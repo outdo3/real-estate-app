@@ -66,7 +66,30 @@ export default function Home() {
 
   // 1. 카카오맵 스크립트 로드 및 사용자 위치(LAWD_CD) 획득
   useEffect(() => {
-    if (!apiKey) return;
+    let kakaoTimeout: NodeJS.Timeout;
+    let checkKakao: NodeJS.Timeout;
+
+    const loadFallback = () => {
+      try {
+        const lastCd = localStorage.getItem('lastLawdCd');
+        const lastName = localStorage.getItem('lastRegionName');
+        if (lastCd && lastName) {
+          setUserLawdCd(lastCd);
+          setUserRegionName(lastName);
+        } else {
+          setUserLawdCd('11110');
+          setUserRegionName('서울특별시 종로구');
+        }
+      } catch (e) {
+        setUserLawdCd('11110');
+        setUserRegionName('서울특별시 종로구');
+      }
+    };
+
+    if (!apiKey) {
+      loadFallback();
+      return;
+    }
     
     const scriptId = 'kakao-map-script-main';
     let script = document.getElementById(scriptId) as HTMLScriptElement;
@@ -79,30 +102,23 @@ export default function Home() {
       document.head.appendChild(script);
     }
     
-    const checkKakao = setInterval(() => {
+    // 카카오 스크립트 로딩 실패 대비 4초 타임아웃
+    kakaoTimeout = setTimeout(() => {
+      clearInterval(checkKakao);
+      if (!userLawdCd) {
+        console.warn('Kakao Map script load timeout');
+        loadFallback();
+      }
+    }, 4000);
+
+    checkKakao = setInterval(() => {
       if (window.kakao && window.kakao.maps) {
         clearInterval(checkKakao);
-        window.kakao.maps.load(() => {
-          const loadFallback = () => {
-            try {
-              const lastCd = localStorage.getItem('lastLawdCd');
-              const lastName = localStorage.getItem('lastRegionName');
-              if (lastCd && lastName) {
-                setUserLawdCd(lastCd);
-                setUserRegionName(lastName);
-              } else {
-                setUserLawdCd('11110');
-                setUserRegionName('서울특별시 종로구');
-              }
-            } catch (e) {
-              setUserLawdCd('11110');
-              setUserRegionName('서울특별시 종로구');
-            }
-          };
+        clearTimeout(kakaoTimeout);
 
+        window.kakao.maps.load(() => {
           if (navigator.geolocation) {
             let handled = false;
-            // 인앱 브라우저 등에서 getCurrentPosition이 콜백을 영영 반환하지 않는 버그 방지 (강제 타임아웃 3초)
             const fallbackTimeout = setTimeout(() => {
               if (!handled) {
                 handled = true;
@@ -164,7 +180,10 @@ export default function Home() {
       }
     }, 200);
     
-    return () => clearInterval(checkKakao);
+    return () => {
+      clearInterval(checkKakao);
+      clearTimeout(kakaoTimeout);
+    };
   }, [apiKey]);
 
   // 2. 초기 데이터 (아파트 TOP 5) 로드
