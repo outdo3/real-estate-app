@@ -47,8 +47,10 @@ const RankCard: React.FC<RankCardProps> = ({ data }) => {
   const formatInfo = (infoStr: string) => {
     const match = infoStr.match(/([\d.]+)m²/);
     if (match) {
-      const pyung = Math.round(parseFloat(match[1]) / 3.3058);
-      return infoStr.replace(match[0], `${match[0]} ${pyung}평`);
+      const sqmt = parseFloat(match[1]);
+      const formattedSqmt = sqmt.toFixed(1).replace(/\.0$/, ''); // 59.7813 -> 59.8, 84.000 -> 84
+      const pyung = Math.round(sqmt / 3.3058);
+      return infoStr.replace(match[0], `${formattedSqmt}m² (${pyung}평)`);
     }
     return infoStr;
   };

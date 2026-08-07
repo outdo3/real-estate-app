@@ -21,19 +21,6 @@ const MapViewer: React.FC<MapViewerProps> = ({ markers = [], userCenter = null }
 
   // 스크립트 로드
   useEffect(() => {
-    if (!apiKey) return;
-    
-    const scriptId = 'kakao-map-script';
-    let script = document.getElementById(scriptId) as HTMLScriptElement;
-    
-    if (!script) {
-      script = document.createElement('script');
-      script.id = scriptId;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer&autoload=false`;
-      script.async = true;
-      document.head.appendChild(script);
-    }
-    
     const checkKakao = setInterval(() => {
       if (window.kakao && window.kakao.maps) {
         clearInterval(checkKakao);
@@ -44,7 +31,7 @@ const MapViewer: React.FC<MapViewerProps> = ({ markers = [], userCenter = null }
     }, 200);
     
     return () => clearInterval(checkKakao);
-  }, [apiKey]);
+  }, []);
 
   // 컴포넌트 첫 마운트 시 또는 userCenter 변경 시 중심 위치 업데이트
   useEffect(() => {
