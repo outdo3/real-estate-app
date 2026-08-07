@@ -223,8 +223,8 @@
   background-color: var(--card-bg);
   border-radius: 1rem;
   padding: 1.25rem;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
-  border: 1px solid rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+  border: 1px solid #f0f0f0;
   position: relative;
   min-width: 0; /* overflow 방지 */
 }
@@ -428,12 +428,31 @@
   background-color: var(--primary-hover);
 }
 
+.floatingViewToggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
 @media (max-width: 768px) {
   .hideOnMobile {
     display: none;
   }
   .dataTable {
     min-width: 100%;
+  }
+  
+  .floatingViewToggle {
+    position: fixed;
+    bottom: 80px; /* Above the bottom nav bar (60px) + some margin */
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 0.5rem;
+    border-radius: 999px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    z-index: 900;
+    border: 1px solid rgba(0, 0, 0, 0.05);
   }
 }
 

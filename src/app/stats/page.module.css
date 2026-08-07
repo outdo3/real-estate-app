@@ -100,8 +100,8 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
@@ -194,9 +194,9 @@
 .panel {
   background: white;
   border-radius: 16px;
-  border: 1px solid var(--border-color);
+  border: 1px solid #f0f0f0;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
 }
 
 .panelHeader {

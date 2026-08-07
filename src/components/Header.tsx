@@ -2,9 +2,12 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import styles from './Header.module.css';
 
 const Header = () => {
+  const pathname = usePathname();
+
   return (
     <header className={styles.header}>
       <div className={`container ${styles.nav}`}>
@@ -15,16 +18,22 @@ const Header = () => {
         
         <ul className={styles.menuList}>
           <li className={styles.menuItem}>
-            <Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>실거래가</Link>
+            <Link href="/" className={pathname === '/' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+              <span className={styles.icon}>🏢</span>
+              <span>실거래가</span>
+            </Link>
           </li>
           <li className={styles.menuItem}>
-            <Link href="/stats" style={{ color: 'inherit', textDecoration: 'none' }}>시장 통계·분석</Link>
+            <Link href="/stats" className={pathname === '/stats' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+              <span className={styles.icon}>📊</span>
+              <span>시장 통계</span>
+            </Link>
           </li>
           <li className={styles.menuItem}>
-            <Link href="/school" style={{ color: 'inherit', textDecoration: 'none' }}>학군 정보</Link>
-          </li>
-          <li className={styles.menuItem}>
-            <Link href="#" style={{ color: 'inherit', textDecoration: 'none' }}>부동산 도구</Link>
+            <Link href="/school" className={pathname === '/school' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+              <span className={styles.icon}>🏫</span>
+              <span>학군 정보</span>
+            </Link>
           </li>
         </ul>
         

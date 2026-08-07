@@ -83,6 +83,15 @@ ul, ol {
   padding: 0 1.5rem;
 }
 
+@media (max-width: 768px) {
+  html {
+    font-size: 14px; /* 모바일에서 폰트 사이즈 전체 12.5% 축소 (16px -> 14px) */
+  }
+  .container {
+    padding: 0 16px; /* 모바일 표준 패딩 */
+  }
+}
+
 .flex { display: flex; }
 .flex-col { display: flex; flex-direction: column; }
 .items-center { align-items: center; }

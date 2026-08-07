@@ -239,22 +239,31 @@ export default function Home() {
         onRegionChange={handleRegionChange}
         onSearch={setKeyword}
       />
-      <div className="container" style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', marginBottom: '2rem' }}>
+      <div className={`container hide-scrollbar`} style={{ 
+        marginTop: '1.5rem', 
+        display: 'flex', 
+        gap: '0.5rem', 
+        marginBottom: '2rem',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+        padding: '0 16px',
+        WebkitOverflowScrolling: 'touch'
+      }}>
         {Object.keys(TAB_MAP).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             style={{
-              padding: '0.6rem 1.5rem',
-              borderRadius: '999px',
-              border: 'none',
-              fontWeight: 600,
-              fontSize: '1rem',
+              padding: '0.5rem 1.25rem',
+              borderRadius: '20px',
+              border: activeTab === tab ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
+              fontWeight: 700,
+              fontSize: '0.95rem',
               cursor: 'pointer',
-              background: activeTab === tab ? 'var(--primary-color)' : '#f1f5f9',
-              color: activeTab === tab ? 'white' : 'var(--text-secondary)',
+              background: activeTab === tab ? '#e6f9ed' : 'white',
+              color: activeTab === tab ? 'var(--primary-color)' : 'var(--text-secondary)',
               transition: 'all 0.2s ease',
-              boxShadow: activeTab === tab ? '0 4px 6px -1px rgba(37, 99, 235, 0.2)' : 'none'
+              flexShrink: 0
             }}
           >
             {tab}
@@ -286,37 +295,38 @@ export default function Home() {
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className={styles.floatingViewToggle}>
             <Link href="/map" style={{ textDecoration: 'none' }}>
               <button style={{
                 background: '#f1f5f9',
                 color: '#475569',
                 border: 'none',
-                padding: '0.5rem 1rem',
+                padding: '0.6rem 1rem',
                 borderRadius: '999px',
                 fontSize: '0.9rem',
-                fontWeight: 600,
+                fontWeight: 700,
                 cursor: 'pointer',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                boxShadow: 'var(--shadow-sm)'
               }}>
-                📍 전체화면 지도
+                📍 지도
               </button>
             </Link>
-            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
               <button 
                 onClick={() => setViewMode('table')}
                 style={{
                   background: viewMode === 'table' ? 'var(--primary-color)' : 'transparent',
                   color: viewMode === 'table' ? 'white' : '#475569',
                   border: 'none',
-                  padding: '0.5rem 1rem',
+                  padding: '0.6rem 1.25rem',
                   fontSize: '0.9rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
               >
-                📋 리스트
+                📋 목록
               </button>
               <button 
                 onClick={() => setViewMode('card')}
@@ -324,9 +334,9 @@ export default function Home() {
                   background: viewMode === 'card' ? 'var(--primary-color)' : 'transparent',
                   color: viewMode === 'card' ? 'white' : '#475569',
                   border: 'none',
-                  padding: '0.5rem 1rem',
+                  padding: '0.6rem 1.25rem',
                   fontSize: '0.9rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
@@ -340,15 +350,16 @@ export default function Home() {
                 background: showMap ? 'var(--primary-color)' : '#f1f5f9',
                 color: showMap ? '#ffffff' : '#475569',
                 border: 'none',
-                padding: '0.5rem 1rem',
+                padding: '0.6rem 1rem',
                 borderRadius: '999px',
                 fontSize: '0.9rem',
-                fontWeight: 600,
+                fontWeight: 700,
                 cursor: 'pointer',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                boxShadow: 'var(--shadow-sm)'
               }}
             >
-              {showMap ? '🗺️ 지도 닫기' : '🗺️ 뷰어 열기'}
+              {showMap ? '🗺️ 닫기' : '🗺️ 뷰어'}
             </button>
           </div>
         </div>

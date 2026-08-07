@@ -118,14 +118,21 @@
   }
   
   .regionSelectGroup {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.4rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    width: 100%;
+  }
+  
+  /* 동 선택은 2열을 다 차지하게 하거나 3번째 요소로 둠 */
+  .selectBox:nth-child(3) {
+    grid-column: span 2;
   }
   
   .selectBox {
-    padding: 0.4rem 1.75rem 0.4rem 0.75rem;
-    font-size: 0.85rem;
+    padding: 0.5rem 1.75rem 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    width: 100%;
   }
   
   .searchInput {
