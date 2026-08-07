@@ -59,7 +59,7 @@ const RankCard: React.FC<RankCardProps> = ({ data }) => {
     <article 
       className={`${styles.card} hover-scale`} 
       onClick={() => router.push(detailUrl)}
-      style={{ cursor: 'pointer', flexShrink: 0, width: '280px', scrollSnapAlign: 'start', transition: 'transform 0.2s, box-shadow 0.2s' }}
+      style={{ cursor: 'pointer', scrollSnapAlign: 'start', transition: 'transform 0.2s, box-shadow 0.2s' }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-4px)';
         e.currentTarget.style.boxShadow = '0 12px 24px -10px rgba(0, 0, 0, 0.15)';

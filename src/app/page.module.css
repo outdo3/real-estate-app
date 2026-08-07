@@ -229,6 +229,11 @@
   min-width: 0; /* overflow 방지 */
 }
 
+.carouselList .card {
+  flex-shrink: 0;
+  width: 280px;
+}
+
 .rankBadge {
   position: absolute;
   top: 1rem;
@@ -263,6 +268,7 @@
   font-weight: 800;
   color: #e11d48;
   margin-bottom: 0.25rem;
+  white-space: nowrap; /* Prevent price breaking into two lines */
 }
 
 .cardMeta {
@@ -441,6 +447,41 @@
   }
   .dataTable {
     min-width: 100%;
+  }
+
+  .cardList {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+  
+  .card {
+    padding: 0.8rem 1rem;
+    width: 100%;
+  }
+  
+  .cardTitle {
+    font-size: 0.95rem;
+    margin-bottom: 0.2rem;
+  }
+  
+  .cardPrice {
+    font-size: 1.15rem;
+    margin-bottom: 0.2rem;
+  }
+  
+  .cardMeta {
+    margin-bottom: 0.4rem;
+  }
+  
+  .badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+  }
+  
+  .cardInfo {
+    font-size: 0.7rem;
+    padding-top: 0.4rem;
   }
   
   .floatingViewToggle {
