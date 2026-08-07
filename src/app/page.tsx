@@ -84,48 +84,79 @@ export default function Home() {
         clearInterval(checkKakao);
         window.kakao.maps.load(() => {
           const loadFallback = () => {
-            const lastCd = localStorage.getItem('lastLawdCd');
-            const lastName = localStorage.getItem('lastRegionName');
-            if (lastCd && lastName) {
-              setUserLawdCd(lastCd);
-              setUserRegionName(lastName);
-            } else {
-              setUserLawdCd('11110'); // 종로구 기본값 (서울 중심)
+            try {
+              const lastCd = localStorage.getItem('lastLawdCd');
+              const lastName = localStorage.getItem('lastRegionName');
+              if (lastCd && lastName) {
+                setUserLawdCd(lastCd);
+                setUserRegionName(lastName);
+              } else {
+                setUserLawdCd('11110');
+                setUserRegionName('서울특별시 종로구');
+              }
+            } catch (e) {
+              setUserLawdCd('11110');
               setUserRegionName('서울특별시 종로구');
             }
           };
 
           if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-              (position) => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                setUserCenter({ lat, lng });
-                
-                const geocoder = new window.kakao.maps.services.Geocoder();
-                geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
-                  if (status === window.kakao.maps.services.Status.OK) {
-                    for (let i = 0; i < result.length; i++) {
-                      if (result[i].region_type === 'B') {
-                        const lawdCd = result[i].code.substring(0, 5);
-                        setUserLawdCd(lawdCd);
-                        setUserRegionName(result[i].address_name);
-                        localStorage.setItem('lastLawdCd', lawdCd);
-                        localStorage.setItem('lastRegionName', result[i].address_name);
-                        break;
-                      }
-                    }
-                  } else {
-                    loadFallback();
-                  }
-                });
-              },
-              (error) => {
-                console.warn('Geolocation Error:', error);
+            let handled = false;
+            // 인앱 브라우저 등에서 getCurrentPosition이 콜백을 영영 반환하지 않는 버그 방지 (강제 타임아웃 3초)
+            const fallbackTimeout = setTimeout(() => {
+              if (!handled) {
+                handled = true;
                 loadFallback();
-              },
-              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
+              }
+            }, 3000);
+
+            try {
+              navigator.geolocation.getCurrentPosition(
+                (position) => {
+                  if (handled) return;
+                  handled = true;
+                  clearTimeout(fallbackTimeout);
+                  
+                  const lat = position.coords.latitude;
+                  const lng = position.coords.longitude;
+                  setUserCenter({ lat, lng });
+                  
+                  const geocoder = new window.kakao.maps.services.Geocoder();
+                  geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
+                    if (status === window.kakao.maps.services.Status.OK) {
+                      for (let i = 0; i < result.length; i++) {
+                        if (result[i].region_type === 'B') {
+                          const lawdCd = result[i].code.substring(0, 5);
+                          setUserLawdCd(lawdCd);
+                          setUserRegionName(result[i].address_name);
+                          try {
+                            localStorage.setItem('lastLawdCd', lawdCd);
+                            localStorage.setItem('lastRegionName', result[i].address_name);
+                          } catch(e) {}
+                          break;
+                        }
+                      }
+                    } else {
+                      loadFallback();
+                    }
+                  });
+                },
+                (error) => {
+                  if (handled) return;
+                  handled = true;
+                  clearTimeout(fallbackTimeout);
+                  console.warn('Geolocation Error:', error);
+                  loadFallback();
+                },
+                { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 }
+              );
+            } catch (e) {
+              if (!handled) {
+                handled = true;
+                clearTimeout(fallbackTimeout);
+                loadFallback();
+              }
+            }
           } else {
             loadFallback();
           }
