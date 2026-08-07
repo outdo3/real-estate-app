@@ -103,13 +103,13 @@ export default function Home() {
                 });
               },
               (error) => {
-                setUserLawdCd('26140');
-                setUserRegionName('부산광역시 서구');
+                setUserLawdCd('11680');
+                setUserRegionName('서울 강남구');
               }
             );
           } else {
-            setUserLawdCd('26140');
-            setUserRegionName('부산광역시 서구');
+            setUserLawdCd('11680');
+            setUserRegionName('서울 강남구');
           }
         });
       }

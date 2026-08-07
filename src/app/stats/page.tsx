@@ -19,8 +19,8 @@ import {
 const TABS = ['📈 거래량·시세 동향', '🔥 특수 거래 (신고가/반등)', '💰 갭투자·매물 분석', '🏆 지역·단지 랭킹'];
 
 export default function StatsPage() {
-  const [sido, setSido] = useState('부산광역시');
-  const [gungu, setGungu] = useState('서구');
+  const [sido, setSido] = useState('서울특별시');
+  const [gungu, setGungu] = useState('강남구');
   const [activeTab, setActiveTab] = useState(TABS[0]);
   
   const [data, setData] = useState<any>(null);

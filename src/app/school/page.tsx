@@ -10,9 +10,9 @@ import styles from './school.module.css';
 const TABS = ['전체', '초등', '중등', '고등', '학원가'];
 
 export default function SchoolInfoPage() {
-  const [sido, setSido] = useState('부산광역시');
-  const [gungu, setGungu] = useState('서구');
-  const [activeTab, setActiveTab] = useState('중등');
+  const [sido, setSido] = useState('서울특별시');
+  const [gungu, setGungu] = useState('강남구');
+  const [activeTab, setActiveTab] = useState(TABS[0]);
   const [selectedSchool, setSelectedSchool] = useState<any>(null);
   
   const region = `${sido} ${gungu}`;
