@@ -60,7 +60,6 @@ export default function Home() {
   const [visibleLimit, setVisibleLimit] = useState(20);
 
   // 검색/필터 상태
-  const [keyword, setKeyword] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<string>('latest');
   const [areaFilter, setAreaFilter] = useState<string>('all');
 
@@ -277,55 +276,6 @@ export default function Home() {
       }
     }
 
-    fetchDynamicData();
-  }, [activeTab, userLawdCd, userDong, loadMoreCount]);
-
-  const handleGlobalSearch = (searchKeyword: string) => {
-    setKeyword(searchKeyword);
-    if (!searchKeyword.trim()) return;
-
-    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
-      setIsDynamicLoading(true);
-      const ps = new window.kakao.maps.services.Places();
-      ps.keywordSearch(searchKeyword, (data: any, status: any) => {
-        if (status === window.kakao.maps.services.Status.OK && data.length > 0) {
-          const firstResult = data[0];
-          const x = parseFloat(firstResult.x);
-          const y = parseFloat(firstResult.y);
-          
-          const geocoder = new window.kakao.maps.services.Geocoder();
-          geocoder.coord2RegionCode(x, y, (result: any, geoStatus: any) => {
-            if (geoStatus === window.kakao.maps.services.Status.OK) {
-              for (let i = 0; i < result.length; i++) {
-                if (result[i].region_type === 'B') {
-                  const lawdCd = result[i].code.substring(0, 5);
-                  
-                  if (lawdCd !== userLawdCd) {
-                    setLoadMoreCount(0);
-                    setUserLawdCd(lawdCd);
-                    setUserRegionName(result[i].address_name);
-                    setUserDong('all');
-                    
-                    try {
-                      localStorage.setItem('lastLawdCd', lawdCd);
-                      localStorage.setItem('lastRegionName', result[i].address_name);
-                    } catch (e) {}
-                  } else {
-                    setIsDynamicLoading(false);
-                  }
-                  return;
-                }
-              }
-            }
-            setIsDynamicLoading(false);
-          });
-        } else {
-          setIsDynamicLoading(false);
-        }
-      });
-    }
-  };
-
   const handleRegionChange = (lawdCd: string, regionName: string, dongName?: string) => {
     setUserLawdCd(lawdCd);
     setUserRegionName(regionName);
@@ -338,9 +288,6 @@ export default function Home() {
   // 필터 및 정렬 적용
   const getFilteredData = () => {
     let data = [...dynamicData];
-    if (keyword) {
-      data = data.filter(item => item.name.includes(keyword) || item.dong?.includes(keyword));
-    }
     if (areaFilter !== 'all') {
       data = data.filter(item => {
         const match = item.info.match(/([\d.]+)m²/);
@@ -385,7 +332,6 @@ export default function Home() {
       <SearchFilterBar 
         initialLawdCd={userLawdCd}
         onRegionChange={handleRegionChange}
-        onSearch={handleGlobalSearch}
       />
       <div className={`container hide-scrollbar`} style={{ 
         marginTop: '1.5rem', 
@@ -529,37 +475,14 @@ export default function Home() {
               {displayRegionName}에 거래 데이터가 없습니다.
             </div>
           ) : getFilteredData().length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem 1rem', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-color)', margin: '2rem 0' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏢</div>
-              <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                최근 3개월 내 <b>&quot;{keyword}&quot;</b>의 실거래 내역이 없습니다.
-              </h3>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
-                원하시는 단지가 맞다면, 상세 페이지에서 과거 실거래 내역과 단지 정보를 확인해 보세요.<br/>
-                (검색하신 지역: {displayRegionName})
-              </p>
-              <Link href={`/apt/${encodeURIComponent(keyword)}?type=${TAB_MAP[activeTab]}&lawdCd=${userLawdCd}&region=${encodeURIComponent(userRegionName)}&dong=${encodeURIComponent(userDong)}`} passHref legacyBehavior>
-                <button style={{
-                  padding: '1rem 2.5rem',
-                  backgroundColor: 'var(--primary-color)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '1.1rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: 'var(--shadow-md)',
-                  transition: 'all 0.2s'
-                }}>
-                  {keyword} 상세정보 바로가기 &gt;
-                </button>
-              </Link>
+            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+              필터 조건에 맞는 거래 데이터가 없습니다.
             </div>
           ) : (
             <>
               {viewMode === 'table' ? (
                 <TableList 
-                  title={keyword ? `${keyword} ${activeTab} 실거래` : `${displayRegionName} ${activeTab} 실거래`}
+                  title={`${displayRegionName} ${activeTab} 실거래`}
                   titleHighlight="최신"
                   highlightColor="var(--primary-color)"
                   date="06-08월"
@@ -568,7 +491,7 @@ export default function Home() {
                 />
               ) : (
                 <CardList 
-                  title={keyword ? `${keyword} ${activeTab} 실거래` : `${displayRegionName} ${activeTab} 실거래`}
+                  title={`${displayRegionName} ${activeTab} 실거래`}
                   titleHighlight="최신"
                   highlightColor="var(--primary-color)"
                   date="06-08월"

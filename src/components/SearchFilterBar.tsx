@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import styles from './SearchFilterBar.module.css';
 
+import { useRouter } from 'next/navigation';
+
 interface SearchFilterBarProps {
   initialLawdCd?: string;
   onRegionChange: (lawdCd: string, regionName: string, dongName?: string) => void;
-  onSearch: (keyword: string) => void;
 }
 
 const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
   initialLawdCd,
-  onRegionChange,
-  onSearch
+  onRegionChange
 }) => {
   const [sidos, setSidos] = useState<{code: string, name: string}[]>([]);
   const [sigungus, setSigungus] = useState<{code: string, name: string}[]>([]);
@@ -19,7 +19,11 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
   const [sido, setSido] = useState<string>('');
   const [sigungu, setSigungu] = useState<string>('');
   const [dong, setDong] = useState<string>('all');
+  
   const [keyword, setKeyword] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const router = useRouter();
 
   // 1. 시/도 목록 가져오기
   useEffect(() => {
@@ -105,9 +109,65 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
     onRegionChange(sigungu, `${sidoName} ${sigunguName}`, dongName);
   };
 
+  // 카카오 장소 검색 (자동완성)
+  useEffect(() => {
+    if (!keyword.trim()) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    
+    const delayDebounceFn = setTimeout(() => {
+      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+        const ps = new window.kakao.maps.services.Places();
+        ps.keywordSearch(keyword, (data: any, status: any) => {
+          if (status === window.kakao.maps.services.Status.OK) {
+            setSearchResults(data);
+            setShowDropdown(true);
+          } else {
+            setSearchResults([]);
+            setShowDropdown(false);
+          }
+        });
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [keyword]);
+
+  const handleResultClick = (place: any) => {
+    const x = parseFloat(place.x);
+    const y = parseFloat(place.y);
+    const aptName = place.place_name;
+
+    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+      const geocoder = new window.kakao.maps.services.Geocoder();
+      geocoder.coord2RegionCode(x, y, (result: any, geoStatus: any) => {
+        if (geoStatus === window.kakao.maps.services.Status.OK) {
+          for (let i = 0; i < result.length; i++) {
+            if (result[i].region_type === 'B') {
+              const lawdCd = result[i].code.substring(0, 5);
+              const region = result[i].address_name;
+              const placeDong = result[i].region_3depth_name;
+              
+              setShowDropdown(false);
+              setKeyword('');
+              // 라우팅 (검색된 결과는 전국 어디든 바로 상세페이지로 이동)
+              router.push(`/apt/${encodeURIComponent(aptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}`);
+              return;
+            }
+          }
+        }
+      });
+    }
+  };
+
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      onSearch(keyword);
+      // 엔터 시 첫 번째 결과 자동 선택
+      if (searchResults.length > 0) {
+        handleResultClick(searchResults[0]);
+      }
     }
   };
 
@@ -153,7 +213,24 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
           onChange={(e) => setKeyword(e.target.value)}
           onKeyDown={handleSearchKeyDown}
         />
-        <button className={styles.searchBtn} onClick={() => onSearch(keyword)}>검색</button>
+        <button className={styles.searchBtn} onClick={() => {
+          if (searchResults.length > 0) handleResultClick(searchResults[0]);
+        }}>검색</button>
+
+        {showDropdown && searchResults.length > 0 && (
+          <div className={styles.dropdown}>
+            {searchResults.map((place: any) => (
+              <div 
+                key={place.id} 
+                className={styles.dropdownItem}
+                onClick={() => handleResultClick(place)}
+              >
+                <div className={styles.itemTitle}>{place.place_name}</div>
+                <div className={styles.itemAddress}>{place.address_name}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
     </div>
