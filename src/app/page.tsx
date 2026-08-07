@@ -66,9 +66,6 @@ export default function Home() {
 
   // 1. 카카오맵 스크립트 로드 및 사용자 위치(LAWD_CD) 획득
   useEffect(() => {
-    let kakaoTimeout: NodeJS.Timeout;
-    let checkKakao: NodeJS.Timeout;
-
     const loadFallback = () => {
       try {
         const lastCd = localStorage.getItem('lastLawdCd');
@@ -102,9 +99,11 @@ export default function Home() {
       document.head.appendChild(script);
     }
     
+    let checkKakao: NodeJS.Timeout;
+
     // 카카오 스크립트 로딩 실패 대비 4초 타임아웃
-    kakaoTimeout = setTimeout(() => {
-      clearInterval(checkKakao);
+    const kakaoTimeout = setTimeout(() => {
+      if (checkKakao) clearInterval(checkKakao);
       if (!userLawdCd) {
         console.warn('Kakao Map script load timeout');
         loadFallback();
@@ -461,7 +460,7 @@ export default function Home() {
             <div style={{ textAlign: 'center', padding: '4rem 1rem', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-color)', margin: '2rem 0' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏢</div>
               <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                최근 3개월 내 <b>"{keyword}"</b>의 실거래 내역이 없습니다.
+                최근 3개월 내 <b>&quot;{keyword}&quot;</b>의 실거래 내역이 없습니다.
               </h3>
               <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
                 원하시는 단지가 맞다면, 상세 페이지에서 과거 실거래 내역과 단지 정보를 확인해 보세요.
