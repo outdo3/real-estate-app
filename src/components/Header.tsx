@@ -12,8 +12,7 @@ const Header = () => {
     <header className={styles.header}>
       <div className={`container ${styles.nav}`}>
         <Link href="/" className={styles.logo}>
-          <span style={{ fontSize: '1.75rem', fontWeight: 900, marginRight: '4px', letterSpacing: '-1px' }}>N</span>
-          <span>부동산</span>
+          <span style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--primary-color)' }}>아파트써처</span>
         </Link>
         
         <ul className={styles.menuList}>

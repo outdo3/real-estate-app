@@ -157,7 +157,6 @@ export default function SchoolInfoPage() {
         <div className={styles.header}>
           <div className={styles.headerTop}>
             <div className={styles.regionSelectorGroup}>
-              <h1 className={styles.title}>아파트써처</h1>
               <select 
                 className={styles.regionSelect} 
                 value={sido}
