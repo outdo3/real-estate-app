@@ -152,8 +152,12 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
               
               setShowDropdown(false);
               setKeyword('');
+              
+              // 아파트 이름 정제: 공백 제거 및 뒤에 붙은 '아파트' 제거
+              const cleanAptName = aptName.replace(/\s+/g, '').replace(/아파트$/, '');
+
               // 라우팅 (검색된 결과는 전국 어디든 바로 상세페이지로 이동)
-              router.push(`/apt/${encodeURIComponent(aptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}`);
+              router.push(`/apt/${encodeURIComponent(cleanAptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}`);
               return;
             }
           }

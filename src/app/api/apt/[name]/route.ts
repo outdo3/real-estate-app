@@ -34,10 +34,19 @@ export async function GET(
       }
     });
 
-    const searchAptName = aptName.replace(/\s+/g, '');
+    const normalizeName = (name: string) => {
+      if (!name) return '';
+      return name.replace(/\s+/g, '').replace(/아파트$/, '');
+    };
+
+    const searchAptName = normalizeName(aptName);
 
     const filteredTrades = allTrades
-      .filter(item => item.name && item.name.replace(/\s+/g, '').includes(searchAptName))
+      .filter(item => {
+        if (!item.name) return false;
+        const itemName = normalizeName(item.name);
+        return itemName.includes(searchAptName) || searchAptName.includes(itemName);
+      })
       .map(item => {
         // "45,000만" 에서 숫자만 추출하여 차트용 price 생성
         const priceStr = item.price;
