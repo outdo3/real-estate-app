@@ -34,6 +34,12 @@ const Header = () => {
               <span>학군 정보</span>
             </Link>
           </li>
+          <li className={styles.menuItem}>
+            <Link href="/tools" className={pathname === '/tools' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+              <span className={styles.icon}>🛠️</span>
+              <span>부동산 도구</span>
+            </Link>
+          </li>
         </ul>
         
       </div>
