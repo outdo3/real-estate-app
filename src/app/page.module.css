@@ -431,6 +431,8 @@
 .floatingViewToggle {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
