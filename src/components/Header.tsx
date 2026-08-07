@@ -28,9 +28,6 @@ const Header = () => {
           </li>
         </ul>
         
-        <div className={styles.actions}>
-          <button className={styles.loginBtn}>로그인</button>
-        </div>
       </div>
     </header>
   );
