@@ -35,8 +35,10 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
       break;
   }
 
-  const decodedKey = decodeURIComponent(API_KEY);
-  const url = `${endpoint}?serviceKey=${encodeURIComponent(decodedKey)}&LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}&numOfRows=1000`;
+  const cleanKey = API_KEY.trim().replace(/['"]/g, '');
+  const decodedKey = decodeURIComponent(cleanKey);
+  const finalKey = encodeURIComponent(decodedKey);
+  const url = `${endpoint}?serviceKey=${finalKey}&LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}&numOfRows=1000`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -136,6 +138,7 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     });
 
   } catch (error: any) {
+    const maskedKey = API_KEY ? `${API_KEY.trim().substring(0, 5)}...${API_KEY.trim().substring(API_KEY.trim().length - 5)}` : 'none';
     console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${error.message}`);
     // Instead of failing silently, return a special error object so the frontend can display it
     return [{
@@ -146,7 +149,7 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
       priceChange: '', 
       changeType: 'new',
       typeLabel: '에러',
-      info: 'MOLIT API 요청 실패',
+      info: `사용된 키 확인: ${maskedKey}`,
       dong: '오류',
       lat: null, 
       lng: null,
