@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { fetchMolitData, DataType } from '@/lib/api-molit';
 
 export async function GET(request: Request) {
@@ -41,10 +40,7 @@ export async function GET(request: Request) {
     }
 
     // 2. 파라미터가 없으면 기존 DB 데이터(TOP 5) 반환
-    const transactions = await prisma.transaction.findMany({
-      where: changeType ? { changeType } : undefined,
-      orderBy: { rank: 'asc' },
-    });
+    const transactions: any[] = [];
 
     return NextResponse.json(transactions);
   } catch (error) {
