@@ -119,11 +119,12 @@ export default function Home() {
           if (navigator.geolocation) {
             const fallbackToIp = async () => {
               try {
-                const res = await fetch('https://ipapi.co/json/');
+                const res = await fetch('https://ipinfo.io/json');
                 const data = await res.json();
-                if (data.latitude && data.longitude) {
-                  const lat = data.latitude;
-                  const lng = data.longitude;
+                if (data.loc) {
+                  const parts = data.loc.split(',');
+                  const lat = parseFloat(parts[0]);
+                  const lng = parseFloat(parts[1]);
                   setUserCenter({ lat, lng });
                   const geocoder = new window.kakao.maps.services.Geocoder();
                   geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
@@ -398,23 +399,6 @@ export default function Home() {
           </div>
           <div className={styles.floatingViewToggle}>
             <div className={styles.floatingViewToggleInner}>
-              <Link href="/map" style={{ textDecoration: 'none' }}>
-                <button style={{
-                  background: '#f1f5f9',
-                  color: '#475569',
-                  border: 'none',
-                  padding: '0.6rem 1rem',
-                  borderRadius: '999px',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: 'var(--shadow-sm)',
-                  whiteSpace: 'nowrap'
-                }}>
-                  📍 지도
-                </button>
-              </Link>
               <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
                 <button 
                   onClick={() => setViewMode('table')}
@@ -471,13 +455,23 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 지도 영역 (토글) */}
+        {/* 지도 영역 (전체 화면 모달) */}
         {showMap && (
-          <div style={{ marginBottom: '3rem' }}>
-            <MapViewer markers={mapMarkers} userCenter={userCenter} />
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 99999, background: 'white', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', background: 'white' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>지도 뷰어</h2>
+              <button 
+                onClick={() => setShowMap(false)}
+                style={{ padding: '0.5rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                닫기 ✕
+              </button>
+            </div>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <MapViewer markers={mapMarkers} userCenter={userCenter} />
+            </div>
           </div>
         )}
-
         {/* 데이터 리스트 영역 */}
         <div style={{ minHeight: '500px' }}>
           {isDynamicLoading ? (

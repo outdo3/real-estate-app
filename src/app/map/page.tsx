@@ -77,10 +77,11 @@ export default function FullscreenMapPage() {
   useEffect(() => {
     const fallbackToIp = async () => {
       try {
-        const res = await fetch('https://ipapi.co/json/');
+        const res = await fetch('https://ipinfo.io/json');
         const data = await res.json();
-        if (data.latitude && data.longitude) {
-          setCenter({ lat: data.latitude, lng: data.longitude });
+        if (data.loc) {
+          const parts = data.loc.split(',');
+          setCenter({ lat: parseFloat(parts[0]), lng: parseFloat(parts[1]) });
           return;
         }
       } catch (e) {}
@@ -181,10 +182,11 @@ export default function FullscreenMapPage() {
                   (pos) => setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
                   async (err) => {
                     try {
-                      const res = await fetch('https://ipapi.co/json/');
+                      const res = await fetch('https://ipinfo.io/json');
                       const data = await res.json();
-                      if (data.latitude && data.longitude) {
-                        setCenter({ lat: data.latitude, lng: data.longitude });
+                      if (data.loc) {
+                        const parts = data.loc.split(',');
+                        setCenter({ lat: parseFloat(parts[0]), lng: parseFloat(parts[1]) });
                       }
                     } catch (e) {}
                   },
