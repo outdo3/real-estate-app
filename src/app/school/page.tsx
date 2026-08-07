@@ -156,8 +156,8 @@ export default function SchoolInfoPage() {
         {/* 1단계: 상단 '학군 탐색 필터' 및 '지역 대시보드' */}
         <div className={styles.header}>
           <div className={styles.headerTop}>
-            <div className={styles.regionSelectorGroup} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <h1 className={styles.title} style={{ margin: 0, marginRight: '10px' }}>아파트써처</h1>
+            <div className={styles.regionSelectorGroup}>
+              <h1 className={styles.title}>아파트써처</h1>
               <select 
                 className={styles.regionSelect} 
                 value={sido}
@@ -166,7 +166,6 @@ export default function SchoolInfoPage() {
                   setSido(newSido);
                   setGungu(REGION_DATA[newSido][0]);
                 }}
-                style={{ fontSize: '1.2rem', padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc' }}
               >
                 {SIDO_LIST.map(s => (
                   <option key={s} value={s}>{s}</option>
@@ -176,7 +175,6 @@ export default function SchoolInfoPage() {
                 className={styles.regionSelect} 
                 value={gungu}
                 onChange={(e) => setGungu(e.target.value)}
-                style={{ fontSize: '1.2rem', padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc' }}
               >
                 {REGION_DATA[sido].map(g => (
                   <option key={g} value={g}>{g}</option>

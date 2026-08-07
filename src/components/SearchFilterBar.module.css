@@ -107,3 +107,34 @@
   background: var(--card-bg);
   color: var(--text-primary);
 }
+
+@media (max-width: 768px) {
+  .heroSection {
+    padding: 2.5rem 1rem;
+  }
+  
+  .heroTitle {
+    font-size: 1.5rem;
+  }
+  
+  .regionSelectGroup {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+  
+  .selectBox {
+    padding: 0.4rem 1.75rem 0.4rem 0.75rem;
+    font-size: 0.85rem;
+  }
+  
+  .searchInput {
+    font-size: 0.95rem;
+    padding: 0.5rem;
+  }
+  
+  .searchBtn {
+    padding: 0.6rem 1.25rem;
+    font-size: 0.9rem;
+  }
+}

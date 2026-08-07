@@ -66,8 +66,8 @@ export default function StatsPage() {
       <div className="container">
         {/* 상단 탭 및 지역 필터 */}
         <div className={styles.headerTop}>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <h1 className={styles.title} style={{ margin: 0, marginRight: '10px' }}>시장 통계·분석</h1>
+          <div className={styles.regionSelectorGroup}>
+            <h1 className={styles.title}>시장 통계·분석</h1>
             <select 
               className={styles.regionSelect} 
               value={sido}

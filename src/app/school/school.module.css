@@ -11,8 +11,22 @@
 .headerTop {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 1.5rem;
   margin-bottom: 1.5rem;
+}
+
+.regionSelectorGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
 }
 
 .regionSelect {
@@ -100,6 +114,40 @@
 @media (max-width: 1024px) {
   .mainGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .headerTop {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .regionSelectorGroup {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .tabs {
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    flex-shrink: 0;
+  }
+
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
   }
 }
 

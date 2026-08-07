@@ -67,22 +67,30 @@
   .nav {
     flex-wrap: wrap;
     height: auto;
-    padding: 1rem 0;
-    gap: 1rem;
+    padding: 0.75rem 0 0 0;
+    gap: 0.5rem;
   }
   
   .logo {
     flex-shrink: 0;
+    padding-left: 1rem;
+  }
+  
+  .actions {
+    padding-right: 1rem;
   }
   
   .menuList {
     width: 100%;
     overflow-x: auto;
-    padding-bottom: 0.5rem;
-    gap: 1rem;
+    padding: 0 1rem 0.5rem 1rem;
+    gap: 1.5rem;
     /* 스크롤바 숨기기 (모바일 터치용) */
     -ms-overflow-style: none;
     scrollbar-width: none;
+    border-top: 1px solid var(--border-color);
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
   }
   
   .menuList::-webkit-scrollbar {
@@ -91,6 +99,7 @@
   
   .menuItem {
     white-space: nowrap;
-    padding: 0.5rem 0;
+    padding: 0.25rem 0;
+    font-size: 0.95rem;
   }
 }
