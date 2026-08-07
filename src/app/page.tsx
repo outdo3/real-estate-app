@@ -276,6 +276,9 @@ export default function Home() {
       }
     }
 
+    fetchDynamicData();
+  }, [activeTab, userLawdCd, userDong, loadMoreCount]);
+
   const handleRegionChange = (lawdCd: string, regionName: string, dongName?: string) => {
     setUserLawdCd(lawdCd);
     setUserRegionName(regionName);
