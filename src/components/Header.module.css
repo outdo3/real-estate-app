@@ -1,0 +1,96 @@
+.header {
+  background-color: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: var(--shadow-sm);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.logo span {
+  color: var(--text-primary);
+}
+
+.menuList {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.menuItem {
+  position: relative;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 1.25rem 0;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.menuItem:hover {
+  color: var(--primary-color);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.loginBtn {
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.loginBtn:hover {
+  color: var(--primary-color);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 900px) {
+  .nav {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 1rem 0;
+    gap: 1rem;
+  }
+  
+  .logo {
+    flex-shrink: 0;
+  }
+  
+  .menuList {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    gap: 1rem;
+    /* 스크롤바 숨기기 (모바일 터치용) */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .menuList::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .menuItem {
+    white-space: nowrap;
+    padding: 0.5rem 0;
+  }
+}

@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  rank        Int
+  name        String
+  price       String
+  priceChange String
+  changeType  String   // "up" or "new"
+  typeLabel   String   // "반등" or "신고가"
+  info        String   // "73.27m² 25평 • 26.07.18"
+  lat         Float?
+  lng         Float?
+  createdAt   DateTime @default(now())
+}
+
+model TradeHistory {
+  id         Int      @id @default(autoincrement())
+  aptName    String
+  tradeDate  String
+  price      Int      // 억 단위 저장 (예: 53)
+  priceStr   String   // 노출용 (예: 53억 2,000만)
+  area       String
+  floor      Int
+  tradeType  String   // 중개거래, 직거래
+  createdAt  DateTime @default(now())
+
+  @@index([aptName])
+}
