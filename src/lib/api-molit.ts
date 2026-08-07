@@ -11,11 +11,12 @@ interface FetchParams {
 }
 
 export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
-  if (!API_KEY) {
-    throw new Error('DATA_GO_KR_API_KEY is not defined in environment variables.');
-  }
+  try {
+    if (!API_KEY) {
+      throw new Error('DATA_GO_KR_API_KEY is not defined in environment variables.');
+    }
 
-  let endpoint = '';
+    let endpoint = '';
   switch (type) {
     case 'apt':
       endpoint = 'http://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev'; // 아파트 매매 상세
@@ -37,7 +38,6 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
   const decodedKey = decodeURIComponent(API_KEY);
   const url = `${endpoint}?serviceKey=${encodeURIComponent(decodedKey)}&LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}&numOfRows=1000`;
 
-  try {
     const response = await fetch(url, {
       method: 'GET',
       headers: {

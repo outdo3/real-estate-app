@@ -445,16 +445,35 @@
   
   .floatingViewToggle {
     position: fixed;
-    bottom: 80px; /* Above the bottom nav bar (60px) + some margin */
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 80px; 
+    left: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none; /* Container itself shouldn't block clicks */
+    z-index: 900;
+  }
+  
+  .floatingViewToggle > * {
+    pointer-events: auto; /* Only buttons are clickable */
+  }
+
+  .floatingViewToggleInner {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
-    padding: 0.5rem;
+    padding: 0.5rem 1rem;
     border-radius: 999px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    z-index: 900;
     border: 1px solid rgba(0, 0, 0, 0.05);
+    gap: 0.5rem;
+    pointer-events: auto;
   }
 }
+
 

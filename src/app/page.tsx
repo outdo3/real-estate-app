@@ -296,71 +296,77 @@ export default function Home() {
             </select>
           </div>
           <div className={styles.floatingViewToggle}>
-            <Link href="/map" style={{ textDecoration: 'none' }}>
-              <button style={{
-                background: '#f1f5f9',
-                color: '#475569',
-                border: 'none',
-                padding: '0.6rem 1rem',
-                borderRadius: '999px',
-                fontSize: '0.9rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: 'var(--shadow-sm)'
-              }}>
-                📍 지도
-              </button>
-            </Link>
-            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
-              <button 
-                onClick={() => setViewMode('table')}
-                style={{
-                  background: viewMode === 'table' ? 'var(--primary-color)' : 'transparent',
-                  color: viewMode === 'table' ? 'white' : '#475569',
+            <div className={styles.floatingViewToggleInner}>
+              <Link href="/map" style={{ textDecoration: 'none' }}>
+                <button style={{
+                  background: '#f1f5f9',
+                  color: '#475569',
                   border: 'none',
-                  padding: '0.6rem 1.25rem',
+                  padding: '0.6rem 1rem',
+                  borderRadius: '999px',
                   fontSize: '0.9rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                📋 목록
-              </button>
+                  transition: 'all 0.2s',
+                  boxShadow: 'var(--shadow-sm)',
+                  whiteSpace: 'nowrap'
+                }}>
+                  📍 지도
+                </button>
+              </Link>
+              <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+                <button 
+                  onClick={() => setViewMode('table')}
+                  style={{
+                    background: viewMode === 'table' ? 'var(--primary-color)' : 'transparent',
+                    color: viewMode === 'table' ? 'white' : '#475569',
+                    border: 'none',
+                    padding: '0.6rem 1.25rem',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  📋 목록
+                </button>
+                <button 
+                  onClick={() => setViewMode('card')}
+                  style={{
+                    background: viewMode === 'card' ? 'var(--primary-color)' : 'transparent',
+                    color: viewMode === 'card' ? 'white' : '#475569',
+                    border: 'none',
+                    padding: '0.6rem 1.25rem',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  🗂️ 카드
+                </button>
+              </div>
               <button 
-                onClick={() => setViewMode('card')}
+                onClick={() => setShowMap(!showMap)}
                 style={{
-                  background: viewMode === 'card' ? 'var(--primary-color)' : 'transparent',
-                  color: viewMode === 'card' ? 'white' : '#475569',
+                  background: showMap ? 'var(--primary-color)' : '#f1f5f9',
+                  color: showMap ? '#ffffff' : '#475569',
                   border: 'none',
-                  padding: '0.6rem 1.25rem',
+                  padding: '0.6rem 1rem',
+                  borderRadius: '999px',
                   fontSize: '0.9rem',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  boxShadow: 'var(--shadow-sm)',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                🗂️ 카드
+                {showMap ? '🗺️ 닫기' : '🗺️ 뷰어'}
               </button>
             </div>
-            <button 
-              onClick={() => setShowMap(!showMap)}
-              style={{
-                background: showMap ? 'var(--primary-color)' : '#f1f5f9',
-                color: showMap ? '#ffffff' : '#475569',
-                border: 'none',
-                padding: '0.6rem 1rem',
-                borderRadius: '999px',
-                fontSize: '0.9rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: 'var(--shadow-sm)'
-              }}
-            >
-              {showMap ? '🗺️ 닫기' : '🗺️ 뷰어'}
-            </button>
           </div>
         </div>
 
