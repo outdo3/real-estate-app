@@ -9,9 +9,10 @@ interface CardListProps {
   date: string;
   data: RankData[];
   isHorizontal?: boolean;
+  regionName?: string;
 }
 
-const CardList: React.FC<CardListProps> = ({ title, titleHighlight, highlightColor, date, data, isHorizontal }) => {
+const CardList: React.FC<CardListProps> = ({ title, titleHighlight, highlightColor, date, data, isHorizontal, regionName }) => {
   return (
     <section className={styles.section}>
       <div className={styles.sectionHeader}>
@@ -23,7 +24,7 @@ const CardList: React.FC<CardListProps> = ({ title, titleHighlight, highlightCol
       
       <div className={`${isHorizontal ? styles.carouselList : styles.cardList} hide-scrollbar`}>
         {data.map((item) => (
-          <RankCard key={item.id} data={item} />
+          <RankCard key={item.id} data={item} regionName={regionName} />
         ))}
       </div>
     </section>

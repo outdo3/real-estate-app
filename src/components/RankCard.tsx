@@ -18,9 +18,10 @@ export interface RankData {
 
 interface RankCardProps {
   data: RankData;
+  regionName?: string;
 }
 
-const RankCard: React.FC<RankCardProps> = ({ data }) => {
+const RankCard: React.FC<RankCardProps> = ({ data, regionName }) => {
   const getRankClass = (rank: number) => {
     switch (rank) {
       case 1: return styles.rank1;
@@ -38,7 +39,13 @@ const RankCard: React.FC<RankCardProps> = ({ data }) => {
   const parts = idStr.split('-');
   const type = parts.length > 1 ? parts[0] : 'apt';
   const lawdCd = parts.length > 1 ? parts[1] : '11680'; // fallback
-  const detailUrl = `/apt/${encodeURIComponent(data.name)}?type=${type}&lawdCd=${lawdCd}`;
+  let detailUrl = `/apt/${encodeURIComponent(data.name)}?type=${type}&lawdCd=${lawdCd}`;
+  if (regionName) {
+    detailUrl += `&region=${encodeURIComponent(regionName)}`;
+  }
+  if (data.dong) {
+    detailUrl += `&dong=${encodeURIComponent(data.dong)}`;
+  }
 
   const formatPrice = (priceStr: string) => {
     return priceStr;

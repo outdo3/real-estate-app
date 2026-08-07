@@ -31,6 +31,7 @@ export default function ApartmentDetail() {
   const [aptInfo, setAptInfo] = useState<Record<string, string> | null>(null);
   const [lawdCdState, setLawdCdState] = useState('11680');
   const [regionName, setRegionName] = useState<string>('');
+  const [urlDong, setUrlDong] = useState<string>('');
   
   const [selectedArea, setSelectedArea] = useState<string>('전체');
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
@@ -63,17 +64,25 @@ export default function ApartmentDetail() {
           setTrades(data.trades || []);
         }
 
-        // 지역명 가져오기
-        try {
-          const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${lawdCd}00000`);
-          if (regRes.ok) {
-            const regData = await regRes.json();
-            if (regData.regcodes && regData.regcodes.length > 0) {
-              setRegionName(regData.regcodes[0].name);
+        const urlRegion = urlParams.get('region');
+        const urlDongParam = urlParams.get('dong');
+        if (urlDongParam) setUrlDong(urlDongParam);
+
+        if (urlRegion) {
+          setRegionName(urlRegion);
+        } else {
+          // 지역명 가져오기
+          try {
+            const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${lawdCd}00000`);
+            if (regRes.ok) {
+              const regData = await regRes.json();
+              if (regData.regcodes && regData.regcodes.length > 0) {
+                setRegionName(regData.regcodes[0].name);
+              }
             }
+          } catch (e) {
+            console.error(e);
           }
-        } catch (e) {
-          console.error(e);
         }
       } catch (error) {
         console.error('Failed to fetch trades:', error);
@@ -397,7 +406,7 @@ export default function ApartmentDetail() {
       
       <div className={styles.header}>
         <div className="container">
-          <div className={styles.breadcrumb}>아파트실거래 &gt; {regionName ? regionName.split(' ').join(' > ') : ''} {(trades.length > 0 && trades[0].dong) ? `> ${trades[0].dong}` : ''} &gt; {aptName}</div>
+          <div className={styles.breadcrumb}>아파트실거래 &gt; {regionName ? regionName.split(' ').join(' > ') : ''} {(urlDong || (trades.length > 0 && trades[0].dong)) ? `> ${urlDong || trades[0].dong}` : ''} &gt; {aptName}</div>
           
           <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
             <h1 className={styles.title} style={{ marginBottom: '0.75rem' }}>{aptName}</h1>
@@ -464,16 +473,16 @@ export default function ApartmentDetail() {
       <div className={`container ${styles.contentGrid}`}>
         {/* 왼쪽 차트 패널 */}
         <div className={styles.panel}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
-            <h2 className={styles.panelTitle} style={{ borderBottom: 'none', margin: 0, padding: 0 }}>실거래가 시세 차트</h2>
-            <div style={{ display: 'flex', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+            <h2 className={styles.panelTitle} style={{ borderBottom: 'none', margin: 0, padding: 0, whiteSpace: 'nowrap' }}>실거래가 시세 차트</h2>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
-                <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.25rem 0.75rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '매매' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>매매</button>
-                <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.25rem 0.75rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>전월세</button>
+                <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.25rem 0.5rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '매매' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>매매</button>
+                <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.25rem 0.5rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>전월세</button>
               </div>
               <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
                 {['1년', '3년', '5년', '전체'].map(p => (
-                  <button key={p} onClick={() => setPeriodFilter(p as any)} style={{ padding: '0.25rem 0.75rem', border: 'none', background: periodFilter === p ? 'white' : 'transparent', fontWeight: periodFilter === p ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: periodFilter === p ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>{p}</button>
+                  <button key={p} onClick={() => setPeriodFilter(p as any)} style={{ padding: '0.25rem 0.5rem', border: 'none', background: periodFilter === p ? 'white' : 'transparent', fontWeight: periodFilter === p ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: periodFilter === p ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>{p}</button>
                 ))}
               </div>
             </div>

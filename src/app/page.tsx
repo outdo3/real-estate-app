@@ -517,6 +517,7 @@ export default function Home() {
                   highlightColor="var(--primary-color)"
                   date="06-08월"
                   data={visibleDynamicData}
+                  regionName={userRegionName}
                 />
               ) : (
                 <CardList 
@@ -525,6 +526,7 @@ export default function Home() {
                   highlightColor="var(--primary-color)"
                   date="06-08월"
                   data={visibleDynamicData}
+                  regionName={userRegionName}
                 />
               )}
               {visibleDynamicData.length > 0 && (

@@ -11,9 +11,10 @@ interface TableListProps {
   highlightColor: string;
   date: string;
   data: RankData[];
+  regionName?: string;
 }
 
-const TableList: React.FC<TableListProps> = ({ title, titleHighlight, highlightColor, date, data }) => {
+const TableList: React.FC<TableListProps> = ({ title, titleHighlight, highlightColor, date, data, regionName }) => {
   const router = useRouter();
 
   const handleRowClick = (item: RankData) => {
@@ -21,7 +22,14 @@ const TableList: React.FC<TableListProps> = ({ title, titleHighlight, highlightC
     const parts = idStr.split('-');
     const type = parts.length > 1 ? parts[0] : 'apt';
     const lawdCd = parts.length > 1 ? parts[1] : '11680';
-    router.push(`/apt/${encodeURIComponent(item.name)}?type=${type}&lawdCd=${lawdCd}`);
+    let url = `/apt/${encodeURIComponent(item.name)}?type=${type}&lawdCd=${lawdCd}`;
+    if (regionName) {
+      url += `&region=${encodeURIComponent(regionName)}`;
+    }
+    if (item.dong) {
+      url += `&dong=${encodeURIComponent(item.dong)}`;
+    }
+    router.push(url);
   };
 
   const getBadgeStyle = (label: string) => {
