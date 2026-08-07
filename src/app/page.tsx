@@ -101,14 +101,14 @@ export default function Home() {
     
     let checkKakao: NodeJS.Timeout;
 
-    // 카카오 스크립트 로딩 실패 대비 4초 타임아웃
+    // 카카오 스크립트 로딩 실패 대비 15초 타임아웃
     const kakaoTimeout = setTimeout(() => {
       if (checkKakao) clearInterval(checkKakao);
       if (!userLawdCd) {
         console.warn('Kakao Map script load timeout');
         loadFallback();
       }
-    }, 4000);
+    }, 15000);
 
     checkKakao = setInterval(() => {
       if (window.kakao && window.kakao.maps) {

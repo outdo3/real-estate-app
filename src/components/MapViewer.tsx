@@ -19,13 +19,18 @@ const MapViewer: React.FC<MapViewerProps> = ({ markers = [], userCenter = null }
   const [center, setCenter] = useState({ lat: 37.498095, lng: 127.027610 }); // 기본: 강남역
   const [keyword, setKeyword] = useState('');
 
-  // 스크립트 로드 (page.tsx에서 로드한 것을 재사용)
+  // 스크립트 로드 (page.tsx에서 로드한 것을 재사용하되, 만약 load가 안 불렸으면 직접 호출)
   useEffect(() => {
+    let loadCalled = false;
     const checkKakao = setInterval(() => {
-      // services 객체까지 로드되었는지 확인 (MapViewer에서는 services를 사용하므로)
       if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
         clearInterval(checkKakao);
         setIsMapReady(true);
+      } else if (window.kakao && window.kakao.maps && !loadCalled) {
+        loadCalled = true;
+        window.kakao.maps.load(() => {
+          setIsMapReady(true);
+        });
       }
     }, 200);
     
