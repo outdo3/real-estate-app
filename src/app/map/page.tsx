@@ -18,7 +18,7 @@ export default function FullscreenMapPage() {
   useEffect(() => {
     if (!apiKey) return;
     
-    const scriptId = 'kakao-map-script';
+    const scriptId = 'kakao-map-script-main';
     let script = document.getElementById(scriptId) as HTMLScriptElement;
     
     if (!script) {
@@ -30,7 +30,11 @@ export default function FullscreenMapPage() {
     }
     
     const checkKakao = setInterval(() => {
-      if (window.kakao && window.kakao.maps) {
+      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+        clearInterval(checkKakao);
+        setIsMapReady(true);
+      } else if (window.kakao && window.kakao.maps) {
+        // In case load wasn't called by page.tsx
         clearInterval(checkKakao);
         window.kakao.maps.load(() => {
           setIsMapReady(true);
@@ -84,7 +88,8 @@ export default function FullscreenMapPage() {
           if (markers.length > 0) {
             setCenter({ lat: markers[0].lat, lng: markers[0].lng });
           }
-        }
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
       );
     } else if (markers.length > 0) {
       setCenter({ lat: markers[0].lat, lng: markers[0].lng });

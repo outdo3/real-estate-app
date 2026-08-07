@@ -50,27 +50,27 @@ const TableList: React.FC<TableListProps> = ({ title, titleHighlight, highlightC
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
-                  <td style={{ padding: '1.25rem 1rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{item.name}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <td style={{ padding: '0.5rem 0.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                      <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{item.name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                         <span style={{ 
-                          padding: '2px 8px', 
-                          borderRadius: '999px', 
-                          fontSize: '0.75rem', 
+                          padding: '1px 6px', 
+                          borderRadius: '4px', 
+                          fontSize: '0.65rem', 
                           fontWeight: 600,
                           ...badgeStyle
                         }}>
                           {item.typeLabel}
                         </span>
-                        <span style={{ fontSize: '0.85rem', color: '#64748b' }}>{item.info}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{item.info}</span>
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: '1.25rem 1rem', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem' }}>
-                      <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary-color)' }}>{item.price}</span>
-                      <span style={{ color: '#94a3b8' }}>&gt;</span>
+                  <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.2rem' }}>
+                      <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--primary-color)' }}>{item.price}</span>
+                      <span style={{ color: '#94a3b8', fontSize: '0.8rem', marginLeft: '0.2rem' }}>&gt;</span>
                     </div>
                   </td>
                 </tr>

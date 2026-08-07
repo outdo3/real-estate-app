@@ -123,7 +123,7 @@ export default function Home() {
                 handled = true;
                 loadFallback();
               }
-            }, 3000);
+            }, 15000);
 
             try {
               navigator.geolocation.getCurrentPosition(
@@ -163,7 +163,7 @@ export default function Home() {
                   console.warn('Geolocation Error:', error);
                   loadFallback();
                 },
-                { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 }
+                { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
               );
             } catch (e) {
               if (!handled) {
