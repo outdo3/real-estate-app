@@ -125,8 +125,21 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
       };
     });
 
-  } catch (error) {
-    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). Returning empty array...`);
-    return [];
+  } catch (error: any) {
+    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${error.message}`);
+    // Instead of failing silently, return a special error object so the frontend can display it
+    return [{
+      id: `error-${type}-${lawdCd}-${dealYmd}`,
+      rank: 1,
+      name: `API 에러: ${error.message}`,
+      price: '에러',
+      priceChange: '', 
+      changeType: 'new',
+      typeLabel: '에러',
+      info: 'MOLIT API 요청 실패',
+      dong: '오류',
+      lat: null, 
+      lng: null,
+    }];
   }
 }
