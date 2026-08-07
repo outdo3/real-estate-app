@@ -117,13 +117,45 @@ export default function Home() {
 
         window.kakao.maps.load(() => {
           if (navigator.geolocation) {
+            const fallbackToIp = async () => {
+              try {
+                const res = await fetch('https://ipapi.co/json/');
+                const data = await res.json();
+                if (data.latitude && data.longitude) {
+                  const lat = data.latitude;
+                  const lng = data.longitude;
+                  setUserCenter({ lat, lng });
+                  const geocoder = new window.kakao.maps.services.Geocoder();
+                  geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
+                    if (status === window.kakao.maps.services.Status.OK) {
+                      for (let i = 0; i < result.length; i++) {
+                        if (result[i].region_type === 'B') {
+                          const lawdCd = result[i].code.substring(0, 5);
+                          setUserLawdCd(lawdCd);
+                          setUserRegionName(result[i].address_name);
+                          try {
+                            localStorage.setItem('lastLawdCd', lawdCd);
+                            localStorage.setItem('lastRegionName', result[i].address_name);
+                          } catch (e) {}
+                          return;
+                        }
+                      }
+                    }
+                    loadFallback();
+                  });
+                  return;
+                }
+              } catch (e) {}
+              loadFallback();
+            };
+
             let handled = false;
             const fallbackTimeout = setTimeout(() => {
               if (!handled) {
                 handled = true;
-                loadFallback();
+                fallbackToIp();
               }
-            }, 15000);
+            }, 10000); // 10초 타임아웃으로 변경
 
             try {
               navigator.geolocation.getCurrentPosition(
@@ -152,7 +184,7 @@ export default function Home() {
                         }
                       }
                     } else {
-                      loadFallback();
+                      fallbackToIp();
                     }
                   });
                 },
@@ -161,15 +193,15 @@ export default function Home() {
                   handled = true;
                   clearTimeout(fallbackTimeout);
                   console.warn('Geolocation Error:', error);
-                  loadFallback();
+                  fallbackToIp();
                 },
-                { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+                { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
               );
             } catch (e) {
               if (!handled) {
                 handled = true;
                 clearTimeout(fallbackTimeout);
-                loadFallback();
+                fallbackToIp();
               }
             }
           } else {

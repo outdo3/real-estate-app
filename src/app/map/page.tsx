@@ -75,6 +75,20 @@ export default function FullscreenMapPage() {
 
   // 컴포넌트 첫 마운트 시, 사용자 위치 가져오기
   useEffect(() => {
+    const fallbackToIp = async () => {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        if (data.latitude && data.longitude) {
+          setCenter({ lat: data.latitude, lng: data.longitude });
+          return;
+        }
+      } catch (e) {}
+      if (markers.length > 0) {
+        setCenter({ lat: markers[0].lat, lng: markers[0].lng });
+      }
+    };
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -84,15 +98,13 @@ export default function FullscreenMapPage() {
           });
         },
         (error) => {
-          console.log('위치 정보를 가져오지 못했습니다. 기본 위치를 사용합니다.', error);
-          if (markers.length > 0) {
-            setCenter({ lat: markers[0].lat, lng: markers[0].lng });
-          }
+          console.log('위치 정보를 가져오지 못했습니다. IP 기반 위치를 시도합니다.', error);
+          fallbackToIp();
         },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
       );
-    } else if (markers.length > 0) {
-      setCenter({ lat: markers[0].lat, lng: markers[0].lng });
+    } else {
+      fallbackToIp();
     }
   }, [markers]);
 
@@ -163,9 +175,21 @@ export default function FullscreenMapPage() {
             <button type="submit" style={{ padding: '0.6rem 1.2rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '99px', cursor: 'pointer', fontWeight: 600 }}>검색</button>
           </form>
           <button 
-            onClick={() => {
+            onClick={async () => {
               if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition((pos) => setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }));
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                  async (err) => {
+                    try {
+                      const res = await fetch('https://ipapi.co/json/');
+                      const data = await res.json();
+                      if (data.latitude && data.longitude) {
+                        setCenter({ lat: data.latitude, lng: data.longitude });
+                      }
+                    } catch (e) {}
+                  },
+                  { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
+                );
               }
             }} 
             style={{ padding: '0.6rem 1.2rem', background: 'white', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '99px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, transition: 'background 0.2s' }}
