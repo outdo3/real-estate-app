@@ -57,10 +57,20 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     });
     
     const jsonObj = parser.parse(textData);
+    
+    // Check for OpenAPI error first
+    if (jsonObj.OpenAPI_ServiceResponse?.cmmMsgHeader?.errMsg) {
+      throw new Error(`OpenAPI Error: ${jsonObj.OpenAPI_ServiceResponse.cmmMsgHeader.returnAuthMsg}`);
+    }
+
     const items = jsonObj.response?.body?.items?.item;
 
     if (!items) {
-      throw new Error("No items found");
+      // If items is empty but resultCode is 00 (Normal), just return empty array
+      if (jsonObj.response?.header?.resultCode === '00' || jsonObj.response?.header?.resultCode === 0) {
+        return [];
+      }
+      throw new Error(`No items found. Response: ${textData.substring(0, 100)}...`);
     }
 
     const itemsArray = Array.isArray(items) ? items : [items];

@@ -34,9 +34,9 @@ const MarketInsights: React.FC<MarketInsightsProps> = ({ data, regionName }) => 
       <div className={styles.scrollWrapper}>
         {/* 전체 거래량 카드 */}
         <div className={styles.statCard}>
-          <div className={styles.statLabel}>이번 주 거래량</div>
+          <div className={styles.statLabel}>최근 조회기간 거래량</div>
           <div className={styles.statValue}>{totalVolume}건</div>
-          <div className={styles.statSub} style={{ color: '#16a34a', fontWeight: 600 }}>전주 대비 +12% 📈</div>
+          <div className={styles.statSub} style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>국토교통부 실거래가 기준</div>
         </div>
 
         {/* 동별 거래량 카드 */}

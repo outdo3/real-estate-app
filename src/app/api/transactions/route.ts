@@ -12,18 +12,22 @@ export async function GET(request: Request) {
     
     // 1. type과 lawdCd가 있으면 국토부 API 실시간 호출
     if (type && lawdCd) {
-      // loadMore 횟수에 따라 과거 데이터를 더 가져옵니다.
-      // 0: 6, 7, 8월 / 1: 3, 4, 5월 추가 등
-      const baseMonths = ['202606', '202607', '202608'];
-      let months = [...baseMonths];
+      const getMonths = (startOffset: number, count: number) => {
+        const res = [];
+        for (let i = 0; i < count; i++) {
+          const date = new Date();
+          // Current month is 0-indexed, so we subtract startOffset + i
+          date.setMonth(date.getMonth() - (startOffset + i));
+          const y = date.getFullYear();
+          const m = String(date.getMonth() + 1).padStart(2, '0');
+          res.push(`${y}${m}`);
+        }
+        return res;
+      };
       
-      for (let i = 1; i <= loadMore; i++) {
-        // 더보기를 누를 때마다 이전 3개월 추가 (간단한 예시 연산)
-        const prev1 = 202606 - (i * 3);
-        const prev2 = prev1 + 1;
-        const prev3 = prev1 + 2;
-        months.push(String(prev1), String(prev2), String(prev3));
-      }
+      // loadMore=0 -> offset=0 (last 3 months)
+      // loadMore=1 -> offset=3 (previous 3 months)
+      const months = getMonths(loadMore * 3, 3);
       
       // 공공데이터 API 병렬 호출 (속도 개선)
       const promises = months.map(dealYmd => fetchMolitData({ lawdCd, dealYmd, type }));

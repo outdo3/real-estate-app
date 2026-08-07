@@ -456,24 +456,9 @@ export default function Home() {
 
           {/* 아파트 탭일 경우 기존 TOP5 데이터도 하단에 표시 */}
           {activeTab === '아파트' && (
-            <div style={{ marginTop: '4rem' }}>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: 'var(--text-secondary)', paddingLeft: '0.5rem' }}>🔥 전국 핫이슈 단지</h2>
-              <CardList 
-                title="전국 반등 실거래"
-                titleHighlight="TOP5"
-                highlightColor="var(--primary-color)"
-                date="08.05"
-                data={reboundData}
-                isHorizontal={true}
-              />
-              <CardList 
-                title="전국 아파트 신고가"
-                titleHighlight="TOP5"
-                highlightColor="var(--up-color)"
-                date="08.05"
-                data={newHighData}
-                isHorizontal={true}
-              />
+            <div style={{ marginTop: '4rem', textAlign: 'center', padding: '2rem', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)', color: 'var(--text-muted)' }}>
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>🔥 전국 핫이슈 단지 (준비 중)</h2>
+              <p style={{ fontSize: '0.9rem' }}>전국 반등 실거래 및 신고가 데이터 수집 로직이 연동 중입니다.</p>
             </div>
           )}
         </div>
