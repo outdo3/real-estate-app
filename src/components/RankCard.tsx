@@ -71,14 +71,18 @@ const RankCard: React.FC<RankCardProps> = ({ data }) => {
         e.currentTarget.style.boxShadow = '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1)';
       }}
     >
-      <h3 className={styles.cardTitle}>{data.name}</h3>
-      <div className={styles.cardPrice}>{formatPrice(data.price)}</div>
-      <div className={styles.cardMeta} style={{ marginBottom: '0.75rem' }}>
-        <span className={`${styles.badge} ${getBadgeClass(data.changeType)}`}>
-          {data.typeLabel} {data.priceChange}
-        </span>
+      <div className={styles.cardTop}>
+        <h3 className={styles.cardTitle}>{data.name}</h3>
+        <div className={styles.cardPrice}>{formatPrice(data.price)}</div>
       </div>
-      <div className={styles.cardInfo} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>{formatInfo(data.info)}</div>
+      <div className={styles.cardBottom}>
+        <div className={styles.cardMeta}>
+          <span className={`${styles.badge} ${getBadgeClass(data.changeType)}`}>
+            {data.typeLabel} {data.priceChange}
+          </span>
+        </div>
+        <div className={styles.cardInfo}>{formatInfo(data.info)}</div>
+      </div>
     </article>
   );
 };

@@ -253,6 +253,16 @@
 .rank3 { background-color: var(--rank-3); color: white; }
 .rankOther { background-color: var(--rank-other); color: var(--text-secondary); }
 
+.cardTop {
+  display: flex;
+  flex-direction: column;
+}
+
+.cardBottom {
+  display: flex;
+  flex-direction: column;
+}
+
 .cardTitle {
   font-weight: 700;
   font-size: 1rem;
@@ -463,18 +473,31 @@
     border-bottom: 1px solid var(--border-color);
   }
   
+  .cardTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .cardBottom {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 6px;
+  }
+
   .cardTitle {
     font-size: 14px;
-    margin-bottom: 2px;
+    margin: 0;
   }
   
   .cardPrice {
     font-size: 15px;
-    margin-bottom: 2px;
+    margin: 0;
   }
   
   .cardMeta {
-    margin-bottom: 4px;
+    margin: 0;
   }
   
   .badge {
@@ -484,7 +507,7 @@
   
   .cardInfo {
     font-size: 11px;
-    padding-top: 4px;
+    padding-top: 0;
   }
   
   .floatingViewToggle {
