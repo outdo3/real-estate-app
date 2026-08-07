@@ -53,6 +53,7 @@ export default function Home() {
   const [userLawdCd, setUserLawdCd] = useState<string>(''); 
   const [userRegionName, setUserRegionName] = useState<string>('지역 탐색 중...');
   const [userDong, setUserDong] = useState<string>('all');
+  const [userCenter, setUserCenter] = useState<{lat: number, lng: number} | null>(null);
   
   // 더보기 상태
   const [loadMoreCount, setLoadMoreCount] = useState(0);
@@ -82,11 +83,24 @@ export default function Home() {
       if (window.kakao && window.kakao.maps) {
         clearInterval(checkKakao);
         window.kakao.maps.load(() => {
+          const loadFallback = () => {
+            const lastCd = localStorage.getItem('lastLawdCd');
+            const lastName = localStorage.getItem('lastRegionName');
+            if (lastCd && lastName) {
+              setUserLawdCd(lastCd);
+              setUserRegionName(lastName);
+            } else {
+              setUserLawdCd('11110'); // 종로구 기본값 (서울 중심)
+              setUserRegionName('서울특별시 종로구');
+            }
+          };
+
           if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
               (position) => {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
+                setUserCenter({ lat, lng });
                 
                 const geocoder = new window.kakao.maps.services.Geocoder();
                 geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
@@ -96,20 +110,24 @@ export default function Home() {
                         const lawdCd = result[i].code.substring(0, 5);
                         setUserLawdCd(lawdCd);
                         setUserRegionName(result[i].address_name);
+                        localStorage.setItem('lastLawdCd', lawdCd);
+                        localStorage.setItem('lastRegionName', result[i].address_name);
                         break;
                       }
                     }
+                  } else {
+                    loadFallback();
                   }
                 });
               },
               (error) => {
-                setUserLawdCd('11680');
-                setUserRegionName('서울 강남구');
-              }
+                console.warn('Geolocation Error:', error);
+                loadFallback();
+              },
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
           } else {
-            setUserLawdCd('11680');
-            setUserRegionName('서울 강남구');
+            loadFallback();
           }
         });
       }
@@ -185,6 +203,8 @@ export default function Home() {
     setUserRegionName(regionName);
     setUserDong(dongName || 'all');
     setLoadMoreCount(0);
+    localStorage.setItem('lastLawdCd', lawdCd);
+    localStorage.setItem('lastRegionName', regionName);
   };
 
   // 필터 및 정렬 적용
@@ -373,7 +393,7 @@ export default function Home() {
         {/* 지도 영역 (토글) */}
         {showMap && (
           <div style={{ marginBottom: '3rem' }}>
-            <MapViewer markers={mapMarkers} />
+            <MapViewer markers={mapMarkers} userCenter={userCenter} />
           </div>
         )}
 

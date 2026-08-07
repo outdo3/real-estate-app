@@ -10,9 +10,10 @@ interface MapViewerProps {
     lat: number;
     lng: number;
   }[];
+  userCenter?: { lat: number; lng: number } | null;
 }
 
-const MapViewer: React.FC<MapViewerProps> = ({ markers = [] }) => {
+const MapViewer: React.FC<MapViewerProps> = ({ markers = [], userCenter = null }) => {
   const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
   const [isMapReady, setIsMapReady] = useState(false);
   const [center, setCenter] = useState({ lat: 37.498095, lng: 127.027610 }); // 기본: 강남역
@@ -45,9 +46,11 @@ const MapViewer: React.FC<MapViewerProps> = ({ markers = [] }) => {
     return () => clearInterval(checkKakao);
   }, [apiKey]);
 
-  // 컴포넌트 첫 마운트 시, 사용자 위치 가져오기
+  // 컴포넌트 첫 마운트 시 또는 userCenter 변경 시 중심 위치 업데이트
   useEffect(() => {
-    if (navigator.geolocation) {
+    if (userCenter) {
+      setCenter(userCenter);
+    } else if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setCenter({
@@ -60,12 +63,13 @@ const MapViewer: React.FC<MapViewerProps> = ({ markers = [] }) => {
           if (markers.length > 0) {
             setCenter({ lat: markers[0].lat, lng: markers[0].lng });
           }
-        }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else if (markers.length > 0) {
       setCenter({ lat: markers[0].lat, lng: markers[0].lng });
     }
-  }, [markers]);
+  }, [userCenter, markers]);
 
   // 장소 검색 함수
   const searchPlaces = (e: React.FormEvent) => {
@@ -117,7 +121,11 @@ const MapViewer: React.FC<MapViewerProps> = ({ markers = [] }) => {
         <button 
           onClick={() => {
             if (navigator.geolocation) {
-              navigator.geolocation.getCurrentPosition((pos) => setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }));
+              navigator.geolocation.getCurrentPosition(
+                (pos) => setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                (err) => console.warn(err),
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+              );
             }
           }} 
           style={{ padding: '0.6rem 1rem', background: 'white', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, transition: 'background 0.2s' }}
