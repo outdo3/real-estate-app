@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import Header from '@/components/Header';
 import styles from './detail.module.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -491,7 +492,20 @@ export default function ApartmentDetail() {
           {loading ? (
             <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>데이터를 불러오는 중입니다...</div>
           ) : trades.length === 0 ? (
-            <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>거래 내역이 없습니다.</div>
+            <div style={{ height: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>😢</div>
+              <h3 style={{ fontSize: '1.2rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                현재 지역({regionName})에는 해당 단지의 거래 내역이 없습니다.
+              </h3>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
+                만약 다른 지역의 아파트라면, 메인 화면으로 돌아가<br/>상단 필터에서 올바른 시/군/구를 선택한 후 다시 검색해 주세요.
+              </p>
+              <Link href="/" passHref legacyBehavior>
+                <button style={{
+                  padding: '0.75rem 2rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer'
+                }}>메인으로 돌아가기</button>
+              </Link>
+            </div>
           ) : (
             <div style={{ width: '100%', height: 400 }}>
               <ResponsiveContainer width="100%" height="100%">

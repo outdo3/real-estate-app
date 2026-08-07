@@ -486,27 +486,11 @@ export default function Home() {
             <div style={{ textAlign: 'center', padding: '4rem 1rem', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-color)', margin: '2rem 0' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏢</div>
               <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                최근 3개월 내 <b>&quot;{keyword}&quot;</b>의 실거래 내역이 없습니다.
+                선택하신 지역({displayRegionName})에 <b>&quot;{keyword}&quot;</b> 실거래 내역이 없습니다.
               </h3>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
-                원하시는 단지가 맞다면, 상세 페이지에서 과거 실거래 내역과 단지 정보를 확인해 보세요.
+              <p style={{ color: 'var(--text-muted)' }}>
+                찾으시는 단지가 다른 지역에 있다면, 상단 필터에서 올바른 시/군/구를 선택한 후 다시 검색해 주세요.
               </p>
-              <Link href={`/apt/${encodeURIComponent(keyword)}?type=${TAB_MAP[activeTab]}&lawdCd=${userLawdCd}`} passHref legacyBehavior>
-                <button style={{
-                  padding: '1rem 2.5rem',
-                  backgroundColor: 'var(--primary-color)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '1.1rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: 'var(--shadow-md)',
-                  transition: 'all 0.2s'
-                }}>
-                  {keyword} 상세정보 바로가기 &gt;
-                </button>
-              </Link>
             </div>
           ) : (
             <>
