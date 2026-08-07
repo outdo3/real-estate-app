@@ -126,50 +126,7 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     });
 
   } catch (error) {
-    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). Returning MOCK data...`);
-    
-    // 네트워크 환경 문제로 국토부 API 접근 불가 시, 실시간 UI 시연을 위한 가상 데이터 생성
-    const isBusan = lawdCd.startsWith('26');
-    const mockDong = isBusan ? (lawdCd === '26140' ? '서대신동' : '해운대구') : '역삼동';
-    
-    const mockNames = type === 'apt' ? ['푸르지오', '래미안', '자이', '힐스테이트', '롯데캐슬'] :
-                      type === 'rent' ? ['행복마을', '휴먼시아', '대시앙', 'sk뷰', '더샵'] :
-                      type === 'officetel' ? ['센텀오피스텔', '에비뉴', '스마트시티', '리더스', '골든타워'] :
-                      type === 'villa' ? ['그린빌라', '행복빌라', '햇살마을', '청담빌라', '로즈하우스'] :
-                      ['분양권A', '분양권B', '분양권C', '분양권D', '분양권E'];
-
-    return Array.from({ length: 5 }).map((_, index) => {
-      const year = dealYmd.substring(0, 4);
-      const month = dealYmd.substring(4, 6);
-      const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
-      
-      const formatKoreanPriceMock = (val: number) => {
-        if (val >= 10000) {
-          const uk = Math.floor(val / 10000);
-          const man = val % 10000;
-          return man === 0 ? `${uk}억` : `${uk}억 ${man.toLocaleString('ko-KR')}만`;
-        }
-        return `${val.toLocaleString('ko-KR')}만`;
-      };
-
-      const randPrice = Math.floor(Math.random() * 50000) + 10000;
-      let priceStr = type === 'rent' 
-        ? `보증금 ${formatKoreanPriceMock(Math.floor(Math.random() * 20000))} / 월세 ${formatKoreanPriceMock(Math.floor(Math.random() * 100) + 30)}`
-        : formatKoreanPriceMock(randPrice);
-
-      return {
-        id: `mock-${type}-${lawdCd}-${dealYmd}-${index}`,
-        rank: index + 1,
-        name: `${mockDong} ${mockNames[index % mockNames.length]}`,
-        price: priceStr,
-        priceChange: '', 
-        changeType: index % 2 === 0 ? 'up' : 'new',
-        typeLabel: type === 'rent' ? '전월세' : (type === 'silv' ? '분양권' : (type === 'officetel' ? '오피스텔' : (type === 'villa' ? '빌라' : '실거래'))),
-        info: `${Math.floor(Math.random() * 40) + 50}m² • ${Math.floor(Math.random() * 15) + 1}층 • ${year}-${month}-${day}`,
-        dong: mockDong,
-        lat: null, 
-        lng: null,
-      };
-    });
+    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). Returning empty array...`);
+    return [];
   }
 }

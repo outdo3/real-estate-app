@@ -156,12 +156,6 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
         <button className={styles.searchBtn} onClick={() => onSearch(keyword)}>검색</button>
       </div>
 
-      <div className={styles.tagsContainer}>
-        <span className={styles.tag} onClick={() => onSearch('부산 서구')}>#부산 서구 신고가</span>
-        <span className={styles.tag} onClick={() => onSearch('대신푸르지오')}>#대신푸르지오</span>
-        <span className={styles.tag} onClick={() => onSearch('힐스테이트이진베이시티')}>#힐스테이트이진베이시티</span>
-        <span className={styles.tag} onClick={() => onSearch('래미안')}>#래미안</span>
-      </div>
     </div>
   );
 };
