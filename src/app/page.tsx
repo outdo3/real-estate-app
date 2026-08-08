@@ -99,11 +99,17 @@ export default function Home() {
     }, 15000);
 
     checkKakao = setInterval(() => {
-      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+      if (window.kakao && window.kakao.maps) {
         clearInterval(checkKakao);
         clearTimeout(kakaoTimeout);
 
         window.kakao.maps.load(() => {
+          if (!window.kakao.maps.services) {
+            console.warn('Kakao maps services not loaded');
+            loadFallback();
+            return;
+          }
+          
           const tryFallback = () => {
             fetch('https://ipinfo.io/json')
               .then(res => res.json())
