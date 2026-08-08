@@ -98,100 +98,104 @@ export default function Home() {
         clearTimeout(kakaoTimeout);
 
         window.kakao.maps.load(() => {
-          if (!window.kakao.maps.services) {
-            console.warn('Kakao maps services not loaded');
-            loadFallback();
-            return;
-          }
-          
-          const tryFallback = () => {
-            fetch('https://ipinfo.io/json')
-              .then(res => res.json())
-              .then(data => {
-                if (data.loc) {
-                  const parts = data.loc.split(',');
-                  const lat = parseFloat(parts[0]);
-                  const lng = parseFloat(parts[1]);
-                  setUserCenter({ lat, lng });
-                  const geocoder = new window.kakao.maps.services.Geocoder();
-                  geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
-                    if (status === window.kakao.maps.services.Status.OK) {
-                      for (let i = 0; i < result.length; i++) {
-                        if (result[i].region_type === 'B') {
-                          const lawdCd = result[i].code.substring(0, 5);
-                          setUserLawdCd(lawdCd);
-                          setUserRegionName(result[i].address_name);
-                          return;
-                        }
-                      }
-                    }
-                    loadFallback();
-                  });
-                } else {
-                  loadFallback();
-                }
-              })
-              .catch(() => loadFallback());
-          };
+          // Removed the early return for window.kakao.maps.services
+          const waitForServices = setInterval(() => {
+            if (window.kakao.maps.services) {
+              clearInterval(waitForServices);
+              clearTimeout(kakaoTimeout);
 
-          if (navigator.geolocation) {
-            let handled = false;
-            const fallbackTimeout = setTimeout(() => {
-              if (!handled) {
-                handled = true;
-                tryFallback();
-              }
-            }, 15000); // 사용자 대기시간 증가 (권한 묻는 시간 고려)
-
-            try {
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  if (handled) return;
-                  handled = true;
-                  clearTimeout(fallbackTimeout);
-                  
-                  const lat = position.coords.latitude;
-                  const lng = position.coords.longitude;
-                  setUserCenter({ lat, lng });
-                  
-                  const geocoder = new window.kakao.maps.services.Geocoder();
-                  geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
-                    if (status === window.kakao.maps.services.Status.OK) {
-                      for (let i = 0; i < result.length; i++) {
-                        if (result[i].region_type === 'B') {
-                          const lawdCd = result[i].code.substring(0, 5);
-                          setUserLawdCd(lawdCd);
-                          setUserRegionName(result[i].address_name);
-                          try {
-                            localStorage.setItem('lastLawdCd', lawdCd);
-                            localStorage.setItem('lastRegionName', result[i].address_name);
-                          } catch(e) {}
-                          return;
+              const tryFallback = () => {
+                fetch('https://ipinfo.io/json')
+                  .then(res => res.json())
+                  .then(data => {
+                    if (data.loc) {
+                      const parts = data.loc.split(',');
+                      const lat = parseFloat(parts[0]);
+                      const lng = parseFloat(parts[1]);
+                      setUserCenter({ lat, lng });
+                      const geocoder = new window.kakao.maps.services.Geocoder();
+                      geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
+                        if (status === window.kakao.maps.services.Status.OK) {
+                          for (let i = 0; i < result.length; i++) {
+                            if (result[i].region_type === 'B') {
+                              const lawdCd = result[i].code.substring(0, 5);
+                              setUserLawdCd(lawdCd);
+                              setUserRegionName(result[i].address_name);
+                              return;
+                            }
+                          }
                         }
-                      }
+                        loadFallback();
+                      });
+                    } else {
+                      loadFallback();
                     }
+                  })
+                  .catch(() => loadFallback());
+              };
+
+              if (navigator.geolocation) {
+                let handled = false;
+                const fallbackTimeout = setTimeout(() => {
+                  if (!handled) {
+                    handled = true;
                     tryFallback();
-                  });
-                },
-                (error) => {
-                  if (handled) return;
-                  handled = true;
-                  clearTimeout(fallbackTimeout);
-                  console.warn('Geolocation Error:', error);
-                  tryFallback();
-                },
-                { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
-              );
-            } catch (e) {
-              if (!handled) {
-                handled = true;
-                clearTimeout(fallbackTimeout);
+                  }
+                }, 15000); // 사용자 대기시간 증가 (권한 묻는 시간 고려)
+
+                try {
+                  navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                      if (handled) return;
+                      handled = true;
+                      clearTimeout(fallbackTimeout);
+                      
+                      const lat = position.coords.latitude;
+                      const lng = position.coords.longitude;
+                      setUserCenter({ lat, lng });
+                      
+                      const geocoder = new window.kakao.maps.services.Geocoder();
+                      geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
+                        if (status === window.kakao.maps.services.Status.OK) {
+                          for (let i = 0; i < result.length; i++) {
+                            if (result[i].region_type === 'B') {
+                              const lawdCd = result[i].code.substring(0, 5);
+                              setUserLawdCd(lawdCd);
+                              setUserRegionName(result[i].address_name);
+                              try {
+                                localStorage.setItem('lastLawdCd', lawdCd);
+                                localStorage.setItem('lastRegionName', result[i].address_name);
+                              } catch(e) {}
+                              return;
+                            }
+                          }
+                        }
+                        tryFallback();
+                      });
+                    },
+                    (error) => {
+                      if (handled) return;
+                      handled = true;
+                      clearTimeout(fallbackTimeout);
+                      console.warn('Geolocation Error:', error);
+                      tryFallback();
+                    },
+                    { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+                  );
+                } catch (e) {
+                  if (!handled) {
+                    handled = true;
+                    clearTimeout(fallbackTimeout);
+                    tryFallback();
+                  }
+                }
+              } else {
                 tryFallback();
               }
             }
-          } else {
-            tryFallback();
-          }
+          }, 100);
+
+          // Duplicate block removed
         });
       }
     }, 200);
