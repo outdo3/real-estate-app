@@ -26,11 +26,11 @@ async function resolveLawdCd(sido: string, gungu: string): Promise<string | null
     const sigunguData = await sigunguRes.json();
     const candidates = (sigunguData.regcodes || []).filter((r: any) => r.code.substring(0, 5) !== `${sidoCode}000`);
 
-    // 완전 일치("서울특별시 강남구") 우선, 없으면 구 이름이 포함된 첫 항목으로 대체
-    // (경기도의 성남시/수원시 등은 분당구/영통구처럼 하위 구 단위로만 존재할 수 있음)
-    const exact = candidates.find((r: any) => r.name === `${sido} ${gungu}`);
-    const partial = candidates.find((r: any) => r.name.includes(gungu));
-    const matched = exact || partial;
+    // 완전 일치만 허용한다. 예전에는 일치하는 항목이 없을 때 이름에 구 이름이
+    // "포함"되는 첫 항목으로 대체했는데("강서구".includes("서구") === true),
+    // 이 때문에 "서구"를 선택해도 "강서구"가 매칭될 위험이 있었다.
+    // 정확히 일치하는 지역이 없으면 절대 추측하지 않고 null을 반환한다.
+    const matched = candidates.find((r: any) => r.name === `${sido} ${gungu}`);
 
     const lawdCd = matched ? matched.code.substring(0, 5) : null;
     lawdCdCache.set(cacheKey, lawdCd);
@@ -110,7 +110,13 @@ export async function GET(request: Request) {
   const gungu = searchParams.get('gungu') || '서구';
 
   try {
-    const lawdCd = (await resolveLawdCd(sido, gungu)) || '26140';
+    const lawdCd = await resolveLawdCd(sido, gungu);
+    if (!lawdCd) {
+      // 지역 코드를 정확히 찾지 못했을 때 임의의 지역(예: 부산 서구)으로
+      // 대체하면, 사용자가 선택한 지역과 다른 지역의 데이터가 표시되어
+      // 마치 지역이 섞인 것처럼 보일 수 있다. 절대 추측하지 않고 명확히 실패를 알린다.
+      return NextResponse.json({ success: false, error: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` });
+    }
 
     const now = new Date();
     const currentYear = now.getFullYear();

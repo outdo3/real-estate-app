@@ -38,19 +38,26 @@ export default function StatsPage() {
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [tradeModal, setTradeModal] = useState<{ title: string; trades: any[] } | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
       setLoading(true);
+      setFetchError(null);
       try {
         const res = await fetch(`/api/stats/dashboard?sido=${encodeURIComponent(sido)}&gungu=${encodeURIComponent(gungu)}`);
         const json = await res.json();
         if (json.success) {
           setData(json.data);
+        } else {
+          setData(null);
+          setFetchError(json.error || '통계 데이터를 불러오지 못했습니다.');
         }
       } catch (e) {
         console.error(e);
+        setData(null);
+        setFetchError('통계 데이터를 불러오지 못했습니다.');
       } finally {
         setLoading(false);
       }
@@ -158,9 +165,13 @@ export default function StatsPage() {
           ))}
         </div>
 
-        {loading || !data ? (
+        {loading ? (
           <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-muted)' }}>
             통계 데이터를 분석 중입니다...
+          </div>
+        ) : fetchError || !data ? (
+          <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-muted)' }}>
+            ⚠️ {fetchError || '통계 데이터를 불러오지 못했습니다.'}
           </div>
         ) : (
           <>

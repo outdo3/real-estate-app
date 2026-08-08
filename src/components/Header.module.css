@@ -55,12 +55,13 @@
   white-space: nowrap;
 }
 
-/* 현재 페이지 타이틀: 로고 우측 중앙 영역에 균형감 있게 배치 (검색창이 있는 페이지는 검색창이 대신 이 자리를 차지) */
+/* 현재 페이지 타이틀: 헤더 우측 가장자리에 깔끔하게 배치 (검색창이 있는 페이지는 검색창이 대신 이 자리를 차지) */
 .pageTitle {
   flex: 1;
   min-width: 0;
   margin: 0;
-  text-align: center;
+  padding-right: 1rem;
+  text-align: right;
   font-size: 1.1rem;
   font-weight: 800;
   color: var(--text-primary);
