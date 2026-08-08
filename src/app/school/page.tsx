@@ -31,6 +31,7 @@ export default function SchoolInfoPage() {
   const [schools, setSchools] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [aptList, setAptList] = useState<any[]>([]);
+  const [aptSort, setAptSort] = useState<'distance' | 'newest'>('distance');
   const [lawdCd, setLawdCd] = useState('11680'); // 기본값: 강남구
 
   // 선택한 지역(sido, gungu)에 맞는 법정동코드(lawdCd) 조회
@@ -206,8 +207,19 @@ export default function SchoolInfoPage() {
             <div className={styles.summaryCard}>
               <div className={styles.cardIcon}>🏫</div>
               <div className={styles.cardContent}>
-                <h3>{region} 학교 수</h3>
-                <p>총 {stats.totalSchools}개교 (초{stats.elemCount}/중{stats.midCount}/고{stats.highCount})</p>
+                <h3>{region} {activeTab === '전체' || activeTab === '학원가' ? '학교' : activeTab + '학교'} 수</h3>
+                <p>
+                  {activeTab === '전체' || activeTab === '학원가'
+                    ? `총 ${stats.totalSchools}개교 (초${stats.elemCount}/중${stats.midCount}/고${stats.highCount})`
+                    : activeTab === '초등'
+                    ? `총 ${stats.elemCount}개교`
+                    : activeTab === '중등'
+                    ? `총 ${stats.midCount}개교`
+                    : activeTab === '고등'
+                    ? `총 ${stats.highCount}개교`
+                    : `총 ${stats.totalSchools}개교`
+                  }
+                </p>
               </div>
             </div>
             <div className={styles.summaryCard}>
@@ -264,12 +276,22 @@ export default function SchoolInfoPage() {
                 <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
                   ※ 직선거리 기반 자동 매칭 단지로, 교육청의 공식 행정 배정 구역과는 미세한 차이가 있을 수 있습니다.
                 </p>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <button onClick={() => setAptSort('distance')} className={aptSort === 'distance' ? styles.activeSortBtn : styles.sortBtn}>거리순</button>
+                  <button onClick={() => setAptSort('newest')} className={aptSort === 'newest' ? styles.activeSortBtn : styles.sortBtn}>신축순</button>
+                </div>
               </div>
               <div className={styles.aptList}>
-                {aptList.map(apt => (
+                {[...aptList].sort((a, b) => {
+                  if (aptSort === 'newest') {
+                    return (b.buildYear || 0) - (a.buildYear || 0);
+                  } else {
+                    return (a.distance || 0) - (b.distance || 0);
+                  }
+                }).map(apt => (
                   <div key={apt.id} className={styles.aptItem}>
                     <div>
-                      <div className={styles.aptName}>{apt.name}</div>
+                      <div className={styles.aptName}>{apt.name} <span style={{fontSize: '0.75rem', color: '#64748b', marginLeft: '4px'}}>{apt.buildYear ? `${apt.buildYear}년` : ''}</span></div>
                       <div className={styles.aptWalk}>{apt.walkTime}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
