@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -167,7 +167,35 @@ export default function Home() {
     });
   };
 
-  // GPS로 사용자 현재 위치를 가져와 지도 중심을 즉시 이동
+  // userLawdCd의 최신값을 참조하기 위한 ref. useCallback(fn, [])으로 고정한 핸들러
+  // (Map의 onCreate/onIdle) 안에서도 최신 값을 읽을 수 있도록 한다.
+  const userLawdCdRef = useRef(userLawdCd);
+  useEffect(() => {
+    userLawdCdRef.current = userLawdCd;
+  }, [userLawdCd]);
+
+  // 좌표를 행정구역(시/군/구, lawdCd)으로 역지오코딩하여 지역 상태를 갱신한다.
+  // userLawdCd/userDong이 바뀌면 기존 데이터 fetch useEffect가 자동으로 해당
+  // 지역의 실거래가를 재요청하므로, 여기서는 상태만 갱신하면 된다.
+  // force가 없으면 현재와 같은 시군구일 때는 불필요한 상태 갱신(및 리스트 리셋)을 건너뛴다.
+  const applyRegionFromCoords = useCallback((lat: number, lng: number, force?: boolean) => {
+    if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) return;
+    const geocoder = new window.kakao.maps.services.Geocoder();
+    geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
+      if (status !== window.kakao.maps.services.Status.OK) return;
+      const region = result.find((r: any) => r.region_type === 'B');
+      if (!region) return;
+      const newLawdCd = region.code.substring(0, 5);
+      if (!force && newLawdCd === userLawdCdRef.current) return;
+      setUserLawdCd(newLawdCd);
+      setUserDong('all');
+      setDisplayRegionName(region.address_name);
+      setHighlightedMarkerName(null);
+    });
+  }, []);
+
+  // GPS로 사용자 현재 위치를 가져와 지도 중심을 이동시키고, 해당 좌표의 행정구역을
+  // 역지오코딩해 상단 표시와 실거래가 데이터를 즉시 갱신한다.
   const goToMyLocation = () => {
     if (!navigator.geolocation) {
       console.warn('[GPS] 이 브라우저는 위치 정보를 지원하지 않습니다.');
@@ -175,7 +203,9 @@ export default function Home() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        const { latitude, longitude } = pos.coords;
+        setCenter({ lat: latitude, lng: longitude });
+        applyRegionFromCoords(latitude, longitude, true);
       },
       (err) => {
         console.error('[GPS] 위치 정보를 가져오지 못했습니다.', err);
@@ -195,7 +225,12 @@ export default function Home() {
       sw: { lat: b.getSouthWest().getLat(), lng: b.getSouthWest().getLng() },
       ne: { lat: b.getNorthEast().getLat(), lng: b.getNorthEast().getLng() },
     });
-  }, []);
+    // LocalStorage에서 다른 지역의 마지막 위치를 복원한 경우, 지도는 그 위치를
+    // 보여주지만 userLawdCd는 여전히 기본값일 수 있으므로 최초 생성 시점에도
+    // 실제 중심 좌표 기준으로 지역을 맞춰준다.
+    const c = map.getCenter();
+    applyRegionFromCoords(c.getLat(), c.getLng());
+  }, [applyRegionFromCoords]);
 
   const handleMapIdle = useCallback((map: any) => {
     const b = map.getBounds();
@@ -205,13 +240,15 @@ export default function Home() {
     });
     const level = map.getLevel();
     setMapLevel(level);
+    const c = map.getCenter();
     try {
-      const c = map.getCenter();
       localStorage.setItem(LAST_POSITION_KEY, JSON.stringify({ lat: c.getLat(), lng: c.getLng(), level }));
     } catch (e) {
       console.error('[LocalStorage] 위치 저장 실패', e);
     }
-  }, []);
+    // 지도 중심이 다른 시/군/구로 넘어간 경우에만 지역/데이터를 자동 재요청
+    applyRegionFromCoords(c.getLat(), c.getLng());
+  }, [applyRegionFromCoords]);
 
   // 마지막 탐색 위치(위도/경도/레벨) 복원: 저장된 값이 있으면 기본 위치(강남구) 대신 사용
   useEffect(() => {
