@@ -26,13 +26,6 @@ export default function ApartmentDetail() {
   const params = useParams();
   const [aptName, setAptName] = useState<string>('');
   
-  useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const queryAptName = searchParams.get('aptName');
-    const pathName = decodeURIComponent(params.name as string);
-    setAptName(queryAptName || pathName || decodeURIComponent(window.location.pathname.split('/').pop() || ''));
-  }, [params.name]);
-
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState<string | null>(null);
@@ -41,16 +34,25 @@ export default function ApartmentDetail() {
   const [lawdCdState, setLawdCdState] = useState('11680');
   const [regionName, setRegionName] = useState<string>('');
   const [urlDong, setUrlDong] = useState<string>('');
-  
+
   const [selectedArea, setSelectedArea] = useState<string>('전체');
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
   const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
   const [onlySales, setOnlySales] = useState<boolean>(true);
 
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryAptName = searchParams.get('aptName');
+    const pathName = decodeURIComponent(params.name as string);
+    setAptName(queryAptName || pathName || decodeURIComponent(window.location.pathname.split('/').pop() || ''));
+
+    const queryType = searchParams.get('type');
+    if (queryType === 'rent') setTradeTypeFilter('전월세');
+  }, [params.name]);
+
   const formatKoreanPrice = (val: string) => {
     const cleanStr = val.replace(/[\s,]/g, '').replace('만', '');
     const num = parseInt(cleanStr, 10);
-    console.log('parsedPrice:', num, 'from val:', val);
     if (isNaN(num)) return val;
     if (num >= 10000) {
       const eok = Math.floor(num / 10000);
@@ -526,7 +528,7 @@ export default function ApartmentDetail() {
           
           {loading ? (
             <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>데이터를 불러오는 중입니다...</div>
-          ) : trades.length === 0 ? (
+          ) : filteredTrades.length === 0 ? (
             <div style={{ height: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>😢</div>
               <h3 style={{ fontSize: '1.2rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>

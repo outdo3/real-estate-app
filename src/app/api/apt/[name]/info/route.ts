@@ -58,7 +58,7 @@ export async function GET(
         let fullLawdCd = lawdCd + '10100'; // fallback
         
         if (regData.regcodes) {
-          const match = regData.regcodes.find((r: any) => r.name.includes(dong) && r.code.startsWith(lawdCd));
+          const match = regData.regcodes.find((r: any) => (r.name || '').includes(dong) && r.code.startsWith(lawdCd));
           if (match) fullLawdCd = match.code;
         }
 
@@ -95,7 +95,8 @@ export async function GET(
               return bldNm.includes(aptCleanName) || aptCleanName.includes(bldNm);
             }) || itemsArr[0]; // 못찾으면 첫번째거라도 (대표 번지)
             
-            if (target && target.totPkngCnt) {
+            const parkingCnt = target ? parseInt(target.totPkngCnt, 10) : NaN;
+            if (target && !isNaN(parkingCnt) && parkingCnt > 0) {
               info['총주차대수'] = `${target.totPkngCnt}대`;
               // 세대당 주차대수 계산
               if (info['세대수']) {

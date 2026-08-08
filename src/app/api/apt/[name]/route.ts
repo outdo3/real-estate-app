@@ -61,17 +61,9 @@ export async function GET(
       })
       .map(item => {
         const priceStr = item.price;
-        let priceNum = item.dealAmount ? item.dealAmount / 10000 : 0;
-        
-        // Fallback if dealAmount is missing for some reason
-        if (priceNum === 0 && priceStr) {
-          const targetStrForChart = type === 'rent' ? priceStr.split('/')[0] : priceStr;
-          const match = targetStrForChart.match(/\d+/g);
-          if (match) {
-            const rawNum = parseInt(match.join(''), 10);
-            priceNum = rawNum / 10000; 
-          }
-        }
+        // dealAmount(만원 단위 정수)를 직접 사용한다. priceStr("1억"처럼 만 단위 나머지가 없는 문자열)을
+        // 정규식으로 재파싱하던 이전 fallback은 자릿수를 잘못 이어붙여 1/10000로 계산되는 버그가 있었다.
+        const priceNum = item.dealAmount ? item.dealAmount / 10000 : 0;
 
         const dateParts = item.info.split('•');
         const tradeDateStr = dateParts[dateParts.length - 1].trim();
