@@ -105,16 +105,6 @@ export default function Home() {
 
         window.kakao.maps.load(() => {
           const tryFallback = () => {
-            try {
-              const lastCd = localStorage.getItem('lastLawdCd');
-              const lastName = localStorage.getItem('lastRegionName');
-              if (lastCd && lastName) {
-                setUserLawdCd(lastCd);
-                setUserRegionName(lastName);
-                return;
-              }
-            } catch (e) {}
-
             fetch('https://ipinfo.io/json')
               .then(res => res.json())
               .then(data => {

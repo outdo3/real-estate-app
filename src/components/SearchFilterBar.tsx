@@ -162,11 +162,13 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
                 setShowDropdown(false);
                 setKeyword('');
                 
-                // 아파트 이름 정제: 공백 제거 및 뒤에 붙은 '아파트' 제거
-                const cleanAptName = aptName.replace(/\s+/g, '').replace(/아파트$/, '');
-
-                // 라우팅 (검색된 결과는 전국 어디든 바로 상세페이지로 이동)
-                router.push(`/apt/${encodeURIComponent(cleanAptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}&aptName=${encodeURIComponent(aptName)}`);
+                // 아파트인 경우 상세페이지로 이동, 그 외(지역/지하철역 등)는 지역만 변경
+                if (place.category_name && place.category_name.includes('아파트')) {
+                  const cleanAptName = aptName.replace(/\s+/g, '').replace(/아파트$/, '');
+                  router.push(`/apt/${encodeURIComponent(cleanAptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}&aptName=${encodeURIComponent(aptName)}`);
+                } else {
+                  onRegionChange(lawdCd, region, placeDong);
+                }
                 return;
               }
             }
