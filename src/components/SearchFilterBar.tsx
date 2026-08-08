@@ -118,17 +118,25 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
     }
     
     const delayDebounceFn = setTimeout(() => {
-      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
-        const ps = new window.kakao.maps.services.Places();
-        ps.keywordSearch(keyword, (data: any, status: any) => {
-          if (status === window.kakao.maps.services.Status.OK) {
-            setSearchResults(data);
-            setShowDropdown(true);
-          } else {
-            setSearchResults([]);
-            setShowDropdown(false);
-          }
-        });
+      const performSearch = () => {
+        if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+          const ps = new window.kakao.maps.services.Places();
+          ps.keywordSearch(keyword, (data: any, status: any) => {
+            if (status === window.kakao.maps.services.Status.OK) {
+              setSearchResults(data);
+              setShowDropdown(true);
+            } else {
+              setSearchResults([]);
+              setShowDropdown(false);
+            }
+          });
+        }
+      };
+
+      if (window.kakao && window.kakao.maps && window.kakao.maps.load) {
+        window.kakao.maps.load(performSearch);
+      } else {
+        performSearch();
       }
     }, 300);
 
@@ -140,29 +148,37 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
     const y = parseFloat(place.y);
     const aptName = place.place_name;
 
-    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
-      const geocoder = new window.kakao.maps.services.Geocoder();
-      geocoder.coord2RegionCode(x, y, (result: any, geoStatus: any) => {
-        if (geoStatus === window.kakao.maps.services.Status.OK) {
-          for (let i = 0; i < result.length; i++) {
-            if (result[i].region_type === 'B') {
-              const lawdCd = result[i].code.substring(0, 5);
-              const region = result[i].address_name;
-              const placeDong = result[i].region_3depth_name;
-              
-              setShowDropdown(false);
-              setKeyword('');
-              
-              // 아파트 이름 정제: 공백 제거 및 뒤에 붙은 '아파트' 제거
-              const cleanAptName = aptName.replace(/\s+/g, '').replace(/아파트$/, '');
+    const performRouting = () => {
+      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+        const geocoder = new window.kakao.maps.services.Geocoder();
+        geocoder.coord2RegionCode(x, y, (result: any, geoStatus: any) => {
+          if (geoStatus === window.kakao.maps.services.Status.OK) {
+            for (let i = 0; i < result.length; i++) {
+              if (result[i].region_type === 'B') {
+                const lawdCd = result[i].code.substring(0, 5);
+                const region = result[i].address_name;
+                const placeDong = result[i].region_3depth_name;
+                
+                setShowDropdown(false);
+                setKeyword('');
+                
+                // 아파트 이름 정제: 공백 제거 및 뒤에 붙은 '아파트' 제거
+                const cleanAptName = aptName.replace(/\s+/g, '').replace(/아파트$/, '');
 
-              // 라우팅 (검색된 결과는 전국 어디든 바로 상세페이지로 이동)
-              router.push(`/apt/${encodeURIComponent(cleanAptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}`);
-              return;
+                // 라우팅 (검색된 결과는 전국 어디든 바로 상세페이지로 이동)
+                router.push(`/apt/${encodeURIComponent(cleanAptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}`);
+                return;
+              }
             }
           }
-        }
-      });
+        });
+      }
+    };
+
+    if (window.kakao && window.kakao.maps && window.kakao.maps.load) {
+      window.kakao.maps.load(performRouting);
+    } else {
+      performRouting();
     }
   };
 

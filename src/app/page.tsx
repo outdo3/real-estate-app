@@ -115,11 +115,20 @@ export default function Home() {
         clearTimeout(kakaoTimeout);
 
         window.kakao.maps.load(() => {
-          if (navigator.geolocation) {
-            const fallbackToIp = async () => {
-              try {
-                const res = await fetch('https://ipinfo.io/json');
-                const data = await res.json();
+          const tryFallback = () => {
+            try {
+              const lastCd = localStorage.getItem('lastLawdCd');
+              const lastName = localStorage.getItem('lastRegionName');
+              if (lastCd && lastName) {
+                setUserLawdCd(lastCd);
+                setUserRegionName(lastName);
+                return;
+              }
+            } catch (e) {}
+
+            fetch('https://ipinfo.io/json')
+              .then(res => res.json())
+              .then(data => {
                 if (data.loc) {
                   const parts = data.loc.split(',');
                   const lat = parseFloat(parts[0]);
@@ -133,29 +142,27 @@ export default function Home() {
                           const lawdCd = result[i].code.substring(0, 5);
                           setUserLawdCd(lawdCd);
                           setUserRegionName(result[i].address_name);
-                          try {
-                            localStorage.setItem('lastLawdCd', lawdCd);
-                            localStorage.setItem('lastRegionName', result[i].address_name);
-                          } catch (e) {}
                           return;
                         }
                       }
                     }
                     loadFallback();
                   });
-                  return;
+                } else {
+                  loadFallback();
                 }
-              } catch (e) {}
-              loadFallback();
-            };
+              })
+              .catch(() => loadFallback());
+          };
 
+          if (navigator.geolocation) {
             let handled = false;
             const fallbackTimeout = setTimeout(() => {
               if (!handled) {
                 handled = true;
-                fallbackToIp();
+                tryFallback();
               }
-            }, 10000); // 10초 타임아웃으로 변경
+            }, 5000); // 5초로 단축하여 사용자 대기시간 감소
 
             try {
               navigator.geolocation.getCurrentPosition(
@@ -180,12 +187,11 @@ export default function Home() {
                             localStorage.setItem('lastLawdCd', lawdCd);
                             localStorage.setItem('lastRegionName', result[i].address_name);
                           } catch(e) {}
-                          break;
+                          return;
                         }
                       }
-                    } else {
-                      fallbackToIp();
                     }
+                    tryFallback();
                   });
                 },
                 (error) => {
@@ -193,19 +199,19 @@ export default function Home() {
                   handled = true;
                   clearTimeout(fallbackTimeout);
                   console.warn('Geolocation Error:', error);
-                  fallbackToIp();
+                  tryFallback();
                 },
-                { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+                { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
               );
             } catch (e) {
               if (!handled) {
                 handled = true;
                 clearTimeout(fallbackTimeout);
-                fallbackToIp();
+                tryFallback();
               }
             }
           } else {
-            loadFallback();
+            tryFallback();
           }
         });
       }
