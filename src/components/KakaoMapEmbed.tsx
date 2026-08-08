@@ -20,7 +20,6 @@ export default function KakaoMapEmbed({ address, type }: Props) {
           const coords = new window.kakao.maps.LatLng(result[0].y, result[0].x);
           
           if (containerRef.current) {
-            // ensure container has dimensions before initializing
             if (type === 'map') {
               const mapOptions = { center: coords, level: 3 };
               mapInstance = new window.kakao.maps.Map(containerRef.current, mapOptions);
@@ -29,11 +28,11 @@ export default function KakaoMapEmbed({ address, type }: Props) {
             } else {
               rvInstance = new window.kakao.maps.Roadview(containerRef.current);
               const rvClient = new window.kakao.maps.RoadviewClient();
-              rvClient.getNearestPanoId(coords, 50, (panoId: any) => {
+              rvClient.getNearestPanoId(coords, 200, (panoId: any) => {
                 if (panoId) {
                   rvInstance.setPanoId(panoId, coords);
                 } else {
-                  setError('해당 위치의 로드뷰 정보가 없습니다.');
+                  setError('해당 단지 근처의 로드뷰 정보를 찾을 수 없습니다.');
                 }
               });
             }
@@ -52,11 +51,11 @@ export default function KakaoMapEmbed({ address, type }: Props) {
                  } else {
                    rvInstance = new window.kakao.maps.Roadview(containerRef.current);
                    const rvClient = new window.kakao.maps.RoadviewClient();
-                   rvClient.getNearestPanoId(coords, 50, (panoId: any) => {
+                   rvClient.getNearestPanoId(coords, 200, (panoId: any) => {
                      if (panoId) {
                        rvInstance.setPanoId(panoId, coords);
                      } else {
-                       setError('해당 위치의 로드뷰 정보가 없습니다.');
+                       setError('해당 단지 근처의 로드뷰 정보를 찾을 수 없습니다.');
                      }
                    });
                  }
@@ -71,7 +70,6 @@ export default function KakaoMapEmbed({ address, type }: Props) {
 
     const loadKakaoMap = () => {
       window.kakao.maps.load(() => {
-        // Use setTimeout to ensure the modal's CSS has applied and container has dimensions
         setTimeout(renderMap, 100);
       });
     };
@@ -79,21 +77,13 @@ export default function KakaoMapEmbed({ address, type }: Props) {
     if (window.kakao && window.kakao.maps) {
       loadKakaoMap();
     } else {
-      const scriptId = 'kakao-map-script';
-      let script = document.getElementById(scriptId) as HTMLScriptElement;
-      
-      if (!script) {
-        script = document.createElement('script');
-        script.id = scriptId;
-        script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=ca05485a3b656a8eca75a33d158f26a4&libraries=services,clusterer,drawing&autoload=false`;
-        document.head.appendChild(script);
-      }
-      
-      script.addEventListener('load', loadKakaoMap);
-      
-      return () => {
-        script.removeEventListener('load', loadKakaoMap);
-      };
+      let checkKakao = setInterval(() => {
+        if (window.kakao && window.kakao.maps) {
+          clearInterval(checkKakao);
+          loadKakaoMap();
+        }
+      }, 100);
+      return () => clearInterval(checkKakao);
     }
   }, [address, type]);
 

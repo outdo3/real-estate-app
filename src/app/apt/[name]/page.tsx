@@ -53,13 +53,16 @@ export default function ApartmentDetail() {
 
   useEffect(() => {
     const fetchTrades = async () => {
+      setLoading(true);
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const lawdCd = urlParams.get('lawdCd') || '11680';
-        const type = urlParams.get('type') || 'apt';
         setLawdCdState(lawdCd);
         
-        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}`);
+        const periodParam = periodFilter === '1년' ? 12 : (periodFilter === '3년' ? 36 : (periodFilter === '5년' ? 60 : 120));
+        const typeParam = tradeTypeFilter === '전월세' ? 'rent' : 'apt';
+
+        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${typeParam}&period=${periodParam}`);
         if (response.ok) {
           const data = await response.json();
           setTrades(data.trades || []);
@@ -106,10 +109,10 @@ export default function ApartmentDetail() {
     
     fetchTrades();
     fetchAptInfo();
-  }, [aptName]);
+  }, [aptName, tradeTypeFilter, periodFilter]);
 
   // 필터링 적용
-  const now = new Date('2026-08-07');
+  const now = new Date();
   const filteredTrades = trades.filter(trade => {
     // 1. 평형 필터
     if (selectedArea !== '전체' && trade.area !== selectedArea) return false;
@@ -463,7 +466,7 @@ export default function ApartmentDetail() {
               <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '2rem' }}>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>최고가 / 최저가</div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  최고 {trades.length > 0 ? formatKoreanPrice(Math.max(...trades.map(t => t.price)).toString()) : '-'} / 최저 {trades.length > 0 ? formatKoreanPrice(Math.min(...trades.map(t => t.price)).toString()) : '-'}
+                  최고 {trades.length > 0 ? formatKoreanPrice((Math.max(...trades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {trades.length > 0 ? formatKoreanPrice((Math.min(...trades.map(t => t.price)) * 10000).toString()) : '-'}
                 </div>
               </div>
             </div>
@@ -495,16 +498,8 @@ export default function ApartmentDetail() {
             <div style={{ height: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>😢</div>
               <h3 style={{ fontSize: '1.2rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                현재 지역({regionName})에는 해당 단지의 거래 내역이 없습니다.
+                해당 기간/조건에 대한 거래 내역이 없습니다.
               </h3>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
-                만약 다른 지역의 아파트라면, 메인 화면으로 돌아가<br/>상단 필터에서 올바른 시/군/구를 선택한 후 다시 검색해 주세요.
-              </p>
-              <Link href="/" passHref legacyBehavior>
-                <button style={{
-                  padding: '0.75rem 2rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer'
-                }}>메인으로 돌아가기</button>
-              </Link>
             </div>
           ) : (
             <div style={{ width: '100%', height: 400 }}>
@@ -524,7 +519,13 @@ export default function ApartmentDetail() {
                     tick={{fill: 'var(--text-secondary)'}}
                     tickFormatter={(id) => chartData[id]?.date.substring(2, 7) || ''}
                   />
-                  <YAxis domain={['dataMin - 2', 'dataMax + 2']} axisLine={false} tickLine={false} tick={{fill: 'var(--text-secondary)'}} tickFormatter={(val) => `${val}억`} />
+                  <YAxis 
+                    domain={['dataMin - (dataMin * 0.1)', 'dataMax + (dataMax * 0.1)']} 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: 'var(--text-secondary)'}} 
+                    tickFormatter={(val) => val >= 1 ? `${val}억` : `${Math.round(val * 10000)}만`} 
+                  />
                   <Tooltip 
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--shadow-md)', padding: '12px' }}
                     content={({ active, payload, label }) => {

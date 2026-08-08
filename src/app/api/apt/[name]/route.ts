@@ -12,17 +12,20 @@ export async function GET(
     const lawdCd = searchParams.get('lawdCd') || '11680';
     const type = searchParams.get('type') || 'apt';
 
-    // 12개월(1년) 치 데이터 생성
+    const periodParam = parseInt(searchParams.get('period') || '36', 10);
+    const period = isNaN(periodParam) ? 36 : periodParam;
+
+    // period 개월 치 데이터 생성
     const months = [];
-    const now = new Date(2026, 7, 5); // 기준일(8월)
-    for (let i = 0; i < 6; i++) {
+    const now = new Date();
+    for (let i = 0; i < period; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, '0');
       months.push(`${y}${m}`);
     }
 
-    // 공공데이터 API 병렬 호출 (속도 6배 개선)
+    // 공공데이터 API 병렬 호출
     const promises = months.map(dealYmd => fetchMolitData({ type: type as any, lawdCd, dealYmd }));
     const results = await Promise.all(promises);
 
@@ -48,13 +51,14 @@ export async function GET(
         return itemName.includes(searchAptName) || searchAptName.includes(itemName);
       })
       .map(item => {
-        // "45,000만" 에서 숫자만 추출하여 차트용 price 생성
         const priceStr = item.price;
-        const match = priceStr.match(/\d+/g);
         let priceNum = 0;
+        
+        // 전월세일 경우 보증금만 차트용 숫자로 변환
+        const targetStrForChart = type === 'rent' ? priceStr.split('/')[0] : priceStr;
+        const match = targetStrForChart.match(/\d+/g);
+        
         if (match) {
-          // 예를 들어 '45000' 만원이면 '4.5억' 인데, 억 단위 정수로 할지... 
-          // Recharts에서는 억 단위로 보여주므로 45000 / 10000 = 4.5
           const rawNum = parseInt(match.join(''), 10);
           priceNum = rawNum / 10000; 
         }
