@@ -57,13 +57,20 @@ export default function KakaoPlaces({ address, category }: Props) {
     if (window.kakao && window.kakao.maps) {
       loadKakaoPlaces();
     } else {
-      const scriptId = 'kakao-map-script';
+      const scriptId = 'kakao-map-script-main';
       let script = document.getElementById(scriptId) as HTMLScriptElement;
-      
+
       if (!script) {
+        const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+        if (!apiKey) {
+          console.error('[KakaoPlaces] NEXT_PUBLIC_KAKAO_MAP_API_KEY 환경변수가 없습니다.');
+          setError('지도 API 키가 설정되지 않았습니다.');
+          setLoading(false);
+          return;
+        }
         script = document.createElement('script');
         script.id = scriptId;
-        script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=ca05485a3b656a8eca75a33d158f26a4&libraries=services,clusterer,drawing&autoload=false`;
+        script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer,drawing&autoload=false`;
         document.head.appendChild(script);
       }
       

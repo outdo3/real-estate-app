@@ -9,8 +9,12 @@ import MarketInsights from '@/components/MarketInsights';
 import RankCard from '@/components/RankCard';
 import styles from './page.module.css';
 
+// 배포 환경에 따라 변수명이 다르게 설정된 경우까지 대비한 방어적 조회
+const apiKey =
+  process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ||
+  process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+
 export default function Home() {
-  const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
   const router = useRouter();
 
   const [markers, setMarkers] = useState<any[]>([]);
@@ -18,21 +22,147 @@ export default function Home() {
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const [mapLoadAttempt, setMapLoadAttempt] = useState(0);
   const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
-  const [keyword, setKeyword] = useState('');
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
 
   const [dynamicData, setDynamicData] = useState<any[]>([]); // 탭 변경 시 데이터
   const [userLawdCd, setUserLawdCd] = useState<string>('26140');
+  const [userDong, setUserDong] = useState<string>('all');
   const [displayRegionName, setDisplayRegionName] = useState<string>('부산광역시 서구 동 전체');
 
+  // 아실 스타일 검색 모달 상태
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [modalStep, setModalStep] = useState<'sido' | 'sigungu' | 'dong'>('sido');
+  const [modalKeyword, setModalKeyword] = useState('');
+  type RegionOption = { code: string; name: string };
+  const [modalSidos, setModalSidos] = useState<RegionOption[]>([]);
+  const [modalSigungus, setModalSigungus] = useState<RegionOption[]>([]);
+  const [modalDongs, setModalDongs] = useState<RegionOption[]>([]);
+  const [selectedSido, setSelectedSido] = useState<RegionOption | null>(null);
+  const [selectedSigungu, setSelectedSigungu] = useState<RegionOption | null>(null);
+  const [regionLoading, setRegionLoading] = useState(false);
+
+  const openSearchModal = () => {
+    setShowSearchModal(true);
+    setModalStep('sido');
+    setSelectedSido(null);
+    setSelectedSigungu(null);
+    setModalKeyword('');
+    if (modalSidos.length === 0) {
+      setRegionLoading(true);
+      fetch('https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=*00000000')
+        .then(res => res.json())
+        .then(data => setModalSidos(data.regcodes || []))
+        .catch(err => console.error('시도 목록 조회 실패', err))
+        .finally(() => setRegionLoading(false));
+    }
+  };
+
+  const selectSido = (sido: RegionOption) => {
+    setSelectedSido(sido);
+    setSelectedSigungu(null);
+    setModalDongs([]);
+    setRegionLoading(true);
+    const sidoCode = sido.code.substring(0, 2);
+    fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${sidoCode}*00000&is_ignore_zero=true`)
+      .then(res => res.json())
+      .then(data => {
+        const list = (data.regcodes || []).filter((item: RegionOption) => item.code.substring(0, 5) !== `${sidoCode}000`);
+        setModalSigungus(list);
+        setModalStep('sigungu');
+      })
+      .catch(err => console.error('시군구 목록 조회 실패', err))
+      .finally(() => setRegionLoading(false));
+  };
+
+  const selectSigungu = (sigungu: RegionOption) => {
+    setSelectedSigungu(sigungu);
+    setRegionLoading(true);
+    const sigunguCode = sigungu.code.substring(0, 5);
+    fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${sigunguCode}*&is_ignore_zero=true`)
+      .then(res => res.json())
+      .then(data => {
+        const list = (data.regcodes || []).filter((item: RegionOption) => item.code !== `${sigunguCode}00000`);
+        setModalDongs(list);
+        setModalStep('dong');
+      })
+      .catch(err => console.error('읍면동 목록 조회 실패', err))
+      .finally(() => setRegionLoading(false));
+  };
+
+  // 지역 선택 확정: lawdCd/동 상태 갱신 + 카카오 지오코딩으로 지도 중심 이동 + 모달 닫기
+  const finalizeRegion = (lawdCd: string, regionName: string, dongName: string) => {
+    setUserLawdCd(lawdCd);
+    setUserDong(dongName);
+    setDisplayRegionName(regionName);
+    setShowSearchModal(false);
+
+    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+      const geocoder = new window.kakao.maps.services.Geocoder();
+      geocoder.addressSearch(regionName, (result: any, status: any) => {
+        if (status === window.kakao.maps.services.Status.OK && result[0]) {
+          setCenter({ lat: parseFloat(result[0].y), lng: parseFloat(result[0].x) });
+        }
+      });
+    }
+  };
+
+  const selectDong = (dong: RegionOption | null) => {
+    if (!selectedSido || !selectedSigungu) return;
+    const sigunguCode = selectedSigungu.code.substring(0, 5);
+    const sigunguShortName = selectedSigungu.name.split(' ').slice(1).join(' ');
+    if (!dong) {
+      finalizeRegion(sigunguCode, `${selectedSido.name} ${sigunguShortName}`, 'all');
+      return;
+    }
+    const dongShortName = dong.name.split(' ').pop() || 'all';
+    finalizeRegion(sigunguCode, dong.name, dongShortName);
+  };
+
+  const handleModalKeywordSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalKeyword.trim()) return;
+    if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) return;
+
+    const ps = new window.kakao.maps.services.Places();
+    ps.keywordSearch(modalKeyword, (data: any, status: any) => {
+      if (status === window.kakao.maps.services.Status.OK && data[0]) {
+        setCenter({ lat: parseFloat(data[0].y), lng: parseFloat(data[0].x) });
+        setShowSearchModal(false);
+      }
+    });
+  };
+
   // 카카오맵 스크립트 로드
-  // - script.onerror 및 타임아웃을 추가해, 로드가 영영 끝나지 않아도
-  //   흰 화면으로 묻히지 않고 재시도 UI를 보여줄 수 있도록 처리
+  // - script.onerror 및 타임아웃을 추가해, 로드(또는 kakao.maps.load 콜백)가
+  //   영영 끝나지 않아도 흰 화면으로 묻히지 않고 재시도 UI를 보여줄 수 있도록 처리
+  // - 페이지 전역에 중복 <script> 태그가 있으면 kakao.maps.load() 콜백이 아예 호출되지
+  //   않는 문제가 있었으므로(layout.tsx의 beforeInteractive 스크립트 제거로 해결),
+  //   이 effect가 유일한 로더가 되도록 보장한다.
   useEffect(() => {
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.error(
+        '[KakaoMap] API 키가 없습니다. NEXT_PUBLIC_KAKAO_MAP_API_KEY(또는 NEXT_PUBLIC_KAKAO_MAP_KEY) 환경변수를 확인하세요.'
+      );
+      setMapLoadFailed(true);
+      return;
+    }
 
     setMapLoadFailed(false);
-    let settled = false;
+    let ready = false;
+    let failed = false;
+
+    const markReady = () => {
+      if (ready || failed) return;
+      ready = true;
+      setIsMapReady(true);
+    };
+
+    const markFailed = (reason: string) => {
+      if (ready || failed) return;
+      failed = true;
+      console.error(`[KakaoMap] 지도 로드 실패: ${reason}`);
+      setMapLoadFailed(true);
+    };
 
     const scriptId = 'kakao-map-script-main';
     let script = document.getElementById(scriptId) as HTMLScriptElement | null;
@@ -42,54 +172,46 @@ export default function Home() {
       script.id = scriptId;
       script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer&autoload=false`;
       script.async = true;
-      script.onerror = () => {
-        if (settled) return;
-        settled = true;
-        console.warn('Kakao Map SDK 스크립트 로드 실패');
-        setMapLoadFailed(true);
-      };
+      script.onerror = () => markFailed('SDK 스크립트 요청 자체가 실패했습니다 (네트워크 차단/잘못된 키 가능성)');
       document.head.appendChild(script);
     }
 
     const checkKakao = setInterval(() => {
       try {
         if (!window.kakao || !window.kakao.maps) return;
+        clearInterval(checkKakao);
 
         if (window.kakao.maps.services) {
-          settled = true;
-          clearInterval(checkKakao);
-          setIsMapReady(true);
+          markReady();
+        } else if (typeof window.kakao.maps.load === 'function') {
+          window.kakao.maps.load(markReady);
         } else {
-          settled = true;
-          clearInterval(checkKakao);
-          window.kakao.maps.load(() => {
-            setIsMapReady(true);
-          });
+          markFailed('window.kakao.maps.load 함수를 찾을 수 없습니다');
         }
       } catch (e) {
-        console.warn('Kakao Map 초기화 중 오류', e);
+        markFailed(`초기화 중 예외 발생: ${e}`);
       }
     }, 200);
 
-    // 10초 안에 준비되지 않으면 무한 로딩 대신 재시도 UI 노출
+    // 10초 안에 준비되지 않으면(예: 도메인 미등록으로 load 콜백이 호출되지 않는 경우)
+    // 무한 로딩 대신 재시도 UI를 노출
     const timeoutId = setTimeout(() => {
-      if (settled) return;
-      settled = true;
+      markFailed('10초 내에 초기화가 완료되지 않았습니다 (Kakao 개발자 콘솔의 플랫폼 도메인 등록 여부 확인 필요)');
       clearInterval(checkKakao);
-      setMapLoadFailed(true);
     }, 10000);
 
     return () => {
       clearInterval(checkKakao);
       clearTimeout(timeoutId);
     };
-  }, [apiKey, mapLoadAttempt]);
+  }, [mapLoadAttempt]);
 
   // 실거래가 데이터 로드
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch(`/api/transactions?type=apt&lawdCd=${userLawdCd}`);
+        const dongParam = userDong && userDong !== 'all' ? `&dong=${encodeURIComponent(userDong)}` : '';
+        const res = await fetch(`/api/transactions?type=apt&lawdCd=${userLawdCd}${dongParam}`);
         const data = await res.json();
         setDynamicData(data);
         
@@ -111,28 +233,14 @@ export default function Home() {
     }
     
     fetchData();
-  }, [userLawdCd]);
-
-  // 장소 검색 함수
-  const searchPlaces = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!keyword.trim()) return;
-
-    if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) return;
-
-    const ps = new window.kakao.maps.services.Places();
-    ps.keywordSearch(keyword, (data: any, status: any) => {
-      if (status === window.kakao.maps.services.Status.OK) {
-        setCenter({
-          lat: parseFloat(data[0].y),
-          lng: parseFloat(data[0].x),
-        });
-      }
-    });
-  };
+  }, [userLawdCd, userDong]);
 
   if (!apiKey) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>API 키를 확인해주세요.</div>;
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        카카오맵 API 키가 설정되지 않았습니다. 환경변수 <code>NEXT_PUBLIC_KAKAO_MAP_API_KEY</code>를 확인해주세요.
+      </div>
+    );
   }
 
   return (
@@ -252,29 +360,25 @@ export default function Home() {
           
           <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             
-            {/* 검색창 */}
-            <div style={{ pointerEvents: 'auto', background: 'white', borderRadius: '8px', padding: '6px', display: 'flex', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-              <form onSubmit={searchPlaces} style={{ display: 'flex', width: '100%', gap: '6px' }}>
-                <input 
-                  type="text" 
-                  placeholder="단지명, 동이름, 지역명을 입력하세요" 
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  style={{ flex: 1, padding: '0.6rem 1rem', border: '1px solid var(--border-color)', borderRadius: '4px', outline: 'none', fontSize: '1rem' }}
-                />
-                <button type="submit" style={{ padding: '0.6rem 1.2rem', background: '#22c55e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                  전국 검색
-                </button>
-              </form>
+            {/* 검색창: 클릭 시 아실 스타일 전면 검색 모달 오픈 */}
+            <div
+              onClick={openSearchModal}
+              style={{ pointerEvents: 'auto', background: 'white', borderRadius: '8px', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', cursor: 'pointer' }}
+            >
+              <span>🔍</span>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>단지명, 동이름, 지역명을 입력하세요</span>
             </div>
 
-            {/* 현재 위치 */}
-            <div style={{ pointerEvents: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.95)', padding: '10px 16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+            {/* 현재 위치: 클릭 시에도 동일하게 검색 모달 오픈 */}
+            <div
+              onClick={openSearchModal}
+              style={{ pointerEvents: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.95)', padding: '10px 16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}
+            >
               <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
                 현재 위치: {displayRegionName} <span style={{ color: '#22c55e' }}>📍</span>
               </div>
-              <button 
-                onClick={() => window.location.reload()}
+              <button
+                onClick={(e) => { e.stopPropagation(); window.location.reload(); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-secondary)' }}
               >
                 🔄
@@ -339,6 +443,98 @@ export default function Home() {
 
         </div>
       </div>
+
+      {/* 아실 스타일 전면 검색 모달 */}
+      {showSearchModal && (
+        <div className={styles.searchModalOverlay} onClick={() => setShowSearchModal(false)}>
+          <div className={styles.searchModalContent} onClick={(e) => e.stopPropagation()}>
+            {/* 상단: 아파트명 검색 입력 + 닫기 */}
+            <div className={styles.searchModalHeader}>
+              <form onSubmit={handleModalKeywordSearch} style={{ flex: 1, display: 'flex' }}>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="아파트명을 입력해주세요."
+                  value={modalKeyword}
+                  onChange={(e) => setModalKeyword(e.target.value)}
+                  className={styles.searchModalInput}
+                />
+              </form>
+              <button
+                className={styles.searchModalCloseBtn}
+                onClick={() => setShowSearchModal(false)}
+                aria-label="검색 닫기"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 중단: 단계별 탭 */}
+            <div className={styles.searchModalTabs}>
+              <button
+                className={`${styles.searchModalTab} ${modalStep === 'sido' ? styles.searchModalTabActive : ''}`}
+                onClick={() => setModalStep('sido')}
+              >
+                {selectedSido ? selectedSido.name : '시도 선택'}
+              </button>
+              <span className={styles.searchModalTabArrow}>›</span>
+              <button
+                className={`${styles.searchModalTab} ${modalStep === 'sigungu' ? styles.searchModalTabActive : ''}`}
+                disabled={!selectedSido}
+                onClick={() => selectedSido && setModalStep('sigungu')}
+              >
+                {selectedSigungu ? selectedSigungu.name.split(' ').slice(1).join(' ') : '시군구 선택'}
+              </button>
+              <span className={styles.searchModalTabArrow}>›</span>
+              <button
+                className={`${styles.searchModalTab} ${modalStep === 'dong' ? styles.searchModalTabActive : ''}`}
+                disabled={!selectedSigungu}
+                onClick={() => selectedSigungu && setModalStep('dong')}
+              >
+                읍면동 선택
+              </button>
+            </div>
+
+            {/* 하단: 지역 그리드 패널 */}
+            <div className={styles.searchModalGridWrapper}>
+              {regionLoading ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                  불러오는 중...
+                </div>
+              ) : (
+                <div className={styles.searchModalGrid}>
+                  {modalStep === 'sido' &&
+                    modalSidos.map((sido) => (
+                      <button key={sido.code} className={styles.searchModalGridBtn} onClick={() => selectSido(sido)}>
+                        {sido.name}
+                      </button>
+                    ))}
+
+                  {modalStep === 'sigungu' &&
+                    modalSigungus.map((sigungu) => (
+                      <button key={sigungu.code} className={styles.searchModalGridBtn} onClick={() => selectSigungu(sigungu)}>
+                        {sigungu.name.split(' ').slice(1).join(' ')}
+                      </button>
+                    ))}
+
+                  {modalStep === 'dong' && (
+                    <>
+                      <button className={styles.searchModalGridBtn} onClick={() => selectDong(null)}>
+                        {(selectedSigungu?.name.split(' ').slice(1).join(' ')) || ''} 전체
+                      </button>
+                      {modalDongs.map((dong) => (
+                        <button key={dong.code} className={styles.searchModalGridBtn} onClick={() => selectDong(dong)}>
+                          {dong.name.split(' ').pop()}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

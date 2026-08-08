@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const gungu = searchParams.get('gungu') || '서구';
   const region = `${sido} ${gungu}`;
 
-  let lawdCd = LAWD_CD_MAP[region] || '26140';
+  const lawdCd = LAWD_CD_MAP[region] || '26140';
 
   const now = new Date();
   const getDealYmd = (date: Date) => {

@@ -5,8 +5,11 @@ import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+const apiKey =
+  process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ||
+  process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+
 export default function FullscreenMapPage() {
-  const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
   const router = useRouter();
 
   const [markers, setMarkers] = useState<any[]>([]);
