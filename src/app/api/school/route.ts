@@ -63,39 +63,51 @@ export async function GET(request: Request) {
 
     // 3. UI 렌더링을 위한 데이터 가공 (실무에서는 학업성취도 API, 대학진학 API 등을 추가 호출하여 Join)
     const result = filtered.map((s: any, index: number) => {
-      // 랜덤 데이터로 성취도 및 학생 수 시뮬레이션 (실제 API가 제공하지 않는 세부 정보)
-      const students = Math.floor(Math.random() * 500) + 200;
+      // 이름 기반 해시(seed)를 만들어 탭을 오가도 값이 고정되게 처리 (안정감 있는 모의 데이터)
+      const nameHash = s.SCHUL_NM.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+      const seed1 = (nameHash % 100) / 100; // 0.0 ~ 0.99
+      const seed2 = ((nameHash * 3) % 100) / 100;
+
+      // 학급당 인원은 15~28명 선, 학생수는 200~1000명 선으로 현실화
+      const classStudents = Math.floor(seed1 * 13) + 15; 
+      const students = classStudents * (Math.floor(seed2 * 15) + 10);
       
       if (type === '초등') {
+        // 초품아 여부 (확률 20%)
+        const isChopuma = seed1 > 0.8;
         return {
           id: s.SD_SCHUL_CODE || `e${index}`,
           name: s.SCHUL_NM,
           rank: index + 1,
           students: students,
-          classStudents: Math.floor(Math.random() * 10) + 18,
-          walkTime: `도보 ${Math.floor(Math.random() * 10) + 2}분`,
-          crossRoad: Math.random() > 0.5 ? '건널목 1개' : '단지 내 (초품아)'
+          classStudents: classStudents,
+          walkTime: isChopuma ? '도보 1분' : `도보 ${Math.floor(seed2 * 10) + 3}분`,
+          crossRoad: isChopuma ? '단지 내 (초품아)' : `건널목 ${Math.floor(seed1 * 3) + 1}개`
         };
       } else if (type === '중등') {
-        const special = Math.floor(Math.random() * 15);
+        // 학업성취도는 65~98% 수준으로 현실화
+        const achievement = Math.floor(seed1 * 33) + 65;
+        // 특목고 진학명수는 학생수의 0~5% 수준
+        const special = Math.floor(students * (seed2 * 0.05));
         return {
           id: s.SD_SCHUL_CODE || `m${index}`,
           name: s.SCHUL_NM,
           rank: index + 1,
           students: students,
-          achievement: Math.floor(Math.random() * 20) + 75,
+          achievement: achievement,
           specialHigh: special,
           specialRatio: ((special / students) * 100).toFixed(1)
         };
       } else {
+        // 4년제 진학률 40~85%, 의약계열 2~12% 수준
         return {
           id: s.SD_SCHUL_CODE || `h${index}`,
           name: s.SCHUL_NM,
           rank: index + 1,
           students: students,
-          univRate: (Math.random() * 30 + 50).toFixed(1),
-          medSeoulRate: (Math.random() * 10 + 5).toFixed(1),
-          type: s.HS_GNRL_BUSNS_SC_NM || '일반고'
+          univRate: (seed1 * 45 + 40).toFixed(1),
+          medSeoulRate: (seed2 * 10 + 2).toFixed(1),
+          type: s.HS_GNRL_BUSNS_SC_NM || (seed1 > 0.8 ? '자율고' : '일반고')
         };
       }
     });

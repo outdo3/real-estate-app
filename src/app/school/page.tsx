@@ -51,24 +51,16 @@ export default function SchoolInfoPage() {
     fetchLawdCd();
   }, [sido, gungu]);
 
-  // 선택 지역에 맞는 학교 목록 및 동적 통계 불러오기
+  // 선택 지역에 맞는 학교 목록 불러오기 (탭 변경 시 리스트만 업데이트)
   useEffect(() => {
-    const fetchSchoolsAndStats = async () => {
+    const fetchSchools = async () => {
       setLoading(true);
       try {
-        // 1. 학교 리스트 페칭
         const res = await fetch(`/api/school?region=${encodeURIComponent(region)}&type=${encodeURIComponent(activeTab)}`);
         const json = await res.json();
         if (json.success) {
           setSchools(json.data);
           setSelectedSchool(null);
-        }
-
-        // 2. 동적 통계 페칭
-        const statsRes = await fetch(`/api/school/stats?region=${encodeURIComponent(region)}`);
-        const statsJson = await statsRes.json();
-        if (statsJson.success) {
-          setStats(statsJson.data);
         }
       } catch (error) {
         console.error('Data load error:', error);
@@ -77,8 +69,25 @@ export default function SchoolInfoPage() {
       }
     };
     
-    fetchSchoolsAndStats();
+    fetchSchools();
   }, [region, activeTab]);
+
+  // 지역 전체 통계 불러오기 (지역 변경 시에만 업데이트하여 숫자 널뛰기 방지)
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const statsRes = await fetch(`/api/school/stats?region=${encodeURIComponent(region)}`);
+        const statsJson = await statsRes.json();
+        if (statsJson.success) {
+          setStats(statsJson.data);
+        }
+      } catch (error) {
+        console.error('Stats load error:', error);
+      }
+    };
+    
+    fetchStats();
+  }, [region]);
 
   // 배정 단지 불러오기 (GIS 연산 API 연동)
   useEffect(() => {
