@@ -10,8 +10,14 @@
 .nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 1rem;
   height: 64px;
+}
+
+.leftCluster {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .backBtn {
@@ -37,16 +43,30 @@
 }
 
 .logo {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--primary-color);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
 }
 
-.logo span {
+.logoText {
+  font-size: 1.15rem; /* 뒤로가기 버튼 옆에 깔끔하게 붙도록 기존보다 축소 */
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--primary-color);
+  white-space: nowrap;
+}
+
+/* 현재 페이지 타이틀: 로고 우측 중앙 영역에 균형감 있게 배치 (검색창이 있는 페이지는 검색창이 대신 이 자리를 차지) */
+.pageTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 800;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .searchSlot {
@@ -60,6 +80,7 @@
   display: flex;
   align-items: center;
   gap: 2rem;
+  flex-shrink: 0;
 }
 
 .menuItem {
@@ -104,24 +125,24 @@
     flex-wrap: nowrap; /* keep logo and some items inline if possible, or use a specific layout */
     height: 56px;
     padding: 0 16px;
-    gap: 1rem;
+    gap: 0.75rem;
     align-items: center;
-    justify-content: space-between;
   }
-  
+
   .logo {
     flex-shrink: 0;
     padding-left: 0;
   }
-  
-  .logo span:first-child {
-    font-size: 1.5rem !important; /* reduce logo size */
+
+  .logoText {
+    font-size: 1rem;
   }
-  
-  .logo span:last-child {
-    font-size: 1.1rem; /* reduce logo size */
+
+  .pageTitle {
+    font-size: 1rem;
   }
-  
+
+
   /* Mobile Bottom Tab Bar Style for Nav */
   .menuList {
     position: fixed;

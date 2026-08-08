@@ -235,10 +235,17 @@
   padding: 0.6rem 1.25rem;
   border-bottom: 1px solid var(--border-color);
   gap: 0.75rem;
+  min-width: 0; /* 자식 플렉스 아이템의 ellipsis 축소가 실제로 동작하도록 보장 */
+  cursor: pointer;
+  transition: background-color 0.15s;
 }
 
 .compactItem:last-child {
   border-bottom: none;
+}
+
+.compactItem:hover {
+  background-color: #f8fafc;
 }
 
 .compactRank {
@@ -284,22 +291,30 @@
 .compactMeta {
   font-size: 0.75rem;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .compactValue {
   text-align: right;
   flex-shrink: 0;
+  max-width: 45%; /* 좁은 화면(모바일 2열)에서도 가격 영역이 단지명 영역을 밀어내지 않도록 상한 지정 */
 }
 
 .compactPrice {
   font-size: 0.9rem;
   font-weight: 800;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .compactSub {
   font-size: 0.72rem;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .emptyState {
@@ -395,6 +410,21 @@
   }
 }
 
+/* 단지 랭킹 탭: 핫이슈/평당가 랭킹 2열. 화면이 좁아지면 1열로 전환해
+   컴팩트 리스트 항목의 단지명·가격 텍스트가 좁은 칼럼에서 줄바꿈/겹침 없이
+   표시되도록 한다. */
+.rankingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .rankingGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .tipBox {
   background: #eff6ff;
   border: 1px solid #bfdbfe;
@@ -410,4 +440,112 @@
   font-size: 0.9rem;
   color: #1e3a8a;
   line-height: 1.5;
+}
+
+/* 거래 내역 팝업 */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 1rem;
+}
+
+.modalContent {
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.2));
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.modalTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.modalBody {
+  overflow-y: auto;
+}
+
+.tradeList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tradeRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.25rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tradeRow:last-child {
+  border-bottom: none;
+}
+
+.tradeName {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tradePrice {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #03C75A;
+  white-space: nowrap;
+}
+
+.tradeDate {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 68px;
+  text-align: right;
 }

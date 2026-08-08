@@ -278,6 +278,38 @@ export async function GET(request: Request) {
     const volume = aptMonthly[11]?.filter(isValidTrade).length || 0;
     const prevVolume = aptMonthly[10]?.filter(isValidTrade).length || 0;
 
+    // ── 8) 클릭 시 팝업으로 보여줄 실거래 내역 ──
+    const tradeDetail = (t: any) => ({
+      name: t.name,
+      price: t.price,
+      tradeDate: (t.info || '').split('•').pop()?.trim() || '',
+      dong: t.dong || '',
+    });
+
+    // (a) 이번 달 거래량 카드 클릭 시: 이번 달 전체 거래 내역
+    const currentMonthTrades = (aptMonthly[11] || [])
+      .filter(isValidTrade)
+      .map(tradeDetail)
+      .sort((a: any, b: any) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
+
+    // (b) 랭킹 리스트(핫이슈/평당가/갭투자) 항목 클릭 시: 해당 단지의 최근 1년 거래 내역
+    // 전체 단지의 1년치를 다 보내면 응답이 과도하게 커지므로, 실제로 화면에 노출되는
+    // 단지에 한해서만 모아서 내려준다.
+    const clickableNames = new Set<string>([
+      ...hotIssues.map((h) => normalizeAptName(h.name)),
+      ...topPrices.map((h) => normalizeAptName(h.name)),
+      ...gapInvest.map((h) => normalizeAptName(h.name)),
+    ]);
+    const complexTrades: Record<string, ReturnType<typeof tradeDetail>[]> = {};
+    allAptTrades.forEach((t: any) => {
+      const key = normalizeAptName(t.name);
+      if (!clickableNames.has(key)) return;
+      (complexTrades[key] ||= []).push(tradeDetail(t));
+    });
+    Object.values(complexTrades).forEach((list) =>
+      list.sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime())
+    );
+
     return NextResponse.json({
       success: true,
       data: {
@@ -292,6 +324,8 @@ export async function GET(request: Request) {
         gapInvest,
         topPrices,
         jeonseRate,
+        currentMonthTrades,
+        complexTrades,
       },
     });
   } catch (err) {

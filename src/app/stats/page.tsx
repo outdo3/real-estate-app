@@ -18,6 +18,11 @@ import {
 
 type TabKey = 'volume' | 'gap' | 'ranking' | 'supply';
 
+const normalizeAptName = (name: string) => {
+  if (!name) return '';
+  return name.replace(/\s+/g, '').replace(/아파트$/, '');
+};
+
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'volume', label: '📊 거래량 분석' },
   { key: 'gap', label: '💰 갭투자 분석' },
@@ -33,6 +38,7 @@ export default function StatsPage() {
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [tradeModal, setTradeModal] = useState<{ title: string; trades: any[] } | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -62,7 +68,15 @@ export default function StatsPage() {
     return <div className={badgeClass}>{rank}</div>;
   };
 
+  // 랭킹 항목 클릭 시 해당 단지의 실거래 내역(단지명/실거래가/거래일자) 팝업 오픈
+  const openComplexTrades = (name: string) => {
+    const key = normalizeAptName(name);
+    const trades = data?.complexTrades?.[key] || [];
+    setTradeModal({ title: `${name} 최근 거래 내역`, trades });
+  };
+
   // 순위 리스트 공통 렌더러: 단지명, 평형/부가정보, 값(가격/갭 등), 거래건수를 한 줄에 압축 표시
+  // 항목 클릭 시 해당 단지의 실거래 내역 팝업이 뜬다.
   const renderCompactList = (
     items: any[],
     valueKey: string,
@@ -75,7 +89,13 @@ export default function StatsPage() {
     return (
       <ul className={styles.compactList}>
         {items.map((item) => (
-          <li key={item.rank} className={styles.compactItem}>
+          <li
+            key={item.rank}
+            className={styles.compactItem}
+            onClick={() => openComplexTrades(item.name)}
+            role="button"
+            tabIndex={0}
+          >
             {renderBadge(item.rank)}
             <div className={styles.compactInfo}>
               <div className={styles.compactName}>{item.name}</div>
@@ -95,12 +115,11 @@ export default function StatsPage() {
 
   return (
     <div className={styles.main}>
-      <Header />
+      <Header pageTitle="시장 통계·분석" />
       <div className="container">
         {/* 상단 지역 선택 */}
         <div className={styles.headerTop}>
           <div className={styles.regionSelectorGroup}>
-            <h1 className={styles.title}>시장 통계·분석</h1>
             <select
               className={styles.regionSelect}
               value={sido}
@@ -147,7 +166,13 @@ export default function StatsPage() {
           <>
             {/* 상단 요약 바: 실데이터만 표시 (입주물량 등 미연동 지표는 하단 탭에서 안내) */}
             <div className={styles.dashboardGrid}>
-              <div className={styles.summaryCard}>
+              <div
+                className={styles.summaryCard}
+                style={{ cursor: 'pointer' }}
+                onClick={() => setTradeModal({ title: `이번 달 실거래 내역 (${data.summary.volume}건)`, trades: data.currentMonthTrades || [] })}
+                role="button"
+                tabIndex={0}
+              >
                 <div className={styles.cardIcon}>📊</div>
                 <div className={styles.cardContent}>
                   <h3>이번 달 거래량</h3>
@@ -256,7 +281,7 @@ export default function StatsPage() {
 
             {/* 3. 단지 랭킹 */}
             {activeTab === 'ranking' && (
-              <div className={styles.detailGrid} style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              <div className={styles.rankingGrid}>
                 <div className={styles.panel}>
                   <div className={styles.panelHeader}>
                     <h2 className={styles.panelTitle}>🔥 최근 핫이슈 거래</h2>
@@ -301,6 +326,35 @@ export default function StatsPage() {
           </>
         )}
       </div>
+
+      {/* 거래 내역 팝업: 거래량 카드 또는 랭킹 항목 클릭 시 단지명/실거래가/거래일자 목록 표시 */}
+      {tradeModal && (
+        <div className={styles.modalOverlay} onClick={() => setTradeModal(null)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>{tradeModal.title}</h2>
+              <button className={styles.closeButton} onClick={() => setTradeModal(null)} aria-label="닫기">
+                &times;
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              {tradeModal.trades.length === 0 ? (
+                <div className={styles.emptyState}>표시할 거래 내역이 없습니다.</div>
+              ) : (
+                <ul className={styles.tradeList}>
+                  {tradeModal.trades.map((t: any, i: number) => (
+                    <li key={i} className={styles.tradeRow}>
+                      <span className={styles.tradeName}>{t.name}</span>
+                      <span className={styles.tradePrice}>{t.price}</span>
+                      <span className={styles.tradeDate}>{t.tradeDate}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

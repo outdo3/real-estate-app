@@ -219,11 +219,10 @@ export default function ToolsPage() {
 
   return (
     <div className={styles.main}>
-      <Header />
+      <Header pageTitle="부동산 도구" />
       <div className="container">
         <div className={styles.header}>
           <div className={styles.headerTop}>
-            <h1 className={styles.title}>🛠️ 실전 부동산 도구</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>현장에서 바로 꺼내쓰는 실무 최적화 도구 모음</p>
           </div>
           <div className={styles.tabsContainer} style={{ marginTop: '1.5rem' }}>

@@ -160,7 +160,7 @@ export default function SchoolInfoPage() {
 
   return (
     <div className={styles.main}>
-      <Header />
+      <Header pageTitle="학군 정보" />
       <div className="container">
         
         {/* 1단계: 상단 '학군 탐색 필터' 및 '지역 대시보드' */}
