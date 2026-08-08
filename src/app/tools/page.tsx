@@ -102,21 +102,21 @@ export default function ToolsPage() {
                   <li className={styles.checkItem}>
                     <div>
                       <div className={styles.checkItemTitle}>대출 불승인 시 계약금 반환</div>
-                      <div className={styles.checkItemDesc}>"임차인의 전세자금대출이 목적물의 하자로 인하여 불가할 경우, 임대인은 계약금을 즉시 반환한다."</div>
+                      <div className={styles.checkItemDesc}>&quot;임차인의 전세자금대출이 목적물의 하자로 인하여 불가할 경우, 임대인은 계약금을 즉시 반환한다.&quot;</div>
                     </div>
                     <button className={styles.copyBtn} onClick={() => handleCopy("임차인의 전세자금대출이 목적물의 하자로 인하여 불가할 경우, 임대인은 계약금을 즉시 반환한다.")}>복사</button>
                   </li>
                   <li className={styles.checkItem}>
                     <div>
                       <div className={styles.checkItemTitle}>임대인 체납 사실 확인</div>
-                      <div className={styles.checkItemDesc}>"임대인은 잔금일 전까지 국세/지방세 완납 증명서를 교부하며, 미납금 발생 시 계약을 해제할 수 있다."</div>
+                      <div className={styles.checkItemDesc}>&quot;임대인은 잔금일 전까지 국세/지방세 완납 증명서를 교부하며, 미납금 발생 시 계약을 해제할 수 있다.&quot;</div>
                     </div>
                     <button className={styles.copyBtn} onClick={() => handleCopy("임대인은 잔금일 전까지 국세/지방세 완납 증명서를 교부하며, 미납금 발생 시 계약을 해제할 수 있다.")}>복사</button>
                   </li>
                   <li className={styles.checkItem}>
                     <div>
                       <div className={styles.checkItemTitle}>근저당권 설정 금지 특약</div>
-                      <div className={styles.checkItemDesc}>"임대인은 계약 체결일로부터 잔금일 익일까지 목적물에 어떠한 근저당이나 제한물권을 설정하지 않는다."</div>
+                      <div className={styles.checkItemDesc}>&quot;임대인은 계약 체결일로부터 잔금일 익일까지 목적물에 어떠한 근저당이나 제한물권을 설정하지 않는다.&quot;</div>
                     </div>
                     <button className={styles.copyBtn} onClick={() => handleCopy("임대인은 계약 체결일로부터 잔금일 익일까지 목적물에 어떠한 근저당이나 제한물권을 설정하지 않는다.")}>복사</button>
                   </li>

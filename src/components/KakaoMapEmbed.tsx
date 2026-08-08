@@ -91,7 +91,7 @@ export default function KakaoMapEmbed({ address, jibunAddress, type }: Props) {
     if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
       loadKakaoMap();
     } else {
-      let checkKakao = setInterval(() => {
+      const checkKakao = setInterval(() => {
         if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
           clearInterval(checkKakao);
           loadKakaoMap();

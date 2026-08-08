@@ -42,6 +42,7 @@ export default function ApartmentDetail() {
   const formatKoreanPrice = (val: string) => {
     const cleanStr = val.replace(/[\s,]/g, '').replace('만', '');
     const num = parseInt(cleanStr, 10);
+    console.log('parsedPrice:', num, 'from val:', val);
     if (isNaN(num)) return val;
     if (num >= 10000) {
       const uk = Math.floor(num / 10000);
@@ -50,6 +51,12 @@ export default function ApartmentDetail() {
     }
     return `${num.toLocaleString('ko-KR')}만`;
   };
+
+  useEffect(() => {
+    if (tradeTypeFilter === '전월세') {
+      setOnlySales(false);
+    }
+  }, [tradeTypeFilter]);
 
   useEffect(() => {
     const fetchTrades = async () => {

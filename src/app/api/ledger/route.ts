@@ -53,7 +53,7 @@ export async function GET(request: Request) {
     }
 
     const body = result.response?.body || result.body;
-    let items = body?.items?.item;
+    const items = body?.items?.item;
     
     if (!items) {
       return NextResponse.json({ error: 'NO_DATA', message: '데이터가 없습니다.' }, { status: 404 });

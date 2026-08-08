@@ -87,6 +87,7 @@ export default function Home() {
       return;
     }
     
+    // eslint-disable-next-line prefer-const
     let checkKakao: NodeJS.Timeout;
 
     const kakaoTimeout = setTimeout(() => {

@@ -77,7 +77,7 @@ export async function GET(request: Request) {
     }
 
     // 국토부 형식 mockData.json 불러오기 (실거래가 모의)
-    let mockPrices: Record<string, string> = {};
+    const mockPrices: Record<string, string> = {};
     try {
       const fs = require('fs');
       const path = require('path');
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
       const dist = distance(schoolPoint, aptPoint, { units: 'kilometers' }); // 킬로미터 단위
       
       // 아파트 이름 정제 (예: '대신더샵 아파트' -> '대신더샵')
-      let cleanName = apt.place_name.replace(/ 아파트$/, '').trim();
+      const cleanName = apt.place_name.replace(/ 아파트$/, '').trim();
       
       return {
         id: apt.id,
@@ -117,7 +117,7 @@ export async function GET(request: Request) {
     // 5. 프론트엔드용 데이터 가공 (현실적인 도보 시간 계산 알고리즘)
     const result = nearbyApartments.map(apt => {
       // 직선거리(km)를 실제 도보 거리(구불구불한 길, 횡단보도 고려)로 변환
-      let realDistance = apt.dist * 1.45; 
+      const realDistance = apt.dist * 1.45; 
       
       // 성인 평균 도보 속도: 4km/h (1km당 15분)
       let walkMin = Math.round(realDistance * 15);

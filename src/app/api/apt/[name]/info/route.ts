@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { XMLParser } from 'fast-xml-parser';
 
+export const dynamic = 'force-dynamic';
+
 const API_KEY = process.env.DATA_GO_KR_API_KEY || '';
 
 export async function GET(

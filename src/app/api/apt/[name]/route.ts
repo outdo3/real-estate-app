@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { fetchMolitData } from '@/lib/api-molit';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ name: string }> }
