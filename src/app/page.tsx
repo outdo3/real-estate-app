@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -183,6 +183,35 @@ export default function Home() {
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
     );
   };
+
+  // Map의 onCreate/onIdle 핸들러: react-kakao-maps-sdk는 이 prop의 참조가 바뀔 때마다
+  // 다시 호출하므로, 매 렌더마다 새로 만들어지는 인라인 함수를 넘기면
+  // 호출 -> setState -> 리렌더 -> 새 함수 참조 -> 재호출 이 무한 반복되며
+  // "Maximum update depth exceeded" 런타임 에러로 이어진다. useCallback으로
+  // 참조를 고정해 이 무한 루프를 방지한다.
+  const updateMapBounds = useCallback((map: any) => {
+    const b = map.getBounds();
+    setMapBounds({
+      sw: { lat: b.getSouthWest().getLat(), lng: b.getSouthWest().getLng() },
+      ne: { lat: b.getNorthEast().getLat(), lng: b.getNorthEast().getLng() },
+    });
+  }, []);
+
+  const handleMapIdle = useCallback((map: any) => {
+    const b = map.getBounds();
+    setMapBounds({
+      sw: { lat: b.getSouthWest().getLat(), lng: b.getSouthWest().getLng() },
+      ne: { lat: b.getNorthEast().getLat(), lng: b.getNorthEast().getLng() },
+    });
+    const level = map.getLevel();
+    setMapLevel(level);
+    try {
+      const c = map.getCenter();
+      localStorage.setItem(LAST_POSITION_KEY, JSON.stringify({ lat: c.getLat(), lng: c.getLng(), level }));
+    } catch (e) {
+      console.error('[LocalStorage] 위치 저장 실패', e);
+    }
+  }, []);
 
   // 마지막 탐색 위치(위도/경도/레벨) 복원: 저장된 값이 있으면 기본 위치(강남구) 대신 사용
   useEffect(() => {
@@ -423,28 +452,8 @@ export default function Home() {
               center={center}
               style={{ width: '100%', height: '100%' }}
               level={mapLevel}
-              onCreate={(map: any) => {
-                const b = map.getBounds();
-                setMapBounds({
-                  sw: { lat: b.getSouthWest().getLat(), lng: b.getSouthWest().getLng() },
-                  ne: { lat: b.getNorthEast().getLat(), lng: b.getNorthEast().getLng() },
-                });
-              }}
-              onIdle={(map: any) => {
-                const b = map.getBounds();
-                setMapBounds({
-                  sw: { lat: b.getSouthWest().getLat(), lng: b.getSouthWest().getLng() },
-                  ne: { lat: b.getNorthEast().getLat(), lng: b.getNorthEast().getLng() },
-                });
-                const level = map.getLevel();
-                setMapLevel(level);
-                try {
-                  const c = map.getCenter();
-                  localStorage.setItem(LAST_POSITION_KEY, JSON.stringify({ lat: c.getLat(), lng: c.getLng(), level }));
-                } catch (e) {
-                  console.error('[LocalStorage] 위치 저장 실패', e);
-                }
-              }}
+              onCreate={updateMapBounds}
+              onIdle={handleMapIdle}
             >
               {markers.map((marker) => {
                 const style = MARKER_STYLES[marker.status] || MARKER_STYLES.normal;
