@@ -16,13 +16,21 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
-const TABS = ['📈 거래량·시세 동향', '🔥 특수 거래 (신고가/반등)', '💰 갭투자·매물 분석', '🏆 지역·단지 랭킹'];
+type TabKey = 'volume' | 'gap' | 'ranking' | 'supply';
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'volume', label: '📊 거래량 분석' },
+  { key: 'gap', label: '💰 갭투자 분석' },
+  { key: 'ranking', label: '🏆 단지 랭킹' },
+  { key: 'supply', label: '🏢 입주/전세가율' },
+];
 
 export default function StatsPage() {
   const [sido, setSido] = useState('서울특별시');
   const [gungu, setGungu] = useState('강남구');
-  const [activeTab, setActiveTab] = useState(TABS[0]);
-  
+  const [activeTab, setActiveTab] = useState<TabKey>('volume');
+  const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -47,29 +55,54 @@ export default function StatsPage() {
   const region = `${sido} ${gungu}`;
 
   const renderBadge = (rank: number) => {
-    let badgeClass = styles.rankBadge;
+    let badgeClass = styles.compactRank;
     if (rank === 1) badgeClass += ` ${styles.rankBadgeTop1}`;
     if (rank === 2) badgeClass += ` ${styles.rankBadgeTop2}`;
     if (rank === 3) badgeClass += ` ${styles.rankBadgeTop3}`;
     return <div className={badgeClass}>{rank}</div>;
   };
 
-  const getTagClass = (type: string) => {
-    if (type === 'up') return styles.tagUp;
-    if (type === 'rebound') return styles.tagRebound;
-    return styles.tagHot;
+  // 순위 리스트 공통 렌더러: 단지명, 평형/부가정보, 값(가격/갭 등), 거래건수를 한 줄에 압축 표시
+  const renderCompactList = (
+    items: any[],
+    valueKey: string,
+    options?: { valueColor?: string; emptyText?: string; meta?: (item: any) => string }
+  ) => {
+    const { valueColor, emptyText = '표시할 데이터가 없습니다.', meta = (item: any) => (item.pyung ? `${item.pyung}평` : '') } = options || {};
+    if (!items || items.length === 0) {
+      return <div className={styles.emptyState}>{emptyText}</div>;
+    }
+    return (
+      <ul className={styles.compactList}>
+        {items.map((item) => (
+          <li key={item.rank} className={styles.compactItem}>
+            {renderBadge(item.rank)}
+            <div className={styles.compactInfo}>
+              <div className={styles.compactName}>{item.name}</div>
+              <div className={styles.compactMeta}>{meta(item)}</div>
+            </div>
+            <div className={styles.compactValue}>
+              <div className={styles.compactPrice} style={valueColor ? { color: valueColor } : undefined}>
+                {item[valueKey]}
+              </div>
+              <div className={styles.compactSub}>거래 {item.dealCount}건</div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    );
   };
 
   return (
     <div className={styles.main}>
       <Header />
       <div className="container">
-        {/* 상단 탭 및 지역 필터 */}
+        {/* 상단 지역 선택 */}
         <div className={styles.headerTop}>
           <div className={styles.regionSelectorGroup}>
             <h1 className={styles.title}>시장 통계·분석</h1>
-            <select 
-              className={styles.regionSelect} 
+            <select
+              className={styles.regionSelect}
               value={sido}
               onChange={(e) => {
                 const newSido = e.target.value;
@@ -81,8 +114,8 @@ export default function StatsPage() {
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
-            <select 
-              className={styles.regionSelect} 
+            <select
+              className={styles.regionSelect}
               value={gungu}
               onChange={(e) => setGungu(e.target.value)}
             >
@@ -91,17 +124,19 @@ export default function StatsPage() {
               ))}
             </select>
           </div>
-          <div className={styles.tabs}>
-            {TABS.map(tab => (
-              <button 
-                key={tab} 
-                className={`${styles.tab} ${activeTab === tab ? styles.activeTab : ''}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+        </div>
+
+        {/* 서브 카테고리 탭 */}
+        <div className={styles.tabs}>
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              className={`${styles.tab} ${activeTab === tab.key ? styles.activeTab : ''}`}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {loading || !data ? (
@@ -110,152 +145,159 @@ export default function StatsPage() {
           </div>
         ) : (
           <>
-            {/* 1. 시장 요약 브리핑 대시보드 */}
+            {/* 상단 요약 바: 실데이터만 표시 (입주물량 등 미연동 지표는 하단 탭에서 안내) */}
             <div className={styles.dashboardGrid}>
               <div className={styles.summaryCard}>
                 <div className={styles.cardIcon}>📊</div>
                 <div className={styles.cardContent}>
-                  <h3>26년 8월 거래량</h3>
-                  <p>{data.summary.volume}건 <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#16a34a' }}>(월평균 대비 {data.summary.volumeChange}%)</span></p>
-                </div>
-              </div>
-              <div className={styles.summaryCard}>
-                <div className={styles.cardIcon}>🏢</div>
-                <div className={styles.cardContent}>
-                  <h3>향후 2년 입주물량</h3>
-                  <p>{data.summary.supply}세대 <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--primary-color)' }}>({data.summary.supplyStatus})</span></p>
+                  <h3>이번 달 거래량</h3>
+                  <p>{data.summary.volume}건 <span style={{ fontSize: '0.9rem', fontWeight: 600, color: data.summary.volumeChange >= 0 ? '#ef4444' : '#3b82f6' }}>(전월 대비 {data.summary.volumeChange >= 0 ? '+' : ''}{data.summary.volumeChange}건)</span></p>
                 </div>
               </div>
               <div className={styles.summaryCard}>
                 <div className={styles.cardIcon}>📈</div>
                 <div className={styles.cardContent}>
                   <h3>평균 전세가율</h3>
-                  <p>{data.summary.chonseRate}% <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ef4444' }}>({data.summary.chonseChange}%)</span></p>
+                  <p>{data.summary.chonseRate != null ? `${data.summary.chonseRate}%` : '데이터 없음'}</p>
                 </div>
               </div>
             </div>
 
-            {/* 2. 차트 & 핫이슈 (Main Grid) */}
-            <div className={styles.mainGrid}>
-              
+            {/* 1. 거래량 분석 */}
+            {activeTab === 'volume' && (
               <div className={styles.panel}>
                 <div className={styles.panelHeader}>
-                  <h2 className={styles.panelTitle}>📈 최근 1년 월별 거래량 및 시세 추이</h2>
-                </div>
-                <div className={styles.panelBody} style={{ height: '400px' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart
-                      data={data.chartData}
-                      margin={{ top: 20, right: 20, bottom: 20, left: 0 }}
+                  <h2 className={styles.panelTitle}>📊 거래량·시세 추이</h2>
+                  <div className={styles.viewToggle}>
+                    <button
+                      className={`${styles.viewToggleBtn} ${chartView === 'graph' ? styles.viewToggleActive : ''}`}
+                      onClick={() => setChartView('graph')}
                     >
-                      <CartesianGrid stroke="#f5f5f5" vertical={false} />
-                      <XAxis dataKey="month" scale="band" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
-                      <YAxis yAxisId="left" orientation="left" stroke="#94a3b8" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" domain={['auto', 'auto']} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                        labelStyle={{ fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}
-                      />
-                      <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '13px' }} />
-                      <Bar yAxisId="left" dataKey="volume" name="거래량(건)" barSize={20} fill="#cbd5e1" radius={[4, 4, 0, 0]} />
-                      <Line yAxisId="right" type="monotone" dataKey="priceIndex" name="매매가격지수" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                  <div className={styles.tipBox}>
-                    <span>💡 <strong>분석 팁:</strong> 현재 {region}는 전월 대비 거래량이 증가하며 <strong>매수 심리 회복세</strong>를 보이고 있습니다.</span>
+                      📊 그래프 보기
+                    </button>
+                    <button
+                      className={`${styles.viewToggleBtn} ${chartView === 'table' ? styles.viewToggleActive : ''}`}
+                      onClick={() => setChartView('table')}
+                    >
+                      📋 표로 보기
+                    </button>
+                  </div>
+                </div>
+
+                {chartView === 'graph' ? (
+                  <div className={styles.panelBody} style={{ height: '400px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart
+                        data={data.chartData}
+                        margin={{ top: 20, right: 20, bottom: 20, left: 0 }}
+                      >
+                        <CartesianGrid stroke="#f5f5f5" vertical={false} />
+                        <XAxis dataKey="month" scale="band" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
+                        <YAxis yAxisId="left" orientation="left" stroke="#94a3b8" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                        <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" domain={['auto', 'auto']} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                          labelStyle={{ fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}
+                        />
+                        <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '13px' }} />
+                        <Bar yAxisId="left" dataKey="volume" name="거래량(건)" barSize={16} fill="#cbd5e1" radius={[4, 4, 0, 0]} />
+                        <Line yAxisId="right" type="monotone" dataKey="saleIndex" name="매매가격지수" stroke="#3b82f6" strokeWidth={3} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
+                        <Line yAxisId="right" type="monotone" dataKey="jeonseIndex" name="전세가격지수" stroke="#10b981" strokeWidth={3} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                    <div className={styles.tipBox}>
+                      <span>💡 <strong>분석 팁:</strong> 최근 12개월 실거래 기준, {region}의 거래량과 매매/전세 가격지수(최초 유효월=100 기준) 추이입니다.</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.panelBody}>
+                    <div className={styles.tableWrapper}>
+                      <table className={styles.yearlyTable}>
+                        <thead>
+                          <tr>
+                            <th>거래년월</th>
+                            <th>최고가</th>
+                            <th>최저가</th>
+                            <th>평균가</th>
+                            <th>거래량(건)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...data.yearlyTable].reverse().map((row: any) => (
+                            <tr key={row.year}>
+                              <td className={styles.yearlyTableYear}>{row.year}년</td>
+                              <td>{row.maxPrice || '-'}</td>
+                              <td>{row.minPrice || '-'}</td>
+                              <td>{row.avgPrice || '-'}</td>
+                              <td>{row.count.toLocaleString('ko-KR')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 2. 갭투자 분석 */}
+            {activeTab === 'gap' && (
+              <div className={styles.panel}>
+                <div className={styles.panelHeader}>
+                  <h2 className={styles.panelTitle}>💰 소액 갭투자 단지 TOP 5</h2>
+                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 3개월 · 매매-전세 근사 갭</span>
+                </div>
+                {renderCompactList(data.gapInvest, 'gap', {
+                  valueColor: '#ef4444',
+                  emptyText: '최근 3개월 내 매매·전세가 함께 확인된 단지가 없습니다.',
+                })}
+              </div>
+            )}
+
+            {/* 3. 단지 랭킹 */}
+            {activeTab === 'ranking' && (
+              <div className={styles.detailGrid} style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+                <div className={styles.panel}>
+                  <div className={styles.panelHeader}>
+                    <h2 className={styles.panelTitle}>🔥 최근 핫이슈 거래</h2>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 3개월 최고가 TOP 5</span>
+                  </div>
+                  {renderCompactList(data.hotIssues, 'price')}
+                </div>
+                <div className={styles.panel}>
+                  <div className={styles.panelHeader}>
+                    <h2 className={styles.panelTitle}>🏆 {gungu} 평당가 랭킹</h2>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 1년 평균</span>
+                  </div>
+                  {renderCompactList(data.topPrices, 'pricePerPyung', {
+                    meta: () => '최근 1년 평균 평당가',
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 4. 입주/전세가율 */}
+            {activeTab === 'supply' && (
+              <div className={styles.panel}>
+                <div className={styles.panelHeader}>
+                  <h2 className={styles.panelTitle}>🏢 입주물량 · 전세가율</h2>
+                </div>
+                <div className={styles.panelBody}>
+                  <div className={styles.dashboardGrid} style={{ marginBottom: 0 }}>
+                    <div className={styles.summaryCard}>
+                      <div className={styles.cardIcon}>📈</div>
+                      <div className={styles.cardContent}>
+                        <h3>{region} 평균 전세가율</h3>
+                        <p>{data.jeonseRate != null ? `${data.jeonseRate}%` : '데이터 없음'} <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>(최근 3개월 실거래 기준)</span></p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className={styles.emptyState} style={{ marginTop: '1.25rem' }}>
+                    📦 입주(예정)물량 데이터는 아직 연동되지 않았습니다. 임의의 추정치를 표시하지 않기 위해 비워둡니다.
                   </div>
                 </div>
               </div>
-
-              <div className={styles.panel}>
-                <div className={styles.panelHeader}>
-                  <h2 className={styles.panelTitle}>🔥 최근 1개월 핫이슈 거래</h2>
-                </div>
-                <ul className={styles.rankList}>
-                  {data.hotIssues.map((item: any) => (
-                    <li key={item.rank} className={styles.rankItem}>
-                      {renderBadge(item.rank)}
-                      <div className={styles.rankInfo}>
-                        <h4>{item.name}</h4>
-                        <span className={`${styles.rankTag} ${getTagClass(item.type)}`}>{item.tag}</span>
-                      </div>
-                      <div className={styles.rankValue}>
-                        <div className={styles.rankPrice}>{item.price}</div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-            </div>
-
-            {/* 3. 상세 통계 데이터 Grid (Bottom) */}
-            <div className={styles.detailGrid}>
-              
-              <div className={styles.panel}>
-                <div className={styles.panelHeader}>
-                  <h2 className={styles.panelTitle}>💰 소액 갭투자 단지</h2>
-                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 3개월</span>
-                </div>
-                <ul className={styles.rankList}>
-                  {data.gapInvest.map((item: any) => (
-                    <li key={item.rank} className={styles.rankItem} style={{ padding: '0.8rem 1.25rem' }}>
-                      <div className={styles.rankInfo}>
-                        <h4 style={{ fontSize: '0.95rem' }}>{item.name}</h4>
-                        <p>거래 {item.deals}건</p>
-                      </div>
-                      <div className={styles.rankValue}>
-                        <div className={styles.rankPrice} style={{ fontSize: '1rem', color: '#ef4444' }}>{item.gap}</div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className={styles.panel}>
-                <div className={styles.panelHeader}>
-                  <h2 className={styles.panelTitle}>🏆 {gungu} 평당가 랭킹</h2>
-                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>전체 면적 기준</span>
-                </div>
-                <ul className={styles.rankList}>
-                  {data.topPrices.map((item: any) => (
-                    <li key={item.rank} className={styles.rankItem} style={{ padding: '0.8rem 1.25rem' }}>
-                      {renderBadge(item.rank)}
-                      <div className={styles.rankInfo}>
-                        <h4 style={{ fontSize: '0.95rem' }}>{item.name}</h4>
-                        <p>최근 실거래 {item.price}</p>
-                      </div>
-                      <div className={styles.rankValue}>
-                        <div className={styles.rankPrice} style={{ fontSize: '1rem' }}>{item.pricePerPyung}</div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className={styles.panel}>
-                <div className={styles.panelHeader}>
-                  <h2 className={styles.panelTitle}>📦 매물 급증 단지</h2>
-                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>전월 대비</span>
-                </div>
-                <ul className={styles.rankList}>
-                  {data.inventory.map((item: any) => (
-                    <li key={item.rank} className={styles.rankItem} style={{ padding: '0.8rem 1.25rem' }}>
-                      <div className={styles.rankInfo}>
-                        <h4 style={{ fontSize: '0.95rem' }}>{item.name}</h4>
-                        <p>총 {item.amount}건</p>
-                      </div>
-                      <div className={styles.rankValue}>
-                        <div className={styles.rankPrice} style={{ fontSize: '1rem', color: item.changeRate.startsWith('+') ? '#3b82f6' : '#16a34a' }}>
-                          {item.changeRate}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-            </div>
+            )}
           </>
         )}
       </div>

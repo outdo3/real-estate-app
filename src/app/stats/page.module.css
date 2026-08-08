@@ -1,7 +1,7 @@
 .main {
   min-height: 100vh;
   background-color: var(--background-color);
-  padding-bottom: 4rem;
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom)); /* 하단 고정 탭바에 콘텐츠가 가리지 않도록 확보 (90px 이상) */
 }
 
 .header {
@@ -222,34 +222,28 @@
   padding: 1.5rem;
 }
 
-/* Ranking List */
-.rankList {
+/* 컴팩트 순위 리스트: 단지명/평형 | 가격·갭 | 거래건수를 한 줄에 압축 표시 */
+.compactList {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-.rankItem {
+.compactItem {
   display: flex;
   align-items: center;
-  padding: 1rem 1.5rem;
+  padding: 0.6rem 1.25rem;
   border-bottom: 1px solid var(--border-color);
-  gap: 1rem;
-  transition: background-color 0.2s;
-  cursor: pointer;
+  gap: 0.75rem;
 }
 
-.rankItem:hover {
-  background-color: #f8fafc;
-}
-
-.rankItem:last-child {
+.compactItem:last-child {
   border-bottom: none;
 }
 
-.rankBadge {
-  width: 28px;
-  height: 28px;
+.compactRank {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: var(--primary-color);
   color: white;
@@ -257,7 +251,7 @@
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   flex-shrink: 0;
 }
 
@@ -273,55 +267,119 @@
   background: #eab308; /* 3등 강조 */
 }
 
-.rankInfo {
+.compactInfo {
   flex: 1;
+  min-width: 0;
 }
 
-.rankInfo h4 {
-  margin: 0 0 0.25rem 0;
-  font-size: 1.05rem;
+.compactName {
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.rankInfo p {
-  margin: 0;
-  font-size: 0.85rem;
+.compactMeta {
+  font-size: 0.75rem;
   color: var(--text-secondary);
 }
 
-.rankValue {
+.compactValue {
   text-align: right;
+  flex-shrink: 0;
 }
 
-.rankPrice {
-  font-size: 1.1rem;
+.compactPrice {
+  font-size: 0.9rem;
   font-weight: 800;
   color: var(--text-primary);
-  margin-bottom: 0.25rem;
 }
 
-.rankTag {
-  display: inline-block;
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
+.compactSub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.emptyState {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* 그래프/표 보기 토글 */
+.viewToggle {
+  display: flex;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.viewToggleBtn {
+  padding: 0.45rem 0.9rem;
+  border: none;
+  background: white;
+  color: var(--text-secondary);
   font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
 }
 
-.tagUp {
-  background: #fee2e2;
-  color: #ef4444;
+.viewToggleActive {
+  background: var(--primary-color);
+  color: white;
 }
 
-.tagHot {
-  background: #fef3c7;
-  color: #d97706;
+/* 연도별 통계표 */
+.tableWrapper {
+  overflow-x: auto;
+  max-height: 480px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
 }
 
-.tagRebound {
-  background: #e0e7ff;
-  color: #4f46e5;
+.yearlyTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.yearlyTable th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  color: var(--text-secondary);
+  font-weight: 700;
+  padding: 0.6rem 0.9rem;
+  text-align: right;
+  border-bottom: 1px solid var(--border-color);
+  z-index: 1;
+}
+
+.yearlyTable th:first-child,
+.yearlyTable td:first-child {
+  text-align: left;
+}
+
+.yearlyTable td {
+  padding: 0.55rem 0.9rem;
+  text-align: right;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--text-primary);
+}
+
+.yearlyTable tr:last-child td {
+  border-bottom: none;
+}
+
+.yearlyTableYear {
+  font-weight: 700;
 }
 
 /* Detail Grid (Bottom) */

@@ -10,6 +10,21 @@ interface FetchParams {
   type: DataType;
 }
 
+// 만원 단위 정수(또는 그 문자열)를 "N억 M만" 형태의 한글 가격 문자열로 변환
+export const formatKoreanPrice = (val: string | number) => {
+  const cleanStr = val.toString().replace(/[\s,]/g, '');
+  const num = parseInt(cleanStr, 10);
+  if (isNaN(num)) return val.toString();
+  if (num >= 10000) {
+    const eok = Math.floor(num / 10000);
+    const rest = num % 10000;
+    if (eok > 0) {
+      return `${eok}억 ${rest > 0 ? rest.toLocaleString('ko-KR') + '만' : ''}`.trim();
+    }
+  }
+  return `${num.toLocaleString('ko-KR')}만`;
+};
+
 export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
   try {
     if (!API_KEY) {
@@ -76,20 +91,6 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     }
 
     const itemsArray = Array.isArray(items) ? items : [items];
-
-    const formatKoreanPrice = (val: string) => {
-      const cleanStr = val.replace(/[\s,]/g, '');
-      const num = parseInt(cleanStr, 10);
-      if (isNaN(num)) return val;
-      if (num >= 10000) {
-        const eok = Math.floor(num / 10000);
-        const rest = num % 10000;
-        if (eok > 0) {
-          return `${eok}억 ${rest > 0 ? rest.toLocaleString('ko-KR') + '만' : ''}`.trim();
-        }
-      }
-      return `${num.toLocaleString('ko-KR')}만`;
-    };
 
     return itemsArray.map((item: any, index: number) => {
       let priceStr = '';
