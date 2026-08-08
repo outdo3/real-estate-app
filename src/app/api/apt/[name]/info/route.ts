@@ -62,9 +62,21 @@ export async function GET(
         const bjdongCd = fullLawdCd.substring(5, 10);
         const cleanKey = encodeURIComponent(decodeURIComponent(API_KEY.trim().replace(/['"]/g, '')));
 
-        // 건축물대장 표제부조회 (총주차대수 - totPkngCnt)
-        // http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo
-        const bldUrl = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&numOfRows=100`;
+        let bldUrl = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&numOfRows=100`;
+        
+        // 지번 파싱
+        const jibun = searchParams.get('jibun') || '';
+        if (jibun) {
+          const parts = jibun.split('-');
+          const bunNum = parseInt(parts[0], 10);
+          const jiNum = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+          if (!isNaN(bunNum)) {
+            const bun = bunNum.toString().padStart(4, '0');
+            const ji = jiNum.toString().padStart(4, '0');
+            bldUrl += `&platGbCd=0&bun=${bun}&ji=${ji}`;
+          }
+        }
+
         const bldRes = await fetch(bldUrl, { signal: AbortSignal.timeout(3000) });
         if (bldRes.ok) {
           const xmlData = await bldRes.text();

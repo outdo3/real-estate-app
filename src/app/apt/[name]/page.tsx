@@ -36,7 +36,7 @@ export default function ApartmentDetail() {
   
   const [selectedArea, setSelectedArea] = useState<string>('전체');
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
-  const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('3년');
+  const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
   const [onlySales, setOnlySales] = useState<boolean>(true);
 
   const formatKoreanPrice = (val: string) => {
@@ -62,20 +62,29 @@ export default function ApartmentDetail() {
         const periodParam = periodFilter === '1년' ? 12 : (periodFilter === '3년' ? 36 : (periodFilter === '5년' ? 60 : 120));
         const typeParam = tradeTypeFilter === '전월세' ? 'rent' : 'apt';
 
+        const urlDongParam = urlParams.get('dong');
         const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${typeParam}&period=${periodParam}`);
+        
         if (response.ok) {
           const data = await response.json();
-          setTrades(data.trades || []);
+          const fetchedTrades = data.trades || [];
+          setTrades(fetchedTrades);
+
+          if (fetchedTrades.length > 0) {
+            fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, lawdCd);
+          } else {
+            fetchAptInfo('', urlDongParam || '', lawdCd);
+          }
+        } else {
+          fetchAptInfo('', urlDongParam || '', lawdCd);
         }
 
         const urlRegion = urlParams.get('region');
-        const urlDongParam = urlParams.get('dong');
         if (urlDongParam) setUrlDong(urlDongParam);
 
         if (urlRegion) {
           setRegionName(urlRegion);
         } else {
-          // 지역명 가져오기
           try {
             const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${lawdCd}00000`);
             if (regRes.ok) {
@@ -95,9 +104,9 @@ export default function ApartmentDetail() {
       }
     };
 
-    const fetchAptInfo = async () => {
+    const fetchAptInfo = async (jibun: string, dong: string, lawdCd: string) => {
       try {
-        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}/info`);
+        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(jibun)}&dong=${encodeURIComponent(dong)}&lawdCd=${encodeURIComponent(lawdCd)}`);
         if (response.ok) {
           const data = await response.json();
           if (data.info) {
@@ -108,7 +117,6 @@ export default function ApartmentDetail() {
     };
     
     fetchTrades();
-    fetchAptInfo();
   }, [aptName, tradeTypeFilter, periodFilter]);
 
   // 필터링 적용

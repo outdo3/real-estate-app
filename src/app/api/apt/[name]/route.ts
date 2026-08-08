@@ -25,17 +25,24 @@ export async function GET(
       months.push(`${y}${m}`);
     }
 
-    // 공공데이터 API 병렬 호출
-    const promises = months.map(dealYmd => fetchMolitData({ type: type as any, lawdCd, dealYmd }));
-    const results = await Promise.all(promises);
-
-    // 모든 데이터를 하나로 합치고 대상 아파트만 필터링
+    // 공공데이터 API 병렬 호출 (청크 단위로 분할하여 Rate Limit 및 Timeout 방지)
+    const chunkSize = 12; // 1년에 해당하는 12개월씩 끊어서 요청
     let allTrades: any[] = [];
-    results.forEach(monthlyData => {
-      if (Array.isArray(monthlyData)) {
-        allTrades = allTrades.concat(monthlyData);
-      }
-    });
+    
+    for (let i = 0; i < months.length; i += chunkSize) {
+      const chunk = months.slice(i, i + chunkSize);
+      const promises = chunk.map(dealYmd => fetchMolitData({ type: type as any, lawdCd, dealYmd }).catch(e => {
+        console.warn(`Failed to fetch for ${dealYmd}:`, e.message);
+        return []; // 에러 시 빈 배열 반환하여 전체 실패 방지
+      }));
+      
+      const results = await Promise.all(promises);
+      results.forEach(monthlyData => {
+        if (Array.isArray(monthlyData)) {
+          allTrades = allTrades.concat(monthlyData);
+        }
+      });
+    }
 
     const normalizeName = (name: string) => {
       if (!name) return '';

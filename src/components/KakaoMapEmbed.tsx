@@ -69,20 +69,29 @@ export default function KakaoMapEmbed({ address, type }: Props) {
     };
 
     const loadKakaoMap = () => {
-      window.kakao.maps.load(() => {
-        setTimeout(renderMap, 100);
-      });
+      if (window.kakao && window.kakao.maps && window.kakao.maps.load) {
+        window.kakao.maps.load(() => {
+          if (window.kakao.maps.services) {
+            setTimeout(renderMap, 100);
+          } else {
+            setError('카카오 서비스 라이브러리 로드 대기 중...');
+            setTimeout(loadKakaoMap, 500);
+          }
+        });
+      } else {
+        setTimeout(loadKakaoMap, 500);
+      }
     };
 
-    if (window.kakao && window.kakao.maps) {
+    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
       loadKakaoMap();
     } else {
       let checkKakao = setInterval(() => {
-        if (window.kakao && window.kakao.maps) {
+        if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
           clearInterval(checkKakao);
           loadKakaoMap();
         }
-      }, 100);
+      }, 200);
       return () => clearInterval(checkKakao);
     }
   }, [address, type]);
