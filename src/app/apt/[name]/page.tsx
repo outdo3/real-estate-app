@@ -426,7 +426,9 @@ export default function ApartmentDetail() {
             <div className={styles.tags} style={{ marginBottom: 0 }}>
               <span className={styles.tag}>{aptInfo?.['세대수'] ? (aptInfo['세대수'].includes('세대') ? aptInfo['세대수'] : `${aptInfo['세대수']}세대`) : '세대수 정보 없음'}</span>
               <span className={styles.tag}>{(trades.length > 0 && trades[0].buildYear) ? `${trades[0].buildYear}년 준공` : (aptInfo?.['사용승인일'] ? `${aptInfo['사용승인일']} 준공` : '준공연도 모름')}</span>
-              <span className={styles.tag}>{aptInfo?.['총주차대수'] ? `총 주차 ${aptInfo['총주차대수']}` : '주차 정보 없음'}</span>
+              {aptInfo?.['총주차대수'] && (
+                <span className={styles.tag}>{`총 주차 ${aptInfo['총주차대수']}`}</span>
+              )}
             </div>
           </div>
 

@@ -111,15 +111,8 @@ export async function GET(
       }
     }
 
-    // 만약 여전히 없다면 모의 데이터 (사용자 경험을 위해 주차 정보 없음을 방지)
-    if (!info['총주차대수']) {
-      const hash = aptName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const mockH = info['세대수'] ? parseInt(info['세대수'].replace(/,/g, '').replace('세대', ''), 10) : (400 + (hash % 600));
-      // 세대당 1.1 ~ 1.3대 추정
-      const ratio = 1.1 + ((hash % 20) / 100); // 1.1 ~ 1.29
-      const mockTotal = Math.round(mockH * ratio);
-      info['총주차대수'] = `약 ${mockTotal}대 (세대당 ${ratio.toFixed(2)}대) *추정치`;
-    }
+    // 추정치 제공 금지 (정확한 데이터만 사용)
+    // if (!info['총주차대수']) { ... }
 
     return NextResponse.json({ 
       success: true, 
