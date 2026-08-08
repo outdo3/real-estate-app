@@ -494,9 +494,11 @@ export default function ApartmentDetail() {
                 </div>
               </div>
               <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '2rem' }}>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>최고가 / 최저가</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                  {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}
+                </div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  최고 {trades.length > 0 ? formatKoreanPrice((Math.max(...trades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {trades.length > 0 ? formatKoreanPrice((Math.min(...trades.map(t => t.price)) * 10000).toString()) : '-'}
+                  최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}
                 </div>
               </div>
             </div>
@@ -614,7 +616,7 @@ export default function ApartmentDetail() {
               style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
             >
               <option value="all">전체 보기</option>
-              <option value="sales">매매만 보기</option>
+              <option value="sales" disabled={tradeTypeFilter === '전월세'}>{tradeTypeFilter === '전월세' ? '전월세만 보기' : '매매만 보기'}</option>
             </select>
           </div>
           <div className={styles.timeline}>
