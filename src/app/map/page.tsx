@@ -12,7 +12,7 @@ export default function FullscreenMapPage() {
   const [markers, setMarkers] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isMapReady, setIsMapReady] = useState(false);
-  const [center, setCenter] = useState({ lat: 37.498095, lng: 127.027610 });
+  const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
   const [keyword, setKeyword] = useState('');
 
   useEffect(() => {

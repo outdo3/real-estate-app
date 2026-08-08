@@ -16,7 +16,7 @@ interface MapViewerProps {
 const MapViewer: React.FC<MapViewerProps> = ({ markers = [], userCenter = null }) => {
   const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
   const [isMapReady, setIsMapReady] = useState(false);
-  const [center, setCenter] = useState({ lat: 37.498095, lng: 127.027610 }); // 기본: 강남역
+  const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
   const [keyword, setKeyword] = useState('');
 
   // 스크립트 로드 (page.tsx에서 로드한 것을 재사용하되, 만약 load가 안 불렸으면 직접 호출)
