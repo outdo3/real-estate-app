@@ -78,7 +78,7 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     const itemsArray = Array.isArray(items) ? items : [items];
 
     const formatKoreanPrice = (val: string) => {
-      const cleanStr = val.replace(/,/g, '').trim();
+      const cleanStr = val.replace(/[\s,]/g, '');
       const num = parseInt(cleanStr, 10);
       if (isNaN(num)) return val;
       if (num >= 10000) {
@@ -95,8 +95,8 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
       let monthlyRent = 0;
       
       if (type === 'rent') {
-        const deposit = (item.보증금액 || item.deposit || '').toString().trim().replace(/,/g, '');
-        const monthly = (item.월세금액 || item.monthlyRent || '').toString().trim().replace(/,/g, '');
+        const deposit = (item.보증금액 || item.deposit || '').toString().replace(/[\s,]/g, '');
+        const monthly = (item.월세금액 || item.monthlyRent || '').toString().replace(/[\s,]/g, '');
         dealAmount = parseInt(deposit, 10) || 0;
         monthlyRent = parseInt(monthly, 10) || 0;
         
@@ -105,7 +105,7 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
           priceStr += ` / 월세 ${formatKoreanPrice(monthly)}`;
         }
       } else {
-        const dealStr = (item.거래금액 || item.dealAmount || '').toString().trim().replace(/,/g, '');
+        const dealStr = (item.거래금액 || item.dealAmount || '').toString().replace(/[\s,]/g, '');
         dealAmount = parseInt(dealStr, 10) || 0;
         priceStr = formatKoreanPrice(dealStr);
       }

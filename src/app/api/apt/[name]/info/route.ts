@@ -112,14 +112,13 @@ export async function GET(
     }
 
     // 만약 여전히 없다면 모의 데이터 (사용자 경험을 위해 주차 정보 없음을 방지)
-    // 실제로는 공공데이터 포털 승인 대기나 데이터베이스 누락이 있을 수 있음
     if (!info['총주차대수']) {
-      // 단지명 기반의 해시 생성으로 일관된 랜덤값 반환
       const hash = aptName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const mockTotal = 500 + (hash % 1000);
-      const mockH = info['세대수'] ? parseInt(info['세대수'].replace(/,/g, ''), 10) : (400 + (hash % 600));
-      const perH = (mockTotal / mockH).toFixed(2);
-      info['총주차대수'] = `${mockTotal}대 (세대당 ${perH}대)`;
+      const mockH = info['세대수'] ? parseInt(info['세대수'].replace(/,/g, '').replace('세대', ''), 10) : (400 + (hash % 600));
+      // 세대당 1.1 ~ 1.3대 추정
+      const ratio = 1.1 + ((hash % 20) / 100); // 1.1 ~ 1.29
+      const mockTotal = Math.round(mockH * ratio);
+      info['총주차대수'] = `약 ${mockTotal}대 (세대당 ${ratio.toFixed(2)}대) *추정치`;
     }
 
     return NextResponse.json({ 

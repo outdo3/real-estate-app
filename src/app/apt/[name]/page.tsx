@@ -40,7 +40,7 @@ export default function ApartmentDetail() {
   const [onlySales, setOnlySales] = useState<boolean>(true);
 
   const formatKoreanPrice = (val: string) => {
-    const cleanStr = val.replace(/,/g, '').replace('만', '').trim();
+    const cleanStr = val.replace(/[\s,]/g, '').replace('만', '');
     const num = parseInt(cleanStr, 10);
     if (isNaN(num)) return val;
     if (num >= 10000) {
@@ -127,10 +127,10 @@ export default function ApartmentDetail() {
     
     // 2. 거래 유형 필터
     if (tradeTypeFilter === '매매' && trade.tradeType !== '아파트 매매' && trade.tradeType !== '실거래') return false;
-    if (tradeTypeFilter === '전월세' && trade.tradeType !== '아파트 전월세') return false;
+    if (tradeTypeFilter === '전월세' && trade.tradeType !== '전월세' && trade.tradeType !== '아파트 전월세') return false;
     
     // 3. 타임라인 매매 전용 필터 (차트와 별개로 적용되지만, 현재는 같이 묶여있으므로 일단 적용)
-    if (onlySales && trade.tradeType.includes('전월세')) return false;
+    if (onlySales && tradeTypeFilter !== '전월세' && trade.tradeType.includes('전월세')) return false;
 
     // 4. 기간 필터
     if (periodFilter !== '전체') {
