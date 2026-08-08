@@ -5,6 +5,9 @@ import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
+import RegionSelectModal from '@/components/RegionSelectModal';
+import { useRegion, RegionState } from '@/contexts/RegionContext';
+import { resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import styles from './page.module.css';
 
 // 배포 환경에 따라 변수명이 다르게 설정된 경우까지 대비한 방어적 조회
@@ -28,6 +31,7 @@ const MARKER_STYLES: Record<string, { border: string; bg: string; glow?: string;
 
 export default function Home() {
   const router = useRouter();
+  const { region, setRegion, openRegionModal } = useRegion();
 
   const [markers, setMarkers] = useState<any[]>([]);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -41,81 +45,29 @@ export default function Home() {
 
   const [dynamicData, setDynamicData] = useState<any[]>([]); // 탭 변경 시 데이터
   const [visibleCount, setVisibleCount] = useState(15); // 리스트 모드 15개 단위 페이징
-  const [userLawdCd, setUserLawdCd] = useState<string>('11680');
-  const [userDong, setUserDong] = useState<string>('all');
-  const [displayRegionName, setDisplayRegionName] = useState<string>('서울특별시 강남구 동 전체');
 
-  // 아실 스타일 검색 모달 상태
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [modalStep, setModalStep] = useState<'sido' | 'sigungu' | 'dong'>('sido');
-  const [modalKeyword, setModalKeyword] = useState('');
-  type RegionOption = { code: string; name: string };
-  const [modalSidos, setModalSidos] = useState<RegionOption[]>([]);
-  const [modalSigungus, setModalSigungus] = useState<RegionOption[]>([]);
-  const [modalDongs, setModalDongs] = useState<RegionOption[]>([]);
-  const [selectedSido, setSelectedSido] = useState<RegionOption | null>(null);
-  const [selectedSigungu, setSelectedSigungu] = useState<RegionOption | null>(null);
-  const [regionLoading, setRegionLoading] = useState(false);
-
-  const openSearchModal = () => {
-    setShowSearchModal(true);
-    setModalStep('sido');
-    setSelectedSido(null);
-    setSelectedSigungu(null);
-    setModalKeyword('');
-    if (modalSidos.length === 0) {
-      setRegionLoading(true);
-      fetch('https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=*00000000')
-        .then(res => res.json())
-        .then(data => setModalSidos(data.regcodes || []))
-        .catch(err => console.error('시도 목록 조회 실패', err))
-        .finally(() => setRegionLoading(false));
-    }
+  // 지도에 이미 로드된 마커 중 검색어와 이름이 일치하는 것이 있으면 그 마커의 실좌표로
+  // 이동시키고 펄스 강조를 적용한다(공유 지역 선택 모달의 키워드 검색이 처리하지 못하는
+  // "이미 로드된 단지" 케이스를 홈 화면이 직접 가로채 처리).
+  const handleKeywordMatch = (keyword: string): boolean => {
+    const normalizedKeyword = normalizeAptName(keyword);
+    const matched = markers.find((m) => {
+      const normalizedName = normalizeAptName(m.name);
+      return normalizedName.includes(normalizedKeyword) || normalizedKeyword.includes(normalizedName);
+    });
+    if (!matched) return false;
+    setCenter({ lat: matched.lat, lng: matched.lng });
+    setHighlightedMarkerName(matched.name);
+    return true;
   };
 
-  const selectSido = (sido: RegionOption) => {
-    setSelectedSido(sido);
-    setSelectedSigungu(null);
-    setModalDongs([]);
-    setRegionLoading(true);
-    const sidoCode = sido.code.substring(0, 2);
-    fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${sidoCode}*00000&is_ignore_zero=true`)
-      .then(res => res.json())
-      .then(data => {
-        const list = (data.regcodes || []).filter((item: RegionOption) => item.code.substring(0, 5) !== `${sidoCode}000`);
-        setModalSigungus(list);
-        setModalStep('sigungu');
-      })
-      .catch(err => console.error('시군구 목록 조회 실패', err))
-      .finally(() => setRegionLoading(false));
-  };
-
-  const selectSigungu = (sigungu: RegionOption) => {
-    setSelectedSigungu(sigungu);
-    setRegionLoading(true);
-    const sigunguCode = sigungu.code.substring(0, 5);
-    fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${sigunguCode}*&is_ignore_zero=true`)
-      .then(res => res.json())
-      .then(data => {
-        const list = (data.regcodes || []).filter((item: RegionOption) => item.code !== `${sigunguCode}00000`);
-        setModalDongs(list);
-        setModalStep('dong');
-      })
-      .catch(err => console.error('읍면동 목록 조회 실패', err))
-      .finally(() => setRegionLoading(false));
-  };
-
-  // 지역 선택 확정: lawdCd/동 상태 갱신 + 카카오 지오코딩으로 지도 중심 이동 + 모달 닫기
-  const finalizeRegion = (lawdCd: string, regionName: string, dongName: string) => {
-    setUserLawdCd(lawdCd);
-    setUserDong(dongName);
-    setDisplayRegionName(regionName);
-    setShowSearchModal(false);
-    setHighlightedMarkerName(null); // 지역이 바뀌면 이전 검색 강조는 더 이상 유효하지 않으므로 해제
-
+  // 지역 선택 모달에서 지역이 확정되면(그리드 선택 또는 키워드 역지오코딩), 지도 중심을
+  // 해당 지역으로 이동시킨다. 검색 강조는 새 지역과 무관해지므로 해제.
+  const handleRegionFinalize = (next: RegionState) => {
+    setHighlightedMarkerName(null);
     if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
       const geocoder = new window.kakao.maps.services.Geocoder();
-      geocoder.addressSearch(regionName, (result: any, status: any) => {
+      geocoder.addressSearch(next.displayRegionName, (result: any, status: any) => {
         if (status === window.kakao.maps.services.Status.OK && result[0]) {
           setCenter({ lat: parseFloat(result[0].y), lng: parseFloat(result[0].x) });
         }
@@ -123,76 +75,38 @@ export default function Home() {
     }
   };
 
-  const selectDong = (dong: RegionOption | null) => {
-    if (!selectedSido || !selectedSigungu) return;
-    const sigunguCode = selectedSigungu.code.substring(0, 5);
-    const sigunguShortName = selectedSigungu.name.split(' ').slice(1).join(' ');
-    if (!dong) {
-      finalizeRegion(sigunguCode, `${selectedSido.name} ${sigunguShortName}`, 'all');
-      return;
-    }
-    const dongShortName = dong.name.split(' ').pop() || 'all';
-    finalizeRegion(sigunguCode, dong.name, dongShortName);
-  };
-
-  const handleModalKeywordSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!modalKeyword.trim()) return;
-    if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) return;
-
-    // 현재 지도에 이미 로드된 단지 마커 중 검색어와 이름이 일치하는 것이 있으면
-    // 그 마커의 실좌표로 정확히 이동시키고 펄스 강조를 적용한다. (region 밖의 단지는
-    // 아직 데이터가 로드되지 않아 강조가 불가능하므로, 이 경우 카카오 키워드 검색
-    // 결과 좌표로만 이동하고 강조는 적용하지 않는다.)
-    const normalizedKeyword = normalizeAptName(modalKeyword);
-    const matched = markers.find((m) => {
-      const normalizedName = normalizeAptName(m.name);
-      return normalizedName.includes(normalizedKeyword) || normalizedKeyword.includes(normalizedName);
-    });
-
-    if (matched) {
-      setCenter({ lat: matched.lat, lng: matched.lng });
-      setHighlightedMarkerName(matched.name);
-      setShowSearchModal(false);
-      return;
-    }
-
-    const ps = new window.kakao.maps.services.Places();
-    ps.keywordSearch(modalKeyword, (data: any, status: any) => {
-      if (status === window.kakao.maps.services.Status.OK && data[0]) {
-        setCenter({ lat: parseFloat(data[0].y), lng: parseFloat(data[0].x) });
-        setHighlightedMarkerName(null);
-        setShowSearchModal(false);
-      }
-    });
-  };
-
-  // userLawdCd의 최신값을 참조하기 위한 ref. useCallback(fn, [])으로 고정한 핸들러
+  // region.lawdCd의 최신값을 참조하기 위한 ref. useCallback(fn, [])으로 고정한 핸들러
   // (Map의 onCreate/onIdle) 안에서도 최신 값을 읽을 수 있도록 한다.
-  const userLawdCdRef = useRef(userLawdCd);
+  const regionLawdCdRef = useRef(region.lawdCd);
   useEffect(() => {
-    userLawdCdRef.current = userLawdCd;
-  }, [userLawdCd]);
+    regionLawdCdRef.current = region.lawdCd;
+  }, [region.lawdCd]);
 
-  // 좌표를 행정구역(시/군/구, lawdCd)으로 역지오코딩하여 지역 상태를 갱신한다.
-  // userLawdCd/userDong이 바뀌면 기존 데이터 fetch useEffect가 자동으로 해당
-  // 지역의 실거래가를 재요청하므로, 여기서는 상태만 갱신하면 된다.
-  // force가 없으면 현재와 같은 시군구일 때는 불필요한 상태 갱신(및 리스트 리셋)을 건너뛴다.
+  // 좌표를 행정구역(시/군/구, lawdCd)으로 역지오코딩하여 전역 지역 상태를 갱신한다.
+  // 지역이 바뀌면 기존 데이터 fetch useEffect가 자동으로 해당 지역의 실거래가를
+  // 재요청하므로, 여기서는 상태만 갱신하면 된다. force가 없으면 현재와 같은
+  // 시군구일 때는 불필요한 상태 갱신(및 리스트 리셋)을 건너뛴다.
   const applyRegionFromCoords = useCallback((lat: number, lng: number, force?: boolean) => {
     if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) return;
     const geocoder = new window.kakao.maps.services.Geocoder();
     geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
       if (status !== window.kakao.maps.services.Status.OK) return;
-      const region = result.find((r: any) => r.region_type === 'B');
-      if (!region) return;
-      const newLawdCd = region.code.substring(0, 5);
-      if (!force && newLawdCd === userLawdCdRef.current) return;
-      setUserLawdCd(newLawdCd);
-      setUserDong('all');
-      setDisplayRegionName(region.address_name);
+      const kakaoRegion = result.find((r: any) => r.region_type === 'B');
+      if (!kakaoRegion) return;
+      const newLawdCd = kakaoRegion.code.substring(0, 5);
+      if (!force && newLawdCd === regionLawdCdRef.current) return;
       setHighlightedMarkerName(null);
+      resolveRegionNameByLawdCd(newLawdCd).then((resolved) => {
+        setRegion({
+          lawdCd: newLawdCd,
+          dong: 'all',
+          sido: resolved?.sido || kakaoRegion.address_name,
+          sigungu: resolved?.sigungu || '',
+          displayRegionName: kakaoRegion.address_name,
+        });
+      });
     });
-  }, []);
+  }, [setRegion]);
 
   // GPS로 사용자 현재 위치를 가져와 지도 중심을 이동시키고, 해당 좌표의 행정구역을
   // 역지오코딩해 상단 표시와 실거래가 데이터를 즉시 갱신한다.
@@ -226,7 +140,7 @@ export default function Home() {
       ne: { lat: b.getNorthEast().getLat(), lng: b.getNorthEast().getLng() },
     });
     // LocalStorage에서 다른 지역의 마지막 위치를 복원한 경우, 지도는 그 위치를
-    // 보여주지만 userLawdCd는 여전히 기본값일 수 있으므로 최초 생성 시점에도
+    // 보여주지만 region.lawdCd는 여전히 기본값일 수 있으므로 최초 생성 시점에도
     // 실제 중심 좌표 기준으로 지역을 맞춰준다.
     const c = map.getCenter();
     applyRegionFromCoords(c.getLat(), c.getLng());
@@ -342,7 +256,7 @@ export default function Home() {
   }, [mapLoadAttempt]);
 
   // 실거래가 데이터 로드 (매매 + 분양권) 및 상태별 마커 분류
-  // userLawdCd는 최초 마운트 직후 곧바로(기본값 -> 역지오코딩된 실제 지역) 다시 바뀔 수 있어
+  // region.lawdCd는 최초 마운트 직후 곧바로(기본값 -> 역지오코딩된 실제 지역) 다시 바뀔 수 있어
   // (예: LocalStorage에 저장된 다른 지역 위치 복원), 이전 지역 요청이 새 지역 요청보다
   // 늦게 응답하면 최신 상태를 되돌려쓰는 경쟁 상태가 생길 수 있다. cancelled 플래그로
   // 이미 무효화된(effect가 재실행된) 요청의 응답은 무시하도록 방어한다.
@@ -351,11 +265,11 @@ export default function Home() {
 
     async function fetchData() {
       try {
-        const dongParam = userDong && userDong !== 'all' ? `&dong=${encodeURIComponent(userDong)}` : '';
+        const dongParam = region.dong && region.dong !== 'all' ? `&dong=${encodeURIComponent(region.dong)}` : '';
 
         const [aptRes, silvRes] = await Promise.all([
-          fetch(`/api/transactions?type=apt&lawdCd=${userLawdCd}${dongParam}`),
-          fetch(`/api/transactions?type=silv&lawdCd=${userLawdCd}${dongParam}`).catch(() => null),
+          fetch(`/api/transactions?type=apt&lawdCd=${region.lawdCd}${dongParam}`),
+          fetch(`/api/transactions?type=silv&lawdCd=${region.lawdCd}${dongParam}`).catch(() => null),
         ]);
 
         const data = await aptRes.json();
@@ -405,7 +319,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [userLawdCd, userDong]);
+  }, [region.lawdCd, region.dong]);
 
   // 지도 이동/축소로 bounds가 바뀌면 리스트 페이징을 처음부터 다시 보여준다
   useEffect(() => {
@@ -447,7 +361,7 @@ export default function Home() {
         hideMobileNav
         searchSlot={
           <div
-            onClick={openSearchModal}
+            onClick={openRegionModal}
             style={{
               cursor: 'pointer',
               display: 'flex',
@@ -513,7 +427,7 @@ export default function Home() {
                     yAnchor={1}
                   >
                     <div
-                      onClick={() => router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${userLawdCd}`)}
+                      onClick={() => router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${region.lawdCd}`)}
                       className={isHighlighted ? styles.markerHighlight : undefined}
                       style={{
                         display: 'flex',
@@ -596,7 +510,7 @@ export default function Home() {
                         className={styles.listRow}
                         onClick={() =>
                           router.push(
-                            `/apt/${encodeURIComponent(item.name)}?lawdCd=${userLawdCd}${item.dong ? `&dong=${encodeURIComponent(item.dong)}` : ''}`
+                            `/apt/${encodeURIComponent(item.name)}?lawdCd=${region.lawdCd}${item.dong ? `&dong=${encodeURIComponent(item.dong)}` : ''}`
                           )
                         }
                       >
@@ -626,13 +540,13 @@ export default function Home() {
           
           <div style={{ padding: '8px 16px 0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
-            {/* 현재 위치: 클릭 시 검색 모달 오픈 (검색창은 상단 헤더로 이동) */}
+            {/* 현재 위치: 클릭 시 지역 선택 모달 오픈 (검색창은 상단 헤더로 이동) */}
             <div
-              onClick={openSearchModal}
+              onClick={openRegionModal}
               style={{ pointerEvents: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.95)', padding: '10px 16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}
             >
               <div style={{ fontWeight: 600, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                현재 위치: {displayRegionName} <span style={{ color: '#22c55e' }}>📍</span>
+                현재 위치: {region.displayRegionName} <span style={{ color: '#22c55e' }}>📍</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                 <button
@@ -728,97 +642,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 아실 스타일 전면 검색 모달 */}
-      {showSearchModal && (
-        <div className={styles.searchModalOverlay} onClick={() => setShowSearchModal(false)}>
-          <div className={styles.searchModalContent} onClick={(e) => e.stopPropagation()}>
-            {/* 상단: 아파트명 검색 입력 + 닫기 */}
-            <div className={styles.searchModalHeader}>
-              <form onSubmit={handleModalKeywordSearch} style={{ flex: 1, display: 'flex' }}>
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder="아파트명을 입력해주세요."
-                  value={modalKeyword}
-                  onChange={(e) => setModalKeyword(e.target.value)}
-                  className={styles.searchModalInput}
-                />
-              </form>
-              <button
-                className={styles.searchModalCloseBtn}
-                onClick={() => setShowSearchModal(false)}
-                aria-label="검색 닫기"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* 중단: 단계별 탭 */}
-            <div className={styles.searchModalTabs}>
-              <button
-                className={`${styles.searchModalTab} ${modalStep === 'sido' ? styles.searchModalTabActive : ''}`}
-                onClick={() => setModalStep('sido')}
-              >
-                {selectedSido ? selectedSido.name : '시도 선택'}
-              </button>
-              <span className={styles.searchModalTabArrow}>›</span>
-              <button
-                className={`${styles.searchModalTab} ${modalStep === 'sigungu' ? styles.searchModalTabActive : ''}`}
-                disabled={!selectedSido}
-                onClick={() => selectedSido && setModalStep('sigungu')}
-              >
-                {selectedSigungu ? selectedSigungu.name.split(' ').slice(1).join(' ') : '시군구 선택'}
-              </button>
-              <span className={styles.searchModalTabArrow}>›</span>
-              <button
-                className={`${styles.searchModalTab} ${modalStep === 'dong' ? styles.searchModalTabActive : ''}`}
-                disabled={!selectedSigungu}
-                onClick={() => selectedSigungu && setModalStep('dong')}
-              >
-                읍면동 선택
-              </button>
-            </div>
-
-            {/* 하단: 지역 그리드 패널 */}
-            <div className={styles.searchModalGridWrapper}>
-              {regionLoading ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-                  불러오는 중...
-                </div>
-              ) : (
-                <div className={styles.searchModalGrid}>
-                  {modalStep === 'sido' &&
-                    modalSidos.map((sido) => (
-                      <button key={sido.code} className={styles.searchModalGridBtn} onClick={() => selectSido(sido)}>
-                        {sido.name}
-                      </button>
-                    ))}
-
-                  {modalStep === 'sigungu' &&
-                    modalSigungus.map((sigungu) => (
-                      <button key={sigungu.code} className={styles.searchModalGridBtn} onClick={() => selectSigungu(sigungu)}>
-                        {sigungu.name.split(' ').slice(1).join(' ')}
-                      </button>
-                    ))}
-
-                  {modalStep === 'dong' && (
-                    <>
-                      <button className={styles.searchModalGridBtn} onClick={() => selectDong(null)}>
-                        {(selectedSigungu?.name.split(' ').slice(1).join(' ')) || ''} 전체
-                      </button>
-                      {modalDongs.map((dong) => (
-                        <button key={dong.code} className={styles.searchModalGridBtn} onClick={() => selectDong(dong)}>
-                          {dong.name.split(' ').pop()}
-                        </button>
-                      ))}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 아실 스타일 전면 지역 선택 모달 (실거래가/시장통계/학군정보 등에서 공유) */}
+      <RegionSelectModal onKeywordMatch={handleKeywordMatch} onRegionFinalize={handleRegionFinalize} />
     </div>
   );
 }

@@ -15,7 +15,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-kakao-maps-sdk": "^1.2.1",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "swr": "^2.5.0"
   },
   "devDependencies": {
     "@prisma/client": "^5.22.0",

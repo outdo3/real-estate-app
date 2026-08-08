@@ -106,11 +106,16 @@ async function fetchMonthsThrottled(tasks: MonthTask[], concurrency = 3): Promis
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const lawdCdParam = searchParams.get('lawdCd');
   const sido = searchParams.get('sido') || '부산광역시';
   const gungu = searchParams.get('gungu') || '서구';
 
   try {
-    const lawdCd = await resolveLawdCd(sido, gungu);
+    // lawdCd가 직접 전달되면(전역 지역 선택 모달이 이미 정확히 해석해 둔 값) 이름
+    // 기반 재해석을 아예 건너뛴다 — 문자열 매칭 단계 자체를 없애 "서구 선택 시
+    // 강서구가 섞이는" 것과 같은 부류의 버그가 애초에 발생할 여지를 제거한다.
+    // lawdCd가 없는 요청(레거시/직접 호출)에 한해서만 이름 기반 조회로 대체한다.
+    const lawdCd = lawdCdParam && /^\d{5}$/.test(lawdCdParam) ? lawdCdParam : await resolveLawdCd(sido, gungu);
     if (!lawdCd) {
       // 지역 코드를 정확히 찾지 못했을 때 임의의 지역(예: 부산 서구)으로
       // 대체하면, 사용자가 선택한 지역과 다른 지역의 데이터가 표시되어

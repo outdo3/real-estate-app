@@ -20,36 +20,36 @@
   margin-bottom: 2rem;
 }
 
-.regionSelectorGroup {
+/* 지역 선택 트리거: 클릭 시 실거래가 탭과 동일한 전역 지역 선택 모달이 열린다 */
+.regionTrigger {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-}
-
-.title {
-  margin: 0;
-  font-size: 1.75rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  letter-spacing: -0.5px;
-}
-
-.regionSelect {
-  padding: 0.6rem 1rem;
-  border-radius: 8px;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 999px;
   border: 1px solid var(--border-color);
-  font-size: 1rem;
   background-color: #f8fafc;
   color: var(--text-primary);
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 700;
   cursor: pointer;
   outline: none;
   transition: all 0.2s;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.regionSelect:hover {
+.regionTrigger:hover {
   border-color: var(--primary-color);
   background-color: white;
+  color: var(--primary-color);
+}
+
+.regionTriggerCaret {
+  color: var(--text-muted);
+  font-size: 0.8rem;
 }
 
 .tabs {
@@ -163,9 +163,8 @@
     gap: 1rem;
   }
 
-  .regionSelectorGroup {
+  .regionTrigger {
     width: 100%;
-    flex-wrap: wrap;
   }
 
   .tabs {

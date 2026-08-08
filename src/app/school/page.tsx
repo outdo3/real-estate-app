@@ -2,21 +2,22 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Map, MapMarker } from 'react-kakao-maps-sdk';
-import { REGION_DATA, SIDO_LIST } from '../../lib/regions';
 import Header from '@/components/Header';
+import RegionSelectModal from '@/components/RegionSelectModal';
+import { useRegion } from '@/contexts/RegionContext';
 import styles from './school.module.css';
 
 const TABS = ['전체', '초등', '중등', '고등', '학원가'];
 
 export default function SchoolInfoPage() {
-  const [sido, setSido] = useState('서울특별시');
-  const [gungu, setGungu] = useState('강남구');
+  const { region, openRegionModal } = useRegion();
   const [activeTab, setActiveTab] = useState(TABS[0]);
   const [selectedSchool, setSelectedSchool] = useState<any>(null);
-  
-  const region = `${sido} ${gungu}`;
-  
+
+  // 학교 검색 API는 동(洞) 단위가 아닌 시/군/구 단위로 동작하므로, 선택된 동 이름은
+  // 제외하고 "시도 시군구" 형태로만 구성한다.
+  const regionName = `${region.sido} ${region.sigungu}`;
+
   // 통계 상태 관리
   const [stats, setStats] = useState({
     totalSchools: 0,
@@ -27,37 +28,18 @@ export default function SchoolInfoPage() {
     academyLocation: '-',
     academyCount: 0
   });
-  
+
   const [schools, setSchools] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [aptList, setAptList] = useState<any[]>([]);
   const [aptSort, setAptSort] = useState<'distance' | 'newest'>('distance');
-  const [lawdCd, setLawdCd] = useState('11680'); // 기본값: 강남구
-
-  // 선택한 지역(sido, gungu)에 맞는 법정동코드(lawdCd) 조회
-  useEffect(() => {
-    const fetchLawdCd = async () => {
-      try {
-        const res = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=*00000`);
-        const json = await res.json();
-        const targetName = `${sido} ${gungu}`;
-        const found = json.regcodes.find((r: any) => r.name === targetName);
-        if (found) {
-          setLawdCd(found.code.substring(0, 5));
-        }
-      } catch (e) {
-        console.error('Failed to fetch lawdCd', e);
-      }
-    };
-    fetchLawdCd();
-  }, [sido, gungu]);
 
   // 선택 지역에 맞는 학교 목록 불러오기 (탭 변경 시 리스트만 업데이트)
   useEffect(() => {
     const fetchSchools = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/school?region=${encodeURIComponent(region)}&type=${encodeURIComponent(activeTab)}`);
+        const res = await fetch(`/api/school?region=${encodeURIComponent(regionName)}&type=${encodeURIComponent(activeTab)}`);
         const json = await res.json();
         if (json.success) {
           setSchools(json.data);
@@ -69,15 +51,15 @@ export default function SchoolInfoPage() {
         setLoading(false);
       }
     };
-    
+
     fetchSchools();
-  }, [region, activeTab]);
+  }, [regionName, activeTab]);
 
   // 지역 전체 통계 불러오기 (지역 변경 시에만 업데이트하여 숫자 널뛰기 방지)
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const statsRes = await fetch(`/api/school/stats?region=${encodeURIComponent(region)}`);
+        const statsRes = await fetch(`/api/school/stats?region=${encodeURIComponent(regionName)}`);
         const statsJson = await statsRes.json();
         if (statsJson.success) {
           setStats(statsJson.data);
@@ -86,16 +68,16 @@ export default function SchoolInfoPage() {
         console.error('Stats load error:', error);
       }
     };
-    
+
     fetchStats();
-  }, [region]);
+  }, [regionName]);
 
   // 배정 단지 불러오기 (GIS 연산 API 연동)
   useEffect(() => {
     if (selectedSchool && selectedSchool.name) {
       const fetchApts = async () => {
         try {
-          const res = await fetch(`/api/school/apartments?schoolName=${encodeURIComponent(selectedSchool.name)}&lat=${selectedSchool.lat || ''}&lng=${selectedSchool.lng || ''}&lawdCd=${encodeURIComponent(lawdCd)}`);
+          const res = await fetch(`/api/school/apartments?schoolName=${encodeURIComponent(selectedSchool.name)}&lat=${selectedSchool.lat || ''}&lng=${selectedSchool.lng || ''}&lawdCd=${encodeURIComponent(region.lawdCd)}`);
           const json = await res.json();
           if (json.success) {
             setAptList(json.data);
@@ -108,7 +90,7 @@ export default function SchoolInfoPage() {
     } else {
       setAptList([]);
     }
-  }, [selectedSchool]);
+  }, [selectedSchool, region.lawdCd]);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -166,30 +148,10 @@ export default function SchoolInfoPage() {
         {/* 1단계: 상단 '학군 탐색 필터' 및 '지역 대시보드' */}
         <div className={styles.header}>
           <div className={styles.headerTop}>
-            <div className={styles.regionSelectorGroup}>
-              <select 
-                className={styles.regionSelect} 
-                value={sido}
-                onChange={(e) => {
-                  const newSido = e.target.value;
-                  setSido(newSido);
-                  setGungu(REGION_DATA[newSido][0]);
-                }}
-              >
-                {SIDO_LIST.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-              <select 
-                className={styles.regionSelect} 
-                value={gungu}
-                onChange={(e) => setGungu(e.target.value)}
-              >
-                {REGION_DATA[sido].map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>  
+            <button className={styles.regionTrigger} onClick={openRegionModal}>
+              <span>📍 {regionName}</span>
+              <span className={styles.regionTriggerCaret}>▾</span>
+            </button>
             <div className={styles.tabs}>
               {TABS.map(tab => (
                 <button 
@@ -207,7 +169,7 @@ export default function SchoolInfoPage() {
             <div className={styles.summaryCard}>
               <div className={styles.cardIcon}>🏫</div>
               <div className={styles.cardContent}>
-                <h3>{region} {activeTab === '전체' || activeTab === '학원가' ? '학교' : activeTab + '학교'} 수</h3>
+                <h3>{regionName} {activeTab === '전체' || activeTab === '학원가' ? '학교' : activeTab + '학교'} 수</h3>
                 <p>
                   {activeTab === '전체' || activeTab === '학원가'
                     ? `총 ${stats.totalSchools}개교 (초${stats.elemCount}/중${stats.midCount}/고${stats.highCount})`
@@ -248,7 +210,7 @@ export default function SchoolInfoPage() {
         {/* 학교 랭킹 리스트 (전체 너비 사용) */}
         <div className={styles.panel}>
           <div className={styles.panelHeader}>
-            <h2 className={styles.panelTitle}>🏆 {region} {activeTab} 랭킹</h2>
+            <h2 className={styles.panelTitle}>🏆 {regionName} {activeTab} 랭킹</h2>
             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
               {activeTab === '중등' ? '특목고 진학률 순' : (activeTab === '초등' ? '과밀학급/선호도 순' : '진학률 순')}
             </span>
@@ -277,7 +239,7 @@ export default function SchoolInfoPage() {
             <div className={styles.modalHeader}>
               <div>
                 <h2 className={styles.modalTitle}>{selectedSchool.name}</h2>
-                <span style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>{region} 전체 {selectedSchool.rank}위</span>
+                <span style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>{regionName} 전체 {selectedSchool.rank}위</span>
               </div>
               <button className={styles.modalCloseBtn} onClick={() => setSelectedSchool(null)}>×</button>
             </div>
@@ -360,7 +322,7 @@ export default function SchoolInfoPage() {
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div className={styles.aptPrice}>{apt.price}</div>
-                      <Link href={`/apt/${encodeURIComponent(apt.name)}?lawdCd=${lawdCd}&type=apt`} className={styles.linkBtn}>시세 보기 &gt;</Link>
+                      <Link href={`/apt/${encodeURIComponent(apt.name)}?lawdCd=${region.lawdCd}&type=apt`} className={styles.linkBtn}>시세 보기 &gt;</Link>
                     </div>
                   </div>
                 ))}
@@ -369,6 +331,8 @@ export default function SchoolInfoPage() {
           </div>
         </div>
       )}
+
+      <RegionSelectModal />
     </div>
   );
 }

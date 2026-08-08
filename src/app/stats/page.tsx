@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import useSWR from 'swr';
 import Header from '@/components/Header';
-import { REGION_DATA, SIDO_LIST } from '../../lib/regions';
+import RegionSelectModal from '@/components/RegionSelectModal';
+import { useRegion } from '@/contexts/RegionContext';
 import styles from './page.module.css';
 import {
   ComposedChart,
@@ -30,42 +32,28 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'supply', label: '🏢 입주/전세가율' },
 ];
 
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
 export default function StatsPage() {
-  const [sido, setSido] = useState('서울특별시');
-  const [gungu, setGungu] = useState('강남구');
+  const { region, openRegionModal } = useRegion();
   const [activeTab, setActiveTab] = useState<TabKey>('volume');
   const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
-
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
   const [tradeModal, setTradeModal] = useState<{ title: string; trades: any[] } | null>(null);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      setLoading(true);
-      setFetchError(null);
-      try {
-        const res = await fetch(`/api/stats/dashboard?sido=${encodeURIComponent(sido)}&gungu=${encodeURIComponent(gungu)}`);
-        const json = await res.json();
-        if (json.success) {
-          setData(json.data);
-        } else {
-          setData(null);
-          setFetchError(json.error || '통계 데이터를 불러오지 못했습니다.');
-        }
-      } catch (e) {
-        console.error(e);
-        setData(null);
-        setFetchError('통계 데이터를 불러오지 못했습니다.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchStats();
-  }, [sido, gungu]);
+  // SWR이 lawdCd별로 응답을 캐시하므로, 이미 조회한 지역으로 다시 돌아오면(탭 이동 후
+  // 복귀 등) 재요청 없이 캐시된 데이터를 즉시 보여준다. isLoading은 해당 키에 대한
+  // 캐시가 전혀 없을 때(최초 조회)만 true가 된다.
+  const { data: apiResponse, error: swrError, isLoading } = useSWR(
+    region.lawdCd ? `/api/stats/dashboard?lawdCd=${region.lawdCd}` : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
+  );
 
-  const region = `${sido} ${gungu}`;
+  const data = apiResponse?.success ? apiResponse.data : null;
+  const fetchError = apiResponse && !apiResponse.success
+    ? apiResponse.error
+    : (swrError ? '통계 데이터를 불러오지 못했습니다.' : null);
+  const loading = isLoading;
 
   const renderBadge = (rank: number) => {
     let badgeClass = styles.compactRank;
@@ -124,32 +112,12 @@ export default function StatsPage() {
     <div className={styles.main}>
       <Header pageTitle="시장 통계·분석" />
       <div className="container">
-        {/* 상단 지역 선택 */}
+        {/* 상단 지역 선택: 실거래가 탭과 동일한 전역 지역 선택 모달을 공유한다 */}
         <div className={styles.headerTop}>
-          <div className={styles.regionSelectorGroup}>
-            <select
-              className={styles.regionSelect}
-              value={sido}
-              onChange={(e) => {
-                const newSido = e.target.value;
-                setSido(newSido);
-                setGungu(REGION_DATA[newSido][0]);
-              }}
-            >
-              {SIDO_LIST.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-            <select
-              className={styles.regionSelect}
-              value={gungu}
-              onChange={(e) => setGungu(e.target.value)}
-            >
-              {REGION_DATA[sido].map(g => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-          </div>
+          <button className={styles.regionTrigger} onClick={openRegionModal}>
+            <span>📍 {region.displayRegionName}</span>
+            <span className={styles.regionTriggerCaret}>▾</span>
+          </button>
         </div>
 
         {/* 서브 카테고리 탭 */}
@@ -242,7 +210,7 @@ export default function StatsPage() {
                       </ComposedChart>
                     </ResponsiveContainer>
                     <div className={styles.tipBox}>
-                      <span>💡 <strong>분석 팁:</strong> 최근 12개월 실거래 기준, {region}의 거래량과 매매/전세 가격지수(최초 유효월=100 기준) 추이입니다.</span>
+                      <span>💡 <strong>분석 팁:</strong> 최근 12개월 실거래 기준, {region.displayRegionName}의 거래량과 매매/전세 가격지수(최초 유효월=100 기준) 추이입니다.</span>
                     </div>
                   </div>
                 ) : (
@@ -302,7 +270,7 @@ export default function StatsPage() {
                 </div>
                 <div className={styles.panel}>
                   <div className={styles.panelHeader}>
-                    <h2 className={styles.panelTitle}>🏆 {gungu} 평당가 랭킹</h2>
+                    <h2 className={styles.panelTitle}>🏆 {region.sigungu} 평당가 랭킹</h2>
                     <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 1년 평균</span>
                   </div>
                   {renderCompactList(data.topPrices, 'pricePerPyung', {
@@ -323,7 +291,7 @@ export default function StatsPage() {
                     <div className={styles.summaryCard}>
                       <div className={styles.cardIcon}>📈</div>
                       <div className={styles.cardContent}>
-                        <h3>{region} 평균 전세가율</h3>
+                        <h3>{region.displayRegionName} 평균 전세가율</h3>
                         <p>{data.jeonseRate != null ? `${data.jeonseRate}%` : '데이터 없음'} <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>(최근 3개월 실거래 기준)</span></p>
                       </div>
                     </div>
@@ -366,6 +334,8 @@ export default function StatsPage() {
           </div>
         </div>
       )}
+
+      <RegionSelectModal />
     </div>
   );
 }

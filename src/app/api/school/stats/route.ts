@@ -1,19 +1,13 @@
 import { NextResponse } from 'next/server';
-
-const SIDO_CODES: Record<string, string> = {
-  '서울특별시': 'B10', '부산광역시': 'C10', '대구광역시': 'D10', '인천광역시': 'E10', 
-  '광주광역시': 'F10', '대전광역시': 'G10', '울산광역시': 'H10', '세종특별자치시': 'I10', 
-  '경기도': 'J10', '강원특별자치도': 'K10', '충청북도': 'M10', '충청남도': 'N10', 
-  '전북특별자치도': 'P10', '전라남도': 'Q10', '경상북도': 'R10', '경상남도': 'S10', '제주특별자치도': 'T10'
-};
+import { resolveNeisEduCode, addressMatchesRegion } from '@/lib/neis-sido-codes';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const region = searchParams.get('region') || '부산광역시 서구';
   const [sido, gungu] = region.split(' ');
-  
+
   const apiKey = process.env.NEIS_API_KEY || 'sample';
-  const eduCode = SIDO_CODES[sido] || 'C10';
+  const eduCode = resolveNeisEduCode(sido) || 'C10';
 
   try {
     // 1. NEIS 학교 데이터 페칭 (pSize와 무관하게 최대 500건까지만 반환되므로 페이지 순회로 전량 확보)
@@ -39,19 +33,12 @@ export async function GET(request: Request) {
       console.warn("NEIS API failed in stats, using empty");
     }
 
-    // 지역 필터링 (엄격한 필터링: '서구' 검색 시 '강서구' 등 오매칭 방지)
+    // 지역 필터링: 주소를 토큰 단위로 쪼개 gungu와 정확히 일치하는 경우만 허용
+    // (예전 addr.includes(gungu) 방식은 "강서구".includes("서구") === true라
+    // '서구'를 선택해도 '강서구' 학교가 함께 매칭될 수 있었다)
     const regionSchools = rawSchools.filter(s => {
       const addr = (s.ORG_RDNMA || s.LCTN_SC_NM || '');
-      // '부산광역시 서구' 등 region 텍스트가 정확히 포함되거나,
-      // gungu가 포함되면서 오매칭 단어(강서구 등)가 포함되지 않은 경우만 허용
-      if (addr.includes(region)) return true;
-      if (addr.includes(gungu)) {
-        // '서구' 검색인데 '강서구'가 주소에 있으면 제외
-        if (gungu === '서구' && (addr.includes('강서구') || addr.includes('달서구') || addr.includes('서구청'))) return false;
-        // '중구' 검색인데 '중랑구' 등이 있으면 제외 (필요시 추가)
-        return true;
-      }
-      return false;
+      return addressMatchesRegion(addr, region, gungu);
     });
 
     let elemCount = 0;

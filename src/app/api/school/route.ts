@@ -1,15 +1,22 @@
 import { NextResponse } from 'next/server';
+import { resolveNeisEduCode, addressMatchesRegion } from '@/lib/neis-sido-codes';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const region = searchParams.get('region') || '부산광역시 서구';
   const type = searchParams.get('type') || '중등';
+  const [sido] = region.split(' ');
 
   // NEIS API KEY (환경변수 또는 샘플)
   const apiKey = process.env.NEIS_API_KEY || 'sample';
-  
+
+  // 교육청 코드를 시/도 이름으로 동적으로 조회한다. 예전에는 부산(C10)으로
+  // 하드코딩되어 있어, 다른 시/도를 선택해도 항상 부산 학교 목록을 대상으로
+  // 지역명(gungu)만 필터링하는 바람에 결과가 비거나 엉뚱한 지역이 섞이는
+  // 문제가 있었다.
+  const eduCode = resolveNeisEduCode(sido) || 'C10';
+
   try {
-    // 교육청 코드 (부산: C10)
     // NEIS API는 pSize를 요청과 무관하게 최대 500건까지만 반환하므로,
     // list_total_count를 확인해 필요한 만큼 페이지를 순회해 전량을 확보한다.
     let rawSchools: any[] = [];
@@ -20,7 +27,7 @@ export async function GET(request: Request) {
       let totalCount = Infinity;
 
       while ((pIndex - 1) * pageSize < totalCount) {
-        const neisUrl = `https://open.neis.go.kr/hub/schoolInfo?KEY=${apiKey}&Type=json&pIndex=${pIndex}&pSize=${pageSize}&ATPT_OFCDC_SC_CODE=C10`;
+        const neisUrl = `https://open.neis.go.kr/hub/schoolInfo?KEY=${apiKey}&Type=json&pIndex=${pIndex}&pSize=${pageSize}&ATPT_OFCDC_SC_CODE=${eduCode}`;
         const res = await fetch(neisUrl);
         if (!res.ok) break;
         const data = await res.json();
@@ -49,15 +56,13 @@ export async function GET(request: Request) {
       ];
     }
 
-    // 1. 지역 필터링 (엄격한 필터링: '서구' 검색 시 '강서구' 등 오매칭 방지)
+    // 1. 지역 필터링: 주소를 토큰 단위로 쪼개 gungu와 정확히 일치하는 경우만 허용
+    // (예전 addr.includes(gungu) 방식은 "강서구".includes("서구") === true라
+    // '서구'를 선택해도 '강서구' 학교가 함께 매칭될 수 있었다)
     const gungu = region.split(' ')[1] || '';
     let filtered = rawSchools.filter((s: any) => {
       const addr = (s.ORG_RDNMA || s.LCTN_SC_NM || '');
-      if (addr.includes(region)) return true;
-      if (addr.includes(gungu)) {
-        if (gungu === '서구' && (addr.includes('강서구') || addr.includes('달서구') || addr.includes('서구청'))) return false;
-        return true;
-      }
+      if (addressMatchesRegion(addr, region, gungu)) return true;
       // Fallback for sample demo
       if (region === '부산광역시 서구' && s.SCHUL_NM.includes('대신')) return true;
       return false;
