@@ -133,10 +133,10 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
         }
       };
 
-      if (window.kakao && window.kakao.maps && window.kakao.maps.load) {
-        window.kakao.maps.load(performSearch);
-      } else {
-        performSearch();
+      if (window.kakao && window.kakao.maps) {
+        window.kakao.maps.load(() => {
+          performSearch();
+        });
       }
     }, 300);
 
@@ -175,10 +175,10 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
       }
     };
 
-    if (window.kakao && window.kakao.maps && window.kakao.maps.load) {
-      window.kakao.maps.load(performRouting);
-    } else {
-      performRouting();
+    if (window.kakao && window.kakao.maps) {
+      window.kakao.maps.load(() => {
+        performRouting();
+      });
     }
   };
 
