@@ -5,7 +5,6 @@ import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
-import RankCard from '@/components/RankCard';
 import styles from './page.module.css';
 
 // 배포 환경에 따라 변수명이 다르게 설정된 경우까지 대비한 방어적 조회
@@ -24,6 +23,7 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
 
   const [dynamicData, setDynamicData] = useState<any[]>([]); // 탭 변경 시 데이터
+  const [visibleCount, setVisibleCount] = useState(20); // 리스트 모드 20개 단위 페이징
   const [userLawdCd, setUserLawdCd] = useState<string>('26140');
   const [userDong, setUserDong] = useState<string>('all');
   const [displayRegionName, setDisplayRegionName] = useState<string>('부산광역시 서구 동 전체');
@@ -213,7 +213,8 @@ export default function Home() {
         const res = await fetch(`/api/transactions?type=apt&lawdCd=${userLawdCd}${dongParam}`);
         const data = await res.json();
         setDynamicData(data);
-        
+        setVisibleCount(20);
+
         const fetchedMarkers = data
           .filter((item: any) => item.lat && item.lng)
           .map((item: any) => ({
@@ -369,18 +370,44 @@ export default function Home() {
           </div>
         )}
 
-        {/* 슬림 리스트 레이어: 지도 대신 부산 서구 아파트 단지 카드 목록을 같은 자리에 표시 */}
+        {/* 슬림 리스트 레이어: 지도 대신 부산 서구 아파트 실거래 목록을 한 줄 컴팩트 형태로 표시 */}
         {viewMode === 'list' && (
           <div className={styles.listWrapper}>
             <div className={styles.listGrid}>
               {dynamicData.length === 0 ? (
-                <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
                   표시할 단지 정보가 없습니다.
                 </div>
               ) : (
-                dynamicData.map((item: any) => (
-                  <RankCard key={item.id} data={item} regionName={displayRegionName} />
-                ))
+                <>
+                  {dynamicData.slice(0, visibleCount).map((item: any) => {
+                    const dateLabel = item.tradeDate ? item.tradeDate.slice(5).replace('-', '.') : '';
+                    return (
+                      <div
+                        key={item.id}
+                        className={styles.listRow}
+                        onClick={() =>
+                          router.push(
+                            `/apt/${encodeURIComponent(item.name)}?lawdCd=${userLawdCd}${item.dong ? `&dong=${encodeURIComponent(item.dong)}` : ''}`
+                          )
+                        }
+                      >
+                        <span className={styles.listRowName}>{item.name}</span>
+                        <span className={styles.listRowMeta}>
+                          {item.pyung ? `${item.pyung}평` : ''}{item.floor ? ` ${item.floor}층` : ''}
+                        </span>
+                        <span className={styles.listRowPrice}>{item.price}</span>
+                        <span className={styles.listRowDate}>{dateLabel}</span>
+                      </div>
+                    );
+                  })}
+
+                  {visibleCount < dynamicData.length && (
+                    <button className={styles.loadMoreBtn} onClick={() => setVisibleCount((n) => n + 20)}>
+                      실거래가 더보기 ({Math.min(visibleCount, dynamicData.length)}/전체 {dynamicData.length}건)
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>

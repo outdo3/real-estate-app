@@ -589,22 +589,97 @@
   overflow-y: auto;
   background: var(--bg-light, #f8fafc);
   padding: 1rem;
-  padding-top: 280px; /* 상단에 떠 있는 검색창/대시보드/토글 레이어에 가려지지 않도록 넉넉하게 확보 */
+  padding-top: 190px; /* 상단에 떠 있는 헤더 검색창/현재 위치/동향 바/토글 레이어에 가려지지 않도록 확보 (검색창을 헤더로 이동한 만큼 축소) */
   z-index: 0;
 }
 
 @media (max-width: 480px) {
   .listWrapper {
-    padding-top: 250px;
+    padding-top: 170px;
   }
 }
 
 .listGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
-  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+  max-width: 720px;
   margin: 0 auto;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* 한 줄 컴팩트 실거래 리스트 아이템: 단지명 | 평형/층 | 가격(네이버 그린) | 계약일자 */
+.listRow {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.listRow:last-child {
+  border-bottom: none;
+}
+
+.listRow:hover {
+  background: #f8fafc;
+}
+
+.listRowName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listRowMeta {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.listRowPrice {
+  flex: 0 0 auto;
+  min-width: 84px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #03C75A;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.listRowDate {
+  flex: 0 0 auto;
+  min-width: 42px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.loadMoreBtn {
+  width: 100%;
+  padding: 0.85rem;
+  background: white;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.loadMoreBtn:hover {
+  background: #f8fafc;
+  color: #03C75A;
 }
 
 /* 아실 스타일 전면 검색 모달 */

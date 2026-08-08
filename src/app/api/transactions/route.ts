@@ -80,12 +80,26 @@ export async function GET(request: Request) {
       const promises = months.map(dealYmd => fetchMolitData({ lawdCd, dealYmd, type }));
       const results = await Promise.all(promises);
       
-      // 데이터를 하나의 배열로 합치고 정렬 (최신이 위로 오도록 임시 처리)
-      let data = results.flat().reverse();
-      
+      let data = results.flat();
+
       if (dong && dong !== 'all') {
         data = data.filter((item: any) => item.dong === dong);
       }
+
+      // 정렬/표시용 필드 보강: info 문자열("면적 • 층 • 계약일")에서 평형·층·계약일자를
+      // 파싱한다 (api/apt/[name]/route.ts와 동일한 규칙). 여러 달치 데이터를 합친 뒤이므로
+      // 단순 배열 순서로는 최신순이 보장되지 않아, 실제 계약일자 기준으로 명시적으로 정렬한다.
+      data = data.map((item: any) => {
+        const infoParts = (item.info || '').split('•');
+        const area = infoParts[0]?.trim() || '';
+        const floor = parseInt(infoParts[1]?.trim() || '0', 10) || 0;
+        const tradeDate = infoParts[infoParts.length - 1]?.trim() || '';
+        const areaNum = parseFloat(area);
+        const pyung = areaNum ? Math.round(areaNum / 3.3058) : null;
+        return { ...item, area, floor, tradeDate, pyung };
+      });
+
+      data.sort((a: any, b: any) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
 
       // 지도 마커(단지 칩) 표시를 위해 아파트 매매(apt) 데이터에 한해 좌표 보강
       if (type === 'apt' && data.length > 0) {
