@@ -106,16 +106,12 @@ export async function GET(request: Request) {
             academyLocation = parts[2]; // "서대신동3가"
           }
         }
+      } else {
+        academyCount = -1; // API 통신 실패 또는 권한 없음
       }
     } catch (err) {
-      console.warn("Kakao API failed for academy stats");
-      // 학원 수 모의 데이터: 현실적으로 30~150개 범위
-      academyCount = Math.floor(Math.random() * 120) + 30;
-    }
-    
-    // 만약 카카오 API가 너무 많은 개수를 리턴했다면(예: 2000 이상) 반경이 넓은 것이므로 시군구 스케일로 조정
-    if (academyCount > 1000) {
-      academyCount = Math.floor(academyCount / 20); // 대략적인 동 단위로 스케일 다운
+      console.warn("Kakao API failed for academy stats", err);
+      academyCount = -1; // 더미 숫자 방지용 플래그
     }
 
     // 모의 데이터인 경우 (API 실패 등으로 카운트가 0인 경우)

@@ -233,7 +233,12 @@ export default function SchoolInfoPage() {
               <div className={styles.cardIcon}>📚</div>
               <div className={styles.cardContent}>
                 <h3>주요 학원가 밀집</h3>
-                <p>{stats.academyLocation} (학원 {stats.academyCount}개)</p>
+                <p>
+                  {stats.academyCount === -1 
+                    ? <span style={{fontSize: '1rem', color: 'var(--text-muted)'}}>데이터 수집 중...</span>
+                    : `${stats.academyLocation} (학원 ${stats.academyCount}개)`
+                  }
+                </p>
               </div>
             </div>
           </div>
