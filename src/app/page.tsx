@@ -252,8 +252,32 @@ export default function Home() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <Header />
-      
+      <Header
+        searchSlot={
+          <div
+            onClick={openSearchModal}
+            style={{
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              background: 'var(--background)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '999px',
+              padding: '0.45rem 0.9rem',
+              fontSize: '0.85rem',
+              color: 'var(--text-secondary)',
+              overflow: 'hidden',
+              whiteSpace: 'nowrap',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            <span>🔍</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>단지명, 동이름, 지역명 검색</span>
+          </div>
+        }
+      />
+
       <div style={{ position: 'relative', flex: 1, minHeight: '450px' }}>
         {/* 지도 레이어 */}
         {viewMode === 'map' && mapLoadFailed && (
@@ -291,8 +315,8 @@ export default function Home() {
                   position={{ lat: marker.lat, lng: marker.lng }}
                   yAnchor={1}
                 >
-                  <div 
-                    onClick={() => router.push(`/apt/${marker.name}`)}
+                  <div
+                    onClick={() => router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${userLawdCd}`)}
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
@@ -365,18 +389,9 @@ export default function Home() {
         {/* 상단 떠있는 UI 레이어 */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, pointerEvents: 'none', display: 'flex', flexDirection: 'column' }}>
           
-          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ padding: '8px 16px 0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
-            {/* 검색창: 클릭 시 아실 스타일 전면 검색 모달 오픈 */}
-            <div
-              onClick={openSearchModal}
-              style={{ pointerEvents: 'auto', background: 'white', borderRadius: '8px', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', cursor: 'pointer' }}
-            >
-              <span>🔍</span>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>단지명, 동이름, 지역명을 입력하세요</span>
-            </div>
-
-            {/* 현재 위치: 클릭 시에도 동일하게 검색 모달 오픈 */}
+            {/* 현재 위치: 클릭 시 검색 모달 오픈 (검색창은 상단 헤더로 이동) */}
             <div
               onClick={openSearchModal}
               style={{ pointerEvents: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.95)', padding: '10px 16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}
@@ -393,8 +408,8 @@ export default function Home() {
             </div>
 
             {/* 컴팩트 시장 동향 바: 한 줄 스와이프 칩 (기존 대형 카드 대체) */}
-            <div style={{ pointerEvents: 'auto', background: 'white', borderRadius: '999px', padding: '0.5rem 1rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+            <div style={{ pointerEvents: 'auto', background: 'white', borderRadius: '999px', padding: '0.7rem 1.15rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '0.92rem', color: 'var(--text-primary)' }}>
                 <strong>최근 거래량 {dynamicData.length}건</strong>
                 {topDongs.length > 0 && (
                   <span style={{ color: 'var(--text-secondary)' }}>

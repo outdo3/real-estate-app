@@ -5,7 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import styles from './Header.module.css';
 
-const Header = () => {
+interface HeaderProps {
+  searchSlot?: React.ReactNode;
+}
+
+const Header = ({ searchSlot }: HeaderProps) => {
   const pathname = usePathname();
 
   return (
@@ -14,7 +18,9 @@ const Header = () => {
         <Link href="/" className={styles.logo}>
           <span style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--primary-color)' }}>아파트써처</span>
         </Link>
-        
+
+        {searchSlot && <div className={styles.searchSlot}>{searchSlot}</div>}
+
         <ul className={styles.menuList}>
           <li className={styles.menuItem}>
             <Link href="/" className={pathname === '/' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>

@@ -88,17 +88,57 @@ export default function KakaoMapEmbed({ address, jibunAddress, type }: Props) {
       }
     };
 
-    if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
-      loadKakaoMap();
-    } else {
+    // 지도/로드뷰 모달을 다른 페이지(예: 학군/교통)를 거치지 않고 처음 여는
+    // 경우에도 정상 동작하도록, 이 컴포넌트가 직접 SDK 스크립트 로드를 보장한다.
+    // (기존에는 다른 컴포넌트가 먼저 스크립트를 주입해줄 것이라 가정하고 있었고,
+    //  그 전제가 깨지면 window.kakao가 영영 정의되지 않아 무한 대기 상태로
+    //  빈 화면만 표시되는 문제가 있었다.)
+    const ensureScriptAndLoad = () => {
+      if (window.kakao && window.kakao.maps) {
+        loadKakaoMap();
+        return;
+      }
+
+      const scriptId = 'kakao-map-script-main';
+      let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+
+      if (!script) {
+        const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+        if (!apiKey) {
+          console.error('[KakaoMapEmbed] NEXT_PUBLIC_KAKAO_MAP_API_KEY 환경변수가 없습니다.');
+          setError('지도 API 키가 설정되지 않았습니다.');
+          return;
+        }
+        script = document.createElement('script');
+        script.id = scriptId;
+        script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer&autoload=false`;
+        script.async = true;
+        script.onerror = () => setError('카카오 지도 스크립트 로드에 실패했습니다.');
+        document.head.appendChild(script);
+      }
+
       const checkKakao = setInterval(() => {
-        if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+        if (window.kakao && window.kakao.maps) {
           clearInterval(checkKakao);
           loadKakaoMap();
         }
       }, 200);
-      return () => clearInterval(checkKakao);
-    }
+
+      // 도메인 미등록 등으로 스크립트가 로드되지 않는 경우 무한 대기 대신 에러 표시
+      const timeoutId = setTimeout(() => {
+        clearInterval(checkKakao);
+        if (!window.kakao || !window.kakao.maps) {
+          setError('카카오 지도를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+        }
+      }, 10000);
+
+      return () => {
+        clearInterval(checkKakao);
+        clearTimeout(timeoutId);
+      };
+    };
+
+    return ensureScriptAndLoad();
   }, [address, type]);
 
   if (error) {
