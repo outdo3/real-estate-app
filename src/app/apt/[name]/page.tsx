@@ -28,6 +28,7 @@ export default function ApartmentDetail() {
   
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [ledgerType, setLedgerType] = useState<'전유부' | '표제부'>('전유부');
   const [aptInfo, setAptInfo] = useState<Record<string, string> | null>(null);
@@ -90,6 +91,7 @@ export default function ApartmentDetail() {
           const data = await response.json();
           const fetchedTrades = data.trades || [];
           setTrades(fetchedTrades);
+          setApiError(data.apiError || null);
 
           if (fetchedTrades.length > 0) {
             fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, lawdCd);
@@ -530,10 +532,11 @@ export default function ApartmentDetail() {
             <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>데이터를 불러오는 중입니다...</div>
           ) : filteredTrades.length === 0 ? (
             <div style={{ height: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>😢</div>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>{apiError ? '⚠️' : '😢'}</div>
               <h3 style={{ fontSize: '1.2rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                해당 기간/조건에 대한 거래 내역이 없습니다.
+                {apiError ? '실거래가 데이터를 불러오지 못했습니다.' : '해당 기간/조건에 대한 거래 내역이 없습니다.'}
               </h3>
+              {apiError && <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{apiError}</p>}
             </div>
           ) : (
             <div style={{ width: '100%', height: 400 }}>
@@ -626,7 +629,7 @@ export default function ApartmentDetail() {
             {loading ? (
               <div>데이터를 불러오는 중입니다...</div>
             ) : filteredTrades.length === 0 ? (
-              <div>거래 내역이 없습니다.</div>
+              <div>{apiError ? `실거래가 데이터를 불러오지 못했습니다. (${apiError})` : '거래 내역이 없습니다.'}</div>
             ) : (
               filteredTrades.map((trade, index) => {
                 const pyung = Math.round(parseFloat(trade.area) / 3.3058);

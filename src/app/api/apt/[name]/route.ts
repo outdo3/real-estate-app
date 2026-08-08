@@ -85,7 +85,14 @@ export async function GET(
     // 날짜 최신순 정렬
     filteredTrades.sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
 
-    return NextResponse.json({ trades: filteredTrades });
+    // 공공데이터 API 자체가 실패한 경우(키 누락/만료 등) 에러 플레이스홀더가 아파트명 필터에서
+    // 걸러지면서 "거래 내역 없음"과 구분이 안 되므로, 매 월 전부 실패했는지 여부를 별도로 알려준다.
+    const errorMonths = allTrades.filter(item => item.typeLabel === '에러').length;
+    const apiError = months.length > 0 && errorMonths >= months.length
+      ? (allTrades.find(item => item.typeLabel === '에러')?.name.replace(/^API 에러: /, '') || '공공데이터 API 호출에 실패했습니다.')
+      : null;
+
+    return NextResponse.json({ trades: filteredTrades, apiError });
   } catch (error) {
     console.error('Error fetching trade history:', error);
     return NextResponse.json({ error: 'Failed to fetch trade history' }, { status: 500 });
