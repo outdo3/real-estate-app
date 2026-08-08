@@ -87,20 +87,8 @@ export default function Home() {
       return;
     }
     
-    const scriptId = 'kakao-map-script-main';
-    let script = document.getElementById(scriptId) as HTMLScriptElement;
-    
-    if (!script) {
-      script = document.createElement('script');
-      script.id = scriptId;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer&autoload=false`;
-      script.async = true;
-      document.head.appendChild(script);
-    }
-    
     let checkKakao: NodeJS.Timeout;
 
-    // 카카오 스크립트 로딩 실패 대비 15초 타임아웃
     const kakaoTimeout = setTimeout(() => {
       if (checkKakao) clearInterval(checkKakao);
       if (!userLawdCd) {
