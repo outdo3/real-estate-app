@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import MarketInsights from '@/components/MarketInsights';
+import RankCard from '@/components/RankCard';
 import styles from './page.module.css';
 
 export default function Home() {
@@ -14,42 +15,75 @@ export default function Home() {
 
   const [markers, setMarkers] = useState<any[]>([]);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [mapLoadFailed, setMapLoadFailed] = useState(false);
+  const [mapLoadAttempt, setMapLoadAttempt] = useState(0);
   const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
   const [keyword, setKeyword] = useState('');
-  
+  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+
   const [dynamicData, setDynamicData] = useState<any[]>([]); // 탭 변경 시 데이터
   const [userLawdCd, setUserLawdCd] = useState<string>('26140');
   const [displayRegionName, setDisplayRegionName] = useState<string>('부산광역시 서구 동 전체');
 
   // 카카오맵 스크립트 로드
+  // - script.onerror 및 타임아웃을 추가해, 로드가 영영 끝나지 않아도
+  //   흰 화면으로 묻히지 않고 재시도 UI를 보여줄 수 있도록 처리
   useEffect(() => {
     if (!apiKey) return;
-    
+
+    setMapLoadFailed(false);
+    let settled = false;
+
     const scriptId = 'kakao-map-script-main';
-    let script = document.getElementById(scriptId) as HTMLScriptElement;
-    
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+
     if (!script) {
       script = document.createElement('script');
       script.id = scriptId;
       script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer&autoload=false`;
       script.async = true;
+      script.onerror = () => {
+        if (settled) return;
+        settled = true;
+        console.warn('Kakao Map SDK 스크립트 로드 실패');
+        setMapLoadFailed(true);
+      };
       document.head.appendChild(script);
     }
-    
+
     const checkKakao = setInterval(() => {
-      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
-        clearInterval(checkKakao);
-        setIsMapReady(true);
-      } else if (window.kakao && window.kakao.maps) {
-        clearInterval(checkKakao);
-        window.kakao.maps.load(() => {
+      try {
+        if (!window.kakao || !window.kakao.maps) return;
+
+        if (window.kakao.maps.services) {
+          settled = true;
+          clearInterval(checkKakao);
           setIsMapReady(true);
-        });
+        } else {
+          settled = true;
+          clearInterval(checkKakao);
+          window.kakao.maps.load(() => {
+            setIsMapReady(true);
+          });
+        }
+      } catch (e) {
+        console.warn('Kakao Map 초기화 중 오류', e);
       }
     }, 200);
-    
-    return () => clearInterval(checkKakao);
-  }, [apiKey]);
+
+    // 10초 안에 준비되지 않으면 무한 로딩 대신 재시도 UI 노출
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      clearInterval(checkKakao);
+      setMapLoadFailed(true);
+    }, 10000);
+
+    return () => {
+      clearInterval(checkKakao);
+      clearTimeout(timeoutId);
+    };
+  }, [apiKey, mapLoadAttempt]);
 
   // 실거래가 데이터 로드
   useEffect(() => {
@@ -105,10 +139,32 @@ export default function Home() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <Header />
       
-      <div style={{ position: 'relative', flex: 1 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: '450px' }}>
         {/* 지도 레이어 */}
-        {isMapReady && (
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0 }}>
+        {viewMode === 'map' && mapLoadFailed && (
+          <div className={styles.mapFallback}>
+            <div style={{ fontSize: '2rem' }}>🗺️</div>
+            <div>지도를 불러오지 못했습니다.</div>
+            <button
+              className={styles.mapRetryBtn}
+              onClick={() => {
+                setMapLoadFailed(false);
+                setMapLoadAttempt(n => n + 1);
+              }}
+            >
+              다시 시도
+            </button>
+          </div>
+        )}
+
+        {viewMode === 'map' && !mapLoadFailed && !isMapReady && (
+          <div className={styles.mapFallback}>
+            지도를 불러오는 중입니다...
+          </div>
+        )}
+
+        {viewMode === 'map' && isMapReady && (
+          <div className={styles.mapWrapper}>
             <Map
               center={center}
               style={{ width: '100%', height: '100%' }}
@@ -174,6 +230,23 @@ export default function Home() {
           </div>
         )}
 
+        {/* 슬림 리스트 레이어: 지도 대신 부산 서구 아파트 단지 카드 목록을 같은 자리에 표시 */}
+        {viewMode === 'list' && (
+          <div className={styles.listWrapper}>
+            <div className={styles.listGrid}>
+              {dynamicData.length === 0 ? (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
+                  표시할 단지 정보가 없습니다.
+                </div>
+              ) : (
+                dynamicData.map((item: any) => (
+                  <RankCard key={item.id} data={item} regionName={displayRegionName} />
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 상단 떠있는 UI 레이어 */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, pointerEvents: 'none', display: 'flex', flexDirection: 'column' }}>
           
@@ -213,14 +286,17 @@ export default function Home() {
               <MarketInsights data={dynamicData} regionName="부산광역시 서구" />
             </div>
 
-            {/* 모드 전환 토글 */}
+            {/* 모드 전환 토글: 페이지 이동 없이 같은 화면 안에서 지도 <-> 리스트만 바꿔치기 */}
             <div style={{ pointerEvents: 'auto', display: 'flex', background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '4px' }}>
-              <button style={{ flex: 1, padding: '12px 0', background: 'white', border: 'none', borderRight: '1px solid var(--border-color)', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
+              <button
+                onClick={() => setViewMode('map')}
+                style={{ flex: 1, padding: '12px 0', background: viewMode === 'map' ? 'white' : '#f8fafc', border: 'none', borderRight: '1px solid var(--border-color)', fontWeight: viewMode === 'map' ? 700 : 600, color: viewMode === 'map' ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+              >
                 🗺️ 지도 모드
               </button>
-              <button 
-                onClick={() => router.push('/stats')} 
-                style={{ flex: 1, padding: '12px 0', background: '#f8fafc', border: 'none', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+              <button
+                onClick={() => setViewMode('list')}
+                style={{ flex: 1, padding: '12px 0', background: viewMode === 'list' ? 'white' : '#f8fafc', border: 'none', fontWeight: viewMode === 'list' ? 700 : 600, color: viewMode === 'list' ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
               >
                 📋 슬림 리스트
               </button>
@@ -241,27 +317,23 @@ export default function Home() {
             </button>
           </div>
 
-          {/* 하단 네비게이션 바 */}
+          {/* 하단 네비게이션 바: 실거래가(/) / 시장 통계(/stats) / 학군 정보(/school) / 부동산 도구(/tools) */}
           <div style={{ pointerEvents: 'auto', background: 'white', display: 'flex', justifyContent: 'space-around', padding: '12px 0', borderTop: '1px solid var(--border-color)', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
             <Link href="/" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: '#22c55e' }}>
-              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🗺️</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>지도</span>
-            </Link>
-            <Link href="/stats" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
               <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📈</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>실거래</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>실거래가</span>
             </Link>
             <Link href="/stats" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
               <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📊</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>통계</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>시장 통계</span>
             </Link>
             <Link href="/school" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
               <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🏫</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>학군</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>학군 정보</span>
             </Link>
             <Link href="/tools" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
               <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🛠️</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>부동산도구</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>부동산 도구</span>
             </Link>
           </div>
 
