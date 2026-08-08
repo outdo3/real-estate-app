@@ -32,10 +32,19 @@ export async function GET(request: Request) {
       console.warn("NEIS API failed in stats, using empty");
     }
 
-    // 지역 필터링
+    // 지역 필터링 (엄격한 필터링: '서구' 검색 시 '강서구' 등 오매칭 방지)
     const regionSchools = rawSchools.filter(s => {
       const addr = (s.ORG_RDNMA || s.LCTN_SC_NM || '');
-      return addr.includes(gungu) || addr.includes(region);
+      // '부산광역시 서구' 등 region 텍스트가 정확히 포함되거나,
+      // gungu가 포함되면서 오매칭 단어(강서구 등)가 포함되지 않은 경우만 허용
+      if (addr.includes(region)) return true;
+      if (addr.includes(gungu)) {
+        // '서구' 검색인데 '강서구'가 주소에 있으면 제외
+        if (gungu === '서구' && (addr.includes('강서구') || addr.includes('달서구') || addr.includes('서구청'))) return false;
+        // '중구' 검색인데 '중랑구' 등이 있으면 제외 (필요시 추가)
+        return true;
+      }
+      return false;
     });
 
     let elemCount = 0;

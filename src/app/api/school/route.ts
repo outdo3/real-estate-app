@@ -43,12 +43,19 @@ export async function GET(request: Request) {
       ];
     }
 
-    // 1. 지역 필터링 (LCTN_SC_NM 또는 ORG_RDNMA 사용)
-    let filtered = rawSchools.filter((s: any) => 
-      (s.LCTN_SC_NM && s.LCTN_SC_NM.includes(region.replace('부산광역시 ', ''))) ||
-      (s.ORG_RDNMA && s.ORG_RDNMA.includes(region)) ||
-      (region === '부산광역시 서구' && s.SCHUL_NM.includes('대신')) // Fallback for sample demo
-    );
+    // 1. 지역 필터링 (엄격한 필터링: '서구' 검색 시 '강서구' 등 오매칭 방지)
+    const gungu = region.split(' ')[1] || '';
+    let filtered = rawSchools.filter((s: any) => {
+      const addr = (s.ORG_RDNMA || s.LCTN_SC_NM || '');
+      if (addr.includes(region)) return true;
+      if (addr.includes(gungu)) {
+        if (gungu === '서구' && (addr.includes('강서구') || addr.includes('달서구') || addr.includes('서구청'))) return false;
+        return true;
+      }
+      // Fallback for sample demo
+      if (region === '부산광역시 서구' && s.SCHUL_NM.includes('대신')) return true;
+      return false;
+    });
 
     // 2. 학교급 필터링
     const kindMap: Record<string, string> = {

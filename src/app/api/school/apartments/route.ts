@@ -78,6 +78,7 @@ export async function GET(request: Request) {
 
     // 국토부 형식 mockData.json 불러오기 (실거래가 모의)
     const mockPrices: Record<string, string> = {};
+    const mockBuildYears: Record<string, number> = {};
     try {
       const fs = require('fs');
       const path = require('path');
@@ -87,6 +88,9 @@ export async function GET(request: Request) {
       const items = mockJson?.response?.body?.items?.item || [];
       items.forEach((it: any) => {
         mockPrices[it.아파트] = `${it.거래금액}만`; // 예: 59,000 -> 59,000만
+        if (it.건축년도) {
+          mockBuildYears[it.아파트] = parseInt(it.건축년도, 10);
+        }
       });
     } catch (e) {
       console.warn("Could not load mockData.json", e);
@@ -137,9 +141,13 @@ export async function GET(request: Request) {
 
       walkMin = Math.max(3, walkMin); // 최소 3분 보장
 
-      // 임의의 신축(준공연도) 부여: 이름의 길이나 해시를 이용해 현실감 있게 고정
-      const nameHash = apt.name.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-      const buildYear = 1995 + (nameHash % 30); // 1995 ~ 2024 사이
+      // 임의의 신축(준공연도) 부여 (실제 데이터가 없으면 해시 사용)
+      const cleanName = apt.name.replace(/ 아파트$/, '').trim();
+      let buildYear = mockBuildYears[cleanName];
+      if (!buildYear) {
+        const nameHash = apt.name.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+        buildYear = 1995 + (nameHash % 30); // 1995 ~ 2024 사이
+      }
 
       return {
         id: apt.id,
