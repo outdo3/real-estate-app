@@ -123,30 +123,45 @@
 }
 
 @media (max-width: 768px) {
-  .scrollWrapper {
-    scroll-snap-type: x mandatory;
-    scroll-padding: 0 1rem;
-    gap: 0.75rem;
-  }
-  
-  .statCard {
-    width: 80vw;
-    max-width: 260px;
-    padding: 1rem;
-    scroll-snap-align: start;
-  }
-  
-  .statLabel {
-    font-size: 0.85rem;
+  .container {
+    padding: 1rem 0.75rem;
     margin-bottom: 0.5rem;
   }
-  
-  .statValue {
-    font-size: 1.5rem;
+
+  .title {
+    font-size: 1rem;
+    margin-bottom: 0.6rem;
   }
-  
+
+  .scrollWrapper {
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 0.75rem;
+    gap: 0.6rem;
+  }
+
+  .statCard {
+    width: 72vw;
+    max-width: 220px;
+    padding: 0.75rem;
+    scroll-snap-align: start;
+  }
+
+  .statLabel {
+    font-size: 0.75rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .statValue {
+    font-size: 1.3rem;
+    margin-bottom: 0.15rem;
+  }
+
+  .statSub {
+    font-size: 0.7rem;
+  }
+
   .listItem {
-    padding-bottom: 0.4rem;
-    font-size: 0.85rem;
+    padding-bottom: 0.3rem;
+    font-size: 0.8rem;
   }
 }

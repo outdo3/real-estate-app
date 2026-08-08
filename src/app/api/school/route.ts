@@ -10,19 +10,25 @@ export async function GET(request: Request) {
   
   try {
     // 교육청 코드 (부산: C10)
-    // 실제 NEIS API 호출 예시 (샘플 키로는 데이터가 제한적일 수 있음)
-    const neisUrl = `https://open.neis.go.kr/hub/schoolInfo?KEY=${apiKey}&Type=json&pIndex=1&pSize=500&ATPT_OFCDC_SC_CODE=C10`;
-    
-    // API 키가 유효하다면 실제 호출
-    let rawSchools = [];
-    
+    // NEIS API는 pSize를 요청과 무관하게 최대 500건까지만 반환하므로,
+    // list_total_count를 확인해 필요한 만큼 페이지를 순회해 전량을 확보한다.
+    let rawSchools: any[] = [];
+
     try {
-      const res = await fetch(neisUrl);
-      if (res.ok) {
+      const pageSize = 500;
+      let pIndex = 1;
+      let totalCount = Infinity;
+
+      while ((pIndex - 1) * pageSize < totalCount) {
+        const neisUrl = `https://open.neis.go.kr/hub/schoolInfo?KEY=${apiKey}&Type=json&pIndex=${pIndex}&pSize=${pageSize}&ATPT_OFCDC_SC_CODE=C10`;
+        const res = await fetch(neisUrl);
+        if (!res.ok) break;
         const data = await res.json();
-        if (data.schoolInfo && data.schoolInfo[1] && data.schoolInfo[1].row) {
-          rawSchools = data.schoolInfo[1].row;
-        }
+        totalCount = data.schoolInfo?.[0]?.head?.[0]?.list_total_count ?? 0;
+        const rows = data.schoolInfo?.[1]?.row || [];
+        if (rows.length === 0) break;
+        rawSchools = rawSchools.concat(rows);
+        pIndex++;
       }
     } catch (e) {
       console.warn("NEIS API 호출 실패, Fallback 적용", e);

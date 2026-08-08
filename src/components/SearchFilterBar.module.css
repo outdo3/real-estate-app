@@ -120,40 +120,61 @@
 
 @media (max-width: 768px) {
   .heroSection {
-    padding: 2.5rem 1rem;
+    padding: 1.5rem 1rem;
   }
-  
+
   .heroTitle {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
   }
-  
+
+  .heroSubtitle {
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
   .regionSelectGroup {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
+    gap: 0.4rem;
     width: 100%;
+    margin-bottom: 1rem;
   }
-  
+
   /* 동 선택은 2열을 다 차지하게 하거나 3번째 요소로 둠 */
   .selectBox:nth-child(3) {
     grid-column: span 2;
   }
-  
+
   .selectBox {
-    padding: 0.4rem 1.5rem 0.4rem 0.5rem;
-    font-size: 0.8rem;
+    padding: 0.35rem 1.25rem 0.35rem 0.5rem;
+    font-size: 0.75rem;
     width: 100%;
     background-position: right 0.5rem top 50%;
   }
-  
-  .searchInput {
-    font-size: 0.95rem;
-    padding: 0.5rem;
+
+  .searchContainer {
+    padding: 0.35rem 0.75rem;
+    margin-bottom: 1rem;
   }
-  
-  .searchBtn {
-    padding: 0.6rem 1.25rem;
+
+  .searchInput {
     font-size: 0.9rem;
+    padding: 0.4rem;
+  }
+
+  .searchBtn {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .tagsContainer {
+    gap: 0.5rem;
+  }
+
+  .tag {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.75rem;
   }
 }
 

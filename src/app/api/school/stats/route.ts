@@ -16,17 +16,24 @@ export async function GET(request: Request) {
   const eduCode = SIDO_CODES[sido] || 'C10';
 
   try {
-    // 1. NEIS 학교 데이터 페칭
-    const neisUrl = `https://open.neis.go.kr/hub/schoolInfo?KEY=${apiKey}&Type=json&pIndex=1&pSize=1000&ATPT_OFCDC_SC_CODE=${eduCode}`;
+    // 1. NEIS 학교 데이터 페칭 (pSize와 무관하게 최대 500건까지만 반환되므로 페이지 순회로 전량 확보)
     let rawSchools: any[] = [];
-    
+
     try {
-      const res = await fetch(neisUrl);
-      if (res.ok) {
+      const pageSize = 500;
+      let pIndex = 1;
+      let totalCount = Infinity;
+
+      while ((pIndex - 1) * pageSize < totalCount) {
+        const neisUrl = `https://open.neis.go.kr/hub/schoolInfo?KEY=${apiKey}&Type=json&pIndex=${pIndex}&pSize=${pageSize}&ATPT_OFCDC_SC_CODE=${eduCode}`;
+        const res = await fetch(neisUrl);
+        if (!res.ok) break;
         const data = await res.json();
-        if (data.schoolInfo && data.schoolInfo[1] && data.schoolInfo[1].row) {
-          rawSchools = data.schoolInfo[1].row;
-        }
+        totalCount = data.schoolInfo?.[0]?.head?.[0]?.list_total_count ?? 0;
+        const rows = data.schoolInfo?.[1]?.row || [];
+        if (rows.length === 0) break;
+        rawSchools = rawSchools.concat(rows);
+        pIndex++;
       }
     } catch (e) {
       console.warn("NEIS API failed in stats, using empty");
@@ -71,63 +78,69 @@ export async function GET(request: Request) {
     let avgSpecRate = '0.0%';
     if (specRateCount > 0) {
       avgSpecRate = (totalSpecRate / specRateCount).toFixed(1) + '%';
-    } else {
-      avgSpecRate = (Math.random() * 5 + 1).toFixed(1) + '%'; // 랜덤 폴백
     }
 
-    // 2. 카카오 로컬 API로 학원가(AC5) 개수 페칭
+    // 2. 카카오 로컬 API로 학원(AC5) 실집계
+    // - 키워드 텍스트 검색의 meta.total_count는 지역과 무관하게 부풀려진 추정치라 신뢰할 수 없으므로
+    //   구 중심좌표 기준 반경 카테고리 검색으로 바꾸고, 실제로 페이지네이션으로 회수 가능한 건수(최대 45건,
+    //   카카오 API 자체 한도)만 집계한다.
     const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
     let academyCount = 0;
     let academyLocation = gungu; // 기본값
-    
+
     try {
-      // 카카오 로컬 API 키워드 검색 (학원)
-      const kakaoUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(region + ' 학원')}&category_group_code=AC5`;
-      const kakaoRes = await fetch(kakaoUrl, {
-        headers: { 
-          'Authorization': `KakaoAK ${kakaoKey}`,
-          'KA': 'sdk/1.0 os/javascript origin/http%3A%2F%2Flocalhost%3A3000',
-          'Origin': 'http://localhost:3000'
+      const kakaoHeaders = {
+        'Authorization': `KakaoAK ${kakaoKey}`,
+        'KA': 'sdk/1.0 os/javascript origin/http%3A%2F%2Flocalhost%3A3000',
+        'Origin': 'http://localhost:3000'
+      };
+
+      const addrRes = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(region)}`, { headers: kakaoHeaders });
+      const addrData = addrRes.ok ? await addrRes.json() : null;
+      const center = addrData?.documents?.[0];
+
+      if (center) {
+        const centerX = center.x;
+        const centerY = center.y;
+        const dongCounts: Record<string, number> = {};
+        const seenIds = new Set<string>();
+
+        for (let page = 1; page <= 3; page++) {
+          const catUrl = `https://dapi.kakao.com/v2/local/search/category.json?category_group_code=AC5&x=${centerX}&y=${centerY}&radius=3000&page=${page}&size=15`;
+          const catRes = await fetch(catUrl, { headers: kakaoHeaders });
+          if (!catRes.ok) break;
+          const catData = await catRes.json();
+          const docs = catData.documents || [];
+          docs.forEach((doc: any) => {
+            if (seenIds.has(doc.id)) return;
+            seenIds.add(doc.id);
+            const parts = (doc.address_name || '').split(' ');
+            const dong = parts[2] || gungu; // 예: "부산 서구 서대신동3가" -> "서대신동3가"
+            dongCounts[dong] = (dongCounts[dong] || 0) + 1;
+          });
+          if (catData.meta?.is_end !== false) break; // 마지막 페이지면 중단
         }
-      });
-      if (kakaoRes.ok) {
-        const kakaoData = await kakaoRes.json();
-        // meta.total_count 가 전체 개수를 반환함
-        if (kakaoData.meta && kakaoData.meta.total_count !== undefined) {
-          academyCount = kakaoData.meta.total_count;
-        }
-        
-        // 가장 학원이 많은 법정동 이름 추출 (대략적인 밀집지역)
-        if (kakaoData.documents && kakaoData.documents.length > 0) {
-          const doc = kakaoData.documents[0];
-          // address_name 예: "부산 서구 서대신동3가"
-          const parts = doc.address_name.split(' ');
-          if (parts.length >= 3) {
-            academyLocation = parts[2]; // "서대신동3가"
-          }
-        }
+
+        academyCount = seenIds.size;
+        const topDong = Object.entries(dongCounts).sort((a, b) => b[1] - a[1])[0];
+        if (topDong) academyLocation = topDong[0];
       } else {
-        academyCount = -1; // API 통신 실패 또는 권한 없음
+        academyCount = -1; // 구 중심좌표를 못 찾은 경우 (통신 실패/권한 없음)
       }
     } catch (err) {
       console.warn("Kakao API failed for academy stats", err);
       academyCount = -1; // 더미 숫자 방지용 플래그
     }
 
-    // 모의 데이터인 경우 (API 실패 등으로 카운트가 0인 경우)
-    const finalElemCount = elemCount === 0 ? Math.floor(Math.random() * 15) + 5 : elemCount;
-    const finalMidCount = midCount === 0 ? Math.floor(Math.random() * 10) + 3 : midCount;
-    const finalHighCount = highCount === 0 ? Math.floor(Math.random() * 10) + 2 : highCount;
-    
-    // 총 학교 수는 반드시 초+중+고 합계로 산출
-    const finalTotalSchools = finalElemCount + finalMidCount + finalHighCount;
+    // 총 학교 수는 반드시 초+중+고 합계로 산출 (실패 시 임의 숫자로 채우지 않고 0 그대로 반환)
+    const finalTotalSchools = elemCount + midCount + highCount;
 
     // 결과 조립
     const data = {
       totalSchools: finalTotalSchools,
-      elemCount: finalElemCount,
-      midCount: finalMidCount,
-      highCount: finalHighCount,
+      elemCount: elemCount,
+      midCount: midCount,
+      highCount: highCount,
       specRate: avgSpecRate,
       academyLocation: academyLocation,
       academyCount: academyCount

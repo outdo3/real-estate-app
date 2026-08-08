@@ -49,8 +49,8 @@ export default function Home() {
   // 로딩 및 위치 상태
   const [isLoading, setIsLoading] = useState(true);
   const [isDynamicLoading, setIsDynamicLoading] = useState(false);
-  const [userLawdCd, setUserLawdCd] = useState<string>(''); 
-  const [userRegionName, setUserRegionName] = useState<string>('지역 탐색 중...');
+  const [userLawdCd, setUserLawdCd] = useState<string>('26140'); // 기본값: 부산광역시 서구
+  const [userRegionName, setUserRegionName] = useState<string>('부산광역시 서구');
   const [userDong, setUserDong] = useState<string>('all');
   const [userCenter, setUserCenter] = useState<{lat: number, lng: number} | null>(null);
   
@@ -62,148 +62,67 @@ export default function Home() {
   const [sortOrder, setSortOrder] = useState<string>('latest');
   const [areaFilter, setAreaFilter] = useState<string>('all');
 
-  // 1. 카카오맵 스크립트 로드 및 사용자 위치(LAWD_CD) 획득
+  // 1. 사용자 위치(LAWD_CD) 획득
+  // 기본값은 항상 '부산광역시 서구'이므로(useState 초기값), 아래 로직은 전부 실패해도
+  // 화면이 빈 상태로 남거나 크래시가 나지 않고 그냥 기본 지역이 유지된다.
   useEffect(() => {
-    const loadFallback = () => {
-      try {
-        const lastCd = localStorage.getItem('lastLawdCd');
-        const lastName = localStorage.getItem('lastRegionName');
-        if (lastCd && lastName) {
-          setUserLawdCd(lastCd);
-          setUserRegionName(lastName);
-        } else {
-          setUserLawdCd('11110');
-          setUserRegionName('서울특별시 종로구');
-        }
-      } catch (e) {
-        setUserLawdCd('11110');
-        setUserRegionName('서울특별시 종로구');
+    const applyRegion = (lawdCd: string, name: string, persist = false) => {
+      setUserLawdCd(lawdCd);
+      setUserRegionName(name);
+      if (persist) {
+        try {
+          localStorage.setItem('lastLawdCd', lawdCd);
+          localStorage.setItem('lastRegionName', name);
+        } catch (e) {}
       }
     };
-    
-    // eslint-disable-next-line prefer-const
-    let checkKakao: NodeJS.Timeout;
 
-    const kakaoTimeout = setTimeout(() => {
-      if (checkKakao) clearInterval(checkKakao);
-      if (!userLawdCd) {
-        console.warn('Kakao Map script load timeout');
-        loadFallback();
-      }
-    }, 15000);
+    // 이전에 방문해서 저장해둔 위치가 있으면 기본값 대신 우선 적용
+    try {
+      const lastCd = localStorage.getItem('lastLawdCd');
+      const lastName = localStorage.getItem('lastRegionName');
+      if (lastCd && lastName) applyRegion(lastCd, lastName);
+    } catch (e) {}
 
-    checkKakao = setInterval(() => {
-      if (window.kakao && window.kakao.maps) {
-        clearInterval(checkKakao);
-        clearTimeout(kakaoTimeout);
+    if (!navigator.geolocation) return;
 
-        window.kakao.maps.load(() => {
-          // Removed the early return for window.kakao.maps.services
-          const waitForServices = setInterval(() => {
-            if (window.kakao.maps.services) {
-              clearInterval(waitForServices);
-              clearTimeout(kakaoTimeout);
+    let settled = false;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (settled) return;
+        settled = true;
 
-              const tryFallback = () => {
-                fetch('https://ipinfo.io/json')
-                  .then(res => res.json())
-                  .then(data => {
-                    if (data.loc) {
-                      const parts = data.loc.split(',');
-                      const lat = parseFloat(parts[0]);
-                      const lng = parseFloat(parts[1]);
-                      setUserCenter({ lat, lng });
-                      const geocoder = new window.kakao.maps.services.Geocoder();
-                      geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
-                        if (status === window.kakao.maps.services.Status.OK) {
-                          for (let i = 0; i < result.length; i++) {
-                            if (result[i].region_type === 'B') {
-                              const lawdCd = result[i].code.substring(0, 5);
-                              setUserLawdCd(lawdCd);
-                              setUserRegionName(result[i].address_name);
-                              return;
-                            }
-                          }
-                        }
-                        loadFallback();
-                      });
-                    } else {
-                      loadFallback();
-                    }
-                  })
-                  .catch(() => loadFallback());
-              };
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setUserCenter({ lat, lng });
 
-              if (navigator.geolocation) {
-                let handled = false;
-                const fallbackTimeout = setTimeout(() => {
-                  if (!handled) {
-                    handled = true;
-                    tryFallback();
-                  }
-                }, 15000); // 사용자 대기시간 증가 (권한 묻는 시간 고려)
+        const waitForKakao = setInterval(() => {
+          if (!window.kakao?.maps?.services) return;
+          clearInterval(waitForKakao);
 
-                try {
-                  navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                      if (handled) return;
-                      handled = true;
-                      clearTimeout(fallbackTimeout);
-                      
-                      const lat = position.coords.latitude;
-                      const lng = position.coords.longitude;
-                      setUserCenter({ lat, lng });
-                      
-                      const geocoder = new window.kakao.maps.services.Geocoder();
-                      geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
-                        if (status === window.kakao.maps.services.Status.OK) {
-                          for (let i = 0; i < result.length; i++) {
-                            if (result[i].region_type === 'B') {
-                              const lawdCd = result[i].code.substring(0, 5);
-                              setUserLawdCd(lawdCd);
-                              setUserRegionName(result[i].address_name);
-                              try {
-                                localStorage.setItem('lastLawdCd', lawdCd);
-                                localStorage.setItem('lastRegionName', result[i].address_name);
-                              } catch(e) {}
-                              return;
-                            }
-                          }
-                        }
-                        tryFallback();
-                      });
-                    },
-                    (error) => {
-                      if (handled) return;
-                      handled = true;
-                      clearTimeout(fallbackTimeout);
-                      console.warn('Geolocation Error:', error);
-                      tryFallback();
-                    },
-                    { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
-                  );
-                } catch (e) {
-                  if (!handled) {
-                    handled = true;
-                    clearTimeout(fallbackTimeout);
-                    tryFallback();
-                  }
+          window.kakao.maps.load(() => {
+            try {
+              const geocoder = new window.kakao.maps.services.Geocoder();
+              geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
+                if (status !== window.kakao.maps.services.Status.OK) return;
+                const region = result.find((r: any) => r.region_type === 'B');
+                if (region) {
+                  applyRegion(region.code.substring(0, 5), region.address_name, true);
                 }
-              } else {
-                tryFallback();
-              }
+              });
+            } catch (e) {
+              console.warn('카카오 역지오코딩 실패, 기본 지역 유지:', e);
             }
-          }, 100);
-
-          // Duplicate block removed
-        });
-      }
-    }, 200);
-    
-    return () => {
-      clearInterval(checkKakao);
-      clearTimeout(kakaoTimeout);
-    };
+          });
+        }, 200);
+        setTimeout(() => clearInterval(waitForKakao), 10000);
+      },
+      (error) => {
+        settled = true;
+        console.warn('위치 정보 사용 불가, 기본 지역(부산광역시 서구) 유지:', error.message);
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    );
   }, []);
 
   // 2. 초기 데이터 (아파트 TOP 5) 로드

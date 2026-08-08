@@ -95,7 +95,7 @@ export default function SchoolInfoPage() {
     if (selectedSchool && selectedSchool.name) {
       const fetchApts = async () => {
         try {
-          const res = await fetch(`/api/school/apartments?schoolName=${encodeURIComponent(selectedSchool.name)}&lat=${selectedSchool.lat || ''}&lng=${selectedSchool.lng || ''}`);
+          const res = await fetch(`/api/school/apartments?schoolName=${encodeURIComponent(selectedSchool.name)}&lat=${selectedSchool.lat || ''}&lng=${selectedSchool.lng || ''}&lawdCd=${encodeURIComponent(lawdCd)}`);
           const json = await res.json();
           if (json.success) {
             setAptList(json.data);

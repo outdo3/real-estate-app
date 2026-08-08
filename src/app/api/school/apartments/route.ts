@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 import { point, distance } from '@turf/turf';
+import { fetchMolitData } from '@/lib/api-molit';
+
+const normalizeAptName = (name: string) => {
+  if (!name) return '';
+  return name.replace(/\s+/g, '').replace(/아파트$/, '');
+};
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const schoolName = searchParams.get('schoolName') || '';
   const latParam = searchParams.get('lat');
   const lngParam = searchParams.get('lng');
+  const lawdCd = searchParams.get('lawdCd') || '';
 
   if (!schoolName) {
     return NextResponse.json({ success: false, error: 'School name is required' }, { status: 400 });
@@ -76,38 +84,49 @@ export async function GET(request: Request) {
       }
     }
 
-    // 국토부 형식 mockData.json 불러오기 (실거래가 모의)
-    const mockPrices: Record<string, string> = {};
-    const mockBuildYears: Record<string, number> = {};
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const mockFilePath = path.join(process.cwd(), 'src', 'lib', 'mockData.json');
-      const mockFileContent = fs.readFileSync(mockFilePath, 'utf-8');
-      const mockJson = JSON.parse(mockFileContent);
-      const items = mockJson?.response?.body?.items?.item || [];
-      items.forEach((it: any) => {
-        mockPrices[it.아파트] = `${it.거래금액}만`; // 예: 59,000 -> 59,000만
-        if (it.건축년도) {
-          mockBuildYears[it.아파트] = parseInt(it.건축년도, 10);
+    // 실거래가/준공연도: 공공데이터포털(MOLIT) 최근 12개월 매매 데이터에서 이름 매칭으로 조회
+    // (더미 mockData.json + 해시 기반 임의 준공연도는 실제 데이터와 불일치할 수 있어 제거)
+    const realAptInfo = new Map<string, { priceStr: string; buildYear: number | null }>();
+    if (lawdCd) {
+      try {
+        const now = new Date();
+        const months = Array.from({ length: 12 }, (_, i) => {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
+        });
+        const monthlyResults = await Promise.all(
+          months.map(dealYmd => fetchMolitData({ type: 'apt', lawdCd, dealYmd }).catch(() => []))
+        );
+        // 최신 거래가 우선 반영되도록 최근 달부터 순서대로 채움 (이미 최신순 배열)
+        for (const trades of monthlyResults) {
+          for (const t of trades as any[]) {
+            const key = normalizeAptName(t.name);
+            if (!key || realAptInfo.has(key)) continue;
+            realAptInfo.set(key, {
+              priceStr: t.price,
+              buildYear: t.buildYear ? parseInt(t.buildYear, 10) : null,
+            });
+          }
         }
-      });
-    } catch (e) {
-      console.warn("Could not load mockData.json", e);
+      } catch (e) {
+        console.warn('Failed to load real MOLIT data for nearby apartments', e);
+      }
     }
 
     // 3. Turf.js를 사용하여 학교와 아파트 간의 직선거리(반경) 계산
     const apartmentsWithDistance = searchedApartments.map(apt => {
       const aptPoint = point([parseFloat(apt.x), parseFloat(apt.y)]);
       const dist = distance(schoolPoint, aptPoint, { units: 'kilometers' }); // 킬로미터 단위
-      
+
       // 아파트 이름 정제 (예: '대신더샵 아파트' -> '대신더샵')
       const cleanName = apt.place_name.replace(/ 아파트$/, '').trim();
-      
+      const matched = realAptInfo.get(normalizeAptName(cleanName));
+
       return {
         id: apt.id,
         name: cleanName,
-        price: mockPrices[cleanName] || '가격 정보 없음',
+        price: matched?.priceStr || '가격 정보 없음',
+        buildYear: matched?.buildYear ?? null,
         dist
       };
     });
@@ -141,27 +160,19 @@ export async function GET(request: Request) {
 
       walkMin = Math.max(3, walkMin); // 최소 3분 보장
 
-      // 임의의 신축(준공연도) 부여 (실제 데이터가 없으면 해시 사용)
-      const cleanName = apt.name.replace(/ 아파트$/, '').trim();
-      let buildYear = mockBuildYears[cleanName];
-      if (!buildYear) {
-        const nameHash = apt.name.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-        buildYear = 1995 + (nameHash % 30); // 1995 ~ 2024 사이
-      }
-
       return {
         id: apt.id,
         name: apt.name,
         price: apt.price,
         walkTime: `도보 ${walkMin}분`,
         distance: apt.dist, // km 단위
-        buildYear: buildYear
+        buildYear: apt.buildYear // 실제 준공연도 (매칭 실패 시 null, 추정치 부여하지 않음)
       };
     });
 
     if (result.length === 0) {
       result.push({
-        id: -1, name: '인근 아파트 매물 없음', price: '-', walkTime: '-'
+        id: -1, name: '인근 아파트 매물 없음', price: '-', walkTime: '-', distance: 0, buildYear: null
       });
     }
 

@@ -255,14 +255,14 @@ export default function ApartmentDetail() {
         return (
           <div style={{height: '100%'}}>
             <p style={{marginBottom: '1rem', fontWeight: 600}}>🏫 반경 1.5km 이내 학교 정보 (거리순)</p>
-            <KakaoPlaces address={searchAddress} category="SC4" />
+            <KakaoPlaces address={primaryAddress} category="SC4" />
           </div>
         );
       case '교통':
         return (
           <div style={{height: '100%'}}>
             <p style={{marginBottom: '1rem', fontWeight: 600}}>🚇 반경 1.5km 이내 지하철역 정보 (거리순)</p>
-            <KakaoPlaces address={searchAddress} category="SW8" />
+            <KakaoPlaces address={primaryAddress} category="SW8" />
           </div>
         );
       case '건축물대장':
