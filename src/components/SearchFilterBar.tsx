@@ -166,7 +166,7 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
                 const cleanAptName = aptName.replace(/\s+/g, '').replace(/아파트$/, '');
 
                 // 라우팅 (검색된 결과는 전국 어디든 바로 상세페이지로 이동)
-                router.push(`/apt/${encodeURIComponent(cleanAptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}`);
+                router.push(`/apt/${encodeURIComponent(cleanAptName)}?type=apt&lawdCd=${lawdCd}&region=${encodeURIComponent(region)}&dong=${encodeURIComponent(placeDong)}&aptName=${encodeURIComponent(aptName)}`);
                 return;
               }
             }

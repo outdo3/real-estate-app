@@ -24,7 +24,15 @@ interface Trade {
 
 export default function ApartmentDetail() {
   const params = useParams();
-  const aptName = decodeURIComponent(params.name as string);
+  const [aptName, setAptName] = useState<string>('');
+  
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryAptName = searchParams.get('aptName');
+    const pathName = decodeURIComponent(params.name as string);
+    setAptName(queryAptName || pathName || decodeURIComponent(window.location.pathname.split('/').pop() || ''));
+  }, [params.name]);
+
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState<string | null>(null);
@@ -45,9 +53,11 @@ export default function ApartmentDetail() {
     console.log('parsedPrice:', num, 'from val:', val);
     if (isNaN(num)) return val;
     if (num >= 10000) {
-      const uk = Math.floor(num / 10000);
-      const man = num % 10000;
-      return man === 0 ? `${uk}억` : `${uk}억 ${man.toLocaleString('ko-KR')}만`;
+      const eok = Math.floor(num / 10000);
+      const rest = num % 10000;
+      if (eok > 0) {
+        return `${eok}억 ${rest > 0 ? rest.toLocaleString('ko-KR') + '만' : ''}`.trim();
+      }
     }
     return `${num.toLocaleString('ko-KR')}만`;
   };
@@ -59,6 +69,8 @@ export default function ApartmentDetail() {
   }, [tradeTypeFilter]);
 
   useEffect(() => {
+    if (!aptName) return;
+
     const fetchTrades = async () => {
       setLoading(true);
       try {
