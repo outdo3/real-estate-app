@@ -369,7 +369,6 @@ export default function SchoolInfoPage() {
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }
