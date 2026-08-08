@@ -147,7 +147,7 @@ export default function Home() {
                 handled = true;
                 tryFallback();
               }
-            }, 5000); // 5초로 단축하여 사용자 대기시간 감소
+            }, 15000); // 사용자 대기시간 증가 (권한 묻는 시간 고려)
 
             try {
               navigator.geolocation.getCurrentPosition(
@@ -186,7 +186,7 @@ export default function Home() {
                   console.warn('Geolocation Error:', error);
                   tryFallback();
                 },
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+                { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
               );
             } catch (e) {
               if (!handled) {
