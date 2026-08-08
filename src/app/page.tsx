@@ -34,7 +34,6 @@ const AREA_OPTIONS = [
 ];
 
 export default function Home() {
-  const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 
   const [activeTab, setActiveTab] = useState('아파트');
   const [showMap, setShowMap] = useState(false);
@@ -81,11 +80,6 @@ export default function Home() {
         setUserRegionName('서울특별시 종로구');
       }
     };
-
-    if (!apiKey) {
-      loadFallback();
-      return;
-    }
     
     // eslint-disable-next-line prefer-const
     let checkKakao: NodeJS.Timeout;
@@ -206,7 +200,7 @@ export default function Home() {
       clearInterval(checkKakao);
       clearTimeout(kakaoTimeout);
     };
-  }, [apiKey]);
+  }, []);
 
   // 2. 초기 데이터 (아파트 TOP 5) 로드
   useEffect(() => {
