@@ -184,12 +184,24 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
     }
   };
 
+  const executeSearchAndGo = () => {
+    if (searchResults.length > 0) {
+      handleResultClick(searchResults[0]);
+    } else if (keyword.trim()) {
+      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+        const ps = new window.kakao.maps.services.Places();
+        ps.keywordSearch(keyword, (data: any, status: any) => {
+          if (status === window.kakao.maps.services.Status.OK && data.length > 0) {
+            handleResultClick(data[0]);
+          }
+        });
+      }
+    }
+  };
+
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      // 엔터 시 첫 번째 결과 자동 선택
-      if (searchResults.length > 0) {
-        handleResultClick(searchResults[0]);
-      }
+      executeSearchAndGo();
     }
   };
 
@@ -235,9 +247,7 @@ const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
           onChange={(e) => setKeyword(e.target.value)}
           onKeyDown={handleSearchKeyDown}
         />
-        <button className={styles.searchBtn} onClick={() => {
-          if (searchResults.length > 0) handleResultClick(searchResults[0]);
-        }}>검색</button>
+        <button className={styles.searchBtn} onClick={executeSearchAndGo}>검색</button>
 
         {showDropdown && searchResults.length > 0 && (
           <div className={styles.dropdown}>

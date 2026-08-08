@@ -99,7 +99,7 @@ export default function Home() {
     }, 15000);
 
     checkKakao = setInterval(() => {
-      if (window.kakao && window.kakao.maps) {
+      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
         clearInterval(checkKakao);
         clearTimeout(kakaoTimeout);
 
