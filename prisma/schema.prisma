@@ -2,35 +2,139 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Supabase(PostgreSQL)를 데이터베이스로 사용한다. DATABASE_URL은 .env에서 설정.
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
+enum Role {
+  GUEST
+  USER
+  VERIFIED
+  ADMIN
+}
+
+// NextAuth의 AdapterUser 타입 계약(name/image 필드)을 그대로 만족시키면서도,
+// 실제 DB 컬럼명은 요청된 대로 nickname/avatar_url이 되도록 @map으로 매핑한다.
+// (Prisma Client 상의 속성명은 name/image, DB 컬럼명은 nickname/avatar_url)
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  emailVerified DateTime? @map("email_verified")
+  name          String    @map("nickname")
+  image         String?   @map("avatar_url")
+  role          Role      @default(USER)
+  // 관리자가 커뮤니티 이용을 제한(강퇴)한 계정. 로그인 자체는 막지 않되,
+  // 글/댓글 작성 등 커뮤니티 활동을 차단하는 데 사용한다.
+  banned        Boolean   @default(false)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  accounts Account[]
+  sessions Session[]
+  posts    Post[]
+  comments Comment[]
+
+  @@map("users")
+}
+
+// NextAuth(Auth.js) PrismaAdapter가 요구하는 표준 스키마
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @db.Text
+  // 관리자 권한으로 게시글을 목록 상단에 고정
+  pinned    Boolean  @default(false)
+  authorId  String   @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  author   User      @relation(fields: [authorId], references: [id])
+  comments Comment[]
+
+  @@index([pinned, createdAt])
+  @@map("posts")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  postId    String   @map("post_id")
+  authorId  String   @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([postId])
+  @@map("comments")
+}
+
+// ── 기존 실거래가 시드/오프라인 스크립트용 모델 (라이브 앱에서는 사용하지 않음) ──
 model Transaction {
   id          Int      @id @default(autoincrement())
   rank        Int
   name        String
   price       String
   priceChange String
-  changeType  String   // "up" or "new"
-  typeLabel   String   // "반등" or "신고가"
-  info        String   // "73.27m² 25평 • 26.07.18"
+  changeType  String // "up" or "new"
+  typeLabel   String // "반등" or "신고가"
+  info        String // "73.27m² 25평 • 26.07.18"
   lat         Float?
   lng         Float?
   createdAt   DateTime @default(now())
 }
 
 model TradeHistory {
-  id         Int      @id @default(autoincrement())
-  aptName    String
-  tradeDate  String
-  price      Int      // 억 단위 저장 (예: 53)
-  priceStr   String   // 노출용 (예: 53억 2,000만)
-  area       String
-  floor      Int
-  tradeType  String   // 중개거래, 직거래
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  aptName   String
+  tradeDate String
+  price     Int // 억 단위 저장 (예: 53)
+  priceStr  String // 노출용 (예: 53억 2,000만)
+  area      String
+  floor     Int
+  tradeType String // 중개거래, 직거래
+  createdAt DateTime @default(now())
 
   @@index([aptName])
 }

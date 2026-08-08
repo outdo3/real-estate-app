@@ -619,7 +619,7 @@ export default function Home() {
             </button>
           </div>
 
-          {/* 하단 네비게이션 바: 실거래가(/) / 시장 통계(/stats) / 학군 정보(/school) / 부동산 도구(/tools) */}
+          {/* 하단 네비게이션 바: 실거래가(/) / 시장 통계(/stats) / 학군 정보(/school) / 부동산 도구(/tools) / 커뮤니티(/community) */}
           <div style={{ pointerEvents: 'auto', background: 'white', display: 'flex', justifyContent: 'space-around', padding: '10px 0', borderTop: '1px solid var(--border-color)', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
             <Link href="/" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: '#22c55e' }}>
               <span style={{ fontSize: '1.35rem', marginBottom: '4px' }}>📈</span>
@@ -636,6 +636,10 @@ export default function Home() {
             <Link href="/tools" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
               <span style={{ fontSize: '1.35rem', marginBottom: '4px' }}>🛠️</span>
               <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>부동산 도구</span>
+            </Link>
+            <Link href="/community" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
+              <span style={{ fontSize: '1.35rem', marginBottom: '4px' }}>💬</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>커뮤니티</span>
             </Link>
           </div>
 

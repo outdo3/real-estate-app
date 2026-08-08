@@ -97,20 +97,59 @@
   color: var(--primary-color);
 }
 
-.actions {
+/* 헤더 우측 끝 로그인/프로필 버튼 */
+.loginTrigger {
+  flex-shrink: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.loginTrigger:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.authButtonSkeleton {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--background);
+}
+
+.avatarLink {
+  flex-shrink: 0;
+  display: flex;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatarFallback {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
-  gap: 1rem;
-}
-
-.loginBtn {
-  font-weight: 600;
-  color: var(--text-secondary);
-  transition: color var(--transition-fast);
-}
-
-.loginBtn:hover {
-  color: var(--primary-color);
+  justify-content: center;
+  background: var(--primary-color);
+  color: white;
+  font-weight: 700;
+  font-size: 0.9rem;
 }
 
 /* Mobile Responsiveness */
@@ -141,6 +180,17 @@
 
   .pageTitle {
     font-size: 1rem;
+  }
+
+  .loginTrigger {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.75rem;
+  }
+
+  .avatarLink,
+  .authButtonSkeleton {
+    width: 28px;
+    height: 28px;
   }
 
 

@@ -1,0 +1,76 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Header from '@/components/Header';
+import AuthGate from '@/components/AuthGate';
+import styles from './page.module.css';
+
+export default function WritePostPage() {
+  const router = useRouter();
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !content.trim()) {
+      setError('제목과 내용을 모두 입력해주세요.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/community/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, content }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.error || '게시글을 작성하지 못했습니다.');
+        return;
+      }
+      router.push(`/community/${json.data.id}`);
+    } catch (e) {
+      console.error(e);
+      setError('게시글을 작성하지 못했습니다.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <AuthGate>
+      <div className={styles.main}>
+        <Header pageTitle="글쓰기" />
+        <div className="container">
+          <div className={styles.form}>
+            <input
+              className={styles.titleInput}
+              placeholder="제목을 입력해주세요"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={200}
+            />
+            <textarea
+              className={styles.contentInput}
+              placeholder="내용을 입력해주세요"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+            />
+            {error && <div className={styles.errorText}>⚠️ {error}</div>}
+            <div className={styles.actions}>
+              <button className={styles.cancelBtn} onClick={() => router.back()}>
+                취소
+              </button>
+              <button className={styles.submitBtn} onClick={handleSubmit} disabled={submitting}>
+                {submitting ? '등록 중...' : '등록하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AuthGate>
+  );
+}

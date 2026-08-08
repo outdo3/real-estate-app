@@ -1,0 +1,111 @@
+.main {
+  min-height: 100vh;
+  background-color: var(--background-color);
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+
+.profileCard {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+  padding: 1.75rem;
+  margin-top: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.avatarFallback {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-color);
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.nickname {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.email {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.roleBadge {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: var(--primary-color);
+}
+
+.emptyCard {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+  padding: 2.5rem;
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.section {
+  margin-top: 1.5rem;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.linkCard {
+  display: block;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #f0f0f0;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.6rem;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.linkCard:hover {
+  border-color: var(--primary-color);
+}
+
+.logoutBtn {
+  width: 100%;
+  padding: 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: #ef4444;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1.5rem;
+}

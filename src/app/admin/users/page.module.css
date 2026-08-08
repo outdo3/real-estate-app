@@ -1,0 +1,111 @@
+.main {
+  min-height: 100vh;
+  background-color: var(--background-color);
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+
+.list {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+  margin-top: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.avatarFallback {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-color);
+  color: white;
+  font-weight: 700;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.nickname {
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.email {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.roleBadge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: #eff6ff;
+  color: var(--primary-color);
+}
+
+.bannedBadge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.banBtn {
+  flex-shrink: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: #ef4444;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.banBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.unbanBtn {
+  composes: banBtn;
+  color: var(--primary-color);
+}
+
+.emptyState {
+  padding: 3rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+}

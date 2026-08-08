@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import HeaderAuthButton from './HeaderAuthButton';
 import styles from './Header.module.css';
 
 interface HeaderProps {
@@ -64,8 +65,15 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav }: HeaderProps) => {
               <span>부동산 도구</span>
             </Link>
           </li>
+          <li className={styles.menuItem}>
+            <Link href="/community" className={pathname.startsWith('/community') ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+              <span className={styles.icon}>💬</span>
+              <span>커뮤니티</span>
+            </Link>
+          </li>
         </ul>
-        
+
+        <HeaderAuthButton />
       </div>
     </header>
   );
