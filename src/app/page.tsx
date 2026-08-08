@@ -12,6 +12,20 @@ const apiKey =
   process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ||
   process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
+const LAST_POSITION_KEY = 'realEstateApp:lastPosition';
+
+const normalizeAptName = (name: string) => {
+  if (!name) return '';
+  return name.replace(/\s+/g, '').replace(/아파트$/, '');
+};
+
+// 마커 상태별 스타일: 기존(파랑) / 신축 5년 이내(에메랄드 그린) / 분양권(주황)
+const MARKER_STYLES: Record<string, { border: string; bg: string; glow?: string; badge?: string }> = {
+  normal: { border: '#1d4ed8', bg: '#1d4ed8' },
+  new: { border: '#059669', bg: '#10b981', glow: '0 0 10px rgba(16, 185, 129, 0.55)', badge: '✨' },
+  presale: { border: '#ea580c', bg: '#f97316', badge: '🏗️' },
+};
+
 export default function Home() {
   const router = useRouter();
 
@@ -19,14 +33,17 @@ export default function Home() {
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const [mapLoadAttempt, setMapLoadAttempt] = useState(0);
-  const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
+  const [center, setCenter] = useState({ lat: 37.4979, lng: 127.0276 }); // 기본: 서울특별시 강남구
+  const [mapLevel, setMapLevel] = useState(5);
+  const [mapBounds, setMapBounds] = useState<{ sw: { lat: number; lng: number }; ne: { lat: number; lng: number } } | null>(null);
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const [highlightedMarkerName, setHighlightedMarkerName] = useState<string | null>(null);
 
   const [dynamicData, setDynamicData] = useState<any[]>([]); // 탭 변경 시 데이터
-  const [visibleCount, setVisibleCount] = useState(20); // 리스트 모드 20개 단위 페이징
-  const [userLawdCd, setUserLawdCd] = useState<string>('26140');
+  const [visibleCount, setVisibleCount] = useState(15); // 리스트 모드 15개 단위 페이징
+  const [userLawdCd, setUserLawdCd] = useState<string>('11680');
   const [userDong, setUserDong] = useState<string>('all');
-  const [displayRegionName, setDisplayRegionName] = useState<string>('부산광역시 서구 동 전체');
+  const [displayRegionName, setDisplayRegionName] = useState<string>('서울특별시 강남구 동 전체');
 
   // 아실 스타일 검색 모달 상태
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -94,6 +111,7 @@ export default function Home() {
     setUserDong(dongName);
     setDisplayRegionName(regionName);
     setShowSearchModal(false);
+    setHighlightedMarkerName(null); // 지역이 바뀌면 이전 검색 강조는 더 이상 유효하지 않으므로 해제
 
     if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
       const geocoder = new window.kakao.maps.services.Geocoder();
@@ -122,14 +140,66 @@ export default function Home() {
     if (!modalKeyword.trim()) return;
     if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) return;
 
+    // 현재 지도에 이미 로드된 단지 마커 중 검색어와 이름이 일치하는 것이 있으면
+    // 그 마커의 실좌표로 정확히 이동시키고 펄스 강조를 적용한다. (region 밖의 단지는
+    // 아직 데이터가 로드되지 않아 강조가 불가능하므로, 이 경우 카카오 키워드 검색
+    // 결과 좌표로만 이동하고 강조는 적용하지 않는다.)
+    const normalizedKeyword = normalizeAptName(modalKeyword);
+    const matched = markers.find((m) => {
+      const normalizedName = normalizeAptName(m.name);
+      return normalizedName.includes(normalizedKeyword) || normalizedKeyword.includes(normalizedName);
+    });
+
+    if (matched) {
+      setCenter({ lat: matched.lat, lng: matched.lng });
+      setHighlightedMarkerName(matched.name);
+      setShowSearchModal(false);
+      return;
+    }
+
     const ps = new window.kakao.maps.services.Places();
     ps.keywordSearch(modalKeyword, (data: any, status: any) => {
       if (status === window.kakao.maps.services.Status.OK && data[0]) {
         setCenter({ lat: parseFloat(data[0].y), lng: parseFloat(data[0].x) });
+        setHighlightedMarkerName(null);
         setShowSearchModal(false);
       }
     });
   };
+
+  // GPS로 사용자 현재 위치를 가져와 지도 중심을 즉시 이동
+  const goToMyLocation = () => {
+    if (!navigator.geolocation) {
+      console.warn('[GPS] 이 브라우저는 위치 정보를 지원하지 않습니다.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => {
+        console.error('[GPS] 위치 정보를 가져오지 못했습니다.', err);
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
+  };
+
+  // 마지막 탐색 위치(위도/경도/레벨) 복원: 저장된 값이 있으면 기본 위치(강남구) 대신 사용
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_POSITION_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (typeof parsed?.lat === 'number' && typeof parsed?.lng === 'number') {
+        setCenter({ lat: parsed.lat, lng: parsed.lng });
+      }
+      if (typeof parsed?.level === 'number') {
+        setMapLevel(parsed.level);
+      }
+    } catch (e) {
+      console.error('[LocalStorage] 이전 위치 복원 실패', e);
+    }
+  }, []);
 
   // 카카오맵 스크립트 로드
   // - script.onerror 및 타임아웃을 추가해, 로드(또는 kakao.maps.load 콜백)가
@@ -205,35 +275,65 @@ export default function Home() {
     };
   }, [mapLoadAttempt]);
 
-  // 실거래가 데이터 로드
+  // 실거래가 데이터 로드 (매매 + 분양권) 및 상태별 마커 분류
   useEffect(() => {
     async function fetchData() {
       try {
         const dongParam = userDong && userDong !== 'all' ? `&dong=${encodeURIComponent(userDong)}` : '';
-        const res = await fetch(`/api/transactions?type=apt&lawdCd=${userLawdCd}${dongParam}`);
-        const data = await res.json();
-        setDynamicData(data);
-        setVisibleCount(20);
 
-        const fetchedMarkers = data
+        const [aptRes, silvRes] = await Promise.all([
+          fetch(`/api/transactions?type=apt&lawdCd=${userLawdCd}${dongParam}`),
+          fetch(`/api/transactions?type=silv&lawdCd=${userLawdCd}${dongParam}`).catch(() => null),
+        ]);
+
+        const data = await aptRes.json();
+        setDynamicData(data);
+        setVisibleCount(15);
+
+        const currentYear = new Date().getFullYear();
+        const aptMarkers = data
           .filter((item: any) => item.lat && item.lng)
-          .map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            price: item.price,
-            type: item.changeType,
-            lat: item.lat,
-            lng: item.lng,
-          }));
-        
-        setMarkers(fetchedMarkers);
+          .map((item: any) => {
+            const buildYear = parseInt(item.buildYear, 10);
+            const isNew = !isNaN(buildYear) && currentYear - buildYear >= 0 && currentYear - buildYear <= 5;
+            return {
+              id: item.id,
+              name: item.name,
+              price: item.price,
+              lat: item.lat,
+              lng: item.lng,
+              status: isNew ? 'new' : 'normal',
+            };
+          });
+
+        let presaleMarkers: any[] = [];
+        if (silvRes && silvRes.ok) {
+          const silvData = await silvRes.json();
+          presaleMarkers = (Array.isArray(silvData) ? silvData : [])
+            .filter((item: any) => item.lat && item.lng)
+            .map((item: any) => ({
+              id: item.id,
+              name: item.name,
+              price: item.price,
+              lat: item.lat,
+              lng: item.lng,
+              status: 'presale',
+            }));
+        }
+
+        setMarkers([...aptMarkers, ...presaleMarkers]);
       } catch (error) {
         console.error('Failed to fetch map data:', error);
       }
     }
-    
+
     fetchData();
   }, [userLawdCd, userDong]);
+
+  // 지도 이동/축소로 bounds가 바뀌면 리스트 페이징을 처음부터 다시 보여준다
+  useEffect(() => {
+    setVisibleCount(15);
+  }, [mapBounds]);
 
   // 컴팩트 시장 동향 바용 요약: 동별 거래량 집계 (실데이터 기반, 더미 수치 없음)
   const dongCounts: Record<string, number> = {};
@@ -242,6 +342,19 @@ export default function Home() {
     dongCounts[d] = (dongCounts[d] || 0) + 1;
   });
   const topDongs = Object.entries(dongCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  // 리스트 모드: 현재 지도 화면(bounds) 안에 들어온 단지의 실거래만 노출
+  const boundsFilteredList = mapBounds
+    ? dynamicData.filter(
+        (item: any) =>
+          item.lat &&
+          item.lng &&
+          item.lat >= mapBounds.sw.lat &&
+          item.lat <= mapBounds.ne.lat &&
+          item.lng >= mapBounds.sw.lng &&
+          item.lng <= mapBounds.ne.lng
+      )
+    : dynamicData;
 
   if (!apiKey) {
     return (
@@ -254,6 +367,7 @@ export default function Home() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <Header
+        hideMobileNav
         searchSlot={
           <div
             onClick={openSearchModal}
@@ -308,65 +422,102 @@ export default function Home() {
             <Map
               center={center}
               style={{ width: '100%', height: '100%' }}
-              level={5}
+              level={mapLevel}
+              onCreate={(map: any) => {
+                const b = map.getBounds();
+                setMapBounds({
+                  sw: { lat: b.getSouthWest().getLat(), lng: b.getSouthWest().getLng() },
+                  ne: { lat: b.getNorthEast().getLat(), lng: b.getNorthEast().getLng() },
+                });
+              }}
+              onIdle={(map: any) => {
+                const b = map.getBounds();
+                setMapBounds({
+                  sw: { lat: b.getSouthWest().getLat(), lng: b.getSouthWest().getLng() },
+                  ne: { lat: b.getNorthEast().getLat(), lng: b.getNorthEast().getLng() },
+                });
+                const level = map.getLevel();
+                setMapLevel(level);
+                try {
+                  const c = map.getCenter();
+                  localStorage.setItem(LAST_POSITION_KEY, JSON.stringify({ lat: c.getLat(), lng: c.getLng(), level }));
+                } catch (e) {
+                  console.error('[LocalStorage] 위치 저장 실패', e);
+                }
+              }}
             >
-              {markers.map((marker) => (
-                <CustomOverlayMap
-                  key={marker.id}
-                  position={{ lat: marker.lat, lng: marker.lng }}
-                  yAnchor={1}
-                >
-                  <div
-                    onClick={() => router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${userLawdCd}`)}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      transform: 'translateY(-5px)',
-                    }}
+              {markers.map((marker) => {
+                const style = MARKER_STYLES[marker.status] || MARKER_STYLES.normal;
+                const isHighlighted = marker.name === highlightedMarkerName;
+                return (
+                  <CustomOverlayMap
+                    key={marker.id}
+                    position={{ lat: marker.lat, lng: marker.lng }}
+                    yAnchor={1}
                   >
-                    <div style={{
-                      background: 'white',
-                      border: '1px solid #1d4ed8',
-                      borderTopLeftRadius: '6px',
-                      borderTopRightRadius: '6px',
-                      padding: '4px 8px',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      color: '#1e293b',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {marker.name}
-                    </div>
-                    <div style={{
-                      background: '#1d4ed8',
-                      color: 'white',
-                      borderBottomLeftRadius: '6px',
-                      borderBottomRightRadius: '6px',
-                      padding: '4px 8px',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      position: 'relative'
-                    }}>
-                      {marker.price}
+                    <div
+                      onClick={() => router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${userLawdCd}`)}
+                      className={isHighlighted ? styles.markerHighlight : undefined}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        transform: 'translateY(-5px)',
+                        borderRadius: '8px',
+                        boxShadow: style.glow,
+                      }}
+                    >
                       <div style={{
-                        position: 'absolute',
-                        bottom: '-6px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        width: '0',
-                        height: '0',
-                        borderLeft: '5px solid transparent',
-                        borderRight: '5px solid transparent',
-                        borderTop: '6px solid #1d4ed8'
-                      }} />
+                        background: 'white',
+                        border: `1px solid ${style.border}`,
+                        borderTopLeftRadius: '6px',
+                        borderTopRightRadius: '6px',
+                        padding: '4px 8px',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        color: '#1e293b',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {style.badge && <span style={{ marginRight: '2px' }}>{style.badge}</span>}
+                        {marker.name}
+                      </div>
+                      <div style={{
+                        background: style.bg,
+                        color: 'white',
+                        borderBottomLeftRadius: '6px',
+                        borderBottomRightRadius: '6px',
+                        padding: '4px 8px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        position: 'relative'
+                      }}>
+                        {marker.price}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '-6px',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          width: '0',
+                          height: '0',
+                          borderLeft: '5px solid transparent',
+                          borderRight: '5px solid transparent',
+                          borderTop: `6px solid ${style.bg}`
+                        }} />
+                      </div>
                     </div>
-                  </div>
-                </CustomOverlayMap>
-              ))}
+                  </CustomOverlayMap>
+                );
+              })}
             </Map>
+
+            {/* 마커 색상 범례 */}
+            <div className={styles.markerLegend}>
+              <span className={styles.legendItem}><span className={styles.legendDot} style={{ background: MARKER_STYLES.normal.bg }} /> 기존</span>
+              <span className={styles.legendItem}><span className={styles.legendDot} style={{ background: MARKER_STYLES.new.bg }} /> 신축 5년↓</span>
+              <span className={styles.legendItem}><span className={styles.legendDot} style={{ background: MARKER_STYLES.presale.bg }} /> 분양권</span>
+            </div>
           </div>
         )}
 
@@ -374,13 +525,13 @@ export default function Home() {
         {viewMode === 'list' && (
           <div className={styles.listWrapper}>
             <div className={styles.listGrid}>
-              {dynamicData.length === 0 ? (
+              {boundsFilteredList.length === 0 ? (
                 <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
-                  표시할 단지 정보가 없습니다.
+                  {mapBounds ? '현재 지도 범위 내에 표시할 단지 정보가 없습니다.' : '표시할 단지 정보가 없습니다.'}
                 </div>
               ) : (
                 <>
-                  {dynamicData.slice(0, visibleCount).map((item: any) => {
+                  {boundsFilteredList.slice(0, visibleCount).map((item: any) => {
                     const dateLabel = item.tradeDate ? item.tradeDate.slice(5).replace('-', '.') : '';
                     return (
                       <div
@@ -402,9 +553,9 @@ export default function Home() {
                     );
                   })}
 
-                  {visibleCount < dynamicData.length && (
-                    <button className={styles.loadMoreBtn} onClick={() => setVisibleCount((n) => n + 20)}>
-                      실거래가 더보기 ({Math.min(visibleCount, dynamicData.length)}/전체 {dynamicData.length}건)
+                  {visibleCount < boundsFilteredList.length && (
+                    <button className={styles.loadMoreBtn} onClick={() => setVisibleCount((n) => n + 15)}>
+                      실거래가 더보기 ({Math.min(visibleCount, boundsFilteredList.length)}/전체 {boundsFilteredList.length}건)
                     </button>
                   )}
                 </>
@@ -423,15 +574,25 @@ export default function Home() {
               onClick={openSearchModal}
               style={{ pointerEvents: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.95)', padding: '10px 16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}
             >
-              <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 현재 위치: {displayRegionName} <span style={{ color: '#22c55e' }}>📍</span>
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); window.location.reload(); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-secondary)' }}
-              >
-                🔄
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); goToMyLocation(); }}
+                  aria-label="내 위치로 이동"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-secondary)' }}
+                >
+                  🎯
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); window.location.reload(); }}
+                  aria-label="새로고침"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-secondary)' }}
+                >
+                  🔄
+                </button>
+              </div>
             </div>
 
             {/* 컴팩트 시장 동향 바: 한 줄 스와이프 칩 (기존 대형 카드 대체) */}
@@ -456,13 +617,13 @@ export default function Home() {
             <div style={{ pointerEvents: 'auto', alignSelf: 'flex-end', display: 'flex', background: 'white', borderRadius: '999px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
               <button
                 onClick={() => setViewMode('map')}
-                style={{ padding: '8px 14px', background: viewMode === 'map' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'map' ? 'white' : 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ padding: '8px 14px', background: viewMode === 'map' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'map' ? 'white' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
                 🗺️ 지도
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                style={{ padding: '8px 14px', background: viewMode === 'list' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'list' ? 'white' : 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ padding: '8px 14px', background: viewMode === 'list' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'list' ? 'white' : 'var(--text-secondary)', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
                 📋 리스트
               </button>
@@ -475,7 +636,11 @@ export default function Home() {
 
           {/* 우측 하단 컨트롤 */}
           <div style={{ pointerEvents: 'auto', alignSelf: 'flex-end', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button style={{ width: '40px', height: '40px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', cursor: 'pointer' }}>
+            <button
+              onClick={goToMyLocation}
+              aria-label="내 위치로 이동"
+              style={{ width: '40px', height: '40px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', cursor: 'pointer' }}
+            >
               🎯
             </button>
             <button style={{ width: '40px', height: '40px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', cursor: 'pointer' }}>
@@ -484,21 +649,21 @@ export default function Home() {
           </div>
 
           {/* 하단 네비게이션 바: 실거래가(/) / 시장 통계(/stats) / 학군 정보(/school) / 부동산 도구(/tools) */}
-          <div style={{ pointerEvents: 'auto', background: 'white', display: 'flex', justifyContent: 'space-around', padding: '12px 0', borderTop: '1px solid var(--border-color)', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+          <div style={{ pointerEvents: 'auto', background: 'white', display: 'flex', justifyContent: 'space-around', padding: '10px 0', borderTop: '1px solid var(--border-color)', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
             <Link href="/" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: '#22c55e' }}>
-              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📈</span>
+              <span style={{ fontSize: '1.35rem', marginBottom: '4px' }}>📈</span>
               <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>실거래가</span>
             </Link>
             <Link href="/stats" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
-              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📊</span>
+              <span style={{ fontSize: '1.35rem', marginBottom: '4px' }}>📊</span>
               <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>시장 통계</span>
             </Link>
             <Link href="/school" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
-              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🏫</span>
+              <span style={{ fontSize: '1.35rem', marginBottom: '4px' }}>🏫</span>
               <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>학군 정보</span>
             </Link>
             <Link href="/tools" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
-              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🛠️</span>
+              <span style={{ fontSize: '1.35rem', marginBottom: '4px' }}>🛠️</span>
               <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>부동산 도구</span>
             </Link>
           </div>

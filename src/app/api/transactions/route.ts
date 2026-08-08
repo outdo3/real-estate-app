@@ -101,8 +101,8 @@ export async function GET(request: Request) {
 
       data.sort((a: any, b: any) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
 
-      // 지도 마커(단지 칩) 표시를 위해 아파트 매매(apt) 데이터에 한해 좌표 보강
-      if (type === 'apt' && data.length > 0) {
+      // 지도 마커(단지 칩) 표시를 위해 아파트 매매(apt)·분양권(silv) 데이터에 한해 좌표 보강
+      if ((type === 'apt' || type === 'silv') && data.length > 0) {
         const uniqueKeys = Array.from(new Set(data.map((item: any) => `${item.dong}|${item.name}`)));
         await Promise.all(
           uniqueKeys.map((key) => {

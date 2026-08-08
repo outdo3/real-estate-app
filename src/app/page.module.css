@@ -554,6 +554,48 @@
   z-index: 0;
 }
 
+/* 검색으로 이동한 단지 마커를 강조하는 펄스 애니메이션 */
+@keyframes markerPulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  70% { box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.markerHighlight {
+  animation: markerPulse 1.4s ease-out infinite;
+}
+
+/* 마커 상태 범례: 지도 좌측 하단에 떠 있는 작은 안내 칩 */
+.markerLegend {
+  position: absolute;
+  left: 12px;
+  bottom: calc(78px + env(safe-area-inset-bottom)); /* 하단 네비게이션 바에 가리지 않도록 여유 확보 */
+  z-index: 1;
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .mapFallback {
   width: 100%;
   height: 100%;
@@ -758,7 +800,7 @@
   color: var(--text-secondary);
   border-radius: 999px;
   padding: 0.4rem 0.9rem;
-  font-size: 0.85rem;
+  font-size: 0.75rem; /* 앱 전체 탭 폰트 크기(11~12px 수준)와 통일 */
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;

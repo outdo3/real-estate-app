@@ -120,13 +120,17 @@
     gap: 0;
   }
   
+  .menuListHideMobile {
+    display: none;
+  }
+
   .menuItem {
     flex: 1;
     display: flex;
     justify-content: center;
     align-items: center;
     padding: 0;
-    font-size: 0.85rem;
+    font-size: 0.75rem; /* 홈 화면 하단 탭과 통일된 크기(11~12px 수준) */
     font-weight: 600;
     height: 100%;
   }
@@ -141,10 +145,10 @@
     color: var(--text-muted) !important;
     gap: 4px;
   }
-  
+
   .icon {
-    font-size: 1.25rem;
-    margin-bottom: 2px;
+    font-size: 1.35rem; /* 홈 화면 하단 탭 아이콘과 통일된 크기 */
+    margin-bottom: 4px;
   }
   
   .menuItem a.active {
