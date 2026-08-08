@@ -245,47 +245,106 @@ export default function SchoolInfoPage() {
         </div>
 
         {/* 2단계 및 3단계 레이아웃 */}
-        <div className={styles.mainGrid}>
+        {/* 학교 랭킹 리스트 (전체 너비 사용) */}
+        <div className={styles.panel}>
+          <div className={styles.panelHeader}>
+            <h2 className={styles.panelTitle}>🏆 {region} {activeTab} 랭킹</h2>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+              {activeTab === '중등' ? '특목고 진학률 순' : (activeTab === '초등' ? '과밀학급/선호도 순' : '진학률 순')}
+            </span>
+          </div>
           
-          {/* 좌측: 학교/비교 학군 리스트 */}
-          <div className={styles.panel}>
-            <div className={styles.panelHeader}>
-              <h2 className={styles.panelTitle}>🏆 {region} {activeTab} 랭킹</h2>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                {activeTab === '중등' ? '특목고 진학률 순' : (activeTab === '초등' ? '과밀학급/선호도 순' : '진학률 순')}
-              </span>
+          <ul className={styles.schoolList}>
+            {schools.map((item) => (
+              <li 
+                key={item.id} 
+                className={`${styles.schoolItem} ${selectedSchool?.id === item.id ? styles.active : ''}`}
+                onClick={() => setSelectedSchool(item)}
+              >
+                <div className={styles.rankBadge}>{item.rank}</div>
+                {renderSchoolItem(item)}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+      </div>
+
+      {/* 학교 상세 전면 모달 (Modal) */}
+      {selectedSchool && (
+        <div className={styles.modalOverlay} onClick={() => setSelectedSchool(null)}>
+          <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h2 className={styles.modalTitle}>{selectedSchool.name}</h2>
+                <span style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>{region} 전체 {selectedSchool.rank}위</span>
+              </div>
+              <button className={styles.modalCloseBtn} onClick={() => setSelectedSchool(null)}>×</button>
             </div>
             
-            <ul className={styles.schoolList}>
-              {schools.map((item) => (
-                <li 
-                  key={item.id} 
-                  className={`${styles.schoolItem} ${selectedSchool?.id === item.id ? styles.active : ''}`}
-                  onClick={() => setSelectedSchool(item)}
-                >
-                  <div className={styles.rankBadge}>{item.rank}</div>
-                  {renderSchoolItem(item)}
-                </li>
-              ))}
-            </ul>
-          </div>
+            <div className={styles.modalBody}>
+              {/* 상단: 학교 기본 정보 및 지표 */}
+              <h3 style={{marginTop: 0, marginBottom: '1rem', color: 'var(--text-primary)'}}>📊 세부 지표</h3>
+              <div className={styles.schoolDetailGrid}>
+                <div className={styles.detailBox}>
+                  <div className={styles.detailLabel}>총 학생수</div>
+                  <div className={styles.detailValue}>{selectedSchool.students}명</div>
+                </div>
+                {selectedSchool.classStudents && (
+                  <div className={styles.detailBox}>
+                    <div className={styles.detailLabel}>학급당 인원</div>
+                    <div className={styles.detailValue}>{selectedSchool.classStudents}명</div>
+                  </div>
+                )}
+                {selectedSchool.graduates && (
+                  <div className={styles.detailBox}>
+                    <div className={styles.detailLabel}>졸업생 수</div>
+                    <div className={styles.detailValue}>{selectedSchool.graduates}명</div>
+                  </div>
+                )}
+                
+                {activeTab === '중등' && (
+                  <>
+                    <div className={styles.detailBox}>
+                      <div className={styles.detailLabel}>과학고 진학</div>
+                      <div className={styles.detailValue} style={{color: '#3b82f6'}}>{selectedSchool.sciHigh}명</div>
+                    </div>
+                    <div className={styles.detailBox}>
+                      <div className={styles.detailLabel}>외고·국제고 진학</div>
+                      <div className={styles.detailValue} style={{color: '#8b5cf6'}}>{selectedSchool.foreignHigh}명</div>
+                    </div>
+                    <div className={styles.detailBox}>
+                      <div className={styles.detailLabel}>특목고 진학률</div>
+                      <div className={styles.detailValue} style={{color: 'var(--primary-color)'}}>{selectedSchool.specialRatio}%</div>
+                    </div>
+                  </>
+                )}
 
-          {/* 우측: 학교 배정 단지 및 맵 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            
-            <div className={styles.panel}>
-              <div className={styles.panelHeader} style={{ backgroundColor: '#eff6ff', borderBottom: '2px solid #bfdbfe', flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
-                <h2 className={styles.panelTitle} style={{ fontSize: '1.1rem', color: 'var(--primary-color)' }}>
-                  📌 선택한 학교 배정 단지
-                </h2>
-                <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                  ※ 직선거리 기반 자동 매칭 단지로, 교육청의 공식 행정 배정 구역과는 미세한 차이가 있을 수 있습니다.
-                </p>
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                {activeTab === '고등' && (
+                  <>
+                    <div className={styles.detailBox}>
+                      <div className={styles.detailLabel}>4년제 진학률</div>
+                      <div className={styles.detailValue} style={{color: '#3b82f6'}}>{selectedSchool.univRate}%</div>
+                    </div>
+                    <div className={styles.detailBox}>
+                      <div className={styles.detailLabel}>의약계열/주요대</div>
+                      <div className={styles.detailValue} style={{color: '#8b5cf6'}}>{selectedSchool.medSeoulRate}%</div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* 하단: 배정 단지 리스트 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+                <div>
+                  <h3 style={{margin: 0, color: 'var(--text-primary)'}}>📌 배정 가능 단지 (직선거리)</h3>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button onClick={() => setAptSort('distance')} className={aptSort === 'distance' ? styles.activeSortBtn : styles.sortBtn}>거리순</button>
                   <button onClick={() => setAptSort('newest')} className={aptSort === 'newest' ? styles.activeSortBtn : styles.sortBtn}>신축순</button>
                 </div>
               </div>
+
               <div className={styles.aptList}>
                 {[...aptList].sort((a, b) => {
                   if (aptSort === 'newest') {
@@ -307,27 +366,9 @@ export default function SchoolInfoPage() {
                 ))}
               </div>
             </div>
-
-            <div className={styles.panel}>
-              <div className={styles.panelHeader}>
-                <h2 className={styles.panelTitle} style={{ fontSize: '1.1rem' }}>🎓 주변 학원가 분포</h2>
-              </div>
-              <div className={styles.mapContainer} style={{ padding: 0, overflow: 'hidden', height: '300px' }}>
-                <Map 
-                  center={{ lat: 35.115, lng: 129.018 }} 
-                  style={{ width: '100%', height: '100%' }}
-                  level={4}
-                >
-                  <MapMarker position={{ lat: 35.115, lng: 129.018 }}>
-                    <div style={{ padding: '5px', color: '#000', fontSize: '12px' }}>{region} 학원가</div>
-                  </MapMarker>
-                </Map>
-              </div>
-            </div>
-
           </div>
-
         </div>
+      )}
       </div>
     </div>
   );

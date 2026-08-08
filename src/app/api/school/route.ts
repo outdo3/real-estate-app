@@ -87,6 +87,7 @@ export async function GET(request: Request) {
           name: s.SCHUL_NM,
           rank: index + 1,
           students: students,
+          graduates: Math.floor(students / 6),
           classStudents: classStudents,
           walkTime: isChopuma ? '도보 1분' : `도보 ${Math.floor(seed2 * 10) + 3}분`,
           crossRoad: isChopuma ? '단지 내 (초품아)' : `건널목 ${Math.floor(seed1 * 3) + 1}개`
@@ -94,24 +95,35 @@ export async function GET(request: Request) {
       } else if (type === '중등') {
         // 학업성취도는 65~98% 수준으로 현실화
         const achievement = Math.floor(seed1 * 33) + 65;
+        const graduates = Math.floor(students / 3);
         // 특목고 진학명수는 학생수의 0~5% 수준
         const special = Math.floor(students * (seed2 * 0.05));
+        const sciHigh = Math.floor(special * (seed1 * 0.5 + 0.1));
+        const foreignHigh = special - sciHigh;
+        
         return {
           id: s.SD_SCHUL_CODE || `m${index}`,
           name: s.SCHUL_NM,
           rank: index + 1,
           students: students,
+          graduates: graduates,
+          classStudents: classStudents,
           achievement: achievement,
           specialHigh: special,
-          specialRatio: ((special / students) * 100).toFixed(1)
+          sciHigh: sciHigh,
+          foreignHigh: foreignHigh,
+          specialRatio: graduates > 0 ? ((special / graduates) * 100).toFixed(1) : "0.0"
         };
       } else {
         // 4년제 진학률 40~85%, 의약계열 2~12% 수준
+        const graduates = Math.floor(students / 3);
         return {
           id: s.SD_SCHUL_CODE || `h${index}`,
           name: s.SCHUL_NM,
           rank: index + 1,
           students: students,
+          graduates: graduates,
+          classStudents: classStudents,
           univRate: (seed1 * 45 + 40).toFixed(1),
           medSeoulRate: (seed2 * 10 + 2).toFixed(1),
           type: s.HS_GNRL_BUSNS_SC_NM || (seed1 > 0.8 ? '자율고' : '일반고')
