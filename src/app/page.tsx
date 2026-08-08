@@ -342,7 +342,13 @@ export default function Home() {
   }, [mapLoadAttempt]);
 
   // 실거래가 데이터 로드 (매매 + 분양권) 및 상태별 마커 분류
+  // userLawdCd는 최초 마운트 직후 곧바로(기본값 -> 역지오코딩된 실제 지역) 다시 바뀔 수 있어
+  // (예: LocalStorage에 저장된 다른 지역 위치 복원), 이전 지역 요청이 새 지역 요청보다
+  // 늦게 응답하면 최신 상태를 되돌려쓰는 경쟁 상태가 생길 수 있다. cancelled 플래그로
+  // 이미 무효화된(effect가 재실행된) 요청의 응답은 무시하도록 방어한다.
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchData() {
       try {
         const dongParam = userDong && userDong !== 'all' ? `&dong=${encodeURIComponent(userDong)}` : '';
@@ -353,6 +359,7 @@ export default function Home() {
         ]);
 
         const data = await aptRes.json();
+        if (cancelled) return;
         setDynamicData(data);
         setVisibleCount(15);
 
@@ -387,13 +394,17 @@ export default function Home() {
             }));
         }
 
+        if (cancelled) return;
         setMarkers([...aptMarkers, ...presaleMarkers]);
       } catch (error) {
-        console.error('Failed to fetch map data:', error);
+        if (!cancelled) console.error('Failed to fetch map data:', error);
       }
     }
 
     fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [userLawdCd, userDong]);
 
   // 지도 이동/축소로 bounds가 바뀌면 리스트 페이징을 처음부터 다시 보여준다

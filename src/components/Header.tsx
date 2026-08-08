@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import styles from './Header.module.css';
 
 interface HeaderProps {
@@ -14,10 +14,19 @@ interface HeaderProps {
 
 const Header = ({ searchSlot, hideMobileNav }: HeaderProps) => {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <header className={styles.header}>
       <div className={`container ${styles.nav}`}>
+        <button
+          onClick={() => router.back()}
+          className={styles.backBtn}
+          aria-label="이전 화면으로 돌아가기"
+        >
+          ←
+        </button>
+
         <Link href="/" className={styles.logo}>
           <span style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--primary-color)' }}>아파트써처</span>
         </Link>

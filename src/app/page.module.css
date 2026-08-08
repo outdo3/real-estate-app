@@ -632,6 +632,7 @@
   background: var(--bg-light, #f8fafc);
   padding: 1rem;
   padding-top: 190px; /* 상단에 떠 있는 헤더 검색창/현재 위치/동향 바/토글 레이어에 가려지지 않도록 확보 (검색창을 헤더로 이동한 만큼 축소) */
+  padding-bottom: calc(100px + env(safe-area-inset-bottom)); /* 하단 고정 네비게이션 바/우측 플로팅 버튼에 마지막 항목과 더보기 버튼이 가리지 않도록 확보 */
   z-index: 0;
 }
 
