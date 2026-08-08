@@ -365,8 +365,8 @@ export default function Home() {
         {/* 상단 떠있는 UI 레이어 */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, pointerEvents: 'none', display: 'flex', flexDirection: 'column' }}>
           
-          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            
+          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
             {/* 검색창: 클릭 시 아실 스타일 전면 검색 모달 오픈 */}
             <div
               onClick={openSearchModal}
@@ -410,22 +410,22 @@ export default function Home() {
               </span>
             </div>
 
-          </div>
+            {/* 지도/리스트 모드 전환: 시장 동향 바로 바로 아래, 우측에 밀착된 플로팅 필 (지도 중앙을 가리지 않음) */}
+            <div style={{ pointerEvents: 'auto', alignSelf: 'flex-end', display: 'flex', background: 'white', borderRadius: '999px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+              <button
+                onClick={() => setViewMode('map')}
+                style={{ padding: '8px 14px', background: viewMode === 'map' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'map' ? 'white' : 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                🗺️ 지도
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                style={{ padding: '8px 14px', background: viewMode === 'list' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'list' ? 'white' : 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                📋 리스트
+              </button>
+            </div>
 
-          {/* 지도/리스트 모드 전환: 상단 바로 아래, 우측에 얇게 떠 있는 플로팅 필 (지도 중앙을 가리지 않음) */}
-          <div style={{ pointerEvents: 'auto', alignSelf: 'flex-end', marginRight: '16px', marginTop: '4px', display: 'flex', background: 'white', borderRadius: '999px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-            <button
-              onClick={() => setViewMode('map')}
-              style={{ padding: '8px 14px', background: viewMode === 'map' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'map' ? 'white' : 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-            >
-              🗺️ 지도
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              style={{ padding: '8px 14px', background: viewMode === 'list' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'list' ? 'white' : 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-            >
-              📋 리스트
-            </button>
           </div>
 
           {/* 하단 여백 및 네비게이션을 위해 flex-1 */}
