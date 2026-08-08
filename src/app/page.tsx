@@ -5,7 +5,6 @@ import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
-import MarketInsights from '@/components/MarketInsights';
 import RankCard from '@/components/RankCard';
 import styles from './page.module.css';
 
@@ -235,6 +234,14 @@ export default function Home() {
     fetchData();
   }, [userLawdCd, userDong]);
 
+  // 컴팩트 시장 동향 바용 요약: 동별 거래량 집계 (실데이터 기반, 더미 수치 없음)
+  const dongCounts: Record<string, number> = {};
+  dynamicData.forEach((item: any) => {
+    const d = item.dong || '기타';
+    dongCounts[d] = (dongCounts[d] || 0) + 1;
+  });
+  const topDongs = Object.entries(dongCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
   if (!apiKey) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -385,27 +392,40 @@ export default function Home() {
               </button>
             </div>
 
-            {/* 대시보드 */}
-            <div style={{ pointerEvents: 'auto', background: 'white', borderRadius: '12px', padding: '0', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-              <MarketInsights data={dynamicData} regionName="부산광역시 서구" />
+            {/* 컴팩트 시장 동향 바: 한 줄 스와이프 칩 (기존 대형 카드 대체) */}
+            <div style={{ pointerEvents: 'auto', background: 'white', borderRadius: '999px', padding: '0.5rem 1rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                <strong>최근 거래량 {dynamicData.length}건</strong>
+                {topDongs.length > 0 && (
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    {' | 동별 TOP: '}
+                    {topDongs.map(([name, count], i) => (
+                      <span key={name}>
+                        {i > 0 && ', '}
+                        {name} {count}건
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </span>
             </div>
 
-            {/* 모드 전환 토글: 페이지 이동 없이 같은 화면 안에서 지도 <-> 리스트만 바꿔치기 */}
-            <div style={{ pointerEvents: 'auto', display: 'flex', background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '4px' }}>
-              <button
-                onClick={() => setViewMode('map')}
-                style={{ flex: 1, padding: '12px 0', background: viewMode === 'map' ? 'white' : '#f8fafc', border: 'none', borderRight: '1px solid var(--border-color)', fontWeight: viewMode === 'map' ? 700 : 600, color: viewMode === 'map' ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
-              >
-                🗺️ 지도 모드
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                style={{ flex: 1, padding: '12px 0', background: viewMode === 'list' ? 'white' : '#f8fafc', border: 'none', fontWeight: viewMode === 'list' ? 700 : 600, color: viewMode === 'list' ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
-              >
-                📋 슬림 리스트
-              </button>
-            </div>
+          </div>
 
+          {/* 지도/리스트 모드 전환: 상단 바로 아래, 우측에 얇게 떠 있는 플로팅 필 (지도 중앙을 가리지 않음) */}
+          <div style={{ pointerEvents: 'auto', alignSelf: 'flex-end', marginRight: '16px', marginTop: '4px', display: 'flex', background: 'white', borderRadius: '999px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+            <button
+              onClick={() => setViewMode('map')}
+              style={{ padding: '8px 14px', background: viewMode === 'map' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'map' ? 'white' : 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              🗺️ 지도
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              style={{ padding: '8px 14px', background: viewMode === 'list' ? 'var(--primary-color)' : 'white', border: 'none', fontWeight: 700, color: viewMode === 'list' ? 'white' : 'var(--text-secondary)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              📋 리스트
+            </button>
           </div>
 
           {/* 하단 여백 및 네비게이션을 위해 flex-1 */}
