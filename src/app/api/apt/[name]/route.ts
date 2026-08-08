@@ -59,15 +59,16 @@ export async function GET(
       })
       .map(item => {
         const priceStr = item.price;
-        let priceNum = 0;
+        let priceNum = item.dealAmount ? item.dealAmount / 10000 : 0;
         
-        // 전월세일 경우 보증금만 차트용 숫자로 변환
-        const targetStrForChart = type === 'rent' ? priceStr.split('/')[0] : priceStr;
-        const match = targetStrForChart.match(/\d+/g);
-        
-        if (match) {
-          const rawNum = parseInt(match.join(''), 10);
-          priceNum = rawNum / 10000; 
+        // Fallback if dealAmount is missing for some reason
+        if (priceNum === 0 && priceStr) {
+          const targetStrForChart = type === 'rent' ? priceStr.split('/')[0] : priceStr;
+          const match = targetStrForChart.match(/\d+/g);
+          if (match) {
+            const rawNum = parseInt(match.join(''), 10);
+            priceNum = rawNum / 10000; 
+          }
         }
 
         const dateParts = item.info.split('•');

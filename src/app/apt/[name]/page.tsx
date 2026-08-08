@@ -166,9 +166,10 @@ export default function ApartmentDetail() {
 
   const renderModalContent = () => {
     const firstTrade = trades.length > 0 ? trades[0] : null;
-    const searchAddress = firstTrade?.dong 
-      ? (firstTrade?.jibun ? `${regionName || firstTrade.dong} ${firstTrade.jibun}` : `${regionName || firstTrade.dong} ${aptName}`) 
-      : aptName;
+    const primaryAddress = `${regionName || firstTrade?.dong || ''} ${aptName}`.trim();
+    const jibunAddress = firstTrade?.dong && firstTrade?.jibun 
+      ? `${regionName || firstTrade.dong} ${firstTrade.jibun}` 
+      : undefined;
     
     switch (activeModal) {
       case '지도':
@@ -176,7 +177,7 @@ export default function ApartmentDetail() {
           <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
             <p style={{marginBottom: '1rem'}}>📍 <b>{aptName}</b>의 위치입니다.</p>
             <div style={{flex: 1, minHeight: '400px', position: 'relative'}}>
-              <KakaoMapEmbed address={searchAddress} type="map" />
+              <KakaoMapEmbed address={primaryAddress} jibunAddress={jibunAddress} type="map" />
             </div>
           </div>
         );
@@ -185,7 +186,7 @@ export default function ApartmentDetail() {
           <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
             <p style={{marginBottom: '1rem'}}>👀 단지 주변 <b>로드뷰</b>입니다.</p>
             <div style={{flex: 1, minHeight: '400px', position: 'relative'}}>
-              <KakaoMapEmbed address={searchAddress} type="roadview" />
+              <KakaoMapEmbed address={primaryAddress} jibunAddress={jibunAddress} type="roadview" />
             </div>
           </div>
         );

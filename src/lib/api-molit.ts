@@ -90,18 +90,24 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     };
 
     return itemsArray.map((item: any, index: number) => {
-      // 거래 금액 (매매가 또는 보증금)
       let priceStr = '';
+      let dealAmount = 0;
+      let monthlyRent = 0;
+      
       if (type === 'rent') {
-        const deposit = (item.보증금액 || item.deposit || '').toString().trim();
-        const monthly = (item.월세금액 || item.monthlyRent || '').toString().trim();
+        const deposit = (item.보증금액 || item.deposit || '').toString().trim().replace(/,/g, '');
+        const monthly = (item.월세금액 || item.monthlyRent || '').toString().trim().replace(/,/g, '');
+        dealAmount = parseInt(deposit, 10) || 0;
+        monthlyRent = parseInt(monthly, 10) || 0;
+        
         priceStr = `보증금 ${formatKoreanPrice(deposit)}`;
-        if (monthly && parseInt(monthly.replace(/,/g, '')) > 0) {
+        if (monthlyRent > 0) {
           priceStr += ` / 월세 ${formatKoreanPrice(monthly)}`;
         }
       } else {
-        const dealAmount = (item.거래금액 || item.dealAmount || '').toString().trim();
-        priceStr = formatKoreanPrice(dealAmount);
+        const dealStr = (item.거래금액 || item.dealAmount || '').toString().trim().replace(/,/g, '');
+        dealAmount = parseInt(dealStr, 10) || 0;
+        priceStr = formatKoreanPrice(dealStr);
       }
 
       // 평형 (전용면적)
@@ -125,6 +131,8 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
         rank: index + 1,
         name: name,
         price: priceStr,
+        dealAmount: dealAmount, // 추가
+        monthlyRent: monthlyRent, // 추가
         priceChange: '', 
         changeType: 'new',
         typeLabel: type === 'rent' ? '전월세' : (type === 'silv' ? '분양권' : (type === 'officetel' ? '오피스텔' : (type === 'villa' ? '빌라' : '실거래'))),
