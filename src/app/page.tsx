@@ -1,446 +1,272 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
-import SearchFilterBar from '@/components/SearchFilterBar';
 import MarketInsights from '@/components/MarketInsights';
-import CardList from '@/components/CardList';
-import TableList from '@/components/TableList';
-import MapViewer from '@/components/MapViewer';
-import { RankData } from '@/components/RankCard';
 import styles from './page.module.css';
 
-// 탭 맵핑
-const TAB_MAP: Record<string, string> = {
-  '아파트': 'apt',
-  '전월세': 'rent',
-  '분양권': 'silv',
-  '오피스텔': 'officetel',
-  '빌라': 'villa',
-};
-
-const SORT_OPTIONS = [
-  { value: 'latest', label: '최신순' },
-  { value: 'price_desc', label: '최고가순' },
-  { value: 'price_asc', label: '최저가순' },
-];
-
-const AREA_OPTIONS = [
-  { value: 'all', label: '면적 전체' },
-  { value: 'small', label: '20평 미만' },
-  { value: 'medium', label: '20~30평대' },
-  { value: 'large', label: '40평 이상' },
-];
-
 export default function Home() {
+  const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
+  const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState('아파트');
-  const [showMap, setShowMap] = useState(false);
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+  const [markers, setMarkers] = useState<any[]>([]);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
+  const [keyword, setKeyword] = useState('');
   
-  // 데이터 상태
-  const [reboundData, setReboundData] = useState<RankData[]>([]);
-  const [newHighData, setNewHighData] = useState<RankData[]>([]);
-  const [dynamicData, setDynamicData] = useState<RankData[]>([]); // 탭 변경 시 데이터
-  
-  const [mapMarkers, setMapMarkers] = useState<any[]>([]);
-  
-  // 로딩 및 위치 상태
-  const [isLoading, setIsLoading] = useState(true);
-  const [isDynamicLoading, setIsDynamicLoading] = useState(false);
-  const [userLawdCd, setUserLawdCd] = useState<string>('26140'); // 기본값: 부산광역시 서구
-  const [userRegionName, setUserRegionName] = useState<string>('부산광역시 서구');
-  const [userDong, setUserDong] = useState<string>('all');
-  const [userCenter, setUserCenter] = useState<{lat: number, lng: number} | null>(null);
-  
-  // 더보기 상태
-  const [loadMoreCount, setLoadMoreCount] = useState(0);
-  const [visibleLimit, setVisibleLimit] = useState(20);
+  const [dynamicData, setDynamicData] = useState<any[]>([]); // 탭 변경 시 데이터
+  const [userLawdCd, setUserLawdCd] = useState<string>('26140');
+  const [displayRegionName, setDisplayRegionName] = useState<string>('부산광역시 서구 동 전체');
 
-  // 검색/필터 상태
-  const [sortOrder, setSortOrder] = useState<string>('latest');
-  const [areaFilter, setAreaFilter] = useState<string>('all');
-
-  // 1. 사용자 위치(LAWD_CD) 획득
-  // 기본값은 항상 '부산광역시 서구'이므로(useState 초기값), 아래 로직은 전부 실패해도
-  // 화면이 빈 상태로 남거나 크래시가 나지 않고 그냥 기본 지역이 유지된다.
+  // 카카오맵 스크립트 로드
   useEffect(() => {
-    const applyRegion = (lawdCd: string, name: string, persist = false) => {
-      setUserLawdCd(lawdCd);
-      setUserRegionName(name);
-      if (persist) {
-        try {
-          localStorage.setItem('lastLawdCd', lawdCd);
-          localStorage.setItem('lastRegionName', name);
-        } catch (e) {}
+    if (!apiKey) return;
+    
+    const scriptId = 'kakao-map-script-main';
+    let script = document.getElementById(scriptId) as HTMLScriptElement;
+    
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer&autoload=false`;
+      script.async = true;
+      document.head.appendChild(script);
+    }
+    
+    const checkKakao = setInterval(() => {
+      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
+        clearInterval(checkKakao);
+        setIsMapReady(true);
+      } else if (window.kakao && window.kakao.maps) {
+        clearInterval(checkKakao);
+        window.kakao.maps.load(() => {
+          setIsMapReady(true);
+        });
       }
-    };
+    }, 200);
+    
+    return () => clearInterval(checkKakao);
+  }, [apiKey]);
 
-    // 이전에 방문해서 저장해둔 위치가 있으면 기본값 대신 우선 적용
-    try {
-      const lastCd = localStorage.getItem('lastLawdCd');
-      const lastName = localStorage.getItem('lastRegionName');
-      if (lastCd && lastName) applyRegion(lastCd, lastName);
-    } catch (e) {}
-
-    if (!navigator.geolocation) return;
-
-    let settled = false;
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (settled) return;
-        settled = true;
-
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setUserCenter({ lat, lng });
-
-        const waitForKakao = setInterval(() => {
-          if (!window.kakao?.maps?.services) return;
-          clearInterval(waitForKakao);
-
-          window.kakao.maps.load(() => {
-            try {
-              const geocoder = new window.kakao.maps.services.Geocoder();
-              geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
-                if (status !== window.kakao.maps.services.Status.OK) return;
-                const region = result.find((r: any) => r.region_type === 'B');
-                if (region) {
-                  applyRegion(region.code.substring(0, 5), region.address_name, true);
-                }
-              });
-            } catch (e) {
-              console.warn('카카오 역지오코딩 실패, 기본 지역 유지:', e);
-            }
-          });
-        }, 200);
-        setTimeout(() => clearInterval(waitForKakao), 10000);
-      },
-      (error) => {
-        settled = true;
-        console.warn('위치 정보 사용 불가, 기본 지역(부산광역시 서구) 유지:', error.message);
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
-    );
-  }, []);
-
-  // 2. 초기 데이터 (아파트 TOP 5) 로드
+  // 실거래가 데이터 로드
   useEffect(() => {
-    async function fetchInitialData() {
+    async function fetchData() {
       try {
-        const res = await fetch('/api/transactions');
+        const res = await fetch(`/api/transactions?type=apt&lawdCd=${userLawdCd}`);
         const data = await res.json();
+        setDynamicData(data);
         
-        const rebound = data.filter((item: any) => item.changeType === 'up');
-        const newHigh = data.filter((item: any) => item.changeType === 'new');
-        
-        setReboundData(rebound);
-        setNewHighData(newHigh);
-
-        const markers = data
+        const fetchedMarkers = data
           .filter((item: any) => item.lat && item.lng)
           .map((item: any) => ({
             id: item.id,
-            title: `${item.name} (${item.price})`,
+            name: item.name,
+            price: item.price,
+            type: item.changeType,
             lat: item.lat,
             lng: item.lng,
           }));
         
-        setMapMarkers(markers);
+        setMarkers(fetchedMarkers);
       } catch (error) {
-        console.error('Failed to fetch initial data:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('Failed to fetch map data:', error);
       }
     }
     
-    fetchInitialData();
-  }, []);
+    fetchData();
+  }, [userLawdCd]);
 
-  // 3. 탭 변경 또는 위치 획득 시 동적 데이터 로드
-  useEffect(() => {
-    if (!userLawdCd) return;
+  // 장소 검색 함수
+  const searchPlaces = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!keyword.trim()) return;
 
-    const fetchDynamicData = async () => {
-      setIsDynamicLoading(true);
-      if (loadMoreCount === 0) setVisibleLimit(20); // 초기화 시에만 20으로 리셋
-      try {
-        const type = TAB_MAP[activeTab];
-        let url = `/api/transactions?type=${type}&lawdCd=${userLawdCd}&loadMore=${loadMoreCount}`;
-        if (userDong && userDong !== 'all') {
-          url += `&dong=${encodeURIComponent(userDong)}`;
-        }
-        const response = await fetch(url);
-        if (response.ok) {
-          const data = await response.json();
-          setDynamicData(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch dynamic data:', error);
-        setDynamicData([]);
-      } finally {
-        setIsDynamicLoading(false);
+    if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) return;
+
+    const ps = new window.kakao.maps.services.Places();
+    ps.keywordSearch(keyword, (data: any, status: any) => {
+      if (status === window.kakao.maps.services.Status.OK) {
+        setCenter({
+          lat: parseFloat(data[0].y),
+          lng: parseFloat(data[0].x),
+        });
       }
-    }
-
-    fetchDynamicData();
-  }, [activeTab, userLawdCd, userDong, loadMoreCount]);
-
-  const handleRegionChange = (lawdCd: string, regionName: string, dongName?: string) => {
-    setUserLawdCd(lawdCd);
-    setUserRegionName(regionName);
-    setUserDong(dongName || 'all');
-    setLoadMoreCount(0);
-    localStorage.setItem('lastLawdCd', lawdCd);
-    localStorage.setItem('lastRegionName', regionName);
+    });
   };
 
-  // 필터 및 정렬 적용
-  const getFilteredData = () => {
-    let data = [...dynamicData];
-    if (areaFilter !== 'all') {
-      data = data.filter(item => {
-        const match = item.info.match(/([\d.]+)m²/);
-        if (match) {
-          const m2 = parseFloat(match[1]);
-          if (areaFilter === 'small') return m2 < 60;
-          if (areaFilter === 'medium') return m2 >= 60 && m2 < 85;
-          if (areaFilter === 'large') return m2 >= 85;
-        }
-        return true;
-      });
-    }
-    if (sortOrder === 'price_high') data.sort((a, b) => parseInt(b.price.replace(/[^\d]/g, '')) - parseInt(a.price.replace(/[^\d]/g, '')));
-    if (sortOrder === 'price_low') data.sort((a, b) => parseInt(a.price.replace(/[^\d]/g, '')) - parseInt(b.price.replace(/[^\d]/g, '')));
-    return data;
-  };
-
-  const handleLoadMore = () => {
-    const filteredData = getFilteredData();
-    if (visibleLimit >= filteredData.length) {
-      // 렌더링된 데이터가 모두 표시되었을 경우 서버에 추가 데이터 요청
-      setLoadMoreCount(c => c + 1);
-      setVisibleLimit(v => v + 20);
-    } else {
-      // 서버에서 가져온 데이터가 아직 남아있을 경우 UI 표시 갯수만 증가
-      setVisibleLimit(v => v + 20);
-    }
-  };
-
-  const filteredDynamicData = getFilteredData();
-  const visibleDynamicData = filteredDynamicData.slice(0, visibleLimit);
-  const displayRegionName = userDong !== 'all' ? `${userRegionName} ${userDong}` : userRegionName;
-
-  if (isLoading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontSize: '1.5rem', color: 'var(--primary-color)' }}>데이터를 불러오는 중입니다...</div>;
+  if (!apiKey) {
+    return <div style={{ padding: '2rem', textAlign: 'center' }}>API 키를 확인해주세요.</div>;
   }
 
   return (
-    <main className={styles.main}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <Header />
       
-      <SearchFilterBar 
-        initialLawdCd={userLawdCd}
-        onRegionChange={handleRegionChange}
-      />
-      <div className={`container hide-scrollbar`} style={{ 
-        marginTop: '1.5rem', 
-        display: 'flex', 
-        gap: '0.5rem', 
-        marginBottom: '2rem',
-        overflowX: 'auto',
-        whiteSpace: 'nowrap',
-        padding: '0 16px',
-        WebkitOverflowScrolling: 'touch'
-      }}>
-        {Object.keys(TAB_MAP).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              padding: '0.5rem 1.25rem',
-              borderRadius: '20px',
-              border: activeTab === tab ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
-              fontWeight: 700,
-              fontSize: '0.95rem',
-              cursor: 'pointer',
-              background: activeTab === tab ? '#e6f9ed' : 'white',
-              color: activeTab === tab ? 'var(--primary-color)' : 'var(--text-secondary)',
-              transition: 'all 0.2s ease',
-              flexShrink: 0
-            }}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-      <div className="container">
-        <MarketInsights data={dynamicData} regionName={displayRegionName} />
-      </div>
-      <div className="container" style={{ marginTop: '2rem' }}>
-        {/* 리스트 헤더 및 지도 토글 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '0 0.5rem', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: '0.2rem' }} className="hide-scrollbar">
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, marginRight: '0.5rem' }}>
-              단지 실거래가 리스트
-            </h2>
-            <select 
-              value={areaFilter}
-              onChange={(e) => setAreaFilter(e.target.value)}
-              style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none' }}
+      <div style={{ position: 'relative', flex: 1 }}>
+        {/* 지도 레이어 */}
+        {isMapReady && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0 }}>
+            <Map
+              center={center}
+              style={{ width: '100%', height: '100%' }}
+              level={5}
             >
-              {AREA_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-            </select>
-            <select 
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              style={{ padding: '0.4rem 0.8rem', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none' }}
-            >
-              {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-            </select>
-          </div>
-          <div className={styles.floatingViewToggle}>
-            <div className={styles.floatingViewToggleInner}>
-              <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
-                <button 
-                  onClick={() => setViewMode('table')}
-                  style={{
-                    background: viewMode === 'table' ? 'var(--primary-color)' : 'transparent',
-                    color: viewMode === 'table' ? 'white' : '#475569',
-                    border: 'none',
-                    padding: '0.6rem 1.25rem',
-                    fontSize: '0.9rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    whiteSpace: 'nowrap'
-                  }}
+              {markers.map((marker) => (
+                <CustomOverlayMap
+                  key={marker.id}
+                  position={{ lat: marker.lat, lng: marker.lng }}
+                  yAnchor={1}
                 >
-                  📋 목록
-                </button>
-                <button 
-                  onClick={() => setViewMode('card')}
-                  style={{
-                    background: viewMode === 'card' ? 'var(--primary-color)' : 'transparent',
-                    color: viewMode === 'card' ? 'white' : '#475569',
-                    border: 'none',
-                    padding: '0.6rem 1.25rem',
-                    fontSize: '0.9rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  🗂️ 카드
-                </button>
-              </div>
-              <button 
-                onClick={() => setShowMap(!showMap)}
-                style={{
-                  background: showMap ? 'var(--primary-color)' : '#f1f5f9',
-                  color: showMap ? '#ffffff' : '#475569',
-                  border: 'none',
-                  padding: '0.6rem 1rem',
-                  borderRadius: '999px',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: 'var(--shadow-sm)',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {showMap ? '🗺️ 닫기' : '🗺️ 뷰어'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 지도 영역 (전체 화면 모달) */}
-        {showMap && (
-          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 99999, background: 'white', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', background: 'white' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>지도 뷰어</h2>
-              <button 
-                onClick={() => setShowMap(false)}
-                style={{ padding: '0.5rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                닫기 ✕
-              </button>
-            </div>
-            <div style={{ flex: 1, position: 'relative' }}>
-              <MapViewer markers={mapMarkers} userCenter={userCenter} />
-            </div>
-          </div>
-        )}
-        {/* 데이터 리스트 영역 */}
-        <div style={{ minHeight: '500px' }}>
-          {isDynamicLoading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-              {displayRegionName}의 최신 실거래 데이터를 불러오는 중입니다...
-            </div>
-          ) : dynamicData.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-              {displayRegionName}에 거래 데이터가 없습니다.
-            </div>
-          ) : getFilteredData().length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-              필터 조건에 맞는 거래 데이터가 없습니다.
-            </div>
-          ) : (
-            <>
-              {viewMode === 'table' ? (
-                <TableList 
-                  title={`${displayRegionName} ${activeTab} 실거래`}
-                  titleHighlight="최신"
-                  highlightColor="var(--primary-color)"
-                  date="06-08월"
-                  data={visibleDynamicData}
-                  regionName={userRegionName}
-                />
-              ) : (
-                <CardList 
-                  title={`${displayRegionName} ${activeTab} 실거래`}
-                  titleHighlight="최신"
-                  highlightColor="var(--primary-color)"
-                  date="06-08월"
-                  data={visibleDynamicData}
-                  regionName={userRegionName}
-                />
-              )}
-              {visibleDynamicData.length > 0 && (
-                <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-                  <button 
-                    onClick={handleLoadMore}
+                  <div 
+                    onClick={() => router.push(`/apt/${marker.name}`)}
                     style={{
-                      padding: '0.75rem 2rem',
-                      background: 'white',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 'var(--radius-full)',
-                      color: 'var(--text-secondary)',
-                      fontWeight: 600,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
                       cursor: 'pointer',
-                      boxShadow: 'var(--shadow-sm)'
+                      transform: 'translateY(-5px)',
                     }}
                   >
-                    더보기 {loadMoreCount > 0 ? `(${loadMoreCount})` : ''} 🔽
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+                    <div style={{
+                      background: 'white',
+                      border: '1px solid #1d4ed8',
+                      borderTopLeftRadius: '6px',
+                      borderTopRightRadius: '6px',
+                      padding: '4px 8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      color: '#1e293b',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {marker.name}
+                    </div>
+                    <div style={{
+                      background: '#1d4ed8',
+                      color: 'white',
+                      borderBottomLeftRadius: '6px',
+                      borderBottomRightRadius: '6px',
+                      padding: '4px 8px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      position: 'relative'
+                    }}>
+                      {marker.price}
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '-6px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: '0',
+                        height: '0',
+                        borderLeft: '5px solid transparent',
+                        borderRight: '5px solid transparent',
+                        borderTop: '6px solid #1d4ed8'
+                      }} />
+                    </div>
+                  </div>
+                </CustomOverlayMap>
+              ))}
+            </Map>
+          </div>
+        )}
 
-          {/* 아파트 탭일 경우 기존 TOP5 데이터도 하단에 표시 */}
-          {activeTab === '아파트' && (
-            <div style={{ marginTop: '4rem', textAlign: 'center', padding: '2rem', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)', color: 'var(--text-muted)' }}>
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>🔥 전국 핫이슈 단지 (준비 중)</h2>
-              <p style={{ fontSize: '0.9rem' }}>전국 반등 실거래 및 신고가 데이터 수집 로직이 연동 중입니다.</p>
+        {/* 상단 떠있는 UI 레이어 */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, pointerEvents: 'none', display: 'flex', flexDirection: 'column' }}>
+          
+          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            
+            {/* 검색창 */}
+            <div style={{ pointerEvents: 'auto', background: 'white', borderRadius: '8px', padding: '6px', display: 'flex', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              <form onSubmit={searchPlaces} style={{ display: 'flex', width: '100%', gap: '6px' }}>
+                <input 
+                  type="text" 
+                  placeholder="단지명, 동이름, 지역명을 입력하세요" 
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  style={{ flex: 1, padding: '0.6rem 1rem', border: '1px solid var(--border-color)', borderRadius: '4px', outline: 'none', fontSize: '1rem' }}
+                />
+                <button type="submit" style={{ padding: '0.6rem 1.2rem', background: '#22c55e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  전국 검색
+                </button>
+              </form>
             </div>
-          )}
+
+            {/* 현재 위치 */}
+            <div style={{ pointerEvents: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.95)', padding: '10px 16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                현재 위치: {displayRegionName} <span style={{ color: '#22c55e' }}>📍</span>
+              </div>
+              <button 
+                onClick={() => window.location.reload()}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--text-secondary)' }}
+              >
+                🔄
+              </button>
+            </div>
+
+            {/* 대시보드 */}
+            <div style={{ pointerEvents: 'auto', background: 'white', borderRadius: '12px', padding: '0', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+              <MarketInsights data={dynamicData} regionName="부산광역시 서구" />
+            </div>
+
+            {/* 모드 전환 토글 */}
+            <div style={{ pointerEvents: 'auto', display: 'flex', background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginTop: '4px' }}>
+              <button style={{ flex: 1, padding: '12px 0', background: 'white', border: 'none', borderRight: '1px solid var(--border-color)', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
+                🗺️ 지도 모드
+              </button>
+              <button 
+                onClick={() => router.push('/stats')} 
+                style={{ flex: 1, padding: '12px 0', background: '#f8fafc', border: 'none', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+              >
+                📋 슬림 리스트
+              </button>
+            </div>
+
+          </div>
+
+          {/* 하단 여백 및 네비게이션을 위해 flex-1 */}
+          <div style={{ flex: 1 }}></div>
+
+          {/* 우측 하단 컨트롤 */}
+          <div style={{ pointerEvents: 'auto', alignSelf: 'flex-end', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button style={{ width: '40px', height: '40px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', cursor: 'pointer' }}>
+              🎯
+            </button>
+            <button style={{ width: '40px', height: '40px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.1)', cursor: 'pointer' }}>
+              📏
+            </button>
+          </div>
+
+          {/* 하단 네비게이션 바 */}
+          <div style={{ pointerEvents: 'auto', background: 'white', display: 'flex', justifyContent: 'space-around', padding: '12px 0', borderTop: '1px solid var(--border-color)', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+            <Link href="/" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: '#22c55e' }}>
+              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🗺️</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>지도</span>
+            </Link>
+            <Link href="/stats" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
+              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📈</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>실거래</span>
+            </Link>
+            <Link href="/stats" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
+              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📊</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>통계</span>
+            </Link>
+            <Link href="/school" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
+              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🏫</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>학군</span>
+            </Link>
+            <Link href="/tools" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none', color: 'var(--text-secondary)' }}>
+              <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🛠️</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>부동산도구</span>
+            </Link>
+          </div>
+
         </div>
       </div>
-    </main>
+    </div>
   );
 }
