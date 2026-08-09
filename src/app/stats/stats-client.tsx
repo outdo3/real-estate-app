@@ -327,14 +327,14 @@ export default function StatsPage() {
                 <div className={styles.panel}>
                   <div className={styles.panelHeader}>
                     <h2 className={styles.panelTitle}>🔥 최근 핫이슈 거래</h2>
-                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 3개월 최고가 TOP 5</span>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>정렬 기준: 거래가 높은순 (최근 3개월)</span>
                   </div>
                   {renderCompactList(data.hotIssues, 'price')}
                 </div>
                 <div className={styles.panel}>
                   <div className={styles.panelHeader}>
                     <h2 className={styles.panelTitle}>🏆 {region.sigungu} 평당가 랭킹</h2>
-                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 1년 평균</span>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>정렬 기준: 평당가 높은순 (최근 1년 평균)</span>
                   </div>
                   {renderCompactList(data.topPrices, 'pricePerPyung', {
                     meta: () => '최근 1년 평균 평당가',
