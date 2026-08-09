@@ -628,7 +628,7 @@ export default function ApartmentDetail() {
                 const isSale = t.tradeType.includes('매매') || t.tradeType === '실거래';
                 const prevTrade = filteredTrades[index + 1];
                 let diffBadge = null;
-                if (prevTrade && isSale) {
+                if (prevTrade && isSale && prevTrade.area === t.area) {
                   const diff = t.price - prevTrade.price;
                   if (diff > 0) diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>▲ {diff.toFixed(1)}억</span>;
                   else if (diff < 0) diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#e0e7ff', color: '#3b82f6', fontWeight: 'bold' }}>▼ {Math.abs(diff).toFixed(1)}억</span>;
