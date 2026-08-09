@@ -84,7 +84,7 @@ export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetrics
           <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>최근 6개월 데이터 부족</div>
         )}
         {!loading && jeonseRate !== null && !isSameArea && (
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>* 동일 평형 매물이 없어 근접 평형 기준으로 계산</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>* 동일 평형 매물이 없어 다른 평형의 최근 거래 기준으로 계산(참고용)</div>
         )}
       </div>
       <div style={cardStyle}>
