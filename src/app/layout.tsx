@@ -4,7 +4,7 @@ import { siteConfig } from '@/config/site';
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://real-estate-app-park11.vercel.app'),
+  metadataBase: new URL(siteConfig.url),
   title: '이집 - 부산 실거래가 지도',
   description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
   openGraph: {
