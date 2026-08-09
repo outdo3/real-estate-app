@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 
+// 카카오 로컬 카테고리 코드 중 이 컴포넌트에서 실제로 사용하는 4종.
+// SC4(학교), SW8(지하철), HP8(병원), MT1(대형마트)
+type KakaoCategoryCode = 'SC4' | 'SW8' | 'HP8' | 'MT1';
+
 interface Props {
   address: string;
   // 카카오 로컬 카테고리 코드. 여러 개를 넘기면 각각 검색 후 거리순으로 병합한다.
-  // 예: SC4(학교), SW8(지하철), HP8(병원), MT1(대형마트)
-  categories: string[];
+  categories: KakaoCategoryCode[];
   limit?: number;
 }
 
@@ -27,7 +30,7 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
       const geocoder = new window.kakao.maps.services.Geocoder();
       const ps = new window.kakao.maps.services.Places();
 
-      const searchOneCategory = (category: string, coords: any) =>
+      const searchOneCategory = (category: KakaoCategoryCode, coords: any) =>
         new Promise<any[]>((resolve) => {
           ps.categorySearch(
             category,
