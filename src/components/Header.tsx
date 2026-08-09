@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import HeaderAuthButton from './HeaderAuthButton';
+import { siteConfig } from '@/config/site';
 import styles from './Header.module.css';
 
 interface HeaderProps {
@@ -33,7 +34,7 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav }: HeaderProps) => {
           </button>
 
           <Link href="/" className={styles.logo}>
-            <span className={styles.logoText}>아파트써처</span>
+            <span className={styles.logoText}>{siteConfig.name}</span>
           </Link>
         </div>
 
