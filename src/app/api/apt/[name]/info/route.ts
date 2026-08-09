@@ -48,15 +48,18 @@ export async function GET(
       console.warn('Naver scraping failed', e);
     }
 
-    // 2. 주차대수가 없으면 K-APT(공동주택 기본정보 API) 또는 건축물대장 API를 모방한 공공데이터 호출 시도
-    // Vercel 배포 환경에서는 공공데이터 API 키 문제로 막힐 수 있으므로 안전하게 감싸기
-    if (!info['총주차대수'] && API_KEY && lawdCd && dong) {
+    // 2. K-APT(건축물대장 표제부) 공공데이터 호출 — 주차대수(세대당 포함), 용적률, 건폐율, 주용도를 가져온다.
+    // 이전에는 네이버 스크래핑이 총주차대수를 먼저 채우면 이 블록 전체가 스킵되어 세대당
+    // 계산이 누락되는 버그가 있었다. 네이버 결과 존재 여부와 무관하게 항상 조회하고, 성공하면
+    // 더 상세한 이 결과로 덮어쓴다. Vercel 배포 환경에서는 공공데이터 API 키 문제로 막힐 수
+    // 있으므로 안전하게 감싼다.
+    if (API_KEY && lawdCd && dong) {
       try {
         // 법정동 코드 조회 (법정동명 기준 10자리 코드)
         const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?is_ignore_zero=true`);
         const regData = await regRes.json();
         let fullLawdCd = lawdCd + '10100'; // fallback
-        
+
         if (regData.regcodes) {
           const match = regData.regcodes.find((r: any) => (r.name || '').includes(dong) && r.code.startsWith(lawdCd));
           if (match) fullLawdCd = match.code;
@@ -66,7 +69,7 @@ export async function GET(
         const cleanKey = encodeURIComponent(decodeURIComponent(API_KEY.trim().replace(/['"]/g, '')));
 
         let bldUrl = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&numOfRows=100`;
-        
+
         // 지번 파싱
         const jibun = searchParams.get('jibun') || '';
         if (jibun) {
@@ -94,18 +97,28 @@ export async function GET(
               const bldNm = (it.bldNm || '').replace(/\s+/g, '');
               return bldNm.includes(aptCleanName) || aptCleanName.includes(bldNm);
             }) || itemsArr[0]; // 못찾으면 첫번째거라도 (대표 번지)
-            
-            const parkingCnt = target ? parseInt(target.totPkngCnt, 10) : NaN;
-            if (target && !isNaN(parkingCnt) && parkingCnt > 0) {
-              info['총주차대수'] = `${target.totPkngCnt}대`;
-              // 세대당 주차대수 계산
-              if (info['세대수']) {
-                const totalH = parseInt(info['세대수'].replace(/,/g, ''), 10);
-                if (totalH > 0) {
-                  const perH = (parseInt(target.totPkngCnt, 10) / totalH).toFixed(2);
-                  info['총주차대수'] = `${target.totPkngCnt}대 (세대당 ${perH}대)`;
+
+            if (target) {
+              const parkingCnt = parseInt(target.totPkngCnt, 10);
+              if (!isNaN(parkingCnt) && parkingCnt > 0) {
+                info['총주차대수'] = `${target.totPkngCnt}대`;
+                // 세대당 주차대수 계산
+                if (info['세대수']) {
+                  const totalH = parseInt(info['세대수'].replace(/,/g, ''), 10);
+                  if (totalH > 0) {
+                    const perH = (parseInt(target.totPkngCnt, 10) / totalH).toFixed(2);
+                    info['총주차대수'] = `${target.totPkngCnt}대 (세대당 ${perH}대)`;
+                  }
                 }
               }
+
+              const vlRat = parseFloat(target.vlRat);
+              if (!isNaN(vlRat) && vlRat > 0) info['용적률'] = `${vlRat}%`;
+
+              const bcRat = parseFloat(target.bcRat);
+              if (!isNaN(bcRat) && bcRat > 0) info['건폐율'] = `${bcRat}%`;
+
+              if (target.mainPurpsCdNm) info['주용도'] = target.mainPurpsCdNm;
             }
           }
         }
