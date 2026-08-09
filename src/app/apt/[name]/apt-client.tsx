@@ -609,7 +609,9 @@ export default function ApartmentDetail() {
             </select>
           </div>
 
-          {filteredTrades.length === 0 ? (
+          {loading ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>데이터를 불러오는 중입니다...</div>
+          ) : filteredTrades.length === 0 ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
               {apiError ? `실거래가 데이터를 불러오지 못했습니다. (${apiError})` : '거래 내역이 없습니다.'}
             </div>
@@ -655,19 +657,21 @@ export default function ApartmentDetail() {
             </>
           )}
 
-          <div className={styles.briefCard}>
-            <div className={styles.briefTitle}>💡 단지 브리핑</div>
-            <ul className={styles.briefList}>
-              {buildAptBrief({
-                trades: filteredTrades,
-                tradeTypeFilter,
-                totalHouseholds: aptInfo?.['세대수'] ?? null,
-                buildYear: trades.length > 0 && trades[0].buildYear ? parseInt(trades[0].buildYear, 10) : null,
-              }).map((sentence, i) => (
-                <li key={i}>{sentence}</li>
-              ))}
-            </ul>
-          </div>
+          {!loading && (
+            <div className={styles.briefCard}>
+              <div className={styles.briefTitle}>💡 단지 브리핑</div>
+              <ul className={styles.briefList}>
+                {buildAptBrief({
+                  trades: filteredTrades,
+                  tradeTypeFilter,
+                  totalHouseholds: aptInfo?.['세대수'] ?? null,
+                  buildYear: trades.length > 0 && trades[0].buildYear ? parseInt(trades[0].buildYear, 10) : null,
+                }).map((sentence, i) => (
+                  <li key={i}>{sentence}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 
