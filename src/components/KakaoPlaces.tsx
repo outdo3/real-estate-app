@@ -2,32 +2,58 @@ import React, { useEffect, useState } from 'react';
 
 interface Props {
   address: string;
-  category: 'SC4' | 'SW8'; // SC4: 학교, SW8: 지하철
+  // 카카오 로컬 카테고리 코드. 여러 개를 넘기면 각각 검색 후 거리순으로 병합한다.
+  // 예: SC4(학교), SW8(지하철), HP8(병원), MT1(대형마트)
+  categories: string[];
+  limit?: number;
 }
 
-export default function KakaoPlaces({ address, category }: Props) {
+const CATEGORY_ICON: Record<string, string> = {
+  SC4: '🏫',
+  SW8: '🚇',
+  HP8: '🏥',
+  MT1: '🛒',
+};
+
+export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
   const [places, setPlaces] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const categoriesKey = categories.join(',');
 
   useEffect(() => {
     const renderPlaces = () => {
       const geocoder = new window.kakao.maps.services.Geocoder();
       const ps = new window.kakao.maps.services.Places();
 
-      const searchPlaces = (coords: any) => {
-        ps.categorySearch(category, (result: any, status: any) => {
-          if (status === window.kakao.maps.services.Status.OK) {
-            setPlaces(result.slice(0, 5)); // 상위 5개만
-          } else {
-            setError('주변에 해당 인프라가 없습니다.');
-          }
-          setLoading(false);
-        }, {
-          location: coords,
-          radius: 1500, // 1.5km 반경
-          sort: window.kakao.maps.services.SortBy.DISTANCE
+      const searchOneCategory = (category: string, coords: any) =>
+        new Promise<any[]>((resolve) => {
+          ps.categorySearch(
+            category,
+            (result: any, status: any) => {
+              resolve(status === window.kakao.maps.services.Status.OK ? result : []);
+            },
+            {
+              location: coords,
+              radius: 1500, // 1.5km 반경
+              sort: window.kakao.maps.services.SortBy.DISTANCE,
+            }
+          );
         });
+
+      const searchPlaces = async (coords: any) => {
+        const resultsByCategory = await Promise.all(
+          categories.map((c) => searchOneCategory(c, coords))
+        );
+        const merged = resultsByCategory.flat().sort((a, b) => Number(a.distance) - Number(b.distance));
+
+        if (merged.length === 0) {
+          setError('주변에 해당 인프라가 없습니다.');
+        } else {
+          setPlaces(merged.slice(0, limit));
+        }
+        setLoading(false);
       };
 
       geocoder.addressSearch(address, (result: any, status: any) => {
@@ -73,34 +99,37 @@ export default function KakaoPlaces({ address, category }: Props) {
         script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer,drawing&autoload=false`;
         document.head.appendChild(script);
       }
-      
+
       script.addEventListener('load', loadKakaoPlaces);
-      
+
       return () => {
         script.removeEventListener('load', loadKakaoPlaces);
       };
     }
-  }, [address, category]);
+  }, [address, categoriesKey, limit]);
 
   if (loading) return <div>검색 중입니다...</div>;
   if (error) return <div style={{ color: 'var(--text-muted)' }}>{error}</div>;
+
+  const isSchoolOnly = categoriesKey === 'SC4';
+  const isSubwayOnly = categoriesKey === 'SW8';
 
   return (
     <ul style={{ lineHeight: 1.8, paddingLeft: '1.2rem' }}>
       {places.map((p, i) => (
         <li key={i} style={{ marginBottom: '0.5rem' }}>
-          {category === 'SC4' ? '🏫' : '🚇'} <b>{p.place_name}</b> 
+          {CATEGORY_ICON[p.category_group_code] || '📍'} <b>{p.place_name}</b>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
             ({p.distance}m, 도보 약 {Math.ceil(p.distance / 80)}분)
           </span>
         </li>
       ))}
-      {places.length > 0 && category === 'SC4' && places[0].distance < 300 && (
+      {places.length > 0 && isSchoolOnly && places[0].distance < 300 && (
          <li style={{color: 'var(--primary-color)', fontWeight: 600, marginTop: '1rem', listStyle: 'none', marginLeft: '-1.2rem'}}>
            🏆 초품아(학세권) 단지로 교육 환경이 매우 우수합니다.
          </li>
       )}
-      {places.length > 0 && category === 'SW8' && places[0].distance < 500 && (
+      {places.length > 0 && isSubwayOnly && places[0].distance < 500 && (
          <li style={{color: 'var(--primary-color)', fontWeight: 600, marginTop: '1rem', listStyle: 'none', marginLeft: '-1.2rem'}}>
            🚗 도보 5분 이내의 초역세권 단지입니다!
          </li>
