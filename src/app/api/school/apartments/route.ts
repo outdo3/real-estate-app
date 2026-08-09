@@ -2,11 +2,79 @@ import { NextResponse } from 'next/server';
 import { point, distance } from '@turf/turf';
 import { fetchMolitData } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
+import { XMLParser } from 'fast-xml-parser';
 
 const normalizeAptName = (name: string) => {
   if (!name) return '';
   return name.replace(/\s+/g, '').replace(/아파트$/, '');
 };
+
+// 카카오 지번주소("...구 암남동 507-3")에서 동 이름과 지번을 분리한다.
+// "산51"처럼 파싱 불가능한 형태(산번지 등)는 null을 반환해 건너뛴다.
+const parseDongJibun = (addressName: string): { dong: string; jibun: string } | null => {
+  const tokens = (addressName || '').trim().split(/\s+/);
+  if (tokens.length < 2) return null;
+  const jibun = tokens[tokens.length - 1];
+  const dong = tokens[tokens.length - 2];
+  if (!/^\d+(-\d+)?$/.test(jibun)) return null;
+  return { dong, jibun };
+};
+
+const BUILD_YEAR_API_KEY = process.env.DATA_GO_KR_API_KEY || '';
+
+// 카카오 지번주소를 기반으로 건축물대장(표제부)에서 사용승인일(준공연도)을 조회한다.
+// 실거래 유무와 무관하게 정확한 값을 얻을 수 있다 — src/app/api/apt/[name]/info/route.ts의
+// 동일한 K-APT 조회 패턴을 이 라우트 용도(준공연도만 필요)에 맞춰 재구현한 것이다. 그 파일은
+// 이미 배포·검증된 코드라 건드리지 않고 별도로 둔다.
+async function fetchBuildYearFromRegistry(
+  aptName: string,
+  addressName: string,
+  lawdCd: string,
+  regcodes: any[]
+): Promise<number | null> {
+  if (!BUILD_YEAR_API_KEY || !lawdCd) return null;
+  const parsed = parseDongJibun(addressName);
+  if (!parsed) return null;
+
+  const match = regcodes.find((r: any) => (r.name || '').includes(parsed.dong) && r.code.startsWith(lawdCd));
+  if (!match) return null;
+  const bjdongCd = match.code.substring(5, 10);
+
+  const parts = parsed.jibun.split('-');
+  const bunNum = parseInt(parts[0], 10);
+  const jiNum = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+  if (isNaN(bunNum)) return null;
+  const bun = bunNum.toString().padStart(4, '0');
+  const ji = jiNum.toString().padStart(4, '0');
+
+  const cleanKey = encodeURIComponent(decodeURIComponent(BUILD_YEAR_API_KEY.trim().replace(/['"]/g, '')));
+  const bldUrl = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&platGbCd=0&bun=${bun}&ji=${ji}&numOfRows=100`;
+
+  try {
+    const res = await fetch(bldUrl, { signal: AbortSignal.timeout(2500) });
+    if (!res.ok) return null;
+    const xmlData = await res.text();
+    const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: true });
+    const jsonObj = parser.parse(xmlData);
+    const items = jsonObj.response?.body?.items?.item;
+    if (!items) return null;
+    const itemsArr = Array.isArray(items) ? items : [items];
+    const aptCleanName = normalizeAptName(aptName);
+    const target = itemsArr.find((it: any) => {
+      const bldNm = (it.bldNm || '').replace(/\s+/g, '');
+      return bldNm.includes(aptCleanName) || aptCleanName.includes(bldNm);
+    }) || itemsArr[0];
+
+    const useAprDay = target?.useAprDay ? String(target.useAprDay) : '';
+    if (useAprDay.length >= 4) {
+      const year = parseInt(useAprDay.substring(0, 4), 10);
+      if (!isNaN(year) && year > 1900) return year;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -88,12 +156,27 @@ export async function GET(request: Request) {
         }
       }
 
-      // 실거래가/준공연도: 공공데이터포털(MOLIT) 최근 12개월 매매 데이터에서 이름 매칭으로 조회
+      // 법정동 코드 목록은 요청당 한 번만 조회해 모든 단지의 건축물대장 조회가 공유한다.
+      let regcodes: any[] = [];
+      if (BUILD_YEAR_API_KEY && lawdCd) {
+        try {
+          const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?is_ignore_zero=true`, { signal: AbortSignal.timeout(2500) });
+          const regData = await regRes.json();
+          regcodes = regData.regcodes || [];
+        } catch (e) {
+          console.warn('Failed to load regcodes for building registry lookup', e);
+        }
+      }
+
+      // 실거래가: 공공데이터포털(MOLIT) 최근 24개월 매매 데이터에서 이름 매칭으로 조회
+      // (12개월에서 확대 — 여전히 24개월 내 거래가 전혀 없는 단지는 정상적으로 "가격 정보
+      // 없음"으로 남는다. 준공연도는 아래에서 건축물대장으로 별도 확보하므로 이 매칭에
+      // 의존하지 않는다.)
       const realAptInfo = new Map<string, { priceStr: string; buildYear: number | null }>();
       if (lawdCd) {
         try {
           const now = new Date();
-          const months = Array.from({ length: 12 }, (_, i) => {
+          const months = Array.from({ length: 24 }, (_, i) => {
             const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
             return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
           });
@@ -126,20 +209,28 @@ export async function GET(request: Request) {
         return {
           id: apt.id,
           name: cleanName,
+          addressName: apt.address_name || '',
           price: matched?.priceStr || '가격 정보 없음',
           buildYear: matched?.buildYear ?? null,
           dist
         };
       });
 
-      // 4. 반경 1.5km 이내 아파트 필터 및 거리순(오름차순) 정렬
+      // 4. 반경 1.5km 이내 아파트 필터 및 거리순(오름차순) 정렬, 상위 20개만 사용
       const nearbyApartments = apartmentsWithDistance
         .filter(apt => apt.dist <= 1.5)
         .sort((a, b) => a.dist - b.dist)
-        .slice(0, 5);
+        .slice(0, 20);
+
+      // 4-1. 건축물대장에서 정확한 준공연도를 조회해 MOLIT 매칭값을 덮어쓴다(실거래 유무와
+      // 무관하게 더 신뢰도 높은 값). 화면에 실제로 노출될 최대 20개에 대해서만 병렬 조회한다.
+      const withRegistryBuildYear = await Promise.all(nearbyApartments.map(async apt => {
+        const registryBuildYear = await fetchBuildYearFromRegistry(apt.name, apt.addressName, lawdCd, regcodes);
+        return { ...apt, buildYear: registryBuildYear ?? apt.buildYear };
+      }));
 
       // 5. 프론트엔드용 데이터 가공 (현실적인 도보 시간 계산 알고리즘)
-      return nearbyApartments.map(apt => {
+      return withRegistryBuildYear.map(apt => {
         const realDistance = apt.dist * 1.45;
 
         let walkMin = Math.round(realDistance * 15);
