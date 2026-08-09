@@ -79,6 +79,15 @@ export default function StatsPage() {
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
 
+  // 연도별 통계표는 무거운 조회라, "표로 보기"가 실제로 선택됐을 때만 요청한다
+  // (그래프 보기만 쓰는 사용자는 이 요청 자체가 나가지 않음).
+  const { data: yearlyResponse, isLoading: yearlyLoading } = useSWR(
+    region.lawdCd && chartView === 'table' ? `/api/stats/yearly?lawdCd=${region.lawdCd}` : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
+  );
+  const yearlyTable = yearlyResponse?.success ? yearlyResponse.data.yearlyTable : null;
+
   const data = apiResponse?.success ? apiResponse.data : null;
   const fetchError = apiResponse && !apiResponse.success
     ? apiResponse.error
@@ -260,15 +269,25 @@ export default function StatsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {[...data.yearlyTable].reverse().map((row: any) => (
-                            <tr key={row.year}>
-                              <td className={styles.yearlyTableYear}>{row.year}년</td>
-                              <td>{row.maxPrice || '-'}</td>
-                              <td>{row.minPrice || '-'}</td>
-                              <td>{row.avgPrice || '-'}</td>
-                              <td>{row.count.toLocaleString('ko-KR')}</td>
-                            </tr>
-                          ))}
+                          {!yearlyTable ? (
+                            Array.from({ length: 6 }).map((_, i) => (
+                              <tr key={`skeleton-${i}`}>
+                                <td colSpan={5}>
+                                  <div className={styles.skeletonBar} />
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            [...yearlyTable].reverse().map((row: any) => (
+                              <tr key={row.year}>
+                                <td className={styles.yearlyTableYear}>{row.year}년</td>
+                                <td>{row.maxPrice || '-'}</td>
+                                <td>{row.minPrice || '-'}</td>
+                                <td>{row.avgPrice || '-'}</td>
+                                <td>{row.count.toLocaleString('ko-KR')}</td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
