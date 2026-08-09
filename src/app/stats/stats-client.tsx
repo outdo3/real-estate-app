@@ -79,8 +79,9 @@ export default function StatsPage() {
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
 
-  // 연도별 통계표는 무거운 조회라, "표로 보기"가 실제로 선택됐을 때만 요청한다
-  // (그래프 보기만 쓰는 사용자는 이 요청 자체가 나가지 않음).
+  // 연도별 통계표는 무거운 조회라 chartView === 'table'일 때만 요청한다. 기본값이
+  // '표로 보기'라 대부분 진입 즉시 나가지만(캐시·동시성 제한으로 안전), "그래프 보기"로
+  // 전환한 사용자에게는 이 요청 자체가 나가지 않는다.
   const { data: yearlyResponse, isLoading: yearlyLoading, error: yearlySwrError } = useSWR(
     region.lawdCd && chartView === 'table' ? `/api/stats/yearly?lawdCd=${region.lawdCd}` : null,
     fetcher,

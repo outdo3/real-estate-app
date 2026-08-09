@@ -51,6 +51,7 @@
 }
 
 .panelTitle {
+  display: block; /* 기본 규칙의 display:flex 위에서는 text-overflow:ellipsis가 렌더링되지 않음 */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
