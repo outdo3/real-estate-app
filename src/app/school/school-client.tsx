@@ -357,19 +357,21 @@ export default function SchoolInfoPage() {
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div className={styles.aptPrice}>{apt.price}</div>
-                      <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
-                        <Link href={`/apt/${encodeURIComponent(apt.name)}?lawdCd=${region.lawdCd}&type=apt`} className={styles.linkBtn}>
-                          실거래가 보기 &gt;
-                        </Link>
-                        <a
-                          href={`https://new.land.naver.com/search?query=${encodeURIComponent(apt.name)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={styles.linkBtn}
-                        >
-                          매물 보기 ↗
-                        </a>
-                      </div>
+                      {apt.id !== -1 && (
+                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
+                          <Link href={`/apt/${encodeURIComponent(apt.name)}?lawdCd=${region.lawdCd}&type=apt`} className={styles.linkBtn}>
+                            실거래가 보기 &gt;
+                          </Link>
+                          <a
+                            href={`https://new.land.naver.com/search?query=${encodeURIComponent(apt.name)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.linkBtn}
+                          >
+                            매물 보기 ↗
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

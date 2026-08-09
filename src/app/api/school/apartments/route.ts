@@ -37,7 +37,9 @@ async function fetchBuildYearFromRegistry(
   if (!parsed) return null;
 
   try {
-    const match = regcodes.find((r: any) => (r.name || '').includes(parsed.dong) && r.code.startsWith(lawdCd));
+    const candidates = regcodes.filter((r: any) => typeof r.code === 'string' && r.code.startsWith(lawdCd));
+    const match = candidates.find((r: any) => String(r.name || '').split(/\s+/).pop() === parsed.dong)
+      || candidates.find((r: any) => String(r.name || '').includes(parsed.dong));
     if (!match) return null;
     const bjdongCd = match.code.substring(5, 10);
 
@@ -72,6 +74,7 @@ async function fetchBuildYearFromRegistry(
     }
     return null;
   } catch (e) {
+    console.warn('Building registry lookup failed', aptName, e);
     return null;
   }
 }
