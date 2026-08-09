@@ -5,14 +5,22 @@ import './globals.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
-  title: `${siteConfig.name} - 실거래가 조회, 시세 분석, 학군`,
+  title: siteConfig.name,
   description: siteConfig.description,
   openGraph: {
-    title: `${siteConfig.name} - 실거래가 조회, 시세 분석, 학군`,
+    title: siteConfig.name,
     description: siteConfig.description,
     siteName: siteConfig.name,
     locale: 'ko_KR',
     type: 'website',
+    images: [
+      {
+        url: `${siteConfig.url}/og-image.png`,
+        width: 1200,
+        height: 630,
+        alt: siteConfig.name,
+      },
+    ],
   },
 };
 
