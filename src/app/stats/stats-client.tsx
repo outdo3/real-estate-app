@@ -224,13 +224,13 @@ export default function StatsPage() {
                       className={`${styles.viewToggleBtn} ${chartView === 'graph' ? styles.viewToggleActive : ''}`}
                       onClick={() => setChartView('graph')}
                     >
-                      📊 그래프 보기
+                      {'📊 그래프\n보기'}
                     </button>
                     <button
                       className={`${styles.viewToggleBtn} ${chartView === 'table' ? styles.viewToggleActive : ''}`}
                       onClick={() => setChartView('table')}
                     >
-                      📋 표로 보기
+                      {'📋 표로\n보기'}
                     </button>
                   </div>
                 </div>

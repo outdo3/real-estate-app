@@ -348,6 +348,36 @@
   color: white;
 }
 
+/* 모바일에서 패널 헤더(제목+뷰 토글)가 한 줄을 벗어나지 않도록: 제목은 말줄임표로
+   줄어들고, 토글 버튼 그룹은 줄어들지 않는다. 버튼 텍스트 자체에 실제 줄바꿈 문자가
+   들어있는 경우(stats-client.tsx) white-space:pre-line으로 그 줄바꿈을 살려 버튼 폭을
+   줄인다 — 데스크톱은 기본 white-space(줄바꿈 무시)라 영향받지 않는다. */
+@media (max-width: 768px) {
+  .panelHeader {
+    gap: 0.5rem;
+  }
+
+  .panelTitle {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+  }
+
+  .viewToggle {
+    flex-shrink: 0;
+  }
+
+  .viewToggleBtn {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.72rem;
+    white-space: pre-line;
+    line-height: 1.25;
+    text-align: center;
+  }
+}
+
 /* 연도별 통계표 */
 .tableWrapper {
   overflow-x: auto;
