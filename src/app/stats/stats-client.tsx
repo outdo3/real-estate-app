@@ -67,7 +67,7 @@ function RegionUrlSync({ setRegion }: { setRegion: (region: RegionState) => void
 export default function StatsPage() {
   const { region, setRegion, openRegionModal } = useRegion();
   const [activeTab, setActiveTab] = useState<TabKey>('volume');
-  const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
+  const [chartView, setChartView] = useState<'graph' | 'table'>('table');
   const [tradeModal, setTradeModal] = useState<{ title: string; trades: any[] } | null>(null);
 
   // SWR이 lawdCd별로 응답을 캐시하므로, 이미 조회한 지역으로 다시 돌아오면(탭 이동 후
