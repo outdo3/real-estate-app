@@ -38,7 +38,12 @@ function loadKakaoShareSdk(): Promise<void> {
       document.head.appendChild(script);
     }
     script.addEventListener('load', () => resolve());
-    script.addEventListener('error', () => reject(new Error('카카오 SDK 로드 실패')));
+    script.addEventListener('error', () => {
+      // 실패한 프로미스를 그대로 캐시해두면 일시적인 네트워크 문제가 세션 내내 영구적으로
+      // 카카오 공유를 막아버리므로, 다음 클릭에서 다시 로드를 시도할 수 있도록 캐시를 비운다.
+      kakaoShareSdkPromise = null;
+      reject(new Error('카카오 SDK 로드 실패'));
+    });
   });
 
   return kakaoShareSdkPromise;
@@ -86,6 +91,7 @@ export default function KakaoShareButton({ title, description }: KakaoShareButto
 
   return (
     <button
+      type="button"
       onClick={handleShare}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem',
