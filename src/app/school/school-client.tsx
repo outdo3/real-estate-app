@@ -63,6 +63,7 @@ export default function SchoolInfoPage() {
   const [loading, setLoading] = useState(true);
   const [aptList, setAptList] = useState<any[]>([]);
   const [aptSort, setAptSort] = useState<'distance' | 'newest'>('newest');
+  const [visibleApts, setVisibleApts] = useState<number>(5);
 
   // 선택 지역에 맞는 학교 목록 불러오기 (탭 변경 시 리스트만 업데이트)
   useEffect(() => {
@@ -104,6 +105,7 @@ export default function SchoolInfoPage() {
 
   // 배정 단지 불러오기 (GIS 연산 API 연동)
   useEffect(() => {
+    setVisibleApts(5);
     if (selectedSchool && selectedSchool.name) {
       const fetchApts = async () => {
         try {
@@ -347,7 +349,7 @@ export default function SchoolInfoPage() {
                   } else {
                     return (a.distance || 0) - (b.distance || 0);
                   }
-                }).map(apt => (
+                }).slice(0, visibleApts).map(apt => (
                   <div key={apt.id} className={styles.aptItem}>
                     <div>
                       <div className={styles.aptName}>{apt.name} <span style={{fontSize: '0.75rem', color: '#64748b', marginLeft: '4px'}}>{apt.buildYear ? `${apt.buildYear}년` : ''}</span></div>
@@ -360,6 +362,13 @@ export default function SchoolInfoPage() {
                   </div>
                 ))}
               </div>
+              {aptList.length > visibleApts && (
+                <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                  <button onClick={() => setVisibleApts((v) => v + 5)} className={styles.sortBtn}>
+                    더보기 ({aptList.length - visibleApts}개 더 있음)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
