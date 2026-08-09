@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { siteConfig } from '@/config/site';
+import { siteConfig, buildOpenGraph } from '@/config/site';
+import { REGION_DATA } from '@/lib/regions';
 import SchoolInfoPageClient from './school-client';
 
 type Props = {
@@ -8,13 +9,14 @@ type Props = {
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { sido, sigungu } = await searchParams;
-  const regionLabel = sido && sigungu ? `${sido} ${sigungu}` : '전국';
+  const isValidRegion = !!sido && !!sigungu && REGION_DATA[sido]?.includes(sigungu);
+  const regionLabel = isValidRegion ? `${sido} ${sigungu}` : '전국';
   const title = `${regionLabel} 학군정보 - ${siteConfig.name}`;
   const description = `${regionLabel}의 초·중·고 학교 정보, 특목고 진학률, 학원가 위치를 확인하세요.`;
   return {
     title,
     description,
-    openGraph: { title, description },
+    openGraph: buildOpenGraph({ title, description }),
   };
 }
 

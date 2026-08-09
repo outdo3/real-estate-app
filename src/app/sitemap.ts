@@ -16,7 +16,7 @@ function buildRegionRoutes(): MetadataRoute.Sitemap {
   const routes: MetadataRoute.Sitemap = [];
   for (const [sido, sigunguList] of Object.entries(REGION_DATA)) {
     for (const sigungu of sigunguList) {
-      const query = `sido=${encodeURIComponent(sido)}&sigungu=${encodeURIComponent(sigungu)}`;
+      const query = `sido=${encodeURIComponent(sido)}&amp;sigungu=${encodeURIComponent(sigungu)}`;
       routes.push({
         url: absoluteUrl(`/stats?${query}`),
         changeFrequency: 'daily',

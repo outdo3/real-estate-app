@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
-import { siteConfig } from '@/config/site';
+import { siteConfig, buildOpenGraph } from '@/config/site';
 import PostDetailPageClient from './post-client';
 
 type Props = {
@@ -9,10 +9,15 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const post = await prisma.post.findUnique({
-    where: { id },
-    select: { title: true, content: true },
-  });
+  let post: { title: string; content: string } | null = null;
+  try {
+    post = await prisma.post.findUnique({
+      where: { id },
+      select: { title: true, content: true },
+    });
+  } catch (e) {
+    console.error('[community/[id]] generateMetadata Prisma 조회 실패', e);
+  }
 
   if (!post) {
     return {
@@ -26,11 +31,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
-    openGraph: {
+    openGraph: buildOpenGraph({
       title: post.title,
       description,
       type: 'article',
-    },
+    }),
   };
 }
 

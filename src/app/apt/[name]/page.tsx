@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { siteConfig } from '@/config/site';
+import { siteConfig, buildOpenGraph } from '@/config/site';
 import ApartmentDetailClient from './apt-client';
 
 type Props = {
@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
-    openGraph: { title, description },
+    openGraph: buildOpenGraph({ title, description }),
   };
 }
 
