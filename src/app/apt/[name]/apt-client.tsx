@@ -676,7 +676,7 @@ export default function ApartmentDetail() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
           <div className={styles.panel} style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🎓 학군 정보</h3>
-            {primaryAddress ? (
+            {!loading && primaryAddress ? (
               <KakaoPlaces address={primaryAddress} categories={['SC4']} limit={2} />
             ) : (
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>단지 위치 확인 후 표시됩니다.</p>
@@ -684,7 +684,7 @@ export default function ApartmentDetail() {
           </div>
           <div className={styles.panel} style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🚇 교통 정보</h3>
-            {primaryAddress ? (
+            {!loading && primaryAddress ? (
               <KakaoPlaces address={primaryAddress} categories={['SW8']} limit={2} />
             ) : (
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>단지 위치 확인 후 표시됩니다.</p>
@@ -692,7 +692,7 @@ export default function ApartmentDetail() {
           </div>
           <div className={styles.panel} style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🏥 편의 시설</h3>
-            {primaryAddress ? (
+            {!loading && primaryAddress ? (
               <KakaoPlaces address={primaryAddress} categories={['HP8', 'MT1']} limit={3} />
             ) : (
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>단지 위치 확인 후 표시됩니다.</p>
@@ -716,7 +716,9 @@ export default function ApartmentDetail() {
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem' }}>전체 실거래 내역 ({selectedArea})</h2>
         <div className={styles.panel} style={{ padding: 0, overflow: 'hidden' }}>
           {filteredTrades.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>거래 내역이 없습니다.</div>
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              {apiError ? `실거래가 데이터를 불러오지 못했습니다. (${apiError})` : '거래 내역이 없습니다.'}
+            </div>
           ) : (
             <>
               {filteredTrades.slice(0, visibleCount).map((t) => {

@@ -27,6 +27,15 @@ export interface AreaInfo {
 }
 
 export function getAreaInfo(rawExclusiveM2: number): AreaInfo {
+  if (Number.isNaN(rawExclusiveM2)) {
+    return {
+      exclusiveM2: 0,
+      exclusivePyung: 0,
+      supplyPyung: 0,
+      label: '면적 정보 없음',
+    };
+  }
+
   const exclusiveM2 = Math.round(rawExclusiveM2 * 100) / 100;
   const exclusivePyung = Math.round((exclusiveM2 / M2_PER_PYUNG) * 10) / 10;
 

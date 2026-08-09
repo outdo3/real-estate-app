@@ -56,7 +56,7 @@ export async function GET(
     if (API_KEY && lawdCd && dong) {
       try {
         // 법정동 코드 조회 (법정동명 기준 10자리 코드)
-        const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?is_ignore_zero=true`);
+        const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?is_ignore_zero=true`, { signal: AbortSignal.timeout(2500) });
         const regData = await regRes.json();
         let fullLawdCd = lawdCd + '10100'; // fallback
 

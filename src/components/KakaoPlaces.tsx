@@ -26,7 +26,15 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
   const categoriesKey = categories.join(',');
 
   useEffect(() => {
+    let cancelled = false;
+
+    // 새 실행 시작: 이전 실행이 남긴 상태(특히 error)가 최신 결과 렌더링을 가리지 않도록 초기화.
+    setLoading(true);
+    setError('');
+    setPlaces([]);
+
     const renderPlaces = () => {
+      if (cancelled) return;
       const geocoder = new window.kakao.maps.services.Geocoder();
       const ps = new window.kakao.maps.services.Places();
 
@@ -49,6 +57,7 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
         const resultsByCategory = await Promise.all(
           categories.map((c) => searchOneCategory(c, coords))
         );
+        if (cancelled) return;
         const merged = resultsByCategory.flat().sort((a, b) => Number(a.distance) - Number(b.distance));
 
         if (merged.length === 0) {
@@ -60,11 +69,13 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
       };
 
       geocoder.addressSearch(address, (result: any, status: any) => {
+        if (cancelled) return;
         if (status === window.kakao.maps.services.Status.OK) {
           const coords = new window.kakao.maps.LatLng(result[0].y, result[0].x);
           searchPlaces(coords);
         } else {
           ps.keywordSearch(address, (res: any, status2: any) => {
+            if (cancelled) return;
             if (status2 === window.kakao.maps.services.Status.OK) {
                const coords = new window.kakao.maps.LatLng(res[0].y, res[0].x);
                searchPlaces(coords);
@@ -85,6 +96,9 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
 
     if (window.kakao && window.kakao.maps) {
       loadKakaoPlaces();
+      return () => {
+        cancelled = true;
+      };
     } else {
       const scriptId = 'kakao-map-script-main';
       let script = document.getElementById(scriptId) as HTMLScriptElement;
@@ -95,7 +109,9 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
           console.error('[KakaoPlaces] NEXT_PUBLIC_KAKAO_MAP_API_KEY 환경변수가 없습니다.');
           setError('지도 API 키가 설정되지 않았습니다.');
           setLoading(false);
-          return;
+          return () => {
+            cancelled = true;
+          };
         }
         script = document.createElement('script');
         script.id = scriptId;
@@ -106,6 +122,7 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
       script.addEventListener('load', loadKakaoPlaces);
 
       return () => {
+        cancelled = true;
         script.removeEventListener('load', loadKakaoPlaces);
       };
     }
