@@ -81,13 +81,17 @@ export default function StatsPage() {
 
   // 연도별 통계표는 무거운 조회라, "표로 보기"가 실제로 선택됐을 때만 요청한다
   // (그래프 보기만 쓰는 사용자는 이 요청 자체가 나가지 않음).
-  const { data: yearlyResponse, isLoading: yearlyLoading } = useSWR(
+  const { data: yearlyResponse, isLoading: yearlyLoading, error: yearlySwrError } = useSWR(
     region.lawdCd && chartView === 'table' ? `/api/stats/yearly?lawdCd=${region.lawdCd}` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
   const yearlyTable = yearlyResponse?.success ? yearlyResponse.data.yearlyTable : null;
-  const yearlyError = !yearlyLoading && yearlyResponse && !yearlyResponse.success ? (yearlyResponse.error || '연도별 통계를 불러오지 못했습니다.') : null;
+  const yearlyError = yearlySwrError
+    ? '연도별 통계를 불러오지 못했습니다.'
+    : (!yearlyLoading && yearlyResponse && !yearlyResponse.success
+        ? (yearlyResponse.error || '연도별 통계를 불러오지 못했습니다.')
+        : null);
 
   const data = apiResponse?.success ? apiResponse.data : null;
   const fetchError = apiResponse && !apiResponse.success
