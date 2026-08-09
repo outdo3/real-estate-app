@@ -62,7 +62,7 @@ export default function SchoolInfoPage() {
   const [schools, setSchools] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [aptList, setAptList] = useState<any[]>([]);
-  const [aptSort, setAptSort] = useState<'distance' | 'newest'>('distance');
+  const [aptSort, setAptSort] = useState<'distance' | 'newest'>('newest');
 
   // 선택 지역에 맞는 학교 목록 불러오기 (탭 변경 시 리스트만 업데이트)
   useEffect(() => {
