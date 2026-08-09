@@ -3,41 +3,26 @@ import AppProviders from '@/components/AppProviders';
 import { siteConfig } from '@/config/site';
 import './globals.css';
 
-import { headers } from 'next/headers';
-
-export async function generateMetadata(): Promise<Metadata> {
-  let host = 'localhost:3000';
-  try {
-    const headersList = headers();
-    host = headersList.get('host') || 'localhost:3000';
-  } catch (e) {
-    // build time fallback
-    if (process.env.VERCEL_URL) host = process.env.VERCEL_URL;
-  }
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  const origin = `${protocol}://${host}`;
-
-  return {
-    metadataBase: new URL(origin),
-    title: siteConfig.name,
-    description: siteConfig.description,
-    openGraph: {
-      title: siteConfig.name,
-      description: siteConfig.description,
-      siteName: siteConfig.name,
-      locale: 'ko_KR',
-      type: 'website',
-      images: [
-        {
-          url: `${origin}/og-image.png`,
-          width: 1200,
-          height: 630,
-          alt: siteConfig.name,
-        },
-      ],
-    },
-  };
-}
+export const metadata: Metadata = {
+  metadataBase: new URL('https://real-estate-app-park11.vercel.app'),
+  title: '이집 - 부산 실거래가 지도',
+  description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
+  openGraph: {
+    title: '이집 - 부산 실거래가 지도',
+    description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
+    url: 'https://real-estate-app-park11.vercel.app',
+    siteName: '이집',
+    images: [
+      {
+        url: 'https://real-estate-app-park11.vercel.app/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: '이집 메인 이미지',
+      },
+    ],
+    type: 'website',
+  },
+};
 
 export default function RootLayout({
   children,
