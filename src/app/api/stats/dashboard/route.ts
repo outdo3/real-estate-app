@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` });
     }
 
-    const data = await getOrSetCache(`stats-dashboard:${lawdCd}`, 30 * 60 * 1000, async () => {
+    const data = await getOrSetCache(`stats-dashboard:${lawdCd}`, 5 * 60 * 1000, async () => {
       const now = new Date();
 
       // ── 1) 최근 12개월 매매/전세: 그래프 + 핫이슈 + 갭투자 + 전세가율에 재사용 ──

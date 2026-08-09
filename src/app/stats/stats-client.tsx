@@ -87,6 +87,7 @@ export default function StatsPage() {
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
   const yearlyTable = yearlyResponse?.success ? yearlyResponse.data.yearlyTable : null;
+  const yearlyError = !yearlyLoading && yearlyResponse && !yearlyResponse.success ? (yearlyResponse.error || '연도별 통계를 불러오지 못했습니다.') : null;
 
   const data = apiResponse?.success ? apiResponse.data : null;
   const fetchError = apiResponse && !apiResponse.success
@@ -269,7 +270,13 @@ export default function StatsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {!yearlyTable ? (
+                          {yearlyError ? (
+                            <tr>
+                              <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                ⚠️ {yearlyError}
+                              </td>
+                            </tr>
+                          ) : !yearlyTable ? (
                             Array.from({ length: 6 }).map((_, i) => (
                               <tr key={`skeleton-${i}`}>
                                 <td colSpan={5}>

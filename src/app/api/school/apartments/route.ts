@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   try {
     const cacheKey = `school-apts:${schoolName}:${lawdCd}:${latParam || ''}:${lngParam || ''}`;
 
-    const result = await getOrSetCache(cacheKey, 30 * 60 * 1000, async () => {
+    const result = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
       let schoolCoords = [129.0225, 35.0772]; // Default (송도)
 
       if (latParam && lngParam) {

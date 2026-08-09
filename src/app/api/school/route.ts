@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const eduCode = resolveNeisEduCode(sido) || 'C10';
 
   try {
-    const result = await getOrSetCache(`school-list:${region}:${type}`, 60 * 60 * 1000, async () => {
+    const result = await getOrSetCache(`school-list:${region}:${type}`, 10 * 60 * 1000, async () => {
       let rawSchools: any[] = [];
 
       try {

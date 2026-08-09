@@ -66,23 +66,53 @@ export interface MonthTask {
   type: 'apt' | 'rent';
 }
 
-// 여러 월별 조회를 하나의 공용 큐로 모아 동시성을 낮게 고정한 워커 풀로 순차 처리한다.
-// 호출부가 여러 배치로 나눠 각각 병렬 호출하면 배치마다 다시 동시 요청이 몰려 초당
-// 제한에 걸리므로, 항상 하나의 큐로 합쳐 넘겨야 실제 동시 요청 수를 안정적으로 제한할 수 있다.
-export async function fetchMonthsThrottled(tasks: MonthTask[], concurrency = 3): Promise<Record<string, any[]>> {
-  const results: Record<string, any[]> = {};
-  let cursor = 0;
+const GLOBAL_MOLIT_CONCURRENCY = 3;
+let activeMolitRequests = 0;
+const molitWaitQueue: Array<() => void> = [];
 
-  async function worker() {
-    while (cursor < tasks.length) {
-      const task = tasks[cursor++];
-      results[task.key] = await fetchMonthWithRetry(task.lawdCd, task.dealYmd, task.type);
-      // 초당 요청 수를 낮게 유지하기 위한 페이싱
-      await new Promise((r) => setTimeout(r, 200));
-    }
+function acquireMolitSlot(): Promise<void> {
+  if (activeMolitRequests < GLOBAL_MOLIT_CONCURRENCY) {
+    activeMolitRequests++;
+    return Promise.resolve();
   }
+  return new Promise<void>((resolve) => {
+    molitWaitQueue.push(() => {
+      activeMolitRequests++;
+      resolve();
+    });
+  });
+}
 
-  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
-  await Promise.all(workers);
+function releaseMolitSlot(): void {
+  activeMolitRequests--;
+  const next = molitWaitQueue.shift();
+  if (next) next();
+}
+
+async function fetchMonthGated(lawdCd: string, dealYmd: string, type: 'apt' | 'rent'): Promise<any[]> {
+  await acquireMolitSlot();
+  try {
+    const result = await fetchMonthWithRetry(lawdCd, dealYmd, type);
+    // 초당 요청 수를 낮게 유지하기 위한 페이싱: 슬롯을 쥔 채로 대기해야
+    // 전역 동시 요청 수 자체가 실제로 제한된다.
+    await new Promise((r) => setTimeout(r, 200));
+    return result;
+  } finally {
+    releaseMolitSlot();
+  }
+}
+
+// 여러 월별 조회를 하나의 전역 세마포어로 게이팅해, 서로 다른 라우트(예: 대시보드와
+// 연도별 통계)가 동시에 호출되어도 전체 프로세스 기준 동시 MOLIT 요청 수가 항상
+// GLOBAL_MOLIT_CONCURRENCY를 넘지 않도록 보장한다. 호출별로 워커 풀을 새로 만들면
+// 두 라우트가 동시에 실행될 때 실제 동시 요청 수가 배로 늘어나 초당 제한에 걸리므로,
+// 반드시 모듈 레벨에서 공유해야 한다.
+export async function fetchMonthsThrottled(tasks: MonthTask[]): Promise<Record<string, any[]>> {
+  const results: Record<string, any[]> = {};
+  await Promise.all(
+    tasks.map(async (task) => {
+      results[task.key] = await fetchMonthGated(task.lawdCd, task.dealYmd, task.type);
+    })
+  );
   return results;
 }

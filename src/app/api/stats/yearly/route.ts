@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` });
     }
 
-    const yearlyTable = await getOrSetCache(`stats-yearly:${lawdCd}`, 60 * 60 * 1000, async () => {
+    const yearlyTable = await getOrSetCache(`stats-yearly:${lawdCd}`, 10 * 60 * 1000, async () => {
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonthIndex = now.getMonth();
