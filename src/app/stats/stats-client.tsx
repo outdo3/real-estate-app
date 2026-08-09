@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, Suspense } from 'react';
 import useSWR from 'swr';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/components/Header';
 import RegionSelectModal from '@/components/RegionSelectModal';
-import { useRegion } from '@/contexts/RegionContext';
+import { useRegion, RegionState } from '@/contexts/RegionContext';
 import { resolveLawdCdByNames } from '@/lib/region-utils';
 import styles from './page.module.css';
 import {
@@ -36,13 +36,13 @@ const TABS: { key: TabKey; label: string }[] = [
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function StatsPage() {
-  const { region, setRegion, openRegionModal } = useRegion();
+// ?sido=...&sigungu=...로 진입한 경우(사이트맵/공유 링크) 최초 1회만 URL의 지역으로
+// RegionContext를 초기화한다. useSearchParams()는 정적 렌더링 페이지에서 Suspense 경계
+//안에 있어야 하므로 별도 컴포넌트로 분리했다.
+function RegionUrlSync({ setRegion }: { setRegion: (region: RegionState) => void }) {
   const searchParams = useSearchParams();
   const hydratedFromUrl = useRef(false);
 
-  // ?sido=...&sigungu=...로 진입한 경우(사이트맵/공유 링크) 최초 1회만 URL의 지역으로
-  // RegionContext를 초기화한다. 이후 사용자가 모달로 지역을 바꾸는 기존 동작은 그대로 둔다.
   useEffect(() => {
     if (hydratedFromUrl.current) return;
     hydratedFromUrl.current = true;
@@ -60,6 +60,12 @@ export default function StatsPage() {
       });
     });
   }, [searchParams, setRegion]);
+
+  return null;
+}
+
+export default function StatsPage() {
+  const { region, setRegion, openRegionModal } = useRegion();
   const [activeTab, setActiveTab] = useState<TabKey>('volume');
   const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
   const [tradeModal, setTradeModal] = useState<{ title: string; trades: any[] } | null>(null);
@@ -134,6 +140,9 @@ export default function StatsPage() {
 
   return (
     <div className={styles.main}>
+      <Suspense fallback={null}>
+        <RegionUrlSync setRegion={setRegion} />
+      </Suspense>
       <Header pageTitle="시장 통계·분석" />
       <div className="container">
         {/* 상단 지역 선택: 실거래가 탭과 동일한 전역 지역 선택 모달을 공유한다 */}
