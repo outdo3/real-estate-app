@@ -180,6 +180,9 @@ export default function ApartmentDetail() {
   const latestPrice = filteredTrades.length > 0 ? filteredTrades[0].priceStr : (trades.length > 0 ? trades[0].priceStr : '조회 중...');
   const latestPriceNum = filteredTrades.length > 0 ? filteredTrades[0].price : 0; // 억 단위 정수
 
+  const firstTrade = trades.length > 0 ? trades[0] : null;
+  const primaryAddress = `${regionName || firstTrade?.dong || ''} ${aptName}`.trim();
+
   const openModal = (modalName: string) => {
     setActiveModal(modalName);
   };
@@ -189,12 +192,10 @@ export default function ApartmentDetail() {
   };
 
   const renderModalContent = () => {
-    const firstTrade = trades.length > 0 ? trades[0] : null;
-    const primaryAddress = `${regionName || firstTrade?.dong || ''} ${aptName}`.trim();
-    const jibunAddress = firstTrade?.dong && firstTrade?.jibun 
-      ? `${regionName || firstTrade.dong} ${firstTrade.jibun}` 
+    const jibunAddress = firstTrade?.dong && firstTrade?.jibun
+      ? `${regionName || firstTrade.dong} ${firstTrade.jibun}`
       : undefined;
-    
+
     switch (activeModal) {
       case '지도':
         return (
@@ -670,23 +671,40 @@ export default function ApartmentDetail() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
           <div className={styles.panel} style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🎓 학군 정보</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• {regionName} 송도초등학교 (도보 8분)</p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• {regionName} 암남중학교 (도보 12분)</p>
+            {primaryAddress ? (
+              <KakaoPlaces address={primaryAddress} categories={['SC4']} limit={2} />
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>단지 위치 확인 후 표시됩니다.</p>
+            )}
           </div>
           <div className={styles.panel} style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🚇 교통 정보</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• 1호선 자갈치역 (버스 10분)</p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• 남항대교 진입 용이</p>
+            {primaryAddress ? (
+              <KakaoPlaces address={primaryAddress} categories={['SW8']} limit={2} />
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>단지 위치 확인 후 표시됩니다.</p>
+            )}
           </div>
           <div className={styles.panel} style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🏥 편의 시설</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• 고신대학교복음병원 (도보 5분)</p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• 송도해수욕장 (도보 3분)</p>
+            {primaryAddress ? (
+              <KakaoPlaces address={primaryAddress} categories={['HP8', 'MT1']} limit={3} />
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>단지 위치 확인 후 표시됩니다.</p>
+            )}
           </div>
           <div className={styles.panel} style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🏢 단지 상세</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• 용적률: 868% / 건폐율: 48%</p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• 난방: 개별난방, 도시가스</p>
+            {(aptInfo?.['용적률'] || aptInfo?.['건폐율']) ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                • 용적률: {aptInfo?.['용적률'] || '정보 없음'} / 건폐율: {aptInfo?.['건폐율'] || '정보 없음'}
+              </p>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>용적률/건폐율 정보 없음</p>
+            )}
+            {aptInfo?.['주용도'] && (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>• 주용도: {aptInfo['주용도']}</p>
+            )}
           </div>
         </div>
 
