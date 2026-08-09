@@ -8,6 +8,7 @@ import styles from './detail.module.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import KakaoMapEmbed from '@/components/KakaoMapEmbed';
 import KakaoPlaces from '@/components/KakaoPlaces';
+import { getAreaInfo } from '@/lib/area-utils';
 
 interface Trade {
   id: number;
@@ -467,9 +468,9 @@ export default function ApartmentDetail() {
                 }}
               >전체</button>
               {Array.from(new Set(trades.map(t => t.area))).sort((a, b) => parseFloat(a) - parseFloat(b)).map(area => {
-                const pyung = Math.round(parseFloat(area) / 3.3058);
+                const { supplyPyung } = getAreaInfo(parseFloat(area));
                 return (
-                  <button 
+                  <button
                     key={area}
                     onClick={() => setSelectedArea(area)}
                     style={{
@@ -479,7 +480,7 @@ export default function ApartmentDetail() {
                       borderColor: selectedArea === area ? 'var(--primary-color)' : 'var(--border-color)'
                     }}
                   >
-                    {area} <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>({pyung}평)</span>
+                    {area}㎡ <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>(공급 약 {supplyPyung}평)</span>
                   </button>
                 );
               })}
@@ -492,7 +493,7 @@ export default function ApartmentDetail() {
                   <span className={styles.price}>{latestPrice}</span>
                   {trades.length > 0 && (
                     <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      ({trades[0].area} • {trades[0].floor}층 • {trades[0].tradeDate})
+                      ({getAreaInfo(parseFloat(trades[0].area)).label} • {trades[0].floor}층 • {trades[0].tradeDate})
                     </span>
                   )}
                 </div>
@@ -632,7 +633,7 @@ export default function ApartmentDetail() {
               <div>{apiError ? `실거래가 데이터를 불러오지 못했습니다. (${apiError})` : '거래 내역이 없습니다.'}</div>
             ) : (
               filteredTrades.map((trade, index) => {
-                const pyung = Math.round(parseFloat(trade.area) / 3.3058);
+                const areaInfo = getAreaInfo(parseFloat(trade.area));
                 const prevTrade = filteredTrades[index + 1];
                 let diffBadge = null;
                 
@@ -653,7 +654,7 @@ export default function ApartmentDetail() {
                         {trade.priceStr}
                         {diffBadge}
                       </div>
-                      <div className={styles.timelineInfo}>{trade.area} ({pyung}평) • {trade.floor}층 • {trade.tradeType.replace('아파트 ', '')}</div>
+                      <div className={styles.timelineInfo}>{areaInfo.label} • {trade.floor}층 • {trade.tradeType.replace('아파트 ', '')}</div>
                     </div>
                   </div>
                 );
