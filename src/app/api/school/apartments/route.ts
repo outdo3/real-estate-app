@@ -36,21 +36,21 @@ async function fetchBuildYearFromRegistry(
   const parsed = parseDongJibun(addressName);
   if (!parsed) return null;
 
-  const match = regcodes.find((r: any) => (r.name || '').includes(parsed.dong) && r.code.startsWith(lawdCd));
-  if (!match) return null;
-  const bjdongCd = match.code.substring(5, 10);
-
-  const parts = parsed.jibun.split('-');
-  const bunNum = parseInt(parts[0], 10);
-  const jiNum = parts.length > 1 ? parseInt(parts[1], 10) : 0;
-  if (isNaN(bunNum)) return null;
-  const bun = bunNum.toString().padStart(4, '0');
-  const ji = jiNum.toString().padStart(4, '0');
-
-  const cleanKey = encodeURIComponent(decodeURIComponent(BUILD_YEAR_API_KEY.trim().replace(/['"]/g, '')));
-  const bldUrl = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&platGbCd=0&bun=${bun}&ji=${ji}&numOfRows=100`;
-
   try {
+    const match = regcodes.find((r: any) => (r.name || '').includes(parsed.dong) && r.code.startsWith(lawdCd));
+    if (!match) return null;
+    const bjdongCd = match.code.substring(5, 10);
+
+    const parts = parsed.jibun.split('-');
+    const bunNum = parseInt(parts[0], 10);
+    const jiNum = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+    if (isNaN(bunNum)) return null;
+    const bun = bunNum.toString().padStart(4, '0');
+    const ji = jiNum.toString().padStart(4, '0');
+
+    const cleanKey = encodeURIComponent(decodeURIComponent(BUILD_YEAR_API_KEY.trim().replace(/['"]/g, '')));
+    const bldUrl = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&platGbCd=0&bun=${bun}&ji=${ji}&numOfRows=100`;
+
     const res = await fetch(bldUrl, { signal: AbortSignal.timeout(2500) });
     if (!res.ok) return null;
     const xmlData = await res.text();
