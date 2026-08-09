@@ -41,6 +41,7 @@ export default function ApartmentDetail() {
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
   const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
   const [onlySales, setOnlySales] = useState<boolean>(true);
+  const [visibleCount, setVisibleCount] = useState<number>(15);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -71,6 +72,10 @@ export default function ApartmentDetail() {
       setOnlySales(false);
     }
   }, [tradeTypeFilter]);
+
+  useEffect(() => {
+    setVisibleCount(15);
+  }, [selectedArea, tradeTypeFilter, periodFilter, onlySales]);
 
   useEffect(() => {
     if (!aptName) return;
@@ -710,30 +715,39 @@ export default function ApartmentDetail() {
 
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem' }}>전체 실거래 내역 ({selectedArea})</h2>
         <div className={styles.panel} style={{ padding: 0, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead style={{ backgroundColor: 'var(--bg-color)' }}>
-              <tr>
-                <th style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>계약일</th>
-                <th style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>유형</th>
-                <th style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>금액</th>
-                <th style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>층</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTrades.map((t) => (
-                <tr key={`table-${t.id}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '1rem' }}>{t.tradeDate}</td>
-                  <td style={{ padding: '1rem' }}>
-                    <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem', backgroundColor: t.tradeType.includes('매매') || t.tradeType === '실거래' ? '#e0e7ff' : '#dcfce3', color: t.tradeType.includes('매매') || t.tradeType === '실거래' ? '#3b82f6' : '#10b981' }}>
-                      {t.tradeType.replace('아파트 ', '')}
-                    </span>
-                  </td>
-                  <td style={{ padding: '1rem', fontWeight: 600 }}>{t.priceStr}</td>
-                  <td style={{ padding: '1rem', color: 'var(--text-secondary)' }}>{t.floor}층</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {filteredTrades.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>거래 내역이 없습니다.</div>
+          ) : (
+            <>
+              {filteredTrades.slice(0, visibleCount).map((t) => {
+                const areaInfo = getAreaInfo(parseFloat(t.area));
+                const isSale = t.tradeType.includes('매매') || t.tradeType === '실거래';
+                return (
+                  <div key={`card-${t.id}`} style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem', backgroundColor: isSale ? '#e0e7ff' : '#dcfce3', color: isSale ? '#3b82f6' : '#10b981' }}>
+                        {t.tradeType.replace('아파트 ', '')}
+                      </span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t.tradeDate}</span>
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                      {areaInfo.label} · <b>{t.priceStr}</b> · {t.floor}층
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredTrades.length > visibleCount && (
+                <div style={{ padding: '1rem', textAlign: 'center' }}>
+                  <button
+                    onClick={() => setVisibleCount((v) => v + 15)}
+                    style={{ padding: '0.6rem 1.5rem', borderRadius: '999px', border: '1px solid var(--border-color)', background: 'white', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    더보기 ({filteredTrades.length - visibleCount}건 더 있음)
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
