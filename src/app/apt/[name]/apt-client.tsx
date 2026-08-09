@@ -486,7 +486,7 @@ export default function ApartmentDetail() {
                       borderColor: selectedArea === area ? 'var(--primary-color)' : 'var(--border-color)'
                     }}
                   >
-                    {area}㎡ <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>(공급 약 {supplyPyung}평)</span>
+                    {area} <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>(공급 약 {supplyPyung}평)</span>
                   </button>
                 );
               })}
