@@ -25,6 +25,7 @@ interface Trade {
   dong?: string;
   buildYear?: string;
   jibun?: string;
+  monthlyRent?: number;
 }
 
 export default function ApartmentDetail() {
@@ -55,6 +56,11 @@ export default function ApartmentDetail() {
 
     const queryType = searchParams.get('type');
     if (queryType === 'rent') setTradeTypeFilter('전월세');
+
+    // lawdCd도 여기서 미리 읽어둔다 — InvestmentMetrics가 부모의 fetchTrades 이펙트보다
+    // 먼저 마운트/실행되므로, 이걸 하지 않으면 하드코딩된 기본값('11680')으로 한 번 잘못 호출된다.
+    const queryLawdCd = searchParams.get('lawdCd');
+    setLawdCdState(queryLawdCd || '11680');
   }, [params.name]);
 
   const formatKoreanPrice = (val: string) => {
@@ -622,12 +628,11 @@ export default function ApartmentDetail() {
                 const isSale = t.tradeType.includes('매매') || t.tradeType === '실거래';
                 const prevTrade = filteredTrades[index + 1];
                 let diffBadge = null;
-                if (prevTrade && t.tradeType.includes('매매')) {
+                if (prevTrade && isSale) {
                   const diff = t.price - prevTrade.price;
-                  if (diff > 0) diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>▲ {diff}억</span>;
-                  else if (diff < 0) diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#e0e7ff', color: '#3b82f6', fontWeight: 'bold' }}>▼ {Math.abs(diff)}억</span>;
+                  if (diff > 0) diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>▲ {diff.toFixed(1)}억</span>;
+                  else if (diff < 0) diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#e0e7ff', color: '#3b82f6', fontWeight: 'bold' }}>▼ {Math.abs(diff).toFixed(1)}억</span>;
                 }
-                if (t.tradeType === '신고가') diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>신고가</span>;
 
                 return (
                   <div key={`card-${t.id}`} style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9' }}>

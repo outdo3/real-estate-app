@@ -2,6 +2,7 @@ export interface AptBriefTrade {
   tradeDate: string;
   price: number;
   tradeType: string;
+  area: string;
 }
 
 export interface AptBriefInput {
@@ -29,9 +30,13 @@ export function buildAptBrief(input: AptBriefInput): string[] {
   // 1. 최근 시세 추이 (매매 기준, 거래 2건 이상일 때만 — trades는 최신순이므로
   // trades[0]이 최신, trades[trades.length-1]이 가장 오래된 거래)
   if (tradeTypeFilter === '매매' && trades.length >= 2) {
-    const latest = trades[0].price;
-    const oldest = trades[trades.length - 1].price;
-    if (oldest > 0) {
+    // 평형(면적)이 다른 거래끼리 절대 가격을 비교하면 왜곡되므로, 면적당 가격(평당가 성격)으로
+    // 정규화한 뒤 비교한다.
+    const latestArea = parseFloat(trades[0].area);
+    const oldestArea = parseFloat(trades[trades.length - 1].area);
+    const latest = latestArea > 0 ? trades[0].price / latestArea : NaN;
+    const oldest = oldestArea > 0 ? trades[trades.length - 1].price / oldestArea : NaN;
+    if (oldest > 0 && !isNaN(latest)) {
       const pctChange = ((latest - oldest) / oldest) * 100;
       if (pctChange >= 3) {
         sentences.push(`최근 시세는 약 ${pctChange.toFixed(1)}% 상승 추세입니다.`);

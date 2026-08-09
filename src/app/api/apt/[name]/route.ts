@@ -78,7 +78,8 @@ export async function GET(
           tradeType: item.typeLabel,
           dong: item.dong || '',
           buildYear: item.buildYear || '',
-          jibun: item.jibun || ''
+          jibun: item.jibun || '',
+          monthlyRent: item.monthlyRent || 0,
         };
       });
 

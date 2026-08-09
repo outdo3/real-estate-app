@@ -13,6 +13,7 @@ interface SimpleTrade {
   area: string;
   tradeDate: string;
   tradeType: string;
+  monthlyRent?: number;
 }
 
 // 기존 필터 토글(매매/전월세, 기간)과 무관하게 최근 6개월 매매+전월세를 병렬로 고정
@@ -55,7 +56,10 @@ export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetrics
     ? [...saleTrades].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime())[0]
     : null;
 
-  const sortedRent = rentTrades ? [...rentTrades].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime()) : [];
+  // 순수 전세(월세 없음)만 필터링 — 월세가 섞이면 보증금이 전세 보증금과 비교 불가능한 규모라
+  // 갭/전세가율 계산이 완전히 틀어진다.
+  const jeonseOnlyRent = rentTrades ? rentTrades.filter((r) => (r.monthlyRent ?? 0) === 0) : [];
+  const sortedRent = [...jeonseOnlyRent].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
   const matchedRent = latestSale
     ? sortedRent.find((r) => r.area === latestSale.area) || (sortedRent.length > 0 ? sortedRent[0] : null)
     : null;
