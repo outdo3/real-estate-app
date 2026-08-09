@@ -18,3 +18,33 @@ export async function resolveRegionNameByLawdCd(
     return null;
   }
 }
+
+type RegcodeEntry = { code: string; name: string };
+
+// URL 쿼리파라미터로 받은 "시/도 전체이름"+"시/군/구 이름"을 RegionContext가 요구하는
+// lawdCd(5자리)로 변환한다. RegionSelectModal의 selectSido/selectSigungu와 동일하게
+// REGCODE_PROXY를 시도 목록 → 해당 시도의 시군구 목록 순서로 조회해 이름을 매칭한다.
+export async function resolveLawdCdByNames(
+  sido: string,
+  sigungu: string
+): Promise<string | null> {
+  try {
+    const sidoRes = await fetch(`${REGCODE_PROXY}?regcode_pattern=*00000000`);
+    const sidoData = await sidoRes.json();
+    const sidoEntry = ((sidoData.regcodes || []) as RegcodeEntry[]).find((r) => r.name === sido);
+    if (!sidoEntry) return null;
+
+    const sidoCode = sidoEntry.code.substring(0, 2);
+    const sigunguRes = await fetch(
+      `${REGCODE_PROXY}?regcode_pattern=${sidoCode}*00000&is_ignore_zero=true`
+    );
+    const sigunguData = await sigunguRes.json();
+    const sigunguEntry = ((sigunguData.regcodes || []) as RegcodeEntry[]).find(
+      (r) => r.name === `${sido} ${sigungu}`
+    );
+    return sigunguEntry ? sigunguEntry.code.substring(0, 5) : null;
+  } catch (e) {
+    console.error('[region-utils] 지역명 -> lawdCd 조회 실패', e);
+    return null;
+  }
+}
