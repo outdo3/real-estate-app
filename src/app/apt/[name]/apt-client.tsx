@@ -8,7 +8,11 @@ import styles from './detail.module.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import KakaoMapEmbed from '@/components/KakaoMapEmbed';
 import KakaoPlaces from '@/components/KakaoPlaces';
+import AreaSelector from '@/components/AreaSelector';
+import InvestmentMetrics from '@/components/InvestmentMetrics';
+import KakaoShareButton from '@/components/KakaoShareButton';
 import { getAreaInfo } from '@/lib/area-utils';
+import { buildAptBrief } from '@/lib/apt-brief';
 
 interface Trade {
   id: number;
@@ -427,12 +431,12 @@ export default function ApartmentDetail() {
   return (
     <div className={styles.main}>
       <Header />
-      
+
       {/* 팝업(모달) */}
       {activeModal && (
         <div className={styles.modalOverlay} onClick={closeModal}>
-          <div 
-            className={styles.modalContent} 
+          <div
+            className={styles.modalContent}
             onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: (activeModal === '지도' || activeModal === '로드뷰') ? '800px' : '500px' }}
           >
@@ -446,11 +450,12 @@ export default function ApartmentDetail() {
           </div>
         </div>
       )}
-      
+
+      {/* ── 1구역: 단지 기본 스펙 + 시세 차트 + 핵심 투자 지표 ── */}
       <div className={styles.header}>
         <div className="container">
           <div className={styles.breadcrumb}>아파트실거래 &gt; {regionName ? regionName.split(' ').join(' > ') : ''} {(urlDong || (trades.length > 0 && trades[0].dong)) ? `> ${urlDong || trades[0].dong}` : ''} &gt; {aptName}</div>
-          
+
           <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
             <h1 className={styles.title} style={{ marginBottom: '0.75rem' }}>{aptName}</h1>
             <div className={styles.tags} style={{ marginBottom: 0 }}>
@@ -462,63 +467,31 @@ export default function ApartmentDetail() {
             </div>
           </div>
 
-          <div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-              <button 
-                onClick={() => setSelectedArea('전체')}
-                style={{
-                  padding: '0.5rem 1rem', borderRadius: '4px', fontWeight: 600, border: '1px solid', cursor: 'pointer',
-                  backgroundColor: selectedArea === '전체' ? 'var(--primary-color)' : 'white',
-                  color: selectedArea === '전체' ? 'white' : 'var(--text-secondary)',
-                  borderColor: selectedArea === '전체' ? 'var(--primary-color)' : 'var(--border-color)'
-                }}
-              >전체</button>
-              {Array.from(new Set(trades.map(t => t.area))).sort((a, b) => parseFloat(a) - parseFloat(b)).map(area => {
-                const { supplyPyung } = getAreaInfo(parseFloat(area));
-                return (
-                  <button
-                    key={area}
-                    onClick={() => setSelectedArea(area)}
-                    style={{
-                      padding: '0.5rem 1rem', borderRadius: '4px', fontWeight: 600, border: '1px solid', cursor: 'pointer',
-                      backgroundColor: selectedArea === area ? 'var(--primary-color)' : 'white',
-                      color: selectedArea === area ? 'white' : 'var(--text-secondary)',
-                      borderColor: selectedArea === area ? 'var(--primary-color)' : 'var(--border-color)'
-                    }}
-                  >
-                    {area} <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>(공급 약 {supplyPyung}평)</span>
-                  </button>
-                );
-              })}
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>최근 실거래가</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <span className={styles.price}>{latestPrice}</span>
-                  {trades.length > 0 && (
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      ({getAreaInfo(parseFloat(trades[0].area)).label} • {trades[0].floor}층 • {trades[0].tradeDate})
-                    </span>
-                  )}
-                </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>최근 실거래가</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <span className={styles.price}>{latestPrice}</span>
+                {trades.length > 0 && (
+                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                    ({getAreaInfo(parseFloat(trades[0].area)).label} • {trades[0].floor}층 • {trades[0].tradeDate})
+                  </span>
+                )}
               </div>
-              <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '2rem' }}>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                  {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}
-                </div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}
-                </div>
+            </div>
+            <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '2rem' }}>
+              <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}
+              </div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className={`container ${styles.contentGrid}`}>
-        {/* 왼쪽 차트 패널 */}
+      <div className="container">
         <div className={styles.panel}>
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
             <h2 className={styles.panelTitle} style={{ borderBottom: 'none', margin: 0, padding: 0, whiteSpace: 'nowrap' }}>실거래가 시세 차트</h2>
@@ -534,7 +507,7 @@ export default function ApartmentDetail() {
               </div>
             </div>
           </div>
-          
+
           {loading ? (
             <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>데이터를 불러오는 중입니다...</div>
           ) : filteredTrades.length === 0 ? (
@@ -556,21 +529,21 @@ export default function ApartmentDetail() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" />
-                  <XAxis 
-                    dataKey="id" 
-                    axisLine={false} 
-                    tickLine={false} 
+                  <XAxis
+                    dataKey="id"
+                    axisLine={false}
+                    tickLine={false}
                     tick={{fill: 'var(--text-secondary)'}}
                     tickFormatter={(id) => chartData[id]?.date.substring(2, 7) || ''}
                   />
-                  <YAxis 
-                    domain={['dataMin - (dataMin * 0.1)', 'dataMax + (dataMax * 0.1)']} 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{fill: 'var(--text-secondary)'}} 
-                    tickFormatter={(val) => val >= 1 ? `${val}억` : `${Math.round(val * 10000)}만`} 
+                  <YAxis
+                    domain={['dataMin - (dataMin * 0.1)', 'dataMax + (dataMax * 0.1)']}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{fill: 'var(--text-secondary)'}}
+                    tickFormatter={(val) => val >= 1 ? `${val}억` : `${Math.round(val * 10000)}만`}
                   />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--shadow-md)', padding: '12px' }}
                     content={({ active, payload, label }) => {
                       if (active && payload && payload.length) {
@@ -585,14 +558,14 @@ export default function ApartmentDetail() {
                       return null;
                     }}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="price" 
+                  <Area
+                    type="monotone"
+                    dataKey="price"
                     name="거래가"
-                    stroke="var(--primary-color)" 
+                    stroke="var(--primary-color)"
                     strokeWidth={3}
-                    fillOpacity={1} 
-                    fill="url(#colorPrice)" 
+                    fillOpacity={1}
+                    fill="url(#colorPrice)"
                     activeDot={{ r: 8, fill: 'var(--primary-color)', stroke: 'white', strokeWidth: 2 }}
                   />
                 </AreaChart>
@@ -600,16 +573,15 @@ export default function ApartmentDetail() {
             </div>
           )}
 
+          <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} />
+
           <div className={styles.quickButtons} style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', justifyContent: 'center' }}>
             <button className={styles.quickBtn} onClick={() => openModal('지도')}>지도</button>
             <button className={styles.quickBtn} onClick={() => openModal('로드뷰')}>로드뷰</button>
             <button className={styles.quickBtn} onClick={() => openModal('단지정보')}>단지정보</button>
             <button className={styles.quickBtn} onClick={() => openModal('대출한도')}>대출한도</button>
-            <button className={styles.quickBtn} onClick={() => openModal('학군')}>학군</button>
-            <button className={styles.quickBtn} onClick={() => openModal('교통')}>교통</button>
-            
-            <button 
-              className={styles.quickBtn} 
+            <button
+              className={styles.quickBtn}
               style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', fontWeight: 'bold' }}
               onClick={() => openModal('건축물대장')}
             >
@@ -617,13 +589,18 @@ export default function ApartmentDetail() {
             </button>
           </div>
         </div>
+      </div>
 
-        {/* 오른쪽 실거래가 타임라인 패널 */}
+      {/* ── 2구역: 평형 선택 + 평형별 실거래 내역 + 단지 브리핑 ── */}
+      <div className={`container ${styles.sectionBlock}`}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem' }}>평형별 실거래 내역</h2>
         <div className={styles.panel}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
-            <h2 className={styles.panelTitle} style={{ borderBottom: 'none', margin: 0, padding: 0 }}>최근 실거래 타임라인</h2>
-            <select 
-              value={onlySales ? 'sales' : 'all'} 
+          <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} />
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1.5rem 0 1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{selectedArea === '전체' ? '전체 평형' : getAreaInfo(parseFloat(selectedArea)).label} · 총 {filteredTrades.length}건</span>
+            <select
+              value={onlySales ? 'sales' : 'all'}
               onChange={(e) => setOnlySales(e.target.value === 'sales')}
               style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
             >
@@ -631,49 +608,73 @@ export default function ApartmentDetail() {
               <option value="sales" disabled={tradeTypeFilter === '전월세'}>{tradeTypeFilter === '전월세' ? '전월세만 보기' : '매매만 보기'}</option>
             </select>
           </div>
-          <div className={styles.timeline}>
-            
-            {loading ? (
-              <div>데이터를 불러오는 중입니다...</div>
-            ) : filteredTrades.length === 0 ? (
-              <div>{apiError ? `실거래가 데이터를 불러오지 못했습니다. (${apiError})` : '거래 내역이 없습니다.'}</div>
-            ) : (
-              filteredTrades.map((trade, index) => {
-                const areaInfo = getAreaInfo(parseFloat(trade.area));
+
+          {filteredTrades.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              {apiError ? `실거래가 데이터를 불러오지 못했습니다. (${apiError})` : '거래 내역이 없습니다.'}
+            </div>
+          ) : (
+            <>
+              {filteredTrades.slice(0, visibleCount).map((t, index) => {
+                const areaInfo = getAreaInfo(parseFloat(t.area));
+                const isSale = t.tradeType.includes('매매') || t.tradeType === '실거래';
                 const prevTrade = filteredTrades[index + 1];
                 let diffBadge = null;
-                
-                if (prevTrade && trade.tradeType.includes('매매')) {
-                  const diff = trade.price - prevTrade.price;
+                if (prevTrade && t.tradeType.includes('매매')) {
+                  const diff = t.price - prevTrade.price;
                   if (diff > 0) diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>▲ {diff}억</span>;
                   else if (diff < 0) diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#e0e7ff', color: '#3b82f6', fontWeight: 'bold' }}>▼ {Math.abs(diff)}억</span>;
                 }
-                
-                if (trade.tradeType === '신고가') diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>신고가</span>;
+                if (t.tradeType === '신고가') diffBadge = <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>신고가</span>;
 
                 return (
-                  <div key={trade.id} className={styles.timelineItem}>
-                    <div className={styles.timelineDot}></div>
-                    <div className={styles.timelineContent}>
-                      <div className={styles.timelineDate}>{trade.tradeDate}</div>
-                      <div className={styles.timelinePrice} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        {trade.priceStr}
-                        {diffBadge}
-                      </div>
-                      <div className={styles.timelineInfo}>{areaInfo.label} • {trade.floor}층 • {trade.tradeType.replace('아파트 ', '')}</div>
+                  <div key={`card-${t.id}`} style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem', backgroundColor: isSale ? '#e0e7ff' : '#dcfce3', color: isSale ? '#3b82f6' : '#10b981' }}>
+                        {t.tradeType.replace('아파트 ', '')}
+                      </span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t.tradeDate}</span>
+                      {diffBadge}
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                      {areaInfo.label} · <b>{t.priceStr}</b> · {t.floor}층
                     </div>
                   </div>
                 );
-              })
-            )}
+              })}
+              {filteredTrades.length > visibleCount && (
+                <div style={{ padding: '1rem', textAlign: 'center' }}>
+                  <button
+                    onClick={() => setVisibleCount((v) => v + 15)}
+                    style={{ padding: '0.6rem 1.5rem', borderRadius: '999px', border: '1px solid var(--border-color)', background: 'white', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    더보기 ({filteredTrades.length - visibleCount}건 더 있음)
+                  </button>
+                </div>
+              )}
+            </>
+          )}
 
+          <div className={styles.briefCard}>
+            <div className={styles.briefTitle}>💡 단지 브리핑</div>
+            <ul className={styles.briefList}>
+              {buildAptBrief({
+                trades: filteredTrades,
+                tradeTypeFilter,
+                totalHouseholds: aptInfo?.['세대수'] ?? null,
+                buildYear: trades.length > 0 && trades[0].buildYear ? parseInt(trades[0].buildYear, 10) : null,
+              }).map((sentence, i) => (
+                <li key={i}>{sentence}</li>
+              ))}
+            </ul>
           </div>
         </div>
       </div>
 
-      <div className="container" style={{ marginTop: '2rem' }}>
+      {/* ── 3구역: 학군/입지 정보 + 커뮤니티 + 공유 ── */}
+      <div className={`container ${styles.sectionBlock}`}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem' }}>단지 입지 분석</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
           <div className={styles.panel} style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🎓 학군 정보</h3>
             {!loading && primaryAddress ? (
@@ -713,43 +714,21 @@ export default function ApartmentDetail() {
           </div>
         </div>
 
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem' }}>전체 실거래 내역 ({selectedArea})</h2>
-        <div className={styles.panel} style={{ padding: 0, overflow: 'hidden' }}>
-          {filteredTrades.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              {apiError ? `실거래가 데이터를 불러오지 못했습니다. (${apiError})` : '거래 내역이 없습니다.'}
-            </div>
-          ) : (
-            <>
-              {filteredTrades.slice(0, visibleCount).map((t) => {
-                const areaInfo = getAreaInfo(parseFloat(t.area));
-                const isSale = t.tradeType.includes('매매') || t.tradeType === '실거래';
-                return (
-                  <div key={`card-${t.id}`} style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                      <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem', backgroundColor: isSale ? '#e0e7ff' : '#dcfce3', color: isSale ? '#3b82f6' : '#10b981' }}>
-                        {t.tradeType.replace('아파트 ', '')}
-                      </span>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t.tradeDate}</span>
-                    </div>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                      {areaInfo.label} · <b>{t.priceStr}</b> · {t.floor}층
-                    </div>
-                  </div>
-                );
-              })}
-              {filteredTrades.length > visibleCount && (
-                <div style={{ padding: '1rem', textAlign: 'center' }}>
-                  <button
-                    onClick={() => setVisibleCount((v) => v + 15)}
-                    style={{ padding: '0.6rem 1.5rem', borderRadius: '999px', border: '1px solid var(--border-color)', background: 'white', fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    더보기 ({filteredTrades.length - visibleCount}건 더 있음)
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+        <div className={styles.communityCard}>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>💬 {aptName} 실거주민 이야기가 궁금하다면?</div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>커뮤니티에서 이 단지에 대한 이야기를 나눠보세요.</div>
+          </div>
+          <Link href={`/community?aptName=${encodeURIComponent(aptName)}`} className={styles.quickBtn} style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            커뮤니티 가기 &gt;
+          </Link>
+        </div>
+
+        <div className={styles.shareRow}>
+          <KakaoShareButton
+            title={`${aptName} 실거래가`}
+            description={`최근 실거래가 ${latestPrice} · ${(regionName || '').trim()} ${aptName}`.trim()}
+          />
         </div>
       </div>
     </div>

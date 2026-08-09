@@ -246,3 +246,64 @@
   font-weight: 600;
   width: 40%;
 }
+
+/* 3구역 레이아웃 개편: 섹션 간격, 브리핑 카드, 커뮤니티 CTA, 공유 버튼 줄 */
+.sectionBlock {
+  margin-top: 2rem;
+}
+
+.briefCard {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.briefTitle {
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.briefList {
+  margin: 0;
+  padding-left: 1.2rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+
+.communityCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.shareRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .sectionBlock {
+    margin-top: 1.25rem;
+  }
+  .briefCard,
+  .communityCard {
+    padding: 1rem;
+  }
+  .communityCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
