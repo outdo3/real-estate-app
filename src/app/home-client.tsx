@@ -86,8 +86,22 @@ export default function Home() {
 
   // 지역 선택 모달에서 지역이 확정되면(그리드 선택 또는 키워드 역지오코딩), 지도 중심을
   // 해당 지역으로 이동시킨다. 검색 강조는 새 지역과 무관해지므로 해제.
-  const handleRegionFinalize = (next: RegionState) => {
+  const handleRegionFinalize = (next: RegionState, exactCoords?: { lat: number; lng: number }) => {
     setHighlightedMarkerName(null);
+
+    // exactCoords가 있으면(자동완성으로 특정 단지를 검색해 확정된 경우) 그 좌표가 이미
+    // 그 단지 자체의 정확한 위치다 — 이걸 무시하고 동 이름(displayRegionName)을 다시
+    // addressSearch로 지오코딩하면 그 동의 대표 지점(엉뚱한 곳, 특히 우동처럼 넓은 동에서는
+    // 검색한 단지와 몇 km씩 떨어진 곳)으로 지도가 이동하는 버그가 있었다. 정확한 좌표를
+    // 그대로 쓰고, 검색해서 찾은 단지가 넓은 지역 뷰에 묻히지 않도록 확대까지 한다.
+    if (exactCoords) {
+      setCenter(exactCoords);
+      setMapLevel((lvl) => Math.min(lvl, 3));
+      return;
+    }
+
+    // exactCoords가 없는 경우(그리드로 시/군/구·읍면동을 직접 고른 경우)는 특정 지점이
+    // 없으므로 기존처럼 지역명을 지오코딩해 대표 지점으로 이동한다.
     if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
       const geocoder = new window.kakao.maps.services.Geocoder();
       geocoder.addressSearch(next.displayRegionName, (result: any, status: any) => {

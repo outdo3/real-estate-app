@@ -19,8 +19,11 @@ interface RegionSelectModalProps {
   /**
    * 지역이 확정(그리드 선택 또는 키워드 역지오코딩)된 직후 호출된다.
    * 홈 화면은 이를 이용해 지도 중심을 해당 지역으로 이동시킨다.
+   * exactCoords가 있으면(단지 검색으로 확정된 경우) 그 좌표가 검색한 단지 자체의 정확한
+   * 위치이므로, 호출부는 이를 그대로 지도 중심으로 써야 한다 — 동 이름을 다시
+   * addressSearch로 지오코딩하면 그 동의 대표 지점(엉뚱한 곳)으로 튈 수 있다.
    */
-  onRegionFinalize?: (region: RegionState) => void;
+  onRegionFinalize?: (region: RegionState, exactCoords?: { lat: number; lng: number }) => void;
 }
 
 // 아실 스타일 전면 지역 선택 모달: 시도 > 시군구 > 읍면동 2열 그리드.
@@ -94,10 +97,10 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       .finally(() => setRegionLoading(false));
   };
 
-  const finalize = (next: RegionState) => {
+  const finalize = (next: RegionState, exactCoords?: { lat: number; lng: number }) => {
     setRegion(next);
     closeRegionModal();
-    onRegionFinalize?.(next);
+    onRegionFinalize?.(next, exactCoords);
   };
 
   const selectDong = (dong: RegionOption | null) => {
@@ -142,13 +145,18 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       // (카카오의 region_1depth_name은 종종 "서울"처럼 축약된 이름을 반환해
       //  전역 상태의 sido 값과 형식이 어긋날 수 있다.)
       resolveRegionNameByLawdCd(lawdCd).then((resolved) => {
-        finalize({
-          lawdCd,
-          dong: 'all',
-          sido: resolved?.sido || region.address_name,
-          sigungu: resolved?.sigungu || '',
-          displayRegionName: region.address_name || addressNameFallback,
-        });
+        finalize(
+          {
+            lawdCd,
+            dong: 'all',
+            sido: resolved?.sido || region.address_name,
+            sigungu: resolved?.sigungu || '',
+            displayRegionName: region.address_name || addressNameFallback,
+          },
+          // 방금 이 좌표(lat,lng) 자체로 역지오코딩했으니, 호출부(홈 화면)가 동 이름을
+          // 또 지오코딩해서 대표 지점으로 튀지 않도록 정확한 좌표를 그대로 전달한다.
+          { lat, lng }
+        );
       });
     });
   };

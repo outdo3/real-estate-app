@@ -29,21 +29,37 @@ export function buildAptBrief(input: AptBriefInput): string[] {
 
   // 1. 최근 시세 추이 (매매 기준, 거래 2건 이상일 때만 — trades는 최신순이므로
   // trades[0]이 최신, trades[trades.length-1]이 가장 오래된 거래)
+  //
+  // 최신 거래 1건과 가장 오래된 거래 1건, 딱 두 점만 비교하면 그중 하나가 우연히
+  // 저층/급매 등 이상치면 실제 흐름과 동떨어진 %가 나온다(실측 사례: 21건 중 최저가
+  // 단일 거래를 "과거"로, 최고가 근처 단일 거래를 "현재"로 잡아 57% 상승으로 계산됐지만
+  // 실제로는 1년 내내 6.1억~9.85억을 오간 변동성 큰 데이터였다). 최근 N건과 가장 오래된
+  // N건의 평균으로 비교해 단일 이상치에 덜 흔들리게 한다.
   if (tradeTypeFilter === '매매' && trades.length >= 2) {
     // 평형(면적)이 다른 거래끼리 절대 가격을 비교하면 왜곡되므로, 면적당 가격(평당가 성격)으로
     // 정규화한 뒤 비교한다.
-    const latestArea = parseFloat(trades[0].area);
-    const oldestArea = parseFloat(trades[trades.length - 1].area);
-    const latest = latestArea > 0 ? trades[0].price / latestArea : NaN;
-    const oldest = oldestArea > 0 ? trades[trades.length - 1].price / oldestArea : NaN;
-    if (oldest > 0 && !isNaN(latest)) {
-      const pctChange = ((latest - oldest) / oldest) * 100;
-      if (pctChange >= 3) {
-        sentences.push(`최근 시세는 약 ${pctChange.toFixed(1)}% 상승 추세입니다.`);
-      } else if (pctChange <= -3) {
-        sentences.push(`최근 시세는 약 ${Math.abs(pctChange).toFixed(1)}% 하락 추세입니다.`);
-      } else {
-        sentences.push('최근 시세는 큰 변동 없이 보합세를 보이고 있습니다.');
+    const toUnitPrice = (t: AptBriefTrade): number | null => {
+      const area = parseFloat(t.area);
+      return area > 0 ? t.price / area : null;
+    };
+    const sampleSize = Math.min(3, Math.floor(trades.length / 2)) || 1;
+    const average = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
+
+    const recentSample = trades.slice(0, sampleSize).map(toUnitPrice).filter((v): v is number => v !== null);
+    const oldestSample = trades.slice(-sampleSize).map(toUnitPrice).filter((v): v is number => v !== null);
+
+    if (recentSample.length > 0 && oldestSample.length > 0) {
+      const latest = average(recentSample);
+      const oldest = average(oldestSample);
+      if (oldest > 0) {
+        const pctChange = ((latest - oldest) / oldest) * 100;
+        if (pctChange >= 3) {
+          sentences.push(`최근 시세는 약 ${pctChange.toFixed(1)}% 상승 추세입니다.`);
+        } else if (pctChange <= -3) {
+          sentences.push(`최근 시세는 약 ${Math.abs(pctChange).toFixed(1)}% 하락 추세입니다.`);
+        } else {
+          sentences.push('최근 시세는 큰 변동 없이 보합세를 보이고 있습니다.');
+        }
       }
     }
   }
