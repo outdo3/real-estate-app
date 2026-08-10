@@ -55,7 +55,7 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge
 
         <ul className={`${styles.menuList} ${hideMobileNav ? styles.menuListHideMobile : ''}`}>
           <li className={styles.menuItem}>
-            <Link href="/" className={pathname === '/' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link href="/map" className={pathname === '/map' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
               <span className={styles.icon}>🏢</span>
               <span>실거래가</span>
             </Link>

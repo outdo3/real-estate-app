@@ -176,3 +176,20 @@ model Apartment {
   @@unique([name, dong])
   @@map("apartments")
 }
+
+// AI 검색(/api/ai-search)의 의도 분류 + 최종 응답을 캐싱해 동일한 질문에 Gemini를
+// 다시 호출하지 않게 한다(토큰 비용 절감 + 응답 속도). 정규화된 질문 문자열의 해시를
+// 키로 쓴다 — 완전히 같은 문장일 때만 히트하는 단순한 캐시라, 유사하지만 다른 표현의
+// 질문은 캐시되지 않고 새로 호출된다(요청된 범위 그대로).
+model AiSearchCache {
+  id        Int      @id @default(autoincrement())
+  queryHash String   @unique @map("query_hash")
+  query     String   @db.Text
+  intent    String
+  // Gemini 브리핑 텍스트 + 조회된 실제 데이터(리스트/통계/비교표)를 함께 저장 — 캐시
+  // 히트 시 이 하나만 읽으면 프론트가 바로 렌더링할 수 있다.
+  result    Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("ai_search_cache")
+}

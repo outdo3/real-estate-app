@@ -1,0 +1,161 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem 6rem;
+  text-align: center;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--primary-color);
+  letter-spacing: -0.5px;
+  margin-bottom: 1.25rem;
+}
+
+.headline {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -1px;
+  margin-bottom: 2.5rem;
+}
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 640px;
+  background: var(--card-bg);
+  border: 2px solid transparent;
+  background-image: linear-gradient(white, white), linear-gradient(120deg, #a7f3d0, #bfdbfe, #ddd6fe);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  border-radius: 999px;
+  padding: 0.4rem 0.4rem 0.4rem 1.5rem;
+  box-shadow: 0 8px 24px rgba(3, 199, 90, 0.08);
+  transition: box-shadow var(--transition-fast);
+}
+
+.searchBar:focus-within {
+  box-shadow: 0 8px 28px rgba(3, 199, 90, 0.18);
+}
+
+.searchInput {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0.75rem 0;
+  min-width: 0;
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.searchBtn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 0.75rem 1.25rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.searchBtn:hover {
+  background: var(--primary-hover);
+}
+
+.suggestions {
+  margin-top: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 680px;
+}
+
+.suggestLabel {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.chip {
+  border: none;
+  border-radius: 999px;
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.chip:nth-child(4n + 1) { background: #d1fae5; color: #047857; }
+.chip:nth-child(4n + 2) { background: #dbeafe; color: #1d4ed8; }
+.chip:nth-child(4n + 3) { background: #ede9fe; color: #6d28d9; }
+.chip:nth-child(4n + 4) { background: #fef3c7; color: #b45309; }
+
+@media (max-width: 768px) {
+  .headline {
+    font-size: 1.75rem;
+  }
+
+  .searchBar {
+    padding-left: 1.1rem;
+  }
+
+  .searchInput {
+    font-size: 0.95rem;
+  }
+
+  .searchBtn {
+    padding: 0.65rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .chip {
+    font-size: 0.78rem;
+    padding: 0.5rem 0.85rem;
+  }
+
+  .main {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+}
