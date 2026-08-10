@@ -63,6 +63,7 @@ export default function FullscreenMapPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
+  const [mapLoadError, setMapLoadError] = useState<string | null>(null);
   const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
@@ -78,7 +79,7 @@ export default function FullscreenMapPage() {
     if (!apiKey) return;
 
     const scriptId = 'kakao-map-script-main';
-    let script = document.getElementById(scriptId) as HTMLScriptElement;
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
 
     if (!script) {
       script = document.createElement('script');
@@ -87,6 +88,16 @@ export default function FullscreenMapPage() {
       script.async = true;
       document.head.appendChild(script);
     }
+
+    // 광고차단 확장 프로그램이나 특정 통신사/사내망이 dapi.kakao.com 스크립트 자체를
+    // 막는 경우가 실제로 있다 — 이전에는 그러면 아래 폴링이 영원히 실패 상태로 남아
+    // 사용자에게 아무 신호 없이 "지도 데이터를 불러오는 중입니다..."에서 페이지가
+    // 멈춘 것처럼 보였다. 스크립트 자체의 로드 실패를 즉시 감지하고, 혹시 그 신호를
+    // 놓치는 경우를 대비해 폴링에도 타임아웃을 둬서 반드시 사용자에게 원인을 알린다.
+    const handleScriptError = () => {
+      setMapLoadError('카카오맵 스크립트를 불러오지 못했습니다. 광고 차단 확장 프로그램이나 네트워크(사내망/통신사) 설정이 dapi.kakao.com 접속을 막고 있을 수 있습니다.');
+    };
+    script.addEventListener('error', handleScriptError);
 
     const checkKakao = setInterval(() => {
       if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
@@ -101,7 +112,21 @@ export default function FullscreenMapPage() {
       }
     }, 200);
 
-    return () => clearInterval(checkKakao);
+    const timeout = setTimeout(() => {
+      clearInterval(checkKakao);
+      setIsMapReady((ready) => {
+        if (!ready) {
+          setMapLoadError('지도를 불러오는 데 시간이 너무 오래 걸립니다. 네트워크 상태를 확인하거나 광고 차단 확장 프로그램을 꺼보세요.');
+        }
+        return ready;
+      });
+    }, 10000);
+
+    return () => {
+      clearInterval(checkKakao);
+      clearTimeout(timeout);
+      script?.removeEventListener('error', handleScriptError);
+    };
   }, [apiKey]);
 
   // 단지(아파트) 마커: 좌표만으로는 어느 시군구(lawdCd) 실거래 데이터를 조회해야 할지 알 수
@@ -114,14 +139,24 @@ export default function FullscreenMapPage() {
   // 소스(MOLIT 실거래) 자체에 존재 근거가 없어 마커를 만들 수 없다 — 그 경우까지 100%
   // 커버하려면 별도의 "단지 마스터 목록" 데이터가 필요한데 이 앱엔 아직 없다.
   const fetchAptMarkers = async (lat: number, lng: number) => {
-    if (!window.kakao?.maps?.services) return;
+    if (!window.kakao?.maps?.services) {
+      setIsLoadingData(false);
+      return;
+    }
     const geocoder = new window.kakao.maps.services.Geocoder();
 
     geocoder.coord2RegionCode(lng, lat, async (result: any, status: any) => {
-      if (status !== window.kakao.maps.services.Status.OK) return;
-      const region = result.find((r: any) => r.region_type === 'B');
-      if (!region) return;
-      const lawdCd = region.code.substring(0, 5);
+      // 사용자의 실제 GPS 좌표가 국내 행정구역으로 역지오코딩되지 않는 경우(해외, 또는
+      // 카카오가 지원하지 않는 좌표)가 실제로 있다 — 이때 그냥 return해버리면
+      // isLoadingData가 영원히 true로 남아 페이지 전체가 "지도 데이터를 불러오는
+      // 중입니다..."에 멈춘 것처럼 보이는 심각한 버그였다(발견: 실사용자 리포트로 좌표
+      // 실패 케이스를 재현). 역지오코딩이 실패하면 이 서비스의 기본 대상 지역(부산 서구)
+      // 데이터로 폴백해서 최소한 화면에 뭔가는 뜨게 한다.
+      const DEFAULT_FALLBACK_LAWD_CD = '26140'; // 부산광역시 서구
+      const region = status === window.kakao.maps.services.Status.OK
+        ? result.find((r: any) => r.region_type === 'B')
+        : null;
+      const lawdCd = region ? region.code.substring(0, 5) : DEFAULT_FALLBACK_LAWD_CD;
 
       try {
         const res = await fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`);
@@ -358,7 +393,15 @@ export default function FullscreenMapPage() {
     setCenter(latLng);
     setShowSearchHereBtn(false);
     if (mapRef.current && window.kakao?.maps) {
-      mapRef.current.panTo(new window.kakao.maps.LatLng(latLng.lat, latLng.lng));
+      const anchor = new window.kakao.maps.LatLng(latLng.lat, latLng.lng);
+      mapRef.current.panTo(anchor);
+      // 기존 지도 줌(레벨 6, 넓은 개요 화면)에서는 목적지가 이미 화면 안에 있는 경우가
+      // 많아서(특히 도심 밀집지역) panTo만으로는 사용자 눈에 "아무것도 안 바뀐 것"처럼
+      // 보였다 — 검색해서 고른 그 단지가 클러스터 배지 뒤에 묻혀 있지 않고 개별 칩으로
+      // 확실히 보이도록 레벨 3까지 함께 확대한다.
+      if (mapRef.current.getLevel() > 3) {
+        mapRef.current.setLevel(3, { anchor });
+      }
     }
     refreshActiveLayers(latLng.lat, latLng.lng);
   };
@@ -369,6 +412,19 @@ export default function FullscreenMapPage() {
         <h2>지도를 불러오는 데 실패했습니다.</h2>
         <p>카카오맵 API 키를 확인해주세요. (현재 키가 비어있습니다)</p>
         <button onClick={() => router.push('/')} style={{ marginTop: '2rem', padding: '1rem 2rem', background: 'white', border: '1px solid #EF4444', borderRadius: '8px', cursor: 'pointer' }}>돌아가기</button>
+      </div>
+    );
+  }
+
+  if (mapLoadError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: '2rem', textAlign: 'center', backgroundColor: '#FEE2E2', color: '#EF4444' }}>
+        <h2>지도를 불러오지 못했습니다.</h2>
+        <p style={{ maxWidth: '480px', marginTop: '0.75rem' }}>{mapLoadError}</p>
+        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '2rem' }}>
+          <button onClick={() => window.location.reload()} style={{ padding: '1rem 2rem', background: '#EF4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>다시 시도</button>
+          <button onClick={() => router.push('/')} style={{ padding: '1rem 2rem', background: 'white', border: '1px solid #EF4444', borderRadius: '8px', cursor: 'pointer' }}>돌아가기</button>
+        </div>
       </div>
     );
   }
