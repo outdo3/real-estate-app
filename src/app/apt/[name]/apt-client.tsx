@@ -61,6 +61,12 @@ export default function ApartmentDetail() {
   const [visibleCount, setVisibleCount] = useState<number>(15);
   const [infraTab, setInfraTab] = useState<InfraTab>('환경');
 
+  // 단지 커뮤니티 시설(골프연습장/수영장 등) — scripts/crawl_facilities.py가 채워둔 값을
+  // 모달을 처음 열 때만 조회한다. null은 "정보 없음"(미조사 또는 DB에 값이 없음),
+  // undefined는 "아직 조회 전"으로 구분한다.
+  const [facilities, setFacilities] = useState<string[] | null | undefined>(undefined);
+  const [facilitiesLoading, setFacilitiesLoading] = useState(false);
+
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const queryAptName = searchParams.get('aptName');
@@ -202,6 +208,14 @@ export default function ApartmentDetail() {
 
   const openModal = (modalName: string) => {
     setActiveModal(modalName);
+    if (modalName === '커뮤니티 시설' && facilities === undefined && !facilitiesLoading) {
+      setFacilitiesLoading(true);
+      fetch(`/api/apt/${encodeURIComponent(aptName)}/facilities${urlDong ? `?dong=${encodeURIComponent(urlDong)}` : ''}`)
+        .then((res) => res.json())
+        .then((data) => setFacilities(Array.isArray(data.facilities) ? data.facilities : null))
+        .catch(() => setFacilities(null))
+        .finally(() => setFacilitiesLoading(false));
+    }
   };
 
   const closeModal = () => {
@@ -268,6 +282,45 @@ export default function ApartmentDetail() {
             <p style={{marginTop: '1.5rem', fontSize: '0.85rem', color: 'var(--text-muted)'}}>
               * 위 계산은 LTV 비율만을 단순히 적용한 예상치이며, DSR 규제(소득 증빙) 및 은행별 조건에 따라 실제 대출 가능 금액은 크게 달라질 수 있습니다.
             </p>
+          </div>
+        );
+      case '커뮤니티 시설':
+        if (facilitiesLoading) {
+          return <div style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>불러오는 중...</div>;
+        }
+        if (facilities && facilities.length > 0) {
+          return (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', padding: '0.5rem 0' }}>
+              {facilities.map((f, i) => (
+                <span
+                  key={i}
+                  style={{
+                    padding: '0.5rem 0.9rem',
+                    borderRadius: '999px',
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    color: '#166534',
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {f}
+                </span>
+              ))}
+            </div>
+          );
+        }
+        return (
+          <div style={{ padding: '1.5rem 0', textAlign: 'center' }}>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.25rem' }}>등록된 커뮤니티 시설 정보가 없습니다.</p>
+            <Link
+              href={`/community/write?aptName=${encodeURIComponent(aptName)}`}
+              className={styles.quickBtn}
+              style={{ textDecoration: 'none', display: 'inline-block' }}
+            >
+              📝 정보 제보하기
+            </Link>
           </div>
         );
       case '건축물대장':
@@ -491,6 +544,7 @@ export default function ApartmentDetail() {
             <button className={styles.quickBtn} onClick={() => openModal('로드뷰')}>로드뷰</button>
             <button className={styles.quickBtn} onClick={() => openModal('단지정보')}>단지정보</button>
             <button className={styles.quickBtn} onClick={() => openModal('대출한도')}>대출한도</button>
+            <button className={styles.quickBtn} onClick={() => openModal('커뮤니티 시설')}>⛳ 커뮤니티 시설</button>
             <button
               className={styles.quickBtn}
               style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', fontWeight: 'bold' }}

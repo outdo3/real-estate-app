@@ -141,3 +141,20 @@ model TradeHistory {
 
   @@index([aptName])
 }
+
+// scripts/crawl_facilities.py가 오프라인으로 채우는 단지 커뮤니티 시설 정보.
+// 실거래가처럼 실시간 API가 있는 데이터가 아니라, 스크립트가 주기적으로 수집해
+// 미리 채워둔 값을 상세페이지가 그대로 읽어 보여준다.
+model Apartment {
+  id                  Int      @id @default(autoincrement())
+  name                String
+  dong                String?
+  lawdCd              String?  @map("lawd_cd")
+  // 이모지 태그 배열, 예: ["⛳ 골프연습장", "🏊 수영장"]. 정보가 없으면 null(빈 배열이 아님 —
+  // "조사했지만 시설이 하나도 없다"와 "아직 조사 전"을 구분하기 위함).
+  communityFacilities Json?    @map("community_facilities")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@unique([name, dong])
+  @@map("apartments")
+}
