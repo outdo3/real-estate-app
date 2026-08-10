@@ -26,15 +26,18 @@ interface AptCluster {
 }
 
 // 화면 픽셀 기준 이 거리 안에 있는 칩들은 한 그룹으로 묶는다. 서구 원도심처럼 오래된
-// 소규모 단지가 밀집한 지역에서는 칩(대략 90x50px)이 서로 완전히 겹쳐 뒤에 깔린 단지가
-// 실제로는 존재해도 "마커가 안 보인다"는 문제로 이어졌었다 — 데이터가 없어서가 아니라
-// 화면에서 물리적으로 가려진 것. 숫자 배지로 뭉치는 대신, 그룹 안 칩들을 정사각형에
-// 가까운 격자로 살짝 벌려서 각자 이름/가격이 그대로 보이게 한다(뱃지 방식은 정보가
-// 안 보인다는 피드백을 받아 교체함).
-const CLUSTER_PIXEL_RADIUS = 55;
-const GRID_CHIP_WIDTH = 110;
-const GRID_CHIP_HEIGHT = 52;
-const GRID_GAP = 6;
+// 소규모 단지가 밀집한 지역에서는 칩이 서로 완전히 겹쳐 뒤에 깔린 단지가 실제로는
+// 존재해도 "마커가 안 보인다"는 문제로 이어졌었다 — 데이터가 없어서가 아니라 화면에서
+// 물리적으로 가려진 것. 숫자 배지로 뭉치는 대신, 그룹 안 칩들을 정사각형에 가까운
+// 격자로 살짝 벌려서 각자 정보가 그대로 보이게 한다(뱃지 방식은 정보가 안 보인다는
+// 피드백을 받아 교체함). 확대 단계별로 칩 크기 자체가 다르므로(아래 CHIP_LAYOUT),
+// 클러스터링 반경/격자 간격도 현재 확대 단계에 맞는 값을 써야 실제 렌더 크기와
+// 어긋나지 않는다.
+const DETAIL_ZOOM_LEVEL = 4; // 카카오맵 레벨(숫자가 작을수록 확대) 기준: 이 값 이하로 확대해야 단지명+실거래가 상세 카드로 전환됨
+const CHIP_LAYOUT = {
+  compact: { width: 60, height: 26, gap: 4, clusterRadius: 38 },
+  detailed: { width: 92, height: 42, gap: 6, clusterRadius: 52 },
+};
 
 interface SchoolMarker {
   id: string;
@@ -65,6 +68,10 @@ export default function FullscreenMapPage() {
   const [aptMarkers, setAptMarkers] = useState<AptMarker[]>([]);
   const [aptClusters, setAptClusters] = useState<AptCluster[]>([]);
   const [schoolMarkers, setSchoolMarkers] = useState<SchoolMarker[]>([]);
+  const [zoomLevel, setZoomLevel] = useState(6);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const isDetailed = zoomLevel <= DETAIL_ZOOM_LEVEL;
+  const chipLayout = isDetailed ? CHIP_LAYOUT.detailed : CHIP_LAYOUT.compact;
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
@@ -258,7 +265,7 @@ export default function FullscreenMapPage() {
       used[i] = true;
       points.forEach((q, j) => {
         if (used[j] || i === j) return;
-        if (Math.hypot(p.x - q.x, p.y - q.y) <= CLUSTER_PIXEL_RADIUS) {
+        if (Math.hypot(p.x - q.x, p.y - q.y) <= chipLayout.clusterRadius) {
           group.push(q);
           used[j] = true;
         }
@@ -307,7 +314,9 @@ export default function FullscreenMapPage() {
 
   // 지도 인스턴스가 실제로 준비된 뒤 줌/드래그가 끝날 때마다(native 'idle' 이벤트) 클러스터를
   // 다시 계산한다. 데이터가 새로 들어와도(aptMarkers 변경) 같은 화면 상태 기준으로 즉시 한
-  // 번 재계산한다.
+  // 번 재계산한다. zoomLevel이 바뀌면(확대/축소로 칩 크기·클러스터 반경이 달라짐) 리스너를
+  // 새 chipLayout을 참조하는 클로저로 다시 등록하고, 그 자리에서 즉시 한 번 재계산해
+  // 'idle' 이벤트를 기다리지 않고도 칩 배치가 바로 갱신되게 한다.
   useEffect(() => {
     if (!mapInstanceReady || !mapRef.current || !window.kakao?.maps?.event) return;
     const map = mapRef.current;
@@ -317,45 +326,96 @@ export default function FullscreenMapPage() {
     return () => {
       window.kakao.maps.event.removeListener(map, 'idle', handleIdle);
     };
-  }, [mapInstanceReady, aptMarkers]);
+  }, [mapInstanceReady, aptMarkers, zoomLevel]);
 
   // 개별 마커 칩 하나를 그린다. 단독 마커든, 겹친 그룹을 격자로 벌린 것 중 하나든 이
   // 함수 하나로 렌더링해서 두 경우의 모양이 항상 같게 유지한다.
-  const renderMarkerChip = (marker: AptMarker) => (
-    <div
-      onClick={() => router.push(`/apt/${marker.name}`)}
-      style={{
-        background: 'white',
-        border: `2px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`,
-        borderRadius: '8px',
-        padding: '6px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-        cursor: 'pointer',
-        position: 'relative',
-      }}
-    >
-      {/* 작은 말풍선 꼬리 */}
-      <div style={{
-        position: 'absolute',
-        bottom: '-8px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: '0',
-        height: '0',
-        borderLeft: '6px solid transparent',
-        borderRight: '6px solid transparent',
-        borderTop: `8px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`
-      }} />
+  // - isDetailed(확대 상태)가 아니면 단지명 없이 가격만 파스텔톤 알약 칩으로 간결하게 보여
+  //   화면 점유율을 낮춘다. 확대해야만 단지명이 함께 보이는 상세 카드로 전환된다.
+  // - 선택(터치/호버)된 마커는 강조 링 + 확대 transform으로 다른 마커보다 항상 눈에 띄게
+  //   하고, 실제 겹침 순서는 호출부에서 CustomOverlayMap의 zIndex prop으로 9999를 줘서
+  //   보장한다(CSS z-index만으로는 카카오 SDK가 각 오버레이를 별도 컨테이너로 그려서
+  //   먹히지 않는다).
+  const renderMarkerChip = (marker: AptMarker, selected: boolean) => {
+    const accent = marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8';
+    const highlightRing = selected
+      ? '0 0 0 3px rgba(37, 99, 235, 0.35), 0 6px 14px rgba(0,0,0,0.22)'
+      : '0 2px 5px rgba(0,0,0,0.12)';
+    const handleSelect = () => setSelectedMarkerId(marker.id);
+    const handleDeselect = () => setSelectedMarkerId((cur) => (cur === marker.id ? null : cur));
+    const handleClick = () => {
+      setSelectedMarkerId(marker.id);
+      router.push(`/apt/${marker.name}`);
+    };
 
-      <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>{marker.name}</span>
-      <span style={{ fontSize: marker.hasRecentPrice ? '1.1rem' : '0.8rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8' }}>
-        {marker.price}
-      </span>
-    </div>
-  );
+    if (!isDetailed) {
+      return (
+        <div
+          onClick={handleClick}
+          onMouseEnter={handleSelect}
+          onMouseLeave={handleDeselect}
+          style={{
+            background: marker.hasRecentPrice ? '#ecfdf5' : '#f1f5f9',
+            border: `1.5px solid ${accent}`,
+            borderRadius: '999px',
+            padding: '3px 9px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: highlightRing,
+            cursor: 'pointer',
+            transform: selected ? 'scale(1.12)' : 'scale(1)',
+            transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span style={{ fontSize: marker.hasRecentPrice ? '0.72rem' : '0.66rem', fontWeight: 800, color: marker.hasRecentPrice ? 'var(--primary-hover)' : '#64748b' }}>
+            {marker.price}
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        onClick={handleClick}
+        onMouseEnter={handleSelect}
+        onMouseLeave={handleDeselect}
+        style={{
+          background: 'white',
+          border: `1.5px solid ${accent}`,
+          borderRadius: '6px',
+          padding: '4px 8px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          boxShadow: highlightRing,
+          cursor: 'pointer',
+          position: 'relative',
+          transform: selected ? 'scale(1.08)' : 'scale(1)',
+          transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+        }}
+      >
+        {/* 작은 말풍선 꼬리 */}
+        <div style={{
+          position: 'absolute',
+          bottom: '-6px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '0',
+          height: '0',
+          borderLeft: '5px solid transparent',
+          borderRight: '5px solid transparent',
+          borderTop: `6px solid ${accent}`
+        }} />
+
+        <span style={{ fontSize: '0.66rem', color: '#666', fontWeight: 600, whiteSpace: 'nowrap' }}>{marker.name}</span>
+        <span style={{ fontSize: marker.hasRecentPrice ? '0.9rem' : '0.7rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8', whiteSpace: 'nowrap' }}>
+          {marker.price}
+        </span>
+      </div>
+    );
+  };
 
   // 컴포넌트 첫 마운트 시, 사용자 위치 가져오기
   useEffect(() => {
@@ -583,21 +643,34 @@ export default function FullscreenMapPage() {
         style={{ width: '100%', height: '100%' }}
         level={6}
         onDragEnd={handleDragEnd}
+        onZoomChanged={(map) => setZoomLevel(map.getLevel())}
+        onClick={() => setSelectedMarkerId(null)}
       >
         {layers.apt && aptClusters.map((cluster) => {
           if (cluster.markers.length > 1) {
             // 겹치는 칩들을 정사각형에 가까운 격자로 살짝 벌려서 그린다 — 숫자 배지
-            // 하나로 뭉치면 이름/가격이 안 보인다는 피드백을 반영.
+            // 하나로 뭉치면 이름/가격이 안 보인다는 피드백을 반영. 그룹 안에 선택된
+            // 마커가 있으면 이 그룹 오버레이 전체를 다른 클러스터들보다 위로 올리고
+            // (CustomOverlayMap의 zIndex), 그룹 내부에서도 선택된 칩 하나만 형제 칩들
+            // 위로 올려(일반 CSS z-index — 같은 컨테이너 안이라 여기선 먹힌다) 완전히
+            // 겹친 경우에도 항상 맨 위에서 보이게 한다.
             const cols = Math.ceil(Math.sqrt(cluster.markers.length));
             const rows = Math.ceil(cluster.markers.length / cols);
+            const clusterSelected = cluster.markers.some((m) => m.id === selectedMarkerId);
             return (
-              <CustomOverlayMap key={cluster.id} position={{ lat: cluster.lat, lng: cluster.lng }} yAnchor={0.5}>
+              <CustomOverlayMap
+                key={cluster.id}
+                position={{ lat: cluster.lat, lng: cluster.lng }}
+                yAnchor={0.5}
+                zIndex={clusterSelected ? 9999 : 1}
+              >
                 <div style={{ position: 'relative' }}>
                   {cluster.markers.map((marker, i) => {
                     const col = i % cols;
                     const row = Math.floor(i / cols);
-                    const offsetX = (col - (cols - 1) / 2) * (GRID_CHIP_WIDTH + GRID_GAP);
-                    const offsetY = (row - (rows - 1) / 2) * (GRID_CHIP_HEIGHT + GRID_GAP);
+                    const offsetX = (col - (cols - 1) / 2) * (chipLayout.width + chipLayout.gap);
+                    const offsetY = (row - (rows - 1) / 2) * (chipLayout.height + chipLayout.gap);
+                    const selected = marker.id === selectedMarkerId;
                     return (
                       <div
                         key={marker.id}
@@ -606,9 +679,10 @@ export default function FullscreenMapPage() {
                           left: offsetX,
                           top: offsetY,
                           transform: 'translate(-50%, -50%)',
+                          zIndex: selected ? 9999 : i,
                         }}
                       >
-                        {renderMarkerChip(marker)}
+                        {renderMarkerChip(marker, selected)}
                       </div>
                     );
                   })}
@@ -618,14 +692,16 @@ export default function FullscreenMapPage() {
           }
 
           const marker = cluster.markers[0];
+          const selected = marker.id === selectedMarkerId;
           return (
             <CustomOverlayMap
               key={marker.id}
               position={{ lat: marker.lat, lng: marker.lng }}
               yAnchor={1} // 오버레이의 기준점 (1이면 마커 하단이 뾰족한 부분이 됨)
+              zIndex={selected ? 9999 : 1}
             >
               <div style={{ transform: 'translateY(-10px)' }}>
-                {renderMarkerChip(marker)}
+                {renderMarkerChip(marker, selected)}
               </div>
             </CustomOverlayMap>
           );
