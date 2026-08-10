@@ -1,0 +1,64 @@
+/* 단지 기본 정보(세대수/준공년월/용적률/건폐율/주차대수) 카드 — 균등한 그리드.
+   데스크톱 5열, 모바일은 3열(2줄+1)로 줄여 각 칸이 으스러지지 않게 한다. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.6rem 0.4rem;
+  text-align: center;
+  min-height: 68px;
+}
+
+.cellLabel {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.cellValue {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.cellMissing {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.reportLink {
+  margin-top: 0.15rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.reportLink:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}

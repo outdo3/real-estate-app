@@ -502,7 +502,7 @@ export default function ApartmentDetail() {
       <div className={styles.header}>
         <div className="container">
           <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', paddingTop: '1rem' }}>
-            <AptSpecGrid address={primaryAddress} aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
+            <AptSpecGrid aptName={aptName} address={primaryAddress} aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>

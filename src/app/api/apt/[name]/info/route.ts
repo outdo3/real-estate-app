@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { XMLParser } from 'fast-xml-parser';
+import { prisma } from '@/lib/prisma';
+import { fetchBuildingRegistryInfo, formatRatio, formatParking } from '@/lib/apt-building-info';
 
 export const dynamic = 'force-dynamic';
-
-const API_KEY = process.env.DATA_GO_KR_API_KEY || '';
 
 export async function GET(
   request: Request,
@@ -12,18 +11,19 @@ export async function GET(
   try {
     const { name } = await params;
     const aptName = decodeURIComponent(name);
-    
+
     const { searchParams } = new URL(request.url);
     const lawdCd = searchParams.get('lawdCd') || '11680';
     const dong = searchParams.get('dong') || '';
-    
+    const jibun = searchParams.get('jibun') || '';
+
     const info: Record<string, string> = {};
 
     // 1. 네이버 스크래핑 (기본 세대수, 준공연도 등) - 헤더 보강하여 차단 방지
     try {
       const query = encodeURIComponent(`${aptName} 아파트 정보`);
       const searchUrl = `https://search.naver.com/search.naver?query=${query}`;
-      
+
       const response = await fetch(searchUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
@@ -32,110 +32,99 @@ export async function GET(
         },
         signal: AbortSignal.timeout(2500) // 2.5초 타임아웃 추가
       });
-      
+
       if (response.ok) {
         const html = await response.text();
         const householdMatch = html.match(/(?:총\s*)?([0-9,]+)세대/);
         if (householdMatch) info['세대수'] = `${householdMatch[1]}세대`;
-        
+
         const yearMatch = html.match(/([0-9]{4})년\s*(?:준공|입주)/);
         if (yearMatch) info['사용승인일'] = `${yearMatch[1]}년`;
-        
-        const parkingMatch = html.match(/(?:주차대수|총주차대수)\s*([0-9,]+대)/);
-        if (parkingMatch) info['총주차대수'] = parkingMatch[1];
       }
     } catch (e) {
       console.warn('Naver scraping failed', e);
     }
 
-    // 2. K-APT(건축물대장 표제부) 공공데이터 호출 — 주차대수(세대당 포함), 용적률, 건폐율, 주용도를 가져온다.
-    // 이전에는 네이버 스크래핑이 총주차대수를 먼저 채우면 이 블록 전체가 스킵되어 세대당
-    // 계산이 누락되는 버그가 있었다. 네이버 결과 존재 여부와 무관하게 항상 조회하고, 성공하면
-    // 더 상세한 이 결과로 덮어쓴다. Vercel 배포 환경에서는 공공데이터 API 키 문제로 막힐 수
-    // 있으므로 안전하게 감싼다.
-    if (API_KEY && lawdCd && dong) {
-      try {
-        // 법정동 코드 조회 (법정동명 기준 10자리 코드)
-        const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?is_ignore_zero=true`, { signal: AbortSignal.timeout(2500) });
-        const regData = await regRes.json();
-        let fullLawdCd = lawdCd + '10100'; // fallback
+    // 2. 주차대수/용적률/건폐율: DB(apartments)에 이미 조회해둔 값이 있으면 그걸 바로 쓰고
+    // (건축물대장 공공데이터 API를 매 페이지뷰마다 다시 부르지 않아도 됨), 없으면 라이브로
+    // 조회한 뒤 다음 요청을 위해 DB에 저장해둔다(cache-aside) — scripts/backfill_apt_details.ts로
+    // 미리 대량 채워둘 수도 있고, 실제 사용자가 페이지를 볼 때마다 조금씩 채워지기도 한다.
+    // dong이 빈 문자열/undefined일 수 있는데, @@unique([name, dong])는 값이 항상 같은
+    // 형태여야 매칭된다(null과 ''는 SQL에서 서로 다른 값으로 취급됨) — 이 라우트 안에서는
+    // 항상 빈 문자열로 통일해 upsert의 where/create가 서로 어긋나지 않게 한다.
+    const dongKey = dong || '';
+    let registry: { parkingCount: number | null; far: number | null; bcr: number | null; totalHouseholds: number | null } | null = null;
 
-        if (regData.regcodes) {
-          const match = regData.regcodes.find((r: any) => (r.name || '').includes(dong) && r.code.startsWith(lawdCd));
-          if (match) fullLawdCd = match.code;
-        }
+    try {
+      const cached = await prisma.apartment.findFirst({ where: { name: aptName, dong: dongKey } });
+      if (cached && cached.parkingCount && cached.far && cached.bcr) {
+        registry = {
+          parkingCount: cached.parkingCount,
+          far: cached.far,
+          bcr: cached.bcr,
+          totalHouseholds: cached.totalHouseholds ?? null,
+        };
+      }
+    } catch (e) {
+      console.warn('Apartment DB lookup failed (DB 미설정 등 — 라이브 조회로 폴백)', e);
+    }
 
-        const bjdongCd = fullLawdCd.substring(5, 10);
-        const cleanKey = encodeURIComponent(decodeURIComponent(API_KEY.trim().replace(/['"]/g, '')));
-
-        let bldUrl = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&numOfRows=100`;
-
-        // 지번 파싱
-        const jibun = searchParams.get('jibun') || '';
-        if (jibun) {
-          const parts = jibun.split('-');
-          const bunNum = parseInt(parts[0], 10);
-          const jiNum = parts.length > 1 ? parseInt(parts[1], 10) : 0;
-          if (!isNaN(bunNum)) {
-            const bun = bunNum.toString().padStart(4, '0');
-            const ji = jiNum.toString().padStart(4, '0');
-            bldUrl += `&platGbCd=0&bun=${bun}&ji=${ji}`;
+    if (!registry) {
+      const live = await fetchBuildingRegistryInfo(aptName, lawdCd, dong, jibun);
+      if (live) {
+        registry = live;
+        if (live.mainPurpose) info['주용도'] = live.mainPurpose;
+        if (live.parkingCount || live.far || live.bcr || live.totalHouseholds) {
+          try {
+            await prisma.apartment.upsert({
+              where: { name_dong: { name: aptName, dong: dongKey } },
+              create: {
+                name: aptName,
+                dong: dongKey,
+                lawdCd,
+                jibun: jibun || undefined,
+                parkingCount: live.parkingCount ?? undefined,
+                far: live.far ?? undefined,
+                bcr: live.bcr ?? undefined,
+                totalHouseholds: live.totalHouseholds ?? undefined,
+              },
+              update: {
+                ...(jibun ? { jibun } : {}),
+                ...(live.parkingCount ? { parkingCount: live.parkingCount } : {}),
+                ...(live.far ? { far: live.far } : {}),
+                ...(live.bcr ? { bcr: live.bcr } : {}),
+                ...(live.totalHouseholds ? { totalHouseholds: live.totalHouseholds } : {}),
+              },
+            });
+          } catch (e) {
+            console.warn('Apartment DB upsert failed (DB 미설정 등 — 이번 응답에는 영향 없음)', e);
           }
         }
-
-        const bldRes = await fetch(bldUrl, { signal: AbortSignal.timeout(3000) });
-        if (bldRes.ok) {
-          const xmlData = await bldRes.text();
-          const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: true });
-          const jsonObj = parser.parse(xmlData);
-          const items = jsonObj.response?.body?.items?.item;
-          if (items) {
-            const itemsArr = Array.isArray(items) ? items : [items];
-            // 단지명과 가장 유사한 항목 찾기
-            const aptCleanName = aptName.replace(/\s+/g, '').replace(/아파트$/, '');
-            const target = itemsArr.find((it: any) => {
-              const bldNm = (it.bldNm || '').replace(/\s+/g, '');
-              return bldNm.includes(aptCleanName) || aptCleanName.includes(bldNm);
-            }) || itemsArr[0]; // 못찾으면 첫번째거라도 (대표 번지)
-
-            if (target) {
-              const parkingCnt = parseInt(target.totPkngCnt, 10);
-              if (!isNaN(parkingCnt) && parkingCnt > 0) {
-                info['총주차대수'] = `${target.totPkngCnt}대`;
-                // 세대당 주차대수 계산
-                if (info['세대수']) {
-                  const totalH = parseInt(info['세대수'].replace(/,/g, ''), 10);
-                  if (totalH > 0) {
-                    const perH = (parseInt(target.totPkngCnt, 10) / totalH).toFixed(2);
-                    info['총주차대수'] = `${target.totPkngCnt}대 (세대당 ${perH}대)`;
-                  }
-                }
-              }
-
-              const vlRat = parseFloat(target.vlRat);
-              if (!isNaN(vlRat) && vlRat > 0) info['용적률'] = `${vlRat}%`;
-
-              const bcRat = parseFloat(target.bcRat);
-              if (!isNaN(bcRat) && bcRat > 0) info['건폐율'] = `${bcRat}%`;
-
-              if (target.mainPurpsCdNm) info['주용도'] = target.mainPurpsCdNm;
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Public API building registry failed', e);
       }
     }
+
+    // 네이버 스크래핑이 세대수를 못 찾았으면 건축물대장 총괄표제부의 세대수로 보완한다
+    // (같은 API 호출에서 이미 받아온 값이라 추가 조회가 필요 없다).
+    if (!info['세대수'] && registry?.totalHouseholds) {
+      info['세대수'] = `${registry.totalHouseholds.toLocaleString('ko-KR')}세대`;
+    }
+
+    if (registry?.parkingCount) {
+      const totalHouseholds = info['세대수'] ? parseInt(info['세대수'].replace(/,/g, ''), 10) : null;
+      info['총주차대수'] = formatParking(registry.parkingCount, totalHouseholds);
+    }
+    if (registry?.far) info['용적률'] = formatRatio(registry.far);
+    if (registry?.bcr) info['건폐율'] = formatRatio(registry.bcr);
 
     // 추정치 제공 금지 (정확한 데이터만 사용)
     // if (!info['총주차대수']) { ... }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       aptName,
-      info: Object.keys(info).length > 0 ? info : null 
+      info: Object.keys(info).length > 0 ? info : null
     });
-    
+
   } catch (error) {
     console.error('Info route error:', error);
     return NextResponse.json({ success: false, error: 'Failed to fetch info' }, { status: 500 });

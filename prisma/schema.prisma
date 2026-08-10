@@ -153,6 +153,22 @@ model Apartment {
   // 이모지 태그 배열, 예: ["⛳ 골프연습장", "🏊 수영장"]. 정보가 없으면 null(빈 배열이 아님 —
   // "조사했지만 시설이 하나도 없다"와 "아직 조사 전"을 구분하기 위함).
   communityFacilities Json?    @map("community_facilities")
+  // 건축물대장 표제부 공공데이터 기반. null은 "아직 조회 전/실패", 0은 취급하지 않는다
+  // (총주차대수 0대·용적률 0%는 실제로 있을 수 없는 값이라 항상 "미확보"로 간주 — 조회
+  // 로직도 0 이하 값은 저장하지 않는다).
+  parkingCount        Int?     @map("parking_count")
+  far                 Float?   @map("far") // 용적률(%)
+  bcr                 Float?   @map("bcr") // 건폐율(%)
+  // 총괄표제부 응답에 세대수도 같이 들어있어 캐싱해둔다. 네이버 스크래핑(비결정적 —
+  // 매 요청 성공을 보장 못 함)에만 의존하면, parkingCount/far/bcr가 캐시 히트라 라이브
+  // 조회를 건너뛴 요청에서는 세대수만 빠지는 문제가 실측으로 확인됐다.
+  totalHouseholds     Int?     @map("total_households")
+  // 건축물대장 총괄표제부 조회에 필요한 지번(예: "1544"). 이 값 없이는 동 전체를
+  // 뒤져야 하는데, 실측 결과 그 방식은 신뢰할 수 없는 결과(엉뚱한 건물)만 반환해서
+  // jibun을 사실상 필수로 요구하게 됐다 — apt-client.tsx가 실거래 데이터에서 얻은
+  // jibun으로 /api/apt/[name]/info를 호출할 때마다 여기 저장해, 다음부터는 배치
+  // 스크립트도 이 값을 재사용할 수 있게 한다.
+  jibun               String?  @map("jibun")
   // @default(now())를 같이 둬서, Prisma를 거치지 않고 scripts/crawl_facilities.py가
   // Supabase REST API로 직접 INSERT할 때도(이 컬럼 값을 안 보내도) DB가 자동으로 채운다.
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
