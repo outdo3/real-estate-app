@@ -427,9 +427,17 @@ export default function Home() {
       try {
         const dongParam = region.dong && region.dong !== 'all' ? `&dong=${encodeURIComponent(region.dong)}` : '';
 
-        const [aptRes, silvRes] = await Promise.all([
+        // 리스트/통계용(dynamicData)은 기존과 같이 "최근 3개월" 기본 윈도우를 그대로 쓰고,
+        // 지도 마커용은 months=12로 따로 넓게 조회한다. 하나로 합쳐서 쓰면(과거처럼) 최근
+        // 3개월 안에 거래가 없는 단지는 12개월 안에 거래가 있어도 마커가 영영 안 뜬다 —
+        // "서대신금호어울림아파트(실제 데이터상 이름은 '금호어울림')"가 정확히 이 케이스였다:
+        // 실거래 6건이 전부 3~12개월 전이라 3개월 창에는 하나도 안 걸렸다. /map 페이지는
+        // 애초에 마커 전용 조회를 months=12로 따로 했었는데(다른 파일이라 이 버그를 피해감),
+        // 홈 화면은 리스트/마커 fetch를 하나로 같이 쓰고 있어서 이 문제를 그대로 갖고 있었다.
+        const [aptRes, silvRes, aptMarkerRes] = await Promise.all([
           fetch(`/api/transactions?type=apt&lawdCd=${region.lawdCd}${dongParam}`),
-          fetch(`/api/transactions?type=silv&lawdCd=${region.lawdCd}${dongParam}`).catch(() => null),
+          fetch(`/api/transactions?type=silv&lawdCd=${region.lawdCd}${dongParam}&months=12`).catch(() => null),
+          fetch(`/api/transactions?type=apt&lawdCd=${region.lawdCd}${dongParam}&months=12`),
         ]);
 
         const data = await aptRes.json();
@@ -438,34 +446,49 @@ export default function Home() {
         setVisibleCount(15);
 
         const currentYear = new Date().getFullYear();
-        const aptMarkers = data
-          .filter((item: any) => item.lat && item.lng)
-          .map((item: any) => {
-            const buildYear = parseInt(item.buildYear, 10);
-            const isNew = !isNaN(buildYear) && currentYear - buildYear >= 0 && currentYear - buildYear <= 5;
-            return {
-              id: item.id,
-              name: item.name,
-              price: item.price,
-              lat: item.lat,
-              lng: item.lng,
-              status: isNew ? 'new' : 'normal',
-            };
-          });
+        const markerSourceData = aptMarkerRes.ok ? await aptMarkerRes.json() : data;
+
+        // 단지(dong+name)당 최신 거래 1건만 마커로 남긴다 — 같은 단지의 여러 거래가 겹치는
+        // 칩으로 중복 표시되던 문제(/map 페이지의 byComplex dedup과 동일한 방식). API가 이미
+        // 계약일 최신순으로 정렬해서 내려주므로 먼저 나온 항목을 유지하면 최신 거래가 남는다.
+        // 이 파일은 상단에서 react-kakao-maps-sdk의 `Map` 컴포넌트를 이미 import해서 전역
+        // `Map` 클래스 이름을 가리므로(new Map<K,V>() 사용 불가), 여기서는 일반 객체로 dedup한다.
+        const byComplex: Record<string, any> = {};
+        for (const item of Array.isArray(markerSourceData) ? markerSourceData : []) {
+          if (!item.lat || !item.lng) continue;
+          const key = `${item.dong}|${item.name}`;
+          if (!byComplex[key]) byComplex[key] = item;
+        }
+        const aptMarkers = Object.values(byComplex).map((item: any) => {
+          const buildYear = parseInt(item.buildYear, 10);
+          const isNew = !isNaN(buildYear) && currentYear - buildYear >= 0 && currentYear - buildYear <= 5;
+          return {
+            id: `${item.dong}-${item.name}`,
+            name: item.name,
+            price: item.price,
+            lat: item.lat,
+            lng: item.lng,
+            status: isNew ? 'new' : 'normal',
+          };
+        });
 
         let presaleMarkers: any[] = [];
         if (silvRes && silvRes.ok) {
           const silvData = await silvRes.json();
-          presaleMarkers = (Array.isArray(silvData) ? silvData : [])
-            .filter((item: any) => item.lat && item.lng)
-            .map((item: any) => ({
-              id: item.id,
-              name: item.name,
-              price: item.price,
-              lat: item.lat,
-              lng: item.lng,
-              status: 'presale',
-            }));
+          const bySilvComplex: Record<string, any> = {};
+          for (const item of Array.isArray(silvData) ? silvData : []) {
+            if (!item.lat || !item.lng) continue;
+            const key = `${item.dong}|${item.name}`;
+            if (!bySilvComplex[key]) bySilvComplex[key] = item;
+          }
+          presaleMarkers = Object.values(bySilvComplex).map((item: any) => ({
+            id: `${item.dong}-${item.name}-presale`,
+            name: item.name,
+            price: item.price,
+            lat: item.lat,
+            lng: item.lng,
+            status: 'presale',
+          }));
         }
 
         if (cancelled) return;
