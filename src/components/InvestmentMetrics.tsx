@@ -76,8 +76,34 @@ export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetrics
     border: '1px solid var(--border-color)',
   };
 
+  const highlightCardStyle: React.CSSProperties = {
+    ...cardStyle,
+    backgroundColor: '#eff6ff',
+    border: '1px solid #bfdbfe',
+  };
+
   return (
     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+      <div style={cardStyle}>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>매매가</div>
+        {loading ? (
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-muted)' }}>조회 중...</div>
+        ) : latestSale ? (
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{latestSale.priceStr}</div>
+        ) : (
+          <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>최근 6개월 데이터 부족</div>
+        )}
+      </div>
+      <div style={cardStyle}>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>전세가</div>
+        {loading ? (
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-muted)' }}>조회 중...</div>
+        ) : matchedRent ? (
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{matchedRent.priceStr}</div>
+        ) : (
+          <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>최근 6개월 데이터 부족</div>
+        )}
+      </div>
       <div style={cardStyle}>
         <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>전세가율</div>
         {loading ? (
@@ -91,12 +117,12 @@ export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetrics
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>* 동일 평형 매물이 없어 다른 평형의 최근 거래 기준으로 계산(참고용)</div>
         )}
       </div>
-      <div style={cardStyle}>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>갭 금액 (매매-전세)</div>
+      <div style={highlightCardStyle}>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>필요 갭 금액 (매매-전세)</div>
         {loading ? (
           <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-muted)' }}>조회 중...</div>
         ) : gap !== null ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{gap.toFixed(1)}억</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--primary-color)' }}>{gap.toFixed(1)}억</div>
         ) : (
           <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>최근 6개월 데이터 부족</div>
         )}

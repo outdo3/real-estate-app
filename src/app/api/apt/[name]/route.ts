@@ -80,6 +80,9 @@ export async function GET(
           buildYear: item.buildYear || '',
           jibun: item.jibun || '',
           monthlyRent: item.monthlyRent || 0,
+          registryDate: item.registryDate || '',
+          dealCanceled: item.dealCanceled || false,
+          cancelDate: item.cancelDate || '',
         };
       });
 

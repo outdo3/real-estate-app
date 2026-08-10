@@ -128,6 +128,11 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
       const dong = (item.법정동 || item.umdNm || '').toString().trim();
       const buildYear = (item.건축년도 || item.buildYear || '').toString().trim();
       const jibun = (item.지번 || item.jibun || '').toString().trim();
+      // RTMSDataSvcAptTradeDev(매매 상세) 응답에만 존재하는 실제 필드. 등기일자가 채워져 있으면
+      // 등기 완료로, 해제여부가 'O'면 계약 해제(취소) 건으로 판단한다 — 추정치가 아닌 원본 데이터.
+      const registryDate = (item.등기일자 || '').toString().trim();
+      const dealCanceled = (item.해제여부 || '').toString().trim() === 'O';
+      const cancelDate = (item.해제사유발생일 || '').toString().trim();
 
       return {
         id: `${type}-${lawdCd}-${dealYmd}-${index}`,
@@ -136,14 +141,17 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
         price: priceStr,
         dealAmount: dealAmount, // 추가
         monthlyRent: monthlyRent, // 추가
-        priceChange: '', 
+        priceChange: '',
         changeType: 'new',
         typeLabel: type === 'rent' ? '전월세' : (type === 'silv' ? '분양권' : (type === 'officetel' ? '오피스텔' : (type === 'villa' ? '빌라' : '실거래'))),
         info: `${area} • ${floor ? floor + '층' : ''} • ${tradeDate}`,
         dong: dong,
         buildYear: buildYear,
         jibun: jibun,
-        lat: null, 
+        registryDate: registryDate,
+        dealCanceled: dealCanceled,
+        cancelDate: cancelDate,
+        lat: null,
         lng: null,
       };
     });

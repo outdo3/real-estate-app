@@ -307,3 +307,75 @@
     align-items: flex-start;
   }
 }
+
+/* 4구역: 학군/입지 탭, 커뮤니티 미리보기, 하단 고정 바 */
+.zoneTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.infraTabBar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.infraTabBtn {
+  padding: 0.6rem 1rem;
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.infraTabBtnActive {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.stickyBar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .stickyBar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 500;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1.25rem;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    background: white;
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+  }
+}
+
+.stickyBarPrice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.stickyBarWriteBtn {
+  flex-shrink: 0;
+  padding: 0.65rem 1.2rem;
+  border-radius: 999px;
+  background: var(--primary-color);
+  color: white;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+}

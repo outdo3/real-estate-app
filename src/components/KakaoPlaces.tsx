@@ -8,6 +8,9 @@ interface Props {
   address: string;
   // 카카오 로컬 카테고리 코드. 여러 개를 넘기면 각각 검색 후 거리순으로 병합한다.
   categories: KakaoCategoryCode[];
+  // 카테고리 코드가 없는 장소(공원, KTX역 등)는 키워드 검색으로 보완한다. 카테고리 결과와
+  // 동일하게 거리순으로 병합된다. 기존 호출부는 이 prop을 넘기지 않아도 그대로 동작한다.
+  keywords?: string[];
   limit?: number;
 }
 
@@ -18,12 +21,37 @@ const CATEGORY_ICON: Record<string, string> = {
   MT1: '🛒',
 };
 
-export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
+const KEYWORD_ICON: Record<string, string> = {
+  공원: '🌳',
+  KTX: '🚄',
+  기차역: '🚄',
+};
+
+const iconFor = (place: any, keyword?: string) => {
+  if (place.category_group_code && CATEGORY_ICON[place.category_group_code]) {
+    return CATEGORY_ICON[place.category_group_code];
+  }
+  if (keyword && KEYWORD_ICON[keyword]) return KEYWORD_ICON[keyword];
+  return '📍';
+};
+
+// 도보 기준(분속 80m)이 비현실적인 거리(1km 초과)에서는 차량 이동시간(분속 500m, 시속 약
+// 30km 도심 평균 가정)을 함께 보여준다 — 둘 다 카카오 실측 직선거리 기반의 근사치이며,
+// 이 앱 다른 곳(학군 탭 walkTime)에서도 이미 쓰는 것과 같은 종류의 어림값이다.
+const formatEta = (distance: number) => {
+  const walkMin = Math.ceil(distance / 80);
+  if (distance <= 1000) return `도보 약 ${walkMin}분`;
+  const driveMin = Math.ceil(distance / 500);
+  return `차량 약 ${driveMin}분`;
+};
+
+export default function KakaoPlaces({ address, categories, keywords = [], limit = 5 }: Props) {
   const [places, setPlaces] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   const categoriesKey = categories.join(',');
+  const keywordsKey = keywords.join(',');
 
   useEffect(() => {
     let cancelled = false;
@@ -53,12 +81,37 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
           );
         });
 
+      const searchOneKeyword = (keyword: string, coords: any) =>
+        new Promise<any[]>((resolve) => {
+          ps.keywordSearch(
+            keyword,
+            (result: any, status: any) => {
+              resolve(status === window.kakao.maps.services.Status.OK ? result.map((r: any) => ({ ...r, __keyword: keyword })) : []);
+            },
+            {
+              location: coords,
+              radius: 5000, // 공원/KTX역은 도보권 밖에도 있을 수 있어 카테고리 검색보다 넓게
+              sort: window.kakao.maps.services.SortBy.DISTANCE,
+            }
+          );
+        });
+
       const searchPlaces = async (coords: any) => {
-        const resultsByCategory = await Promise.all(
-          categories.map((c) => searchOneCategory(c, coords))
-        );
+        const [categoryResults, keywordResults] = await Promise.all([
+          Promise.all(categories.map((c) => searchOneCategory(c, coords))),
+          Promise.all(keywords.map((k) => searchOneKeyword(k, coords))),
+        ]);
         if (cancelled) return;
-        const merged = resultsByCategory.flat().sort((a, b) => Number(a.distance) - Number(b.distance));
+        // 카테고리 검색과 키워드 검색 결과가 같은 장소를 중복으로 찾을 수 있어(예: KTX역이
+        // 지하철 카테고리와 'KTX' 키워드 양쪽에 걸리는 경우) 카카오 장소 id 기준으로 제거한다.
+        const seen = new Set<string>();
+        const merged = [...categoryResults.flat(), ...keywordResults.flat()]
+          .sort((a, b) => Number(a.distance) - Number(b.distance))
+          .filter((p) => {
+            if (seen.has(p.id)) return false;
+            seen.add(p.id);
+            return true;
+          });
 
         if (merged.length === 0) {
           setError('주변에 해당 인프라가 없습니다.');
@@ -126,21 +179,21 @@ export default function KakaoPlaces({ address, categories, limit = 5 }: Props) {
         script.removeEventListener('load', loadKakaoPlaces);
       };
     }
-  }, [address, categoriesKey, limit]);
+  }, [address, categoriesKey, keywordsKey, limit]);
 
   if (loading) return <div>검색 중입니다...</div>;
   if (error) return <div style={{ color: 'var(--text-muted)' }}>{error}</div>;
 
-  const isSchoolOnly = categoriesKey === 'SC4';
-  const isSubwayOnly = categoriesKey === 'SW8';
+  const isSchoolOnly = categoriesKey === 'SC4' && keywords.length === 0;
+  const isSubwayOnly = categoriesKey === 'SW8' && keywords.length === 0;
 
   return (
     <ul style={{ lineHeight: 1.8, paddingLeft: '1.2rem' }}>
       {places.map((p, i) => (
         <li key={i} style={{ marginBottom: '0.5rem' }}>
-          {CATEGORY_ICON[p.category_group_code] || '📍'} <b>{p.place_name}</b>
+          {iconFor(p, p.__keyword)} <b>{p.place_name}</b>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-            ({p.distance}m, 도보 약 {Math.ceil(p.distance / 80)}분)
+            ({p.distance}m, {formatEta(Number(p.distance))})
           </span>
         </li>
       ))}
