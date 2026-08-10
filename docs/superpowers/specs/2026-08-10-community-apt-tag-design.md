@@ -44,7 +44,7 @@ model Post {
 
 - `aptName`은 nullable — 기존 글은 `null`로 남고 일반 글로 계속 취급된다. 백필 불필요.
 - `@@index([aptName, createdAt])`는 필터링된 목록 조회(단지별 최신순)를 위한 인덱스. 기존 `@@index([pinned, createdAt])`는 전체 목록 조회용으로 그대로 유지.
-- `prisma migrate dev`로 실제 마이그레이션 파일 생성 (Sub-project B가 A와 분리된 이유 — 실제 DB 변경이 필요).
+- `prisma db push`로 스키마를 실제 DB에 반영 (이 저장소는 `prisma/migrations/` 히스토리가 없어 `db push` 방식을 써왔음 — `migrate dev`는 drift를 감지해 DB reset을 제안할 수 있어 사용 금지) (Sub-project B가 A와 분리된 이유 — 실제 DB 변경이 필요).
 
 ### 2. API
 
@@ -82,6 +82,13 @@ model Post {
 ## 에러 처리
 
 기존 API 에러 처리 패턴(`try/catch` + `{ success: false, error }`) 그대로 재사용. 새로운 실패 모드 없음 — `aptName`은 선택적 문자열이라 별도 유효성 검사 불필요 (제목/내용과 달리 필수값 아님).
+
+## 알려진 한계
+
+- 커뮤니티 배지(`🏢 {aptName}`, `src/app/community/page.tsx`와 `src/app/community/[id]/post-client.tsx` 양쪽)는 `/apt/${encodeURIComponent(aptName)}`로 이동하며 `lawdCd`(지역코드) 쿼리파라미터를 붙이지 않는다. `Post`가 자유 텍스트 단지명만 저장하고 지역 필드가 없어 지역이 한정된 링크를 만들 수 없기 때문이다.
+- `src/app/apt/[name]/apt-client.tsx`는 `lawdCd` 쿼리파라미터가 없으면 `lawdCd = '11680'`(강남구)로 기본값을 사용한다. 따라서 강남구 밖에 있는 단지의 배지를 클릭하면 엉뚱한 구(강남구)를 조회하게 되어, "거래 내역 없음"으로 보이거나 강남구에 동명의 단지가 우연히 존재하면 완전히 다른 단지의 데이터가 표시될 수 있다.
+- 이는 의도적인 범위 결정이다 — `Post`에 지역 필드를 추가하고 글쓰기 플로우에서 이를 실제로 입력받게 하려면 추가 스키마 변경과 UI 작업이 필요해 이번 기능의 범위 밖으로 두었다. 같은 방식의 저하(degraded pattern)가 코드베이스 다른 곳에도 이미 있다 (`src/components/SearchFilter.tsx`도 `lawdCd` 없이 `/apt/${name}`으로 링크함).
+- 허용된 트레이드오프이며 버그가 아니다. 향후 실제로 문제가 된다면, `Post`에 `aptName`과 나란히 `aptLawdCd` 필드를 추가하고 글쓰기 시점에 (아마 단지 상세페이지 자신의 `lawdCd` state로부터 `aptName`이 자동채움되는 것과 같은 방식으로) 함께 채워 넣는 것이 확장 경로가 된다.
 
 ## 테스트 / 검증 계획
 

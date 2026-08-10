@@ -48,6 +48,9 @@ export async function POST(request: Request) {
     if (title.length > 200) {
       return NextResponse.json({ success: false, error: '제목은 200자 이내로 입력해주세요.' }, { status: 400 });
     }
+    if (aptName && aptName.length > 100) {
+      return NextResponse.json({ success: false, error: '단지명은 100자 이내로 입력해주세요.' }, { status: 400 });
+    }
 
     const post = await prisma.post.create({
       data: { title, content, aptName, authorId: user!.id },

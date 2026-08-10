@@ -17,7 +17,7 @@ export default function CommunityPage() {
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
-    setAptName(searchParams.get('aptName') || '');
+    setAptName((searchParams.get('aptName') || '').trim());
   }, []);
 
   const queryKey = `/api/community/posts?page=${page}${aptName ? `&aptName=${encodeURIComponent(aptName)}` : ''}`;
@@ -36,7 +36,7 @@ export default function CommunityPage() {
   const handleClearFilter = () => {
     setAptName('');
     setPage(1);
-    router.push('/community');
+    router.replace('/community');
   };
 
   return (
@@ -54,7 +54,11 @@ export default function CommunityPage() {
           )}
 
           <div className={styles.headerTop}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>전체 {total}건</span>
+            {!aptName ? (
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>전체 {total}건</span>
+            ) : (
+              <span />
+            )}
             <Link href={writeHref} className={styles.writeBtn}>
               ✏️ 글쓰기
             </Link>
