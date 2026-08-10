@@ -4,6 +4,13 @@ interface LivingEnvironmentPanelProps {
   aptInfo: Record<string, string> | null;
 }
 
+const cardStyle: React.CSSProperties = {
+  padding: '1rem 1.1rem',
+  borderRadius: '10px',
+  background: '#f8fafc',
+  border: '1px solid var(--border-color)',
+};
+
 // "{count}대 (세대당 {ratio}대)" 형식으로 이미 계산되어 오는 실제 총주차대수 문자열에서
 // 세대당 주차대수만 뽑아 게이지로 시각화한다 — 새 데이터를 만드는 게 아니라 기존 aptInfo
 // 값을 파싱만 하는 것이라 추정치를 추가하지 않는다.
@@ -21,8 +28,8 @@ function ParkingGauge({ aptInfo }: { aptInfo: Record<string, string> | null }) {
 
   if (!parkingRaw) {
     return (
-      <div>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>주차공간</div>
+      <div style={cardStyle}>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>🅿️ 주차공간</div>
         <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>정보 없음</div>
       </div>
     );
@@ -35,9 +42,9 @@ function ParkingGauge({ aptInfo }: { aptInfo: Record<string, string> | null }) {
   const color = ratio === null ? 'var(--text-muted)' : ratio < 1 ? '#ef4444' : ratio < 1.3 ? '#f59e0b' : '#10b981';
 
   return (
-    <div>
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>주차공간 (세대당)</div>
-      <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>{parkingRaw}</div>
+    <div style={cardStyle}>
+      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>🅿️ 주차공간 (세대당)</div>
+      <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>{parkingRaw}</div>
       {capped !== null && (
         <div style={{ width: '100%', height: '8px', borderRadius: '999px', background: '#e5e7eb', overflow: 'hidden' }}>
           <div style={{ width: `${capped * 100}%`, height: '100%', background: color, borderRadius: '999px' }} />
@@ -51,8 +58,8 @@ function ParkingGauge({ aptInfo }: { aptInfo: Record<string, string> | null }) {
 // 공개 API가 존재하지 않음) — 숫자를 지어내는 대신 정직하게 준비 중 상태를 보여준다.
 function MaintenanceFeePlaceholder() {
   return (
-    <div>
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>계절별 평균 관리비</div>
+    <div style={cardStyle}>
+      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>💰 계절별 평균 관리비</div>
       <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>데이터 준비 중입니다.</div>
     </div>
   );
@@ -63,8 +70,8 @@ function MaintenanceFeePlaceholder() {
 // 라는 문구로 특정 단지에 대한 확정적 주장이 되지 않도록 함).
 function DeliveryBadges() {
   return (
-    <div>
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>배송 생활권</div>
+    <div style={cardStyle}>
+      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>📦 배송 생활권</div>
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
         <span style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem', borderRadius: '999px', background: '#fff1f2', color: '#e11d48', fontWeight: 700 }}>🚚 쿠팡 로켓배송</span>
         <span style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem', borderRadius: '999px', background: '#fefce8', color: '#ca8a04', fontWeight: 700 }}>🌙 SSG 새벽배송</span>
@@ -76,7 +83,7 @@ function DeliveryBadges() {
 
 export default function LivingEnvironmentPanel({ aptInfo }: LivingEnvironmentPanelProps) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
       <ParkingGauge aptInfo={aptInfo} />
       <MaintenanceFeePlaceholder />
       <DeliveryBadges />

@@ -69,11 +69,14 @@ export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetrics
   const jeonseRate = latestSale && matchedRent && latestSale.price > 0 ? (matchedRent.price / latestSale.price) * 100 : null;
 
   const cardStyle: React.CSSProperties = {
-    flex: '1 1 160px',
-    padding: '1rem',
-    borderRadius: '12px',
+    padding: '0.55rem 0.75rem',
+    borderRadius: '8px',
     backgroundColor: '#f8fafc',
     border: '1px solid var(--border-color)',
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: '0.5rem',
   };
 
   const highlightCardStyle: React.CSSProperties = {
@@ -82,49 +85,50 @@ export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetrics
     border: '1px solid #bfdbfe',
   };
 
+  const labelStyle: React.CSSProperties = { fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' };
+  const loadingValueStyle: React.CSSProperties = { fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-muted)' };
+  const emptyValueStyle: React.CSSProperties = { fontSize: '0.78rem', color: 'var(--text-muted)' };
+
   return (
-    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '1.5rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem', marginTop: '0.85rem' }}>
       <div style={cardStyle}>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>매매가</div>
+        <span style={labelStyle}>매매가</span>
         {loading ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-muted)' }}>조회 중...</div>
+          <span style={loadingValueStyle}>조회 중</span>
         ) : latestSale ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{latestSale.priceStr}</div>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{latestSale.priceStr}</span>
         ) : (
-          <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>최근 6개월 데이터 부족</div>
+          <span style={emptyValueStyle}>데이터 부족</span>
         )}
       </div>
       <div style={cardStyle}>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>전세가</div>
+        <span style={labelStyle}>전세가</span>
         {loading ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-muted)' }}>조회 중...</div>
+          <span style={loadingValueStyle}>조회 중</span>
         ) : matchedRent ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{matchedRent.priceStr}</div>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>{matchedRent.priceStr}</span>
         ) : (
-          <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>최근 6개월 데이터 부족</div>
+          <span style={emptyValueStyle}>데이터 부족</span>
         )}
       </div>
-      <div style={cardStyle}>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>전세가율</div>
+      <div style={cardStyle} title={!loading && jeonseRate !== null && !isSameArea ? '동일 평형 매물이 없어 다른 평형의 최근 거래 기준으로 계산(참고용)' : undefined}>
+        <span style={labelStyle}>전세가율{!loading && jeonseRate !== null && !isSameArea ? ' *' : ''}</span>
         {loading ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-muted)' }}>조회 중...</div>
+          <span style={loadingValueStyle}>조회 중</span>
         ) : jeonseRate !== null ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--primary-color)' }}>{jeonseRate.toFixed(1)}%</div>
+          <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary-color)' }}>{jeonseRate.toFixed(1)}%</span>
         ) : (
-          <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>최근 6개월 데이터 부족</div>
-        )}
-        {!loading && jeonseRate !== null && !isSameArea && (
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>* 동일 평형 매물이 없어 다른 평형의 최근 거래 기준으로 계산(참고용)</div>
+          <span style={emptyValueStyle}>데이터 부족</span>
         )}
       </div>
       <div style={highlightCardStyle}>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>필요 갭 금액 (매매-전세)</div>
+        <span style={labelStyle}>필요 갭 금액</span>
         {loading ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-muted)' }}>조회 중...</div>
+          <span style={loadingValueStyle}>조회 중</span>
         ) : gap !== null ? (
-          <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--primary-color)' }}>{gap.toFixed(1)}억</div>
+          <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--primary-color)' }}>{gap.toFixed(1)}억</span>
         ) : (
-          <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>최근 6개월 데이터 부족</div>
+          <span style={emptyValueStyle}>데이터 부족</span>
         )}
       </div>
     </div>

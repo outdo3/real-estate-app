@@ -1,13 +1,15 @@
 import React from 'react';
 
 interface AptSpecGridProps {
+  address: string;
   aptInfo: Record<string, string> | null;
   buildYear: string | null; // trades[0].buildYear 등 실거래 기반 준공연도(문자열 "YYYY")
 }
 
-// 단지 기본 스펙(연차/세대수/용적률/주차대수)을 1구역 상단에 한눈에 보여주는 4칸 그리드.
-// 값이 없으면 항상 "정보 없음"으로 표시하고 추정치를 만들어내지 않는다.
-export default function AptSpecGrid({ aptInfo, buildYear }: AptSpecGridProps) {
+// 호갱노노 스타일: 큰 박스 4개 대신 "주소 | 세대수 | 준공연도(연차) | 용적률/건폐율 | 주차대수"를
+// 한 줄 텍스트 + 소형 칩으로 압축해 공간을 아낀다. 값이 없으면 항상 "정보 없음"으로 표시하고
+// 추정치를 만들어내지 않는다(예: 준공연월은 월 단위 원본 데이터가 없어 연도까지만 표기).
+export default function AptSpecGrid({ address, aptInfo, buildYear }: AptSpecGridProps) {
   const currentYear = new Date().getFullYear();
   const parsedBuildYear = buildYear ? parseInt(buildYear, 10) : NaN;
   const age = !isNaN(parsedBuildYear) && parsedBuildYear > 1900 ? currentYear - parsedBuildYear : null;
@@ -16,32 +18,42 @@ export default function AptSpecGrid({ aptInfo, buildYear }: AptSpecGridProps) {
     ? (aptInfo['세대수'].includes('세대') ? aptInfo['세대수'] : `${aptInfo['세대수']}세대`)
     : null;
   const floorAreaRatio = aptInfo?.['용적률'] || null;
+  const buildingCoverageRatio = aptInfo?.['건폐율'] || null;
   const parking = aptInfo?.['총주차대수'] || null;
 
-  const items: { label: string; value: string }[] = [
-    { label: '연차', value: age !== null ? `${age}년차` : '정보 없음' },
-    { label: '세대수', value: households || '정보 없음' },
-    { label: '용적률', value: floorAreaRatio || '정보 없음' },
-    { label: '주차대수', value: parking || '정보 없음' },
+  const chipStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '0.2rem 0.6rem',
+    borderRadius: '999px',
+    background: '#f1f5f9',
+    color: 'var(--text-secondary)',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+  };
+
+  const chips: string[] = [
+    households ? `세대수 ${households}` : '세대수 정보 없음',
+    parsedBuildYear ? `${parsedBuildYear}년 준공${age !== null ? ` · ${age}년차` : ''}` : '준공연도 정보 없음',
+    (floorAreaRatio || buildingCoverageRatio)
+      ? `용적률 ${floorAreaRatio || '정보 없음'} / 건폐율 ${buildingCoverageRatio || '정보 없음'}`
+      : '용적률/건폐율 정보 없음',
+    parking ? `주차 ${parking}` : '주차대수 정보 없음',
   ];
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
-      {items.map((item) => (
-        <div
-          key={item.label}
-          style={{
-            padding: '0.85rem 1rem',
-            borderRadius: '10px',
-            background: '#f8fafc',
-            border: '1px solid var(--border-color)',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{item.label}</div>
-          <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{item.value}</div>
+    <div style={{ marginTop: '0.75rem' }}>
+      {address && (
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+          📍 {address}
         </div>
-      ))}
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+        {chips.map((chip) => (
+          <span key={chip} style={chipStyle}>{chip}</span>
+        ))}
+      </div>
     </div>
   );
 }

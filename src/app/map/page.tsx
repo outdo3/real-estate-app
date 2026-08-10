@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Map, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 
 const apiKey =
   process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ||
@@ -16,7 +17,7 @@ export default function FullscreenMapPage() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isMapReady, setIsMapReady] = useState(false);
   const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
-  const [keyword, setKeyword] = useState('');
+  const mapRef = useRef<any>(null);
 
   useEffect(() => {
     if (!apiKey) return;
@@ -112,29 +113,16 @@ export default function FullscreenMapPage() {
     }
   }, [markers]);
 
-  // 장소 검색 함수
-  const searchPlaces = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!keyword.trim()) return;
-
-    if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) {
-      alert("지도 서비스가 아직 로드되지 않았습니다.");
-      return;
+  // 아파트 자동완성에서 단지를 선택하면 실제 kakao.maps.Map 인스턴스의 panTo로 부드럽게
+  // 이동시킨다(마커 재조회 등으로 인한 리렌더가 center state를 되돌리지 못하도록 state도
+  // 함께 갱신한다 — panTo만 호출하면 다음 setCenter 호출 없는 리렌더에서는 문제 없지만,
+  // 이후 다른 흐름이 center state를 참조할 때 최신 위치와 어긋나는 것을 방지).
+  const handleApartmentSelect = (result: ApartmentSearchResult) => {
+    const latLng = { lat: result.lat, lng: result.lng };
+    setCenter(latLng);
+    if (mapRef.current && window.kakao?.maps) {
+      mapRef.current.panTo(new window.kakao.maps.LatLng(latLng.lat, latLng.lng));
     }
-
-    const ps = new window.kakao.maps.services.Places();
-    ps.keywordSearch(keyword, (data: any, status: any) => {
-      if (status === window.kakao.maps.services.Status.OK) {
-        setCenter({
-          lat: parseFloat(data[0].y),
-          lng: parseFloat(data[0].x),
-        });
-      } else if (status === window.kakao.maps.services.Status.ZERO_RESULT) {
-        alert("검색 결과가 존재하지 않습니다.");
-      } else {
-        alert("검색 중 오류가 발생했습니다.");
-      }
-    });
   };
 
   if (!apiKey) {
@@ -167,18 +155,11 @@ export default function FullscreenMapPage() {
           ⬅ 메인으로
         </button>
 
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.95)', padding: '0.5rem', borderRadius: '99px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-          <form onSubmit={searchPlaces} style={{ display: 'flex', gap: '0.5rem' }}>
-            <input 
-              type="text" 
-              placeholder="지역 검색 (예: 판교역)" 
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              style={{ padding: '0.6rem 1rem', border: '1px solid var(--border-color)', borderRadius: '99px', outline: 'none', width: '250px', fontSize: '1rem' }}
-            />
-            <button type="submit" style={{ padding: '0.6rem 1.2rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '99px', cursor: 'pointer', fontWeight: 600 }}>검색</button>
-          </form>
-          <button 
+        <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.95)', padding: '0.5rem', borderRadius: '99px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', alignItems: 'center' }}>
+          <div style={{ width: '260px' }}>
+            <ApartmentAutocomplete onSelect={handleApartmentSelect} placeholder="아파트 단지명 검색" />
+          </div>
+          <button
             onClick={async () => {
               if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
@@ -207,6 +188,7 @@ export default function FullscreenMapPage() {
       </div>
 
       <Map
+        ref={mapRef}
         center={center}
         style={{ width: '100%', height: '100%' }}
         level={6}

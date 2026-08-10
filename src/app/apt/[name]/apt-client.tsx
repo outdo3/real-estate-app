@@ -427,7 +427,7 @@ export default function ApartmentDetail() {
 
   return (
     <div className={styles.main}>
-      <Header />
+      <Header hideLogo pageTitle={aptName} pageTitleLarge />
 
       {/* 팝업(모달) */}
       {activeModal && (
@@ -455,29 +455,35 @@ export default function ApartmentDetail() {
 
           <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
             <h1 className={styles.title} style={{ marginBottom: '0.75rem' }}>{aptName}</h1>
-            <AptSpecGrid aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
+            <AptSpecGrid address={primaryAddress} aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>최근 실거래가</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <span className={styles.price}>{latestPrice}</span>
-                {trades.length > 0 && (
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                    ({getAreaInfo(parseFloat(trades[0].area)).label} • {trades[0].floor}층 • {trades[0].tradeDate})
-                  </span>
-                )}
-              </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
+            <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
+              <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '매매' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>매매</button>
+              <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>전월세</button>
             </div>
-            <div style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '2rem' }}>
-              <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}
-              </div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}
-              </div>
-            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+            <span className={styles.price}>{latestPrice}</span>
+            {trades.length > 0 && (
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                {getAreaInfo(parseFloat(trades[0].area)).label} • {trades[0].floor}층 • {trades[0].tradeDate}
+              </span>
+            )}
+          </div>
+
+          <div style={{ marginTop: '0.5rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+            <span style={{ color: 'var(--text-muted)' }}>
+              {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}:
+            </span>{' '}
+            <b>최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}</b>
+          </div>
+
+          <div style={{ marginTop: '1.25rem' }}>
+            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} />
           </div>
 
           <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} />
@@ -526,20 +532,14 @@ export default function ApartmentDetail() {
 
       {/* ══════════ 2구역: 시세/실거래 타임라인 & 평면도 ══════════ */}
       <div className={`container ${styles.sectionBlock}`}>
-        <h2 className={styles.zoneTitle}>시세 & 실거래 타임라인</h2>
+        <h2 className={styles.zoneTitle}>실거래 타임라인</h2>
         <div className={styles.panel}>
-          <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} />
-
-          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+          <div>
             <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} />
 
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', margin: '1.5rem 0 1rem' }}>
               <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{selectedArea === '전체' ? '전체 평형' : getAreaInfo(parseFloat(selectedArea)).label} · 총 {filteredTrades.length}건</span>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
-                  <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.25rem 0.5rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '매매' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>매매</button>
-                  <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.25rem 0.5rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>전월세</button>
-                </div>
                 <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
                   {['1년', '3년', '5년', '전체'].map(p => (
                     <button key={p} onClick={() => setPeriodFilter(p as any)} style={{ padding: '0.25rem 0.5rem', border: 'none', background: periodFilter === p ? 'white' : 'transparent', fontWeight: periodFilter === p ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: periodFilter === p ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>{p}</button>

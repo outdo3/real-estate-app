@@ -15,9 +15,14 @@ interface HeaderProps {
   /** 페이지가 자체적인 모바일 하단 탭바를 이미 그리는 경우(예: 홈 화면), Header의 기본
    *  모바일 하단 탭바와 중복 표시되는 것을 막기 위해 true로 전달한다. */
   hideMobileNav?: boolean;
+  /** 브랜드 로고 텍스트를 숨긴다. 단지 상세페이지처럼 현재 조회 중인 대상(아파트명)을
+   *  pageTitle 자리에 대신 크게 보여주고 싶을 때 pageTitleLarge와 함께 사용한다. */
+  hideLogo?: boolean;
+  /** pageTitle을 더 크고 진하게(단지명처럼 화면의 주인공이 되는 타이틀) 표시한다. */
+  pageTitleLarge?: boolean;
 }
 
-const Header = ({ searchSlot, pageTitle, hideMobileNav }: HeaderProps) => {
+const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge }: HeaderProps) => {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -33,13 +38,17 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav }: HeaderProps) => {
             ←
           </button>
 
-          <Link href="/" className={styles.logo}>
-            <span className={styles.logoText}>{siteConfig.name}</span>
-          </Link>
+          {!hideLogo && (
+            <Link href="/" className={styles.logo}>
+              <span className={styles.logoText}>{siteConfig.name}</span>
+            </Link>
+          )}
         </div>
 
         {searchSlot && <div className={styles.searchSlot}>{searchSlot}</div>}
-        {!searchSlot && pageTitle && <h1 className={styles.pageTitle}>{pageTitle}</h1>}
+        {!searchSlot && pageTitle && (
+          <h1 className={`${styles.pageTitle} ${pageTitleLarge ? styles.pageTitleLarge : ''}`}>{pageTitle}</h1>
+        )}
 
         <ul className={`${styles.menuList} ${hideMobileNav ? styles.menuListHideMobile : ''}`}>
           <li className={styles.menuItem}>
