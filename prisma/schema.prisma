@@ -153,7 +153,9 @@ model Apartment {
   // 이모지 태그 배열, 예: ["⛳ 골프연습장", "🏊 수영장"]. 정보가 없으면 null(빈 배열이 아님 —
   // "조사했지만 시설이 하나도 없다"와 "아직 조사 전"을 구분하기 위함).
   communityFacilities Json?    @map("community_facilities")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  // @default(now())를 같이 둬서, Prisma를 거치지 않고 scripts/crawl_facilities.py가
+  // Supabase REST API로 직접 INSERT할 때도(이 컬럼 값을 안 보내도) DB가 자동으로 채운다.
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@unique([name, dong])
   @@map("apartments")

@@ -35,6 +35,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Optional
 
 import requests
@@ -166,6 +167,10 @@ def upsert_facilities(client, result: FacilityResult) -> None:
         "dong": result.target.dong,
         "lawd_cd": result.target.lawd_cd,
         "community_facilities": result.facilities,
+        # updated_at은 DB DEFAULT now()가 INSERT에는 적용되지만, upsert의 UPDATE 경로에서는
+        # SET 절에 없는 컬럼은 그대로 남는다(직접 실측 확인) — 재크롤링해도 "마지막 수집 시각"이
+        # 안 바뀌는 걸 막기 위해 항상 명시적으로 채운다.
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     # apartments 테이블에 (name, dong) 복합 유니크가 있다고 가정하고 upsert한다
     # (prisma/schema.prisma의 Apartment 모델과 동일한 제약).
