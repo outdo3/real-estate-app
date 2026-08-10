@@ -135,10 +135,18 @@ export async function GET(
     };
 
     const searchAptName = normalizeName(aptName);
+    // 이름만으로는 같은 lawdCd(구/군) 안에 있는 서로 다른 단지가 섞여 잡힐 수 있다 —
+    // 예: "롯데캐슬"로 검색하면 "대신롯데캐슬"뿐 아니라 다른 동의 "OO롯데캐슬2차"까지
+    // 부분일치로 함께 잡히고, "푸르지오"는 서로 다른 두 단지("대신푸르지오1차" 서대신동2가,
+    // "대신푸르지오2차" 서대신동1가)를 동시에 매칭해버리는 걸 실측으로 확인했다. 호출부가
+    // dong을 알고 있으면(대부분의 진입 경로가 이제 넘겨준다) 그 동에 속한 거래만으로 좁혀서
+    // 브랜드명이 겹치는 타 단지 데이터가 섞이는 걸 원천 차단한다.
+    const dong = searchParams.get('dong') || '';
 
     const filteredTrades = allTrades
       .filter(item => {
         if (!item.name) return false;
+        if (dong && item.dong !== dong) return false;
         const itemName = normalizeName(item.name);
         return itemName.includes(searchAptName) || searchAptName.includes(itemName);
       })

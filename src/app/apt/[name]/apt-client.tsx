@@ -76,11 +76,13 @@ export default function ApartmentDetail() {
     const queryType = searchParams.get('type');
     if (queryType === 'rent') setTradeTypeFilter('전월세');
 
-    // lawdCd도 여기서 미리 읽어둔다 — InvestmentMetrics/PriceTrendChart가 부모의 fetchTrades
-    // 이펙트보다 먼저 마운트/실행되므로, 이걸 하지 않으면 하드코딩된 기본값('11680')으로
-    // 한 번 잘못 호출된다.
+    // lawdCd/dong도 여기서 미리 읽어둔다 — InvestmentMetrics/PriceTrendChart가 부모의
+    // fetchTrades 이펙트보다 먼저 마운트/실행되므로, 이걸 하지 않으면 하드코딩된 기본값
+    // ('11680')이나 dong 없이 한 번 잘못(너무 넓게) 조회된다.
     const queryLawdCd = searchParams.get('lawdCd');
     setLawdCdState(queryLawdCd || '11680');
+    const queryDong = searchParams.get('dong');
+    if (queryDong) setUrlDong(queryDong);
   }, [params.name]);
 
   const formatKoreanPrice = (val: string) => {
@@ -121,10 +123,15 @@ export default function ApartmentDetail() {
         // 경로) 아예 파라미터를 안 보내고, API가 DB에 저장된 실제 지역을 찾아 응답에 함께
         // 돌려주는 lawdCd를 신뢰한다 — 여기서 하드코딩된 기본 지역으로 미리 단정하지 않는다.
         const lawdCdQuery = urlLawdCd ? `&lawdCd=${urlLawdCd}` : '';
-        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?type=${typeParam}&period=${periodParam}${lawdCdQuery}`);
+        // dong이 있으면 반드시 실거래가 조회에도 넘긴다 — 없으면 "롯데캐슬", "푸르지오"처럼
+        // 같은 구 안에 있는 다른 동의 동일 브랜드 단지 실거래가 이름만으로 부분일치되어
+        // 함께 섞여 나오는 문제가 있다(API 쪽에서 dong이 오면 정확히 그 동으로만 좁힌다).
+        const dongQuery = urlDongParam ? `&dong=${encodeURIComponent(urlDongParam)}` : '';
+        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?type=${typeParam}&period=${periodParam}${lawdCdQuery}${dongQuery}`);
         if (cancelled) return;
 
         let resolvedLawdCd = urlLawdCd || '11680';
+        let resolvedDong = urlDongParam || '';
 
         if (response.ok) {
           const data = await response.json();
@@ -133,20 +140,24 @@ export default function ApartmentDetail() {
           setTrades(fetchedTrades);
           setApiError(data.apiError || null);
           if (data.lawdCd) resolvedLawdCd = data.lawdCd;
+          // URL에 dong이 없었다면(위 dongQuery가 비어 실제로는 구 전체를 뒤진 응답이다)
+          // 실제로 찾아낸 첫 거래의 dong으로 이후 호출(단지정보/투자지표/시세추이)을
+          // 좁혀서, 다음부터는 같은 브랜드의 다른 단지가 섞이지 않게 한다.
+          if (!resolvedDong && fetchedTrades.length > 0) resolvedDong = fetchedTrades[0].dong || '';
 
           if (fetchedTrades.length > 0) {
             fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, resolvedLawdCd);
           } else {
-            fetchAptInfo('', urlDongParam || '', resolvedLawdCd);
+            fetchAptInfo('', resolvedDong, resolvedLawdCd);
           }
         } else {
-          fetchAptInfo('', urlDongParam || '', resolvedLawdCd);
+          fetchAptInfo('', resolvedDong, resolvedLawdCd);
         }
 
         setLawdCdState(resolvedLawdCd);
+        setUrlDong(resolvedDong);
 
         const urlRegion = urlParams.get('region');
-        if (urlDongParam) setUrlDong(urlDongParam);
 
         if (urlRegion) {
           setRegionName(urlRegion);
@@ -550,10 +561,10 @@ export default function ApartmentDetail() {
           </div>
 
           <div style={{ marginTop: '1.25rem' }}>
-            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} />
+            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
           </div>
 
-          <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} />
+          <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
         </div>
       </div>
 

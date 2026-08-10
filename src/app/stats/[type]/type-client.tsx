@@ -145,7 +145,7 @@ function RankingListView({ slug, lawdCd }: { slug: string; lawdCd: string }) {
             <li
               key={`${c.dong}-${c.name}`}
               className={styles.compactItem}
-              onClick={() => router.push(`/apt/${encodeURIComponent(c.name)}?lawdCd=${lawdCd}`)}
+              onClick={() => router.push(`/apt/${encodeURIComponent(c.name)}?lawdCd=${lawdCd}&dong=${encodeURIComponent(c.dong)}`)}
               role="button"
               tabIndex={0}
             >
@@ -270,7 +270,7 @@ function GapInvestView({ lawdCd }: { lawdCd: string }) {
       ) : (
         <ul className={styles.compactList}>
           {list.map((item: any) => (
-            <li key={item.rank} className={styles.compactItem} onClick={() => router.push(`/apt/${encodeURIComponent(item.name)}?lawdCd=${lawdCd}`)} role="button" tabIndex={0}>
+            <li key={item.rank} className={styles.compactItem} onClick={() => router.push(`/apt/${encodeURIComponent(item.name)}?lawdCd=${lawdCd}&dong=${encodeURIComponent(item.dong || '')}`)} role="button" tabIndex={0}>
               <div className={`${styles.compactRank} ${item.rank === 1 ? styles.rankBadgeTop1 : item.rank === 2 ? styles.rankBadgeTop2 : item.rank === 3 ? styles.rankBadgeTop3 : ''}`}>{item.rank}</div>
               <div className={styles.compactInfo}>
                 <div className={styles.compactName}>{item.name}</div>

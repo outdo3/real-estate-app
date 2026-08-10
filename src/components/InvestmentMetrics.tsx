@@ -5,6 +5,9 @@ import React, { useEffect, useState } from 'react';
 interface InvestmentMetricsProps {
   aptName: string;
   lawdCd: string;
+  // 같은 구/군 안에 다른 동의 동일 브랜드 단지(예: "롯데캐슬", "푸르지오")가 있으면
+  // 이름만으로는 섞여 조회될 수 있어, 알고 있으면 반드시 넘겨서 정확히 그 동으로 좁힌다.
+  dong?: string;
 }
 
 interface SimpleTrade {
@@ -18,7 +21,7 @@ interface SimpleTrade {
 
 // 기존 필터 토글(매매/전월세, 기간)과 무관하게 최근 6개월 매매+전월세를 병렬로 고정
 // 조회해서 갭 금액/전세가율을 계산한다. KakaoPlaces와 같은 패턴으로 자기완결형이다.
-export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetricsProps) {
+export default function InvestmentMetrics({ aptName, lawdCd, dong }: InvestmentMetricsProps) {
   const [saleTrades, setSaleTrades] = useState<SimpleTrade[] | null>(null);
   const [rentTrades, setRentTrades] = useState<SimpleTrade[] | null>(null);
 
@@ -28,9 +31,10 @@ export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetrics
     setSaleTrades(null);
     setRentTrades(null);
 
+    const dongQuery = dong ? `&dong=${encodeURIComponent(dong)}` : '';
     const fetchType = async (type: 'apt' | 'rent'): Promise<SimpleTrade[]> => {
       try {
-        const res = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}&period=6`);
+        const res = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}&period=6${dongQuery}`);
         if (!res.ok) return [];
         const data = await res.json();
         return data.trades || [];
@@ -48,7 +52,7 @@ export default function InvestmentMetrics({ aptName, lawdCd }: InvestmentMetrics
     return () => {
       cancelled = true;
     };
-  }, [aptName, lawdCd]);
+  }, [aptName, lawdCd, dong]);
 
   const loading = saleTrades === null || rentTrades === null;
 

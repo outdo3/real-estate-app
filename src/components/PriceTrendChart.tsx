@@ -6,6 +6,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 interface PriceTrendChartProps {
   aptName: string;
   lawdCd: string;
+  // 같은 구/군 안에 다른 동의 동일 브랜드 단지(예: "롯데캐슬", "푸르지오")가 있으면
+  // 이름만으로는 섞여 조회될 수 있어, 알고 있으면 반드시 넘겨서 정확히 그 동으로 좁힌다.
+  dong?: string;
 }
 
 interface SimpleTrade {
@@ -30,7 +33,7 @@ const PERIODS: Record<'1년' | '3년' | '5년', number> = { '1년': 12, '3년': 
 // InvestmentMetrics와 같은 자기완결형 패턴 — 부모의 tradeTypeFilter(매매/전월세 단일 선택)와
 // 무관하게 매매·전세 두 시계열을 동시에 조회해 겹쳐 그린다. "매매/전세 시세 추이 차트"는
 // 두 값을 동시에 비교하는 게 핵심이라 부모의 단일 필터 상태에 얹기보다 독립시키는 편이 안전하다.
-export default function PriceTrendChart({ aptName, lawdCd }: PriceTrendChartProps) {
+export default function PriceTrendChart({ aptName, lawdCd, dong }: PriceTrendChartProps) {
   const [saleTrades, setSaleTrades] = useState<SimpleTrade[] | null>(null);
   const [rentTrades, setRentTrades] = useState<SimpleTrade[] | null>(null);
   const [period, setPeriod] = useState<'1년' | '3년' | '5년'>('3년');
@@ -42,9 +45,10 @@ export default function PriceTrendChart({ aptName, lawdCd }: PriceTrendChartProp
     setRentTrades(null);
 
     const months = PERIODS[period];
+    const dongQuery = dong ? `&dong=${encodeURIComponent(dong)}` : '';
     const fetchType = async (type: 'apt' | 'rent'): Promise<SimpleTrade[]> => {
       try {
-        const res = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}&period=${months}`);
+        const res = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}&period=${months}${dongQuery}`);
         if (!res.ok) return [];
         const data = await res.json();
         return data.trades || [];
@@ -64,7 +68,7 @@ export default function PriceTrendChart({ aptName, lawdCd }: PriceTrendChartProp
     return () => {
       cancelled = true;
     };
-  }, [aptName, lawdCd, period]);
+  }, [aptName, lawdCd, period, dong]);
 
   const loading = saleTrades === null || rentTrades === null;
 

@@ -121,7 +121,7 @@ export async function GET(request: Request) {
           const latestApt = apts[0];
           const latestRent = rents[0];
           const gap = latestApt.dealAmount - latestRent.dealAmount;
-          return { name: latestApt.name, pyung: parsePyung(latestApt), gap, dealCount: apts.length };
+          return { name: latestApt.name, dong: latestApt.dong || '', pyung: parsePyung(latestApt), gap, dealCount: apts.length };
         })
         .filter((c) => c.gap >= 0);
 
@@ -131,6 +131,7 @@ export async function GET(request: Request) {
         .map((c, i) => ({
           rank: i + 1,
           name: c.name,
+          dong: c.dong,
           pyung: c.pyung,
           gap: formatKoreanPrice(c.gap),
           dealCount: c.dealCount,
