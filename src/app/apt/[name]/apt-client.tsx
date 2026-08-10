@@ -23,6 +23,7 @@ import { buildAptBrief } from '@/lib/apt-brief';
 
 interface Trade {
   id: number;
+  name?: string;
   tradeDate: string;
   price: number;
   priceStr: string;
@@ -53,6 +54,10 @@ export default function ApartmentDetail() {
   const [lawdCdState, setLawdCdState] = useState('11680');
   const [regionName, setRegionName] = useState<string>('');
   const [urlDong, setUrlDong] = useState<string>('');
+  // 사용자가 검색/진입에 쓴 이름(아실 "금호어울림" vs 네이버 "서대신금호어울림" 같은 표기
+  // 차이)과 무관하게, 상세페이지 상단 표기는 실제로 매칭된 국토부 데이터의 대표 단지명으로
+  // 통일한다. aptName은 API 호출 키로 계속 쓰이므로 별도 상태로 분리한다.
+  const [displayName, setDisplayName] = useState<string>('');
 
   const [selectedArea, setSelectedArea] = useState<string>('전체');
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
@@ -140,10 +145,13 @@ export default function ApartmentDetail() {
           setTrades(fetchedTrades);
           setApiError(data.apiError || null);
           if (data.lawdCd) resolvedLawdCd = data.lawdCd;
-          // URL에 dong이 없었다면(위 dongQuery가 비어 실제로는 구 전체를 뒤진 응답이다)
-          // 실제로 찾아낸 첫 거래의 dong으로 이후 호출(단지정보/투자지표/시세추이)을
-          // 좁혀서, 다음부터는 같은 브랜드의 다른 단지가 섞이지 않게 한다.
-          if (!resolvedDong && fetchedTrades.length > 0) resolvedDong = fetchedTrades[0].dong || '';
+          // URL에 dong이 없었다면(위 dongQuery가 비어 실제로는 구 전체를 뒤진 응답이다) API가
+          // DB 조회/지오코딩으로 찾아낸 dong을 신뢰한다(거래가 0건이어도 유효한 값). 이후 호출
+          // (단지정보/투자지표/시세추이)을 좁혀서 같은 브랜드의 다른 단지가 섞이지 않게 한다.
+          if (!resolvedDong && data.dong) resolvedDong = data.dong;
+          // 플랫폼마다 표기가 다를 수 있는 검색어(예: "금호어울림" vs "서대신금호어울림")와
+          // 무관하게, 실제로 매칭된 첫 거래의 국토부 대표 단지명으로 상단 표기를 통일한다.
+          if (fetchedTrades.length > 0 && fetchedTrades[0].name) setDisplayName(fetchedTrades[0].name);
 
           if (fetchedTrades.length > 0) {
             fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, resolvedLawdCd);
@@ -234,7 +242,7 @@ export default function ApartmentDetail() {
   const latestPriceNum = filteredTrades.length > 0 ? filteredTrades[0].price : 0; // 억 단위 정수
 
   const firstTrade = trades.length > 0 ? trades[0] : null;
-  const primaryAddress = `${regionName || firstTrade?.dong || ''} ${aptName}`.trim();
+  const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
   const addressReady = !loading && !!primaryAddress;
 
   const openModal = (modalName: string) => {
@@ -508,7 +516,7 @@ export default function ApartmentDetail() {
 
   return (
     <div className={styles.main}>
-      <Header hideLogo pageTitle={aptName} pageTitleLarge pageTitleAlign="left" />
+      <Header hideLogo pageTitle={displayName || aptName} pageTitleLarge pageTitleAlign="left" />
 
       {/* 팝업(모달) */}
       {activeModal && (

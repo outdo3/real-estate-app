@@ -4,19 +4,22 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-// 단지명만으로 lawdCd(법정동코드 5자리)를 알아낸다 — DB(apartments)에도 아직 없는(건축물대장
-// 조회가 한 번도 성공한 적 없는) 단지가 대부분이라 DB 조회만으로는 커버가 안 된다. 카카오
-// 키워드 검색으로 단지 좌표를 찾은 뒤, 그 좌표를 다시 행정구역 코드로 역지오코딩한다 —
-// /map 페이지가 클라이언트에서 하는 것과 같은 2단계 조회를 서버에서 재현한 것.
-// 서버 인스턴스가 살아있는 동안 재사용되는 캐시로 동일 단지 중복 조회를 방지한다.
-const aptLawdCdCache = new Map<string, string | null>();
+// 단지명만으로 lawdCd(법정동코드 5자리)와 dong(법정동명)을 알아낸다 — DB(apartments)에도
+// 아직 없는(건축물대장 조회가 한 번도 성공한 적 없는) 단지가 대부분이라 DB 조회만으로는
+// 커버가 안 된다. 카카오 키워드 검색으로 단지 좌표를 찾은 뒤, 그 좌표를 다시 행정구역
+// 코드로 역지오코딩한다 — /map 페이지가 클라이언트에서 하는 것과 같은 2단계 조회를 서버에서
+// 재현한 것. 카카오 키워드 검색 자체가 "금호어울림"/"서대신금호어울림"처럼 검색어와 실제
+// 장소명이 정확히 안 맞아도 알아서 가장 근접한 결과를 찾아주므로, 플랫폼별 표기 차이를
+// 별도 별칭(alias) 테이블 없이도 흡수한다. 서버 인스턴스가 살아있는 동안 재사용되는
+// 캐시로 동일 단지 중복 조회를 방지한다.
+const aptGeoCache = new Map<string, { lawdCd: string; dong: string } | null>();
 
-async function geocodeAptNameToLawdCd(aptName: string): Promise<string | null> {
-  if (aptLawdCdCache.has(aptName)) return aptLawdCdCache.get(aptName)!;
+async function geocodeApt(aptName: string): Promise<{ lawdCd: string; dong: string } | null> {
+  if (aptGeoCache.has(aptName)) return aptGeoCache.get(aptName)!;
 
   const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
   if (!kakaoKey || !aptName) {
-    aptLawdCdCache.set(aptName, null);
+    aptGeoCache.set(aptName, null);
     return null;
   }
 
@@ -35,13 +38,13 @@ async function geocodeAptNameToLawdCd(aptName: string): Promise<string | null> {
       { headers }
     );
     if (!keywordRes.ok) {
-      aptLawdCdCache.set(aptName, null);
+      aptGeoCache.set(aptName, null);
       return null;
     }
     const keywordData = await keywordRes.json();
     const place = keywordData.documents?.[0];
     if (!place) {
-      aptLawdCdCache.set(aptName, null);
+      aptGeoCache.set(aptName, null);
       return null;
     }
 
@@ -50,18 +53,22 @@ async function geocodeAptNameToLawdCd(aptName: string): Promise<string | null> {
       { headers }
     );
     if (!regionRes.ok) {
-      aptLawdCdCache.set(aptName, null);
+      aptGeoCache.set(aptName, null);
       return null;
     }
     const regionData = await regionRes.json();
     const bRegion = (regionData.documents || []).find((r: any) => r.region_type === 'B');
-    const lawdCd = bRegion?.code ? String(bRegion.code).substring(0, 5) : null;
+    if (!bRegion?.code) {
+      aptGeoCache.set(aptName, null);
+      return null;
+    }
 
-    aptLawdCdCache.set(aptName, lawdCd);
-    return lawdCd;
+    const result = { lawdCd: String(bRegion.code).substring(0, 5), dong: bRegion.region_3depth_name || '' };
+    aptGeoCache.set(aptName, result);
+    return result;
   } catch (e) {
-    console.warn('아파트명 -> lawdCd 지오코딩 실패', e);
-    aptLawdCdCache.set(aptName, null);
+    console.warn('아파트명 -> 지역 지오코딩 실패', e);
+    aptGeoCache.set(aptName, null);
     return null;
   }
 }
@@ -75,23 +82,36 @@ export async function GET(
     const aptName = decodeURIComponent(name);
     const { searchParams } = new URL(request.url);
 
-    // 지도 마커 클릭, 커뮤니티 글 링크처럼 lawdCd를 안 넘기는 진입 경로가 실제로 있다 —
+    // 지도 마커 클릭, 커뮤니티 글 링크처럼 lawdCd/dong을 안 넘기는 진입 경로가 실제로 있다 —
     // 이 경우 무조건 기본 지역(서울 강남구)으로 조회하면 다른 지역 단지는 실거래가 하나도
-    // 안 잡혀 "조회 중..."에서 멈추고, 지역명도 강남구로 잘못 표시된다. URL에 lawdCd가
-    // 없으면 (1) 이전에 이 단지명으로 조회되어 DB(apartments)에 저장된 실제 lawdCd가
-    // 있는지 먼저 확인하고, (2) 그마저 없으면 단지명 자체를 지오코딩해서 실제 지역을
-    // 알아낸다. 그 둘 다 실패했을 때만 기본 지역으로 폴백한다.
-    let lawdCd = searchParams.get('lawdCd');
-    if (!lawdCd) {
+    // 안 잡혀 "조회 중..."에서 멈추고, 지역명도 강남구로 잘못 표시된다. 또한 dong 없이
+    // 이름만으로 조회하면 같은 구 안의 다른 단지(예: 대신푸르지오1차/2차)가 섞인다.
+    // (1) 이전에 이 단지명으로 조회되어 DB(apartments)에 저장된 실제 lawdCd/dong이 있는지
+    // 먼저 확인하고, (2) 그래도 부족하면 단지명 자체를 지오코딩해서 알아낸다. lawdCd가 이미
+    // 확실한 경우(URL 또는 DB) 지오코딩이 엉뚱한 지역의 동명 단지를 찾아버릴 위험이 있으니,
+    // 지오코딩 결과의 lawdCd가 이미 알고 있는 lawdCd와 일치할 때만 그 dong을 채택한다.
+    let lawdCd = searchParams.get('lawdCd') || '';
+    let dong = searchParams.get('dong') || '';
+
+    if (!lawdCd || !dong) {
       try {
-        const cached = await prisma.apartment.findFirst({ where: { name: aptName }, select: { lawdCd: true } });
-        if (cached?.lawdCd) lawdCd = cached.lawdCd;
+        const cached = await prisma.apartment.findFirst({
+          where: lawdCd ? { name: aptName, lawdCd } : { name: aptName },
+          select: { lawdCd: true, dong: true },
+        });
+        if (!lawdCd && cached?.lawdCd) lawdCd = cached.lawdCd;
+        if (!dong && cached?.dong) dong = cached.dong;
       } catch (e) {
-        console.warn('lawdCd DB 조회 실패(DB 미설정 등)', e);
+        console.warn('lawdCd/dong DB 조회 실패(DB 미설정 등)', e);
       }
     }
-    if (!lawdCd) {
-      lawdCd = await geocodeAptNameToLawdCd(aptName);
+
+    if (!lawdCd || !dong) {
+      const geo = await geocodeApt(aptName);
+      if (geo) {
+        if (!lawdCd) lawdCd = geo.lawdCd;
+        if (!dong && geo.lawdCd === lawdCd) dong = geo.dong;
+      }
     }
     lawdCd = lawdCd || '11680';
 
@@ -138,11 +158,9 @@ export async function GET(
     // 이름만으로는 같은 lawdCd(구/군) 안에 있는 서로 다른 단지가 섞여 잡힐 수 있다 —
     // 예: "롯데캐슬"로 검색하면 "대신롯데캐슬"뿐 아니라 다른 동의 "OO롯데캐슬2차"까지
     // 부분일치로 함께 잡히고, "푸르지오"는 서로 다른 두 단지("대신푸르지오1차" 서대신동2가,
-    // "대신푸르지오2차" 서대신동1가)를 동시에 매칭해버리는 걸 실측으로 확인했다. 호출부가
-    // dong을 알고 있으면(대부분의 진입 경로가 이제 넘겨준다) 그 동에 속한 거래만으로 좁혀서
-    // 브랜드명이 겹치는 타 단지 데이터가 섞이는 걸 원천 차단한다.
-    const dong = searchParams.get('dong') || '';
-
+    // "대신푸르지오2차" 서대신동1가)를 동시에 매칭해버리는 걸 실측으로 확인했다. dong은
+    // 위에서 URL/DB/지오코딩으로 이미 최대한 확보했으므로, 있으면 그 동에 속한 거래만으로
+    // 좁혀서 브랜드명이 겹치는 타 단지 데이터가 섞이는 걸 원천 차단한다.
     const filteredTrades = allTrades
       .filter(item => {
         if (!item.name) return false;
@@ -161,6 +179,10 @@ export async function GET(
 
         return {
           id: item.id,
+          // 실제 국토부 데이터상의 단지명(대표명) — 플랫폼마다 표기가 다를 수 있는 검색어
+          // (예: "금호어울림" vs "서대신금호어울림")와 무관하게, 상세페이지 상단 표기는
+          // 항상 이 값으로 통일한다.
+          name: item.name,
           tradeDate: tradeDateStr,
           price: priceNum,
           priceStr: priceStr,
@@ -187,9 +209,10 @@ export async function GET(
       ? (allTrades.find(item => item.typeLabel === '에러')?.name.replace(/^API 에러: /, '') || '공공데이터 API 호출에 실패했습니다.')
       : null;
 
-    // 클라이언트가 URL에 lawdCd를 안 넘긴 경우, 여기서 실제로 조회에 사용한(DB 조회 또는
-    // 기본값) lawdCd를 함께 돌려줘서 화면의 지역명/이후 요청들이 같은 값으로 맞춰지게 한다.
-    return NextResponse.json({ trades: filteredTrades, apiError, lawdCd });
+    // 클라이언트가 URL에 lawdCd/dong을 안 넘긴 경우, 여기서 실제로 조회에 사용한(DB 조회,
+    // 지오코딩 또는 기본값) 값을 함께 돌려줘서 화면의 지역명/이후 요청들이 같은 값으로
+    // 맞춰지게 한다.
+    return NextResponse.json({ trades: filteredTrades, apiError, lawdCd, dong });
   } catch (error) {
     console.error('Error fetching trade history:', error);
     return NextResponse.json({ error: 'Failed to fetch trade history' }, { status: 500 });
