@@ -46,6 +46,20 @@
   padding: 0.1rem 0.35rem;
 }
 
+.aptBadge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  background: #eff6ff;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  text-decoration: none;
+}
+
+.aptBadge:hover {
+  background: #dbeafe;
+}
+
 .postActions {
   display: flex;
   gap: 0.4rem;
