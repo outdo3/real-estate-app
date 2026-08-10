@@ -40,6 +40,7 @@
   border-bottom: 1px solid var(--border-color);
   text-decoration: none;
   color: inherit;
+  cursor: pointer;
 }
 
 .row:last-child {
@@ -48,6 +49,46 @@
 
 .row:hover {
   background: #f8fafc;
+}
+
+.filterBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1rem;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.clearFilterBtn {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.aptBadge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  background: #eff6ff;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  text-decoration: none;
+}
+
+.aptBadge:hover {
+  background: #dbeafe;
 }
 
 .pinBadge {
