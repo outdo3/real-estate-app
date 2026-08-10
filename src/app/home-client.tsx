@@ -29,11 +29,16 @@ const MARKER_STYLES: Record<string, { border: string; bg: string; glow?: string;
   presale: { border: '#ea580c', bg: '#f97316', badge: '🏗️' },
 };
 
-// 화면 픽셀 기준 이 거리 안에 있는 칩들은 하나로 묶는다. 서구 원도심처럼 오래된 소규모
-// 단지가 밀집한 지역에서는 칩(대략 90x50px)이 서로 완전히 겹쳐 뒤에 깔린 단지가 실제로는
-// 존재해도 "마커가 안 보인다"는 문제로 이어진다 — 데이터가 없어서가 아니라 화면에서
-// 물리적으로 가려진 것(/map 페이지에 먼저 적용했던 것과 동일한 수정을 홈 미니맵에도 적용).
+// 화면 픽셀 기준 이 거리 안에 있는 칩들은 한 그룹으로 묶는다. 서구 원도심처럼 오래된
+// 소규모 단지가 밀집한 지역에서는 칩(대략 90x50px)이 서로 완전히 겹쳐 뒤에 깔린 단지가
+// 실제로는 존재해도 "마커가 안 보인다"는 문제로 이어진다 — 데이터가 없어서가 아니라
+// 화면에서 물리적으로 가려진 것. 숫자 배지로 뭉치는 대신, 그룹 안 칩들을 정사각형에
+// 가까운 격자로 살짝 벌려서 각자 이름/가격이 그대로 보이게 한다(뱃지 방식은 정보가
+// 안 보인다는 피드백을 받아 교체함).
 const CLUSTER_PIXEL_RADIUS = 55;
+const GRID_CHIP_WIDTH = 100;
+const GRID_CHIP_HEIGHT = 48;
+const GRID_GAP = 6;
 
 interface MarkerCluster {
   id: string;
@@ -260,11 +265,63 @@ export default function Home() {
     };
   }, [mapInstanceReady, recomputeClusters]);
 
-  const handleClusterClick = (cluster: MarkerCluster) => {
-    const map = mapRef.current;
-    if (!map || !window.kakao?.maps) return;
-    const anchor = new window.kakao.maps.LatLng(cluster.lat, cluster.lng);
-    map.setLevel(Math.max(1, map.getLevel() - 2), { anchor });
+  // 개별 마커 칩 하나를 그린다. 단독 마커든, 겹친 그룹을 격자로 벌린 것 중 하나든 이
+  // 함수 하나로 렌더링해서 두 경우의 모양(이름/가격/뱃지)이 항상 같게 유지한다.
+  const renderMarkerChip = (marker: any, isHighlighted: boolean) => {
+    const style = MARKER_STYLES[marker.status] || MARKER_STYLES.normal;
+    return (
+      <div
+        onClick={() => router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${region.lawdCd}`)}
+        className={isHighlighted ? styles.markerHighlight : undefined}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          cursor: 'pointer',
+          borderRadius: '8px',
+          boxShadow: style.glow,
+        }}
+      >
+        <div style={{
+          background: 'white',
+          border: `1px solid ${style.border}`,
+          borderTopLeftRadius: '6px',
+          borderTopRightRadius: '6px',
+          padding: '4px 8px',
+          fontSize: '0.8rem',
+          fontWeight: 700,
+          color: '#1e293b',
+          whiteSpace: 'nowrap'
+        }}>
+          {style.badge && <span style={{ marginRight: '2px' }}>{style.badge}</span>}
+          {marker.name}
+        </div>
+        <div style={{
+          background: style.bg,
+          color: 'white',
+          borderBottomLeftRadius: '6px',
+          borderBottomRightRadius: '6px',
+          padding: '4px 8px',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+          position: 'relative'
+        }}>
+          {marker.price}
+          <div style={{
+            position: 'absolute',
+            bottom: '-6px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '0',
+            height: '0',
+            borderLeft: '5px solid transparent',
+            borderRight: '5px solid transparent',
+            borderTop: `6px solid ${style.bg}`
+          }} />
+        </div>
+      </div>
+    );
   };
 
   // 마지막 탐색 위치(위도/경도/레벨) 복원: 저장된 값이 있으면 기본 위치(강남구) 대신 사용
@@ -523,35 +580,39 @@ export default function Home() {
             >
               {clusters.map((cluster) => {
                 if (cluster.markers.length > 1) {
+                  // 겹치는 칩들을 정사각형에 가까운 격자로 살짝 벌려서 그린다 — 숫자
+                  // 배지 하나로 뭉치면 이름/가격이 안 보인다는 피드백을 반영.
+                  const cols = Math.ceil(Math.sqrt(cluster.markers.length));
+                  const rows = Math.ceil(cluster.markers.length / cols);
                   return (
                     <CustomOverlayMap key={cluster.id} position={{ lat: cluster.lat, lng: cluster.lng }} yAnchor={0.5}>
-                      <div
-                        onClick={() => handleClusterClick(cluster)}
-                        title={cluster.markers.map((m) => m.name).join(', ')}
-                        style={{
-                          width: '46px',
-                          height: '46px',
-                          borderRadius: '50%',
-                          background: 'var(--primary-color)',
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontWeight: 800,
-                          fontSize: '0.95rem',
-                          boxShadow: '0 4px 8px rgba(0,0,0,0.25)',
-                          cursor: 'pointer',
-                          border: '3px solid white',
-                        }}
-                      >
-                        {cluster.markers.length}
+                      <div style={{ position: 'relative' }}>
+                        {cluster.markers.map((marker, i) => {
+                          const col = i % cols;
+                          const row = Math.floor(i / cols);
+                          const offsetX = (col - (cols - 1) / 2) * (GRID_CHIP_WIDTH + GRID_GAP);
+                          const offsetY = (row - (rows - 1) / 2) * (GRID_CHIP_HEIGHT + GRID_GAP);
+                          const isHighlighted = marker.name === highlightedMarkerName;
+                          return (
+                            <div
+                              key={marker.id}
+                              style={{
+                                position: 'absolute',
+                                left: offsetX,
+                                top: offsetY,
+                                transform: 'translate(-50%, -50%)',
+                              }}
+                            >
+                              {renderMarkerChip(marker, isHighlighted)}
+                            </div>
+                          );
+                        })}
                       </div>
                     </CustomOverlayMap>
                   );
                 }
 
                 const marker = cluster.markers[0];
-                const style = MARKER_STYLES[marker.status] || MARKER_STYLES.normal;
                 const isHighlighted = marker.name === highlightedMarkerName;
                 return (
                   <CustomOverlayMap
@@ -559,57 +620,8 @@ export default function Home() {
                     position={{ lat: marker.lat, lng: marker.lng }}
                     yAnchor={1}
                   >
-                    <div
-                      onClick={() => router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${region.lawdCd}`)}
-                      className={isHighlighted ? styles.markerHighlight : undefined}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        transform: 'translateY(-5px)',
-                        borderRadius: '8px',
-                        boxShadow: style.glow,
-                      }}
-                    >
-                      <div style={{
-                        background: 'white',
-                        border: `1px solid ${style.border}`,
-                        borderTopLeftRadius: '6px',
-                        borderTopRightRadius: '6px',
-                        padding: '4px 8px',
-                        fontSize: '0.8rem',
-                        fontWeight: 700,
-                        color: '#1e293b',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {style.badge && <span style={{ marginRight: '2px' }}>{style.badge}</span>}
-                        {marker.name}
-                      </div>
-                      <div style={{
-                        background: style.bg,
-                        color: 'white',
-                        borderBottomLeftRadius: '6px',
-                        borderBottomRightRadius: '6px',
-                        padding: '4px 8px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        position: 'relative'
-                      }}>
-                        {marker.price}
-                        <div style={{
-                          position: 'absolute',
-                          bottom: '-6px',
-                          left: '50%',
-                          transform: 'translateX(-50%)',
-                          width: '0',
-                          height: '0',
-                          borderLeft: '5px solid transparent',
-                          borderRight: '5px solid transparent',
-                          borderTop: `6px solid ${style.bg}`
-                        }} />
-                      </div>
+                    <div style={{ transform: 'translateY(-5px)' }}>
+                      {renderMarkerChip(marker, isHighlighted)}
                     </div>
                   </CustomOverlayMap>
                 );

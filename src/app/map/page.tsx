@@ -25,11 +25,16 @@ interface AptCluster {
   markers: AptMarker[];
 }
 
-// 화면 픽셀 기준 이 거리 안에 있는 칩들은 하나로 묶는다. 서구 원도심처럼 오래된 소규모
-// 단지가 밀집한 지역에서는 칩(대략 90x50px)이 서로 완전히 겹쳐 뒤에 깔린 단지가 실제로는
-// 존재해도 "마커가 안 보인다"는 문제로 이어졌었다 — 데이터가 없어서가 아니라 화면에서
-// 물리적으로 가려진 것.
+// 화면 픽셀 기준 이 거리 안에 있는 칩들은 한 그룹으로 묶는다. 서구 원도심처럼 오래된
+// 소규모 단지가 밀집한 지역에서는 칩(대략 90x50px)이 서로 완전히 겹쳐 뒤에 깔린 단지가
+// 실제로는 존재해도 "마커가 안 보인다"는 문제로 이어졌었다 — 데이터가 없어서가 아니라
+// 화면에서 물리적으로 가려진 것. 숫자 배지로 뭉치는 대신, 그룹 안 칩들을 정사각형에
+// 가까운 격자로 살짝 벌려서 각자 이름/가격이 그대로 보이게 한다(뱃지 방식은 정보가
+// 안 보인다는 피드백을 받아 교체함).
 const CLUSTER_PIXEL_RADIUS = 55;
+const GRID_CHIP_WIDTH = 110;
+const GRID_CHIP_HEIGHT = 52;
+const GRID_GAP = 6;
 
 interface SchoolMarker {
   id: string;
@@ -314,12 +319,43 @@ export default function FullscreenMapPage() {
     };
   }, [mapInstanceReady, aptMarkers]);
 
-  const handleClusterClick = (cluster: AptCluster) => {
-    const map = mapRef.current;
-    if (!map || !window.kakao?.maps) return;
-    const anchor = new window.kakao.maps.LatLng(cluster.lat, cluster.lng);
-    map.setLevel(Math.max(1, map.getLevel() - 2), { anchor });
-  };
+  // 개별 마커 칩 하나를 그린다. 단독 마커든, 겹친 그룹을 격자로 벌린 것 중 하나든 이
+  // 함수 하나로 렌더링해서 두 경우의 모양이 항상 같게 유지한다.
+  const renderMarkerChip = (marker: AptMarker) => (
+    <div
+      onClick={() => router.push(`/apt/${marker.name}`)}
+      style={{
+        background: 'white',
+        border: `2px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`,
+        borderRadius: '8px',
+        padding: '6px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+        cursor: 'pointer',
+        position: 'relative',
+      }}
+    >
+      {/* 작은 말풍선 꼬리 */}
+      <div style={{
+        position: 'absolute',
+        bottom: '-8px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '0',
+        height: '0',
+        borderLeft: '6px solid transparent',
+        borderRight: '6px solid transparent',
+        borderTop: `8px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`
+      }} />
+
+      <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>{marker.name}</span>
+      <span style={{ fontSize: marker.hasRecentPrice ? '1.1rem' : '0.8rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8' }}>
+        {marker.price}
+      </span>
+    </div>
+  );
 
   // 컴포넌트 첫 마운트 시, 사용자 위치 가져오기
   useEffect(() => {
@@ -550,28 +586,32 @@ export default function FullscreenMapPage() {
       >
         {layers.apt && aptClusters.map((cluster) => {
           if (cluster.markers.length > 1) {
+            // 겹치는 칩들을 정사각형에 가까운 격자로 살짝 벌려서 그린다 — 숫자 배지
+            // 하나로 뭉치면 이름/가격이 안 보인다는 피드백을 반영.
+            const cols = Math.ceil(Math.sqrt(cluster.markers.length));
+            const rows = Math.ceil(cluster.markers.length / cols);
             return (
               <CustomOverlayMap key={cluster.id} position={{ lat: cluster.lat, lng: cluster.lng }} yAnchor={0.5}>
-                <div
-                  onClick={() => handleClusterClick(cluster)}
-                  title={cluster.markers.map((m) => m.name).join(', ')}
-                  style={{
-                    width: '46px',
-                    height: '46px',
-                    borderRadius: '50%',
-                    background: 'var(--primary-color)',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                    fontSize: '0.95rem',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.25)',
-                    cursor: 'pointer',
-                    border: '3px solid white',
-                  }}
-                >
-                  {cluster.markers.length}
+                <div style={{ position: 'relative' }}>
+                  {cluster.markers.map((marker, i) => {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    const offsetX = (col - (cols - 1) / 2) * (GRID_CHIP_WIDTH + GRID_GAP);
+                    const offsetY = (row - (rows - 1) / 2) * (GRID_CHIP_HEIGHT + GRID_GAP);
+                    return (
+                      <div
+                        key={marker.id}
+                        style={{
+                          position: 'absolute',
+                          left: offsetX,
+                          top: offsetY,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                      >
+                        {renderMarkerChip(marker)}
+                      </div>
+                    );
+                  })}
                 </div>
               </CustomOverlayMap>
             );
@@ -584,47 +624,8 @@ export default function FullscreenMapPage() {
               position={{ lat: marker.lat, lng: marker.lng }}
               yAnchor={1} // 오버레이의 기준점 (1이면 마커 하단이 뾰족한 부분이 됨)
             >
-              <div
-                onClick={() => router.push(`/apt/${marker.name}`)}
-                style={{
-                  background: 'white',
-                  border: `2px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`,
-                  borderRadius: '8px',
-                  padding: '6px 12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                  cursor: 'pointer',
-                  transform: 'translateY(-10px)',
-                  transition: 'transform 0.2s, boxShadow 0.2s'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-15px) scale(1.05)';
-                  e.currentTarget.style.boxShadow = '0 8px 12px rgba(0,0,0,0.2)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-10px) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-                }}
-              >
-                {/* 작은 말풍선 꼬리 */}
-                <div style={{
-                  position: 'absolute',
-                  bottom: '-8px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: '0',
-                  height: '0',
-                  borderLeft: '6px solid transparent',
-                  borderRight: '6px solid transparent',
-                  borderTop: `8px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`
-                }} />
-
-                <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>{marker.name}</span>
-                <span style={{ fontSize: marker.hasRecentPrice ? '1.1rem' : '0.8rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8' }}>
-                  {marker.price}
-                </span>
+              <div style={{ transform: 'translateY(-10px)' }}>
+                {renderMarkerChip(marker)}
               </div>
             </CustomOverlayMap>
           );
