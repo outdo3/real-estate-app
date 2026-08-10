@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
-import { absoluteUrl } from '@/config/site';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface KakaoShareButtonProps {
   title: string;
@@ -49,33 +48,83 @@ function loadKakaoShareSdk(): Promise<void> {
   return kakaoShareSdkPromise;
 }
 
+function getAppKey(): string | undefined {
+  return process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+}
+
+function ensureInitialized(): boolean {
+  const appKey = getAppKey();
+  if (!appKey || !window.Kakao) return false;
+  if (!window.Kakao.isInitialized()) {
+    window.Kakao.init(appKey);
+  }
+  return true;
+}
+
 // 카카오 디벨로퍼스 콘솔에서 "카카오톡 공유" 제품이 활성화돼 있지 않으면 Kakao.Share 호출이
 // 실패할 수 있다 — 이 경우 URL을 클립보드에 복사하는 것으로 폴백해 완전히 막히지 않게 한다.
 export default function KakaoShareButton({ title, description }: KakaoShareButtonProps) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'error'>('idle');
+  const sdkReadyRef = useRef(false);
+
+  // SDK를 클릭 시점에 처음 로드하면, 로드가 끝난 뒤 Kakao.Share.sendDefault()를 호출하는
+  // 시점은 더 이상 "사용자가 직접 클릭한 동기 실행 흐름"이 아니게 된다(await를 한 번이라도
+  // 거치면 브라우저가 팝업 차단 대상으로 간주함). sendDefault 내부는 팝업을 열 때
+  // window.open()의 반환값에 곧바로 .focus()를 호출하는데, 팝업이 차단되면 그 반환값이
+  // null이라 "Cannot read properties of null (reading 'focus')" 예외로 조용히 실패한다
+  // (실측 확인 — 클릭해도 아무 일도 안 일어나는 것처럼 보이던 원인). 그래서 마운트 시
+  // 미리 SDK를 로드/초기화해두고, 클릭 핸들러는 이미 준비된 경우 await 없이 동기적으로
+  // sendDefault를 호출해 사용자 제스처 흐름을 끊지 않는다.
+  useEffect(() => {
+    loadKakaoShareSdk()
+      .then(() => {
+        if (ensureInitialized()) sdkReadyRef.current = true;
+      })
+      .catch(() => {});
+  }, []);
+
+  const buildShareUrl = () => {
+    // location.href를 그대로 써도 되지만, 이 페이지는 ?lawdCd=&dong= 같은 쿼리스트링에
+    // 실제 지역 컨텍스트가 실려 있어(없으면 기본 지역으로 폴백) 쿼리스트링은 반드시
+    // 유지해야 한다. NEXT_PUBLIC_APP_URL 같은 빌드타임 환경변수가 없어도(또는 Vercel의
+    // 배포별 임시 도메인이 잡혀도) 항상 지금 실제로 열려있는 도메인을 쓰도록
+    // location.origin을 직접 조합한다.
+    return `${window.location.origin}${window.location.pathname}${window.location.search}`;
+  };
+
+  const buildImageUrl = () => `${window.location.origin}/og-image.png`;
+
+  const sendShare = () => {
+    const url = buildShareUrl();
+    window.Kakao.Share.sendDefault({
+      objectType: 'feed',
+      content: {
+        title,
+        description,
+        imageUrl: buildImageUrl(),
+        link: { mobileWebUrl: url, webUrl: url },
+      },
+      buttons: [
+        { title: '이집에서 단지정보 보기', link: { mobileWebUrl: url, webUrl: url } },
+      ],
+    });
+  };
 
   const handleShare = async () => {
-    const url = window.location.href;
-    const appKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+    const url = buildShareUrl();
 
     try {
-      if (!appKey) throw new Error('카카오 키 없음');
-      await loadKakaoShareSdk();
-      if (!window.Kakao.isInitialized()) {
-        window.Kakao.init(appKey);
+      if (!getAppKey()) throw new Error('카카오 키 없음');
+
+      if (sdkReadyRef.current && window.Kakao?.isInitialized?.()) {
+        // 이미 준비돼 있으면 await 없이 곧바로 호출 — 클릭 이벤트와 동기적으로 이어져야
+        // 브라우저가 팝업을 차단하지 않는다.
+        sendShare();
+      } else {
+        await loadKakaoShareSdk();
+        if (!ensureInitialized()) throw new Error('카카오 SDK 초기화 실패');
+        sendShare();
       }
-      window.Kakao.Share.sendDefault({
-        objectType: 'feed',
-        content: {
-          title,
-          description,
-          imageUrl: absoluteUrl('/og-image.png'),
-          link: { mobileWebUrl: url, webUrl: url },
-        },
-        buttons: [
-          { title: '자세히 보기', link: { mobileWebUrl: url, webUrl: url } },
-        ],
-      });
       setStatus('idle');
     } catch (e) {
       try {

@@ -571,8 +571,8 @@ export default function ApartmentDetail() {
 
           <div className={styles.shareRow}>
             <KakaoShareButton
-              title={`${aptName} 실거래가`}
-              description={`최근 실거래가 ${latestPrice} · ${(regionName || '').trim()} ${aptName}`.trim()}
+              title={`${aptName} - 실거래가 & 단지정보 | 이집`}
+              description="최근 실거래가, 세대당 주차대수, 커뮤니티 시설 정보를 확인해보세요."
             />
           </div>
         </div>
