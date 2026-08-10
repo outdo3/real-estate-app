@@ -28,6 +28,19 @@
   border-color: var(--primary-color);
 }
 
+.aptNameInput {
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  outline: none;
+  color: var(--text-secondary);
+}
+
+.aptNameInput:focus {
+  border-color: var(--primary-color);
+}
+
 .contentInput {
   padding: 0.85rem 1rem;
   border-radius: 8px;
