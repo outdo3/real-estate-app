@@ -113,6 +113,26 @@ export default function KakaoShareButton({ title, description }: KakaoShareButto
   const handleShare = async () => {
     const url = buildShareUrl();
 
+    // 모바일 브라우저(iOS Safari, Android Chrome 등)는 navigator.share()를 지원하며,
+    // 클릭 즉시 OS 자체 공유 시트를 띄운다 — 카카오톡이 설치돼 있으면 그 목록에 바로
+    // 나타난다. 카카오 JS SDK의 sendDefault()는 데스크톱에서 팝업을 여는 방식이라
+    // "사용자 클릭과 완전히 동기적으로 이어지지 않으면 팝업이 차단되고 SDK 내부에서
+    // null.focus() 예외로 조용히 실패"하는 문제가 있다는 게 카카오 공식 답변으로
+    // 확인됐다(devtalk.kakao.com) — 이 앱을 실제 만졌던 브라우저 환경에서도 재현됨.
+    // navigator.share()는 이 문제 자체가 없는 더 안정적인 경로라 있으면 최우선으로 쓴다.
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title, text: description, url });
+        setStatus('idle');
+        return;
+      } catch (e) {
+        // 사용자가 공유 시트에서 취소한 경우(AbortError)는 실패가 아니라 정상 취소이므로
+        // 에러 상태로 넘어가지 않는다.
+        if (e instanceof Error && e.name === 'AbortError') return;
+        // 그 외 실패면 아래 카카오 SDK/클립보드 경로로 계속 폴백한다.
+      }
+    }
+
     try {
       if (!getAppKey()) throw new Error('카카오 키 없음');
 
