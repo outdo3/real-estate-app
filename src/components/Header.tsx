@@ -20,9 +20,12 @@ interface HeaderProps {
   hideLogo?: boolean;
   /** pageTitle을 더 크고 진하게(단지명처럼 화면의 주인공이 되는 타이틀) 표시한다. */
   pageTitleLarge?: boolean;
+  /** pageTitle 정렬. 기본은 'right'(우측 끝 근처). 로고가 있던 좌측 영역에 타이틀을
+   *  두고 싶을 때(예: 단지 상세페이지) 'left'로 전달한다. */
+  pageTitleAlign?: 'left' | 'right';
 }
 
-const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge }: HeaderProps) => {
+const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge, pageTitleAlign = 'right' }: HeaderProps) => {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -47,7 +50,7 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge
 
         {searchSlot && <div className={styles.searchSlot}>{searchSlot}</div>}
         {!searchSlot && pageTitle && (
-          <h1 className={`${styles.pageTitle} ${pageTitleLarge ? styles.pageTitleLarge : ''}`}>{pageTitle}</h1>
+          <h1 className={`${styles.pageTitle} ${pageTitleLarge ? styles.pageTitleLarge : ''} ${pageTitleAlign === 'left' ? styles.pageTitleLeft : ''}`}>{pageTitle}</h1>
         )}
 
         <ul className={`${styles.menuList} ${hideMobileNav ? styles.menuListHideMobile : ''}`}>

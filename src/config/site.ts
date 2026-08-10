@@ -14,7 +14,7 @@ const getBaseUrl = () => {
 };
 
 export const siteConfig = {
-  name: '이집 - 부산 실거래가 지도',
+  name: '이집',
   url: getBaseUrl().replace(/\/$/, ''),
   description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
 };

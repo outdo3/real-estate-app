@@ -427,7 +427,7 @@ export default function ApartmentDetail() {
 
   return (
     <div className={styles.main}>
-      <Header hideLogo pageTitle={aptName} pageTitleLarge />
+      <Header hideLogo pageTitle={aptName} pageTitleLarge pageTitleAlign="left" />
 
       {/* 팝업(모달) */}
       {activeModal && (
@@ -454,7 +454,6 @@ export default function ApartmentDetail() {
           <div className={styles.breadcrumb}>아파트실거래 &gt; {regionName ? regionName.split(' ').join(' > ') : ''} {(urlDong || (trades.length > 0 && trades[0].dong)) ? `> ${urlDong || trades[0].dong}` : ''} &gt; {aptName}</div>
 
           <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
-            <h1 className={styles.title} style={{ marginBottom: '0.75rem' }}>{aptName}</h1>
             <AptSpecGrid address={primaryAddress} aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
           </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
 export interface ApartmentSearchResult {
   name: string;
@@ -15,14 +15,26 @@ interface ApartmentAutocompleteProps {
 }
 
 const SCRIPT_ID = 'kakao-map-script-main';
+// 상위 몇 개 결과까지 실데이터(세대수/준공연도/건물유형)를 보강할지. 이 조회는 동/법정동
+// 역지오코딩 + /api/apt/[name]/info(외부 스크래핑 포함) 왕복이 있어 전체 결과에 다 걸면
+// 타이핑마다 과도한 외부 호출이 발생한다 — 상위 3개로 제한.
+const ENRICH_COUNT = 3;
+
+interface Enrichment {
+  households: string | null;
+  buildYear: string | null;
+  buildingType: string | null;
+}
 
 // 카카오 장소 키워드 검색(SearchFilterBar.tsx와 같은 방식)으로 아파트 단지를 찾는 자동완성.
-// 카카오 로컬 API는 세대수/준공연월 같은 부동산 속성을 제공하지 않는다 — 그 값을 지어내는
-// 대신 실제로 받을 수 있는 단지명/주소만 드롭다운에 보여준다.
+// 카카오 로컬 API 자체는 세대수/준공연월/건물유형을 제공하지 않는다 — 그 값이 필요하면
+// 이 앱이 이미 갖고 있는 실제 데이터 소스(/api/apt/[name]/info, 단지 상세페이지가 쓰는 것과
+// 동일한 라우트)를 상위 결과에 한해 추가로 조회해서 채운다. 값을 지어내지 않는다.
 export default function ApartmentAutocomplete({ onSelect, placeholder }: ApartmentAutocompleteProps) {
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [enrichment, setEnrichment] = useState<Record<string, Enrichment | 'loading' | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +46,49 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const enrichTopResults = (apartments: any[]) => {
+    if (!window.kakao?.maps?.services) return;
+    const geocoder = new window.kakao.maps.services.Geocoder();
+
+    apartments.slice(0, ENRICH_COUNT).forEach((place) => {
+      const key = place.id;
+      setEnrichment((prev) => ({ ...prev, [key]: 'loading' }));
+
+      geocoder.coord2RegionCode(place.x, place.y, (regionResult: any, regionStatus: any) => {
+        if (regionStatus !== window.kakao.maps.services.Status.OK) {
+          setEnrichment((prev) => ({ ...prev, [key]: null }));
+          return;
+        }
+        const region = regionResult.find((r: any) => r.region_type === 'B');
+        if (!region) {
+          setEnrichment((prev) => ({ ...prev, [key]: null }));
+          return;
+        }
+        const lawdCd = region.code.substring(0, 5);
+        const dong = region.region_3depth_name;
+
+        fetch(`/api/apt/${encodeURIComponent(place.place_name)}/info?dong=${encodeURIComponent(dong)}&lawdCd=${encodeURIComponent(lawdCd)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            const info = data?.info as Record<string, string> | null;
+            if (!info) {
+              setEnrichment((prev) => ({ ...prev, [key]: null }));
+              return;
+            }
+            setEnrichment((prev) => ({
+              ...prev,
+              [key]: {
+                households: info['세대수'] || null,
+                buildYear: info['사용승인일'] || null,
+                buildingType: info['주용도'] || null,
+              },
+            }));
+          })
+          .catch(() => setEnrichment((prev) => ({ ...prev, [key]: null })));
+      });
+    });
+  };
 
   useEffect(() => {
     if (!keyword.trim()) {
@@ -50,8 +105,10 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
           if (status === window.kakao.maps.services.Status.OK) {
             // 아파트 카테고리만 남긴다(단지 검색이 목적이라 역/상점 등은 노이즈).
             const apartments = data.filter((p: any) => p.category_name && p.category_name.includes('아파트'));
+            setEnrichment({});
             setResults(apartments);
             setShowDropdown(apartments.length > 0);
+            enrichTopResults(apartments);
           } else {
             setResults([]);
             setShowDropdown(false);
@@ -89,6 +146,20 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
     });
   };
 
+  const renderEnrichmentLine = (place: any) => {
+    const e = enrichment[place.id];
+    if (e === undefined) return null;
+    if (e === 'loading') return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>상세정보 조회 중...</div>;
+    if (e === null) return null;
+    const parts = [
+      e.households ? (e.households.includes('세대') ? e.households : `${e.households}세대`) : null,
+      e.buildYear ? `${e.buildYear}년 준공` : null,
+      e.buildingType,
+    ].filter(Boolean);
+    if (parts.length === 0) return null;
+    return <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{parts.join(' · ')}</div>;
+  };
+
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
       <input
@@ -121,7 +192,7 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
             listStyle: 'none',
             margin: 0,
             padding: '0.4rem',
-            maxHeight: '320px',
+            maxHeight: '360px',
             overflowY: 'auto',
             zIndex: 20,
           }}
@@ -140,6 +211,7 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
             >
               <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{place.place_name}</div>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{place.road_address_name || place.address_name}</div>
+              {renderEnrichmentLine(place)}
             </li>
           ))}
         </ul>

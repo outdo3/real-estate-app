@@ -56,7 +56,11 @@ export async function GET(request: Request) {
     const lawdCd = searchParams.get('lawdCd');
     const dong = searchParams.get('dong');
     const loadMore = parseInt(searchParams.get('loadMore') || '0', 10);
-    
+    // 지도 마커처럼 "최근 3개월에 거래가 없어도 그 단지의 가장 최근 실거래로라도 마커를
+    // 띄워야" 하는 호출부를 위한 단발성 넓은 윈도우. loadMore 기반 페이지네이션과는
+    // 별개 파라미터라 기존 호출부(홈 화면 "더보기")는 영향받지 않는다.
+    const monthsParam = searchParams.get('months');
+
     // 1. type과 lawdCd가 있으면 국토부 API 실시간 호출
     if (type && lawdCd) {
       const getMonths = (startOffset: number, count: number) => {
@@ -71,10 +75,12 @@ export async function GET(request: Request) {
         }
         return res;
       };
-      
+
       // loadMore=0 -> offset=0 (last 3 months)
       // loadMore=1 -> offset=3 (previous 3 months)
-      const months = getMonths(loadMore * 3, 3);
+      const months = monthsParam
+        ? getMonths(0, Math.max(1, parseInt(monthsParam, 10) || 3))
+        : getMonths(loadMore * 3, 3);
       
       // 공공데이터 API 병렬 호출 (속도 개선)
       const promises = months.map(dealYmd => fetchMolitData({ lawdCd, dealYmd, type }));
