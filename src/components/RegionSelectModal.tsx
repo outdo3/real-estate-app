@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRegion, RegionState } from '@/contexts/RegionContext';
 import { REGCODE_PROXY, resolveRegionNameByLawdCd } from '@/lib/region-utils';
+import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import styles from './RegionSelectModal.module.css';
 
 type RegionOption = { code: string; name: string };
@@ -29,7 +30,6 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
   const { isRegionModalOpen, closeRegionModal, setRegion } = useRegion();
 
   const [modalStep, setModalStep] = useState<'sido' | 'sigungu' | 'dong'>('sido');
-  const [keyword, setKeyword] = useState('');
   const [modalSidos, setModalSidos] = useState<RegionOption[]>([]);
   const [modalSigungus, setModalSigungus] = useState<RegionOption[]>([]);
   const [modalDongs, setModalDongs] = useState<RegionOption[]>([]);
@@ -43,7 +43,6 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     setModalStep('sido');
     setSelectedSido(null);
     setSelectedSigungu(null);
-    setKeyword('');
     if (modalSidos.length === 0) {
       setRegionLoading(true);
       fetch(`${REGCODE_PROXY}?regcode_pattern=*00000000`)
@@ -127,8 +126,45 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     });
   };
 
-  const handleKeywordSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  // 좌표(경도, 위도) -> 행정구역 역지오코딩 후 지역을 확정한다. 키워드 검색으로 찾은 좌표든
+  // 자동완성에서 고른 단지의 좌표든 이 한 함수로 처리한다.
+  const reverseGeocodeAndFinalize = (lng: number, lat: number, addressNameFallback: string) => {
+    if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) return;
+    const geocoder = new window.kakao.maps.services.Geocoder();
+    geocoder.coord2RegionCode(lng, lat, (result: any, geoStatus: any) => {
+      if (geoStatus !== window.kakao.maps.services.Status.OK) return;
+      const region = result.find((r: any) => r.region_type === 'B');
+      if (!region) return;
+      const lawdCd = region.code.substring(0, 5);
+
+      // 시/군/구 이름을 우리 지역코드 프록시 기준으로 다시 조회해, REGION_DATA 및
+      // 다른 화면들과 동일한 표기(예: "부산광역시 서구")를 보장한다.
+      // (카카오의 region_1depth_name은 종종 "서울"처럼 축약된 이름을 반환해
+      //  전역 상태의 sido 값과 형식이 어긋날 수 있다.)
+      resolveRegionNameByLawdCd(lawdCd).then((resolved) => {
+        finalize({
+          lawdCd,
+          dong: 'all',
+          sido: resolved?.sido || region.address_name,
+          sigungu: resolved?.sigungu || '',
+          displayRegionName: region.address_name || addressNameFallback,
+        });
+      });
+    });
+  };
+
+  // 자동완성 드롭다운에서 항목을 골랐을 때: 이미 좌표를 알고 있으니 바로 역지오코딩한다.
+  const handlePlaceSelect = (place: ApartmentSearchResult) => {
+    if (onKeywordMatch && onKeywordMatch(place.name)) {
+      closeRegionModal();
+      return;
+    }
+    reverseGeocodeAndFinalize(place.lng, place.lat, place.address);
+  };
+
+  // 드롭다운에서 고르지 않고 Enter를 눌렀을 때(정확한 지역명 등): 카카오 키워드 검색으로
+  // 첫 결과를 찾아 같은 방식으로 처리한다.
+  const handleKeywordSubmit = (keyword: string) => {
     if (!keyword.trim()) return;
 
     if (onKeywordMatch && onKeywordMatch(keyword)) {
@@ -141,28 +177,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     const ps = new window.kakao.maps.services.Places();
     ps.keywordSearch(keyword, (data: any, status: any) => {
       if (status !== window.kakao.maps.services.Status.OK || !data[0]) return;
-
-      const geocoder = new window.kakao.maps.services.Geocoder();
-      geocoder.coord2RegionCode(parseFloat(data[0].x), parseFloat(data[0].y), (result: any, geoStatus: any) => {
-        if (geoStatus !== window.kakao.maps.services.Status.OK) return;
-        const region = result.find((r: any) => r.region_type === 'B');
-        if (!region) return;
-        const lawdCd = region.code.substring(0, 5);
-
-        // 시/군/구 이름을 우리 지역코드 프록시 기준으로 다시 조회해, REGION_DATA 및
-        // 다른 화면들과 동일한 표기(예: "부산광역시 서구")를 보장한다.
-        // (카카오의 region_1depth_name은 종종 "서울"처럼 축약된 이름을 반환해
-        //  전역 상태의 sido 값과 형식이 어긋날 수 있다.)
-        resolveRegionNameByLawdCd(lawdCd).then((resolved) => {
-          finalize({
-            lawdCd,
-            dong: 'all',
-            sido: resolved?.sido || region.address_name,
-            sigungu: resolved?.sigungu || '',
-            displayRegionName: region.address_name,
-          });
-        });
-      });
+      reverseGeocodeAndFinalize(parseFloat(data[0].x), parseFloat(data[0].y), data[0].address_name);
     });
   };
 
@@ -170,16 +185,16 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     <div className={styles.overlay} onClick={handleClose}>
       <div className={styles.content} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
-          <form onSubmit={handleKeywordSearch} style={{ flex: 1, display: 'flex' }}>
-            <input
+          <div style={{ flex: 1 }}>
+            <ApartmentAutocomplete
               autoFocus
-              type="text"
+              categoryFilter={null}
               placeholder="단지명, 동이름, 지역명을 입력해주세요."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              className={styles.input}
+              onSelect={handlePlaceSelect}
+              onSubmit={handleKeywordSubmit}
+              inputStyle={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.75rem 1rem' }}
             />
-          </form>
+          </div>
           <button className={styles.closeBtn} onClick={handleClose} aria-label="검색 닫기">
             ×
           </button>

@@ -29,11 +29,27 @@ const MARKER_STYLES: Record<string, { border: string; bg: string; glow?: string;
   presale: { border: '#ea580c', bg: '#f97316', badge: '🏗️' },
 };
 
+// 화면 픽셀 기준 이 거리 안에 있는 칩들은 하나로 묶는다. 서구 원도심처럼 오래된 소규모
+// 단지가 밀집한 지역에서는 칩(대략 90x50px)이 서로 완전히 겹쳐 뒤에 깔린 단지가 실제로는
+// 존재해도 "마커가 안 보인다"는 문제로 이어진다 — 데이터가 없어서가 아니라 화면에서
+// 물리적으로 가려진 것(/map 페이지에 먼저 적용했던 것과 동일한 수정을 홈 미니맵에도 적용).
+const CLUSTER_PIXEL_RADIUS = 55;
+
+interface MarkerCluster {
+  id: string;
+  lat: number;
+  lng: number;
+  markers: any[];
+}
+
 export default function Home() {
   const router = useRouter();
   const { region, setRegion, openRegionModal } = useRegion();
 
   const [markers, setMarkers] = useState<any[]>([]);
+  const [clusters, setClusters] = useState<MarkerCluster[]>([]);
+  const mapRef = useRef<any>(null);
+  const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const [mapLoadAttempt, setMapLoadAttempt] = useState(0);
@@ -58,6 +74,8 @@ export default function Home() {
     if (!matched) return false;
     setCenter({ lat: matched.lat, lng: matched.lng });
     setHighlightedMarkerName(matched.name);
+    // 클러스터 배지 뒤에 묻히지 않고 개별 칩으로 확실히 보이도록 확대(/map 페이지와 동일한 처리).
+    setMapLevel((lvl) => Math.min(lvl, 3));
     return true;
   };
 
@@ -163,6 +181,91 @@ export default function Home() {
     // 지도 중심이 다른 시/군/구로 넘어간 경우에만 지역/데이터를 자동 재요청
     applyRegionFromCoords(c.getLat(), c.getLng());
   }, [applyRegionFromCoords]);
+
+  // markers를 현재 지도 줌/중심 기준 화면 픽셀 좌표로 투영해서 서로 가까운 칩끼리 묶는다.
+  // 실제 kakao.maps.Map 인스턴스의 projection API가 필요해서(react-kakao-maps-sdk 프롭이
+  // 아니라 원본 SDK 기능) mapRef를 직접 사용한다(/map 페이지와 동일한 방식).
+  const recomputeClusters = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !window.kakao?.maps || markers.length === 0) {
+      setClusters([]);
+      return;
+    }
+    const projection = map.getProjection();
+    if (!projection) return;
+
+    const points = markers.map((m) => {
+      const p = projection.containerPointFromCoords(new window.kakao.maps.LatLng(m.lat, m.lng));
+      return { marker: m, x: p.x, y: p.y };
+    });
+
+    const used = new Array(points.length).fill(false);
+    const result: MarkerCluster[] = [];
+
+    points.forEach((p, i) => {
+      if (used[i]) return;
+      const group = [p];
+      used[i] = true;
+      points.forEach((q, j) => {
+        if (used[j] || i === j) return;
+        if (Math.hypot(p.x - q.x, p.y - q.y) <= CLUSTER_PIXEL_RADIUS) {
+          group.push(q);
+          used[j] = true;
+        }
+      });
+      const avgLat = group.reduce((s, g) => s + g.marker.lat, 0) / group.length;
+      const avgLng = group.reduce((s, g) => s + g.marker.lng, 0) / group.length;
+      result.push({
+        id: group.map((g) => g.marker.id).join(','),
+        lat: avgLat,
+        lng: avgLng,
+        markers: group.map((g) => g.marker),
+      });
+    });
+
+    setClusters(result);
+  }, [markers]);
+
+  // react-kakao-maps-sdk의 <Map ref={mapRef}>는 실제 kakao.maps.Map 인스턴스를 자기 내부
+  // useEffect에서 비동기로 생성한 뒤에야 ref에 채워준다 — "로딩 게이트를 지난 그 커밋"에서
+  // 곧바로 mapRef.current를 참조하면 항상 null을 보고 조기 종료된다(ref 자체는 리액트 렌더
+  // 트리거가 아니라 effect 재실행도 안 됨). 짧은 폴링으로 실제 인스턴스 생성을 기다린다.
+  useEffect(() => {
+    if (!isMapReady) return;
+    if (mapRef.current) {
+      setMapInstanceReady(true);
+      return;
+    }
+    const checkMapInstance = setInterval(() => {
+      if (mapRef.current) {
+        clearInterval(checkMapInstance);
+        setMapInstanceReady(true);
+      }
+    }, 100);
+    return () => clearInterval(checkMapInstance);
+  }, [isMapReady]);
+
+  // 지도 인스턴스가 준비된 뒤 줌/드래그가 끝날 때마다(native 'idle' 이벤트) 클러스터를 다시
+  // 계산한다. recomputeClusters는 markers가 바뀌면 참조도 바뀌므로(useCallback deps),
+  // 데이터가 새로 들어왔을 때도 이 effect가 재실행되며 같은 화면 상태 기준으로 즉시
+  // 재계산된다.
+  useEffect(() => {
+    if (!mapInstanceReady || !mapRef.current || !window.kakao?.maps?.event) return;
+    const map = mapRef.current;
+    const handleIdle = () => recomputeClusters();
+    window.kakao.maps.event.addListener(map, 'idle', handleIdle);
+    recomputeClusters();
+    return () => {
+      window.kakao.maps.event.removeListener(map, 'idle', handleIdle);
+    };
+  }, [mapInstanceReady, recomputeClusters]);
+
+  const handleClusterClick = (cluster: MarkerCluster) => {
+    const map = mapRef.current;
+    if (!map || !window.kakao?.maps) return;
+    const anchor = new window.kakao.maps.LatLng(cluster.lat, cluster.lng);
+    map.setLevel(Math.max(1, map.getLevel() - 2), { anchor });
+  };
 
   // 마지막 탐색 위치(위도/경도/레벨) 복원: 저장된 값이 있으면 기본 위치(강남구) 대신 사용
   useEffect(() => {
@@ -411,13 +514,43 @@ export default function Home() {
         {viewMode === 'map' && isMapReady && (
           <div className={styles.mapWrapper}>
             <Map
+              ref={mapRef}
               center={center}
               style={{ width: '100%', height: '100%' }}
               level={mapLevel}
               onCreate={updateMapBounds}
               onIdle={handleMapIdle}
             >
-              {markers.map((marker) => {
+              {clusters.map((cluster) => {
+                if (cluster.markers.length > 1) {
+                  return (
+                    <CustomOverlayMap key={cluster.id} position={{ lat: cluster.lat, lng: cluster.lng }} yAnchor={0.5}>
+                      <div
+                        onClick={() => handleClusterClick(cluster)}
+                        title={cluster.markers.map((m) => m.name).join(', ')}
+                        style={{
+                          width: '46px',
+                          height: '46px',
+                          borderRadius: '50%',
+                          background: 'var(--primary-color)',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 800,
+                          fontSize: '0.95rem',
+                          boxShadow: '0 4px 8px rgba(0,0,0,0.25)',
+                          cursor: 'pointer',
+                          border: '3px solid white',
+                        }}
+                      >
+                        {cluster.markers.length}
+                      </div>
+                    </CustomOverlayMap>
+                  );
+                }
+
+                const marker = cluster.markers[0];
                 const style = MARKER_STYLES[marker.status] || MARKER_STYLES.normal;
                 const isHighlighted = marker.name === highlightedMarkerName;
                 return (

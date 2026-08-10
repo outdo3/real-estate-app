@@ -12,7 +12,17 @@ export interface ApartmentSearchResult {
 interface ApartmentAutocompleteProps {
   onSelect: (result: ApartmentSearchResult) => void;
   placeholder?: string;
+  /** 검색 결과를 이 문자열이 category_name에 포함된 것만 남긴다. null이면 필터링 없이
+   * 카카오 키워드 검색 결과를 그대로 보여준다(동/지역명 등 아파트가 아닌 장소도 검색해야
+   * 하는 화면에서 사용). 생략 시 기존 동작(아파트만)을 그대로 유지한다. */
+  categoryFilter?: string | null;
+  /** 드롭다운에서 항목을 고르지 않고 Enter를 눌렀을 때(예: 정확한 지역명을 바로 검색) 호출된다. */
+  onSubmit?: (keyword: string) => void;
+  autoFocus?: boolean;
+  inputStyle?: React.CSSProperties;
 }
+
+const DEFAULT_CATEGORY_FILTER = '아파트';
 
 const SCRIPT_ID = 'kakao-map-script-main';
 // 상위 몇 개 결과까지 실데이터(세대수/준공연도/건물유형)를 보강할지. 이 조회는 동/법정동
@@ -36,7 +46,14 @@ interface DropdownRect {
 // 카카오 로컬 API 자체는 세대수/준공연월/건물유형을 제공하지 않는다 — 그 값이 필요하면
 // 이 앱이 이미 갖고 있는 실제 데이터 소스(/api/apt/[name]/info, 단지 상세페이지가 쓰는 것과
 // 동일한 라우트)를 상위 결과에 한해 추가로 조회해서 채운다. 값을 지어내지 않는다.
-export default function ApartmentAutocomplete({ onSelect, placeholder }: ApartmentAutocompleteProps) {
+export default function ApartmentAutocomplete({
+  onSelect,
+  placeholder,
+  categoryFilter = DEFAULT_CATEGORY_FILTER,
+  onSubmit,
+  autoFocus,
+  inputStyle,
+}: ApartmentAutocompleteProps) {
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -105,6 +122,9 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
     const geocoder = new window.kakao.maps.services.Geocoder();
 
     apartments.slice(0, ENRICH_COUNT).forEach((place) => {
+      // /api/apt/[name]/info는 아파트 단지 전용 데이터라, categoryFilter를 끈 화면(동/지역명
+      // 검색)에서 아파트가 아닌 장소가 섞여 들어와도 그런 항목은 조회하지 않는다.
+      if (!place.category_name || !place.category_name.includes(DEFAULT_CATEGORY_FILTER)) return;
       const key = place.id;
       setEnrichment((prev) => ({ ...prev, [key]: 'loading' }));
 
@@ -161,8 +181,11 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
         const ps = new window.kakao.maps.services.Places();
         ps.keywordSearch(keyword, (data: any, status: any) => {
           if (status === window.kakao.maps.services.Status.OK) {
-            // 아파트 카테고리만 남긴다(단지 검색이 목적이라 역/상점 등은 노이즈).
-            const apartments = data.filter((p: any) => p.category_name && p.category_name.includes('아파트'));
+            // categoryFilter가 있으면 그 카테고리만 남긴다(예: '아파트'로 단지 검색 시 역/상점
+            // 등 노이즈 제거). null이면 동/지역명 검색을 위해 필터링하지 않는다.
+            const apartments = categoryFilter
+              ? data.filter((p: any) => p.category_name && p.category_name.includes(categoryFilter))
+              : data;
             setEnrichment({});
             setResults(apartments);
             setShowDropdown(apartments.length > 0);
@@ -226,9 +249,16 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
       <input
         ref={inputRef}
         type="text"
+        autoFocus={autoFocus}
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
         onFocus={() => results.length > 0 && setShowDropdown(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && onSubmit) {
+            setShowDropdown(false);
+            onSubmit(keyword);
+          }
+        }}
         placeholder={placeholder || '아파트 단지명 검색'}
         style={{
           width: '100%',
@@ -238,6 +268,7 @@ export default function ApartmentAutocomplete({ onSelect, placeholder }: Apartme
           outline: 'none',
           fontSize: '1rem',
           boxSizing: 'border-box',
+          ...inputStyle,
         }}
       />
       {showDropdown && dropdownRect && (
