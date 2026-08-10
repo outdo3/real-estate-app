@@ -85,6 +85,8 @@ model Post {
   content   String   @db.Text
   // 관리자 권한으로 게시글을 목록 상단에 고정
   pinned    Boolean  @default(false)
+  // 단지 상세페이지에서 연동되는 커뮤니티 글 태그 — 자유 텍스트, 정확 일치로만 필터링
+  aptName   String?  @map("apt_name")
   authorId  String   @map("author_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -93,6 +95,7 @@ model Post {
   comments Comment[]
 
   @@index([pinned, createdAt])
+  @@index([aptName, createdAt])
   @@map("posts")
 }
 
