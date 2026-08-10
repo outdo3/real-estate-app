@@ -18,6 +18,19 @@ interface AptMarker {
   lng: number;
 }
 
+interface AptCluster {
+  id: string;
+  lat: number;
+  lng: number;
+  markers: AptMarker[];
+}
+
+// 화면 픽셀 기준 이 거리 안에 있는 칩들은 하나로 묶는다. 서구 원도심처럼 오래된 소규모
+// 단지가 밀집한 지역에서는 칩(대략 90x50px)이 서로 완전히 겹쳐 뒤에 깔린 단지가 실제로는
+// 존재해도 "마커가 안 보인다"는 문제로 이어졌었다 — 데이터가 없어서가 아니라 화면에서
+// 물리적으로 가려진 것.
+const CLUSTER_PIXEL_RADIUS = 55;
+
 interface SchoolMarker {
   id: string;
   name: string;
@@ -45,9 +58,11 @@ export default function FullscreenMapPage() {
   const router = useRouter();
 
   const [aptMarkers, setAptMarkers] = useState<AptMarker[]>([]);
+  const [aptClusters, setAptClusters] = useState<AptCluster[]>([]);
   const [schoolMarkers, setSchoolMarkers] = useState<SchoolMarker[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
@@ -177,12 +192,99 @@ export default function FullscreenMapPage() {
     if (layers.school) fetchSchoolMarkers(lat, lng);
   };
 
+  // aptMarkers를 현재 지도 줌/중심 기준 화면 픽셀 좌표로 투영해서 서로 가까운 칩끼리
+  // 묶는다. 실제 kakao.maps.Map 인스턴스의 projection API가 필요해서(react-kakao-maps-sdk
+  // 프롭이 아니라 원본 SDK 기능) mapRef를 직접 사용한다.
+  const recomputeClusters = () => {
+    const map = mapRef.current;
+    if (!map || !window.kakao?.maps || aptMarkers.length === 0) {
+      setAptClusters([]);
+      return;
+    }
+    const projection = map.getProjection();
+    if (!projection) return;
+
+    const points = aptMarkers.map((m) => {
+      const p = projection.containerPointFromCoords(new window.kakao.maps.LatLng(m.lat, m.lng));
+      return { marker: m, x: p.x, y: p.y };
+    });
+
+    const used = new Array(points.length).fill(false);
+    const result: AptCluster[] = [];
+
+    points.forEach((p, i) => {
+      if (used[i]) return;
+      const group = [p];
+      used[i] = true;
+      points.forEach((q, j) => {
+        if (used[j] || i === j) return;
+        if (Math.hypot(p.x - q.x, p.y - q.y) <= CLUSTER_PIXEL_RADIUS) {
+          group.push(q);
+          used[j] = true;
+        }
+      });
+      const avgLat = group.reduce((s, g) => s + g.marker.lat, 0) / group.length;
+      const avgLng = group.reduce((s, g) => s + g.marker.lng, 0) / group.length;
+      result.push({
+        id: group.map((g) => g.marker.id).join(','),
+        lat: avgLat,
+        lng: avgLng,
+        markers: group.map((g) => g.marker),
+      });
+    });
+
+    setAptClusters(result);
+  };
+
   // 최초 지도 준비 완료 + center 확정 시 최초 1회 로드
   useEffect(() => {
     if (!isMapReady) return;
     setIsLoadingData(true);
     refreshActiveLayers(center.lat, center.lng);
   }, [isMapReady]);
+
+  // react-kakao-maps-sdk의 <Map ref={mapRef}>는 실제 kakao.maps.Map 인스턴스를 자기 내부
+  // useEffect에서 비동기로 생성한 뒤에야 ref에 채워준다 — 그래서 "로딩 게이트를 지난 그
+  // 커밋"에서 곧바로 mapRef.current를 참조하는 effect는 항상 null을 보고 조기 종료됐다
+  // (ref 자체는 리액트 렌더 트리거가 아니라 effect 재실행도 안 됨 → 클러스터가 영원히
+  // 빈 배열로 남아 마커가 하나도 안 그려지는 회귀로 이어졌다). SDK 로드 감지와 같은 이
+  // 파일의 기존 관례(위 checkKakao setInterval)를 그대로 따라 짧은 폴링으로 실제 인스턴스
+  // 생성을 기다린다.
+  useEffect(() => {
+    if (isLoadingData || !isMapReady) return;
+    if (mapRef.current) {
+      setMapInstanceReady(true);
+      return;
+    }
+    const checkMapInstance = setInterval(() => {
+      if (mapRef.current) {
+        clearInterval(checkMapInstance);
+        setMapInstanceReady(true);
+      }
+    }, 100);
+    return () => clearInterval(checkMapInstance);
+  }, [isLoadingData, isMapReady]);
+
+  // 지도 인스턴스가 실제로 준비된 뒤 줌/드래그가 끝날 때마다(native 'idle' 이벤트) 클러스터를
+  // 다시 계산한다. 데이터가 새로 들어와도(aptMarkers 변경) 같은 화면 상태 기준으로 즉시 한
+  // 번 재계산한다.
+  useEffect(() => {
+    if (!mapInstanceReady || !mapRef.current || !window.kakao?.maps?.event) return;
+    const map = mapRef.current;
+    const handleIdle = () => recomputeClusters();
+    window.kakao.maps.event.addListener(map, 'idle', handleIdle);
+    recomputeClusters();
+    return () => {
+      window.kakao.maps.event.removeListener(map, 'idle', handleIdle);
+    };
+  }, [mapInstanceReady, aptMarkers]);
+
+  const handleClusterClick = (cluster: AptCluster) => {
+    const map = mapRef.current;
+    if (!map || !window.kakao?.maps) return;
+    const anchor = new window.kakao.maps.LatLng(cluster.lat, cluster.lng);
+    map.setLevel(Math.max(1, map.getLevel() - 2), { anchor });
+  };
 
   // 컴포넌트 첫 마운트 시, 사용자 위치 가져오기
   useEffect(() => {
@@ -390,56 +492,87 @@ export default function FullscreenMapPage() {
         level={6}
         onDragEnd={handleDragEnd}
       >
-        {layers.apt && aptMarkers.map((marker) => (
-          <CustomOverlayMap
-            key={marker.id}
-            position={{ lat: marker.lat, lng: marker.lng }}
-            yAnchor={1} // 오버레이의 기준점 (1이면 마커 하단이 뾰족한 부분이 됨)
-          >
-            <div
-              onClick={() => router.push(`/apt/${marker.name}`)}
-              style={{
-                background: 'white',
-                border: `2px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`,
-                borderRadius: '8px',
-                padding: '6px 12px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                cursor: 'pointer',
-                transform: 'translateY(-10px)',
-                transition: 'transform 0.2s, boxShadow 0.2s'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.transform = 'translateY(-15px) scale(1.05)';
-                e.currentTarget.style.boxShadow = '0 8px 12px rgba(0,0,0,0.2)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(-10px) scale(1)';
-                e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-              }}
-            >
-              {/* 작은 말풍선 꼬리 */}
-              <div style={{
-                position: 'absolute',
-                bottom: '-8px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: '0',
-                height: '0',
-                borderLeft: '6px solid transparent',
-                borderRight: '6px solid transparent',
-                borderTop: `8px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`
-              }} />
+        {layers.apt && aptClusters.map((cluster) => {
+          if (cluster.markers.length > 1) {
+            return (
+              <CustomOverlayMap key={cluster.id} position={{ lat: cluster.lat, lng: cluster.lng }} yAnchor={0.5}>
+                <div
+                  onClick={() => handleClusterClick(cluster)}
+                  title={cluster.markers.map((m) => m.name).join(', ')}
+                  style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '50%',
+                    background: 'var(--primary-color)',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.95rem',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.25)',
+                    cursor: 'pointer',
+                    border: '3px solid white',
+                  }}
+                >
+                  {cluster.markers.length}
+                </div>
+              </CustomOverlayMap>
+            );
+          }
 
-              <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>{marker.name}</span>
-              <span style={{ fontSize: marker.hasRecentPrice ? '1.1rem' : '0.8rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8' }}>
-                {marker.price}
-              </span>
-            </div>
-          </CustomOverlayMap>
-        ))}
+          const marker = cluster.markers[0];
+          return (
+            <CustomOverlayMap
+              key={marker.id}
+              position={{ lat: marker.lat, lng: marker.lng }}
+              yAnchor={1} // 오버레이의 기준점 (1이면 마커 하단이 뾰족한 부분이 됨)
+            >
+              <div
+                onClick={() => router.push(`/apt/${marker.name}`)}
+                style={{
+                  background: 'white',
+                  border: `2px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`,
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                  cursor: 'pointer',
+                  transform: 'translateY(-10px)',
+                  transition: 'transform 0.2s, boxShadow 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-15px) scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 8px 12px rgba(0,0,0,0.2)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-10px) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                }}
+              >
+                {/* 작은 말풍선 꼬리 */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '-8px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '0',
+                  height: '0',
+                  borderLeft: '6px solid transparent',
+                  borderRight: '6px solid transparent',
+                  borderTop: `8px solid ${marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8'}`
+                }} />
+
+                <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>{marker.name}</span>
+                <span style={{ fontSize: marker.hasRecentPrice ? '1.1rem' : '0.8rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8' }}>
+                  {marker.price}
+                </span>
+              </div>
+            </CustomOverlayMap>
+          );
+        })}
 
         {layers.school && schoolMarkers.map((school) => (
           <CustomOverlayMap key={school.id} position={{ lat: school.lat, lng: school.lng }} yAnchor={1}>
