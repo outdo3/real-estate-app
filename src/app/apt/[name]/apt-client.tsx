@@ -103,34 +103,47 @@ export default function ApartmentDetail() {
 
   useEffect(() => {
     if (!aptName) return;
+    // 매매/전월세 탭을 빠르게 전환하면 이전 요청이 나중에 끝나 최신 탭의 데이터를 덮어쓸 수
+    // 있다 — cancelled 플래그로 이미 무효화된(effect가 재실행된) 요청의 응답은 반영하지 않는다.
+    let cancelled = false;
 
     const fetchTrades = async () => {
       setLoading(true);
       try {
         const urlParams = new URLSearchParams(window.location.search);
-        const lawdCd = urlParams.get('lawdCd') || '11680';
-        setLawdCdState(lawdCd);
+        const urlLawdCd = urlParams.get('lawdCd');
 
         const periodParam = periodFilter === '1년' ? 12 : (periodFilter === '3년' ? 36 : (periodFilter === '5년' ? 60 : 120));
         const typeParam = tradeTypeFilter === '전월세' ? 'rent' : 'apt';
 
         const urlDongParam = urlParams.get('dong');
-        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${typeParam}&period=${periodParam}`);
+        // URL에 lawdCd가 없으면(지도 마커, 커뮤니티 글 링크 등 지역코드를 안 넘기는 진입
+        // 경로) 아예 파라미터를 안 보내고, API가 DB에 저장된 실제 지역을 찾아 응답에 함께
+        // 돌려주는 lawdCd를 신뢰한다 — 여기서 하드코딩된 기본 지역으로 미리 단정하지 않는다.
+        const lawdCdQuery = urlLawdCd ? `&lawdCd=${urlLawdCd}` : '';
+        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?type=${typeParam}&period=${periodParam}${lawdCdQuery}`);
+        if (cancelled) return;
+
+        let resolvedLawdCd = urlLawdCd || '11680';
 
         if (response.ok) {
           const data = await response.json();
+          if (cancelled) return;
           const fetchedTrades = data.trades || [];
           setTrades(fetchedTrades);
           setApiError(data.apiError || null);
+          if (data.lawdCd) resolvedLawdCd = data.lawdCd;
 
           if (fetchedTrades.length > 0) {
-            fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, lawdCd);
+            fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, resolvedLawdCd);
           } else {
-            fetchAptInfo('', urlDongParam || '', lawdCd);
+            fetchAptInfo('', urlDongParam || '', resolvedLawdCd);
           }
         } else {
-          fetchAptInfo('', urlDongParam || '', lawdCd);
+          fetchAptInfo('', urlDongParam || '', resolvedLawdCd);
         }
+
+        setLawdCdState(resolvedLawdCd);
 
         const urlRegion = urlParams.get('region');
         if (urlDongParam) setUrlDong(urlDongParam);
@@ -139,9 +152,11 @@ export default function ApartmentDetail() {
           setRegionName(urlRegion);
         } else {
           try {
-            const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${lawdCd}00000`);
+            const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${resolvedLawdCd}00000`);
+            if (cancelled) return;
             if (regRes.ok) {
               const regData = await regRes.json();
+              if (cancelled) return;
               if (regData.regcodes && regData.regcodes.length > 0) {
                 setRegionName(regData.regcodes[0].name);
               }
@@ -153,15 +168,17 @@ export default function ApartmentDetail() {
       } catch (error) {
         console.error('Failed to fetch trades:', error);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     const fetchAptInfo = async (jibun: string, dong: string, lawdCd: string) => {
       try {
         const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(jibun)}&dong=${encodeURIComponent(dong)}&lawdCd=${encodeURIComponent(lawdCd)}`);
+        if (cancelled) return;
         if (response.ok) {
           const data = await response.json();
+          if (cancelled) return;
           if (data.info) {
             setAptInfo(data.info);
           }
@@ -170,6 +187,9 @@ export default function ApartmentDetail() {
     };
 
     fetchTrades();
+    return () => {
+      cancelled = true;
+    };
   }, [aptName, tradeTypeFilter, periodFilter]);
 
   // 필터링 적용

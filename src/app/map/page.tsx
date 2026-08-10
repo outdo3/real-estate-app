@@ -12,6 +12,7 @@ const apiKey =
 interface AptMarker {
   id: string;
   name: string;
+  dong: string;
   price: string;
   hasRecentPrice: boolean; // 최근 거래(가격) 유무 — 없으면 "시세 정보 없음"으로 폴백 표시
   lat: number;
@@ -70,6 +71,10 @@ export default function FullscreenMapPage() {
   const [schoolMarkers, setSchoolMarkers] = useState<SchoolMarker[]>([]);
   const [zoomLevel, setZoomLevel] = useState(6);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  // 현재 화면의 마커들을 조회할 때 실제로 사용한 lawdCd. 마커 클릭 시 상세페이지로 이 값을
+  // 함께 넘겨야 한다 — 안 넘기면 상세페이지가 자기 자신의 하드코딩된 기본 지역(서울 강남구)으로
+  // 실거래가를 조회해 엉뚱한 지역/빈 데이터가 뜨는 버그로 이어진다.
+  const [currentLawdCd, setCurrentLawdCd] = useState('26140');
   const isDetailed = zoomLevel <= DETAIL_ZOOM_LEVEL;
   const chipLayout = isDetailed ? CHIP_LAYOUT.detailed : CHIP_LAYOUT.compact;
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -169,6 +174,7 @@ export default function FullscreenMapPage() {
         ? result.find((r: any) => r.region_type === 'B')
         : null;
       const lawdCd = region ? region.code.substring(0, 5) : DEFAULT_FALLBACK_LAWD_CD;
+      setCurrentLawdCd(lawdCd);
 
       try {
         const res = await fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`);
@@ -187,6 +193,7 @@ export default function FullscreenMapPage() {
         const markers: AptMarker[] = Array.from(byComplex.values()).map((item) => ({
           id: `${item.dong}-${item.name}`,
           name: item.name,
+          dong: item.dong || '',
           price: item.price || '시세 정보 없음',
           hasRecentPrice: !!item.price,
           lat: item.lat,
@@ -345,7 +352,7 @@ export default function FullscreenMapPage() {
     const handleDeselect = () => setSelectedMarkerId((cur) => (cur === marker.id ? null : cur));
     const handleClick = () => {
       setSelectedMarkerId(marker.id);
-      router.push(`/apt/${marker.name}`);
+      router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(marker.dong)}`);
     };
 
     if (!isDetailed) {
