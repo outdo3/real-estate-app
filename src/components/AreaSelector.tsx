@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { getAreaInfo } from '@/lib/area-utils';
+import { getCompactAreaLabel } from '@/lib/area-utils';
 
 interface AreaSelectorProps {
   trades: Array<{ area: string }>;
@@ -32,10 +32,7 @@ export default function AreaSelector({ trades, selectedArea, onSelect }: AreaSel
     ? [...topAreas, selectedArea]
     : topAreas;
 
-  const renderAreaLabel = (area: string) => {
-    const { supplyPyung } = getAreaInfo(parseFloat(area));
-    return `${area} (공급 약 ${supplyPyung}평)`;
-  };
+  const renderAreaLabel = (area: string) => getCompactAreaLabel(parseFloat(area));
 
   const chipStyle = (active: boolean): React.CSSProperties => ({
     padding: '0.5rem 1rem',

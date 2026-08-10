@@ -51,3 +51,13 @@ export function getAreaInfo(rawExclusiveM2: number): AreaInfo {
     label: `전용 ${exclusiveM2}㎡(${exclusivePyung}평) · 공급 약 ${supplyPyung}평형`,
   };
 }
+
+// 칩/테이블처럼 공간이 좁은 곳에서 쓰는 축약 표기. "전용 84.99㎡(25.7평) · 공급 약 34평형"
+// 대신 소수점 없이 "84(25평)"처럼 짧게 줄인다 — 전용면적 기준(공급면적은 애초에 근사치라
+// 좁은 자리에 같이 욱여넣으면 오히려 더 헷갈림).
+export function getCompactAreaLabel(rawExclusiveM2: number): string {
+  if (Number.isNaN(rawExclusiveM2)) return '면적 정보 없음';
+  const m2 = Math.round(rawExclusiveM2);
+  const pyung = Math.round(rawExclusiveM2 / M2_PER_PYUNG);
+  return `${m2}(${pyung}평)`;
+}

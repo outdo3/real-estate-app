@@ -339,6 +339,21 @@
   border-bottom-color: var(--primary-color);
 }
 
+@media (max-width: 900px) {
+  .infraTabBar {
+    gap: 0;
+  }
+  .infraTabBtn {
+    flex: 1 1 0;
+    padding: 0.6rem 0.25rem;
+    font-size: 0.78rem;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .stickyBar {
   display: none;
 }

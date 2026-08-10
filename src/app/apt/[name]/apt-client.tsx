@@ -57,7 +57,7 @@ export default function ApartmentDetail() {
   const [selectedArea, setSelectedArea] = useState<string>('전체');
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
   const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
-  const [onlySales, setOnlySales] = useState<boolean>(true);
+  const [saleFilter, setSaleFilter] = useState<'all' | 'sale' | 'rent'>('all');
   const [visibleCount, setVisibleCount] = useState<number>(15);
   const [infraTab, setInfraTab] = useState<InfraTab>('환경');
 
@@ -92,14 +92,8 @@ export default function ApartmentDetail() {
   };
 
   useEffect(() => {
-    if (tradeTypeFilter === '전월세') {
-      setOnlySales(false);
-    }
-  }, [tradeTypeFilter]);
-
-  useEffect(() => {
     setVisibleCount(15);
-  }, [selectedArea, tradeTypeFilter, periodFilter, onlySales]);
+  }, [selectedArea, tradeTypeFilter, periodFilter, saleFilter]);
 
   useEffect(() => {
     if (!aptName) return;
@@ -182,8 +176,11 @@ export default function ApartmentDetail() {
     if (tradeTypeFilter === '매매' && trade.tradeType !== '아파트 매매' && trade.tradeType !== '실거래') return false;
     if (tradeTypeFilter === '전월세' && trade.tradeType !== '전월세' && trade.tradeType !== '아파트 전월세') return false;
 
-    // 3. 타임라인 매매 전용 필터 (차트와 별개로 적용되지만, 현재는 같이 묶여있으므로 일단 적용)
-    if (onlySales && tradeTypeFilter !== '전월세' && trade.tradeType.includes('전월세')) return false;
+    // 3. 실거래 목록 전용 매매/전월세/전체 필터 (2번 타입 필터와 별개 — 2번은 API 조회
+    //    자체의 타입을 바꾸고, 이건 이미 조회된 데이터 안에서 사용자가 다시 세분화하는 것)
+    const isSaleType = trade.tradeType.includes('매매') || trade.tradeType === '실거래';
+    if (saleFilter === 'sale' && !isSaleType) return false;
+    if (saleFilter === 'rent' && !trade.tradeType.includes('전월세')) return false;
 
     // 4. 기간 필터
     if (periodFilter !== '전체') {
@@ -451,9 +448,7 @@ export default function ApartmentDetail() {
       {/* ══════════ 1구역: 단지 요약 및 핵심 지표 ══════════ */}
       <div className={styles.header}>
         <div className="container">
-          <div className={styles.breadcrumb}>아파트실거래 &gt; {regionName ? regionName.split(' ').join(' > ') : ''} {(urlDong || (trades.length > 0 && trades[0].dong)) ? `> ${urlDong || trades[0].dong}` : ''} &gt; {aptName}</div>
-
-          <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
+          <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', paddingTop: '1rem' }}>
             <AptSpecGrid address={primaryAddress} aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
           </div>
 
@@ -545,12 +540,13 @@ export default function ApartmentDetail() {
                   ))}
                 </div>
                 <select
-                  value={onlySales ? 'sales' : 'all'}
-                  onChange={(e) => setOnlySales(e.target.value === 'sales')}
+                  value={saleFilter}
+                  onChange={(e) => setSaleFilter(e.target.value as 'all' | 'sale' | 'rent')}
                   style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
                 >
                   <option value="all">전체 보기</option>
-                  <option value="sales" disabled={tradeTypeFilter === '전월세'}>{tradeTypeFilter === '전월세' ? '전월세만 보기' : '매매만 보기'}</option>
+                  <option value="sale">매매만 보기</option>
+                  <option value="rent">전월세만 보기</option>
                 </select>
               </div>
             </div>
