@@ -8,9 +8,12 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const aptName = searchParams.get('aptName')?.trim() || undefined;
+    const where = aptName ? { aptName } : undefined;
 
     const [posts, total] = await Promise.all([
       prisma.post.findMany({
+        where,
         orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
@@ -19,7 +22,7 @@ export async function GET(request: Request) {
           _count: { select: { comments: true } },
         },
       }),
-      prisma.post.count(),
+      prisma.post.count({ where }),
     ]);
 
     return NextResponse.json({ success: true, data: { posts, total, page, pageSize: PAGE_SIZE } });
@@ -37,6 +40,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const title = (body.title || '').trim();
     const content = (body.content || '').trim();
+    const aptName = (body.aptName || '').trim() || null;
 
     if (!title || !content) {
       return NextResponse.json({ success: false, error: '제목과 내용을 모두 입력해주세요.' }, { status: 400 });
@@ -46,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     const post = await prisma.post.create({
-      data: { title, content, authorId: user!.id },
+      data: { title, content, aptName, authorId: user!.id },
       include: { author: { select: { id: true, name: true, image: true, role: true } } },
     });
 
