@@ -4,6 +4,7 @@ export interface BuildingRegistryInfo {
   bcr: number | null; // 건폐율(%)
   totalHouseholds: number | null;
   mainPurpose: string | null;
+  approvalDate: string | null; // 사용승인일, "YYYY년" 형태
 }
 
 // 건축물대장 "총괄표제부"(여러 동으로 이뤄진 아파트 단지 전체 집계) 공공데이터 조회.
@@ -86,6 +87,9 @@ export async function fetchBuildingRegistryInfo(
     const vlRat = parseFloat(target.vlRat); // 이 오퍼레이션은 이미 퍼센트 값으로 내려온다(실측 확인).
     const bcRat = parseFloat(target.bcRat);
     const hhldCnt = parseInt(target.hhldCnt, 10);
+    // useAprDay는 "YYYYMMDD" 8자리 문자열(예: "20040315"). 앞 4자리만 쓴다.
+    const useAprDay: string = target.useAprDay || '';
+    const approvalYear = /^\d{8}$/.test(useAprDay) ? useAprDay.slice(0, 4) : null;
 
     return {
       parkingCount: !isNaN(parkingCnt) && parkingCnt > 0 ? parkingCnt : null,
@@ -93,6 +97,7 @@ export async function fetchBuildingRegistryInfo(
       bcr: !isNaN(bcRat) && bcRat > 0 ? bcRat : null,
       totalHouseholds: !isNaN(hhldCnt) && hhldCnt > 0 ? hhldCnt : null,
       mainPurpose: (target.etcPurps || target.mainPurpsCdNm || '').trim() || null,
+      approvalDate: approvalYear ? `${approvalYear}년` : null,
     };
   } catch (e) {
     console.warn('Public API building registry failed', e);

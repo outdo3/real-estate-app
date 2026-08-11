@@ -98,12 +98,14 @@ async function backfillOne(target: Target): Promise<void> {
       far: registry.far ?? undefined,
       bcr: registry.bcr ?? undefined,
       totalHouseholds: registry.totalHouseholds ?? undefined,
+      approvalDate: registry.approvalDate ?? undefined,
     },
     update: {
       ...(registry.parkingCount ? { parkingCount: registry.parkingCount } : {}),
       ...(registry.far ? { far: registry.far } : {}),
       ...(registry.bcr ? { bcr: registry.bcr } : {}),
       ...(registry.totalHouseholds ? { totalHouseholds: registry.totalHouseholds } : {}),
+      ...(registry.approvalDate ? { approvalDate: registry.approvalDate } : {}),
     },
   });
 

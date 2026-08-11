@@ -20,6 +20,14 @@ export async function GET(
     const info: Record<string, string> = {};
 
     // 1. 네이버 스크래핑 (기본 세대수, 준공연도 등) - 헤더 보강하여 차단 방지
+    // 주의: 이 검색어에는 지역(동/구) 정보가 전혀 없다 — 검색 결과가 동명의 타 지역
+    // 단지로 얼마든지 쏠릴 수 있다(실측: "금호어울림"으로 검색하면 부산 서구(256세대)가
+    // 아닌 타 지역 단지의 "1,549세대"가 최상단에 잡힘). 그래서 여기서 바로 info에 쓰지
+    // 않고 임시 변수에만 담아둔다 — 아래 2번에서 지번까지 정확히 지정해 조회하는
+    // 건축물대장(registry) 값이 있으면 그걸 우선시키고, registry가 없을 때만 이 값을
+    // 폴백으로 쓴다.
+    let naverHouseholds: string | null = null;
+    let naverApprovalYear: string | null = null;
     try {
       const query = encodeURIComponent(`${aptName} 아파트 정보`);
       const searchUrl = `https://search.naver.com/search.naver?query=${query}`;
@@ -36,16 +44,16 @@ export async function GET(
       if (response.ok) {
         const html = await response.text();
         const householdMatch = html.match(/(?:총\s*)?([0-9,]+)세대/);
-        if (householdMatch) info['세대수'] = `${householdMatch[1]}세대`;
+        if (householdMatch) naverHouseholds = `${householdMatch[1]}세대`;
 
         const yearMatch = html.match(/([0-9]{4})년\s*(?:준공|입주)/);
-        if (yearMatch) info['사용승인일'] = `${yearMatch[1]}년`;
+        if (yearMatch) naverApprovalYear = `${yearMatch[1]}년`;
       }
     } catch (e) {
       console.warn('Naver scraping failed', e);
     }
 
-    // 2. 주차대수/용적률/건폐율: DB(apartments)에 이미 조회해둔 값이 있으면 그걸 바로 쓰고
+    // 2. 주차대수/용적률/건폐율/세대수/사용승인일: DB(apartments)에 이미 조회해둔 값이 있으면 그걸 바로 쓰고
     // (건축물대장 공공데이터 API를 매 페이지뷰마다 다시 부르지 않아도 됨), 없으면 라이브로
     // 조회한 뒤 다음 요청을 위해 DB에 저장해둔다(cache-aside) — scripts/backfill_apt_details.ts로
     // 미리 대량 채워둘 수도 있고, 실제 사용자가 페이지를 볼 때마다 조금씩 채워지기도 한다.
@@ -53,16 +61,21 @@ export async function GET(
     // 형태여야 매칭된다(null과 ''는 SQL에서 서로 다른 값으로 취급됨) — 이 라우트 안에서는
     // 항상 빈 문자열로 통일해 upsert의 where/create가 서로 어긋나지 않게 한다.
     const dongKey = dong || '';
-    let registry: { parkingCount: number | null; far: number | null; bcr: number | null; totalHouseholds: number | null } | null = null;
+    let registry: { parkingCount: number | null; far: number | null; bcr: number | null; totalHouseholds: number | null; approvalDate: string | null } | null = null;
 
     try {
+      // approvalDate까지 캐시돼 있어야 캐시 히트로 간주한다 — 이 컬럼이 나중에
+      // 추가됐으므로, 그 전에 캐싱된 기존 행은 approvalDate가 비어있다. 여기서 조건에
+      // 넣지 않으면 그런 행은 영영 라이브 재조회 없이 세대수/주차 등만 채운 채로
+      // 사용승인일만 계속 네이버 폴백에 의존하게 된다.
       const cached = await prisma.apartment.findFirst({ where: { name: aptName, dong: dongKey } });
-      if (cached && cached.parkingCount && cached.far && cached.bcr) {
+      if (cached && cached.parkingCount && cached.far && cached.bcr && cached.approvalDate) {
         registry = {
           parkingCount: cached.parkingCount,
           far: cached.far,
           bcr: cached.bcr,
           totalHouseholds: cached.totalHouseholds ?? null,
+          approvalDate: cached.approvalDate,
         };
       }
     } catch (e) {
@@ -74,7 +87,7 @@ export async function GET(
       if (live) {
         registry = live;
         if (live.mainPurpose) info['주용도'] = live.mainPurpose;
-        if (live.parkingCount || live.far || live.bcr || live.totalHouseholds) {
+        if (live.parkingCount || live.far || live.bcr || live.totalHouseholds || live.approvalDate) {
           try {
             await prisma.apartment.upsert({
               where: { name_dong: { name: aptName, dong: dongKey } },
@@ -87,6 +100,7 @@ export async function GET(
                 far: live.far ?? undefined,
                 bcr: live.bcr ?? undefined,
                 totalHouseholds: live.totalHouseholds ?? undefined,
+                approvalDate: live.approvalDate ?? undefined,
               },
               update: {
                 ...(jibun ? { jibun } : {}),
@@ -94,6 +108,7 @@ export async function GET(
                 ...(live.far ? { far: live.far } : {}),
                 ...(live.bcr ? { bcr: live.bcr } : {}),
                 ...(live.totalHouseholds ? { totalHouseholds: live.totalHouseholds } : {}),
+                ...(live.approvalDate ? { approvalDate: live.approvalDate } : {}),
               },
             });
           } catch (e) {
@@ -103,10 +118,18 @@ export async function GET(
       }
     }
 
-    // 네이버 스크래핑이 세대수를 못 찾았으면 건축물대장 총괄표제부의 세대수로 보완한다
-    // (같은 API 호출에서 이미 받아온 값이라 추가 조회가 필요 없다).
-    if (!info['세대수'] && registry?.totalHouseholds) {
+    // 지역/지번까지 정확히 스코프된 건축물대장(registry) 값을 지역 정보가 없는 네이버
+    // 스크래핑 값보다 항상 우선한다. registry가 없을 때만 네이버 값을 폴백으로 쓴다.
+    if (registry?.totalHouseholds) {
       info['세대수'] = `${registry.totalHouseholds.toLocaleString('ko-KR')}세대`;
+    } else if (naverHouseholds) {
+      info['세대수'] = naverHouseholds;
+    }
+
+    if (registry?.approvalDate) {
+      info['사용승인일'] = registry.approvalDate;
+    } else if (naverApprovalYear) {
+      info['사용승인일'] = naverApprovalYear;
     }
 
     if (registry?.parkingCount) {
