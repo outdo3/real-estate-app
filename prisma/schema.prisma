@@ -198,3 +198,183 @@ model AiSearchCache {
 
   @@map("ai_search_cache")
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// 오피스텔/생활형숙박시설(생숙)/재개발 — 데이터 수집 기반(스키마 + 파이프라인 스텁)
+// ══════════════════════════════════════════════════════════════════════════
+
+enum PropertyCategory {
+  APT
+  OFFICETEL
+  LIVING_STAY
+  REDEVELOPMENT
+}
+
+// 기존 Apartment 모델은 "MOLIT 아파트 실거래 매칭용 건축물대장 캐시"라는 좁은 용도로
+// 이미 unique([name, dong])와 아파트 전용 조회 로직에 강하게 묶여 있어(apt-building-info.ts,
+// api/apt/[name] 등 여러 곳이 이 제약을 전제로 함), 성격이 다른 오피스텔/생숙/재개발을
+// 억지로 얹으면 기존 아파트 매칭 로직이 깨질 위험이 크다. category로 구분되는 범용
+// 매물 테이블을 새로 둔다 — 실제 데이터 수집(services/publicDataService.ts)이 채워지기
+// 전까지는 빈 테이블이며, /api/properties가 그대로 빈 배열을 정직하게 반환한다.
+model Property {
+  id                Int              @id @default(autoincrement())
+  category          PropertyCategory
+  name              String
+  dong              String?
+  lawdCd            String?          @map("lawd_cd")
+  totalHouseholds   Int?             @map("total_households")
+  totalParking      Int?             @map("total_parking")
+  buildYear         Int?             @map("build_year")
+  approvalDate      String?          @map("approval_date")
+  lat               Float?
+  lng               Float?
+  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([category, name, dong])
+  @@index([category])
+  @@map("properties")
+}
+
+enum RedevelopmentStage {
+  ZONE_DESIGNATED           // 구역지정
+  UNION_ESTABLISHED         // 조합설립
+  PROJECT_APPROVED          // 사업시행인가
+  MANAGEMENT_DISPOSAL_APPROVED // 관리처분인가
+  RELOCATION_DEMOLITION     // 이주철거
+  CONSTRUCTION              // 착공
+}
+
+model RedevelopmentProject {
+  id                Int                 @id @default(autoincrement())
+  zoneName          String              @map("zone_name")
+  lawdCd            String?             @map("lawd_cd")
+  stage             RedevelopmentStage
+  targetHouseholds  Int?                @map("target_households")
+  // 지도 위 구역 경계를 그리기 위한 GeoJSON(Polygon/MultiPolygon) — 실제 좌표가
+  // 수집되기 전까지는 null(지도에 지어낸 경계를 그리지 않기 위함).
+  polygonGeojson    Json?               @map("polygon_geojson")
+  lat               Float?
+  lng               Float?
+  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at")
+
+  @@index([stage])
+  @@map("redevelopment_projects")
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 분양/청약 — 청약홈 연동 기반(스키마 + 파이프라인 스텁)
+// ══════════════════════════════════════════════════════════════════════════
+
+enum PresaleHouseType {
+  APT
+  OFFICETEL
+  URBAN   // 도시형생활주택
+  REMAIN  // 잔여세대(무순위)
+}
+
+model Presale {
+  id                    Int              @id @default(autoincrement())
+  houseManageNo         String?          @unique @map("house_manage_no") // 주택관리번호(청약홈 PK)
+  pblancNo              String?          @map("pblanc_no") // 공고번호
+  houseName             String           @map("house_name")
+  houseType             PresaleHouseType @map("house_type")
+  locationAddress       String?          @map("location_address")
+  latitude              Float?
+  longitude             Float?
+  totalSupplyHouseholds Int?             @map("total_supply_households")
+  constructCompany      String?          @map("construct_company")
+
+  announcementDate      DateTime?        @map("announcement_date")
+  receiptStartDate      DateTime?        @map("receipt_start_date")
+  receiptEndDate        DateTime?        @map("receipt_end_date")
+  winnerDate            DateTime?        @map("winner_date")
+
+  minPrice              Int?             @map("min_price") // 만원 단위
+  maxPrice              Int?             @map("max_price") // 만원 단위
+  pblancUrl             String?          @map("pblanc_url")
+
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at")
+
+  @@index([receiptStartDate, receiptEndDate])
+  @@map("presales")
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 실시간 트래킹 & 관리자 대시보드
+// ══════════════════════════════════════════════════════════════════════════
+
+// 페이지 이동/아파트 상세 진입 로그. 인기 단지 랭킹(누적)과 오늘 PV 집계에 쓰인다.
+model PageView {
+  id        Int      @id @default(autoincrement())
+  url       String
+  complexId String?  @map("complex_id") // 아파트 상세일 때: `${lawdCd}|${dong}|${name}` 형태의 안정적 식별자
+  aptName   String?  @map("apt_name")
+  sessionId String   @map("session_id") // 클라이언트가 생성해 sessionStorage에 들고 있는 익명 세션 ID
+  userId    String?  @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([aptName, createdAt])
+  @@index([sessionId, createdAt])
+  @@map("page_views")
+}
+
+// 검색어 로그(AI 검색 + 일반 검색 공통). 인기 검색어 TOP 10 집계에 쓰인다.
+model SearchLog {
+  id        Int      @id @default(autoincrement())
+  query     String
+  userId    String?  @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("search_logs")
+}
+
+// 실시간 접속자/인기 단지 판정용 하트비트. sessionId 1건당 최신 상태 1행만 유지(upsert) —
+// lastSeenAt이 30초 이내면 "지금 접속 중", currentAptName이 있으면 "지금 이 단지를 보는 중"
+// 으로 간주한다. 별도 소켓 서버 없이 단순 폴링/upsert로 구현한다(이 앱의 기존 관례 —
+// 외부 실시간 인프라를 새로 두지 않고 짧은 TTL 폴링으로 "실시간"을 흉내내는 방식).
+model ActiveSession {
+  sessionId      String   @id @map("session_id")
+  userId         String?  @map("user_id")
+  currentUrl     String?  @map("current_url")
+  currentAptName String?  @map("current_apt_name")
+  lastSeenAt     DateTime @default(now()) @map("last_seen_at")
+
+  @@index([lastSeenAt])
+  @@index([currentAptName, lastSeenAt])
+  @@map("active_sessions")
+}
+
+// 백엔드/프론트엔드 에러 모니터링. 전역 계측(모든 API route try/catch, 클라이언트
+// window.onerror)까지는 이 세션에서 다 걸지 못했고, 아래 log/error 엔드포인트와
+// 최소 연동 지점만 우선 연결해뒀다 — 그래도 스키마/조회 API는 실제로 쌓인 값만
+// 보여주므로 카드에 뜨는 숫자는 항상 진짜다(0건이면 정말 0건).
+model ErrorLog {
+  id        Int      @id @default(autoincrement())
+  source    String   // 'client' | 'server'
+  message   String   @db.Text
+  stack     String?  @db.Text
+  url       String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("error_logs")
+}
+
+// 커뮤니티 신고 — 아직 유저가 신고를 접수하는 UI는 없어 이 테이블은 현재 항상 비어
+// 있다(그래서 대시보드의 "미처리 신고 건수"는 실제로 항상 0으로 나온다). 신고 버튼을
+// 나중에 붙일 때 이 테이블에 INSERT만 하면 대시보드 카드가 바로 실제 값을 반영한다.
+model Report {
+  id        Int      @id @default(autoincrement())
+  postId    String?  @map("post_id")
+  commentId String?  @map("comment_id")
+  reporterId String? @map("reporter_id")
+  reason    String?  @db.Text
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([resolved, createdAt])
+  @@map("reports")
+}

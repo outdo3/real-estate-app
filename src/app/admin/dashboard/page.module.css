@@ -1,0 +1,257 @@
+.main {
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 720px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 1.1rem 1.25rem;
+  box-shadow: var(--shadow-card);
+}
+
+.cardWide {
+  composes: card;
+  grid-column: 1 / -1;
+}
+
+.cardTitle {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin-bottom: 0.85rem;
+}
+
+.statRow {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.statTile {
+  background: var(--bg-color);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem;
+}
+
+.statLabel {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.statValue {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-top: 0.15rem;
+}
+
+.onlineDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  margin-right: 5px;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+.rankList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rankRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.rankIndex {
+  flex-shrink: 0;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: var(--bg-color);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.rankName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.rankValue {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.sectionSplit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 560px) {
+  .sectionSplit {
+    grid-template-columns: 1fr;
+  }
+}
+
+.subLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin: 0.9rem 0 0.5rem;
+}
+
+.subLabel:first-child {
+  margin-top: 0;
+}
+
+.emptyRow {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0.5rem 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: var(--bg-color);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin: 0.2rem 0.3rem 0.2rem 0;
+}
+
+.postRow {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.83rem;
+}
+
+.postRow:last-child {
+  border-bottom: none;
+}
+
+.postTitle {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.postMeta {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+.pipelineRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.85rem;
+}
+
+.pipelineRow:last-child {
+  border-bottom: none;
+}
+
+.pipelineName {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.pipelineStatusOk {
+  color: var(--primary-color);
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+.pipelineStatusError {
+  color: #ef4444;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
+.errorRow {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.78rem;
+}
+
+.errorRow:last-child {
+  border-bottom: none;
+}
+
+.errorSource {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #ef4444;
+  margin-right: 0.4rem;
+}
+
+.errorMessage {
+  color: var(--text-primary);
+}
+
+.errorMeta {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  margin-top: 2px;
+}
+
+.emptyState {
+  padding: 3rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.refreshHint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 1rem;
+  text-align: right;
+}

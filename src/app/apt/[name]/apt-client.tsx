@@ -21,6 +21,7 @@ import StickyPriceBar from '@/components/StickyPriceBar';
 import AdContainer from '@/components/AdContainer';
 import { getAreaInfo } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
+import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 
 // 차트 컴포넌트(recharts)는 번들이 무거워 메인 스레드를 오래 점유한다 — 상세페이지
 // 최초 렌더에 꼭 필요하지 않으므로 지연 로딩(ssr:false)해서 초기 로드를 가볍게 하고,
@@ -314,6 +315,28 @@ export default function ApartmentDetail() {
   useEffect(() => {
     if (pageReady) setHasLoadedOnce(true);
   }, [pageReady]);
+
+  // 상세페이지 조회 로그 — ViewTracker(전역)는 /apt/[name] 경로를 일부러 건너뛰고
+  // (주석 참고) 여기서 실제로 매칭된 단지명·지역까지 포함한 정확한 로그를 남긴다.
+  // pageReady가 처음 true가 되는 시점(단지명이 확정된 시점)에 딱 한 번만 기록한다.
+  useEffect(() => {
+    if (!pageReady) return;
+    const resolvedName = displayName || aptName;
+    if (!resolvedName) return;
+    const complexId = `${lawdCdState}|${urlDong}|${resolvedName}`;
+    setCurrentAptName(resolvedName);
+    fetch('/api/log/view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: window.location.pathname, sessionId: getClientSessionId(), complexId, aptName: resolvedName }),
+      keepalive: true,
+    }).catch(() => {});
+
+    return () => {
+      setCurrentAptName(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageReady, displayName, aptName, lawdCdState, urlDong]);
 
   const openModal = (modalName: string) => {
     setActiveModal(modalName);

@@ -43,6 +43,14 @@ export default function MyPage() {
                 </div>
               </div>
 
+              {session.user.role === 'ADMIN' && (
+                <div className={styles.section}>
+                  <Link href="/admin/dashboard" className={styles.linkCard}>
+                    ⚙️ 관리자 대시보드
+                  </Link>
+                </div>
+              )}
+
               <div className={styles.section}>
                 <div className={styles.sectionTitle}>바로가기</div>
                 <Link href="/community" className={styles.linkCard}>

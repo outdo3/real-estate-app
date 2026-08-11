@@ -3,6 +3,7 @@ import { fetchMolitData } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
 import { geocodeApartmentName } from '@/lib/geocode-apt';
 import { getOrSetCache } from '@/lib/server-cache';
+import { logServerError } from '@/lib/log-server-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,6 +156,7 @@ export async function GET(
     return NextResponse.json({ trades: filteredTrades, apiError, lawdCd, dong });
   } catch (error) {
     console.error('Error fetching trade history:', error);
+    logServerError((error as Error)?.message || 'apt trades route error', '/api/apt/[name]', (error as Error)?.stack).catch(() => {});
     return NextResponse.json({ error: 'Failed to fetch trade history' }, { status: 500 });
   }
 }

@@ -16,9 +16,19 @@ export async function requireUser() {
   return { error: null, status: 200 as const, user };
 }
 
+// role이 아직 DB에서 ADMIN으로 승격되지 않은 상태에서도(예: 최초 관리자 부트스트랩)
+// 환경변수 ADMIN_EMAIL과 로그인 이메일이 일치하면 관리자로 취급한다 — role 컬럼 하나만
+// 신뢰 소스로 두면 배포 초기에 "아무도 ADMIN이 아니라 아무도 admin 화면에 못 들어가는"
+// 상황이 생긴다.
+function isAdminByEnvEmail(email: string | null | undefined): boolean {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  return !!adminEmail && !!email && email.toLowerCase() === adminEmail.toLowerCase();
+}
+
 export async function requireAdmin() {
   const user = await getCurrentUser();
   if (!user) return { error: '로그인이 필요합니다.' as const, status: 401 as const, user: null };
-  if (user.role !== 'ADMIN') return { error: '관리자만 사용할 수 있습니다.' as const, status: 403 as const, user: null };
+  const isAdmin = user.role === 'ADMIN' || isAdminByEnvEmail((user as any).email);
+  if (!isAdmin) return { error: '관리자만 사용할 수 있습니다.' as const, status: 403 as const, user: null };
   return { error: null, status: 200 as const, user };
 }

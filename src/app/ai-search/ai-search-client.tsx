@@ -121,6 +121,15 @@ export default function AiSearchClient() {
     setResult(null);
 
     let cancelled = false;
+    // 인기 검색어 통계용 — 실제로 질의가 실행되는 이 지점 한 곳에서만 기록한다(입력 중
+    // onChange가 아니라 제출된 검색어만).
+    fetch('/api/log/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q }),
+      keepalive: true,
+    }).catch(() => {});
+
     fetch('/api/ai-search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

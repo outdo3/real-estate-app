@@ -82,6 +82,9 @@ interface AptMarker {
   hasRecentPrice: boolean; // 최근 거래(가격) 유무 — 없으면 "시세 정보 없음"으로 폴백 표시
   lat: number;
   lng: number;
+  // 최근 24시간 이내 이 단지 태그(Post.aptName)로 작성된 커뮤니티 글이 있는지 — 있으면
+  // 마커 칩 우측 상단에 빨간 점 뱃지를 띄운다.
+  hasNewPost?: boolean;
 }
 
 interface AptCluster {
@@ -259,9 +262,20 @@ export default function FullscreenMapPage() {
       setCurrentLawdCd(lawdCd);
 
       try {
-        const res = await fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`);
+        // 실거래 마커 데이터와 "최근 24시간 내 커뮤니티 글이 있는 단지" 집계는 서로
+        // 무관한 조회라 Promise.all로 병렬 처리한다.
+        const [res, activityRes] = await Promise.all([
+          fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`),
+          fetch(`/api/community/recent-activity`).catch(() => null),
+        ]);
         const data = await res.json();
         if (!Array.isArray(data)) return;
+
+        let recentActivity: Record<string, number> = {};
+        if (activityRes && activityRes.ok) {
+          const activityJson = await activityRes.json();
+          if (activityJson.success) recentActivity = activityJson.data || {};
+        }
 
         // 단지별(name+dong) 최신 거래 1건만 남긴다 — 같은 단지의 여러 거래가 마커로
         // 중복 표시되는 것을 막는다. data는 이미 route.ts에서 계약일 최신순 정렬됨.
@@ -280,6 +294,7 @@ export default function FullscreenMapPage() {
           hasRecentPrice: !!item.price,
           lat: item.lat,
           lng: item.lng,
+          hasNewPost: (recentActivity[item.name] || 0) > 0,
         }));
 
         setAptMarkers(markers);
@@ -443,6 +458,23 @@ export default function FullscreenMapPage() {
       }
     };
 
+    // 최근 24시간 내 이 단지 태그로 올라온 커뮤니티 글이 있으면 칩 우측 상단에 작은
+        // 빨간 점 뱃지를 띄운다 — 칩 모양 자체는 건드리지 않고 절대 위치로 얹기만 한다.
+    const newPostBadge = marker.hasNewPost ? (
+      <span
+        style={{
+          position: 'absolute',
+          top: '-3px',
+          right: '-3px',
+          width: '10px',
+          height: '10px',
+          background: '#ef4444',
+          borderRadius: '999px',
+          boxShadow: '0 0 0 2px white',
+        }}
+      />
+    ) : null;
+
     if (!isDetailed) {
       return (
         <div
@@ -450,6 +482,7 @@ export default function FullscreenMapPage() {
           onMouseEnter={handleSelect}
           onMouseLeave={handleDeselect}
           style={{
+            position: 'relative',
             background: marker.hasRecentPrice ? '#ecfdf5' : '#f1f5f9',
             border: `1.5px solid ${accent}`,
             borderRadius: '999px',
@@ -464,6 +497,7 @@ export default function FullscreenMapPage() {
             whiteSpace: 'nowrap',
           }}
         >
+          {newPostBadge}
           <span style={{ fontSize: marker.hasRecentPrice ? '0.72rem' : '0.66rem', fontWeight: 800, color: marker.hasRecentPrice ? 'var(--primary-hover)' : '#64748b' }}>
             {marker.price}
           </span>
@@ -491,6 +525,7 @@ export default function FullscreenMapPage() {
           transition: 'transform 0.12s ease, box-shadow 0.12s ease',
         }}
       >
+        {newPostBadge}
         {/* 작은 말풍선 꼬리 */}
         <div style={{
           position: 'absolute',

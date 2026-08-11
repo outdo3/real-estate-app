@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { resolveLawdCdByNames, resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import { geocodeApartmentName } from '@/lib/geocode-apt';
+import { logServerError } from '@/lib/log-server-error';
 import {
   classifyQuery,
   normalizeSidoName,
@@ -198,6 +199,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, cached: false, ...payload });
   } catch (error) {
     console.error('AI search route error:', error);
+    logServerError((error as Error)?.message || 'AI search route error', '/api/ai-search', (error as Error)?.stack).catch(() => {});
     return NextResponse.json({ success: false, error: 'AI 검색 처리 중 오류가 발생했습니다.' }, { status: 500 });
   }
 }
