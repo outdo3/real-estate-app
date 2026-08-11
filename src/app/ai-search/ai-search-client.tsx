@@ -9,6 +9,12 @@ import styles from './ai-search-client.module.css';
 
 type AiIntent = 'condition_search' | 'regional_stats' | 'compare';
 
+interface NearestSchoolInfo {
+  name: string;
+  distanceM: number;
+  walkMinutes: number;
+}
+
 interface ConditionSearchComplex {
   name: string;
   dong: string;
@@ -18,13 +24,35 @@ interface ConditionSearchComplex {
   tradeDate: string;
   parkingInfo: string | null;
   parkingPerHousehold: number | null;
+  totalHouseholds: number | null;
+  nearestSchool: NearestSchoolInfo | null;
 }
+
+interface VolumeRankingItem {
+  rank: number;
+  name: string;
+  dong: string;
+  dealCount: number;
+}
+
+type StatsPeriodKey = '1' | '3' | '6' | '12';
 
 interface RegionalStatsData {
   chartData: { month: string; volume: number; saleIndex: number | null; jeonseIndex: number | null }[];
   volume: number;
   volumeChange: number;
   jeonseRate: number | null;
+  volumeRanking: Record<StatsPeriodKey, VolumeRankingItem[]>;
+  volumeByPeriod: Record<StatsPeriodKey, number>;
+}
+
+interface CompareAreaOption {
+  area: string;
+  label: string;
+  latestPrice: string;
+  latestArea: string;
+  tradeDate: string;
+  tradeCount: number;
 }
 
 interface CompareComplexData {
@@ -38,6 +66,7 @@ interface CompareComplexData {
   bcr: string | null;
   buildYear: string | null;
   facilities: string[];
+  areaOptions: CompareAreaOption[];
 }
 
 interface AiSearchResult {
@@ -174,7 +203,9 @@ export default function AiSearchClient() {
             {result.intent === 'condition_search' && (
               <ConditionSearchResult complexes={result.complexes || []} lawdCd={result.lawdCd || initialLawdCd} />
             )}
-            {result.intent === 'regional_stats' && result.stats && <RegionalStatsResult stats={result.stats} />}
+            {result.intent === 'regional_stats' && result.stats && (
+              <RegionalStatsResult stats={result.stats} lawdCd={result.lawdCd || initialLawdCd} />
+            )}
             {result.intent === 'compare' && result.complexA && result.complexB && (
               <CompareResult a={result.complexA} b={result.complexB} />
             )}
@@ -211,20 +242,52 @@ function ConditionSearchResult({ complexes, lawdCd }: { complexes: ConditionSear
             {c.buildYear && <span>{c.buildYear}년 준공</span>}
             {c.parkingInfo && <span>{c.buildYear ? ' · ' : ''}{c.parkingInfo}</span>}
           </div>
+          {c.nearestSchool && (
+            <div className={styles.schoolBadge}>
+              🏫 {c.nearestSchool.distanceM <= 300 ? '초품아' : `${c.nearestSchool.name} 도보 ${c.nearestSchool.walkMinutes}분`}
+            </div>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-function RegionalStatsResult({ stats }: { stats: RegionalStatsData }) {
+const PERIOD_OPTIONS: { key: StatsPeriodKey; label: string }[] = [
+  { key: '1', label: '최근 1개월' },
+  { key: '3', label: '최근 3개월' },
+  { key: '6', label: '최근 6개월' },
+  { key: '12', label: '최근 1년' },
+];
+
+function RegionalStatsResult({ stats, lawdCd }: { stats: RegionalStatsData; lawdCd: string }) {
+  const router = useRouter();
+  const [period, setPeriod] = useState<StatsPeriodKey>('1');
+  const [showList, setShowList] = useState(false);
+  const periodVolume = stats.volumeByPeriod?.[period] ?? stats.volume;
+  const rankingList = stats.volumeRanking?.[period] || [];
+
   return (
     <div>
+      <div className={styles.periodChipRow}>
+        {PERIOD_OPTIONS.map((opt) => (
+          <button
+            key={opt.key}
+            type="button"
+            className={`${styles.periodChip} ${period === opt.key ? styles.periodChipActive : ''}`}
+            onClick={() => setPeriod(opt.key)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       <div className={styles.statsSummary}>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>최근 1개월 거래량</div>
-          <div className={styles.statValue}>{stats.volume}건</div>
-        </div>
+        <button type="button" className={styles.statCardClickable} onClick={() => setShowList((v) => !v)}>
+          <div className={styles.statLabel}>{PERIOD_OPTIONS.find((o) => o.key === period)?.label} 거래량</div>
+          <div className={styles.statValue}>{periodVolume}건</div>
+          <div className={styles.statCardHint}>{showList ? '목록 접기 ▲' : '상위 단지 보기 ▼'}</div>
+        </button>
         <div className={styles.statCard}>
           <div className={styles.statLabel}>전월 대비</div>
           <div className={styles.statValue} style={{ color: stats.volumeChange >= 0 ? 'var(--up-color)' : 'var(--down-color)' }}>
@@ -237,6 +300,33 @@ function RegionalStatsResult({ stats }: { stats: RegionalStatsData }) {
           <div className={styles.statValue}>{stats.jeonseRate != null ? `${stats.jeonseRate}%` : '정보 없음'}</div>
         </div>
       </div>
+
+      <div className={styles.guideCard}>
+        <span className={styles.guideCardLabel}>💡 전세가율 지표 가이드</span>
+        <p className={styles.guideCardText}>📈 전세가율 상승 (매매가 대비 전세가 높음): 갭투자 리스크 감소, 매매가 하방 지지선 역할 및 갭투자 수요 유입 가능성 증가</p>
+        <p className={styles.guideCardText}>📉 전세가율 하락 (매매가 대비 전세가 낮음): 매매가 대비 거주 가치 비중 감소, 실거주자 매수 전환율 저하 또는 매매가 거품 가능성</p>
+      </div>
+
+      {showList && (
+        <div className={styles.volumeRankingList}>
+          {rankingList.length === 0 ? (
+            <div className={styles.emptyBox}>해당 기간 거래 내역이 없습니다.</div>
+          ) : (
+            rankingList.map((item) => (
+              <div
+                key={`${item.dong}-${item.name}`}
+                className={styles.volumeRankingRow}
+                onClick={() => router.push(`/apt/${encodeURIComponent(item.name)}?lawdCd=${lawdCd}&dong=${encodeURIComponent(item.dong)}`)}
+              >
+                <span className={styles.volumeRankingRank}>{item.rank}</span>
+                <span className={styles.volumeRankingName}>{item.name}</span>
+                <span className={styles.volumeRankingDong}>{item.dong}</span>
+                <span className={styles.volumeRankingCount}>{item.dealCount}건</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {stats.chartData.length > 0 && (
         <div className={styles.chartWrapper}>
@@ -286,7 +376,32 @@ function winnerFor(key: keyof CompareComplexData, a: CompareComplexData, b: Comp
   return av > bv ? 'a' : 'b';
 }
 
+// 비교 표에서 "최근 실거래가"/"평형" 두 행만 선택된 평형에 따라 값이 바뀐다. 나머지
+// (세대수/주차/용적률/건폐율/준공/커뮤니티시설)는 단지 단위 정보라 평형과 무관하다.
+function AreaDropdown({ options, selectedArea, onChange }: { options: CompareAreaOption[]; selectedArea: string; onChange: (area: string) => void }) {
+  if (options.length <= 1) return null;
+  return (
+    <select
+      value={selectedArea}
+      onChange={(e) => onChange(e.target.value)}
+      className={styles.areaDropdown}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {options.map((opt) => (
+        <option key={opt.area} value={opt.area}>
+          {opt.label} ({opt.tradeCount}건)
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function CompareResult({ a, b }: { a: CompareComplexData; b: CompareComplexData }) {
+  const [areaA, setAreaA] = useState(a.areaOptions[0]?.area || '');
+  const [areaB, setAreaB] = useState(b.areaOptions[0]?.area || '');
+  const selectedA = a.areaOptions.find((o) => o.area === areaA) || a.areaOptions[0];
+  const selectedB = b.areaOptions.find((o) => o.area === areaB) || b.areaOptions[0];
+
   return (
     <div className={styles.compareTableWrapper}>
       <table className={styles.compareTable}>
@@ -298,12 +413,32 @@ function CompareResult({ a, b }: { a: CompareComplexData; b: CompareComplexData 
         <thead>
           <tr>
             <th></th>
-            <th>{a.name}</th>
-            <th>{b.name}</th>
+            <th>
+              <div className={styles.compareHeaderCell}>
+                <span>{a.name}</span>
+                <AreaDropdown options={a.areaOptions} selectedArea={areaA} onChange={setAreaA} />
+              </div>
+            </th>
+            <th>
+              <div className={styles.compareHeaderCell}>
+                <span>{b.name}</span>
+                <AreaDropdown options={b.areaOptions} selectedArea={areaB} onChange={setAreaB} />
+              </div>
+            </th>
           </tr>
         </thead>
         <tbody>
-          {COMPARE_ROWS.map((row) => {
+          <tr>
+            <td className={styles.compareRowLabel}>최근 실거래가</td>
+            <td>{selectedA?.latestPrice || '정보 없음'}</td>
+            <td>{selectedB?.latestPrice || '정보 없음'}</td>
+          </tr>
+          <tr>
+            <td className={styles.compareRowLabel}>평형</td>
+            <td>{selectedA?.latestArea || '정보 없음'}</td>
+            <td>{selectedB?.latestArea || '정보 없음'}</td>
+          </tr>
+          {COMPARE_ROWS.filter((row) => row.key !== 'latestPrice' && row.key !== 'latestArea').map((row) => {
             const winner = winnerFor(row.key, a, b);
             return (
               <tr key={row.key}>

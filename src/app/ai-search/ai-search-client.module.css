@@ -178,11 +178,51 @@
   color: var(--text-muted);
 }
 
+.schoolBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.periodChipRow {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+  overflow-x: auto;
+}
+
+.periodChip {
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: white;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.periodChipActive {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
 .statsSummary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .statCard {
@@ -191,6 +231,109 @@
   border-radius: var(--radius-lg);
   padding: 1rem;
   text-align: center;
+}
+
+.statCardClickable {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.statCardHint {
+  margin-top: 0.3rem;
+  font-size: 0.68rem;
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
+.guideCard {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.guideCardLabel {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #92400e;
+}
+
+.guideCardText {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: #78350f;
+}
+
+.volumeRankingList {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--card-bg);
+}
+
+.volumeRankingRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.volumeRankingRow:last-child {
+  border-bottom: none;
+}
+
+.volumeRankingRow:hover {
+  background: var(--bg-color);
+}
+
+.volumeRankingRank {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.volumeRankingName {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.volumeRankingDong {
+  flex-shrink: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.volumeRankingCount {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--primary-color);
 }
 
 .statLabel {
@@ -274,6 +417,24 @@
   background: rgba(16, 185, 129, 0.08);
   color: #047857;
   font-weight: 800;
+}
+
+.compareHeaderCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.areaDropdown {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.15rem 0.3rem;
+  background: white;
+  max-width: 100%;
 }
 
 @media (max-width: 640px) {

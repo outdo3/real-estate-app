@@ -154,6 +154,35 @@ export async function GET(request: Request) {
       const volume = aptMonthly[11]?.filter(isValidTrade).length || 0;
       const prevVolume = aptMonthly[10]?.filter(isValidTrade).length || 0;
 
+      // ── AI 검색 거래량 카드의 기간 선택(1/3/6/12개월)용: 각 기간 창 안에서 단지별
+      // 거래건수를 집계해 상위 단지 순위를 미리 계산해둔다. allAptTrades는 이미 12개월치를
+      // 다 갖고 있으므로 클라이언트가 기간을 바꿀 때마다 새로 API를 부를 필요가 없다.
+      const buildVolumeRanking = (monthsBack: number) => {
+        const windowTrades = aptMonthly.slice(12 - monthsBack).flat().filter(isValidTrade);
+        const byName: Record<string, { name: string; dong: string; count: number }> = {};
+        windowTrades.forEach((t: any) => {
+          const key = normalizeAptName(t.name);
+          if (!byName[key]) byName[key] = { name: t.name, dong: t.dong || '', count: 0 };
+          byName[key].count += 1;
+        });
+        return Object.values(byName)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+          .map((c, i) => ({ rank: i + 1, name: c.name, dong: c.dong, dealCount: c.count }));
+      };
+      const volumeRanking = {
+        '1': buildVolumeRanking(1),
+        '3': buildVolumeRanking(3),
+        '6': buildVolumeRanking(6),
+        '12': buildVolumeRanking(12),
+      };
+      const volumeByPeriod = {
+        '1': volume,
+        '3': aptMonthly.slice(9).flat().filter(isValidTrade).length,
+        '6': aptMonthly.slice(6).flat().filter(isValidTrade).length,
+        '12': allAptTrades.length,
+      };
+
       // ── 7) 클릭 시 팝업으로 보여줄 실거래 내역 ──
       const tradeDetail = (t: any) => ({
         name: t.name,
@@ -195,6 +224,8 @@ export async function GET(request: Request) {
         jeonseRate,
         currentMonthTrades,
         complexTrades,
+        volumeRanking,
+        volumeByPeriod,
       };
     });
 

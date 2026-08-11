@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '@/components/Header';
 import RegionSelectModal from '@/components/RegionSelectModal';
 import { useRegion, RegionState } from '@/contexts/RegionContext';
@@ -40,9 +39,9 @@ function RegionUrlSync({ setRegion }: { setRegion: (region: RegionState) => void
 }
 
 export default function SchoolInfoPage() {
+  const router = useRouter();
   const { region, setRegion, openRegionModal } = useRegion();
   const [activeTab, setActiveTab] = useState(TABS[0]);
-  const [selectedSchool, setSelectedSchool] = useState<any>(null);
 
   // 학교 검색 API는 동(洞) 단위가 아닌 시/군/구 단위로 동작하므로, 선택된 동 이름은
   // 제외하고 "시도 시군구" 형태로만 구성한다.
@@ -61,9 +60,6 @@ export default function SchoolInfoPage() {
 
   const [schools, setSchools] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [aptList, setAptList] = useState<any[]>([]);
-  const [aptSort, setAptSort] = useState<'distance' | 'newest'>('newest');
-  const [visibleApts, setVisibleApts] = useState<number>(5);
 
   // 선택 지역에 맞는 학교 목록 불러오기 (탭 변경 시 리스트만 업데이트)
   useEffect(() => {
@@ -74,7 +70,6 @@ export default function SchoolInfoPage() {
         const json = await res.json();
         if (json.success) {
           setSchools(json.data);
-          setSelectedSchool(null);
         }
       } catch (error) {
         console.error('Data load error:', error);
@@ -103,30 +98,19 @@ export default function SchoolInfoPage() {
     fetchStats();
   }, [regionName]);
 
-  // 배정 단지 불러오기 (GIS 연산 API 연동)
-  useEffect(() => {
-    setVisibleApts(5);
-    if (selectedSchool && selectedSchool.name) {
-      const fetchApts = async () => {
-        try {
-          const res = await fetch(`/api/school/apartments?schoolName=${encodeURIComponent(selectedSchool.name)}&lat=${selectedSchool.lat || ''}&lng=${selectedSchool.lng || ''}&lawdCd=${encodeURIComponent(region.lawdCd)}`);
-          const json = await res.json();
-          if (json.success) {
-            setAptList(json.data);
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      };
-      fetchApts();
-    } else {
-      setAptList([]);
-    }
-  }, [selectedSchool, region.lawdCd]);
-
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    setSelectedSchool(null);
+  };
+
+  // 학교 상세페이지(/school/[id])는 아파트 상세페이지의 [학군] 탭에서 진입하는 경로와
+  // 동일한 단일 라우트다 — 여기서도 같은 경로로 이동시켜(예전에는 이 페이지 안에서
+  // 자체 모달을 띄웠다) 두 진입 경로의 화면을 하나로 합친다.
+  const goToSchoolDetail = (item: any) => {
+    const params = new URLSearchParams({ name: item.name });
+    if (item.lat) params.set('lat', String(item.lat));
+    if (item.lng) params.set('lng', String(item.lng));
+    if (region.lawdCd) params.set('lawdCd', region.lawdCd);
+    router.push(`/school/${encodeURIComponent(item.id)}?${params.toString()}`);
   };
 
   const renderSchoolItem = (item: any) => {
@@ -253,10 +237,10 @@ export default function SchoolInfoPage() {
           
           <ul className={styles.schoolList}>
             {schools.map((item) => (
-              <li 
-                key={item.id} 
-                className={`${styles.schoolItem} ${selectedSchool?.id === item.id ? styles.active : ''}`}
-                onClick={() => setSelectedSchool(item)}
+              <li
+                key={item.id}
+                className={styles.schoolItem}
+                onClick={() => goToSchoolDetail(item)}
               >
                 <div className={styles.rankBadge}>{item.rank}</div>
                 {renderSchoolItem(item)}
@@ -266,127 +250,6 @@ export default function SchoolInfoPage() {
         </div>
 
       </div>
-
-      {/* 학교 상세 전면 모달 (Modal) */}
-      {selectedSchool && (
-        <div className={styles.modalOverlay} onClick={() => setSelectedSchool(null)}>
-          <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <div>
-                <h2 className={styles.modalTitle}>{selectedSchool.name}</h2>
-                <span style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>{regionName} 전체 {selectedSchool.rank}위</span>
-              </div>
-              <button className={styles.modalCloseBtn} onClick={() => setSelectedSchool(null)}>×</button>
-            </div>
-            
-            <div className={styles.modalBody}>
-              {/* 상단: 학교 기본 정보 및 지표 */}
-              <h3 style={{marginTop: 0, marginBottom: '1rem', color: 'var(--text-primary)'}}>📊 세부 지표</h3>
-              <div className={styles.schoolDetailGrid}>
-                <div className={styles.detailBox}>
-                  <div className={styles.detailLabel}>총 학생수</div>
-                  <div className={styles.detailValue}>{selectedSchool.students}명</div>
-                </div>
-                {selectedSchool.classStudents && (
-                  <div className={styles.detailBox}>
-                    <div className={styles.detailLabel}>학급당 인원</div>
-                    <div className={styles.detailValue}>{selectedSchool.classStudents}명</div>
-                  </div>
-                )}
-                {selectedSchool.graduates && (
-                  <div className={styles.detailBox}>
-                    <div className={styles.detailLabel}>졸업생 수</div>
-                    <div className={styles.detailValue}>{selectedSchool.graduates}명</div>
-                  </div>
-                )}
-                
-                {activeTab === '중등' && (
-                  <>
-                    <div className={styles.detailBox}>
-                      <div className={styles.detailLabel}>과학고 진학</div>
-                      <div className={styles.detailValue} style={{color: '#3b82f6'}}>{selectedSchool.sciHigh}명</div>
-                    </div>
-                    <div className={styles.detailBox}>
-                      <div className={styles.detailLabel}>외고·국제고 진학</div>
-                      <div className={styles.detailValue} style={{color: '#8b5cf6'}}>{selectedSchool.foreignHigh}명</div>
-                    </div>
-                    <div className={styles.detailBox}>
-                      <div className={styles.detailLabel}>특목고 진학률</div>
-                      <div className={styles.detailValue} style={{color: 'var(--primary-color)'}}>{selectedSchool.specialRatio}%</div>
-                    </div>
-                  </>
-                )}
-
-                {activeTab === '고등' && (
-                  <>
-                    <div className={styles.detailBox}>
-                      <div className={styles.detailLabel}>4년제 진학률</div>
-                      <div className={styles.detailValue} style={{color: '#3b82f6'}}>{selectedSchool.univRate}%</div>
-                    </div>
-                    <div className={styles.detailBox}>
-                      <div className={styles.detailLabel}>의약계열/주요대</div>
-                      <div className={styles.detailValue} style={{color: '#8b5cf6'}}>{selectedSchool.medSeoulRate}%</div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* 하단: 배정 단지 리스트 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem' }}>
-                <div>
-                  <h3 style={{margin: 0, color: 'var(--text-primary)'}}>📌 배정 가능 단지 (직선거리)</h3>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => setAptSort('distance')} className={aptSort === 'distance' ? styles.activeSortBtn : styles.sortBtn}>거리순</button>
-                  <button onClick={() => setAptSort('newest')} className={aptSort === 'newest' ? styles.activeSortBtn : styles.sortBtn}>신축순</button>
-                </div>
-              </div>
-
-              <div className={styles.aptList}>
-                {[...aptList].sort((a, b) => {
-                  if (aptSort === 'newest') {
-                    return (b.buildYear || 0) - (a.buildYear || 0);
-                  } else {
-                    return (a.distance || 0) - (b.distance || 0);
-                  }
-                }).slice(0, visibleApts).map(apt => (
-                  <div key={apt.id} className={styles.aptItem}>
-                    <div>
-                      <div className={styles.aptName}>{apt.name} <span style={{fontSize: '0.75rem', color: '#64748b', marginLeft: '4px'}}>{apt.buildYear ? `${apt.buildYear}년` : ''}</span></div>
-                      <div className={styles.aptWalk}>{apt.walkTime}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className={styles.aptPrice}>{apt.price}</div>
-                      {apt.id !== -1 && (
-                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
-                          <Link href={`/apt/${encodeURIComponent(apt.name)}?lawdCd=${region.lawdCd}&type=apt`} className={styles.linkBtn}>
-                            실거래가 보기 &gt;
-                          </Link>
-                          <a
-                            href={`https://new.land.naver.com/search?query=${encodeURIComponent(apt.name)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={styles.linkBtn}
-                          >
-                            매물 보기 ↗
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {aptList.length > visibleApts && (
-                <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-                  <button onClick={() => setVisibleApts((v) => v + 5)} className={styles.sortBtn}>
-                    더보기 ({aptList.length - visibleApts}개 더 있음)
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       <RegionSelectModal />
     </div>

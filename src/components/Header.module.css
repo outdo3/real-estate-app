@@ -120,8 +120,12 @@
   color: var(--primary-color);
 }
 
-/* 헤더 우측 끝 로그인/프로필 버튼 */
+/* 헤더 우측 끝 로그인/프로필 버튼. searchSlot/pageTitle이 없는 페이지(예: 홈 화면의
+   bare <Header/>)는 모바일에서 menuList가 position:fixed로 플로우 밖으로 빠지면서 이
+   버튼을 오른쪽으로 밀어줄 flex:1 형제가 하나도 안 남는 문제가 있었다 — margin-left:auto로
+   항상 우측 끝에 고정한다(다른 페이지처럼 이미 flex:1 형제가 있어도 영향 없음). */
 .loginTrigger {
+  margin-left: auto;
   flex-shrink: 0;
   padding: 0.45rem 0.9rem;
   border-radius: 999px;
@@ -141,6 +145,7 @@
 }
 
 .authButtonSkeleton {
+  margin-left: auto;
   flex-shrink: 0;
   width: 32px;
   height: 32px;
@@ -149,6 +154,7 @@
 }
 
 .avatarLink {
+  margin-left: auto;
   flex-shrink: 0;
   display: flex;
   width: 32px;
@@ -252,7 +258,8 @@
     height: 100%;
   }
 
-  .menuItem a {
+  .menuItem a,
+  .menuItem button {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -267,8 +274,9 @@
     font-size: 1.35rem; /* 홈 화면 하단 탭 아이콘과 통일된 크기 */
     margin-bottom: 4px;
   }
-  
-  .menuItem a.active {
+
+  .menuItem a.active,
+  .menuItem button.active {
     color: var(--text-primary) !important;
     font-weight: 800;
   }

@@ -76,7 +76,9 @@ export async function POST(request: Request) {
         {
           maxPriceEok: classification.maxPriceEok,
           minParkingPerHousehold: classification.minParkingPerHousehold,
+          minTotalHouseholds: classification.minTotalHouseholds,
           newBuildOnly: classification.newBuildOnly,
+          nearElementarySchool: classification.nearElementarySchool,
         },
         request.url
       );
@@ -84,9 +86,18 @@ export async function POST(request: Request) {
         complexes.length === 0
           ? '조건에 맞는 단지를 찾지 못했습니다.'
           : complexes
-              .map((c) => `${c.name}(${c.dong}) ${c.price}${c.parkingInfo ? `, ${c.parkingInfo}` : ''}${c.buildYear ? `, ${c.buildYear}년 준공` : ''}`)
+              .map((c) => {
+                const parts = [`${c.name}(${c.dong}) ${c.price}`];
+                if (c.parkingInfo) parts.push(c.parkingInfo);
+                if (c.totalHouseholds) parts.push(`${c.totalHouseholds.toLocaleString('ko-KR')}세대`);
+                if (c.buildYear) parts.push(`${c.buildYear}년 준공`);
+                if (c.nearestSchool) parts.push(`${c.nearestSchool.name}까지 도보 약 ${c.nearestSchool.walkMinutes}분(${c.nearestSchool.distanceM}m)`);
+                return parts.join(', ');
+              })
               .join(' / ');
-      const briefing = await generateBriefing('condition_search', summary);
+      const briefing = await generateBriefing('condition_search', summary, {
+        requireSchoolMention: classification.nearElementarySchool,
+      });
       payload = { intent: 'condition_search', briefing, complexes, lawdCd };
     } else if (classification.intent === 'regional_stats') {
       const stats = await runRegionalStats(lawdCd, request.url);

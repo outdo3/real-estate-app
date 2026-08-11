@@ -715,7 +715,7 @@ export default function ApartmentDetail() {
 
           {infraTab === '환경' && <LivingEnvironmentPanel aptInfo={aptInfo} />}
           {infraTab === '교통' && <NeighborhoodInfoPanel address={primaryAddress} ready={addressReady} />}
-          {infraTab === '학군' && <SchoolDistrictPanel address={primaryAddress} ready={addressReady} />}
+          {infraTab === '학군' && <SchoolDistrictPanel address={primaryAddress} ready={addressReady} lawdCd={lawdCdState} />}
         </div>
       </div>
 

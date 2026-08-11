@@ -25,6 +25,35 @@ interface HeaderProps {
   pageTitleAlign?: 'left' | 'right';
 }
 
+// 하단탭바 항목을 <a href>가 아니라 클릭 핸들러로 이동시킨다 — 실제 href가 있는 앵커는
+// 마우스 호버/포커스만 해도 브라우저가 화면 좌하단에 원본 URL을 상태표시줄로 띄우는데,
+// 하단탭바 자리가 그 위치와 겹쳐 "탭바 위에 주소가 뜬다"는 문제로 이어졌다(브라우저
+// 자체 기능이라 CSS/z-index로는 못 지움 — href 자체를 없애는 것만이 실질적인 방법).
+function NavButton({
+  href,
+  active,
+  icon,
+  label,
+}: {
+  href: string;
+  active: boolean;
+  icon: string;
+  label: string;
+}) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={() => router.push(href)}
+      className={active ? styles.active : ''}
+      style={{ color: 'inherit', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+    >
+      <span className={styles.icon}>{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
 const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge, pageTitleAlign = 'right' }: HeaderProps) => {
   const pathname = usePathname();
   const router = useRouter();
@@ -55,34 +84,19 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge
 
         <ul className={`${styles.menuList} ${hideMobileNav ? styles.menuListHideMobile : ''}`}>
           <li className={styles.menuItem}>
-            <Link href="/" className={pathname === '/' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>🏠</span>
-              <span>홈</span>
-            </Link>
+            <NavButton href="/" active={pathname === '/'} icon="🏠" label="홈" />
           </li>
           <li className={styles.menuItem}>
-            <Link href="/map" className={pathname === '/map' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>🗺️</span>
-              <span>지도</span>
-            </Link>
+            <NavButton href="/map" active={pathname === '/map'} icon="🗺️" label="지도" />
           </li>
           <li className={styles.menuItem}>
-            <Link href="/stats" className={pathname.startsWith('/stats') ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>📊</span>
-              <span>통계</span>
-            </Link>
+            <NavButton href="/stats" active={pathname.startsWith('/stats')} icon="📊" label="통계" />
           </li>
           <li className={styles.menuItem}>
-            <Link href="/redevelopment" className={pathname.startsWith('/redevelopment') ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>🏗️</span>
-              <span>재개발·분양</span>
-            </Link>
+            <NavButton href="/redevelopment" active={pathname.startsWith('/redevelopment')} icon="🏗️" label="재개발·분양" />
           </li>
           <li className={styles.menuItem}>
-            <Link href="/my" className={pathname.startsWith('/my') ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>👤</span>
-              <span>MY</span>
-            </Link>
+            <NavButton href="/my" active={pathname.startsWith('/my')} icon="👤" label="MY" />
           </li>
         </ul>
 

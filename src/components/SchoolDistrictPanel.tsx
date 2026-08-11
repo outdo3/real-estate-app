@@ -4,6 +4,7 @@ import KakaoPlaces from './KakaoPlaces';
 interface SchoolDistrictPanelProps {
   address: string;
   ready: boolean;
+  lawdCd?: string;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -18,13 +19,13 @@ const cardStyle: React.CSSProperties = {
 // 수치이지, 진짜 나이스(NEIS) 학년별 통계나 진학률이 아니다(코드 확인 완료). 단지 상세페이지처럼
 // 사용자가 실제 의사결정에 쓸 화면에 그 가짜 수치를 새로 노출시키지 않고, 대신 실제 카카오
 // POI 기반의 근접 학교 목록만 보여주고 나머지는 정직하게 "준비 중"으로 표시한다.
-export default function SchoolDistrictPanel({ address, ready }: SchoolDistrictPanelProps) {
+export default function SchoolDistrictPanel({ address, ready, lawdCd }: SchoolDistrictPanelProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
       <div style={cardStyle}>
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🏫 인근 학교</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={['SC4']} limit={5} />
+          <KakaoPlaces address={address} categories={['SC4']} limit={5} lawdCd={lawdCd} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}

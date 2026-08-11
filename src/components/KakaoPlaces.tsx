@@ -13,6 +13,9 @@ interface Props {
   // 동일하게 거리순으로 병합된다. 기존 호출부는 이 prop을 넘기지 않아도 그대로 동작한다.
   keywords?: string[];
   limit?: number;
+  // 학교 목록(isSchoolOnly)일 때 /school/[id] 링크에 함께 실어 보낼 지역코드 — 학교
+  // 상세페이지가 배정 아파트 목록(/api/school/apartments)을 조회할 때 필요하다.
+  lawdCd?: string;
 }
 
 const CATEGORY_ICON: Record<string, string> = {
@@ -50,7 +53,7 @@ const formatEta = (distance: number) => {
   return `차량 약 ${driveMin}분`;
 };
 
-export default function KakaoPlaces({ address, categories, keywords = [], limit = 5 }: Props) {
+export default function KakaoPlaces({ address, categories, keywords = [], limit = 5, lawdCd }: Props) {
   const [places, setPlaces] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -203,7 +206,7 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
           {iconFor(p, p.__keyword)}{' '}
           {isSchoolOnly ? (
             <Link
-              href={`/school/${encodeURIComponent(p.id)}?name=${encodeURIComponent(p.place_name)}&lat=${p.y}&lng=${p.x}`}
+              href={`/school/${encodeURIComponent(p.id)}?name=${encodeURIComponent(p.place_name)}&lat=${p.y}&lng=${p.x}${lawdCd ? `&lawdCd=${encodeURIComponent(lawdCd)}` : ''}`}
               style={{ color: 'var(--text-primary)', textDecoration: 'underline', textDecorationColor: 'var(--border-color)' }}
             >
               <b>{p.place_name}</b>

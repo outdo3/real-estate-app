@@ -1,9 +1,72 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
-import { useRouter } from 'next/navigation';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
+
+// Header.tsx의 하단탭바(홈/지도/통계/재개발·분양/MY)와 동일한 5개 메뉴 — 지도 페이지는
+// 전체화면 커스텀 UI라 Header를 아예 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸
+// 막기 위함) 하단탭바만 이 페이지에도 동일하게 떠 있도록 별도로 둔다.
+const BOTTOM_NAV_ITEMS: { href: string; icon: string; label: string }[] = [
+  { href: '/', icon: '🏠', label: '홈' },
+  { href: '/map', icon: '🗺️', label: '지도' },
+  { href: '/stats', icon: '📊', label: '통계' },
+  { href: '/redevelopment', icon: '🏗️', label: '재개발·분양' },
+  { href: '/my', icon: '👤', label: 'MY' },
+];
+
+function MapBottomNav() {
+  const pathname = usePathname();
+  const router = useRouter();
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        background: 'white',
+        borderTop: '1px solid var(--border-color)',
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
+        display: 'flex',
+        zIndex: 1000,
+      }}
+    >
+      {BOTTOM_NAV_ITEMS.map((item) => {
+        const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+        return (
+          // <a href>가 아니라 버튼+router.push로 이동시킨다 — 실제 href가 있는 앵커는
+          // 호버/포커스만 해도 브라우저가 화면 좌하단에 원본 URL을 상태표시줄로 띄우는데,
+          // 하단탭바 자리가 그 위치와 겹쳐 탭바 위에 주소가 뜨는 문제로 이어졌다.
+          <button
+            key={item.href}
+            type="button"
+            onClick={() => router.push(item.href)}
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+              fontWeight: active ? 800 : 600,
+              fontSize: '0.75rem',
+            }}
+          >
+            <span style={{ fontSize: '1.35rem' }}>{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const apiKey =
   process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ||
@@ -48,7 +111,11 @@ interface SchoolMarker {
   lng: number;
 }
 
-type LayerKey = 'apt' | 'school' | 'redevelopment' | 'auction';
+// 요청된 6개 카테고리. apt/school은 실제 데이터(MOLIT 실거래/카카오 학교 POI)로 필터링
+// 동작하고, officetel/livingLodging/redevelopment/auction은 이 앱에 아직 연동된 데이터
+// 소스가 없어(오피스텔·생활숙박시설 실거래는 MOLIT API 자체가 아파트와 별도 엔드포인트라
+// 미연동, 재개발/경공매도 기존과 동일) 지어낸 마커 대신 정직하게 "준비 중" 안내만 띄운다.
+type LayerKey = 'apt' | 'officetel' | 'livingLodging' | 'redevelopment' | 'auction' | 'school';
 
 const LEVEL_COLOR: Record<SchoolMarker['level'], string> = {
   초: '#3b82f6',
@@ -85,15 +152,15 @@ export default function FullscreenMapPage() {
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
   const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
-  const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
     apt: true,
-    school: false,
+    officetel: false,
+    livingLodging: false,
     redevelopment: false,
     auction: false,
+    school: false,
   });
   const mapRef = useRef<any>(null);
-  const pendingCenterRef = useRef(center);
 
   useEffect(() => {
     if (!apiKey) return;
@@ -459,22 +526,16 @@ export default function FullscreenMapPage() {
     }
   }, []);
 
-  // 사용자가 지도를 드래그하면 "이 지역에서 재검색" 버튼만 노출하고, 실제 재조회는 그
-  // 버튼을 눌렀을 때만 수행한다(드래그할 때마다 자동 재조회하면 API 호출이 과도해짐 —
-  // 네이버지도/카카오맵 등 실제 지도 서비스도 같은 패턴을 쓴다).
+  // 드래그가 끝나면(연속 드래그 중이 아니라 'dragend' — 한 번만 발생) 바로 그 위치로
+  // 마커를 다시 조회한다. "이 지역에서 재검색" 버튼을 거치던 이전 방식은 검색창 위에
+  // 버튼이 겹쳐 뜨는 문제가 있었고, dragend 자체가 이미 드래그당 1회만 발생하는
+  // 이벤트라 자동 갱신해도 과도한 API 호출로 이어지지 않는다.
   const handleDragEnd = () => {
     if (!mapRef.current) return;
     const c = mapRef.current.getCenter();
-    pendingCenterRef.current = { lat: c.getLat(), lng: c.getLng() };
-    setShowSearchHereBtn(true);
-  };
-
-  const handleSearchHere = () => {
-    const { lat, lng } = pendingCenterRef.current;
-    setCenter({ lat, lng });
-    setShowSearchHereBtn(false);
-    setIsLoadingData(true);
-    refreshActiveLayers(lat, lng);
+    const latLng = { lat: c.getLat(), lng: c.getLng() };
+    setCenter(latLng);
+    refreshActiveLayers(latLng.lat, latLng.lng);
   };
 
   const toggleLayer = (key: LayerKey) => {
@@ -497,7 +558,6 @@ export default function FullscreenMapPage() {
   const handleApartmentSelect = (result: ApartmentSearchResult) => {
     const latLng = { lat: result.lat, lng: result.lng };
     setCenter(latLng);
-    setShowSearchHereBtn(false);
     if (mapRef.current && window.kakao?.maps) {
       const anchor = new window.kakao.maps.LatLng(latLng.lat, latLng.lng);
       mapRef.current.panTo(anchor);
@@ -539,79 +599,90 @@ export default function FullscreenMapPage() {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontSize: '1.5rem', color: 'var(--primary-color)' }}>지도 데이터를 불러오는 중입니다...</div>;
   }
 
-  const LAYER_LABEL: Record<LayerKey, string> = { apt: '단지', school: '학교', redevelopment: '재개발', auction: '경매' };
-  const showComingSoonNotice = layers.redevelopment || layers.auction;
+  // 요청된 순서: 단지 / 오피스텔 / 생숙 / 재개발 / 경·공매 / 학교
+  const LAYER_LABEL: Record<LayerKey, string> = {
+    apt: '단지',
+    officetel: '오피스텔',
+    livingLodging: '생숙',
+    redevelopment: '재개발',
+    auction: '경·공매',
+    school: '학교',
+  };
+  const LAYER_ORDER: LayerKey[] = ['apt', 'officetel', 'livingLodging', 'redevelopment', 'auction', 'school'];
+  const COMING_SOON_LAYERS: LayerKey[] = ['officetel', 'livingLodging', 'redevelopment', 'auction'];
+  const COMING_SOON_MESSAGE: Partial<Record<LayerKey, string>> = {
+    officetel: '오피스텔 실거래 데이터는 아직 연동 준비 중입니다.',
+    livingLodging: '생활숙박시설(생숙) 실거래 데이터는 아직 연동 준비 중입니다.',
+    redevelopment: '재개발/재건축 구역 데이터는 아직 연동 준비 중입니다.',
+    auction: '경매/공매 매물 데이터는 아직 연동 준비 중입니다.',
+  };
+  const activeComingSoon = COMING_SOON_LAYERS.filter((key) => layers[key]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-      {/* 상단 컨트롤 UI (뒤로가기, 검색창, 내 위치) */}
-      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <button
-          onClick={() => router.push('/')}
-          style={{
-            background: 'white', padding: '12px 24px', borderRadius: '99px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontWeight: 700,
-            display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem',
-            border: 'none', cursor: 'pointer'
-          }}
-        >
-          ⬅ 메인으로
-        </button>
-
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.95)', padding: '0.5rem', borderRadius: '99px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', alignItems: 'center' }}>
-          <div style={{ width: '260px' }}>
-            <ApartmentAutocomplete onSelect={handleApartmentSelect} placeholder="아파트 단지명 검색" />
-          </div>
-          <button
-            onClick={async () => {
-              if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    const latLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                    setCenter(latLng);
-                    refreshActiveLayers(latLng.lat, latLng.lng);
-                  },
-                  async (err) => {
-                    try {
-                      const res = await fetch('https://ipinfo.io/json');
-                      const data = await res.json();
-                      if (data.loc) {
-                        const parts = data.loc.split(',');
-                        const latLng = { lat: parseFloat(parts[0]), lng: parseFloat(parts[1]) };
-                        setCenter(latLng);
-                        refreshActiveLayers(latLng.lat, latLng.lng);
-                      }
-                    } catch (e) {}
-                  },
-                  { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
-                );
-              }
-            }}
-            style={{ padding: '0.6rem 1.2rem', background: 'white', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '99px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, transition: 'background 0.2s' }}
-            onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
-            onMouseOut={(e) => e.currentTarget.style.background = 'white'}
-          >
-            📍 내 위치
-          </button>
+      {/* 상단 컨트롤: 검색창 + 내 위치만 한 줄로(하단탭바에 홈 버튼이 항상 있어 "메인으로"
+          버튼은 제거) — 검색창이 훨씬 넓게 쓰인다. */}
+      <div
+        style={{
+          position: 'absolute', top: '16px', left: '16px', right: '16px', zIndex: 10,
+          display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem',
+          background: 'rgba(255, 255, 255, 0.95)', borderRadius: '99px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <ApartmentAutocomplete onSelect={handleApartmentSelect} placeholder="🔍 아파트, 오피스텔 단지명 검색..." />
         </div>
+        <button
+          onClick={async () => {
+            if (navigator.geolocation) {
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  const latLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                  setCenter(latLng);
+                  refreshActiveLayers(latLng.lat, latLng.lng);
+                },
+                async (err) => {
+                  try {
+                    const res = await fetch('https://ipinfo.io/json');
+                    const data = await res.json();
+                    if (data.loc) {
+                      const parts = data.loc.split(',');
+                      const latLng = { lat: parseFloat(parts[0]), lng: parseFloat(parts[1]) };
+                      setCenter(latLng);
+                      refreshActiveLayers(latLng.lat, latLng.lng);
+                    }
+                  } catch (e) {}
+                },
+                { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
+              );
+            }
+          }}
+          style={{ flexShrink: 0, padding: '0.6rem 1rem', background: 'white', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '99px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, whiteSpace: 'nowrap', transition: 'background 0.2s' }}
+          onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
+          onMouseOut={(e) => e.currentTarget.style.background = 'white'}
+        >
+          📍 내 위치
+        </button>
       </div>
 
-      {/* 레이어 토글 컨트롤 */}
-      <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.95)', padding: '0.5rem', borderRadius: '99px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-        {(Object.keys(LAYER_LABEL) as LayerKey[]).map((key) => (
+      {/* 우측 세로 카테고리 플로팅 바: 예전에는 상단을 가로로 가리던 걸 오른쪽 세로 알약
+          칩으로 옮겨서 검색창/지도 상단이 안 가려지게 한다. */}
+      <div style={{ position: 'absolute', right: '12px', top: '64px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {LAYER_ORDER.map((key) => (
           <button
             key={key}
             onClick={() => toggleLayer(key)}
             style={{
-              padding: '0.5rem 0.9rem',
+              padding: '0.55rem 1rem',
               borderRadius: '99px',
               border: 'none',
               cursor: 'pointer',
               fontWeight: 700,
-              fontSize: '0.85rem',
-              background: layers[key] ? 'var(--primary-color)' : 'transparent',
+              fontSize: '0.8rem',
+              background: layers[key] ? 'var(--primary-color)' : 'rgba(255,255,255,0.95)',
               color: layers[key] ? 'white' : 'var(--text-secondary)',
               whiteSpace: 'nowrap',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             }}
           >
             {LAYER_LABEL[key]}
@@ -619,31 +690,17 @@ export default function FullscreenMapPage() {
         ))}
       </div>
 
-      {/* 이 지역에서 재검색 */}
-      {showSearchHereBtn && (
-        <button
-          onClick={handleSearchHere}
-          style={{
-            position: 'absolute', top: '80px', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
-            padding: '0.65rem 1.3rem', background: 'white', border: 'none', borderRadius: '99px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)', fontWeight: 700, cursor: 'pointer', color: 'var(--primary-color)',
-          }}
-        >
-          🔄 이 지역에서 재검색
-        </button>
-      )}
-
-      {/* 재개발/경매 레이어: 실제 데이터 소스가 아직 없어 정직하게 준비중 안내만 표시 */}
-      {showComingSoonNotice && (
+      {/* 아직 데이터 연동이 안 된 레이어를 켰을 때: 지어낸 마커 대신 정직하게 준비중 안내 */}
+      {activeComingSoon.length > 0 && (
         <div
           style={{
-            position: 'absolute', bottom: '90px', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
+            position: 'absolute', bottom: '76px', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
             padding: '0.75rem 1.25rem', background: 'rgba(30,41,59,0.92)', color: 'white', borderRadius: '12px',
             fontSize: '0.85rem', fontWeight: 600, textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            maxWidth: '90%',
           }}
         >
-          {layers.redevelopment && '재개발/재건축 구역 데이터는 아직 연동 준비 중입니다. '}
-          {layers.auction && '경매/공매 매물 데이터는 아직 연동 준비 중입니다.'}
+          {activeComingSoon.map((key) => COMING_SOON_MESSAGE[key]).join(' ')}
         </div>
       )}
 
@@ -741,6 +798,8 @@ export default function FullscreenMapPage() {
           </CustomOverlayMap>
         ))}
       </KakaoMap>
+
+      <MapBottomNav />
     </div>
   );
 }
