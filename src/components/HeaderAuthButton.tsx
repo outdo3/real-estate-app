@@ -28,7 +28,7 @@ export default function HeaderAuthButton() {
   }
 
   return (
-    <Link href="/mypage" className={styles.avatarLink} aria-label="마이페이지">
+    <Link href="/my" className={styles.avatarLink} aria-label="마이페이지">
       {session.user.image ? (
         <img src={session.user.image} alt="" className={styles.avatarImg} />
       ) : (

@@ -69,7 +69,10 @@ export default function FullscreenMapPage() {
   const [aptMarkers, setAptMarkers] = useState<AptMarker[]>([]);
   const [aptClusters, setAptClusters] = useState<AptCluster[]>([]);
   const [schoolMarkers, setSchoolMarkers] = useState<SchoolMarker[]>([]);
-  const [zoomLevel, setZoomLevel] = useState(6);
+  // 초기 진입 시 마커가 너무 빽빽하게 겹쳐 보이는 문제(레벨 6은 화면 안에 너무 넓은
+  // 지역이 들어와 단지 밀집 지역에서 칩이 서로 겹침) — 레벨 4로 1~2단계 더 확대해
+  // 시작하면 DETAIL_ZOOM_LEVEL(4) 기준 상세 카드 모드로 시작해 칩 간격이 넉넉해진다.
+  const [zoomLevel, setZoomLevel] = useState(4);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   // 현재 화면의 마커들을 조회할 때 실제로 사용한 lawdCd. 마커 클릭 시 상세페이지로 이 값을
   // 함께 넘겨야 한다 — 안 넘기면 상세페이지가 자기 자신의 하드코딩된 기본 지역(서울 강남구)으로
@@ -648,7 +651,7 @@ export default function FullscreenMapPage() {
         ref={mapRef}
         center={center}
         style={{ width: '100%', height: '100%' }}
-        level={6}
+        level={4}
         onDragEnd={handleDragEnd}
         onZoomChanged={(map) => setZoomLevel(map.getLevel())}
         onClick={() => setSelectedMarkerId(null)}

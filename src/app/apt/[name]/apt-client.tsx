@@ -47,6 +47,10 @@ export default function ApartmentDetail() {
 
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
+  // 세대수/준공년월/용적률 등 단지 기본정보(aptInfo) 조회는 trades와 별개의 API 호출이라
+  // 서로 다른 시점에 끝나면 카드가 하나씩 뜨는 것처럼 보였다 — trades와 aptInfo 둘 다
+  // 끝날 때까지 pageReady를 false로 유지해 상단 요약 영역을 한 번에 렌더링한다.
+  const [infoLoading, setInfoLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [ledgerType, setLedgerType] = useState<'전유부' | '표제부'>('전유부');
@@ -116,6 +120,7 @@ export default function ApartmentDetail() {
 
     const fetchTrades = async () => {
       setLoading(true);
+      setInfoLoading(true);
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const urlLawdCd = urlParams.get('lawdCd');
@@ -202,7 +207,10 @@ export default function ApartmentDetail() {
             setAptInfo(data.info);
           }
         }
-      } catch (e) {}
+      } catch (e) {
+      } finally {
+        if (!cancelled) setInfoLoading(false);
+      }
     };
 
     fetchTrades();
@@ -244,6 +252,9 @@ export default function ApartmentDetail() {
   const firstTrade = trades.length > 0 ? trades[0] : null;
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
   const addressReady = !loading && !!primaryAddress;
+  // trades와 aptInfo 둘 다 끝나야 상단 요약 영역(단지정보/가격/차트)을 한 번에 보여준다 —
+  // 시간차를 두고 카드가 하나씩 뜨는 문제를 막는다.
+  const pageReady = !loading && !infoLoading;
 
   const openModal = (modalName: string) => {
     setActiveModal(modalName);
@@ -540,39 +551,52 @@ export default function ApartmentDetail() {
       {/* ══════════ 1구역: 단지 요약 및 핵심 지표 ══════════ */}
       <div className={styles.header}>
         <div className="container">
-          <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', paddingTop: '1rem' }}>
-            <AptSpecGrid aptName={aptName} address={primaryAddress} aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
-            <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
-              <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '매매' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>매매</button>
-              <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>전월세</button>
+          {!pageReady ? (
+            <div className={styles.headerSkeleton}>
+              <div className={styles.skeletonBar} style={{ width: '55%', height: '0.9rem' }} />
+              <div className={styles.skeletonBar} style={{ height: '4.5rem' }} />
+              <div className={styles.skeletonBar} style={{ width: '40%', height: '1.8rem', marginTop: '0.5rem' }} />
+              <div className={styles.skeletonBar} style={{ width: '70%' }} />
+              <div className={styles.skeletonBar} style={{ height: '10rem', marginTop: '0.5rem' }} />
+              <div className={styles.skeletonBar} style={{ height: '3.5rem' }} />
             </div>
-          </div>
+          ) : (
+            <>
+              <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', paddingTop: '1rem' }}>
+                <AptSpecGrid aptName={aptName} address={primaryAddress} aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
+              </div>
 
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
-            <span className={styles.price}>{latestPrice}</span>
-            {trades.length > 0 && (
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                {getAreaInfo(parseFloat(trades[0].area)).label} • {trades[0].floor}층 • {trades[0].tradeDate}
-              </span>
-            )}
-          </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
+                <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
+                  <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '매매' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>매매</button>
+                  <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>전월세</button>
+                </div>
+              </div>
 
-          <div style={{ marginTop: '0.5rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-            <span style={{ color: 'var(--text-muted)' }}>
-              {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}:
-            </span>{' '}
-            <b>최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}</b>
-          </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                <span className={styles.price}>{latestPrice}</span>
+                {trades.length > 0 && (
+                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                    {getAreaInfo(parseFloat(trades[0].area)).label} • {trades[0].floor}층 • {trades[0].tradeDate}
+                  </span>
+                )}
+              </div>
 
-          <div style={{ marginTop: '1.25rem' }}>
-            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
-          </div>
+              <div style={{ marginTop: '0.5rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}:
+                </span>{' '}
+                <b>최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}</b>
+              </div>
 
-          <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
+              <div style={{ marginTop: '1.25rem' }}>
+                <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
+              </div>
+
+              <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
+            </>
+          )}
         </div>
       </div>
 

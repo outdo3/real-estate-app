@@ -57,7 +57,10 @@ export function getAreaInfo(rawExclusiveM2: number): AreaInfo {
 // 좁은 자리에 같이 욱여넣으면 오히려 더 헷갈림).
 export function getCompactAreaLabel(rawExclusiveM2: number): string {
   if (Number.isNaN(rawExclusiveM2)) return '면적 정보 없음';
-  const m2 = Math.round(rawExclusiveM2);
+  // 반올림 대신 절사: 59.93㎡가 "60"으로 반올림되면 실제로는 "59타입"으로 불리는
+  // 매물이 "60타입"으로 오표기되는 문제가 있었다(부동산 실무 관행상 전용면적 타입은
+  // 절사 표기가 일반적).
+  const m2 = Math.floor(rawExclusiveM2);
   const pyung = Math.round(rawExclusiveM2 / M2_PER_PYUNG);
   return `${m2}(${pyung}평)`;
 }

@@ -1,0 +1,100 @@
+.main {
+  min-height: 100vh;
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+.introCard {
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+}
+
+.introText {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.section {
+  margin-top: 1.5rem;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 0.75rem;
+}
+
+.tableWrapper {
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.gradeTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.gradeTable th {
+  background: #f8fafc;
+  color: var(--text-secondary);
+  font-weight: 700;
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.gradeTable td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.gradeTable tr:last-child td {
+  border-bottom: none;
+}
+
+.gradeCell {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dataPending {
+  color: var(--text-muted);
+}
+
+.specialGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.specialCard {
+  padding: 1.1rem 0.9rem;
+  border-radius: 10px;
+  border: 1px dashed var(--border-color);
+  background: #f8fafc;
+  text-align: center;
+}
+
+.specialIcon {
+  font-size: 1.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.specialLabel {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.35rem;
+}
+
+.specialValue {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

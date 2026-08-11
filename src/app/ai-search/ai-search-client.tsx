@@ -266,10 +266,35 @@ function RegionalStatsResult({ stats }: { stats: RegionalStatsData }) {
   );
 }
 
+// 값이 없거나(정보 없음) 동률이면 우열을 가리지 않는다 — 확인되지 않은 데이터로
+// 우열을 지어내지 않기 위함. 가격/평형/용적률/건폐율은 "더 크면 좋다"는 합의가 없어
+// 하이라이트 대상에서 제외하고, 세대수(클수록 대단지)·주차(세대당 대수가 넉넉할수록)·
+// 준공년도(최근일수록 신축)만 객관적으로 비교 가능한 지표로 본다.
+const HIGHLIGHTABLE_KEYS: Array<keyof CompareComplexData> = ['totalHouseholds', 'parking', 'buildYear'];
+
+const parseLeadingNumber = (raw: string | null): number | null => {
+  if (!raw) return null;
+  const match = raw.replace(/,/g, '').match(/[\d.]+/);
+  return match ? parseFloat(match[0]) : null;
+};
+
+function winnerFor(key: keyof CompareComplexData, a: CompareComplexData, b: CompareComplexData): 'a' | 'b' | null {
+  if (!HIGHLIGHTABLE_KEYS.includes(key)) return null;
+  const av = parseLeadingNumber(a[key] as string | null);
+  const bv = parseLeadingNumber(b[key] as string | null);
+  if (av == null || bv == null || av === bv) return null;
+  return av > bv ? 'a' : 'b';
+}
+
 function CompareResult({ a, b }: { a: CompareComplexData; b: CompareComplexData }) {
   return (
     <div className={styles.compareTableWrapper}>
       <table className={styles.compareTable}>
+        <colgroup>
+          <col style={{ width: '28%' }} />
+          <col style={{ width: '36%' }} />
+          <col style={{ width: '36%' }} />
+        </colgroup>
         <thead>
           <tr>
             <th></th>
@@ -278,13 +303,16 @@ function CompareResult({ a, b }: { a: CompareComplexData; b: CompareComplexData 
           </tr>
         </thead>
         <tbody>
-          {COMPARE_ROWS.map((row) => (
-            <tr key={row.key}>
-              <td className={styles.compareRowLabel}>{row.label}</td>
-              <td>{(a[row.key] as string) || '정보 없음'}</td>
-              <td>{(b[row.key] as string) || '정보 없음'}</td>
-            </tr>
-          ))}
+          {COMPARE_ROWS.map((row) => {
+            const winner = winnerFor(row.key, a, b);
+            return (
+              <tr key={row.key}>
+                <td className={styles.compareRowLabel}>{row.label}</td>
+                <td className={winner === 'a' ? styles.winnerCell : undefined}>{(a[row.key] as string) || '정보 없음'}</td>
+                <td className={winner === 'b' ? styles.winnerCell : undefined}>{(b[row.key] as string) || '정보 없음'}</td>
+              </tr>
+            );
+          })}
           <tr>
             <td className={styles.compareRowLabel}>커뮤니티시설</td>
             <td>{a.facilities.length > 0 ? a.facilities.join(', ') : '정보 없음'}</td>

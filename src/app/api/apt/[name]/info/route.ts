@@ -26,61 +26,69 @@ export async function GET(
     // 않고 임시 변수에만 담아둔다 — 아래 2번에서 지번까지 정확히 지정해 조회하는
     // 건축물대장(registry) 값이 있으면 그걸 우선시키고, registry가 없을 때만 이 값을
     // 폴백으로 쓴다.
-    let naverHouseholds: string | null = null;
-    let naverApprovalYear: string | null = null;
-    try {
-      const query = encodeURIComponent(`${aptName} 아파트 정보`);
-      const searchUrl = `https://search.naver.com/search.naver?query=${query}`;
+    // 네이버 스크래핑과 DB 캐시 조회는 서로 의존하지 않는 별개의 네트워크 호출이라
+    // Promise.all로 동시에 실행한다 — 이전에는 순서대로 await해서 두 호출의 지연시간이
+    // 그대로 더해졌다(상세페이지 카드 정보가 늦게 뜨는 원인 중 하나).
+    const fetchNaverInfo = async (): Promise<{ households: string | null; approvalYear: string | null }> => {
+      try {
+        const query = encodeURIComponent(`${aptName} 아파트 정보`);
+        const searchUrl = `https://search.naver.com/search.naver?query=${query}`;
 
-      const response = await fetch(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
-        },
-        signal: AbortSignal.timeout(2500) // 2.5초 타임아웃 추가
-      });
+        const response = await fetch(searchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'
+          },
+          signal: AbortSignal.timeout(2500) // 2.5초 타임아웃 추가
+        });
 
-      if (response.ok) {
+        if (!response.ok) return { households: null, approvalYear: null };
         const html = await response.text();
         const householdMatch = html.match(/(?:총\s*)?([0-9,]+)세대/);
-        if (householdMatch) naverHouseholds = `${householdMatch[1]}세대`;
-
         const yearMatch = html.match(/([0-9]{4})년\s*(?:준공|입주)/);
-        if (yearMatch) naverApprovalYear = `${yearMatch[1]}년`;
+        return {
+          households: householdMatch ? `${householdMatch[1]}세대` : null,
+          approvalYear: yearMatch ? `${yearMatch[1]}년` : null,
+        };
+      } catch (e) {
+        console.warn('Naver scraping failed', e);
+        return { households: null, approvalYear: null };
       }
-    } catch (e) {
-      console.warn('Naver scraping failed', e);
-    }
+    };
 
-    // 2. 주차대수/용적률/건폐율/세대수/사용승인일: DB(apartments)에 이미 조회해둔 값이 있으면 그걸 바로 쓰고
-    // (건축물대장 공공데이터 API를 매 페이지뷰마다 다시 부르지 않아도 됨), 없으면 라이브로
-    // 조회한 뒤 다음 요청을 위해 DB에 저장해둔다(cache-aside) — scripts/backfill_apt_details.ts로
-    // 미리 대량 채워둘 수도 있고, 실제 사용자가 페이지를 볼 때마다 조금씩 채워지기도 한다.
     // dong이 빈 문자열/undefined일 수 있는데, @@unique([name, dong])는 값이 항상 같은
     // 형태여야 매칭된다(null과 ''는 SQL에서 서로 다른 값으로 취급됨) — 이 라우트 안에서는
     // 항상 빈 문자열로 통일해 upsert의 where/create가 서로 어긋나지 않게 한다.
     const dongKey = dong || '';
-    let registry: { parkingCount: number | null; far: number | null; bcr: number | null; totalHouseholds: number | null; approvalDate: string | null } | null = null;
-
-    try {
-      // approvalDate까지 캐시돼 있어야 캐시 히트로 간주한다 — 이 컬럼이 나중에
-      // 추가됐으므로, 그 전에 캐싱된 기존 행은 approvalDate가 비어있다. 여기서 조건에
-      // 넣지 않으면 그런 행은 영영 라이브 재조회 없이 세대수/주차 등만 채운 채로
-      // 사용승인일만 계속 네이버 폴백에 의존하게 된다.
-      const cached = await prisma.apartment.findFirst({ where: { name: aptName, dong: dongKey } });
-      if (cached && cached.parkingCount && cached.far && cached.bcr && cached.approvalDate) {
-        registry = {
-          parkingCount: cached.parkingCount,
-          far: cached.far,
-          bcr: cached.bcr,
-          totalHouseholds: cached.totalHouseholds ?? null,
-          approvalDate: cached.approvalDate,
-        };
+    type Registry = { parkingCount: number | null; far: number | null; bcr: number | null; totalHouseholds: number | null; approvalDate: string | null };
+    const fetchCachedRegistry = async (): Promise<Registry | null> => {
+      try {
+        // approvalDate까지 캐시돼 있어야 캐시 히트로 간주한다 — 이 컬럼이 나중에
+        // 추가됐으므로, 그 전에 캐싱된 기존 행은 approvalDate가 비어있다. 여기서 조건에
+        // 넣지 않으면 그런 행은 영영 라이브 재조회 없이 세대수/주차 등만 채운 채로
+        // 사용승인일만 계속 네이버 폴백에 의존하게 된다.
+        const cached = await prisma.apartment.findFirst({ where: { name: aptName, dong: dongKey } });
+        if (cached && cached.parkingCount && cached.far && cached.bcr && cached.approvalDate) {
+          return {
+            parkingCount: cached.parkingCount,
+            far: cached.far,
+            bcr: cached.bcr,
+            totalHouseholds: cached.totalHouseholds ?? null,
+            approvalDate: cached.approvalDate,
+          };
+        }
+        return null;
+      } catch (e) {
+        console.warn('Apartment DB lookup failed (DB 미설정 등 — 라이브 조회로 폴백)', e);
+        return null;
       }
-    } catch (e) {
-      console.warn('Apartment DB lookup failed (DB 미설정 등 — 라이브 조회로 폴백)', e);
-    }
+    };
+
+    const [naverInfo, cachedRegistry] = await Promise.all([fetchNaverInfo(), fetchCachedRegistry()]);
+    const naverHouseholds = naverInfo.households;
+    const naverApprovalYear = naverInfo.approvalYear;
+    let registry: Registry | null = cachedRegistry;
 
     if (!registry) {
       const live = await fetchBuildingRegistryInfo(aptName, lawdCd, dong, jibun);

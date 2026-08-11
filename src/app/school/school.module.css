@@ -1,7 +1,7 @@
 .main {
   min-height: 100vh;
   background-color: var(--bg-light);
-  padding: 2rem 0 4rem 0;
+  padding: 2rem 0 calc(5.5rem + env(safe-area-inset-bottom)) 0;
 }
 
 .header {

@@ -103,7 +103,7 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
         dealAmount = parseInt(deposit, 10) || 0;
         monthlyRent = parseInt(monthly, 10) || 0;
         
-        priceStr = `보증금 ${formatKoreanPrice(deposit)}`;
+        priceStr = `보 ${formatKoreanPrice(deposit)}`;
         if (monthlyRent > 0) {
           priceStr += ` / 월세 ${formatKoreanPrice(monthly)}`;
         }

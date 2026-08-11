@@ -67,6 +67,20 @@ export default function StatsPage() {
             </Link>
           ))}
         </div>
+
+        {/* 하단 탭바 개편으로 전용 탭이 사라진 학군정보/부동산 도구는 여기서 계속 진입 가능 */}
+        <div className={styles.menuGrid}>
+          <Link href="/school" className={styles.menuCard}>
+            <span className={styles.menuIcon}>🏫</span>
+            <span className={styles.menuTitle}>학군 정보</span>
+            <span className={styles.menuSubtitle}>학교·학원가 정보</span>
+          </Link>
+          <Link href="/tools" className={styles.menuCard}>
+            <span className={styles.menuIcon}>🛠️</span>
+            <span className={styles.menuTitle}>부동산 도구</span>
+            <span className={styles.menuSubtitle}>계산기·체크리스트</span>
+          </Link>
+        </div>
       </div>
 
       <RegionSelectModal />

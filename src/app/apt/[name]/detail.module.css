@@ -394,3 +394,24 @@
   text-decoration: none;
   white-space: nowrap;
 }
+
+/* 단지정보/실거래가/시세차트가 시간차를 두고 따로따로 뜨지 않도록, 셋 다 준비될 때까지
+   이 통합 스켈레톤 하나로 자리를 채워두고 한 번에 실제 콘텐츠로 전환한다. */
+.headerSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.skeletonBar {
+  height: 1rem;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 37%, #e2e8f0 63%);
+  background-size: 400% 100%;
+  animation: skeleton-pulse 1.4s ease infinite;
+}
+
+@keyframes skeleton-pulse {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}

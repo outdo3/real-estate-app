@@ -187,8 +187,14 @@ export interface CompareComplexData {
   facilities: string[];
 }
 
-async function fetchCompareTarget(name: string, lawdCd: string, requestUrl: string): Promise<CompareComplexData> {
-  const tradesUrl = new URL(`/api/apt/${encodeURIComponent(name)}?lawdCd=${lawdCd}&type=apt&period=12`, requestUrl);
+async function fetchCompareTarget(name: string, lawdCd: string | null, requestUrl: string): Promise<CompareComplexData> {
+  // lawdCd가 없으면(질문 문장에 지역이 명시되지 않은 경우) 아예 쿼리에서 빼고 /api/apt/[name]가
+  // 단지명 자체를 지오코딩해서 정확한 지역을 알아내게 한다. 여기서 화면에 현재 선택된 지역
+  // (예: 기본값 서울 강남구)을 강제로 넘기면, 비교 대상 두 단지가 실제로는 부산에 있어도
+  // 강남구 안에서만 찾다가 "정보 없음"이 뜨거나 — 더 나쁘게는 같은 브랜드명의 강남구 단지
+  // (예: 다른 "대신롯데캐슬")가 엉뚱하게 매칭되는 문제가 실측으로 확인됐다.
+  const lawdCdQuery = lawdCd ? `&lawdCd=${lawdCd}` : '';
+  const tradesUrl = new URL(`/api/apt/${encodeURIComponent(name)}?type=apt&period=12${lawdCdQuery}`, requestUrl);
   const tradesRes = await fetch(tradesUrl);
   const tradesJson = await tradesRes.json();
   const trades = Array.isArray(tradesJson.trades) ? tradesJson.trades : [];
@@ -196,9 +202,13 @@ async function fetchCompareTarget(name: string, lawdCd: string, requestUrl: stri
 
   const dong = latest?.dong || '';
   const jibun = latest?.jibun || '';
+  // /api/apt/[name]가 실제로 사용한(지오코딩/DB로 알아낸) lawdCd를 신뢰한다 — 원래 넘겼던
+  // (또는 비어있던) lawdCd를 그대로 다시 쓰면 세대수/주차 등 정보 조회가 트레이드 조회와
+  // 다른 지역을 보게 되는 불일치가 생긴다.
+  const resolvedLawdCd = tradesJson.lawdCd || lawdCd || '';
 
   const infoUrl = new URL(
-    `/api/apt/${encodeURIComponent(name)}/info?lawdCd=${lawdCd}&dong=${encodeURIComponent(dong)}&jibun=${encodeURIComponent(jibun)}`,
+    `/api/apt/${encodeURIComponent(name)}/info?lawdCd=${resolvedLawdCd}&dong=${encodeURIComponent(dong)}&jibun=${encodeURIComponent(jibun)}`,
     requestUrl
   );
   const facilitiesUrl = new URL(`/api/apt/${encodeURIComponent(name)}/facilities?dong=${encodeURIComponent(dong)}`, requestUrl);
@@ -225,7 +235,7 @@ async function fetchCompareTarget(name: string, lawdCd: string, requestUrl: stri
 export async function runCompare(
   targetA: string,
   targetB: string,
-  lawdCd: string,
+  lawdCd: string | null,
   requestUrl: string
 ): Promise<[CompareComplexData, CompareComplexData]> {
   const [a, b] = await Promise.all([

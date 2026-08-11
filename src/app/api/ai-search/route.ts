@@ -30,9 +30,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: '질문을 입력해주세요.' });
     }
 
-    const queryHash = createHash('sha256').update(normalizeQueryKey(query)).digest('hex');
+    // 캐시 키에 지역(lawdCd)도 함께 넣는다 — 같은 질문 문장이라도(예: 홈 화면 추천 칩
+    // "대신더샵 vs 대신롯데캐슬 비교"는 질문 자체에 지역이 없어 매번 클라이언트의 현재
+    // 선택 지역에 의존) 사용자가 다른 지역을 보고 있을 때 재사용하면 엉뚱한 지역의 결과가
+    // 그대로 캐시돼 30분간 계속 잘못 나온다 — 실측으로 재현·확인함.
+    const queryHash = createHash('sha256').update(`${normalizeQueryKey(query)}|${fallbackLawdCd}`).digest('hex');
 
-    // 1. Supabase DB 캐시 확인 — 동일 질문이면 Gemini를 다시 부르지 않는다.
+    // 1. Supabase DB 캐시 확인 — 동일 질문+동일 지역이면 Gemini를 다시 부르지 않는다.
     try {
       const cached = await prisma.aiSearchCache.findUnique({ where: { queryHash } });
       if (cached && Date.now() - cached.createdAt.getTime() < CACHE_TTL_MS) {
@@ -54,10 +58,14 @@ export async function POST(request: Request) {
     // 3. 지역 코드 결정: 질문에서 추출된 지역 우선, 없으면 클라이언트가 보낸 현재 선택
     // 지역으로 폴백.
     let lawdCd = fallbackLawdCd;
+    let regionExplicit = false;
     const normalizedSido = normalizeSidoName(classification.sido);
     if (normalizedSido && classification.sigungu) {
       const resolved = await resolveLawdCdByNames(normalizedSido, classification.sigungu);
-      if (resolved) lawdCd = resolved;
+      if (resolved) {
+        lawdCd = resolved;
+        regionExplicit = true;
+      }
     }
 
     let payload: Record<string, unknown>;
@@ -94,7 +102,12 @@ export async function POST(request: Request) {
       if (!targetA || !targetB) {
         return NextResponse.json({ success: false, error: '비교할 두 단지명을 정확히 알려주세요.' });
       }
-      const [a, b] = await runCompare(targetA, targetB, lawdCd, request.url);
+      // 질문 문장에 지역이 명시되지 않았다면(예: 홈 화면 추천 칩) 클라이언트의 현재 선택
+      // 지역을 두 단지에 강제로 씌우지 않는다 — 비교 대상은 임의의 지역에 있을 수 있는
+      // 구체적인 두 단지라, "지금 보고 있는 지역"이라는 fallback 자체가 이 의도에는 맞지
+      // 않는다(runCompare/fetchCompareTarget이 각 단지명을 스스로 지오코딩하게 둔다).
+      const compareLawdCd = regionExplicit ? lawdCd : null;
+      const [a, b] = await runCompare(targetA, targetB, compareLawdCd, request.url);
       const summary = [a, b]
         .map(
           (c) =>

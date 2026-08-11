@@ -9,7 +9,8 @@
   max-width: 800px;
   width: 100%;
   margin: 0 auto;
-  padding: 1.5rem 1.25rem calc(3rem + env(safe-area-inset-bottom));
+  /* 하단 고정 탭바(모바일 60px)에 콘텐츠가 가리지 않도록 여유 있게 확보 */
+  padding: 1.5rem 1.25rem calc(5.5rem + env(safe-area-inset-bottom));
 }
 
 .searchBar {
@@ -222,9 +223,10 @@
   font-size: 0.8rem;
 }
 
+/* 좌우 스크롤 없이 모바일 한 화면에 전체 비교표가 들어오도록 고정 레이아웃 +
+   컴팩트한 패딩/폰트를 쓴다(min-width로 스크롤을 강제하던 이전 방식 제거). */
 .compareTableWrapper {
   width: 100%;
-  overflow-x: auto;
   background: var(--card-bg);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
@@ -232,24 +234,30 @@
 
 .compareTable {
   width: 100%;
-  min-width: 480px;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
 .compareTable th {
   background: #f8fafc;
-  padding: 0.85rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.78rem;
   font-weight: 800;
   text-align: center;
   border-bottom: 2px solid var(--border-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .compareTable td {
-  padding: 0.75rem 1rem;
+  padding: 0.4rem 0.4rem;
   border-bottom: 1px solid var(--border-color);
   text-align: center;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .compareRowLabel {
@@ -258,6 +266,14 @@
   color: var(--text-secondary);
   background: #fafbfc;
   white-space: nowrap;
+}
+
+/* 세대수/주차/준공년도처럼 객관적으로 우열이 갈리는 지표에서 더 나은 쪽 셀을 은은하게
+   강조한다. */
+.winnerCell {
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+  font-weight: 800;
 }
 
 @media (max-width: 640px) {

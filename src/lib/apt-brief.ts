@@ -76,18 +76,35 @@ export function buildAptBrief(input: AptBriefInput): string[] {
     sentences.push(`${ageLabel} 단지입니다.`);
   }
 
-  // 3. 최근 거래 활발도 (최근 3개월)
+  // 3. 최근 거래 활발도 (최근 3개월) — 절대 건수만으로 판단하면 세대수 대비 왜곡된다
+  // (예: 50세대 단지의 3건은 매우 활발하지만 2,000세대 단지의 3건은 한산한 수준인데
+  // 둘 다 "활발한 편"으로 나오던 버그). 세대수 대비 3개월 거래 비율로 판단 기준을 바꾼다.
   if (trades.length > 0) {
     const now = new Date();
     const recentCount = trades.filter((t) => {
       const diffDays = (now.getTime() - new Date(t.tradeDate).getTime()) / (1000 * 60 * 60 * 24);
       return diffDays <= 90;
     }).length;
-    sentences.push(
-      recentCount >= 3
-        ? `최근 3개월간 ${recentCount}건 거래되어 거래가 활발한 편입니다.`
-        : `최근 3개월간 ${recentCount}건 거래되어 거래가 다소 드문 편입니다.`
-    );
+
+    if (recentCount === 0) {
+      sentences.push('최근 3개월간 거래 내역이 없습니다.');
+    } else if (households) {
+      const ratio = (recentCount / households) * 100;
+      if (ratio >= 1.0) {
+        sentences.push(`최근 3개월간 ${recentCount}건 거래되어 거래가 활발한 편입니다.`);
+      } else if (ratio >= 0.5) {
+        sentences.push(`최근 3개월간 ${recentCount}건 거래되어 거래가 보통 수준입니다.`);
+      } else {
+        sentences.push(`최근 3개월간 ${recentCount}건 거래되어 거래가 한산한 편입니다.`);
+      }
+    } else {
+      // 세대수 정보가 없으면 비율을 계산할 수 없어 기존 절대건수 기준으로 폴백한다.
+      sentences.push(
+        recentCount >= 3
+          ? `최근 3개월간 ${recentCount}건 거래되어 거래가 활발한 편입니다.`
+          : `최근 3개월간 ${recentCount}건 거래되어 거래가 다소 드문 편입니다.`
+      );
+    }
   }
 
   if (sentences.length === 0) {

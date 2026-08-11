@@ -55,33 +55,33 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge
 
         <ul className={`${styles.menuList} ${hideMobileNav ? styles.menuListHideMobile : ''}`}>
           <li className={styles.menuItem}>
+            <Link href="/" className={pathname === '/' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+              <span className={styles.icon}>🏠</span>
+              <span>홈</span>
+            </Link>
+          </li>
+          <li className={styles.menuItem}>
             <Link href="/map" className={pathname === '/map' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>🏢</span>
-              <span>실거래가</span>
+              <span className={styles.icon}>🗺️</span>
+              <span>지도</span>
             </Link>
           </li>
           <li className={styles.menuItem}>
-            <Link href="/stats" className={pathname === '/stats' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link href="/stats" className={pathname.startsWith('/stats') ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
               <span className={styles.icon}>📊</span>
-              <span>시장 통계</span>
+              <span>통계</span>
             </Link>
           </li>
           <li className={styles.menuItem}>
-            <Link href="/school" className={pathname === '/school' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>🏫</span>
-              <span>학군 정보</span>
+            <Link href="/redevelopment" className={pathname.startsWith('/redevelopment') ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+              <span className={styles.icon}>🏗️</span>
+              <span>재개발·분양</span>
             </Link>
           </li>
           <li className={styles.menuItem}>
-            <Link href="/tools" className={pathname === '/tools' ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>🛠️</span>
-              <span>부동산 도구</span>
-            </Link>
-          </li>
-          <li className={styles.menuItem}>
-            <Link href="/community" className={pathname.startsWith('/community') ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
-              <span className={styles.icon}>💬</span>
-              <span>커뮤니티</span>
+            <Link href="/my" className={pathname.startsWith('/my') ? styles.active : ''} style={{ color: 'inherit', textDecoration: 'none' }}>
+              <span className={styles.icon}>👤</span>
+              <span>MY</span>
             </Link>
           </li>
         </ul>

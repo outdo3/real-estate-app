@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 // 카카오 로컬 카테고리 코드 중 이 컴포넌트에서 실제로 사용하는 4종.
 // SC4(학교), SW8(지하철), HP8(병원), MT1(대형마트)
@@ -26,6 +27,10 @@ const KEYWORD_ICON: Record<string, string> = {
   KTX: '🚄',
   기차역: '🚄',
 };
+
+// 장소명에 이 문자열이 포함되면 결과에서 제외한다(아파트/빌라 단지명, 화장실 등 실제
+// 인프라가 아닌 결과가 카테고리/키워드 검색에 섞여 들어오는 것을 막는다).
+const EXCLUDED_NAME_SUBSTRINGS = ['아파트', '빌라', '화장실', '맨션', '타워'];
 
 const iconFor = (place: any, keyword?: string) => {
   if (place.category_group_code && CATEGORY_ICON[place.category_group_code]) {
@@ -111,7 +116,11 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
             if (seen.has(p.id)) return false;
             seen.add(p.id);
             return true;
-          });
+          })
+          // '공원' 키워드 검색은 카카오가 이름에 포함된 문자열만 보고 매칭해서 "OO공원아파트",
+          // "공원빌라", "체육공원 화장실"처럼 실제로는 병원·약국·공원이 아닌 곳도 섞여 들어온다
+          // — 이름에 이런 문자열이 포함된 결과는 제외한다.
+          .filter((p) => !EXCLUDED_NAME_SUBSTRINGS.some((s) => p.place_name.includes(s)));
 
         if (merged.length === 0) {
           setError('주변에 해당 인프라가 없습니다.');
@@ -191,7 +200,17 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
     <ul style={{ lineHeight: 1.8, paddingLeft: '1.2rem' }}>
       {places.map((p, i) => (
         <li key={i} style={{ marginBottom: '0.5rem' }}>
-          {iconFor(p, p.__keyword)} <b>{p.place_name}</b>
+          {iconFor(p, p.__keyword)}{' '}
+          {isSchoolOnly ? (
+            <Link
+              href={`/school/${encodeURIComponent(p.id)}?name=${encodeURIComponent(p.place_name)}&lat=${p.y}&lng=${p.x}`}
+              style={{ color: 'var(--text-primary)', textDecoration: 'underline', textDecorationColor: 'var(--border-color)' }}
+            >
+              <b>{p.place_name}</b>
+            </Link>
+          ) : (
+            <b>{p.place_name}</b>
+          )}
           <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
             ({p.distance}m, {formatEta(Number(p.distance))})
           </span>
