@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { resolveLawdCdByNames } from '@/lib/region-utils';
+import { resolveLawdCdByNames, resolveRegionNameByLawdCd } from '@/lib/region-utils';
+import { geocodeApartmentName } from '@/lib/geocode-apt';
 import {
   classifyQuery,
   normalizeSidoName,
+  detectSortIntent,
+  detectLeadingRegionKeyword,
   runConditionSearch,
   runRegionalStats,
   runCompare,
@@ -55,8 +58,8 @@ export async function POST(request: Request) {
       });
     }
 
-    // 3. 지역 코드 결정: 질문에서 추출된 지역 우선, 없으면 클라이언트가 보낸 현재 선택
-    // 지역으로 폴백.
+    // 3. 지역 코드 결정: 질문에서 추출된 지역 우선, 없으면 코드 레벨 지역 키워드 감지로
+    // 보정, 그래도 없으면 클라이언트가 보낸 현재 선택 지역으로 폴백.
     let lawdCd = fallbackLawdCd;
     let regionExplicit = false;
     const normalizedSido = normalizeSidoName(classification.sido);
@@ -67,6 +70,34 @@ export async function POST(request: Request) {
         regionExplicit = true;
       }
     }
+
+    // LLM이 지역을 못 뽑아냈을 때(예: "해운대 OO아파트"처럼 축약형 지역명이 단지명과
+    // 붙어 있는 경우)를 대비해 검색어 앞부분을 결정적으로 다시 검사한다.
+    let complexNameHint = classification.complexName || null;
+    if (!regionExplicit) {
+      const detected = detectLeadingRegionKeyword(query);
+      if (detected) {
+        const resolved = await resolveLawdCdByNames(detected.sido, detected.sigungu);
+        if (resolved) {
+          lawdCd = resolved;
+          regionExplicit = true;
+          if (!complexNameHint && detected.remainder) complexNameHint = detected.remainder;
+        }
+      }
+    }
+
+    // 단지명은 있는데 지역을 전혀 특정하지 못한 경우(질문에 지역명이 아예 없는 경우) —
+    // 엉뚱한 폴백 지역(클라이언트가 보고 있던 지역)에서만 뒤져 "0건"으로 처리하지 않도록
+    // 단지명 자체를 지오코딩해서 정확한 지역을 알아낸다.
+    if (classification.intent === 'condition_search' && complexNameHint && !regionExplicit) {
+      const geo = await geocodeApartmentName(complexNameHint);
+      if (geo) {
+        lawdCd = geo.lawdCd;
+        regionExplicit = true;
+      }
+    }
+
+    const sortBy = detectSortIntent(query);
 
     let payload: Record<string, unknown>;
 
@@ -80,25 +111,48 @@ export async function POST(request: Request) {
           newBuildOnly: classification.newBuildOnly,
           nearElementarySchool: classification.nearElementarySchool,
         },
-        request.url
+        request.url,
+        { complexName: complexNameHint, sortBy }
       );
-      const summary =
-        complexes.length === 0
-          ? '조건에 맞는 단지를 찾지 못했습니다.'
-          : complexes
-              .map((c) => {
-                const parts = [`${c.name}(${c.dong}) ${c.price}`];
-                if (c.parkingInfo) parts.push(c.parkingInfo);
-                if (c.totalHouseholds) parts.push(`${c.totalHouseholds.toLocaleString('ko-KR')}세대`);
-                if (c.buildYear) parts.push(`${c.buildYear}년 준공`);
-                if (c.nearestSchool) parts.push(`${c.nearestSchool.name}까지 도보 약 ${c.nearestSchool.walkMinutes}분(${c.nearestSchool.distanceM}m)`);
-                return parts.join(', ');
-              })
-              .join(' / ');
-      const briefing = await generateBriefing('condition_search', summary, {
-        requireSchoolMention: classification.nearElementarySchool,
-      });
-      payload = { intent: 'condition_search', briefing, complexes, lawdCd };
+
+      if (complexes.length === 0) {
+        const notFoundMessage = complexNameHint
+          ? '해당하는 아파트 단지를 찾지 못했습니다. 검색어를 확인해주세요.'
+          : '조건에 맞는 단지를 찾지 못했습니다.';
+        const briefing = await generateBriefing('condition_search', notFoundMessage);
+        payload = { intent: 'condition_search', briefing, complexes: [], lawdCd };
+      } else {
+        const summary = complexes
+          .map((c) => {
+            const parts = [`${c.name}(${c.dong}) ${c.price}`];
+            if (c.parkingInfo) parts.push(c.parkingInfo);
+            if (c.totalHouseholds) parts.push(`${c.totalHouseholds.toLocaleString('ko-KR')}세대`);
+            if (c.buildYear) parts.push(`${c.buildYear}년 준공`);
+            if (c.nearestSchool) parts.push(`${c.nearestSchool.name}까지 도보 약 ${c.nearestSchool.walkMinutes}분(${c.nearestSchool.distanceM}m)`);
+            return parts.join(', ');
+          })
+          .join(' / ');
+
+        // 명시적 정렬/특정 단지 검색이 아닌 "일반 조건 브라우징"일 때만 "세대수 많은
+        // 대표 대단지 목록" 안내 문장을 붙인다 — 세대수 내림차순이 실제 기본 정렬이므로.
+        let leadInSentence: string | undefined;
+        if (!complexNameHint && !sortBy) {
+          let regionLabel = [normalizedSido, classification.sigungu].filter(Boolean).join(' ');
+          if (!regionLabel) {
+            const resolvedName = await resolveRegionNameByLawdCd(lawdCd).catch(() => null);
+            if (resolvedName?.fullName) regionLabel = resolvedName.fullName;
+          }
+          const priceLabel = classification.maxPriceEok != null ? `${classification.maxPriceEok}억 미만` : '';
+          leadInSentence = [regionLabel, priceLabel].filter(Boolean).join(' ') + ' 단지 중 세대수가 많은 대표 대단지 목록입니다.';
+        }
+
+        const briefing = await generateBriefing('condition_search', summary, {
+          requireSchoolMention: classification.nearElementarySchool,
+          leadInSentence,
+          fallbackComplexes: complexes.slice(0, 5).map((c) => ({ name: c.name, totalHouseholds: c.totalHouseholds, price: c.price })),
+        });
+        payload = { intent: 'condition_search', briefing, complexes, lawdCd };
+      }
     } else if (classification.intent === 'regional_stats') {
       const stats = await runRegionalStats(lawdCd, request.url);
       if (!stats) {

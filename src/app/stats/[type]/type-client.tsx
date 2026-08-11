@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import {
@@ -170,20 +169,31 @@ function RankingListView({ slug, lawdCd }: { slug: string; lawdCd: string }) {
   );
 }
 
+type DealType = 'sale' | 'jeonse' | 'wolse';
+const DEAL_TYPE_OPTIONS: { key: DealType; label: string; indexLabel: string }[] = [
+  { key: 'sale', label: '매매', indexLabel: '매매가격지수' },
+  { key: 'jeonse', label: '전세', indexLabel: '전세가격지수' },
+  { key: 'wolse', label: '월세', indexLabel: '월세가격지수' },
+];
+
 function VolumeView({ lawdCd, displayRegionName }: { lawdCd: string; displayRegionName: string }) {
   const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
+  const [dealType, setDealType] = useState<DealType>('sale');
   const { data: apiResponse, isLoading } = useSWR(
     lawdCd ? `/api/stats/dashboard?lawdCd=${lawdCd}` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
-  const { data: yearlyResponse, isLoading: yearlyLoading } = useSWR(
+  const { data: yearlyResponse } = useSWR(
     lawdCd && chartView === 'table' ? `/api/stats/yearly?lawdCd=${lawdCd}` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
   const data = apiResponse?.success ? apiResponse.data : null;
-  const yearlyTable = yearlyResponse?.success ? yearlyResponse.data.yearlyTable : null;
+  const chartData = data?.chartDataByType?.[dealType] || data?.chartData || [];
+  const yearlyTableByType = yearlyResponse?.success ? yearlyResponse.data.yearlyTableByType : null;
+  const yearlyTable = yearlyTableByType?.[dealType] || (yearlyResponse?.success ? yearlyResponse.data.yearlyTable : null);
+  const dealTypeMeta = DEAL_TYPE_OPTIONS.find((o) => o.key === dealType)!;
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>분석 중입니다...</div>;
   if (!data) return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>⚠️ 거래량 데이터를 불러오지 못했습니다.</div>;
@@ -197,30 +207,55 @@ function VolumeView({ lawdCd, displayRegionName }: { lawdCd: string; displayRegi
           <button className={`${styles.viewToggleBtn} ${chartView === 'table' ? styles.viewToggleActive : ''}`} onClick={() => setChartView('table')}>{'📋 표로\n보기'}</button>
         </div>
       </div>
+
+      <div className={styles.dealTypeChipRow}>
+        {DEAL_TYPE_OPTIONS.map((opt) => (
+          <button
+            key={opt.key}
+            type="button"
+            className={`${styles.dealTypeChip} ${dealType === opt.key ? styles.dealTypeChipActive : ''}`}
+            onClick={() => setDealType(opt.key)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {chartView === 'graph' ? (
         <div className={styles.panelBody} style={{ height: '400px' }}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data.chartData} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
               <CartesianGrid stroke="#f5f5f5" vertical={false} />
               <XAxis dataKey="month" scale="band" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
               <YAxis yAxisId="left" orientation="left" stroke="#94a3b8" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" domain={['auto', 'auto']} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} labelStyle={{ fontWeight: 700, color: '#1e293b', marginBottom: '8px' }} />
               <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '13px' }} />
-              <Bar yAxisId="left" dataKey="volume" name="거래량(건)" barSize={16} fill="#cbd5e1" radius={[4, 4, 0, 0]} />
-              <Line yAxisId="right" type="monotone" dataKey="saleIndex" name="매매가격지수" stroke="#3b82f6" strokeWidth={3} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
-              <Line yAxisId="right" type="monotone" dataKey="jeonseIndex" name="전세가격지수" stroke="#10b981" strokeWidth={3} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
+              <Bar yAxisId="left" dataKey="volume" name={`거래량(건) · ${dealTypeMeta.label}`} barSize={16} fill="#cbd5e1" radius={[4, 4, 0, 0]} />
+              <Line yAxisId="right" type="monotone" dataKey="priceIndex" name={dealTypeMeta.indexLabel} stroke="#3b82f6" strokeWidth={3} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
             </ComposedChart>
           </ResponsiveContainer>
           <div className={styles.tipBox}>
-            <span>💡 <strong>분석 팁:</strong> 최근 12개월 실거래 기준, {displayRegionName}의 거래량과 매매/전세 가격지수(최초 유효월=100 기준) 추이입니다.</span>
+            <span>💡 <strong>분석 팁:</strong> 최근 12개월 실거래 기준, {displayRegionName}의 {dealTypeMeta.label} 거래량과 가격지수(최초 유효월=100 기준) 추이입니다.</span>
+          </div>
+          <div className={styles.marketGuideCard}>
+            <span>
+              💡 <strong>시장 지표 가이드</strong>: 전세지수 상승 &amp; 매매지수 하락은 실거주 수요 대비 매매 심리가 위축된 상태입니다. 전세가율이 높아짐에 따라 매매가 하방 지지선이 형성되며, 추후 매수 전환 수요 유입 가능성을 나타냅니다.
+            </span>
           </div>
         </div>
       ) : (
         <div className={styles.panelBody}>
           <div className={styles.tableWrapper}>
             <table className={styles.yearlyTable}>
-              <thead><tr><th>거래년월</th><th>최고가</th><th>최저가</th><th>평균가</th><th>거래량(건)</th></tr></thead>
+              <colgroup>
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '23%' }} />
+                <col style={{ width: '23%' }} />
+                <col style={{ width: '23%' }} />
+                <col style={{ width: '13%' }} />
+              </colgroup>
+              <thead><tr><th>거래년월</th><th>최고가</th><th>최저가</th><th>평균가</th><th>건수</th></tr></thead>
               <tbody>
                 {!yearlyTable ? (
                   Array.from({ length: 6 }).map((_, i) => (
@@ -506,7 +541,6 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
     <div className={styles.main}>
       <Header pageTitle={`${item.icon} ${item.title}`} />
       <div className="container">
-        <Link href="/stats" className={styles.backLink}>&larr; 시장 통계로 돌아가기</Link>
         <div className={styles.headerTop}>
           <button className={styles.regionTrigger} onClick={openRegionModal}>
             <span>📍 {region.displayRegionName}</span>

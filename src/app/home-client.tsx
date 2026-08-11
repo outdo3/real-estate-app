@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
+import AdContainer from '@/components/AdContainer';
 import { useRegion } from '@/contexts/RegionContext';
 import styles from './home-client.module.css';
 
@@ -80,6 +81,8 @@ export default function Home() {
           </div>
         </section>
 
+        <AdContainer variant="banner" slot="home-search-bottom" />
+
         <section className={styles.quickSection}>
           <div className={styles.quickHeading}>핵심 Quick 메뉴</div>
 
@@ -105,6 +108,8 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        <AdContainer variant="banner" slot="home-quick-menu-bottom" />
       </main>
     </div>
   );

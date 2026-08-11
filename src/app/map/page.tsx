@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import FullPageLoader from '@/components/FullPageLoader';
+import AdContainer from '@/components/AdContainer';
 
 // Header.tsx의 하단탭바(홈/지도/통계/재개발·분양/MY)와 동일한 5개 메뉴 — 지도 페이지는
 // 전체화면 커스텀 UI라 Header를 아예 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸
@@ -142,6 +143,16 @@ export default function FullscreenMapPage() {
   // 시작하면 DETAIL_ZOOM_LEVEL(4) 기준 상세 카드 모드로 시작해 칩 간격이 넉넉해진다.
   const [zoomLevel, setZoomLevel] = useState(4);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  // 선택된 마커의 전체 정보(하단 요약 카드용) — 조기 return(로딩/에러 화면)보다 위에서
+  // 계산해야 훅 호출 순서가 렌더마다 always 동일하게 유지된다(Rules of Hooks).
+  const selectedMarker = useMemo(() => {
+    if (!selectedMarkerId) return null;
+    for (const cluster of aptClusters) {
+      const found = cluster.markers.find((m) => m.id === selectedMarkerId);
+      if (found) return found;
+    }
+    return null;
+  }, [selectedMarkerId, aptClusters]);
   // 현재 화면의 마커들을 조회할 때 실제로 사용한 lawdCd. 마커 클릭 시 상세페이지로 이 값을
   // 함께 넘겨야 한다 — 안 넘기면 상세페이지가 자기 자신의 하드코딩된 기본 지역(서울 강남구)으로
   // 실거래가를 조회해 엉뚱한 지역/빈 데이터가 뜨는 버그로 이어진다.
@@ -421,9 +432,15 @@ export default function FullscreenMapPage() {
       : '0 2px 5px rgba(0,0,0,0.12)';
     const handleSelect = () => setSelectedMarkerId(marker.id);
     const handleDeselect = () => setSelectedMarkerId((cur) => (cur === marker.id ? null : cur));
+    // 첫 클릭은 하단 요약 카드를 띄우고(마커 선택), 이미 선택된 마커를 다시 클릭하면
+    // 그때 상세페이지로 이동한다 — 요약 카드가 뜰 새도 없이 바로 이동해버리면 카드 안의
+    // 광고 구좌를 포함해 아무것도 보여줄 수 없기 때문.
     const handleClick = () => {
-      setSelectedMarkerId(marker.id);
-      router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(marker.dong)}`);
+      if (selectedMarkerId === marker.id) {
+        router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(marker.dong)}`);
+      } else {
+        setSelectedMarkerId(marker.id);
+      }
     };
 
     if (!isDetailed) {
@@ -805,6 +822,53 @@ export default function FullscreenMapPage() {
           </CustomOverlayMap>
         ))}
       </KakaoMap>
+
+      {selectedMarker && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '60px',
+            left: 0,
+            right: 0,
+            zIndex: 1001,
+            background: 'white',
+            borderTop: '1px solid var(--border-color)',
+            boxShadow: '0 -4px 16px rgba(0,0,0,0.12)',
+            padding: '1rem',
+            borderRadius: '16px 16px 0 0',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedMarker.name}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{selectedMarker.dong}</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--primary-hover)', marginTop: '4px' }}>
+                {selectedMarker.hasRecentPrice ? selectedMarker.price : '최근 실거래 정보 없음'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedMarkerId(null)}
+              aria-label="닫기"
+              style={{ padding: '0.4rem', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.1rem', cursor: 'pointer', flexShrink: 0 }}
+            >
+              ✕
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              router.push(`/apt/${encodeURIComponent(selectedMarker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(selectedMarker.dong)}`)
+            }
+            style={{ marginTop: '0.75rem', width: '100%', padding: '0.7rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+          >
+            상세보기
+          </button>
+          <AdContainer variant="agent" slot="map-marker-summary-agent" label="추천 지역 중개사" />
+        </div>
+      )}
 
       <MapBottomNav />
     </div>

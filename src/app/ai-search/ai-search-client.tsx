@@ -220,7 +220,7 @@ function ConditionSearchResult({ complexes, lawdCd }: { complexes: ConditionSear
   const router = useRouter();
 
   if (complexes.length === 0) {
-    return <div className={styles.emptyBox}>조건에 맞는 단지를 찾지 못했습니다.</div>;
+    return <div className={styles.emptyBox}>해당하는 아파트 단지를 찾지 못했습니다. 검색어를 확인해주세요.</div>;
   }
 
   return (
@@ -235,8 +235,9 @@ function ConditionSearchResult({ complexes, lawdCd }: { complexes: ConditionSear
           <div className={styles.cardMeta}>{c.dong}</div>
           <div className={styles.cardPrice}>{c.price}</div>
           <div className={styles.cardInfo}>
-            {c.buildYear && <span>{c.buildYear}년 준공</span>}
-            {c.parkingInfo && <span>{c.buildYear ? ' · ' : ''}{c.parkingInfo}</span>}
+            {c.totalHouseholds != null && <span>🏢 {c.totalHouseholds.toLocaleString('ko-KR')}세대</span>}
+            {c.buildYear && <span>{c.totalHouseholds != null ? ' · ' : ''}{c.buildYear}년 준공</span>}
+            {c.parkingInfo && <span>{(c.totalHouseholds != null || c.buildYear) ? ' · ' : ''}{c.parkingInfo}</span>}
           </div>
           {c.nearestSchool && (
             <div className={styles.schoolBadge}>

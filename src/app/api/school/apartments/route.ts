@@ -94,14 +94,17 @@ export async function GET(request: Request) {
     const cacheKey = `school-apts:${schoolName}:${lawdCd}:${latParam || ''}:${lngParam || ''}`;
 
     const result = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
-      let schoolCoords = [129.0225, 35.0772]; // Default (송도)
+      const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 
-      if (latParam && lngParam) {
-        schoolCoords = [parseFloat(lngParam), parseFloat(latParam)];
-      } else {
-        // 카카오 로컬 API를 사용하여 학교 이름으로 실제 좌표 검색
-        const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
-        if (kakaoKey) {
+      // 1~2. 학교 좌표 확인 → 반경 1.5km 내 아파트 검색(카카오). 좌표를 먼저 알아야
+      // 반경 검색을 할 수 있어 이 둘은 순차적일 수밖에 없다.
+      const resolveSchoolAndApartments = async (): Promise<{ schoolCoords: [number, number]; searchedApartments: any[] }> => {
+        let schoolCoords: [number, number] = [129.0225, 35.0772]; // Default (송도)
+
+        if (latParam && lngParam) {
+          schoolCoords = [parseFloat(lngParam), parseFloat(latParam)];
+        } else if (kakaoKey) {
+          // 카카오 로컬 API를 사용하여 학교 이름으로 실제 좌표 검색
           try {
             const kakaoUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(schoolName)}`;
             const kakaoRes = await fetch(kakaoUrl, {
@@ -121,62 +124,63 @@ export async function GET(request: Request) {
           } catch (err) {
             console.warn("Kakao API failed for school coords, using fallback", err);
           }
-        }
 
-        // 검색 실패시 기본 폴백 (기존 유지)
-        if (!kakaoKey || schoolCoords[0] === 129.0225) {
-          if (schoolName.includes('대신') || schoolName.includes('경남') || schoolName.includes('부경') || schoolName.includes('중앙') || schoolName.includes('구덕') || schoolName.includes('동신') || schoolName.includes('화랑')) {
-            schoolCoords = [129.015, 35.115]; // 대신동 일대
-          } else if (schoolName.includes('송도') || schoolName.includes('천마') || schoolName.includes('알로이시오')) {
-            schoolCoords = [129.022, 35.075]; // 송도동 일대
-          } else if (schoolName.includes('초장') || schoolName.includes('남부') || schoolName.includes('아미') || schoolName.includes('토성')) {
-            schoolCoords = [129.010, 35.100]; // 충무동 일대
-          }
-        }
-      }
-
-      const schoolPoint = point(schoolCoords);
-
-      // 2. 카카오 로컬 API로 반경 1.5km 내 아파트 검색 (키워드: 아파트)
-      const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
-      let searchedApartments: any[] = [];
-      if (kakaoKey) {
-        try {
-          const radiusUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent('아파트')}&x=${schoolCoords[0]}&y=${schoolCoords[1]}&radius=1500`;
-          const radiusRes = await fetch(radiusUrl, {
-            headers: {
-              'Authorization': `KakaoAK ${kakaoKey}`,
-              'KA': 'sdk/1.0 os/javascript origin/http%3A%2F%2Flocalhost%3A3000',
-              'Origin': 'http://localhost:3000'
+          // 검색 실패시 기본 폴백 (기존 유지)
+          if (schoolCoords[0] === 129.0225) {
+            if (schoolName.includes('대신') || schoolName.includes('경남') || schoolName.includes('부경') || schoolName.includes('중앙') || schoolName.includes('구덕') || schoolName.includes('동신') || schoolName.includes('화랑')) {
+              schoolCoords = [129.015, 35.115]; // 대신동 일대
+            } else if (schoolName.includes('송도') || schoolName.includes('천마') || schoolName.includes('알로이시오')) {
+              schoolCoords = [129.022, 35.075]; // 송도동 일대
+            } else if (schoolName.includes('초장') || schoolName.includes('남부') || schoolName.includes('아미') || schoolName.includes('토성')) {
+              schoolCoords = [129.010, 35.100]; // 충무동 일대
             }
-          });
-          if (radiusRes.ok) {
-            const radiusData = await radiusRes.json();
-            searchedApartments = radiusData.documents || [];
           }
-        } catch (err) {
-          console.error("Failed to fetch apartments from Kakao", err);
         }
-      }
 
-      // 법정동 코드 목록은 요청당 한 번만 조회해 모든 단지의 건축물대장 조회가 공유한다.
-      let regcodes: any[] = [];
-      if (BUILD_YEAR_API_KEY && lawdCd) {
+        let searchedApartments: any[] = [];
+        if (kakaoKey) {
+          try {
+            const radiusUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent('아파트')}&x=${schoolCoords[0]}&y=${schoolCoords[1]}&radius=1500`;
+            const radiusRes = await fetch(radiusUrl, {
+              headers: {
+                'Authorization': `KakaoAK ${kakaoKey}`,
+                'KA': 'sdk/1.0 os/javascript origin/http%3A%2F%2Flocalhost%3A3000',
+                'Origin': 'http://localhost:3000'
+              }
+            });
+            if (radiusRes.ok) {
+              const radiusData = await radiusRes.json();
+              searchedApartments = radiusData.documents || [];
+            }
+          } catch (err) {
+            console.error("Failed to fetch apartments from Kakao", err);
+          }
+        }
+
+        return { schoolCoords, searchedApartments };
+      };
+
+      // 법정동 코드 목록 조회 — lawdCd만 있으면 되고 학교 좌표/카카오 검색과 무관하다.
+      const fetchRegcodes = async (): Promise<any[]> => {
+        if (!BUILD_YEAR_API_KEY || !lawdCd) return [];
         try {
           const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?is_ignore_zero=true`, { signal: AbortSignal.timeout(2500) });
           const regData = await regRes.json();
-          regcodes = regData.regcodes || [];
+          return regData.regcodes || [];
         } catch (e) {
           console.warn('Failed to load regcodes for building registry lookup', e);
+          return [];
         }
-      }
+      };
 
-      // 실거래가: 공공데이터포털(MOLIT) 최근 24개월 매매 데이터에서 이름 매칭으로 조회
+      // 실거래가: 공공데이터포털(MOLIT) 최근 24개월 매매 데이터에서 이름 매칭으로 조회 —
+      // 이 역시 lawdCd만 있으면 되고 학교 좌표/카카오 검색과 무관하다.
       // (12개월에서 확대 — 여전히 24개월 내 거래가 전혀 없는 단지는 정상적으로 "가격 정보
       // 없음"으로 남는다. 준공연도는 아래에서 건축물대장으로 별도 확보하므로 이 매칭에
       // 의존하지 않는다.)
-      const realAptInfo = new Map<string, { priceStr: string; buildYear: number | null }>();
-      if (lawdCd) {
+      const fetchRealAptInfo = async (): Promise<Map<string, { priceStr: string; buildYear: number | null }>> => {
+        const map = new Map<string, { priceStr: string; buildYear: number | null }>();
+        if (!lawdCd) return map;
         try {
           const now = new Date();
           const months = Array.from({ length: 24 }, (_, i) => {
@@ -189,8 +193,8 @@ export async function GET(request: Request) {
           for (const trades of monthlyResults) {
             for (const t of trades as any[]) {
               const key = normalizeAptName(t.name);
-              if (!key || realAptInfo.has(key)) continue;
-              realAptInfo.set(key, {
+              if (!key || map.has(key)) continue;
+              map.set(key, {
                 priceStr: t.price,
                 buildYear: t.buildYear ? parseInt(t.buildYear, 10) : null,
               });
@@ -199,7 +203,19 @@ export async function GET(request: Request) {
         } catch (e) {
           console.warn('Failed to load real MOLIT data for nearby apartments', e);
         }
-      }
+        return map;
+      };
+
+      // 위 세 갈래(학교 좌표+반경 검색 / 법정동 코드 / MOLIT 24개월 실거래)는 서로 데이터
+      // 의존성이 없다 — 이전에는 순서대로 기다렸지만(합치면 지연 시간이 그대로 합산됨),
+      // Promise.all로 동시에 실행해 전체 응답 시간을 세 갈래 중 가장 느린 것 수준으로 줄인다.
+      const [{ schoolCoords, searchedApartments }, regcodes, realAptInfo] = await Promise.all([
+        resolveSchoolAndApartments(),
+        fetchRegcodes(),
+        fetchRealAptInfo(),
+      ]);
+
+      const schoolPoint = point(schoolCoords);
 
       // 3. Turf.js를 사용하여 학교와 아파트 간의 직선거리(반경) 계산
       const apartmentsWithDistance = searchedApartments.map(apt => {

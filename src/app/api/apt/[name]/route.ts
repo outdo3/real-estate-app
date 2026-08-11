@@ -1,77 +1,10 @@
 import { NextResponse } from 'next/server';
 import { fetchMolitData } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
+import { geocodeApartmentName } from '@/lib/geocode-apt';
+import { getOrSetCache } from '@/lib/server-cache';
 
 export const dynamic = 'force-dynamic';
-
-// 단지명만으로 lawdCd(법정동코드 5자리)와 dong(법정동명)을 알아낸다 — DB(apartments)에도
-// 아직 없는(건축물대장 조회가 한 번도 성공한 적 없는) 단지가 대부분이라 DB 조회만으로는
-// 커버가 안 된다. 카카오 키워드 검색으로 단지 좌표를 찾은 뒤, 그 좌표를 다시 행정구역
-// 코드로 역지오코딩한다 — /map 페이지가 클라이언트에서 하는 것과 같은 2단계 조회를 서버에서
-// 재현한 것. 카카오 키워드 검색 자체가 "금호어울림"/"서대신금호어울림"처럼 검색어와 실제
-// 장소명이 정확히 안 맞아도 알아서 가장 근접한 결과를 찾아주므로, 플랫폼별 표기 차이를
-// 별도 별칭(alias) 테이블 없이도 흡수한다. 서버 인스턴스가 살아있는 동안 재사용되는
-// 캐시로 동일 단지 중복 조회를 방지한다.
-const aptGeoCache = new Map<string, { lawdCd: string; dong: string } | null>();
-
-async function geocodeApt(aptName: string): Promise<{ lawdCd: string; dong: string } | null> {
-  if (aptGeoCache.has(aptName)) return aptGeoCache.get(aptName)!;
-
-  const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
-  if (!kakaoKey || !aptName) {
-    aptGeoCache.set(aptName, null);
-    return null;
-  }
-
-  try {
-    // 이 카카오 키는 JavaScript 키라 REST 호출 시 KA/Origin 헤더가 없으면 401을 반환한다
-    // (Authorization만 보내서 실측으로 재현·확인함) — api/transactions/route.ts의
-    // geocodeApt와 동일한 헤더 조합을 그대로 맞춘다.
-    const headers = {
-      Authorization: `KakaoAK ${kakaoKey}`,
-      KA: 'sdk/1.0 os/javascript origin/http%3A%2F%2Flocalhost%3A3000',
-      Origin: 'http://localhost:3000',
-    };
-
-    const keywordRes = await fetch(
-      `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(aptName)}`,
-      { headers }
-    );
-    if (!keywordRes.ok) {
-      aptGeoCache.set(aptName, null);
-      return null;
-    }
-    const keywordData = await keywordRes.json();
-    const place = keywordData.documents?.[0];
-    if (!place) {
-      aptGeoCache.set(aptName, null);
-      return null;
-    }
-
-    const regionRes = await fetch(
-      `https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?x=${place.x}&y=${place.y}`,
-      { headers }
-    );
-    if (!regionRes.ok) {
-      aptGeoCache.set(aptName, null);
-      return null;
-    }
-    const regionData = await regionRes.json();
-    const bRegion = (regionData.documents || []).find((r: any) => r.region_type === 'B');
-    if (!bRegion?.code) {
-      aptGeoCache.set(aptName, null);
-      return null;
-    }
-
-    const result = { lawdCd: String(bRegion.code).substring(0, 5), dong: bRegion.region_3depth_name || '' };
-    aptGeoCache.set(aptName, result);
-    return result;
-  } catch (e) {
-    console.warn('아파트명 -> 지역 지오코딩 실패', e);
-    aptGeoCache.set(aptName, null);
-    return null;
-  }
-}
 
 export async function GET(
   request: Request,
@@ -107,7 +40,7 @@ export async function GET(
     }
 
     if (!lawdCd || !dong) {
-      const geo = await geocodeApt(aptName);
+      const geo = await geocodeApartmentName(aptName);
       if (geo) {
         if (!lawdCd) lawdCd = geo.lawdCd;
         if (!dong && geo.lawdCd === lawdCd) dong = geo.dong;
@@ -136,10 +69,17 @@ export async function GET(
     
     for (let i = 0; i < months.length; i += chunkSize) {
       const chunk = months.slice(i, i + chunkSize);
-      const promises = chunk.map(dealYmd => fetchMolitData({ type: type as any, lawdCd, dealYmd }).catch(e => {
-        console.warn(`Failed to fetch for ${dealYmd}:`, e.message);
-        return []; // 에러 시 빈 배열 반환하여 전체 실패 방지
-      }));
+      // 이 라우트는 export const dynamic = 'force-dynamic'이라 fetchMolitData 내부의
+      // next:{revalidate:3600} 캐시가 무력화된다(force-dynamic은 모든 fetch를
+      // cache:'no-store'로 강제) — lawdCd+월+거래유형 단위로 별도 TTL 캐시를 둬서 같은
+      // 지역의 다른 단지를 조회할 때도 이미 받아온 월별 원본 데이터를 재사용한다(과거
+      // 실거래는 사실상 불변 데이터이므로 재조회할 이유가 없다).
+      const promises = chunk.map(dealYmd =>
+        getOrSetCache(`molit:${type}:${lawdCd}:${dealYmd}`, 3600 * 1000, () => fetchMolitData({ type: type as any, lawdCd, dealYmd })).catch(e => {
+          console.warn(`Failed to fetch for ${dealYmd}:`, e.message);
+          return []; // 에러 시 빈 배열 반환하여 전체 실패 방지
+        })
+      );
       
       const results = await Promise.all(promises);
       results.forEach(monthlyData => {

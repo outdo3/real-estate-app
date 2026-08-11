@@ -3,15 +3,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
 import FullPageLoader from '@/components/FullPageLoader';
 import styles from './detail.module.css';
 import KakaoMapEmbed from '@/components/KakaoMapEmbed';
 import AreaSelector from '@/components/AreaSelector';
-import InvestmentMetrics from '@/components/InvestmentMetrics';
 import KakaoShareButton from '@/components/KakaoShareButton';
 import AptSpecGrid from '@/components/AptSpecGrid';
-import PriceTrendChart from '@/components/PriceTrendChart';
 import TradeTimelineList from '@/components/TradeTimelineList';
 import FloorPlanPanel from '@/components/FloorPlanPanel';
 import LivingEnvironmentPanel from '@/components/LivingEnvironmentPanel';
@@ -19,8 +18,24 @@ import NeighborhoodInfoPanel from '@/components/NeighborhoodInfoPanel';
 import SchoolDistrictPanel from '@/components/SchoolDistrictPanel';
 import CommunityPreview from '@/components/CommunityPreview';
 import StickyPriceBar from '@/components/StickyPriceBar';
+import AdContainer from '@/components/AdContainer';
 import { getAreaInfo } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
+
+// 차트 컴포넌트(recharts)는 번들이 무거워 메인 스레드를 오래 점유한다 — 상세페이지
+// 최초 렌더에 꼭 필요하지 않으므로 지연 로딩(ssr:false)해서 초기 로드를 가볍게 하고,
+// 로딩되는 동안은 실제 차트 영역과 크기가 같은 스켈레톤을 보여줘 레이아웃이 튀지 않게 한다.
+const ChartSkeleton = ({ height }: { height: string }) => (
+  <div className={styles.skeletonBar} style={{ height }} />
+);
+const PriceTrendChart = dynamic(() => import('@/components/PriceTrendChart'), {
+  ssr: false,
+  loading: () => <ChartSkeleton height="16rem" />,
+});
+const InvestmentMetrics = dynamic(() => import('@/components/InvestmentMetrics'), {
+  ssr: false,
+  loading: () => <ChartSkeleton height="8rem" />,
+});
 
 interface Trade {
   id: number;
@@ -122,10 +137,31 @@ export default function ApartmentDetail() {
     // 매매/전월세 탭을 빠르게 전환하면 이전 요청이 나중에 끝나 최신 탭의 데이터를 덮어쓸 수
     // 있다 — cancelled 플래그로 이미 무효화된(effect가 재실행된) 요청의 응답은 반영하지 않는다.
     let cancelled = false;
+    // /api/apt/[name]/info는 지번(jibun)이 없어도 dong+lawdCd만으로 DB 캐시(name+dong
+    // 키)를 우선 조회하므로 대부분 정확하다 — URL에 lawdCd/dong이 이미 있는 진입 경로
+    // (지도 마커, AI 검색 결과, 학교 페이지 링크 등 절대다수)에서는 실거래 응답을 기다릴
+    // 필요 없이 단지정보를 곧바로 병렬 조회한다. infoFetchedInline이 true면 fetchTrades
+    // 안에서 다시 조회하지 않는다(중복 호출 방지).
+    let infoFetchedInline = false;
+
+    const fetchAptInfo = async (jibun: string, dong: string, lawdCd: string) => {
+      try {
+        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(jibun)}&dong=${encodeURIComponent(dong)}&lawdCd=${encodeURIComponent(lawdCd)}`);
+        if (cancelled) return;
+        if (response.ok) {
+          const data = await response.json();
+          if (cancelled) return;
+          if (data.info) {
+            setAptInfo(data.info);
+          }
+        }
+      } catch (e) {
+      } finally {
+        if (!cancelled) setInfoLoading(false);
+      }
+    };
 
     const fetchTrades = async () => {
-      setLoading(true);
-      setInfoLoading(true);
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const urlLawdCd = urlParams.get('lawdCd');
@@ -163,12 +199,28 @@ export default function ApartmentDetail() {
           // 무관하게, 실제로 매칭된 첫 거래의 국토부 대표 단지명으로 상단 표기를 통일한다.
           if (fetchedTrades.length > 0 && fetchedTrades[0].name) setDisplayName(fetchedTrades[0].name);
 
-          if (fetchedTrades.length > 0) {
-            fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, resolvedLawdCd);
-          } else {
+          // 이미 병렬로 dong만으로 단지정보를 조회했더라도(infoFetchedInline), 실거래
+          // 응답에 지번(jibun)이 있으면 더 정밀한 값으로 한 번 더 갱신한다 — 최초 화면은
+          // 이미 떠 있으므로 이 재조회가 pageReady를 다시 늦추지는 않는다(아래 setInfoLoading
+          // 호출 없이 setAptInfo만 조용히 갱신).
+          if (fetchedTrades.length > 0 && fetchedTrades[0].jibun) {
+            if (infoFetchedInline) {
+              fetch(`/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(fetchedTrades[0].jibun)}&dong=${encodeURIComponent(fetchedTrades[0].dong || resolvedDong)}&lawdCd=${encodeURIComponent(resolvedLawdCd)}`)
+                .then((res) => (res.ok ? res.json() : null))
+                .then((data) => {
+                  if (!cancelled && data?.info) setAptInfo(data.info);
+                })
+                .catch(() => {});
+            } else {
+              infoFetchedInline = true;
+              fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, resolvedLawdCd);
+            }
+          } else if (!infoFetchedInline) {
+            infoFetchedInline = true;
             fetchAptInfo('', resolvedDong, resolvedLawdCd);
           }
-        } else {
+        } else if (!infoFetchedInline) {
+          infoFetchedInline = true;
           fetchAptInfo('', resolvedDong, resolvedLawdCd);
         }
 
@@ -201,24 +253,22 @@ export default function ApartmentDetail() {
       }
     };
 
-    const fetchAptInfo = async (jibun: string, dong: string, lawdCd: string) => {
-      try {
-        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(jibun)}&dong=${encodeURIComponent(dong)}&lawdCd=${encodeURIComponent(lawdCd)}`);
-        if (cancelled) return;
-        if (response.ok) {
-          const data = await response.json();
-          if (cancelled) return;
-          if (data.info) {
-            setAptInfo(data.info);
-          }
-        }
-      } catch (e) {
-      } finally {
-        if (!cancelled) setInfoLoading(false);
-      }
-    };
+    setLoading(true);
+    setInfoLoading(true);
 
-    fetchTrades();
+    // URL에 lawdCd+dong이 이미 있는(절대다수) 진입 경로는 실거래 조회를 기다리지 않고
+    // 단지정보 조회를 곧바로 함께 시작한다 — 기존에는 실거래 응답이 와야만 단지정보
+    // 조회가 시작돼(Waterfall) 두 호출의 지연시간이 그대로 합산됐다.
+    const initialUrlParams = new URLSearchParams(window.location.search);
+    const initialLawdCd = initialUrlParams.get('lawdCd');
+    const initialDong = initialUrlParams.get('dong');
+    if (initialLawdCd && initialDong) {
+      infoFetchedInline = true;
+      Promise.all([fetchTrades(), fetchAptInfo('', initialDong, initialLawdCd)]);
+    } else {
+      fetchTrades();
+    }
+
     return () => {
       cancelled = true;
     };
@@ -727,6 +777,10 @@ export default function ApartmentDetail() {
           {infraTab === '교통' && <NeighborhoodInfoPanel address={primaryAddress} ready={addressReady} />}
           {infraTab === '학군' && <SchoolDistrictPanel address={primaryAddress} ready={addressReady} lawdCd={lawdCdState} />}
         </div>
+      </div>
+
+      <div className="container">
+        <AdContainer variant="native" slot="apt-detail-infra-community" label="스폰서 추천 정보" />
       </div>
 
       {/* ══════════ 4구역: 단지 커뮤니티 ══════════ */}

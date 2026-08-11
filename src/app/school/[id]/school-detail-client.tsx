@@ -40,7 +40,7 @@ export default function SchoolDetailClient() {
   const [level, setLevel] = useState<SchoolLevel>(null);
   const [apartments, setApartments] = useState<NearbyApartment[] | null>(null);
   const [aptLoading, setAptLoading] = useState(true);
-  const [aptSort, setAptSort] = useState<AptSort>('distance');
+  const [aptSort, setAptSort] = useState<AptSort>('newest');
   const [lawdCdState, setLawdCdState] = useState('');
 
   useEffect(() => {
@@ -80,14 +80,6 @@ export default function SchoolDetailClient() {
       <Header hideLogo pageTitle={schoolName || '학교 정보'} pageTitleLarge pageTitleAlign="left" />
 
       <div className="container">
-        <div className={styles.introCard}>
-          <p className={styles.introText}>
-            {level ? `${level}등학교` : '학교'} 학군 정보입니다. 학년별 학생 수·특목고 진학률은 나이스(NEIS) 공공데이터 연동이
-            완료되는 대로 실제 값으로 채워질 예정이며, 현재는 확인되지 않은 수치를 지어내지 않고 정직하게 준비 중 상태로
-            표시합니다. 인근 아파트 단지는 실제 카카오 위치·국토부 실거래 데이터입니다.
-          </p>
-        </div>
-
         {level === '초' && (
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>📈 학년별 학생 수 추이</h2>
@@ -141,17 +133,17 @@ export default function SchoolDetailClient() {
             <div className={styles.aptSortTabs}>
               <button
                 type="button"
-                className={`${styles.aptSortChip} ${aptSort === 'distance' ? styles.aptSortChipActive : ''}`}
-                onClick={() => setAptSort('distance')}
-              >
-                거리순
-              </button>
-              <button
-                type="button"
                 className={`${styles.aptSortChip} ${aptSort === 'newest' ? styles.aptSortChipActive : ''}`}
                 onClick={() => setAptSort('newest')}
               >
                 신축순
+              </button>
+              <button
+                type="button"
+                className={`${styles.aptSortChip} ${aptSort === 'distance' ? styles.aptSortChipActive : ''}`}
+                onClick={() => setAptSort('distance')}
+              >
+                거리순
               </button>
             </div>
           </div>

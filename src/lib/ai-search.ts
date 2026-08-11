@@ -4,6 +4,7 @@ import { getCompactAreaLabel } from './area-utils';
 import { REGION_DATA } from './regions';
 
 export type AiIntent = 'condition_search' | 'regional_stats' | 'compare';
+export type SortIntent = 'recent' | 'price_asc' | 'price_desc';
 
 interface Classification {
   intent: AiIntent;
@@ -14,6 +15,7 @@ interface Classification {
   minTotalHouseholds: number | null;
   newBuildOnly: boolean;
   nearElementarySchool: boolean;
+  complexName: string | null;
   compareTargetA: string | null;
   compareTargetB: string | null;
 }
@@ -57,6 +59,12 @@ const CLASSIFY_SCHEMA = {
       type: 'BOOLEAN',
       description: '"초등학교 가까운", "초품아", "학교 가까운", "학군" 같은 표현이 있으면 true — 도보권 초등학교가 있는 단지만 찾는다는 뜻.',
     },
+    complexName: {
+      type: 'STRING',
+      nullable: true,
+      description:
+        'condition_search 의도이면서 특정 단지 하나를 콕 집어 찾는 질문이면(비교가 아니고, 여러 단지를 조건으로 찾는 것도 아닌 경우) 그 단지명만 추출해라. 지역명 접두어(예: "해운대", "서구")는 단지명에서 제외하고 순수 단지명만 넣어라(예: "해운대 동백두산위브더제니스" → "동백두산위브더제니스"). 특정 단지명이 언급되지 않았으면 null.',
+    },
     compareTargetA: { type: 'STRING', nullable: true, description: 'compare 의도일 때 비교 대상 단지명 1. 아니면 null.' },
     compareTargetB: { type: 'STRING', nullable: true, description: 'compare 의도일 때 비교 대상 단지명 2. 아니면 null.' },
   },
@@ -88,12 +96,15 @@ export async function classifyQuery(query: string): Promise<Classification | nul
 - "신축", "새 아파트", "지어진 지 얼마 안 된" → newBuildOnly = true
 - "초등학교 가까운", "초품아", "학교 가까운", "학군" → nearElementarySchool = true
 - "5억 이하/미만" 같은 금액 표현 → maxPriceEok
+- 특정 단지 하나만 콕 집어 찾는 질문(비교/조건 나열이 아니라 그 단지 자체를 찾는 질문) → complexName에 단지명(지역 접두어 제외)을 넣어라.
 
 예시:
 - "부산 서구 5억 이하 신축 아파트" → condition_search, maxPriceEok=5, newBuildOnly=true
 - "부산 서구 주차 넉넉한 아파트" → condition_search, minParkingPerHousehold=${AMPLE_PARKING_MIN_PER_HOUSEHOLD}
 - "부산 서구 대단지 아파트" → condition_search, minTotalHouseholds=${LARGE_COMPLEX_MIN_HOUSEHOLDS}
 - "부산 서구 초품아 아파트 찾아줘" → condition_search, nearElementarySchool=true
+- "해운대 동백두산위브더제니스" → condition_search, sigungu="해운대구", complexName="동백두산위브더제니스"
+- "동백두산위브더제니스 알려줘" → condition_search, complexName="동백두산위브더제니스"
 - "부산 서구 최근 거래량 보여줘" → regional_stats (특정 단지 조건 없이 지역 전체 추세)
 - "부산 서구 요즘 시세 어때" → regional_stats
 - "대신더샵과 대신롯데캐슬 비교해줘" → compare (구체적 단지 2개 비교)
@@ -103,6 +114,55 @@ export async function classifyQuery(query: string): Promise<Classification | nul
 }
 
 export { normalizeSidoName };
+
+// 검색어 안에 명시적 정렬 키워드가 있는지 코드 레벨로 판별한다(LLM에 맡기지 않고 결정적으로
+// 처리 — 정렬 기준은 사용자가 화면에서 바로 확인 가능한 결과라 오분류 리스크를 피한다).
+// 명시적 키워드가 없으면 null을 반환하고, 호출부(runConditionSearch)는 이 경우 기본값인
+// "세대수 내림차순(대단지 우선)"으로 정렬한다.
+export function detectSortIntent(query: string): SortIntent | null {
+  const q = query.replace(/\s+/g, '');
+  if (/최신순|신축순|최근순/.test(q)) return 'recent';
+  if (/비싼순|높은가격순|가격높은순/.test(q)) return 'price_desc';
+  if (/가격순|저렴한순|낮은가격순|가격낮은순/.test(q)) return 'price_asc';
+  return null;
+}
+
+// 검색어 맨 앞부분에 시/군/구 지역명이 포함돼 있는지 코드 레벨로 감지한다. classifyQuery의
+// LLM 추출이 실패하거나(예: "해운대"처럼 정식 명칭 "해운대구"가 아닌 축약형이 단지명과
+// 붙어 있어 LLM이 지역으로 인식하지 못한 경우) 놓친 부분을 결정적으로 보정하기 위함이다.
+// 매칭된 지역 키워드를 뗀 나머지 문자열(remainder)은 단지명 후보로 쓸 수 있다.
+export function detectLeadingRegionKeyword(
+  query: string
+): { sido: string; sigungu: string; remainder: string } | null {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  for (const [sido, gunguList] of Object.entries(REGION_DATA)) {
+    for (const gungu of gunguList) {
+      if (trimmed.startsWith(gungu)) {
+        return { sido, sigungu: gungu, remainder: trimmed.slice(gungu.length).trim() };
+      }
+      // "해운대" → "해운대구"처럼 시/군/구 접미사를 뗀 축약형 접두어도 인식한다.
+      const shortForm = gungu.replace(/(시|군|구)$/, '');
+      if (shortForm.length >= 2 && trimmed.startsWith(shortForm)) {
+        return { sido, sigungu: gungu, remainder: trimmed.slice(shortForm.length).trim() };
+      }
+    }
+  }
+  return null;
+}
+
+// 검색어/DB 단지명 매칭 시 공백 유무 차이를 흡수한다 — "해운대 동백두산위브더제니스"와
+// "해운대동백두산위브더제니스" 둘 다 같은 정규화 문자열로 취급된다.
+function normalizeComplexNameForMatch(name: string): string {
+  return (name || '').replace(/\s+/g, '').replace(/아파트$/, '');
+}
+
+function complexNameMatches(candidateName: string, queryName: string): boolean {
+  const a = normalizeComplexNameForMatch(candidateName);
+  const b = normalizeComplexNameForMatch(queryName);
+  if (!a || !b) return false;
+  return a.includes(b) || b.includes(a);
+}
 
 // ── 조건 검색 ──
 
@@ -160,7 +220,8 @@ async function findNearestElementarySchool(lat: number, lng: number): Promise<Ne
 export async function runConditionSearch(
   lawdCd: string,
   conditions: Pick<Classification, 'maxPriceEok' | 'minParkingPerHousehold' | 'minTotalHouseholds' | 'newBuildOnly' | 'nearElementarySchool'>,
-  requestUrl: string
+  requestUrl: string,
+  options?: { complexName?: string | null; sortBy?: SortIntent | null }
 ): Promise<ConditionSearchComplex[]> {
   const txUrl = new URL(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`, requestUrl);
   const res = await fetch(txUrl);
@@ -175,7 +236,9 @@ export async function runConditionSearch(
     if (!byComplex.has(key)) byComplex.set(key, t);
   }
 
+  const complexName = options?.complexName || null;
   let candidates = Array.from(byComplex.values()).filter((t) => {
+    if (complexName && !complexNameMatches(t.name, complexName)) return false;
     if (conditions.maxPriceEok != null && t.dealAmount > conditions.maxPriceEok * 10000) return false;
     if (conditions.newBuildOnly) {
       const buildYear = parseInt(t.buildYear, 10);
@@ -184,13 +247,19 @@ export async function runConditionSearch(
     return true;
   });
 
-  // 최신 거래일 순으로 정렬 후 상위 후보로 제한 — 주차/세대수/초등학교 조건이 있으면
+  // 명시적 정렬 조건(최신순/가격순 등)이 없으면 기본값은 "세대수 내림차순(대단지 우선)"이라
+  // 세대수 데이터가 항상 필요하다 — 주차/세대수 조건이 없어도 건축물대장 조회를 해야 한다.
+  // 특정 단지명을 콕 집어 찾는 검색(complexName)도 세대수를 함께 보여주기 위해 조회한다.
+  const explicitSortBy = options?.sortBy === 'recent' || options?.sortBy === 'price_asc' || options?.sortBy === 'price_desc';
+  const needsHouseholdData =
+    conditions.minParkingPerHousehold != null || conditions.minTotalHouseholds != null || !!complexName || !explicitSortBy;
   // 후보마다 건축물대장·카카오 API를 실시간 조회해야 해서(캐시 미스 시) 무제한으로 두면
-  // 응답이 느려진다.
-  const needsPerCandidateLookup =
-    conditions.minParkingPerHousehold != null || conditions.minTotalHouseholds != null || conditions.nearElementarySchool;
+  // 응답이 느려진다 — 단, 특정 단지명 검색은 애초에 후보가 소수이므로 자르지 않는다.
+  const needsPerCandidateLookup = needsHouseholdData || conditions.nearElementarySchool;
   candidates.sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
-  candidates = candidates.slice(0, needsPerCandidateLookup ? 15 : 30);
+  if (!complexName) {
+    candidates = candidates.slice(0, needsPerCandidateLookup ? 15 : 30);
+  }
 
   const results: ConditionSearchComplex[] = await Promise.all(
     candidates.map(async (t) => {
@@ -198,7 +267,7 @@ export async function runConditionSearch(
       let parkingPerHousehold: number | null = null;
       let totalHouseholds: number | null = null;
 
-      if ((conditions.minParkingPerHousehold != null || conditions.minTotalHouseholds != null) && t.jibun) {
+      if (needsHouseholdData && t.jibun) {
         const registry = await fetchBuildingRegistryInfo(t.name, lawdCd, t.dong, t.jibun);
         if (registry?.totalHouseholds) totalHouseholds = registry.totalHouseholds;
         if (registry?.parkingCount && registry.totalHouseholds) {
@@ -234,10 +303,20 @@ export async function runConditionSearch(
   if (conditions.minTotalHouseholds != null) {
     filtered = filtered.filter((r) => r.totalHouseholds != null && r.totalHouseholds >= conditions.minTotalHouseholds!);
   }
+
   if (conditions.nearElementarySchool) {
-    filtered = filtered
+    filtered = [...filtered]
       .filter((r) => r.nearestSchool != null)
       .sort((a, b) => a.nearestSchool!.distanceM - b.nearestSchool!.distanceM);
+  } else if (options?.sortBy === 'recent') {
+    filtered = [...filtered].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
+  } else if (options?.sortBy === 'price_asc') {
+    filtered = [...filtered].sort((a, b) => a.dealAmount - b.dealAmount);
+  } else if (options?.sortBy === 'price_desc') {
+    filtered = [...filtered].sort((a, b) => b.dealAmount - a.dealAmount);
+  } else {
+    // 기본 정렬: 세대수 내림차순(대단지 우선). 세대수를 확인하지 못한 단지는 뒤로 보낸다.
+    filtered = [...filtered].sort((a, b) => (b.totalHouseholds ?? -1) - (a.totalHouseholds ?? -1));
   }
 
   return filtered.slice(0, 10);
@@ -420,10 +499,25 @@ export async function runCompare(
 // ── 브리핑 생성 ──
 // 실제로 조회된 데이터만 요약해서 넘기고, "이 안에서만 이야기하라"고 명시해 지어내는 걸
 // 막는다.
+export interface BriefingFallbackComplex {
+  name: string;
+  totalHouseholds: number | null;
+  price: string;
+}
+
 export async function generateBriefing(
   intent: AiIntent,
   groundedSummary: string,
-  options?: { requireSchoolMention?: boolean }
+  options?: {
+    requireSchoolMention?: boolean;
+    // 답변 맨 앞에 반드시 포함해야 하는 안내 문장(예: "부산 서구 5억 미만 단지 중 세대수가
+    // 많은 대표 대단지 목록입니다.") — Gemini 프롬프트 지시뿐 아니라, Gemini 호출이
+    // 실패했을 때의 결정적 폴백 문장으로도 그대로 재사용된다.
+    leadInSentence?: string;
+    // Gemini 호출이 실패(키 미설정/네트워크 오류/빈 응답 등)해도 "요약 생성 실패" 문구
+    // 대신 실제 DB 조회 결과로 사람이 읽을 수 있는 요약을 직접 구성하기 위한 데이터.
+    fallbackComplexes?: BriefingFallbackComplex[];
+  }
 ): Promise<string> {
   // 검색 의도가 "초등학교 가까운 단지"였다면, 가격/준공년도만 나열하는 기존 템플릿식
   // 답변 대신 반드시 배정/인근 초등학교 이름과 도보 거리·시간을 문장에 포함하도록
@@ -432,11 +526,27 @@ export async function generateBriefing(
   const schoolGuardrail = options?.requireSchoolMention
     ? '\n\n중요: 이 검색은 "초등학교 가까운 단지"를 찾는 질문이었다. 각 단지를 설명할 때 가격·준공년도만 나열하지 말고, 반드시 데이터 요약에 있는 초등학교 이름과 도보 거리/시간을 함께 언급해라(예: "OO초등학교까지 도보 약 3분(200m) 거리").'
     : '';
+  const leadInGuardrail = options?.leadInSentence
+    ? `\n\n중요: 답변 맨 앞 문장으로 반드시 이 문장을 그대로(토씨 하나 바꾸지 말고) 포함해라: "${options.leadInSentence}"`
+    : '';
 
-  const prompt = `너는 한국 부동산 서비스 "이집"의 AI 브리핑 작성자다. 아래는 실제로 조회된 데이터 요약이다. 이 안에 있는 사실만 근거로 자연스러운 한국어 브리핑을 2~4문장으로 작성해라. 데이터에 없는 숫자나 추정치를 절대 지어내지 마라. 마크다운 기호(*, # 등)는 쓰지 마라.${schoolGuardrail}
+  const prompt = `너는 한국 부동산 서비스 "이집"의 AI 브리핑 작성자다. 아래는 실제로 조회된 데이터 요약이다. 이 안에 있는 사실만 근거로 자연스러운 한국어 브리핑을 2~4문장으로 작성해라. 데이터에 없는 숫자나 추정치를 절대 지어내지 마라. 마크다운 기호(*, # 등)는 쓰지 마라.${schoolGuardrail}${leadInGuardrail}
 
 [데이터 요약]
 ${groundedSummary}`;
   const text = await callGeminiText(prompt);
-  return text || '데이터를 확인했지만 요약을 생성하지 못했습니다. 아래 결과를 참고해주세요.';
+  if (text) return text;
+
+  // Gemini 호출 실패 시의 가드레일: "요약을 생성하지 못했습니다" 같은 무의미한 실패
+  // 문구 대신, 이미 DB/공공데이터에서 확인된 목록으로 결정적 요약 문장을 직접 구성한다.
+  if (options?.fallbackComplexes && options.fallbackComplexes.length > 0) {
+    const list = options.fallbackComplexes
+      .slice(0, 5)
+      .map((c) => `${c.name}(${c.totalHouseholds ? `${c.totalHouseholds.toLocaleString('ko-KR')}세대` : '세대수 정보 없음'}, 최근 실거래 ${c.price})`)
+      .join(', ');
+    const prefix = options.leadInSentence ? `${options.leadInSentence} ` : '';
+    return `${prefix}${list}`;
+  }
+
+  return '데이터를 확인했지만 요약을 생성하지 못했습니다. 아래 결과를 참고해주세요.';
 }

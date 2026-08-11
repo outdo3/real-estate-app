@@ -50,22 +50,37 @@ export async function GET(request: Request) {
       const recentAptTrades = aptMonthly.slice(-3).flat().filter(isValidTrade);
       const recentRentTrades = rentMonthly.slice(-3).flat().filter(isValidTrade);
 
-      // ── 2) 월별 그래프 데이터: 거래량(막대) + 매매/전세 가격지수(꺾은선, 최초 유효월=100 기준) ──
-      const monthlyAgg = last12Months.map((ym, i) => {
-        const aptTrades = aptMonthly[i].filter(isValidTrade);
-        const rentTrades = rentMonthly[i].filter(isValidTrade);
-        const avgApt = aptTrades.length ? aptTrades.reduce((s: number, t: any) => s + t.dealAmount, 0) / aptTrades.length : null;
-        const avgRent = rentTrades.length ? rentTrades.reduce((s: number, t: any) => s + t.dealAmount, 0) / rentTrades.length : null;
-        return { month: `${ym.substring(2, 4)}.${ym.substring(4, 6)}`, volume: aptTrades.length, avgApt, avgRent };
-      });
-      const baseApt = monthlyAgg.find((d) => d.avgApt)?.avgApt || null;
-      const baseRent = monthlyAgg.find((d) => d.avgRent)?.avgRent || null;
-      const chartData = monthlyAgg.map((d) => ({
-        month: d.month,
-        volume: d.volume,
-        saleIndex: baseApt && d.avgApt ? Math.round((d.avgApt / baseApt) * 1000) / 10 : null,
-        jeonseIndex: baseRent && d.avgRent ? Math.round((d.avgRent / baseRent) * 1000) / 10 : null,
-      }));
+      // ── 2) 월별 그래프 데이터: 거래유형(매매/전세/월세)별 거래량(막대) + 가격지수(꺾은선,
+      // 최초 유효월=100 기준). 세 유형 모두 한 번에 계산해둬서 클라이언트가 칩을 눌러
+      // 유형을 바꿀 때마다 새로 API를 부를 필요가 없게 한다(월별 원본 거래는 이미 위에서
+      // apt/rent 둘 다 12개월치를 받아둔 상태 — rent는 monthlyRent 유무로 전세/월세를
+      // 구분한다: 0(또는 없음)이면 전세, 있으면 월세).
+      const buildChartData = (dealType: 'sale' | 'jeonse' | 'wolse') => {
+        const monthlyAgg = last12Months.map((ym, i) => {
+          const aptTrades = aptMonthly[i].filter(isValidTrade);
+          const rentTrades = rentMonthly[i].filter(isValidTrade);
+          const selected =
+            dealType === 'sale'
+              ? aptTrades
+              : dealType === 'jeonse'
+                ? rentTrades.filter((t: any) => !t.monthlyRent || t.monthlyRent === 0)
+                : rentTrades.filter((t: any) => t.monthlyRent && t.monthlyRent > 0);
+          const avg = selected.length ? selected.reduce((s: number, t: any) => s + t.dealAmount, 0) / selected.length : null;
+          return { month: `${ym.substring(2, 4)}.${ym.substring(4, 6)}`, volume: selected.length, avg };
+        });
+        const base = monthlyAgg.find((d) => d.avg)?.avg || null;
+        return monthlyAgg.map((d) => ({
+          month: d.month,
+          volume: d.volume,
+          priceIndex: base && d.avg ? Math.round((d.avg / base) * 1000) / 10 : null,
+        }));
+      };
+      const chartDataByType = {
+        sale: buildChartData('sale'),
+        jeonse: buildChartData('jeonse'),
+        wolse: buildChartData('wolse'),
+      };
+      const chartData = chartDataByType.sale; // 하위 호환: 기존 소비처(AI 검색 등)는 이 필드만 읽음
 
       // ── 3) 핫이슈 거래: 최근 3개월 중 최고가 개별 거래 Top 5 ──
       const hotIssues = [...recentAptTrades]
@@ -218,6 +233,7 @@ export async function GET(request: Request) {
           chonseRate: jeonseRate,
         },
         chartData,
+        chartDataByType,
         hotIssues,
         gapInvest,
         topPrices,
