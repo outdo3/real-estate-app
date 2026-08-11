@@ -1,0 +1,84 @@
+.main {
+  min-height: 100vh;
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+.content {
+  padding-top: 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: var(--text-primary);
+}
+
+.updatedAt {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-bottom: 2rem;
+}
+
+.section {
+  margin-bottom: 1.75rem;
+}
+
+.section h2 {
+  font-size: 1.02rem;
+  font-weight: 800;
+  margin: 0 0 0.6rem;
+  color: var(--text-primary);
+}
+
+.section h3 {
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin: 1rem 0 0.4rem;
+  color: var(--text-primary);
+}
+
+.section p {
+  margin: 0 0 0.6rem;
+  color: var(--text-secondary);
+}
+
+.section ul,
+.section ol {
+  margin: 0 0 0.6rem;
+  padding-left: 1.3rem;
+  color: var(--text-secondary);
+}
+
+.section li {
+  margin-bottom: 0.3rem;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  margin: 0.75rem 0 1rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  min-width: 420px;
+}
+
+.table th,
+.table td {
+  border: 1px solid var(--border-color);
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+}
+
+.table th {
+  background: #f8fafc;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.contactBox {
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  margin-top: 0.5rem;
+}

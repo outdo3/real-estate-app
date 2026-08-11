@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
+import FullPageLoader from '@/components/FullPageLoader';
 import styles from './detail.module.css';
 import KakaoMapEmbed from '@/components/KakaoMapEmbed';
 import AreaSelector from '@/components/AreaSelector';
@@ -51,6 +52,10 @@ export default function ApartmentDetail() {
   // 서로 다른 시점에 끝나면 카드가 하나씩 뜨는 것처럼 보였다 — trades와 aptInfo 둘 다
   // 끝날 때까지 pageReady를 false로 유지해 상단 요약 영역을 한 번에 렌더링한다.
   const [infoLoading, setInfoLoading] = useState(true);
+  // 최초 진입 시에만 전체화면 브랜드 로더를 보여준다 — 매매/전월세, 기간 필터를 바꿀
+  // 때도 loading/infoLoading이 다시 true가 되는데, 그때마다 전체화면 오버레이가 뜨면
+  // 화면이 계속 깜빡이는 느낌을 준다. 최초 1회 로딩이 끝난 뒤로는 기존 스켈레톤만 쓴다.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [ledgerType, setLedgerType] = useState<'전유부' | '표제부'>('전유부');
@@ -255,6 +260,10 @@ export default function ApartmentDetail() {
   // trades와 aptInfo 둘 다 끝나야 상단 요약 영역(단지정보/가격/차트)을 한 번에 보여준다 —
   // 시간차를 두고 카드가 하나씩 뜨는 문제를 막는다.
   const pageReady = !loading && !infoLoading;
+
+  useEffect(() => {
+    if (pageReady) setHasLoadedOnce(true);
+  }, [pageReady]);
 
   const openModal = (modalName: string) => {
     setActiveModal(modalName);
@@ -527,6 +536,7 @@ export default function ApartmentDetail() {
 
   return (
     <div className={styles.main}>
+      <FullPageLoader active={!pageReady && !hasLoadedOnce} />
       <Header hideLogo pageTitle={displayName || aptName} pageTitleLarge pageTitleAlign="left" />
 
       {/* 팝업(모달) */}

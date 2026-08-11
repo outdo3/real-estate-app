@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
+import FullPageLoader from '@/components/FullPageLoader';
 
 // Header.tsx의 하단탭바(홈/지도/통계/재개발·분양/MY)와 동일한 5개 메뉴 — 지도 페이지는
 // 전체화면 커스텀 UI라 Header를 아예 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸
@@ -596,7 +597,7 @@ export default function FullscreenMapPage() {
   }
 
   if (isLoadingData || !isMapReady) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontSize: '1.5rem', color: 'var(--primary-color)' }}>지도 데이터를 불러오는 중입니다...</div>;
+    return <FullPageLoader active message="지도 데이터를 불러오는 중입니다..." />;
   }
 
   // 요청된 순서: 단지 / 오피스텔 / 생숙 / 재개발 / 경·공매 / 학교
@@ -777,6 +778,11 @@ export default function FullscreenMapPage() {
         {layers.school && schoolMarkers.map((school) => (
           <CustomOverlayMap key={school.id} position={{ lat: school.lat, lng: school.lng }} yAnchor={1}>
             <div
+              onClick={() =>
+                router.push(
+                  `/school/${encodeURIComponent(school.id)}?name=${encodeURIComponent(school.name)}&lat=${school.lat}&lng=${school.lng}&lawdCd=${currentLawdCd}`
+                )
+              }
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -787,6 +793,7 @@ export default function FullscreenMapPage() {
                 padding: '3px 8px 3px 4px',
                 boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
                 whiteSpace: 'nowrap',
+                cursor: 'pointer',
               }}
               title={school.name}
             >

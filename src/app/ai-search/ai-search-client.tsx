@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Header from '@/components/Header';
+import FullPageLoader from '@/components/FullPageLoader';
 import { useRegion } from '@/contexts/RegionContext';
 import styles from './ai-search-client.module.css';
 
@@ -184,12 +185,7 @@ export default function AiSearchClient() {
           ))}
         </div>
 
-        {loading && (
-          <div className={styles.loadingBox}>
-            <div className={styles.spinner} />
-            AI가 데이터를 분석하고 있어요...
-          </div>
-        )}
+        <FullPageLoader active={loading} message="AI가 데이터를 분석하고 있어요..." />
 
         {!loading && error && <div className={styles.errorBox}>{error}</div>}
 

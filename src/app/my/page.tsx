@@ -63,6 +63,18 @@ export default function MyPage() {
               </button>
             </>
           )}
+
+          {/* 로그인 여부와 무관하게 항상 접근 가능해야 하는 정책 링크라 위 로그인 분기
+              밖에 둔다. */}
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>약관 및 정책</div>
+            <Link href="/terms" className={styles.linkCard}>
+              📄 이용약관
+            </Link>
+            <Link href="/privacy" className={styles.linkCard}>
+              🔒 개인정보처리방침
+            </Link>
+          </div>
         </div>
       </div>
     </AuthGate>

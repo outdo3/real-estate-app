@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import styles from './school-detail.module.css';
 
@@ -31,11 +32,16 @@ interface NearbyApartment {
   buildYear: number | null;
 }
 
+type AptSort = 'distance' | 'newest';
+
 export default function SchoolDetailClient() {
+  const router = useRouter();
   const [schoolName, setSchoolName] = useState<string>('');
   const [level, setLevel] = useState<SchoolLevel>(null);
   const [apartments, setApartments] = useState<NearbyApartment[] | null>(null);
   const [aptLoading, setAptLoading] = useState(true);
+  const [aptSort, setAptSort] = useState<AptSort>('distance');
+  const [lawdCdState, setLawdCdState] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -45,6 +51,7 @@ export default function SchoolDetailClient() {
     const lawdCd = params.get('lawdCd') || '';
     setSchoolName(name);
     setLevel(classifySchoolLevel(name));
+    setLawdCdState(lawdCd);
 
     if (!name) {
       setAptLoading(false);
@@ -61,6 +68,12 @@ export default function SchoolDetailClient() {
       .catch(() => setApartments(null))
       .finally(() => setAptLoading(false));
   }, []);
+
+  const sortedApartments = apartments
+    ? [...apartments].sort((a, b) =>
+        aptSort === 'newest' ? (b.buildYear || 0) - (a.buildYear || 0) : a.distance - b.distance
+      )
+    : null;
 
   return (
     <div className={styles.main}>
@@ -123,18 +136,36 @@ export default function SchoolDetailClient() {
         )}
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>📌 인근 아파트 단지 (직선거리순)</h2>
+          <div className={styles.aptSectionHeader}>
+            <h2 className={styles.sectionTitle}>📌 인근 아파트 단지</h2>
+            <div className={styles.aptSortTabs}>
+              <button
+                type="button"
+                className={`${styles.aptSortChip} ${aptSort === 'distance' ? styles.aptSortChipActive : ''}`}
+                onClick={() => setAptSort('distance')}
+              >
+                거리순
+              </button>
+              <button
+                type="button"
+                className={`${styles.aptSortChip} ${aptSort === 'newest' ? styles.aptSortChipActive : ''}`}
+                onClick={() => setAptSort('newest')}
+              >
+                신축순
+              </button>
+            </div>
+          </div>
           {aptLoading ? (
             <div className={styles.dataPending} style={{ padding: '1rem 0' }}>
               불러오는 중...
             </div>
-          ) : !apartments || apartments.length === 0 ? (
+          ) : !sortedApartments || sortedApartments.length === 0 ? (
             <div className={styles.introCard}>
               <p className={styles.introText}>반경 1.5km 이내 아파트 정보를 찾지 못했습니다.</p>
             </div>
           ) : (
             <div className={styles.aptList}>
-              {apartments.map((apt) => (
+              {sortedApartments.map((apt) => (
                 <div key={apt.id} className={styles.aptRow}>
                   <div className={styles.aptRowInfo}>
                     <div className={styles.aptRowName}>
@@ -144,16 +175,25 @@ export default function SchoolDetailClient() {
                       {apt.walkTime} · {apt.price}
                     </div>
                   </div>
-                  {/* 학교/동네 전체가 아니라 이 단지명 자체로 정확히 검색되도록 단지명만
-                      파라미터로 넘긴다(Deep Linking). */}
-                  <a
-                    href={`https://m.land.naver.com/search/result/${encodeURIComponent(apt.name)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={styles.aptRowLinkBtn}
-                  >
-                    네이버 매물 보기 ↗
-                  </a>
+                  <div className={styles.aptRowBtns}>
+                    <button
+                      type="button"
+                      className={styles.aptRowBtn}
+                      onClick={() => router.push(`/apt/${encodeURIComponent(apt.name)}${lawdCdState ? `?lawdCd=${lawdCdState}` : ''}`)}
+                    >
+                      실거래
+                    </button>
+                    {/* 학교/동네 전체가 아니라 이 단지명 자체로 정확히 검색되도록 단지명만
+                        파라미터로 넘긴다(Deep Linking). */}
+                    <a
+                      href={`https://m.land.naver.com/search/result/${encodeURIComponent(apt.name)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.aptRowBtn}
+                    >
+                      매물
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>
