@@ -166,3 +166,46 @@ DB 변경:
 상태:
 
 완료
+
+
+## 2026-08-12
+
+### PRESALE P1 — 청약홈 분양 API 분석 및 실제 호출 검증
+
+목적:
+
+Presale schema, 기존 청약홈 연동 코드(cheongyakService.ts),
+공식 청약홈 API의 실제 응답 구조를 조사하고,
+Presale 필드와 API 응답을 정확히 매핑할 수 있는지 검증.
+
+핵심:
+
+getAPTLttotPblancDetail/getAPTLttotPblancMdl 실제 호출로
+정상 응답(HTTP 200) 확인. 기존 syncApplyhomeListings()의
+receiptStartDate/receiptEndDate/pblancUrl이 존재하지 않는
+필드명을 참조하고 있어 항상 null로 저장되는 버그를 확인.
+houseType 매핑 로직도 실제 값과 불일치. minPrice/maxPrice는
+Detail API에는 없고 Mdl API에서만 확인 가능함을 실측으로 확인.
+
+서비스 코드 변경:
+
+없음 (조사만 수행, 코드 미수정)
+
+검수 후 반영:
+docs/development/02-presale-api-analysis.md에 "P1 최종 검수 결정"
+섹션 추가 — Presale Model 구조 유지, 확인된 필드 매핑 문제 4건은
+P2 수정 대상으로 확정(P1에서는 미수정), 분양가 단위는 P2-A에서
+검증 전까지 저장하지 않음, 좌표는 기존 Kakao 지오코딩 재사용
+검토, 분양/임대 데이터는 임의 제외하지 않고 P2-A에서 표본 조사.
+
+DB 변경:
+
+없음
+
+패키지 변경:
+
+없음
+
+상태:
+
+완료
