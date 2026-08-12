@@ -212,6 +212,12 @@
   font-size: 0.78rem;
 }
 
+.pipelineStatusNeutral {
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
 .errorRow {
   padding: 0.5rem 0;
   border-bottom: 1px solid var(--border-color);

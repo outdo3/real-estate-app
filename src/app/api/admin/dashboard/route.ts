@@ -34,8 +34,24 @@ async function checkPipelineHealth() {
       }
     })();
 
-    const cheongyakConfigured = !!process.env.DATA_GO_KR_API_KEY;
-    const registryConfigured = !!process.env.DATA_GO_KR_API_KEY;
+    // 청약홈/건축물대장은 아래에서 "API 키 존재 여부"만으로 상태를 정했었는데(STEP 1
+    // 감사에서 지적됨), 이는 실제 호출 성공 여부를 의미하지 않는다. 이번 대시보드 로딩마다
+    // 새로 외부 API를 호출하는 구조는 추가하지 않기로 했으므로(비용/레이트리밋/속도 문제),
+    // 두 항목은 코드로 확인 가능한 실제 사실만 반영해 라벨을 바로잡는다.
+    //
+    // - 청약홈(syncApplyhomeListings, src/services/cheongyakService.ts)은 함수 자체가
+    //   어떤 크론/스크립트/관리자 액션에서도 호출되지 않는다(구조만 준비된 상태, 실제
+    //   수집 경로 없음 — 확인 완료) → "미연동"으로 표시. 실패가 아니라 아직 연결되지
+    //   않은 상태이므로 "오류"라고 하지 않는다.
+    // - 건축물대장(fetchBuildingRegistryInfo, src/lib/apt-building-info.ts)은 반대로
+    //   /api/apt/[name]/info 등 실제 사용자 화면에서 라이브로 호출되고 있음이 코드로
+    //   확인된다 — 다만 이 헬스체크 자체는 그 호출을 직접 검증하지 않고 키 존재만
+    //   확인하므로 "정상"이라 단정하지 않고 "설정됨"으로 표시한다. ("실사용은 확인되지만
+    //   이 헬스체크 자체의 실시간 상태 점검은 미구현"이라는 상세 설명은 화면 문구에는
+    //   담지 않고 docs/development/01-5B-admin-api-status-integrity.md에 기록한다 —
+    //   STEP 1.5-B 검수에서 화면 문구는 짧게, 분석 근거는 문서에 남기기로 함.)
+    const cheongyakKeyConfigured = !!process.env.DATA_GO_KR_API_KEY;
+    const registryKeyConfigured = !!process.env.DATA_GO_KR_API_KEY;
 
     const molitStatus = await molitCheck;
     const checkedAt = new Date().toISOString();
@@ -44,12 +60,12 @@ async function checkPipelineHealth() {
       { name: '국토부 실거래가(MOLIT)', status: molitStatus, checkedAt },
       {
         name: '청약홈 분양정보',
-        status: cheongyakConfigured ? '정상(API 키 설정됨)' : '오류(API 키 미설정)',
+        status: cheongyakKeyConfigured ? '미연동(API 키만 설정됨)' : '미연동(API 키 미설정)',
         checkedAt,
       },
       {
         name: '건축물대장',
-        status: registryConfigured ? '정상(API 키 설정됨)' : '오류(API 키 미설정)',
+        status: registryKeyConfigured ? '설정됨' : '미설정(API 키 없음)',
         checkedAt,
       },
     ];

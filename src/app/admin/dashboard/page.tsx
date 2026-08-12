@@ -12,6 +12,15 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 // 실시간 접속자/인기 단지는 자주 바뀌므로 짧은 간격으로 다시 조회한다.
 const REFRESH_INTERVAL_MS = 20 * 1000;
 
+// 파이프라인 상태 문구는 "정상"/"오류" 외에도 "미연동"/"설정됨"처럼 실패가 아닌
+// 중립적인 상태를 나타낼 수 있다. 이 둘을 전부 오류(빨간색)로 표시하면 아직 구현되지
+// 않았을 뿐인 기능이 장애처럼 보이므로, 상태 문구에 따라 세 가지 스타일로 구분한다.
+function pipelineStatusClass(status: string): string {
+  if (status.startsWith('정상')) return styles.pipelineStatusOk;
+  if (status.startsWith('오류')) return styles.pipelineStatusError;
+  return styles.pipelineStatusNeutral;
+}
+
 function formatTime(iso: string) {
   try {
     return new Date(iso).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -177,7 +186,7 @@ export default function AdminDashboardPage() {
                   {d.pipeline.map((p: any) => (
                     <div key={p.name} className={styles.pipelineRow}>
                       <span className={styles.pipelineName}>{p.name}</span>
-                      <span className={p.status.startsWith('정상') ? styles.pipelineStatusOk : styles.pipelineStatusError}>
+                      <span className={pipelineStatusClass(p.status)}>
                         {p.status} · {formatTime(p.checkedAt)}
                       </span>
                     </div>
