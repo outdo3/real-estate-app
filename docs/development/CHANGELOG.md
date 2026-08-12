@@ -209,3 +209,53 @@ DB 변경:
 상태:
 
 완료
+
+
+## 2026-08-12
+
+### PRESALE P2-A — 청약홈 실제 데이터 표본검증 및 저장정책 설계
+
+목적:
+
+Detail 50건 + Mdl 4건(27개 주택형) 실제 표본으로
+고유식별자/주택유형/분양임대구분/접수기간/URL/분양가단위/
+주소품질/입주예정월/계약기간/공급지역/null정책을 검증하고,
+Presale schema의 최종 Gap과 P2-B 구현계획을 확정.
+
+핵심:
+
+receiptStartDate/receiptEndDate는 RCEPT_BGNDE/RCEPT_ENDDE로
+교체하면 그대로 사용 가능함을 50건 전수 확인(9종 세분화 필드의
+min/max와 완전히 일치). 분양가 단위(LTTOT_TOP_AMOUNT)는
+숫자 크기 추측이 아니라 실제 언론보도 3건과 교차검증해
+"만원 단위, 최고가 의미"로 확정(그중 1건은 소수점까지 정확히
+일치). houseType은 이번 API(APT 전용 endpoint)만으로는
+오피스텔/도시형 값이 원천적으로 나올 수 없음을 구조적으로 확인.
+PresaleHouseTypeDetail(가칭) 하위 모델 설계안 제시.
+
+서비스 코드 변경:
+
+없음 (조사만 수행, 코드 미수정)
+
+검수 후 반영:
+docs/development/03-presale-data-policy.md에 "P2-A 최종 검수
+결정" 섹션 추가 — HOUSE_MANAGE_NO/PBLANC_NO 모두 원본 보존,
+receiptStartDate/receiptEndDate는 RCEPT_BGNDE/RCEPT_ENDDE로
+확정, PBLANC_URL 확정, 분양가는 만원 단위 최고가로 확정(0 임의
+변환 금지), 입주예정월은 YYYYMM 문자열 원본 보존, 주택유형/
+분양임대 구분 모두 API 원본값 별도 저장(enum 억지 확장 금지),
+PresaleHouseTypeDetail은 Prisma relation FK +
+@@unique([houseManageNo, modelNo])로 P2-B 기본안 확정,
+좌표는 기존 Kakao 지오코딩 재사용 + null 허용(임의 좌표 생성 금지).
+
+DB 변경:
+
+없음
+
+패키지 변경:
+
+없음
+
+상태:
+
+완료
