@@ -93,12 +93,24 @@ function formatDate(d: string | null): string {
   return d.slice(0, 10).replace(/-/g, '.');
 }
 
-function formatHouseTypeSummary(d: HouseTypeDetail): string {
+// 표시 전용 반올림(소수점 최대 2자리) — DB 원본 supplyArea 값 자체는 건드리지 않는다.
+// Math.round 후 Number의 기본 문자열 변환이 trailing zero를 자연히 제거한다
+// (84 -> "84", 83.6 -> "83.6", 83.65 -> "83.65").
+function formatArea(v: number): string {
+  return String(Math.round(v * 100) / 100);
+}
+
+function formatHouseTypeTitle(d: HouseTypeDetail): string {
   const typeSuffix = d.houseTy?.match(/([A-Za-z]+)$/)?.[1] || '';
-  const areaLabel = d.supplyArea != null ? `${d.supplyArea}㎡${typeSuffix ? ` ${typeSuffix}` : ''}` : d.houseTy || '주택형 정보 없음';
+  return d.supplyArea != null
+    ? `${formatArea(d.supplyArea)}㎡${typeSuffix ? ` ${typeSuffix}` : ''}`
+    : d.houseTy || '주택형 정보 없음';
+}
+
+function formatHouseTypeSubtitle(d: HouseTypeDetail): string {
   const supplyLabel = d.totalSupply != null ? `공급 ${d.totalSupply.toLocaleString()}세대` : null;
   const priceLabel = d.topAmount != null ? `최고 ${formatManwon(d.topAmount)}` : '분양가 미공개';
-  return [areaLabel, supplyLabel, priceLabel].filter(Boolean).join(' · ');
+  return [supplyLabel, priceLabel].filter(Boolean).join(' · ');
 }
 
 export default function PresaleDetailClient() {
@@ -189,7 +201,10 @@ export default function PresaleDetailClient() {
                 <div className={styles.accordionList}>
                   {presale.houseTypeDetails.map((d) => (
                     <details key={d.id} className={styles.accordionItem}>
-                      <summary className={styles.accordionSummary}>{formatHouseTypeSummary(d)}</summary>
+                      <summary className={styles.accordionSummary}>
+                        <span className={styles.accordionTitle}>{formatHouseTypeTitle(d)}</span>
+                        <span className={styles.accordionSubtitle}>{formatHouseTypeSubtitle(d)}</span>
+                      </summary>
                       <div className={styles.accordionBody}>
                         <div className={styles.accordionRow}>
                           <span>일반공급</span>

@@ -165,9 +165,9 @@
 
 .accordionSummary {
   padding: 0.75rem 0.9rem;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
   cursor: pointer;
   list-style: none;
   background: var(--bg-color);
@@ -175,6 +175,18 @@
 
 .accordionSummary::-webkit-details-marker {
   display: none;
+}
+
+.accordionTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.accordionSubtitle {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .accordionBody {
