@@ -259,3 +259,58 @@ DB 변경:
 상태:
 
 완료
+
+
+## 2026-08-12
+
+### PRESALE P2-B — 청약홈 분양정보 실제 DB 연동
+
+목적:
+
+P1/P2-A에서 검증한 저장정책을 실제 schema/코드로 구현하고,
+실제 청약홈 API로 소량(8건) 데이터를 DB에 적재해 검증.
+
+핵심:
+
+Prisma Migrate 이력이 없던 DB를 베이스라인(0_baseline, SQL
+미실행/북키핑만)한 뒤 presale_p2b_schema 마이그레이션(전부
+ADD COLUMN/CREATE TABLE, DROP 없음)을 적용. Presale에 10개
+필드 추가, PresaleHouseTypeDetail 신규 모델(1:N, Cascade,
+@@unique([houseManageNo, modelNo])) 추가. syncApplyhomeListings()
+의 확인된 필드명 버그(receiptStartDate/receiptEndDate/pblancUrl)
+수정 + Mdl 연동 + 기존 Kakao 지오코딩 재사용 추가. 실제 8건
+적재 후 2회 연속 sync로 idempotent함을 확인(Presale 8행/
+PresaleHouseTypeDetail 47행, 중복 0). 지오코딩은 5/8 성공,
+실패 3건 전부 P2-A가 예측한 "일원"/택지지구 주소 패턴과 일치.
+
+서비스 코드 변경:
+
+있음 (prisma/schema.prisma, src/services/cheongyakService.ts,
+scripts/sync_presales_test.ts 신규, scripts/_register-paths.js 신규)
+
+DB 변경:
+
+있음 (migration 2건 적용: 0_baseline, presale_p2b_schema.
+Presale 10개 컬럼 추가 + PresaleHouseTypeDetail 테이블 신규
+생성. 기존 테이블/컬럼/데이터 삭제 없음. 실 데이터 8건 +
+주택형 47건 적재)
+
+검수 후 반영:
+GNRL_HSHLDCO 필드가 실제 API에 없음을 라이브 재확인해
+generalSupply/specialSupply/totalSupply 매핑 유지 확정.
+Presale.totalSupplyHouseholds(Detail 총세대)와
+PresaleHouseTypeDetail 합계(Mdl 주택형 공급합계)는 서로 다른
+의미로 보고 강제 일치시키지 않기로 확정 — 성남복정2(594 vs
+166), 시흥거모(290 vs 284) 불일치 사례를 원인 미확정 상태로
+문서에 기록. Prisma baseline/Cascade/_register-paths.js/
+테스트 데이터 8건+47건/지오코딩 null 유지 등 기존 결정 모두
+최종 유지. 상세는 docs/development/04-presale-db-integration.md
+§P~Q 참고.
+
+패키지 변경:
+
+없음
+
+상태:
+
+완료
