@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import Header from '@/components/Header';
@@ -41,6 +41,39 @@ export default function AdminDashboardPage() {
 
   const d = data?.success ? data.data : null;
   const fetchError = data && !data.success ? data.error : swrError ? '대시보드를 불러오지 못했습니다.' : null;
+
+  // 분양정보(청약홈) 수동 동기화 — P2-C. 자동 cron은 아직 없고, 관리자가 이 버튼으로
+  // 직접 트리거한다. limit은 UI에서도 200으로 제한하지만, 실제 강제 상한은 서버
+  // (cheongyakService.ts의 MAX_SYNC_LIMIT)에 있다 — 여기 값을 조작해도 우회되지 않는다.
+  const [syncMode, setSyncMode] = useState<'incremental' | 'initial'>('incremental');
+  const [syncLimit, setSyncLimit] = useState(8);
+  const [syncDryRun, setSyncDryRun] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<any>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  async function runPresaleSync() {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      const res = await fetch('/api/admin/presales/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: syncMode, limit: syncLimit, dryRun: syncDryRun }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setSyncError(json.error || '동기화에 실패했습니다.');
+        setSyncResult(null);
+      } else {
+        setSyncResult(json.result);
+      }
+    } catch {
+      setSyncError('동기화 요청 중 오류가 발생했습니다.');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   return (
     <AuthGate>
@@ -193,7 +226,69 @@ export default function AdminDashboardPage() {
                   ))}
                 </div>
 
-                {/* 6. 시스템 에러 로그 */}
+                {/* 6. 분양정보(청약홈) 수동 동기화 */}
+                <div className={styles.cardWide}>
+                  <div className={styles.cardTitle}>📦 분양정보(청약홈) 수동 동기화</div>
+                  <div className={styles.syncControls}>
+                    <label className={styles.syncField}>
+                      모드
+                      <select
+                        className={styles.syncSelect}
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as 'incremental' | 'initial')}
+                        disabled={syncing}
+                      >
+                        <option value="incremental">증분(최근 90일)</option>
+                        <option value="initial">초기(최근 3년)</option>
+                      </select>
+                    </label>
+                    <label className={styles.syncField}>
+                      최대 건수(≤200)
+                      <input
+                        className={styles.syncInput}
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={syncLimit}
+                        onChange={(e) => setSyncLimit(Math.max(1, Math.min(200, Number(e.target.value) || 1)))}
+                        disabled={syncing}
+                      />
+                    </label>
+                    <label className={styles.syncCheckbox}>
+                      <input type="checkbox" checked={syncDryRun} onChange={(e) => setSyncDryRun(e.target.checked)} disabled={syncing} />
+                      dry run(저장 안 함, 미리보기만)
+                    </label>
+                    <button className={styles.syncBtn} onClick={runPresaleSync} disabled={syncing}>
+                      {syncing ? '동기화 중...' : '동기화 실행'}
+                    </button>
+                  </div>
+                  {syncError && <div className={styles.emptyRow}>⚠️ {syncError}</div>}
+                  {syncResult && (
+                    <div className={styles.syncResultBox}>
+                      <div>
+                        {formatTime(syncResult.startedAt)} → {formatTime(syncResult.finishedAt)} ({syncResult.mode}
+                        {syncResult.dryRun ? ', dry run' : ''})
+                      </div>
+                      <div>
+                        기간 {syncResult.fromDate} ~ {syncResult.toDate || '오늘'} · 해당 {syncResult.matchCount.toLocaleString('ko-KR')}건 중{' '}
+                        {syncResult.fetched}건 처리
+                      </div>
+                      <div>
+                        신규 {syncResult.created} · 업데이트 {syncResult.updated} · 실패 {syncResult.failed} · 건너뜀 {syncResult.skipped}
+                      </div>
+                      <div>
+                        주택형 upsert {syncResult.houseTypeDetailsUpserted}건 · Mdl 조회 실패 {syncResult.mdlFailedCount}건
+                      </div>
+                      <div>
+                        지오코딩 정확 {syncResult.geocodeExact}건 · 정규화 후 정확 {syncResult.geocodeNormalized}건 · 행정구역 수준(미저장){' '}
+                        {syncResult.geocodeAreaOnly}건 · 실패 {syncResult.geocodeFailed}건
+                      </div>
+                      {syncResult.error && <div className={styles.pipelineStatusError}>오류: {syncResult.error}</div>}
+                    </div>
+                  )}
+                </div>
+
+                {/* 7. 시스템 에러 로그 */}
                 <div className={styles.cardWide}>
                   <div className={styles.cardTitle}>🚨 시스템 에러 로그 (최근 20건)</div>
                   {d.errors.length === 0 ? (

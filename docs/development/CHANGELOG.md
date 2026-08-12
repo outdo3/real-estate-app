@@ -314,3 +314,57 @@ PresaleHouseTypeDetail 합계(Mdl 주택형 공급합계)는 서로 다른
 상태:
 
 완료
+
+
+## 2026-08-12
+
+### PRESALE P2-C — 분양 데이터 운영·동기화 체계 구축
+
+목적:
+
+P2-B의 저장 구조를 실제 운영 가능한 동기화 체계로 확장.
+초기/증분 동기화 정책 확정, 지오코딩 fallback 보완, 관리자
+수동 동기화 기능 구현.
+
+핵심:
+
+RCRIT_PBLANC_DE 기준 서버사이드 날짜 필터(cond[FIELD::GTE/LTE])
+지원을 라이브로 발견해 초기(기본 최근 3년)/증분(기본 최근
+90일) 동기화를 이 필터로 구현. 아이템 단위 try/catch로 한 건
+실패가 배치 전체를 막지 않도록 개선. 관리자 대시보드에 분양정보
+수동 동기화 카드 추가(POST /api/admin/presales/sync,
+requireAdmin 보호, MAX_SYNC_LIMIT=200 서버 강제 클램프,
+dryRun 지원). cron/자동 스케줄러는 구현하지 않음.
+
+검수 후 반영(지오코딩 정확도 강화):
+4단계 fallback 중 4차(시/도+시/군/구+읍/면/동)는 번지를 버린
+행정구역 대표 좌표일 뿐 실제 사업지 좌표가 아니라는 지적에 따라
+exact/normalized(번지 유지, 저장함)와 area_only(4차, 저장 안 함)
+를 구분하도록 재설계. 시/도만 비교하던 검증을 원본 주소 기준
+시/도+시/군/구 비교로 강화. 기존 25건을 재검증해 6건(전부 4차로만
+성공했던 건)의 좌표를 null로 정정(다른 필드는 미변경) — 최종
+19건(76%)만 신뢰 가능한 좌표 보유. 상세는
+docs/development/05-presale-sync-operations.md §N~O 참고.
+
+서비스 코드 변경:
+
+있음 (src/services/cheongyakService.ts 전면 재작성,
+src/app/api/admin/presales/sync/route.ts 신규,
+src/app/admin/dashboard/page.tsx, page.module.css,
+scripts/sync_presales_test.ts 갱신,
+scripts/reverify_presale_geocode.ts 신규)
+
+DB 변경:
+
+없음 (schema 변경 없음. 실 데이터 동기화로 Presale 8→25건,
+PresaleHouseTypeDetail 47→142건으로 증가, 이후 좌표 재검증으로
+6건의 latitude/longitude만 null로 정정 — 여전히 최근 90일 표본,
+전체 동기화 아님)
+
+패키지 변경:
+
+없음
+
+상태:
+
+완료
