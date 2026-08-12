@@ -51,12 +51,41 @@ export async function POST(request: Request) {
     }
 
     // 2. 의도 분류 (Gemini)
-    const classification = await classifyQuery(query);
+    let classification = await classifyQuery(query);
     if (!classification) {
-      return NextResponse.json({
-        success: false,
-        error: 'AI 검색을 사용할 수 없습니다. 잠시 후 다시 시도해주세요.',
-      });
+      // Gemini 호출 실패(키 미설정/네트워크 오류/타임아웃/JSON 파싱 실패 등, callGeminiJSON이
+      // 이미 null로 통일해서 반환함) — 검색 전체를 실패시키는 대신, 기존에 있던 결정적
+      // 지역명 파서(detectLeadingRegionKeyword, 원래는 LLM이 지역을 놓쳤을 때 보정용으로만
+      // 쓰이던 코드)로 지역만이라도 인식되면 "조건 없이 그 지역 단지 목록을 보여주는" 검색으로
+      // 대체한다. 가격/신축/주차 등 세부 조건은 이를 안전하게 추출할 기존 파서가 없으므로
+      // 새로 지어내지 않는다(원칙 B/C) — runConditionSearch는 이런 조건들이 전부 null이어도
+      // 정상적으로 "세대수 많은 순" 기본 목록을 반환하도록 이미 구현되어 있다(정상 경로에서도
+      // 동일하게 쓰이는 로직 그대로 재사용).
+      const detected = detectLeadingRegionKeyword(query);
+      if (detected) {
+        console.warn('[ai-search] Gemini 의도분류 실패 — 지역명 기반 fallback으로 대체', {
+          regionDetected: true,
+        });
+        classification = {
+          intent: 'condition_search',
+          sido: detected.sido,
+          sigungu: detected.sigungu,
+          maxPriceEok: null,
+          minParkingPerHousehold: null,
+          minTotalHouseholds: null,
+          newBuildOnly: false,
+          nearElementarySchool: false,
+          complexName: null,
+          compareTargetA: null,
+          compareTargetB: null,
+        };
+      } else {
+        console.warn('[ai-search] Gemini 의도분류 실패 — 지역명도 인식하지 못해 fallback 불가');
+        return NextResponse.json({
+          success: false,
+          error: '찾으시는 지역이나 조건을 조금 더 구체적으로 입력해주세요. 예: "부산 서구 5억 이하 아파트"',
+        });
+      }
     }
 
     // 3. 지역 코드 결정: 질문에서 추출된 지역 우선, 없으면 코드 레벨 지역 키워드 감지로
