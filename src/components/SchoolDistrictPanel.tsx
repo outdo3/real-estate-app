@@ -14,10 +14,11 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid var(--border-color)',
 };
 
-// 초등학교 학년별 학생 수 추이, 중/고교 특목고 진학률은 실제 데이터 소스가 없다 — 이 앱의
-// 기존 학군 기능(src/app/api/school/route.ts)이 쓰는 값은 학교명 해시로 만들어낸 시뮬레이션
-// 수치이지, 진짜 나이스(NEIS) 학년별 통계나 진학률이 아니다(코드 확인 완료). 단지 상세페이지처럼
-// 사용자가 실제 의사결정에 쓸 화면에 그 가짜 수치를 새로 노출시키지 않고, 대신 실제 카카오
+// 초등학교 학년별 학생 수 추이, 중/고교 특목고 진학률은 실제 데이터 소스가 없다(NEIS
+// schoolInfo API에 이 값이 없고, 이 앱에 다른 실제 소스도 없다 — STEP 1.5-A에서
+// src/app/api/school/route.ts, src/app/api/school/stats/route.ts의 학교명 해시 기반
+// 가짜 수치 생성 로직을 제거하고 동일하게 "데이터 준비 중"으로 통일했다). 단지 상세페이지처럼
+// 사용자가 실제 의사결정에 쓸 화면에 근거 없는 수치를 노출시키지 않고, 대신 실제 카카오
 // POI 기반의 근접 학교 목록만 보여주고 나머지는 정직하게 "준비 중"으로 표시한다.
 export default function SchoolDistrictPanel({ address, ready, lawdCd }: SchoolDistrictPanelProps) {
   return (

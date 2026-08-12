@@ -37,19 +37,9 @@ export async function GET(request: Request) {
         console.warn("NEIS API 호출 실패, Fallback 적용", e);
       }
 
-      if (rawSchools.length === 0) {
-        rawSchools = [
-          { SCHUL_NM: '대신중학교', LCTN_SC_NM: '부산광역시 서구', SCHUL_KND_SC_NM: '중학교', HMPG_ADRES: 'http://daeshin.ms.kr', SD_SCHUL_CODE: '1' },
-          { SCHUL_NM: '경남중학교', LCTN_SC_NM: '부산광역시 서구', SCHUL_KND_SC_NM: '중학교', HMPG_ADRES: 'http://kyungnam.ms.kr', SD_SCHUL_CODE: '2' },
-          { SCHUL_NM: '부경중학교', LCTN_SC_NM: '부산광역시 서구', SCHUL_KND_SC_NM: '중학교', HMPG_ADRES: 'http://pukyong.ms.kr', SD_SCHUL_CODE: '3' },
-
-          { SCHUL_NM: '송도초등학교', LCTN_SC_NM: '부산광역시 서구', SCHUL_KND_SC_NM: '초등학교', HMPG_ADRES: 'http://songdo.es.kr', SD_SCHUL_CODE: '4' },
-          { SCHUL_NM: '천마초등학교', LCTN_SC_NM: '부산광역시 서구', SCHUL_KND_SC_NM: '초등학교', HMPG_ADRES: 'http://chunma.es.kr', SD_SCHUL_CODE: '5' },
-
-          { SCHUL_NM: '부경고등학교', LCTN_SC_NM: '부산광역시 서구', SCHUL_KND_SC_NM: '고등학교', HMPG_ADRES: 'http://pukyong.hs.kr', SD_SCHUL_CODE: '6' },
-          { SCHUL_NM: '경남고등학교', LCTN_SC_NM: '부산광역시 서구', SCHUL_KND_SC_NM: '고등학교', HMPG_ADRES: 'http://kyungnam.hs.kr', SD_SCHUL_CODE: '7' }
-        ];
-      }
+      // NEIS 호출이 완전히 실패한 경우, 과거에는 실존하지 않을 수도 있는 가짜 학교
+      // 목록(대신중학교 등 하드코딩 샘플)으로 채워 마치 실제 조회 결과처럼 보여줬다.
+      // 실제 데이터를 확보하지 못했으면 빈 목록을 그대로 반환한다(가짜 학교 생성 금지).
 
       const gungu = region.split(' ')[1] || '';
       let filtered = rawSchools.filter((s: any) => {
@@ -69,65 +59,32 @@ export async function GET(request: Request) {
         filtered = filtered.filter((s: any) => s.SCHUL_KND_SC_NM === targetKind);
       }
 
+      // 학생수/학급당인원/학업성취도/특목고 진학률/통학시간 등은 NEIS schoolInfo API에
+      // 없는 값이라, 과거에는 학교명 문자열 해시로 만든 시드값(seed1/seed2)으로 이 모든
+      // 수치를 지어내 실제 통계처럼 보여줬다(STEP 1 감사에서 발견). 실제 근거가 있는
+      // 필드(학교명, 학교코드, 고교 유형 구분)만 남기고 나머지는 생성하지 않는다 — 화면에서는
+      // 해당 항목을 "데이터 준비 중"으로 표시한다.
       const mapped = filtered.map((s: any, index: number) => {
-        const nameHash = s.SCHUL_NM.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-        const seed1 = (nameHash % 100) / 100;
-        const seed2 = ((nameHash * 3) % 100) / 100;
+        const base = {
+          id: s.SD_SCHUL_CODE || `${type}${index}`,
+          name: s.SCHUL_NM,
+          rank: index + 1,
+        };
 
-        const classStudents = Math.floor(seed1 * 13) + 15;
-        const students = classStudents * (Math.floor(seed2 * 15) + 10);
-
-        if (type === '초등') {
-          const isChopuma = seed1 > 0.8;
+        if (type === '고등') {
           return {
-            id: s.SD_SCHUL_CODE || `e${index}`,
-            name: s.SCHUL_NM,
-            rank: index + 1,
-            students: students,
-            graduates: Math.floor(students / 6),
-            classStudents: classStudents,
-            walkTime: isChopuma ? '도보 1분' : `도보 ${Math.floor(seed2 * 10) + 3}분`,
-            crossRoad: isChopuma ? '단지 내 (초품아)' : `건널목 ${Math.floor(seed1 * 3) + 1}개`
-          };
-        } else if (type === '중등') {
-          const achievement = Math.floor(seed1 * 33) + 65;
-          const graduates = Math.floor(students / 3);
-          const special = Math.floor(students * (seed2 * 0.05));
-          const sciHigh = Math.floor(special * (seed1 * 0.5 + 0.1));
-          const foreignHigh = special - sciHigh;
-
-          return {
-            id: s.SD_SCHUL_CODE || `m${index}`,
-            name: s.SCHUL_NM,
-            rank: index + 1,
-            students: students,
-            graduates: graduates,
-            classStudents: classStudents,
-            achievement: achievement,
-            specialHigh: special,
-            sciHigh: sciHigh,
-            foreignHigh: foreignHigh,
-            specialRatio: graduates > 0 ? ((special / graduates) * 100).toFixed(1) : "0.0"
-          };
-        } else {
-          const graduates = Math.floor(students / 3);
-          return {
-            id: s.SD_SCHUL_CODE || `h${index}`,
-            name: s.SCHUL_NM,
-            rank: index + 1,
-            students: students,
-            graduates: graduates,
-            classStudents: classStudents,
-            univRate: (seed1 * 45 + 40).toFixed(1),
-            medSeoulRate: (seed2 * 10 + 2).toFixed(1),
-            type: s.HS_GNRL_BUSNS_SC_NM || (seed1 > 0.8 ? '자율고' : '일반고')
+            ...base,
+            // HS_GNRL_BUSNS_SC_NM(일반고/특성화고 등 계열 구분)는 NEIS가 실제로 제공하는
+            // 필드다. 값이 없을 때 임의로 '자율고'/'일반고'를 추측해 채우지 않는다.
+            schoolType: s.HS_GNRL_BUSNS_SC_NM || null,
           };
         }
+        return base;
       });
 
-      if (type === '중등') mapped.sort((a: any, b: any) => parseFloat(b.specialRatio) - parseFloat(a.specialRatio));
-      if (type === '고등') mapped.sort((a: any, b: any) => parseFloat(b.univRate) - parseFloat(a.univRate));
-
+      // 실제 근거가 있는 순위 기준이 없으므로(과거의 '진학률 순' 정렬은 가짜 수치
+      // 기준이었다) 가나다순으로만 정렬한다.
+      mapped.sort((a: any, b: any) => a.name.localeCompare(b.name, 'ko'));
       mapped.forEach((r: any, idx: number) => r.rank = idx + 1);
 
       return mapped;

@@ -44,28 +44,19 @@ export async function GET(request: Request) {
     let elemCount = 0;
     let midCount = 0;
     let highCount = 0;
-    
-    let totalSpecRate = 0;
-    let specRateCount = 0;
 
     regionSchools.forEach(s => {
       if (s.SCHUL_KND_SC_NM === '초등학교') elemCount++;
-      else if (s.SCHUL_KND_SC_NM === '중학교') {
-        midCount++;
-        // 모의 진학률 산출 로직 (기존 route.ts와 동일 구조)
-        const nameHash = s.SCHUL_NM.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-        const rate = (nameHash % 50) / 10 + (nameHash % 5);
-        totalSpecRate += rate;
-        specRateCount++;
-      }
+      else if (s.SCHUL_KND_SC_NM === '중학교') midCount++;
       else if (s.SCHUL_KND_SC_NM === '고등학교') highCount++;
     });
 
     const totalSchools = elemCount + midCount + highCount;
-    let avgSpecRate = '0.0%';
-    if (specRateCount > 0) {
-      avgSpecRate = (totalSpecRate / specRateCount).toFixed(1) + '%';
-    }
+    // 특목고 진학률: NEIS schoolInfo API에는 이 값이 없고, 이 앱에 다른 실제 데이터
+    // 소스도 없다. 과거에는 학교명 문자열 해시로 만든 가짜 수치를 여기 채워 넣었으나
+    // (STEP 1 감사에서 발견), 실제 근거가 없는 값을 통계처럼 보여주지 않는다는 원칙에
+    // 따라 항상 null을 반환한다 — 화면에서는 "데이터 준비 중"으로 표시한다.
+    const specRate: string | null = null;
 
     // 2. 카카오 로컬 API로 학원(AC5) 실집계
     // - 키워드 텍스트 검색의 meta.total_count는 지역과 무관하게 부풀려진 추정치라 신뢰할 수 없으므로
@@ -128,7 +119,7 @@ export async function GET(request: Request) {
       elemCount: elemCount,
       midCount: midCount,
       highCount: highCount,
-      specRate: avgSpecRate,
+      specRate: specRate,
       academyLocation: academyLocation,
       academyCount: academyCount
     };

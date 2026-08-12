@@ -48,12 +48,20 @@ export default function SchoolInfoPage() {
   const regionName = `${region.sido} ${region.sigungu}`;
 
   // 통계 상태 관리
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<{
+    totalSchools: number;
+    elemCount: number;
+    midCount: number;
+    highCount: number;
+    specRate: string | null;
+    academyLocation: string;
+    academyCount: number;
+  }>({
     totalSchools: 0,
     elemCount: 0,
     midCount: 0,
     highCount: 0,
-    specRate: '0.0%',
+    specRate: null,
     academyLocation: '-',
     academyCount: 0
   });
@@ -113,45 +121,38 @@ export default function SchoolInfoPage() {
     router.push(`/school/${encodeURIComponent(item.id)}?${params.toString()}`);
   };
 
+  // 학생수/학급당인원/학업성취도/특목고 진학률/통학시간 등은 NEIS API에 없는 값이라
+  // 과거에는 학교명 해시로 지어낸 가짜 수치를 보여줬다(STEP 1 감사에서 발견, STEP 1.5-A에서
+  // 제거). 실제 근거가 있는 값(학교명, 고교 유형)만 표시하고 나머지는 "데이터 준비 중"으로
+  // 표시한다 — 0%나 임의 숫자로 채우지 않는다.
   const renderSchoolItem = (item: any) => {
     if (activeTab === '중등') {
       return (
-        <>
-          <div className={styles.schoolInfo}>
-            <h4>{item.name}</h4>
-            <div className={styles.schoolStats}>
-              <span>학업성취도: <strong>{item.achievement}%</strong></span>
-              <span>특목·자사고: <span className={styles.statHighlight}>{item.specialHigh}명 ({item.specialRatio}%)</span></span>
-              <span>학생수: {item.students}명</span>
-            </div>
+        <div className={styles.schoolInfo}>
+          <h4>{item.name}</h4>
+          <div className={styles.schoolStats}>
+            <span>학업성취도·특목고 진학률: <span className={styles.dataPending}>데이터 준비 중</span></span>
           </div>
-        </>
+        </div>
       );
     } else if (activeTab === '초등') {
       return (
-        <>
-          <div className={styles.schoolInfo}>
-            <h4>{item.name}</h4>
-            <div className={styles.schoolStats}>
-              <span>학급당 인원: <strong>{item.classStudents}명</strong></span>
-              <span>통학: <span className={styles.statHighlight}>{item.walkTime}</span></span>
-              <span>안전: {item.crossRoad}</span>
-            </div>
+        <div className={styles.schoolInfo}>
+          <h4>{item.name}</h4>
+          <div className={styles.schoolStats}>
+            <span>학급당 인원·통학 정보: <span className={styles.dataPending}>데이터 준비 중</span></span>
           </div>
-        </>
+        </div>
       );
     } else {
       return (
-        <>
-          <div className={styles.schoolInfo}>
-            <h4>{item.name}</h4>
-            <div className={styles.schoolStats}>
-              <span>4년제 진학률: <strong>{item.univRate}%</strong></span>
-              <span>주요대/의약계열: <span className={styles.statHighlight}>{item.medSeoulRate}%</span></span>
-              <span>유형: {item.type}</span>
-            </div>
+        <div className={styles.schoolInfo}>
+          <h4>{item.name}</h4>
+          <div className={styles.schoolStats}>
+            <span>유형: {item.schoolType || '정보 없음'}</span>
+            <span>4년제 진학률: <span className={styles.dataPending}>데이터 준비 중</span></span>
           </div>
-        </>
+        </div>
       );
     }
   };
@@ -207,7 +208,11 @@ export default function SchoolInfoPage() {
               <div className={styles.cardIcon}>🎓</div>
               <div className={styles.cardContent}>
                 <h3>평균 특목고 진학률</h3>
-                <p>{stats.specRate} (시 평균 상회)</p>
+                <p>
+                  {stats.specRate
+                    ? stats.specRate
+                    : <span className={styles.dataPending} style={{ fontSize: '1rem' }}>데이터 준비 중</span>}
+                </p>
               </div>
             </div>
             <div className={styles.summaryCard}>
@@ -229,12 +234,18 @@ export default function SchoolInfoPage() {
         {/* 학교 랭킹 리스트 (전체 너비 사용) */}
         <div className={styles.panel}>
           <div className={styles.panelHeader}>
-            <h2 className={styles.panelTitle}>🏆 {regionName} {activeTab} 랭킹</h2>
+            <h2 className={styles.panelTitle}>🏫 {regionName} {activeTab} 학교 목록</h2>
             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              {activeTab === '중등' ? '특목고 진학률 순' : (activeTab === '초등' ? '과밀학급/선호도 순' : '진학률 순')}
+              가나다순
             </span>
           </div>
-          
+
+          {!loading && schools.length === 0 && (
+            <div style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+              학교 정보를 불러오지 못했습니다.
+            </div>
+          )}
+
           <ul className={styles.schoolList}>
             {schools.map((item) => (
               <li
