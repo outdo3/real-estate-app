@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import Header from '@/components/Header';
 import styles from './page.module.css';
@@ -77,6 +78,7 @@ function formatHouseholds(n: number | null): string {
 }
 
 export default function PresalesClient() {
+  const router = useRouter();
   const [page, setPage] = useState(1);
   const [region, setRegion] = useState('');
   const [status, setStatus] = useState('');
@@ -149,7 +151,16 @@ export default function PresalesClient() {
         ) : (
           <div className={styles.grid}>
             {items.map((p) => (
-              <div key={p.id} className={styles.card}>
+              <div
+                key={p.id}
+                className={styles.card}
+                role="button"
+                tabIndex={0}
+                onClick={() => router.push(`/presales/${p.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') router.push(`/presales/${p.id}`);
+                }}
+              >
                 <div className={styles.cardTitle}>{p.houseName}</div>
                 <div className={styles.cardMetaRow}>
                   <span className={`${styles.badge} ${STATUS_BADGE_CLASS[p.status]}`}>{STATUS_LABEL[p.status]}</span>
@@ -161,7 +172,13 @@ export default function PresalesClient() {
                   <span>{formatMoveIn(p.moveInExpectedYm)}</span>
                 </div>
                 {p.pblancUrl && (
-                  <a href={p.pblancUrl} target="_blank" rel="noopener noreferrer" className={styles.cardLink}>
+                  <a
+                    href={p.pblancUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.cardLink}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     청약홈에서 공고 보기 ↗
                   </a>
                 )}

@@ -500,10 +500,75 @@ API curl 테스트(pagination/지역/상태/가격/복합필터/빈결과/잘못
 브라우저(Chrome, localhost)로 필터 상호작용·페이지네이션·
 /redevelopment 링크 동작 확인. tsc/lint/build 전부 통과(lint 경고
 5건은 이번 변경과 무관한 기존 파일). 모바일(360~390px) 실기기
-스크린샷은 이번 세션 브라우저 자동화 도구의 뷰포트 리사이즈 제약으로
-확보하지 못해 CSS 코드 리뷰로만 검증(상세는
-docs/development/08-presale-list-ui.md §13 참고) — 검수 단계에서
-실기기 확인을 별도로 권장.
+스크린샷은 구현 당시 브라우저 자동화 도구의 뷰포트 리사이즈 제약으로
+확보하지 못해 CSS 코드 리뷰로만 검증했으나, 이후 실제 배포
+환경(https://real-estate-app-park11.vercel.app)에서 모바일 실기기로
+재검증해 지역/상태/가격/복합 필터·1,046건 로딩·카드 레이아웃 전부
+정상 확인(상세는 docs/development/08-presale-list-ui.md "최종 검수
+결과" 참고). 배포 직후 1회 보고된 API 오류는 이후 재현되지 않았고
+production API 반복 호출(6/6) 전부 정상 응답해 일시적 현상으로
+판단(근본 코드 결함 없음).
+
+상태:
+
+완료(2026-08-13 최종 검수 승인 — 모바일 실기기 검증 통과. P2-D3
+착수)
+
+
+## 2026-08-13
+
+### PRESALE P2-D3 — 분양 상세 + 일정 + 주택형 + 가격
+
+목적:
+
+/presales/[id] 상세페이지를 실제로 구현. P2-D1에서 확정한 URL
+정책(Presale.id 기반)과 P2-D2의 상태 라벨·가격 표시 규칙을 그대로
+따름.
+
+핵심:
+
+GET /api/presales/[id] 신규 추가 — Presale 전체 필드 +
+houseTypeDetails relation + computePresaleStatus 결과 반환,
+id 형식 오류 400/존재하지 않음 404/서버오류 500을
+/api/community/posts/[id] 기존 패턴으로 구현. 상세 화면은
+apt/[name] 서버 컴포넌트 metadata 패턴을 재사용(prisma 직접 조회로
+실제 houseName/가격/일정 기반 title·description 생성). 주택형은
+<details>/<summary> 네이티브 아코디언으로 구현, HOUSE_TY 표시는
+houseTy 문자열을 파싱하지 않고 이미 ㎡ 단위인 supplyArea 컬럼을
+그대로 쓰고 타입 접미사(A/B 등)만 정규식으로 추출(원본 코드는
+아코디언 내부에 그대로 병기). 위치정보는 MapViewer(Kakao SDK)가
+/map 페이지에서만 스크립트 로드되는 것을 확인해, 이번 STEP은
+인터랙티브 지도 대신 주소+카카오맵 링크 카드로 최소 구현(실제 지도
+임베드는 P2-D4로 이관). 목록 카드 클릭을 /presales/[id]로 연결하고
+"청약홈에서 공고 보기" 링크는 stopPropagation으로 이벤트 충돌 방지.
+
+서비스 코드 변경:
+
+있음 (src/app/api/presales/[id]/route.ts 신규,
+src/app/presales/[id]/page.tsx 신규,
+src/app/presales/[id]/presale-detail-client.tsx 신규,
+src/app/presales/[id]/page.module.css 신규,
+src/app/presales/presales-client.tsx 카드 클릭 연결,
+src/app/presales/page.module.css cursor 추가)
+
+DB 변경:
+
+없음
+
+패키지 변경:
+
+없음
+
+테스트 결과:
+
+로컬 API로 일반 APT/신혼희망타운/가격 단일·범위/좌표 유무/
+constructCompany null/주택형 20개 공고/존재하지 않는 id/잘못된
+id 형식 8개 시나리오 전부 기대값과 일치. 브라우저로 아코디언
+펼침(0과 null 구분 확인)·카카오맵 링크 조건부 노출·404·400
+상태·목록→상세→뒤로가기·청약홈 새 탭 이동(이벤트 충돌 없음) 전부
+확인. lint에서 <a href>를 next/link Link로 교체하는 오류 1건
+발견·수정 후 tsc/lint/build 전부 통과(상세는
+docs/development/09-presale-detail-ui.md 참고).
 
 상태:
 

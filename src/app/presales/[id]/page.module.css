@@ -1,0 +1,256 @@
+.main {
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+}
+
+.stateBox {
+  margin-top: 1.5rem;
+  padding: 3.5rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.stateLink {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.summarySection {
+  padding: 1.5rem 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+  word-break: keep-all;
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.region {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--radius-pill);
+}
+
+.badgeOngoing {
+  color: var(--primary-color);
+  background: #e6f9ed;
+}
+
+.badgeUpcoming {
+  color: #3152d6;
+  background: #eaf0fe;
+}
+
+.badgeClosed {
+  color: var(--text-muted);
+  background: #f0f0f0;
+}
+
+.badgeUnsold {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.price {
+  font-weight: 800;
+  font-size: 1.35rem;
+  color: var(--text-primary);
+  margin-top: 0.3rem;
+}
+
+.priceCaption {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: -0.3rem 0 0.3rem;
+}
+
+.section {
+  margin-top: 1.1rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 1.1rem 1.15rem;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 0.85rem;
+}
+
+.emptyText {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+/* 청약 일정 */
+.scheduleList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.scheduleRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.scheduleRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.scheduleLabel {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.scheduleValue {
+  text-align: right;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* 주택형 아코디언 */
+.accordionList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.accordionItem {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.accordionSummary {
+  padding: 0.75rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none;
+  background: var(--bg-color);
+}
+
+.accordionSummary::-webkit-details-marker {
+  display: none;
+}
+
+.accordionBody {
+  padding: 0.85rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.accordionRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.accordionRow span:last-child {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* 사업정보 */
+.infoList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.infoRow span:first-child {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.infoRow span:last-child {
+  text-align: right;
+  color: var(--text-primary);
+}
+
+/* 위치정보 */
+.locationCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.locationAddress {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* 청약홈 CTA */
+.ctaButton {
+  display: block;
+  margin-top: 1.25rem;
+  padding: 0.9rem;
+  text-align: center;
+  border-radius: var(--radius-md);
+  background: var(--primary-color);
+  color: white;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+@media (min-width: 768px) {
+  .title {
+    font-size: 1.6rem;
+  }
+}
