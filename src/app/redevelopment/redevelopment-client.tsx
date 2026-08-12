@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import Header from '@/components/Header';
 import styles from './redevelopment.module.css';
 
@@ -41,6 +42,11 @@ export default function RedevelopmentClient() {
               ? '청약홈 등 공공데이터 연동이 완료되는 대로 지역별 분양 일정과 경쟁률을 제공할 예정입니다.'
               : '정비구역 지정 현황 데이터셋이 연동되는 대로 재개발·재건축 진행 단계를 지도와 함께 제공할 예정입니다.'}
           </div>
+          {activeTab === 'sale' && (
+            <Link href="/presales" className={styles.emptyLink}>
+              분양정보 전체 보기 →
+            </Link>
+          )}
         </div>
       </div>
     </div>

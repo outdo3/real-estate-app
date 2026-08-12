@@ -449,3 +449,62 @@ DB 변경:
 /redevelopment 분양 탭은 삭제하지 않고 향후 /presales 진입점으로
 전환, 상태 4분류 유지, "주변 아파트"는 MASTER DB 이전까지 사용
 금지 표현으로 확정, P2-D2~D5 순서 최종 확정. P2-D2 미착수)
+
+
+## 2026-08-13
+
+### PRESALE P2-D2 — 분양 목록 + 기본 필터 + 상태 UI
+
+목적:
+
+/presales 사용자 목록 페이지를 실제로 구현. P2-D1에서 확정한
+설계(URL, 상태 4분류, 카드 구조, 필터 우선순위)를 그대로 따름.
+
+핵심:
+
+GET /api/presales를 최소 확장(재작성 아님) — page/region/priceMax
+파라미터, regions facet(DB groupBy 실측, 하드코딩 없음) 추가.
+응답을 { items, total, page, pageSize, totalPages, regions } 구조로
+변경(기존에 이 API를 호출하는 프론트가 코드상 없었음을 사전 확인해
+안전하게 확장). 정렬은 상태우선순위(접수중→접수예정→접수마감→
+무순위) 후 receiptStartDate desc로 확정 — 실측 접수예정 7건이
+항상 목록 최상단에 노출됨. 가격 필터 구간(3/5/7/10억)을 실 데이터
+분포(총 1,046건: ~3억 45/~5억 174/~7억 306/~10억 233/10억초과 288)로
+재검증 후 그대로 채택. /presales/page.tsx(서버, generateMetadata)+
+presales-client.tsx(클라이언트, useSWR) 구조는 기존 apt/[name]
+패턴을 재사용. 카드 클릭은 상세페이지 부재로 비활성화하고 청약홈
+원문 링크(pblancUrl)만 CTA로 제공(P2-D3에서 상세 라우트로 교체
+예정). /redevelopment "분양·청약" 탭에 /presales로 가는 링크 1줄만
+추가(기존 탭 구조 변경 없음).
+
+서비스 코드 변경:
+
+있음 (src/app/api/presales/route.ts 확장, src/app/presales/page.tsx
+신규, src/app/presales/presales-client.tsx 신규,
+src/app/presales/page.module.css 신규,
+src/app/redevelopment/redevelopment-client.tsx,
+src/app/redevelopment/redevelopment.module.css)
+
+DB 변경:
+
+없음
+
+패키지 변경:
+
+없음
+
+테스트 결과:
+
+API curl 테스트(pagination/지역/상태/가격/복합필터/빈결과/잘못된
+파라미터/범위밖 page) 전부 실 DB 데이터 기준으로 기대값과 일치.
+브라우저(Chrome, localhost)로 필터 상호작용·페이지네이션·
+/redevelopment 링크 동작 확인. tsc/lint/build 전부 통과(lint 경고
+5건은 이번 변경과 무관한 기존 파일). 모바일(360~390px) 실기기
+스크린샷은 이번 세션 브라우저 자동화 도구의 뷰포트 리사이즈 제약으로
+확보하지 못해 CSS 코드 리뷰로만 검증(상세는
+docs/development/08-presale-list-ui.md §13 참고) — 검수 단계에서
+실기기 확인을 별도로 권장.
+
+상태:
+
+검수중
