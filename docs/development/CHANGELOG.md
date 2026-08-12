@@ -368,3 +368,44 @@ PresaleHouseTypeDetail 47→142건으로 증가, 이후 좌표 재검증으로
 상태:
 
 완료
+
+
+## 2026-08-12
+
+### STEP 2 — PRESALE P2-C2: 최근 3년 초기 백필
+
+작업:
+
+기존 P2-C sync 파이프라인(syncApplyhomeListings)을 코드 변경 없이
+그대로 사용해 최근 3년(2023-08-13~2026-08-12) 분양 데이터를
+6개 batch(matchCount 188/176/156/161/171/194, 각 MAX_SYNC_LIMIT=200
+이하)로 나눠 실제 적재. dryRun으로 전체 matchCount(1,046건, 사전
+예상과 정확히 일치) 먼저 확인 후 batch 1만 실행→DB 검증→문제 없어
+batch 2~6 순차 실행. 전 batch failed:0, mdlFailed:0. 마지막
+batch에서 기존 25건이 정확히 update(중복 생성 없음)로 처리됨을
+확인. 백필 후 Presale/PresaleHouseTypeDetail 전수 무결성 검증
+(중복/orphan/날짜역전/가격역전 전부 0건, 가격 100% 확보, 좌표
+728/1046(69.6%) 신뢰 가능·나머지는 null 유지) + 소규모 재동기화로
+idempotency 재확인(중복 0, 정상 update). 상세는
+docs/development/06-presale-initial-backfill.md 참고.
+
+서비스 코드 변경:
+
+없음 (cheongyakService.ts, presales/sync/route.ts 등 기존 sync
+로직 무결함 확인, 미수정. 신규 파일은 백필 실행/검증 전용
+일회성 스크립트뿐: scripts/presale_backfill_probe.ts,
+scripts/presale_backfill_batch.ts — 기존 syncApplyhomeListings()를
+호출만 함)
+
+DB 변경:
+
+없음 (schema 변경 없음. 실 데이터 백필로 Presale 25→1,046건,
+PresaleHouseTypeDetail 142→5,395건으로 증가)
+
+패키지 변경:
+
+없음
+
+상태:
+
+완료(2026-08-12 최종 검수 승인. P2-D 미착수)

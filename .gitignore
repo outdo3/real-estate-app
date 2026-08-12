@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# presale P2-C2 초기 백필 — 일회성 batch 원본 JSON 결과(재현 가능, 커밋 불필요)
+scripts/_backfill_results/
