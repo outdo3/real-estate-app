@@ -1140,3 +1140,135 @@ enrichment 한계로 기록하며 M4-B 완료의 blocker로 취급하지
 enrichment 개선은 M4-C 후속 과제로 유지하고 이번 STEP에서
 착수하지 않는다. 상세는
 docs/development/15-apartment-master-m4-busan-build.md §AC~AD 참고.
+
+### PRESALE P2-D4-B — 주변 아파트·실거래 비교 기능 조사/설계
+
+목적:
+
+MASTER M4-B로 구축된 부산 ApartmentMaster(3,402건)를 실제로
+활용해, 분양 상세페이지에 "주변 아파트 + 최근 실거래 + 분양가
+비교" 기능을 만들 수 있는지 조사·설계했다. 조사/설계 전용
+STEP으로 코드/schema/migration 변경, 실제 UI 구현은 하지 않았다.
+
+핵심:
+
+부산 Presale 85건(좌표 있음 66/77.6%) 재확인. aptSeq 직접 연결을
+실제 MOLIT API 호출로 검증 — MOLIT은 aptSeq 단건조회를 지원하지
+않아 "lawdCd+월 조회 후 응답 내 aptSeq로 필터링" 구조가 필수이며,
+서구 이름충돌 사례("문화" 3개 단지)로 실측 검증했다. 8개 구·군에
+분산된 테스트 Presale 10건을 선정해 @turf/turf(기존 설치 패키지)
+반경검색을 실측 — 동래구 등 밀집지역은 1km에 60~94개, 강서구
+저밀도 지역은 2km까지도 3개뿐인 등 지역별 편차가 커 고정 반경이
+아닌 adaptive radius(1km→2km→3km, 후보 5개 미만 시 확장)를
+권장. houseTy 앞자리=전용면적 가설을 55개 주택형 표본으로
+재검증(문서10 §14의 15개 표본에서 확장) — 일관된 패턴 재확인했으나
+공식 문서 미대조로 "확인 필요" 상태 유지, "같은 평형" 대신 "비슷한
+전용면적(OO~OO㎡)" 표현 권장. 실거래 면적 허용범위는 남구/
+부산진구 실측(고유 excluUseAr 75종/175종 분포)으로 ±1㎡ 권장.
+거래기간은 6개월→12개월→24개월 fallback 권장(3개월 단독은
+후보의 40~50%가 거래 없음을 실측 확인). API 호출량은 반경 내
+후보 수와 무관하게 lawdCd당 월 수(24개월=24회)로 고정됨을
+발견 — 기존 getOrSetCache(lawdCd+월 키)와 병렬 chunk 패턴을
+재사용하면 신규 인프라 없이 충분, M4-C(실거래 DB cache)는
+blocker 아님으로 판단.
+
+서비스 코드 변경:
+
+없음(조사 전용). 조사용 임시 스크립트(scripts/_p2d4b_*.ts, 7개)는
+결과 확인 후 전부 삭제.
+
+DB 변경:
+
+없음(schema/데이터 전부 조회만 수행).
+
+패키지 변경:
+
+없음(@turf/turf 기존 설치분 재사용, 신규 설치 없음).
+
+테스트 결과:
+
+해당 없음(조사/설계 STEP, 코드 테스트 대상 없음). DB read-only
+쿼리와 실제 MOLIT API 호출로 모든 수치를 실측했다.
+
+최종 판단:
+
+B(기능 구현은 가능하지만 간단한 추가 기반작업이 먼저 필요).
+Apartment Master 부재(문서10 P2-D4-A의 B판정 근거)는 M4-B로
+해소됐으나, aptSeq를 활용하는 신규 API route·기존 캐시/병렬
+패턴 재사용이라는 최소 기반작업이 필요. 상세는
+docs/development/16-presale-nearby-market-design.md 참고.
+
+상태:
+
+완료. 사용자가 B판정(B1~B4 분리안 채택)을 최종 승인했다.
+실제 구현은 B1부터 순차 진행한다(아래 PRESALE P2-D4-B1 항목).
+
+### PRESALE P2-D4-B1 — 주변 ApartmentMaster 검색 API
+
+목적:
+
+P2-D4-B 조사/설계(B1~B4 분리안)에 따라, 이번 STEP은 "분양공고
+좌표 기준 주변 ApartmentMaster 검색 API"만 구현한다. 실거래
+연결(B2)/가격비교/면적비교/UI/지도는 이번 STEP 범위 밖.
+
+핵심:
+
+신규 GET /api/presales/[id]/nearby-apartments 구현(기존
+[id]/comments류 중첩 라우트 컨벤션 재사용). Presale 좌표 →
+bounding box(최대반경 3km 위경도 환산) prefilter → @turf/turf
+distance()(기존 설치 패키지, school/apartments/route.ts와 동일
+import 재사용)로 정밀 거리 계산 → adaptive radius(1km→1.5km→
+2km→3km, 5개 미만이면 확장, 3km에서는 있는 만큼만) → 거리순
+정렬 후 최대 5개 반환. ApartmentMaster만 검색 대상(legacy
+Apartment/Property 미사용), 좌표 없는 row는 bounding box 쿼리
+자체에서 자연히 제외. sigungu/sggCd 필터를 전혀 쓰지 않아
+행정구역을 넘는 실제 인접 단지도 후보가 됨 — 남구 분양(id=801)
+반경 1km 결과 5개 중 2개가 실제로 수영구 소속임을 실측으로
+확인(핵심 요구사항 실증). MOLIT 호출 없음, 응답시간 평균
+90.8ms(10개 표본, 2라운드). 좌표없는 Presale 2건 전부 HTTP 200
++ locationAvailable:false로 정상 처리, duplicate 0건, 기존
+Apartment/Property/Presale/PresaleHouseTypeDetail/ApartmentMaster
+행 수 전부 불변 확인.
+
+서비스 코드 변경:
+
+있음. 신규 파일
+src/app/api/presales/[id]/nearby-apartments/route.ts 1개 추가.
+기존 파일 수정 없음.
+
+DB 변경:
+
+없음(read-only API, schema/migration 변경 없음).
+
+패키지 변경:
+
+없음(@turf/turf 기존 설치분 재사용).
+
+테스트 결과:
+
+prisma validate 통과, migrate status "up to date", tsc --noEmit
+오류 0, lint 오류 0(경고 5건 기존파일), build 성공(신규 라우트
+정상 포함). 10개 Presale 실제 API 호출 테스트 전부 통과(정상 8건
++ 좌표없음 2건), 지역경계 실제 사례 확인, duplicate/거리<=반경/
+부산외데이터 위반 0건. 기존 /api/presales, /api/presales/[id]
+정상 동작 확인.
+
+최종 판단:
+
+A(B1 완료 — B2 진행 가능). 상세는
+docs/development/17-presale-nearby-apartment-api.md 참고.
+
+상태:
+
+완료. 사용자가 최종 승인했다. 다음 정책을 확정 유지한다:
+주변 ApartmentMaster 검색은 행정구역 필터가 아니라 실제 좌표
+거리 기준(1km→1.5km→2km→3km adaptive, 최대 5개 반환, 거리ASC+
+deterministic 보조정렬)으로 처리하며, 지역경계 단지도 정상
+후보로 포함한다(남구→수영구 실제 사례 문서 유지). roadAddress/
+jibunAddress 둘 다 API에서 유지하고 대표 주소 선택은 B3에서
+결정한다. 3km 확장 후 5개 미만 경로는 코드상 지원되나 이번
+10건 실측에서 관측되지 않았음을 명시하며 B1 완료 blocker로
+취급하지 않는다. B1은 MOLIT 호출 없이 ApartmentMaster 주변검색만
+담당하는 책임분리를 유지하고, B2는 fetchMolitData의 aptSeq 미추출
+문제를 반드시 해결 대상으로 다루며 단지명 문자열 매칭을 기본
+연결방식으로 쓰지 않는다.
