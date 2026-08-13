@@ -182,6 +182,57 @@ model Apartment {
   @@map("apartments")
 }
 
+// MASTER M1/M2(docs/development/11-apartment-master-analysis.md,
+// 12-apartment-master-design.md)에서 설계한 Apartment Master — MASTER M3(소량 실제
+// 구축 검증) 대상 신규 모델. 기존 Apartment(위, 건축물대장 캐시 20건)를 대체하지 않고
+// 병행한다 — 이번 STEP에서는 기존 코드가 이 모델을 사용하도록 전환하지 않는다.
+//
+// 한 행 = MOLIT aptSeq 1개(M2 §C 결론). 이름/동 문자열 매칭이 아니라 aptSeq(있으면)를
+// 우선 식별자로 쓰고, normalizedName은 검색 보조용일 뿐 identity로 쓰지 않는다(M2 §I).
+model ApartmentMaster {
+  id                Int      @id @default(autoincrement())
+
+  // 외부 식별자 — 내부 PK(id)와 분리, 둘 다 nullable(무거래/미확보 단지 수용, M2 §R)
+  aptSeq            String?  @unique @map("apt_seq") // MOLIT, "{lawdCd}-{일련번호}"
+  // 건축물대장 총괄표제부 관리번호. 정수로 다루면 정밀도 손실 위험이 있어 문자열로만
+  // 저장한다(M1 §K). 한 단지에 총괄표제부가 여러 건 잡히는 드문 사례가 있음이 기존
+  // apt-building-info.ts 주석에서 이미 확인돼, DB unique 제약은 걸지 않는다(M3 §5).
+  mgmBldrgstPk      String?  @map("mgm_bldrgst_pk")
+
+  name              String   // MOLIT aptNm 또는 건축물대장 bldNm 원본 표기
+  normalizedName    String   @map("normalized_name") // 공백/"아파트" 접미사 제거 — 매칭 보조용
+
+  // 지역/주소 — 원본 필드를 분리 보존한다(단일 텍스트 컬럼으로 뭉치지 않음, M2 §H)
+  sido              String?
+  sigungu           String?
+  sggCd             String?  @map("sgg_cd") // = lawdCd, MOLIT 원본
+  umdName           String?  @map("umd_name")
+  umdCd             String?  @map("umd_cd")
+  jibun             String?
+  roadAddress       String?  @map("road_address")  // 건축물대장 newPlatPlc(도로명주소 완성형)
+  jibunAddress      String?  @map("jibun_address")  // 건축물대장 platPlc(지번주소 완성형)
+
+  // 좌표 — Kakao geocoding만 원천(M2 §I). area_only(행정구역 대표좌표)는 저장하지 않는다.
+  latitude          Float?
+  longitude         Float?
+  geocodeQuality    String?  @map("geocode_quality") // 'exact' | 'normalized' | 'failed'
+
+  // 건물 정보 — 단지 총괄 값으로 확정 가능한 것만 저장(동 단위 값을 단지 전체처럼 저장 금지)
+  buildYear         Int?     @map("build_year")        // MOLIT 건축년도(참고용)
+  useApprovalDate   String?  @map("use_approval_date")  // 건축물대장 useAprDay 원본("YYYYMMDD")
+  mainBuildingCount Int?     @map("main_building_count") // 건축물대장 mainBldCnt(동수)
+  totalHouseholds   Int?     @map("total_households")   // 건축물대장 hhldCnt(총괄표제부 확정값만)
+  parkingCount      Int?     @map("parking_count")       // 건축물대장 totPkngCnt(총괄표제부 확정값만)
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([sggCd])
+  @@index([normalizedName])
+  @@index([umdCd, jibun])
+  @@map("apartment_masters")
+}
+
 // AI 검색(/api/ai-search)의 의도 분류 + 최종 응답을 캐싱해 동일한 질문에 Gemini를
 // 다시 호출하지 않게 한다(토큰 비용 절감 + 응답 속도). 정규화된 질문 문자열의 해시를
 // 키로 쓴다 — 완전히 같은 문장일 때만 히트하는 단순한 캐시라, 유사하지만 다른 표현의

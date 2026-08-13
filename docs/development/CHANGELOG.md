@@ -805,3 +805,92 @@ M3 착수하지 않음).
 상태:
 
 완료(2026-08-13 최종 검수 승인)
+
+
+## 2026-08-13
+
+### MASTER M3 — Apartment Master 부산 서구 + 해운대 소량 구축 검증
+
+목적:
+
+MASTER M1/M2 설계를 실제 DB에 처음 구현·적재하는 소량 실제 구축
+검증. 부산 서구 + 부산 해운대구로 한정(부산 전체/전국 적재 금지).
+
+핵심:
+
+Prisma에 ApartmentMaster 모델(22개 필드, 내부 id PK + aptSeq
+nullable unique) 신규 추가, migration(CREATE TABLE + index 4개,
+DROP/ALTER 없음) 생성·적용. scripts/apartment_master_seed.ts를
+작성해 MOLIT(aptSeq/주소) → 건축물대장(REGCODE_PROXY 미사용,
+sggCd+MOLIT umdCd+jibun 직접 조회) → Kakao(좌표, exact/normalized/
+failed) 순으로 enrichment하는 파이프라인 구현. 부산 서구 15건,
+해운대구 18건 총 33건 적재. aptSeq unique 충돌 0건, idempotency
+확인(재실행 후 행수 33 유지, 신규행 0). 해운대 Stress Test 중
+Kakao 키워드검색 응답에 지역 검증용 중첩 필드가 애초에 없어(주소
+검색 API와 다른 스키마) 지역 불일치 검증이 사실상 항상 통과되던
+실제 버그를 발견 — 에이스빌라/스카이맨션/대림맨션 3건이 경기도
+부천시 동명 장소로 잘못 지오코딩된 것을 확인·정정(좌표 null 처리).
+mgmBldrgstPk가 JS Number 안전정수 범위를 넘을 때 res.json()의
+표준 파싱이 값을 조용히 훼손하는 것(예: 22자리 정수가
+"1.0000000000000042e+21"로 깨짐)도 실제로 발견해 원본 텍스트
+정규식 추출로 수정, 3건 정정. 서구 건축물대장 성공률 40%,
+해운대 56% — 실패 원인을 진단해 오래되거나(1970년대) 소규모인
+건물은 총괄표제부 자체가 미등록(표제부에는 존재)임을 확인,
+정책대로 동 단위 값을 단지 전체로 저장하지 않고 null 유지.
+좌표 성공률 서구 100%/해운대 77.8%. 사용승인일만 유독 결측이
+많은(서구 40%/해운대 22%) 현상도 발견해 기록. Presale-
+ApartmentMaster 거리를 @turf/turf distance()로 읽기전용 계산
+성공(DB 저장 없음). 기존 Apartment(20건)/Property(0건)/
+Presale(1046건) 전혀 영향 없음, build 성공(29개 라우트 정상).
+
+서비스 코드 변경:
+
+있음 (prisma/schema.prisma — ApartmentMaster 모델 추가만, 기존
+모델 변경 없음). 신규 scripts/apartment_master_seed.ts(재사용
+가능한 seed 파이프라인으로 보존, 조사용 임시 스크립트 아님).
+기존 production 코드(API 라우트/컴포넌트 등)는 전혀 수정하지
+않음 — 새 Master는 병행 상태로만 존재, 기존 코드가 이를
+사용하도록 전환하지 않음.
+
+DB 변경:
+
+있음 (migration 1건: 20260813033432_apartment_master_m3, 신규
+테이블 apartment_masters 생성 + index 4개, 기존 테이블/컬럼
+변경·삭제 없음. 실 데이터 33건 적재 — 부산 서구 15건, 해운대
+18건)
+
+패키지 변경:
+
+없음
+
+테스트 결과:
+
+prisma validate 통과, migrate status "up to date", tsc --noEmit
+오류 0, lint 오류 0(경고 5건 전부 기존 파일), build 성공(29개
+라우트 정상 생성). aptSeq unique 충돌 0건, 중복 0건, idempotency
+통과, 기존 Apartment/Property/Presale 레코드 수 불변 확인.
+
+최종 판단:
+
+A(현재 ApartmentMaster 구조로 M4 확장 가능). aptSeq unique
+정책이 33건 실제 적재+재실행에서 충돌 0건으로 실증, schema가
+지역 규모 차이(1.9배)에도 변경 없이 적용됨, 기존 기능 전혀
+영향 없음, 발견된 2개 버그는 schema 결함이 아니라 스크립트
+로직 결함으로 확인 즉시 수정 완료. 상세는
+docs/development/13-apartment-master-m3-pilot.md 참고.
+
+검수 후 반영:
+최종 판단 A 승인. 정책 확정 — (1) ApartmentMaster.id 내부 PK +
+aptSeq nullable unique 구조 유지, (2) aptSeq/mgmBldrgstPk 등
+외부 식별자는 문자열로만 취급하고 산술/Number 변환 금지(정밀도
+손실 사고가 직접 근거), (3) Kakao geocoding은 성공률보다 정확도
+우선 — 지역검증 불가/동명장소 가능성 있으면 임의 fallback 없이
+null 유지, (4) 건축물대장 enrichment 실패는 Master 생성 실패로
+취급하지 않음(identity와 enrichment 분리), (5) 현재 건축물대장
+성공률(서구 40%/해운대 56%)은 blocker 아닌 M4 이후 개선과제로
+기록, (6) scripts/apartment_master_seed.ts는 재사용 seed
+pipeline으로 유지. MASTER M4로 진행.
+
+상태:
+
+완료(2026-08-13 최종 검수 승인)
