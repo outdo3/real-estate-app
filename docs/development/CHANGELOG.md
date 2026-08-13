@@ -981,3 +981,162 @@ DB캐시·legacy이관·RegionMaster·REGCODE_PROXY제거·P2-D4-B·
 상태:
 
 완료(2026-08-13 최종 검수 승인 — M4-B는 별도 STEP으로 착수)
+
+
+## 2026-08-13
+
+### MASTER M4-B — 부산 전체 ApartmentMaster 구축(1차, 7/16 구·군 부분 완료 — 이후 같은 날 continuation에서 16/16 완료, 아래 항목 참고)
+
+목적:
+
+MASTER M4-A 조사·정책을 바탕으로 부산 16개 구·군을 실제
+ApartmentMaster에 적재. 사전점검→dryRun→pilot→검증→나머지
+batch 순서로 안전하게 진행(무검증 일괄 실행 금지).
+
+핵심:
+
+16개 구·군 24개월(202409~202608) dryRun 완료 — distinct aptSeq
+합계 3,403개(M4-A 12개월치 2,906 대비 +17.1%, 추정범위 부합),
+null aptSeq 전 구·군 0, 기존 33건 discovery 누락 0으로 sanity
+check 통과. 부산진구(404유닛)를 pilot으로 선정해 실제 적재 중
+심각한 STOP 조건 발생 — 건축물대장(BldRgstHubService) API의
+초당 요청제한(429)으로 404건 중 310건(76.7%) 실패, Kakao는
+동일조건에서 전혀 영향 없음을 별도 실측으로 확인. 원인분석 후
+건축물대장 호출만 전역 직렬화(최소 1.5초 간격)+제한적 재시도
+(429/503만, 최대 2회)로 구조적 해결, 재실행 결과 api_error 0
+확인. 검증 중 서로 다른 aptSeq가 동일 좌표를 공유하는 새로운
+문제도 발견(Kakao 키워드검색이 유사 단지를 하나의 POI로만 색인,
+부산진구 9건 + 이후 구·군 경계를 넘는 사례 1건 추가) — "성공률
+보다 정확도" 원칙에 따라 exact 우선/모호하면 전체 null 처리하는
+좌표중복정정 로직을 추가해 파이프라인에 정식 반영, 이후 batch
+부터 자동 실행. Pilot 통과 후 강서구/중구/동구/영도구/사상구/
+기장군 순서로 batch 진행해 7개 구·군(부산진구 포함, 1,042유닛)
+24개월 전량 완료. 건축물대장 성공률이 지역별로 12%~80%까지
+크게 다름을 재확인(원인을 건축년도로 하드코딩하지 않음). 최종
+1,075건(기존 33건 + 신규 1,042건) — aptSeq 중복 0, 부산 외
+좌표 0, 좌표중복 0(정정후), mgmBldrgstPk 정밀도손실 0, 기존
+Apartment/Property/Presale/PresaleHouseTypeDetail 전부 불변
+확인. 강서구 대표 재실행으로 idempotency 통과(신규 0, 갱신
+44). 시간 제약상 나머지 9개 구·군(서구/해운대구 전량 완료 +
+동래구/남구/북구/사하구/금정구/연제구/수영구, distinct aptSeq
+합계 1,884개 미착수)은 후속 세션으로 이관 — 무리하게 강행하지
+않음.
+
+서비스 코드 변경:
+
+없음(production 코드 미수정). scripts/apartment_master_seed.ts
+확장(throttle/재시도/좌표중복정정/dryRun/24개월 파라미터화,
+재사용 가능한 seed pipeline으로 계속 보존), .gitignore에 구·군별
+batch 결과 JSON 디렉터리 제외 추가.
+
+DB 변경:
+
+있음(schema/migration 변경 없음 — M4-A 판단대로 스키마 변경
+불필요). ApartmentMaster 실 데이터 33→1,075건(신규 1,042건
+적재). 기존 Apartment(20)/Property(0)/Presale(1,046)/
+PresaleHouseTypeDetail(5,395)은 전부 불변.
+
+패키지 변경:
+
+없음
+
+테스트 결과:
+
+prisma validate 통과, migrate status "up to date"(신규 migration
+0건), tsc --noEmit 오류 0, lint 오류 0(경고 5건 기존파일),
+build 성공. aptSeq 중복 0, idempotency 통과, 기존 데이터 4개
+테이블 전부 불변 확인.
+
+최종 판단:
+
+판단1(M4-B) = B(부분 성공 — 보완 필요). 완료된 7개 구·군의
+데이터 품질은 안전(중복/오염/정밀도손실 전부 0)하나 "부산 전체
+구축"이라는 핵심 목표는 미달성(coverage 약 31.6%, distinct
+aptSeq 1,075/3,403) — 남은 작업은 동일 파이프라인 반복 실행일
+뿐 추가 구조변경 불필요. 판단2(다음단계)는 M4-B 완료를 전제로
+한 선택지라 강제 적용 불가, 현재 상태 기준으로는 "사용자
+테스트와 병행하며 결정 가능"에 가장 근접 — 서구/해운대구
+전량완료를 최우선 후속 batch로 권장. 상세는
+docs/development/15-apartment-master-m4-busan-build.md 참고.
+
+상태:
+
+완료(7/16 구·군 시점의 중간 기록 — 아래 continuation 항목에서 16/16 전체 완료로 이어짐)
+
+### MASTER M4-B (continuation) — 부산 16개 구·군 전체 완료
+
+목적:
+
+위 항목에서 부분 완료(7/16) 상태로 남겨둔 나머지 9개 구·군(서구/
+해운대구 전량 확장 + 동래/남/북/사하/금정/연제/수영 신규)을 같은
+날 이어지는 세션에서 완료. 기존 완료 7개 구·군은 재처리하지 않고
+그대로 보존.
+
+핵심:
+
+서구·해운대구(M3 표본 15/18건)를 먼저 24개월 전량으로 안전하게
+확장(upsert, 삭제·재생성 없음, 100% 보존 확인) 후 북구/남구/
+연제구/수영구/금정구/동래구/사하구 순으로 순차 batch 진행.
+9개 구·군 전체에서 §F-1(429 rate limit)·§F-4(좌표중복정정)
+안전장치가 안정적으로 작동, 구조적 STOP 조건 재발 없음(api_error
+16개 구·군 합계 31/3,403=0.9%). 최종 ApartmentMaster 3,402건
+(discovery distinct aptSeq 합계 3,403 대비 1건 차이는 동래구/
+연제구 경계의 교차-LAWD_CD aptSeq 1건이 upsert로 정상 병합된
+결과, 신규 조사 후 STOP 대상 아님으로 판단). coverage 4개 지표를
+분리 계산: 구·군 처리율 16/16=100%, 24개월 discovery 처리율
+3,403/3,403=100%, 좌표 확보율 3,067/3,402=90.2%, 건축물대장
+enrichment 3,402건 중 1,389건=40.8%. 서구/해운대구/부산진구/
+연제구 4개 구·군 대표 idempotency 재검증 전부 통과(created=0).
+재검증 과정에서 자체 실수(검증용 라벨 문자열이 sigungu 필드에
+그대로 흡수)로 4개 구·군 1,127건의 sigungu가 일시 오염된 것을
+발견 — 즉시 정확히 원상복구(임의값 생성 아님, 원래 문자열만
+복원), 잔여 오염 0건 재확인. 기존 Apartment(20)/Property(0)/
+Presale(1,046)/PresaleHouseTypeDetail(5,395) 전부 불변 재확인.
+
+서비스 코드 변경:
+
+없음(production 코드 미수정, 이전 세션에서 완성한
+scripts/apartment_master_seed.ts를 재사용만 함 — 이번
+continuation에서 추가 스크립트 수정 없음).
+
+DB 변경:
+
+있음(schema/migration 변경 없음). ApartmentMaster 실 데이터
+1,075→3,402건(신규 2,918건 + 갱신 485건, 16개 구·군 배치 합계
+기준). 기존 Apartment/Property/Presale/PresaleHouseTypeDetail은
+전부 불변.
+
+패키지 변경:
+
+없음
+
+테스트 결과:
+
+prisma validate 통과, migrate status "up to date"(신규 migration
+0건), tsc --noEmit 오류 0, lint 오류 0(경고 5건 기존파일), build
+성공. aptSeq 중복 0/null 0, 부산 외 좌표 0, 좌표중복 0(정정후),
+mgmBldrgstPk 정밀도손실 0, 4개 구·군 대표 idempotency 전부 통과,
+기존 데이터 4개 테이블 전부 불변 확인.
+
+최종 판단:
+
+판단1(M4-B) = A(부산 전체 구축 성공). 16개 구·군 전체 24개월
+거래단지 discovery+enrichment 완료, M4-A §Z coverage 기준
+3개(coverage/좌표/duplicate) 전부 충족. 판단2(다음단계) = C(사용자
+테스트와 병행하며 결정 가능) — 단 M4-C/P2-D4-B 등 실제 착수는
+이번 STEP에서 진행하지 않고 검수 후 사용자 결정을 기다림. 상세는
+docs/development/15-apartment-master-m4-busan-build.md §AA~AB 참고.
+
+상태:
+
+완료. 사용자가 §AB 판단1(A. 부산 전체 구축 성공)을 최종 승인했다.
+승인 조건이었던 sigungu 복구 상태 read-only 전수 재검증(4개
+구·군 1,127건 대상)을 수행해 잔존 오염 0건을 재확인했고, 부산
+16개 구·군 분포·동래구↔연제구 교차 aptSeq 1건·핵심 품질 지표를
+모두 재확인했다(전부 정상, DB 추가 수정 없음). 건축물대장
+enrichment 40.8%는 Master identity 실패가 아닌 optional
+enrichment 한계로 기록하며 M4-B 완료의 blocker로 취급하지
+않는다. 장기 무거래 단지 보강/실거래 DB cache/건축물대장
+enrichment 개선은 M4-C 후속 과제로 유지하고 이번 STEP에서
+착수하지 않는다. 상세는
+docs/development/15-apartment-master-m4-busan-build.md §AC~AD 참고.
