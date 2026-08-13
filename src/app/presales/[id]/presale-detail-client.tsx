@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Header from '@/components/Header';
+import NearbyMarketSection from './nearby-market-section';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -275,6 +276,9 @@ export default function PresaleDetailClient() {
                 )}
               </div>
             </section>
+
+            {/* 주변 아파트 실거래 비교 (B3) */}
+            <NearbyMarketSection presaleId={id} />
 
             {/* F. 청약홈 원문 CTA */}
             {presale.pblancUrl && (

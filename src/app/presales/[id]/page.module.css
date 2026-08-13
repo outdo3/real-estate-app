@@ -261,6 +261,264 @@
   font-size: 0.95rem;
 }
 
+/* 주변 아파트 실거래 비교 (B3) */
+.nearbyHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.infoButton {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.infoPanel {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  background: var(--bg-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.85rem;
+  margin: -0.4rem 0 0.85rem;
+  white-space: pre-line;
+}
+
+.nearbyStateBox {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.retryBtn {
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--primary-color);
+  background: white;
+  color: var(--primary-color);
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.chipRow {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.9rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.chipRow::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.chipActive {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.selectedSummary {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.selectedTitle {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 0.6rem;
+}
+
+.summaryRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.5rem;
+}
+
+.summaryLabel {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.summaryValue {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.summaryNote {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.sortToggle {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.sortBtn {
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sortBtnActive {
+  background: var(--bg-color);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.aptCard {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.9rem;
+  margin-bottom: 0.65rem;
+}
+
+.aptCard:last-of-type {
+  margin-bottom: 0;
+}
+
+.aptName {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 0.2rem;
+  word-break: keep-all;
+}
+
+.aptMeta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+}
+
+.cardStatBlock {
+  margin-bottom: 0.6rem;
+}
+
+.cardStatLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.cardStatValue {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.cardStatDetail {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.diffValue {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.expandBtn {
+  background: none;
+  border: none;
+  padding: 0.3rem 0;
+  color: var(--primary-color);
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.txList {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.txRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.txRow span:last-child {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.moreBtn {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.7rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-color);
+  background: white;
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.disclaimer {
+  margin-top: 0.9rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 @media (min-width: 768px) {
   .title {
     font-size: 1.6rem;

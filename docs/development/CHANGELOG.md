@@ -1476,3 +1476,84 @@ coverage와 공고 PDF 30개 직접대조 미완료는 데이터 한계로 문�
 
 완료(사용자 최종 승인, 2026-08-13). P2-D4-B2(조사→BLOCKER→
 P2-D4-B2-FIX→P2-D4-B2-CONTINUE) 전체가 이 시점부로 완료 처리된다.
+
+## 2026-08-14
+
+### PRESALE P2-D4-B3 — 주변 아파트 실거래 비교 UI
+
+목적:
+
+B1(주변 ApartmentMaster 검색)·B2(실거래 연결·가격비교) API가
+이미 완료해둔 데이터를 분양 상세페이지(`/presales/[id]`)에
+실제로 노출하는 UI 구현 STEP. B1/B2의 API 응답 구조·계산 정책은
+전혀 변경하지 않았다(읽기 전용 소비).
+
+핵심:
+
+신규 `src/app/presales/[id]/nearby-market-section.tsx` — 위치정보
+섹션과 청약홈 CTA 사이에 삽입. 주택형을 exclusiveArea 오름차순
+chip(한 줄 고정, 가로 스크롤)으로 노출하고 비교 가능한 실거래가
+있는 첫 주택형을 자동 선택. 선택된 주택형의 최고 분양가와
+"비슷한 전용면적 X~Y㎡" 범위를 표시. 주변단지는 거리순/신축순
+토글(클라이언트 전용 재정렬, API 재호출 없음)로 정렬하고 3개
+기본노출+더보기(실제 남은 개수 동적 표시)로 노출. 각 카드는 최근
+거래 1건 기본노출 + "최근 N건 보기" 확장(카드 내부, 페이지 이동
+없음), 최근 거래 중앙값에 `monthsSearched`(API가 이미 제공하는
+6/12/24 실측값)를 그대로 표시, `differenceAmount`(B2 계산값)를
+부호 있는 숫자로만(+3억900만원/-4,500만원) 표시하고 색상·화살표·
+가치판단 문구는 전혀 사용하지 않음(양수/음수 모두 기본 텍스트
+색상 고정). 선택 상태는 기존 `--primary-color`(#03c75a) 그린을
+재사용(신규 색상 도입 없음, `src/components/AreaSelector.tsx`의
+기존 chip 배색 규칙과 동일). info(ⓘ) 버튼으로 안내문구 토글.
+좌표 없는 Presale은 chip/카드 없이 "정확한 위치정보가 없어 주변
+단지를 비교할 수 없습니다."만 표시. API 오류 시 재시도 버튼(SWR
+`mutate()`). 전부 `<button>` + `aria-pressed`/`aria-expanded`/
+`aria-label` 사용.
+
+10개 Presale 실측(문서17/18과 동일 표본, 좌표 있음 8·없음 2) —
+84m² A 주택형의 differenceAmount 4건이 문서18 "수동 검산" 표와
+정확히 일치 확인(+3억900만원 등), 지역경계 사례(id=801)의 음수
+차액(-2억3,100만원)이 색상 없이 정상 표시, adaptive radius 확장
+사례(id=847)·6개월 종료 사례(id=755, monthsSearched:6 실측)·
+comparisons 0건 사례(id=630) 전부 확인. chip/정렬 전환 시 네트워크
+요청 0건(Chrome DevTools로 확인) — API 재호출 없음 요구사항 충족.
+
+서비스 코드 변경:
+
+있음. 신규 `src/app/presales/[id]/nearby-market-section.tsx`.
+수정 `src/app/presales/[id]/presale-detail-client.tsx`(import
+1줄+섹션 삽입 1곳), `src/app/presales/[id]/page.module.css`(B3
+전용 클래스 추가, 기존 클래스 변경 없음). B1/B2 API 코드
+(`nearby-apartments`, `nearby-market` route, `nearby-apartments.ts`,
+`presale-house-type.ts`) 전혀 수정하지 않음.
+
+DB 변경:
+
+없음(read-only 소비, schema/migration 변경 없음).
+
+패키지 변경:
+
+없음.
+
+테스트 결과:
+
+prisma validate 통과, migrate status "up to date", tsc --noEmit
+오류 0, lint 오류 0(경고 5건 전부 이번 변경과 무관한 기존 파일),
+build 성공. 기존 `/api/presales`, `/api/presales/[id]`,
+nearby-apartments(B1), nearby-market(B2), `/presales`(목록) 전부
+정상(회귀 없음). 모바일 뷰포트(360/375/390px)는 브라우저 자동화
+도구의 창 크기 조절 기능이 이 환경에서 동작하지 않아(재현 확인)
+실제 컨테이너 폭을 375/360px로 강제한 근사 검증으로 대체했다 —
+완전한 뷰포트 에뮬레이션은 도구 제약으로 미확인. API 오류 상태와
+`presaleTopAmount` null 경로는 실데이터에 사례가 없어(DB 전수
+확인) 코드 검토로만 확인했다. 상세는
+docs/development/19-presale-nearby-market-ui.md 참고.
+
+최종 판단:
+
+구현 완료, 모바일 실기기 검수중. commit/push 하지 않았다.
+B4(지도)·M4-C·재개발·커뮤니티·전국 확장·SEO로 진행하지 않았다.
+
+상태:
+
+구현 완료 / 모바일 실기기 검수중(2026-08-14).
