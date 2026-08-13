@@ -1272,3 +1272,207 @@ jibunAddress 둘 다 API에서 유지하고 대표 주소 선택은 B3에서
 담당하는 책임분리를 유지하고, B2는 fetchMolitData의 aptSeq 미추출
 문제를 반드시 해결 대상으로 다루며 단지명 문자열 매칭을 기본
 연결방식으로 쓰지 않는다.
+
+### PRESALE P2-D4-B2 — 주변 아파트 실거래 연결 API(면적비교 BLOCKED)
+
+목적:
+
+Presale → 주변 ApartmentMaster(B1) → aptSeq → MOLIT 실거래 →
+Presale 주택형 전용면적 → 유사면적 실거래 → 가격차이 계산까지
+서버에서 구현하는 것이 목표였다. 가격비교 착수 전 houseTy 공식
+의미를 반드시 확인하는 BLOCKER 체크를 먼저 수행했다.
+
+핵심:
+
+data.go.kr 공식 API 페이지→한국부동산원(REB) 기술문서 링크를
+따라가 실제 "[기술문서] 청약홈 분양정보 조회 서비스" 공식
+문서(.docx, 58페이지)를 찾아 26페이지 응답 메시지 명세 표에서
+house_ty 행을 직접 확인했다 — 항목설명이 "주택형"(국문 필드명
+반복)뿐이며 전용면적이라는 의미를 명시한 공식 정의가 없음을
+확인(다른 필드 행에서도 항목설명=국문명 반복 패턴 재확인).
+data.go.kr 메타데이터도 house_ty를 "내용" 유형(면적 유형 아님)
+으로 분류. 요청안의 명시적 BLOCKER 지침("공식 확인 실패 시
+가격차이 계산 중단, 추측으로 진행 금지")에 따라 유사면적
+비교·median·differenceAmount 계산은 구현하지 않았다. BLOCKER와
+무관한 부분은 정상 구현: fetchMolitData에 aptSeq/excluUseArea/
+dealDate/floorRaw optional 필드 추가(기존 필드 불변, 기존
+consumer 영향 없음 재확인), aptSeq 기준 실거래 연결(단지명
+매칭 미사용), 반경 내 후보의 distinct sggCd 배치 조회(아파트
+개수 아닌 sggCd 수에 비례 — 실측 평균 22.5회/최소6/최대48,
+"5개×24개월=120콜" 우려 해소), 6→12→24개월 fallback(신규 월만
+추가 조회), 기존 getOrSetCache(lawdCd+월 키, /api/apt/[name]과
+동일 키로 공유) 재사용. 10개 Presale 실측: 8건 전부 5/5 아파트
+거래 확보, 지역경계(남구→수영구) 정상 배치조회 재확인, 429
+0건, 거래 duplicate 0건, cold 1.2~8.3초/warm 83~106ms.
+
+서비스 코드 변경:
+
+있음. src/lib/api-molit.ts(optional 필드 4종 추가), 신규
+src/lib/nearby-apartments.ts(B1 로직 공통 helper 추출, B1 동작
+불변 재검증), 신규
+src/app/api/presales/[id]/nearby-market/route.ts.
+
+DB 변경:
+
+없음(read-only API, schema/migration 변경 없음).
+
+패키지 변경:
+
+없음.
+
+테스트 결과:
+
+prisma validate 통과, migrate status "up to date", tsc --noEmit
+오류 0, lint 오류 0(경고 5건 기존파일), build 성공(신규 라우트
+포함). 기존 /api/presales, /api/presales/[id],
+/api/presales/[id]/nearby-apartments(B1) 전부 정상 동작 재확인.
+ApartmentMaster/Apartment/Property/Presale/
+PresaleHouseTypeDetail 행 수 전부 불변.
+
+최종 판단:
+
+D(비교 방식 재검토 필요). 핵심 목표(유사면적 비교·가격차이
+계산)는 공식 근거 확인 실패로 BLOCKED, 그 외 aptSeq 실거래
+연결 인프라는 정상 구현·검증 완료. B3 UI 구현으로 진행하지
+않는다. 상세는
+docs/development/18-presale-nearby-market-api.md 참고.
+
+상태:
+
+완료(1차 기록). 이 항목 작성 시점에는 가격비교 부분이 BLOCKED
+상태였다 — 이후 P2-D4-B2-FIX(법령 근거 확보)→P2-D4-B2-CONTINUE
+(가격비교 구현 완성)를 거쳐 사용자가 최종 완료 승인했다. 이
+BLOCKED 기록은 히스토리 보존을 위해 삭제하지 않는다. 최종 상태는
+아래 P2-D4-B2-CONTINUE 항목 참고.
+
+### PRESALE P2-D4-B2-FIX — houseTy 전용면적 의미 확정 전용 조사
+
+목적:
+
+P2-D4-B2의 BLOCKER(houseTy 공식 의미 미확인)를 해소할 추가 공식
+근거만 조사했다. 구현은 하지 않았다.
+
+핵심:
+
+법제처 국가법령정보센터에서 「주택공급에 관한 규칙」 제21조를
+직접 열람해 원문을 확인했다 — 제21조제5항(현행, 시행
+2026.6.15.): "제3항제8호에 따라 공동주택의 공급면적을 세대별로
+표시하는 경우에는 주거의 용도로만 쓰이는 면적(이하
+"주거전용면적"이라 한다)으로 표시하여야 한다. 다만, 주거전용면적
+외에 다음 각 호의 공용면적을 별도로 표시할 수 있다." 이는 청약홈
+API 기술문서에는 없던 내용으로, API가 서비스하는 원본
+데이터(입주자모집공고)를 규율하는 상위 법령이 "세대별 주택형
+표시=전용면적 기준"임을 직접 확인한 것이다. 독립된 3개 소스가
+동일 결론(주택형 표기방식이 2009.4.1.부터 전용면적 단독 표시로
+변경)을 일관되게 뒷받침했다. 다만 요청된 실제 공고 30개 표본
+직접 숫자대조는 PDF 텍스트 추출 실패(폰트 인코딩 문제,
+pdftotext 한글 미추출)와 Chrome PDF 뷰어 자동화 제약으로
+완료하지 못했다 — 이는 요청안 §10이 우려한 "공고 원문 파싱의
+안정성 문제"가 실제로 재현된 사례로 기록.
+
+서비스 코드 변경:
+
+없음(조사 전용).
+
+DB 변경:
+
+없음.
+
+패키지 변경:
+
+없음.
+
+테스트 결과:
+
+해당 없음(조사 전용, 구현 없음).
+
+최종 판단:
+
+B(직접 정의 문장은 없지만 공식 법령 근거+다수 독립 소스 교차
+확인으로 실무상 사용 가능한 수준). A로 승격하지 않은 이유는
+30개 표본 직접 대조를 기술적 제약으로 완료하지 못했기 때문.
+B2 가격비교는 조건부 재개 가능(법령 근거를 UI/API에 명시하는
+조건)으로 판단하나 이번 STEP에서 재개하지 않았다. 상세는
+docs/development/18-presale-nearby-market-api.md
+"houseTy 추가 검증" 섹션 참고.
+
+상태:
+
+완료(조사 기록). 이 조사에서 확보한 법령 근거(주택공급에 관한
+규칙 제21조제5항)가 P2-D4-B2-CONTINUE의 가격비교 구현 재개 및
+사용자 최종 승인의 근거가 됐다. BLOCKED 기록은 히스토리 보존을
+위해 삭제하지 않는다.
+
+### PRESALE P2-D4-B2-CONTINUE — houseTy 정책 확정 + 가격비교 구현 완성
+
+목적:
+
+사용자가 P2-D4-B2-FIX의 판단 B(법령 근거+다수 소스 교차확인으로
+조건부 사용 가능)를 승인해, 중단됐던 유사 전용면적 비교·가격차이
+계산을 완성했다.
+
+핵심:
+
+src/lib/presale-house-type.ts(신규) — parsePresaleHouseType,
+isSimilarExclusiveArea(±1㎡ inclusive), medianPrice 3개 helper를
+런타임 전용으로 구현(DB houseTy/supplyArea 원본 불변, 신규 컬럼
+없음). PresaleHouseTypeDetail 5,395건 전수 파싱 — 성공
+5,395/5,395(100%), 실패 0건, exclusiveArea<supplyArea
+5,395/5,395(100%, 법령 제21조제5항과 정합). GET
+/api/presales/[id]/nearby-market을 houseTypes[] 중심 구조로
+완성 — 각 주택형별 주변 아파트 중 ±1㎡ 이내 최근 거래 최대
+3건+중앙값(recentMedianPrice)+가격차이(differenceAmount, 만원,
+부호있는 객관적 숫자만)를 제공, 가치판단 필드 없음. 6→12→24개월
+fallback 기준을 "아파트에 거래 존재"에서 "이 Presale 주택형 중
+하나와라도 ±1㎡ 이내 비교가능 거래 존재"로 강화 — 강서구(847)
+표본에서 종료시점이 6개월→24개월로 실제로 늘어남을 확인(요청
+우려사항이 실제로 재현되고 강화 로직이 올바르게 대응). MOLIT
+호출은 여전히 sggCd×월 단위(주택형 수 무관), 429 0건. 10개
+Presale 실측 + 56개 comparison 자동 재계산 대조(median/
+differenceAmount 오차 0, ±1㎡ 위반 0, 거래중복 0) + 10건 수동
+검산 전부 일치. 같은 주택형이라도 노후단지(1992/2002년 준공)와
+신축 분양 간 차액이 29,045만~72,000만원까지 벌어지는 사례를
+실측해 "가치판단 금지" 원칙의 실증 근거로 문서화.
+
+서비스 코드 변경:
+
+있음. 신규 src/lib/presale-house-type.ts. 수정
+src/app/api/presales/[id]/nearby-market/route.ts(houseTypes[]
+구조로 재작성, 이전 STEP의 apartments[] 구조 대체).
+
+DB 변경:
+
+없음(read-only API, schema/migration 변경 없음). 행 수 전부
+불변 재확인.
+
+패키지 변경:
+
+없음.
+
+테스트 결과:
+
+prisma validate 통과, migrate status "up to date", tsc --noEmit
+오류 0, lint 오류 0(경고 5건 기존파일), build 성공. 기존
+/api/presales, /api/presales/[id], nearby-apartments(B1) 전부
+정상. 경계값(±1㎡ 정확히 포함) 단위테스트 통과.
+
+최종 판단:
+
+사용자가 아래 최종 승인 정책 17개 항목 전부를 승인했다. 상세는
+docs/development/18-presale-nearby-market-api.md
+"P2-D4-B2-CONTINUE" 및 "최종 승인 정책" 섹션 참고.
+
+최종 승인 정책(2026-08-13, 요약 — 전문은 문서18 참고):
+houseTy 숫자부=비교용 전용면적 정책 승인(법령 제21조제5항+실측+
+5,395건 전수 정합성 근거, API 직접정의 없다는 한계는 문서에 유지),
+supplyArea는 면적비교에 미사용, ±1㎡ 유지, aptSeq 정확 일치만
+사용(단지명 매칭 금지), 6→12→24개월 fallback을 "±1㎡ 비교가능
+거래 존재" 기준으로 유지, 최근 3건+중앙값+differenceAmount(만원,
+가치판단 문구 없음) 유지, differenceRate 계속 제외, 대형평형 낮은
+coverage와 공고 PDF 30개 직접대조 미완료는 데이터 한계로 문서
+유지, topAmount null/parser 실패 경로는 코드 검토 결과로 승인.
+
+상태:
+
+완료(사용자 최종 승인, 2026-08-13). P2-D4-B2(조사→BLOCKER→
+P2-D4-B2-FIX→P2-D4-B2-CONTINUE) 전체가 이 시점부로 완료 처리된다.

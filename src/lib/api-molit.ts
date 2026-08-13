@@ -116,12 +116,21 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
       // 평형 (전용면적)
       const areaVal = item.전용면적 || item.excluUseAr || '';
       const area = areaVal ? `${areaVal}m²` : '';
-      
+      // 전용면적 원본 숫자값(전용면적 비교/후속 계산용) — 표시용 "area" 문자열과 별개로 보존.
+      // MOLIT 필드(excluUseAr)는 공식적으로 "전용면적"임이 명시돼 있어(청약홈 HOUSE_TY와
+      // 달리 의미가 불확실하지 않다) 그대로 숫자로 파싱해 보존한다.
+      const excluUseArea = areaVal !== '' ? parseFloat(String(areaVal)) : null;
+
       // 거래일
       const year = item.년 || item.dealYear || '0000';
       const month = String(item.월 || item.dealMonth || '00').padStart(2, '0');
       const day = String(item.일 || item.dealDay || '00').padStart(2, '0');
       const tradeDate = `${year}-${month}-${day}`;
+
+      // MOLIT 원본의 단지 고유번호(예: "26140-1361"). Number 변환 없이 문자열 그대로
+      // 보존한다(M1~M4가 확립한 identifier 안전 원칙) — P2-D4-B2에서 aptSeq 기반
+      // ApartmentMaster 연결에 사용한다. 없으면 null(기존 소비자에 영향 없는 optional 필드).
+      const aptSeq = item.aptSeq != null ? String(item.aptSeq).trim() : null;
 
       const name = item.아파트 || item.aptNm || item.단지 || item.단지명 || item.offiNm || item.연립다세대 || item.mhouseNm || '이름 없음';
       const floor = item.층 || item.floor || '';
@@ -153,6 +162,14 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
         cancelDate: cancelDate,
         lat: null,
         lng: null,
+        // P2-D4-B2 확장分 — optional 필드로 추가, 기존 필드는 전혀 변경하지 않음(기존
+        // consumer가 이 필드들을 읽지 않아도 그대로 정상 동작). dealDate는 위 tradeDate와
+        // 동일 값을 별도 필드로도 노출한다(기존 info 문자열 파싱 없이 정렬/식별에 바로
+        // 쓸 수 있도록).
+        aptSeq,
+        excluUseArea,
+        dealDate: tradeDate,
+        floorRaw: floor || null,
       };
     });
 
