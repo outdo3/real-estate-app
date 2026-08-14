@@ -4,6 +4,7 @@ import { findNearbyApartments, type NearbyApartmentItem } from '@/lib/nearby-apa
 import { fetchMolitData } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
 import { parsePresaleHouseType, isSimilarExclusiveArea, medianPrice } from '@/lib/presale-house-type';
+import { logServerError, buildErrorLogMessage } from '@/lib/log-server-error';
 
 // P2-D4-B2 — 조사 문서(16번) §11이 확정한 6→12→24개월 fallback. 이미 조회한 월은 다음
 // phase에서 다시 호출하지 않는다(§9~10, §33). P2-D4-B2-CONTINUE에서 "거래 존재" 기준을
@@ -195,7 +196,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       },
     });
   } catch (error) {
+    // MOLIT 외부 API 개별 호출은 위 fetchPromises에서 이미 .catch(() => [])로 흡수되므로,
+    // 이 catch까지 도달하는 오류는 DB(Prisma)/코드 런타임 오류다 — 외부 API 오류와 섞이지 않는다.
     console.error('Failed to fetch nearby market data:', error);
+    logServerError(buildErrorLogMessage('GET /api/presales/[id]/nearby-market', error), '/api/presales/[id]/nearby-market', (error as Error)?.stack).catch(() => {});
     return NextResponse.json({ success: false, error: '주변 실거래 정보를 불러오지 못했습니다.' }, { status: 500 });
   }
 }

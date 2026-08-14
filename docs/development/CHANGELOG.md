@@ -1557,3 +1557,144 @@ B4(지도)·M4-C·재개발·커뮤니티·전국 확장·SEO로 진행하지 �
 상태:
 
 구현 완료 / 모바일 실기기 검수중(2026-08-14).
+
+
+## 2026-08-14
+
+### INFRA I1 — Vercel + Supabase + Prisma Production DB 연결 안정성 조사
+
+작업:
+
+B3(a2272d0) 모바일 검수 중 production `/presales`에서 1회 관측된
+"분양정보를 불러오지 못했습니다." 오류에 대한 조사 전용 STEP. 코드/설정/
+schema/env/DB 변경 없이, 기술스택·환경변수 구조(host/port/parameter만,
+비밀값 제외)·Supabase/Prisma 공식 문서·Vercel function region·API별 DB
+접근 패턴·B3 diff 재검토·production 반복 측정(19회, 실패 0)·오류 코드
+경로·observability·connection pool 위험도를 조사했다.
+
+주요 발견:
+
+DATABASE_URL이 Supavisor **Session Pooler**(`aws-0-ap-northeast-2.pooler.supabase.com:5432`)를
+사용 중이며, `DIRECT_URL` 분리·`pgbouncer=true`·`connection_limit`·
+`pool_timeout` 전부 미설정. Supabase/Prisma 공식 문서는 서버리스(Vercel)
+환경에는 **Transaction Pooler(6543)** + `directUrl` 분리를 명시적으로
+권장 — 현재 구조와 공식 권장 구조 사이에 확인된 편차. 또한 Vercel function
+region(iad1, 미국 동부)과 Supabase DB region(ap-northeast-2, 서울)이
+cross-region임을 실측 확인(19회 요청 전부 `X-Vercel-Id`에 `iad1` 고정).
+presales 4개 API 모두 기존 `logServerError`/`ErrorLog` 헬퍼에 연결되어
+있지 않아, 이번 오류가 DB(admin 대시보드)에도 기록되지 않았음을 확인.
+B3(a2272d0)는 `/presales` 목록 API를 전혀 건드리지 않았으므로 이번 목록
+오류와 직접적 인과관계는 낮다고 판단(단, 상세페이지 connection pressure를
+소폭 늘렸을 가능성은 있음). production 반복 측정(GET ×19)은 전부 200
+성공 — 오류 재현 실패.
+
+서비스 코드 변경:
+
+없음(조사 전용, 지시에 따라 일절 금지).
+
+DB 변경:
+
+없음.
+
+환경변수/설정 변경:
+
+없음.
+
+테스트 결과:
+
+production GET 반복 측정 — `/api/presales` 8회, `/api/presales/479` 6회,
+`/api/presales/479/nearby-apartments` 4회, `/api/presales/479/nearby-market`
+1회, 총 19회 전부 HTTP 200 · `success:true` 정상 JSON. 실패 0건, 오류
+재현 안 됨.
+
+최종 판단:
+
+B(구조적 위험은 확인되었으나 로그 없이 실제 오류 원인을 확정할 수 없어
+안전한 최소 개선 + 관찰이 적절함). 상세는
+docs/development/20-infra-db-connection-analysis.md 참고. commit/push
+하지 않았다. INFRA I2·B3 수정·B4·M4-C·재개발·커뮤니티·전국 확장·SEO로
+진행하지 않았다.
+
+상태:
+
+조사 완료 / 최종 승인(2026-08-14). 사용자 검수 결과 최종 판단(B) 그대로
+승인됨 — DB 연결 구조는 지금 변경하지 않고 INFRA I2-A(관측성 보강)를
+먼저 진행.
+
+
+## 2026-08-14
+
+### INFRA I2-A — Production DB 오류 관측성(logging) 최소 보강
+
+작업:
+
+INFRA I1 최종 판단(B) 승인에 따라, DB 연결 구조(DATABASE_URL/DIRECT_URL/
+Supabase Pooler/Vercel region 등)는 전혀 변경하지 않고 "다음에 같은
+오류가 나면 원인을 확인할 수 있도록" 최소 서버 오류 logging만 보강했다.
+기존 `src/lib/log-server-error.ts`의 `logServerError` 헬퍼와 `ErrorLog`
+Prisma model을 그대로 재사용(새 logging framework 도입 없음). 여기에
+Prisma 오류를 connection 오류(`PrismaClientInitializationError`)와 query
+오류(`PrismaClientKnownRequestError`, code 포함)로 최소 분류하는
+`buildErrorLogMessage()` 헬퍼만 추가했다. `/api/presales`,
+`/api/presales/[id]`, `/api/presales/[id]/nearby-apartments`,
+`/api/presales/[id]/nearby-market` 4개 catch 블록에 기존 3곳(`ai-search`,
+`apt/[name]`, `cheongyakService`)과 동일한 호출 패턴(`await` 없는
+fire-and-forget + `.catch(() => {})`)으로 연결했다. nearby-market은 MOLIT
+외부 API 개별 호출이 이미 각각 `.catch(() => [])`로 흡수되어 outer
+catch까지 올라오지 않음을 코드로 확인한 뒤 적용해, DB 오류와 외부 API
+오류가 섞이지 않는다. client 응답 계약(`success:false` + 500, 동일 메시지
+문자열)은 전혀 변경하지 않았다.
+
+민감정보 보호:
+
+DATABASE_URL/비밀번호/API key/Authorization/Cookie/개인정보/request
+body는 애초에 참조하지 않으며, Prisma init 오류 메시지에 connection
+string이 우연히 섞이는 경우를 대비해 `postgres(ql)://...` 패턴을
+`[redacted-connection-string]`로 마스킹하는 방어 로직을 추가했다(synthetic
+테스트로 마스킹 동작 확인).
+
+서비스 코드 변경:
+
+있음(logging 전용, 최소). 수정 `src/lib/log-server-error.ts`(분류/메시지
+헬퍼 추가, 기존 `logServerError` signature/동작 변경 없음),
+`src/app/api/presales/route.ts`,
+`src/app/api/presales/[id]/route.ts`,
+`src/app/api/presales/[id]/nearby-apartments/route.ts`,
+`src/app/api/presales/[id]/nearby-market/route.ts`(각 catch 블록에
+logging 호출 1~2줄 추가). DB 연결 구조·schema·migration·Vercel/Supabase
+설정·package는 전혀 건드리지 않았다.
+
+DB 변경:
+
+없음. `error_logs` row 수 0건으로 작업 전후 동일(`prisma.errorLog.count()`
+로 확인).
+
+테스트 결과:
+
+로컬 dev 서버에서 4개 API 정상 경로 전부 기존과 동일한 200/`success:true`
+응답 확인. 오류 경로는 unit test 인프라가 없어 synthetic
+`PrismaClientKnownRequestError`(P2024)/`PrismaClientInitializationError`
+(P1001, connection string 포함 메시지)/일반 `TypeError`/non-Error throw
+4가지 케이스로 `buildErrorLogMessage()` 로직을 직접 검증(코드 로직은
+실제 프로젝트 코드와 동일, 검증 스크립트는 실행 후 삭제해 레포에 흔적
+없음) — Prisma code 추출과 connection string 마스킹 정상 확인. 실제
+DB 연결 장애 상황의 live 검증은 하지 않았다(금지 사항이라 의도적으로
+생략, 문서에 한계로 명시). `prisma validate` 통과, `migrate status`
+"up to date", `tsc --noEmit` 오류 0, lint 오류 0, `npm run build` 성공
+(전체 라우트 목록에 presales 4개 API 정상 포함, 회귀 없음). production
+`GET /api/presales` 3회 재확인 — 전부 200(코드는 로컬에만 존재, production
+은 여전히 a2272d0 상태이므로 이번 변경과 무관하게 현재 정상 상태만 재확인).
+
+최종 판단:
+
+A(관측성 보강 완료, 기존 기능 무손상, 검수 후 commit/push 가능). 상세는
+docs/development/21-infra-error-observability.md 참고. INFRA I2-B
+(region/pooler 변경)·B3 추가 수정·B4·M4-C·재개발·커뮤니티·전국 확장·
+SEO로 진행하지 않았다.
+
+상태:
+
+구현 완료 / 최종 승인(2026-08-14). 사용자 검수 결과 최종 판단(A) 승인,
+commit/push 진행. 실제 과거 production 장애 원인은 여전히 미확정 —
+이번 STEP은 오류 해결이 아니라 관측성 보강이며, 재발 시 이번에 추가한
+logging을 먼저 확인한 뒤 INFRA I2-B 필요 여부를 판단한다.

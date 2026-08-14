@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { findNearbyApartments } from '@/lib/nearby-apartments';
+import { logServerError, buildErrorLogMessage } from '@/lib/log-server-error';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,6 +38,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
   } catch (error) {
     console.error('Failed to fetch nearby apartments:', error);
+    logServerError(buildErrorLogMessage('GET /api/presales/[id]/nearby-apartments', error), '/api/presales/[id]/nearby-apartments', (error as Error)?.stack).catch(() => {});
     return NextResponse.json({ success: false, error: '주변 아파트 정보를 불러오지 못했습니다.' }, { status: 500 });
   }
 }
