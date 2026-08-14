@@ -30,6 +30,19 @@ function dedupeKey(t: any): string {
   return `${t.aptSeq}|${t.dealDate}|${t.excluUseArea}|${t.floorRaw}|${t.dealAmount}`;
 }
 
+// P2-D4-B4 — 지도 마커용 additive 필드. houseTypes[].comparisons는 "선택 주택형과 실거래
+// 비교 가능한 단지만" 담고 있어(±1㎡ 조건 미충족 시 통째로 빠짐) 지도가 "주변에 물리적으로
+// 존재하는 단지"를 보여주는 용도로 쓰기엔 부족하다(B4-A 문서23 §4/§15 실측 — 예: id=801/847은
+// B1 기준 후보 5개 중 comparisons엔 1개만 노출). findNearbyApartments()가 이미 계산해 둔
+// items를 그대로 노출만 한다 — 새 검색 로직/DB 쿼리/이름 매칭을 추가하지 않는다.
+function toMapApartments(items: NearbyApartmentItem[]) {
+  return items.map((i) => ({
+    id: i.id, aptSeq: i.aptSeq, name: i.name,
+    latitude: i.latitude, longitude: i.longitude,
+    distanceKm: i.distanceKm, buildYear: i.buildYear,
+  }));
+}
+
 function buildHouseTypes(
   houseTypeDetails: { id: number; houseTy: string | null; supplyArea: number | null; topAmount: number | null }[],
   items: NearbyApartmentItem[],
@@ -110,7 +123,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         success: true,
         data: {
           presaleId, locationAvailable: false, radiusKm: null, totalCandidates: 0, nearbyApartmentCount: 0,
-          monthsSearched: null,
+          monthsSearched: null, nearbyApartments: [],
           houseTypes: buildHouseTypes(presale.houseTypeDetails, [], new Map()),
         },
       });
@@ -129,7 +142,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         success: true,
         data: {
           presaleId, locationAvailable: true, radiusKm, totalCandidates, nearbyApartmentCount: items.length,
-          monthsSearched: items.length === 0 ? null : 0,
+          monthsSearched: items.length === 0 ? null : 0, nearbyApartments: toMapApartments(items),
           houseTypes: buildHouseTypes(presale.houseTypeDetails, items, new Map()),
         },
       });
@@ -191,7 +204,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       success: true,
       data: {
         presaleId, locationAvailable: true, radiusKm, totalCandidates, nearbyApartmentCount: items.length,
-        monthsSearched,
+        monthsSearched, nearbyApartments: toMapApartments(items),
         houseTypes: buildHouseTypes(presale.houseTypeDetails, items, tradesBySeq),
       },
     });

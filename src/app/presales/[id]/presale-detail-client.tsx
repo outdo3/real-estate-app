@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Header from '@/components/Header';
-import NearbyMarketSection from './nearby-market-section';
+import NearbyMarketSection, { type NearbyMarketApiResponse } from './nearby-market-section';
+import PresaleNearbyMap from './presale-nearby-map';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -119,6 +120,18 @@ export default function PresaleDetailClient() {
   const id = params.id as string;
 
   const { data, isLoading } = useSWR(`/api/presales/${id}`, fetcher);
+
+  // P2-D4-B4 — B3(주변 아파트 실거래 비교)와 B4(지도)가 같은 nearby-market 응답을
+  // 공유한다. fetch를 여기 한 곳에서만 호출해 두 섹션이 각자 useSWR을 갖지 않게 하고,
+  // 선택된 주택형(selectedHouseTypeId)도 여기서 관리해 지도 popup의 대표가격이 B3의
+  // 현재 선택과 항상 같은 값을 보도록 한다(추가 API 호출 없이 client-side로만 연결).
+  const {
+    data: marketData,
+    error: marketError,
+    isLoading: marketLoading,
+    mutate: marketMutate,
+  } = useSWR<NearbyMarketApiResponse>(`/api/presales/${id}/nearby-market`, fetcher);
+  const [selectedHouseTypeId, setSelectedHouseTypeId] = useState<number | null>(null);
 
   const presale: PresaleDetail | null = data?.success ? data.data : null;
   const fetchError = data && !data.success ? data.error : null;
@@ -277,8 +290,25 @@ export default function PresaleDetailClient() {
               </div>
             </section>
 
+            {/* 위치와 주변 단지 지도 (B4) */}
+            <PresaleNearbyMap
+              houseName={presale.houseName}
+              latitude={presale.latitude}
+              longitude={presale.longitude}
+              marketData={marketData}
+              marketLoading={marketLoading}
+              selectedHouseTypeId={selectedHouseTypeId}
+            />
+
             {/* 주변 아파트 실거래 비교 (B3) */}
-            <NearbyMarketSection presaleId={id} />
+            <NearbyMarketSection
+              data={marketData}
+              error={marketError}
+              isLoading={marketLoading}
+              mutate={marketMutate}
+              selectedId={selectedHouseTypeId}
+              onSelectId={setSelectedHouseTypeId}
+            />
 
             {/* F. 청약홈 원문 CTA */}
             {presale.pblancUrl && (

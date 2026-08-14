@@ -1,15 +1,25 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import useSWR from 'swr';
 import styles from './page.module.css';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-type NearbyMarketApartment = {
+export type NearbyMarketApartment = {
   id: number;
   aptSeq: string | null;
   name: string;
+  distanceKm: number;
+  buildYear: number | null;
+};
+
+// P2-D4-B4 — 지도(presale-nearby-map.tsx)가 쓰는 additive 필드. B2 comparisons와 달리
+// "이 주택형과 비교 가능한 거래가 있는지"와 무관하게, 반경 내 후보 전부(최대 5개)의 좌표를
+// 담는다. 계산은 API가 이미 하고 있어(findNearbyApartments) 이 컴포넌트는 그대로 통과만 한다.
+export type NearbyMapApartment = {
+  id: number;
+  aptSeq: string | null;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
   distanceKm: number;
   buildYear: number | null;
 };
@@ -28,7 +38,7 @@ type NearbyMarketComparison = {
   differenceAmount: number | null;
 };
 
-type NearbyMarketHouseType = {
+export type NearbyMarketHouseType = {
   houseTypeDetailId: number;
   houseTy: string | null;
   supplyArea: number | null;
@@ -38,15 +48,18 @@ type NearbyMarketHouseType = {
   comparisons: NearbyMarketComparison[];
 };
 
-type NearbyMarketData = {
+export type NearbyMarketData = {
   presaleId: number;
   locationAvailable: boolean;
   radiusKm: number | null;
   totalCandidates: number;
   nearbyApartmentCount: number;
   monthsSearched: number | null;
+  nearbyApartments: NearbyMapApartment[];
   houseTypes: NearbyMarketHouseType[];
 };
+
+export type NearbyMarketApiResponse = { success: boolean; data?: NearbyMarketData; error?: string };
 
 type SortMode = 'distance' | 'new';
 
@@ -139,14 +152,20 @@ const INFO_TEXT =
   '최근 거래 대표가격은 비슷한 전용면적의 최근 거래 최대 3건을 기준으로 계산합니다. 3건이면 가운데 가격, 2건이면 두 거래의 평균, 1건이면 해당 거래가격을 사용합니다.\n\n' +
   '가격 차이는 참고정보이며 준공연도·층·향·입지·상품 구성 등에 따라 차이가 발생할 수 있습니다.';
 
-export default function NearbyMarketSection({ presaleId }: { presaleId: string }) {
-  const { data, error, isLoading, mutate } = useSWR<{ success: boolean; data?: NearbyMarketData; error?: string }>(
-    `/api/presales/${presaleId}/nearby-market`,
-    fetcher
-  );
+interface NearbyMarketSectionProps {
+  // P2-D4-B4 — nearby-market fetch를 presale-detail-client.tsx(부모)로 올려 B3/B4가
+  // 같은 데이터를 공유한다(SWR 캐시 추정이 아니라 실제로 fetch를 1곳에서만 호출). 이
+  // 컴포넌트는 더 이상 자체 useSWR을 갖지 않는다 — 정책/계산 로직은 전혀 바뀌지 않았다.
+  data?: NearbyMarketApiResponse;
+  error: unknown;
+  isLoading: boolean;
+  mutate: () => void;
+  selectedId: number | null;
+  onSelectId: (id: number) => void;
+}
 
+export default function NearbyMarketSection({ data, error, isLoading, mutate, selectedId, onSelectId }: NearbyMarketSectionProps) {
   const [infoOpen, setInfoOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('distance');
   const [showAllCards, setShowAllCards] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
@@ -160,8 +179,8 @@ export default function NearbyMarketSection({ presaleId }: { presaleId: string }
     if (selectedId != null) return;
     if (sortedHouseTypes.length === 0) return;
     const withComparisons = sortedHouseTypes.find((h) => h.comparisonAvailable && h.comparisons.length > 0);
-    setSelectedId((withComparisons ?? sortedHouseTypes[0]).houseTypeDetailId);
-  }, [sortedHouseTypes, selectedId]);
+    onSelectId((withComparisons ?? sortedHouseTypes[0]).houseTypeDetailId);
+  }, [sortedHouseTypes, selectedId, onSelectId]);
 
   const selectedHouseType = sortedHouseTypes.find((h) => h.houseTypeDetailId === selectedId) ?? null;
 
@@ -171,7 +190,7 @@ export default function NearbyMarketSection({ presaleId }: { presaleId: string }
   );
 
   const handleSelectHouseType = (id: number) => {
-    setSelectedId(id);
+    onSelectId(id);
     setShowAllCards(false);
     setExpandedCards(new Set());
   };

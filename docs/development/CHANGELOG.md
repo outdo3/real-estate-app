@@ -1779,3 +1779,149 @@ SEO로 진행하지 않았다.
 완료 / 사용자 최종 승인(2026-08-14). production 배포(commit `398d33a`)
 후 `supplyArea` 필드 실측 확인, 사용자 모바일 최종 검수 완료로 P2-D4-B3
 및 B3-FIX 모두 최종 승인 확정.
+
+
+## 2026-08-14
+
+### PRESALE P2-D4-B4-A — 분양 상세 지도 기능 조사/설계
+
+작업:
+
+`/presales/[id]`에 "분양단지 1개+주변 비교 아파트 최대 5개" 지도를
+넣을 가치가 있는지 조사/설계 전용으로 검토했다(코드/DB/schema/package
+변경 없음, commit/push 없음). 기존 지도 코드 3개(`/map/page.tsx`,
+`MapViewer.tsx`, `KakaoMapEmbed.tsx`)를 전수 확인하고,
+`nearby-market`/`nearby-apartments` production API를 실제로 curl
+호출해 지도에 필요한 데이터가 이미 있는지, 부족하면 무엇이 필요한지
+실측했다.
+
+주요 발견:
+
+`MapViewer.tsx`는 어디서도 import되지 않는 미사용 코드이며, 설령
+가져다 써도 Kakao SDK 스크립트를 자체 로드하지 않아(`/presales/[id]`엔
+스크립트 로더가 아예 없음) 그대로는 동작하지 않음을 코드로 확인했다.
+`/map/page.tsx`는 풀스크린+6개 레이어+자체 클러스터링까지 결합된 대형
+페이지라 그대로 재사용하기엔 과하고, `KakaoMapEmbed.tsx`는 주소
+지오코딩 방식이라 이미 확보된 좌표를 바로 쓰는 용도와 맞지 않는다.
+다만 `react-kakao-maps-sdk`(이미 설치됨)의 `Map`+`CustomOverlayMap`
+조합과 `kakao-map-script-main` 공유 스크립트 로딩 관례(2곳에서 이미
+검증됨), `--primary-color` 강조/neutral 색상 조합은 재사용 가능한
+core로 확인됐다 — 최종 판단 B(재사용 가능한 core + 최소 신규 wrapper
+필요). 데이터 측면에서는 `nearby-market`(B2)의 `comparisons[]`가
+"비교 가능한 거래가 있는 아파트만" 포함해(id=801/847 실측: B1 기준
+후보 5개 중 실제로는 1개만 노출) 지도 마커 용도로는 부족하고,
+`nearby-apartments`(B1)는 5개 후보 전부의 좌표를 안정적으로 반환함을
+실측으로 확인했다 — "위치는 B1, 가격은 B2"로 소스를 분리하거나,
+`nearby-market`에 좌표 배열을 additive로 노출하는 두 가지 신규-API-
+없는 경로를 후보로 제시했다.
+
+서비스 코드 변경:
+
+없음(조사/설계 전용). production UI 구현, API 변경, DB 변경 전혀 없음.
+
+DB 변경:
+
+없음(read-only 조회만 수행 — production API curl + 부산 Presale/
+ApartmentMaster 반경 분포 read-only 쿼리, 임시 스크립트는 실행 후
+삭제).
+
+테스트 결과:
+
+요청된 5개 표본(479/755/801/847/630) 전부 production API로 실측
+확인(밀집지역·3km 확장 사례·지역경계 사례 포함), 추가로 좌표 없는
+Presale(173/164, `locationAvailable:false` 확인)과 "주변단지 1~2개"
+대체 표본으로 후보 0개 사례(47/732)를 read-only 쿼리로 새로 찾아
+확인했다. 부산 ApartmentMaster 3km 반경 분포가 "0개 아니면 13개 이상"
+으로 이분화돼 있어 정확한 1~2개 사례는 찾지 못했음을 한계로 기록했다.
+
+최종 판단:
+
+B(지도 기능 가치 있음. 기존 MapViewer 재사용보다 최소 신규 wrapper
+필요). 상세는 docs/development/23-presale-map-design.md 참고.
+commit/push 하지 않았다. B4 구현·INFRA I2-B·M4-C·재개발·커뮤니티·
+전국 확장·SEO로 진행하지 않았다.
+
+상태:
+
+조사/설계 완료(2026-08-14). 사용자 승인 후 P2-D4-B4로 실제 구현
+착수(같은 날, 문서24 참고).
+
+
+## 2026-08-14
+
+### PRESALE P2-D4-B4 — 분양 상세 "위치와 주변 단지" 지도 UI 구현
+
+작업:
+
+승인된 B4-A V1 최소 범위(문서23 §23)를 그대로 구현했다. 분양단지
+1개+주변 아파트 최대 5개 marker, bounds fit, marker 클릭 시 최소
+정보(단지명/거리/준공연도, 있으면 대표가격), 카카오맵 크게 보기,
+모바일 260px 고정 높이, IntersectionObserver 기반 lazy load, 섹션
+단위 실패 fallback을 구현했다. 신규 API 호출 없이 B3가 이미 호출
+중인 `nearby-market` 응답 1회를 그대로 공유한다 — fetch를
+`presale-detail-client.tsx`(부모)로 끌어올려 B3/B4가 props로 데이터를
+나눠 받도록 구조를 바꿨다(계산 로직은 무변경).
+
+주요 발견 및 수정:
+
+`nearby-market`의 `houseTypes[].comparisons`는 "선택 주택형과 실거래
+비교 가능한 아파트만" 담아 지도 marker 용도로는 부족함을 실측으로
+재확인(id=801/847: B1 기준 5개 후보인데 comparisons엔 각 1개만
+노출) — `findNearbyApartments()`가 이미 계산한 값을 그대로 노출하는
+`nearbyApartments` additive 필드를 API 응답에 추가해 해결(새 검색
+로직 없음). 구현 중 실제 브라우저 클릭 테스트로 버그 2건을 발견해
+수정했다: (1) marker 클릭 시 지도의 빈 곳 클릭 핸들러가 함께 발동해
+선택이 즉시 풀리는 문제(`stopPropagation()`으로 해결), (2) popup이
+Kakao 지도 내부 레이어에 가려 안 보이는 문제(`z-index: 30` 명시로
+해결) — 둘 다 코드 검토만으로는 발견되지 않았을 문제로, 실제 클릭
+후 재현·수정·재확인했다.
+
+서비스 코드 변경:
+
+있음. 신규 `src/app/presales/[id]/presale-nearby-map.tsx`(B4 지도
+컴포넌트). 수정
+`src/app/api/presales/[id]/nearby-market/route.ts`(additive
+`nearbyApartments` 필드),
+`src/app/presales/[id]/nearby-market-section.tsx`(B3, 자체 useSWR/
+selectedId state를 props로 전환 — 계산/표시 로직 자체는 무변경),
+`src/app/presales/[id]/presale-detail-client.tsx`(nearby-market fetch
++ selectedHouseTypeId를 부모로 이동, 지도 섹션 삽입),
+`src/app/presales/[id]/page.module.css`(지도 전용 클래스 추가, 기존
+클래스 변경 없음). `src/components/MapViewer.tsx`는 미사용 상태로
+그대로 두었다(수정도 삭제도 하지 않음). B1 API, B2 계산 정책
+(`presale-house-type.ts`, `nearby-apartments.ts`) 전혀 수정하지
+않았다.
+
+DB 변경:
+
+없음. read-only row count 재확인: ApartmentMaster 3,402 / Apartment
+20 / Property 0 / Presale 1,046 / PresaleHouseTypeDetail 5,395 —
+전부 기존과 일치.
+
+테스트 결과:
+
+로컬 dev 서버 + 실제 브라우저(Chrome DevTools Network 탭 포함)로
+검증. `nearby-market` 네트워크 요청이 실측으로 정확히 1건임을
+확인(추측 아님). lazy load 실측: 스크롤 전 Kakao SDK 요청 0건, 지도
+섹션 접근 후 1건. 실데이터 6개 표본(id=479 밀집·755 6개월·**801
+지역경계(5marker 전부 표시 핵심 검증)**·847 3km 확장·173 좌표없음·47
+주변단지 0개) 전부 브라우저로 직접 확인. 주택형 chip 전환 시 지도
+marker 목록이 불변임을(가격만 갱신) DOM 직접 비교로 확인. `prisma
+validate` 통과, `migrate status` up to date, `tsc --noEmit` 오류 0,
+lint 오류 0(기존 무관 경고 5건), `npm run build` 성공. API 회귀:
+`/api/presales`/`/api/presales/[id]`/B1/B2 전부 200, B2 기존 필드
+전부 유지 + `nearbyApartments`만 추가, `recentMedianPrice`/
+`differenceAmount` 값 기존과 동일. 상세는
+docs/development/24-presale-nearby-map-ui.md 참고.
+
+최종 판단:
+
+A(구현 완료, 기존 기능 무손상, 모바일 검수 가능). 360/375/390px 정확한
+뷰포트 검증과 지도 drag/페이지 스크롤 제스처 충돌 여부는 도구 제약으로
+확인하지 못해 사용자 실기기 검수가 필요하다. commit/push 하지 않았다.
+INFRA I2-B·M4-C·재개발·커뮤니티·전국 확장·SEO·B4 후속 고도화(marker↔
+카드 연동 등)로 진행하지 않았다.
+
+상태:
+
+구현 완료 / 모바일 검수중(2026-08-14).
