@@ -1988,3 +1988,275 @@ INFRA I2-B·M4-C·재개발·커뮤니티·전국 확장·SEO·B4 후속 고도�
 상태:
 
 P2-D4-B4-A 완료 / P2-D4-B4 완료·사용자 최종 승인(2026-08-14).
+
+
+## 2026-08-14
+
+### PROJECT ROADMAP R1 — 현재 구현 상태 전수점검
+
+작업:
+
+문서/코드 조사 전용(변경 없음, commit/push 없음). docs/development
+전체 29개 파일, src/app 전체 route/page(33 API+20 page), Prisma 20개
+model 사용 현황, 외부 데이터소스(MOLIT/Kakao/청약홈/Gemini), 아파트/
+재개발/커뮤니티/MY/SEO 5개 영역을 병렬 조사 에이전트+직접 grep
+교차검증으로 전수 확인했다. 상세는
+docs/development/25-project-roadmap-audit.md 참고.
+
+주요 발견:
+
+`00-PROJECT-ROADMAP.md`(최초 로드맵)가 "STEP 2~15 = 대기"로 남아
+있으나, 실제로는 M1~M4-B(아파트 마스터)·P1~P2-D4(분양)·INFRA I1/I2-A가
+그 STEP 2 범위를 이미 상당 부분 진행했음에도 로드맵 문서가 갱신되지
+않아 stale 상태임을 확인했다. Prisma model 20개 중 `Property`/
+`RedevelopmentProject`/`Report`/`Transaction`/`TradeHistory`가
+사실상 미사용(orphan)임을 grep으로 재확인. ErrorLog 연결이 분양
+도메인에만 국한돼 학교/통계/커뮤니티/관리자 등 나머지 API는 여전히
+console 의존임을 재확인. `/apt/[name]`·`/presales/[id]`가 sitemap에
+누락된 SEO 공백을 발견. MY 페이지에 관심단지/찜 기능이 DB 필드 자체가
+없어 완전 미착수임을 확인.
+
+서비스 코드 변경:
+
+없음(조사 전용).
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+다음 STEP 후보 3개(아파트 상세 재검토/커뮤니티 신고+수정 UI/ErrorLog
+관측성 확장) 중 아파트 상세 재검토를 1순위로 추천. 사용자 승인 후
+진행 여부 결정. commit/push 하지 않았다.
+
+상태:
+
+조사 완료 / 다음 STEP 결정 대기(2026-08-14).
+
+
+## 2026-08-14
+
+### APT DETAIL UI-A — 아파트 상세 현황 해부 / UI 재설계안 수립
+
+작업:
+
+조사·설계 전용(코드/CSS/API/DB/schema 변경 없음, commit/push 없음).
+apt-client.tsx(820줄)·detail.module.css·연결 컴포넌트 13개·API
+route 3개를 전량 직접 읽고, 프로덕션에서 실제 단지 3곳(거래 많음/
+거래 적음·특수/정보량 많음, 부산)을 브라우저로 직접 클릭 검증했다.
+상세는 docs/development/26-apartment-detail-ui-audit.md 참고.
+
+주요 발견:
+
+Header의 모바일 하단 탭바를 숨기는 hideMobileNav prop을
+apt-client.tsx가 전달하지 않아, 페이지 자체 StickyPriceBar(z-index
+500)와 Header 전역 하단바(z-index 1000)가 모바일에서 동시에
+position:fixed; bottom:0으로 겹쳐 렌더됨을 코드 대조로 확인(이번
+조사에서 가장 영향도 높은 발견). 그 외 실측으로 평형 칩 라벨 중복
+(AreaSelector), 교통 탭 KTX 키워드 오탐(KakaoPlaces), 소규모
+단지 브리핑 "거래 활발" 오판(buildAptBrief 임계값), 커뮤니티 시설
+정보 사실상 전무(Apartment 캐시 20건 중 0건) 등 4건을 추가로
+발견했다. B3-FIX 압축 spacing이 이 페이지에는 전혀 적용되지 않아
+`.panel` 2rem 등 이전 세대 여백을 그대로 쓰고 있음을 확인.
+
+서비스 코드 변경:
+
+없음(조사·설계 전용).
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+상단 섹션 재설계안 3개(히어로 압축형/탭 전환형/가로 캐러셀형) 중
+히어로 압축형을 권고. 후속 STEP을 APT-UI-B0(하단바 중복 해소,
+최우선)~B4로 분할 제안. 사용자 확인 후 진행 여부 결정. commit/push
+하지 않았다.
+
+상태:
+
+조사·설계 완료 / 사용자 확인 대기(2026-08-14).
+
+
+## 2026-08-14
+
+### APT DETAIL B0 — 모바일 하단 고정 UI 충돌 최소 수정
+
+작업:
+
+문서26(§4-B-7/§9)에서 발견된 Header 전역 하단탭바(z-index 1000,
+bottom:0)와 StickyPriceBar(z-index 500, bottom:0)의 모바일 동시
+겹침 문제를 최소 수정했다. 해결안 A(hideMobileNav 전달)/B(StickyPriceBar
+offset)/C(StickyPriceBar fixed 해제) 3가지를 비교해 B를 선택했다 —
+이 앱은 /map이 Header 없이도 동일한 5탭 하단바를 직접 재구현할 만큼
+"전역 하단 내비게이션은 항상 노출"이 기존 원칙이라, 그 원칙을 유지하며
+StickyPriceBar 기능도 그대로 보존하는 B가 A/C보다 서비스 UX상
+자연스럽다고 판단했다. 상세는
+docs/development/27-apartment-detail-b0-mobile-fixed-ui.md 참고.
+
+수정 파일:
+
+src/app/apt/[name]/detail.module.css 1개 파일만 수정(다른 production
+파일 변경 없음). `.stickyBar`의 `bottom: 0`을 `bottom: 60px`(Header
+하단탭바 높이와 동일)로 변경하고, 겹침 해소 과정에서 실측으로 추가
+발견한 문제(`.main`의 기존 padding-bottom:80px이 새 결합 높이
+128px보다 작아 4구역 콘텐츠가 가려짐)를 막기 위해 같은
+`@media(max-width:768px)` 블록 안에 `.main { padding-bottom:
+calc(60px + 5rem) }`를 추가했다. 두 변경 모두 기존 미디어쿼리 블록
+범위 안에서만 이뤄져 데스크톱에는 영향이 없다.
+
+검증:
+
+브라우저 자동화 창이 1536px 고정이라 실제 360/375/390px 스크린샷은
+얻지 못해(문서26과 동일한 환경 제약), 로컬 프로덕션 빌드에서 실제
+컴파일된 CSS 클래스에 @media(max-width:768px) 블록의 실제 속성값을
+그대로 주입해 getBoundingClientRect()로 기하학 검증했다. 겹침 해소
+(gap≈0px)·글쓰기 버튼 클릭 히트 영역 정상·4구역 콘텐츠 가림 해소
+(여유 12.8px)·데스크톱 영향 없음(수정 전후 계산값 동일)을 확인.
+tsc/lint/build 전부 통과, prisma validate/migrate status로 DB/schema
+변경 없음 재확인. detail.module.css는 apt-client.tsx/StickyPriceBar.tsx
+외 어디서도 import되지 않아(grep 재확인) 다른 화면 회귀 가능성이
+구조적으로 없다고 판단했다.
+
+서비스 코드 변경:
+
+CSS 1개 파일, 2개 규칙(속성값 1개 변경 + 규칙 1개 추가), 기존
+@media(max-width:768px) 블록 범위 내.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+B0 구현 완료. 문서26 §13이 전제한 "StickyPriceBar 현행 유지"를 그대로
+보존해 B1(상단 Hero 재설계) 진행에 필요한 전제를 바꾸지 않는다. A안
+(hideMobileNav)이 장기적으로 나을 가능성은 남겨두되 이번엔 최소
+수정만 했다. commit/push 하지 않았다. 사용자 검수 후 B1 진행 여부
+결정.
+
+상태:
+
+APT DETAIL B0 구현 완료 / 검수중(2026-08-14).
+
+
+## 2026-08-14
+
+### APT DETAIL B0.5 — "건축물대장" 기능 정밀검수 (조사 전용, STOP 발동)
+
+작업:
+
+B1(상단 Hero 리뉴얼)에서 건축물대장 퀵버튼을 유지할지 결정하기 전에,
+코드 전수 검색 + 실데이터 5표본(부산, 대단지/소규모/오래된단지/
+신축단지/특수케이스) + 실API 호출(curl 4건 + 브라우저 실클릭 1건)로
+기능을 정밀검수했다. 상세는
+docs/development/28-apartment-building-ledger-audit.md 참고.
+
+주요 발견(STOP 조건 발동):
+
+이 기능이 호출하는 외부 API(data.go.kr BldRgstHubService)가
+mgmBldrgstPk(건축물 고유번호)를 22자리 따옴표 없는 JSON 숫자로
+내려주는데, 이를 표준 JSON.parse로 받는 순간 IEEE754 double
+정밀도 한계(2^53)를 넘어 값이 손상됨을 실제 프로덕션에서 재현
+확인했다. 대신해모로센트럴(2022년 준공) 등 신축 단지에서 실제로
+받는 값은 `1.0000000000000028e+21` — 그 단지 16개 동 전부가
+서로 다른 실제 값을 갖고 있음에도 JSON.parse 이후 전부 동일한
+손상값으로 뭉개진다. 다운로드되는 문서(실제 서류처럼 보이는 HTML)의
+"고유번호" 필드가 명백히 틀린 값을 인쇄한다. 오래된 단지(2001년
+등)는 PK 자릿수가 짧아 이 문제가 없음을 확인 — 신축 단지일수록
+영향받는 패턴임을 확인했다. 그 외 jibun 미확보 시 단지 간 오매칭
+가능성(재현 완료), 존재하지 않는 동 입력 시 조용한 동 대체(재현
+완료), 외부 API 호출 timeout 부재, ErrorLog 미연결, AptSpecGrid와
+필드 중복도 함께 발견했다.
+
+지침에 따라 이 BLOCKER를 수정하지 않고 그대로 보고만 했다.
+
+서비스 코드 변경:
+
+없음(조사·검증 전용, STOP 조건에 따라 수정 금지).
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+건축물대장 기능의 사용자 가치를 D(오매칭/기능오류로 현재 노출
+부적절)로 평가. B1(상단 Hero 리뉴얼)에서는 이 버튼을 제외하고,
+별도 버그수정 STEP(정밀도 손상·오매칭·timeout·ErrorLog 연결)을
+먼저 거친 뒤 재노출 여부를 검토할 것을 추천한다. commit/push
+하지 않았다. 최종 유지/수정 여부는 사용자 검수 후 B1 구현 전에
+결정한다.
+
+상태:
+
+APT DETAIL B0.5 건축물대장 기능 검수 완료 / 검수중(2026-08-14).
+
+
+## 2026-08-14
+
+### APT DETAIL B1 — 상단 Hero UI 리뉴얼 구현
+
+작업:
+
+문서26 §14에서 사용자가 승인한 A안(히어로 압축형)을 실제 구현했다.
+`/apt/[name]` 상단 1구역을 "Hero(단지명·지역·준공/세대수 요약+공유)
+→ 가격 핵심(매매/전세 토글+가격+메타+최고최저) → 평형 선택 →
+시세 추이 차트 → 핵심 가격 지표 → 단지 스펙 그리드" 순으로
+재배치했다. 상세는 docs/development/29-apartment-detail-b1-hero-ui.md
+참고.
+
+수정 파일 3개:
+
+- src/app/apt/[name]/apt-client.tsx — Header 호출에서 hideLogo/
+  pageTitle 제거(로고+로그인 유지, 단지명은 Hero로 이동), Hero/가격
+  블록 신설, AreaSelector를 실거래 타임라인 상단에서 가격 블록
+  직후로 재배치, AptSpecGrid를 삭제 없이 핵심 가격 지표 다음으로
+  이동(address는 Hero와 중복 방지 위해 빈 값 전달), 건축물대장
+  퀵버튼만 제거(API/모달 case/state는 보존), 공유 버튼을 Hero로
+  이동. 매매/전세 토글 로직은 무변경, 시각만 AreaSelector와 동일한
+  초록 선택 언어로 통일.
+- src/components/KakaoShareButton.tsx — 선택적 compact prop 추가
+  (공유 로직 handleShare는 완전히 동일, Hero에 어울리는 작은
+  중립색 버튼 표현만 추가). 이 컴포넌트는 apt-client.tsx에서만
+  쓰여 다른 화면에 영향 없음을 grep으로 재확인.
+- src/app/apt/[name]/detail.module.css — Hero용 클래스(.heroTop/
+  .heroTitle/.heroAddress/.heroMeta/.priceBlock) 추가. B0에서 수정한
+  .stickyBar(bottom:60px)/.main(padding-bottom 보정)은 그대로 유지.
+
+검증:
+
+로컬 프로덕션 빌드에서 부산 3개 표본(대단지·신축/소규모·거래적음/
+정보량 많음)으로 실클릭 검증 — 단지명/지역/준공·세대수(동수는
+데이터 없어 생략, 가짜값 미생성)/가격/평형칩/차트/최고최저/공유
+전부 정상. 매매/전세 토글 실클릭 시 가격·라벨·최고최저 정상 전환
+확인. StickyPriceBar+Header 하단탭바 겹침 여부를 B0와 동일 기법
+(실제 CSS 속성값 주입 후 getBoundingClientRect)으로 재검증해 여전히
+겹치지 않음을 확인(B1이 B0 수정을 되돌리지 않음). 지도 모달은
+로컬(비등록 도메인)에서 카카오 스크립트 로드 실패가 떴으나, 이
+코드는 이번 STEP에서 건드리지 않았고 동일 단지를 실제 프로덕션
+도메인에서 열어 정상 렌더됨을 대조 확인해 로컬 환경 한계로
+판단했다. tsc/lint/build 전부 통과, prisma validate/migrate status로
+DB/schema 무변경 재확인.
+
+서비스 코드 변경:
+
+3개 프론트엔드 파일(JSX 재배치+CSS 추가+공유버튼 선택적 prop).
+API/DB/schema 변경 없음. 건축물대장 관련 코드(/api/ledger, modal
+case, state)는 삭제하지 않고 그대로 보존.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+B1 Hero 구현 완료, 기존 기능 무손상, STOP 조건 미발생. 사용자
+실기기 모바일 검수 가능한 상태. commit/push 하지 않았다. 검수 통과
+후 별도 승인을 받아 commit/push 진행.
+
+상태:
+
+APT DETAIL B1 구현 완료 / 검수중(2026-08-14).

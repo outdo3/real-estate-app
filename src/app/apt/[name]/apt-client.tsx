@@ -308,6 +308,18 @@ export default function ApartmentDetail() {
   const firstTrade = trades.length > 0 ? trades[0] : null;
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
   const addressReady = !loading && !!primaryAddress;
+
+  // B1 Hero용 — primaryAddress(지오코딩에 쓰이는 "지역+단지명" 조합 문자열)는 건드리지
+  // 않고, Hero에 표시할 "지역만" 값과 "준공·세대수" 요약 줄만 별도로 계산한다. 실제 값이
+  // 없는 항목(예: 동수 — 현재 데이터 파이프라인에 없음)은 만들어내지 않고 생략한다.
+  const heroRegionLabel = regionName || firstTrade?.dong || '';
+  const heroBuildYearRaw = trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null);
+  const heroBuildYearNum = heroBuildYearRaw ? parseInt(heroBuildYearRaw, 10) : NaN;
+  const heroHouseholds = aptInfo?.['세대수'] || null;
+  const heroMetaLine = [
+    !isNaN(heroBuildYearNum) && heroBuildYearNum > 1900 ? `${heroBuildYearNum}년 준공` : null,
+    heroHouseholds,
+  ].filter((v): v is string => !!v).join(' · ') || null;
   // trades와 aptInfo 둘 다 끝나야 상단 요약 영역(단지정보/가격/차트)을 한 번에 보여준다 —
   // 시간차를 두고 카드가 하나씩 뜨는 문제를 막는다.
   const pageReady = !loading && !infoLoading;
@@ -610,7 +622,7 @@ export default function ApartmentDetail() {
   return (
     <div className={styles.main}>
       <FullPageLoader active={!pageReady && !hasLoadedOnce} />
-      <Header hideLogo pageTitle={displayName || aptName} pageTitleLarge pageTitleAlign="left" />
+      <Header />
 
       {/* 팝업(모달) */}
       {activeModal && (
@@ -645,32 +657,50 @@ export default function ApartmentDetail() {
             </div>
           ) : (
             <>
-              <div style={{ paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', paddingTop: '1rem' }}>
-                <AptSpecGrid aptName={aptName} address={primaryAddress} aptInfo={aptInfo} buildYear={trades.length > 0 && trades[0].buildYear ? trades[0].buildYear : (aptInfo?.['사용승인일'] || null)} />
+              {/* Hero: 단지명 · 지역 · 준공/세대수 요약 + 공유 */}
+              <div className={styles.heroTop}>
+                <div>
+                  <h1 className={styles.heroTitle}>{displayName || aptName}</h1>
+                  {heroRegionLabel && <div className={styles.heroAddress}>📍 {heroRegionLabel}</div>}
+                  {heroMetaLine && <div className={styles.heroMeta}>{heroMetaLine}</div>}
+                </div>
+                <KakaoShareButton
+                  compact
+                  title={`${aptName} - 실거래가 & 단지정보 | 이집`}
+                  description="최근 실거래가, 세대당 주차대수, 커뮤니티 시설 정보를 확인해보세요."
+                />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
-                <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
-                  <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '매매' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>매매</button>
-                  <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>전월세</button>
+              {/* 가격 핵심 */}
+              <div className={styles.priceBlock}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
+                  <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
+                    <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '매매' ? 'var(--primary-color)' : 'transparent', color: tradeTypeFilter === '매매' ? 'white' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>매매</button>
+                    <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'var(--primary-color)' : 'transparent', color: tradeTypeFilter === '전월세' ? 'white' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>전월세</button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                  <span className={styles.price}>{latestPrice}</span>
+                  {trades.length > 0 && (
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                      {getAreaInfo(parseFloat(trades[0].area)).label} · {trades[0].floor}층 · {trades[0].tradeDate}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ marginTop: '0.5rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}:
+                  </span>{' '}
+                  <b>최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}</b>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
-                <span className={styles.price}>{latestPrice}</span>
-                {trades.length > 0 && (
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                    {getAreaInfo(parseFloat(trades[0].area)).label} • {trades[0].floor}층 • {trades[0].tradeDate}
-                  </span>
-                )}
-              </div>
-
-              <div style={{ marginTop: '0.5rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                <span style={{ color: 'var(--text-muted)' }}>
-                  {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}:
-                </span>{' '}
-                <b>최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}</b>
+              {/* 평형 선택 — 가격 확인 직후, 시세 흐름 확인 직전 */}
+              <div style={{ marginTop: '1.25rem' }}>
+                <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} />
               </div>
 
               <div style={{ marginTop: '1.25rem' }}>
@@ -678,6 +708,13 @@ export default function ApartmentDetail() {
               </div>
 
               <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
+
+              {/* 기존 단지 스펙 그리드(세대수/준공년월/용적률/건폐율/주차대수) — Hero 핵심
+                  요약과는 별개로 삭제하지 않고 그대로 유지. address는 위 Hero에서 이미
+                  보여줬으므로 중복 표시를 피하기 위해 빈 값을 넘긴다(컴포넌트 자체 수정 없음). */}
+              <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+                <AptSpecGrid aptName={aptName} address="" aptInfo={aptInfo} buildYear={heroBuildYearRaw} />
+              </div>
             </>
           )}
         </div>
@@ -691,13 +728,10 @@ export default function ApartmentDetail() {
             <button className={styles.quickBtn} onClick={() => openModal('단지정보')}>단지정보</button>
             <button className={styles.quickBtn} onClick={() => openModal('대출한도')}>대출한도</button>
             <button className={styles.quickBtn} onClick={() => openModal('커뮤니티 시설')}>⛳ 커뮤니티 시설</button>
-            <button
-              className={styles.quickBtn}
-              style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', fontWeight: 'bold' }}
-              onClick={() => openModal('건축물대장')}
-            >
-              📑 건축물대장 다운로드
-            </button>
+            {/* 건축물대장 버튼은 B0.5 검수에서 확인된 mgmBldrgstPk 정밀도 손상(BLOCKER)
+                때문에 이번 B1 새 퀵메뉴에서는 노출하지 않는다. 관련 API(/api/ledger)와
+                이 아래 renderModalContent()의 '건축물대장' case, ledgerType state는
+                별도 버그수정 STEP을 위해 삭제하지 않고 그대로 남겨둔다. */}
           </div>
 
           <div className={styles.communityCard} style={{ marginTop: '1.5rem' }}>
@@ -714,13 +748,6 @@ export default function ApartmentDetail() {
               </Link>
             </div>
           </div>
-
-          <div className={styles.shareRow}>
-            <KakaoShareButton
-              title={`${aptName} - 실거래가 & 단지정보 | 이집`}
-              description="최근 실거래가, 세대당 주차대수, 커뮤니티 시설 정보를 확인해보세요."
-            />
-          </div>
         </div>
       </div>
 
@@ -729,9 +756,7 @@ export default function ApartmentDetail() {
         <h2 className={styles.zoneTitle}>실거래 타임라인</h2>
         <div className={styles.panel}>
           <div>
-            <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} />
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', margin: '1.5rem 0 1rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', margin: '0 0 1rem' }}>
               <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{selectedArea === '전체' ? '전체 평형' : getAreaInfo(parseFloat(selectedArea)).label} · 총 {filteredTrades.length}건</span>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>

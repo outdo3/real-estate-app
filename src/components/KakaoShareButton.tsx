@@ -5,6 +5,10 @@ import React, { useEffect, useRef, useState } from 'react';
 interface KakaoShareButtonProps {
   title: string;
   description: string;
+  /** true면 카카오 브랜드 노란 버튼 대신, Hero 등 다른 요소 옆에 자연스럽게 붙는
+   *  작고 중립적인 아이콘+텍스트 버튼으로 렌더한다. 공유 로직(navigator.share →
+   *  카카오 SDK → 클립보드 폴백)은 완전히 동일하고 겉모습만 다르다. */
+  compact?: boolean;
 }
 
 declare global {
@@ -63,7 +67,7 @@ function ensureInitialized(): boolean {
 
 // 카카오 디벨로퍼스 콘솔에서 "카카오톡 공유" 제품이 활성화돼 있지 않으면 Kakao.Share 호출이
 // 실패할 수 있다 — 이 경우 URL을 클립보드에 복사하는 것으로 폴백해 완전히 막히지 않게 한다.
-export default function KakaoShareButton({ title, description }: KakaoShareButtonProps) {
+export default function KakaoShareButton({ title, description, compact }: KakaoShareButtonProps) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const sdkReadyRef = useRef(false);
 
@@ -157,6 +161,22 @@ export default function KakaoShareButton({ title, description }: KakaoShareButto
       }
     }
   };
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={handleShare}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.75rem',
+          backgroundColor: 'white', color: 'var(--text-secondary)', border: '1px solid var(--border-color)',
+          borderRadius: '999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
+        }}
+      >
+        {status === 'copied' ? '복사됨' : status === 'error' ? '공유 실패' : <>↗ 공유</>}
+      </button>
+    );
+  }
 
   return (
     <button
