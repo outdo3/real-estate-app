@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCompactAreaLabel } from '@/lib/area-utils';
+import { resolveAreaLabel } from '@/lib/area-utils';
 
 interface TimelineTrade {
   id: number;
@@ -17,11 +17,16 @@ interface TradeTimelineListProps {
   apiError: string | null;
   visibleCount: number;
   onLoadMore: () => void;
+  // 부모가 이 단지의 전체 거래 기준으로 만든 충돌 해소 라벨 맵 — AreaSelector 칩과
+  // 같은 라벨을 쓴다. filteredTrades만 보고 이 컴포넌트 안에서 새로 계산하면
+  // (평형이 이미 선택된 상태에서는 이 목록에 한 종류 면적만 남아 충돌을 판단할
+  // 자체 근거가 없어져) 칩과 다른 라벨이 나올 수 있어 반드시 상위에서 전달받는다.
+  areaLabels?: Map<number, string>;
 }
 
 // 2구역 "최근 실거래가" 테이블. 모바일 한 화면에 좌우 스크롤 없이 다 들어오도록 컬럼을
 // 계약월/일/가격/타입 4개로 최소화했다(등기 정보·거래동 컬럼은 요청에 따라 제거).
-export default function TradeTimelineList({ trades, loading, apiError, visibleCount, onLoadMore }: TradeTimelineListProps) {
+export default function TradeTimelineList({ trades, loading, apiError, visibleCount, onLoadMore, areaLabels }: TradeTimelineListProps) {
   if (loading) {
     return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>데이터를 불러오는 중입니다...</div>;
   }
@@ -71,7 +76,7 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
         </thead>
         <tbody>
           {visible.map((t, index) => {
-            const areaLabel = getCompactAreaLabel(parseFloat(t.area));
+            const areaLabel = resolveAreaLabel(parseFloat(t.area), areaLabels);
             const isSale = t.tradeType.includes('매매') || t.tradeType === '실거래';
             const prevTrade = trades[index + 1];
             let diffBadge: React.ReactNode = null;

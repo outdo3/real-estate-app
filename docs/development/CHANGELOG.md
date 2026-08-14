@@ -2260,3 +2260,199 @@ B1 Hero 구현 완료, 기존 기능 무손상, STOP 조건 미발생. 사용자
 상태:
 
 APT DETAIL B1 구현 완료 / 검수중(2026-08-14).
+
+
+## 2026-08-14
+
+### STEP 30 — APT DETAIL B1-FIX: 면적 표기 체계 정리 + Hero 세로밀도 개선
+
+작업:
+
+STEP 29 실기기 검수 피드백(가격 영역 간격, `84(26평)`류 중복·모호 표기) 반영.
+부산 5개 단지 실측(대신푸르지오1차/2차·대신롯데캐슬·대연힐스테이트푸르지오·
+명륜아이파크1단지)에서 서로 다른 실제 전용면적(예: 84.36/84.38/84.69/84.92㎡)이
+기존 절사+반올림 포맷 때문에 전부 `84(26평)`으로 겹쳐 보이는 문제를 확인. 상세는
+docs/development/30-apartment-detail-b1-area-format-fix.md 참고.
+
+수정 파일 6개:
+
+- src/lib/area-utils.ts — 전면 교체. `getAreaInfo`/`getCompactAreaLabel`(절사+반올림,
+  "공급 약 XX평형" 근사치 포함) 삭제, `formatExclusiveArea`(소수 2자리+trailing
+  zero 제거)/`formatPyeong`(㎡/3.305785, 소수 1자리)/`getAreaDetailLabel` 신설.
+  "공급 약 XX평형"은 실제 공급면적 데이터가 없는 임의 추정치였음을 확인해 완전히
+  제거(분양 도메인의 진짜 supplyArea는 별개 테이블, 무관·무수정).
+- src/components/AreaSelector.tsx / TradeTimelineList.tsx / FloorPlanPanel.tsx —
+  새 함수로 import 교체만, 선택/필터 key(원본 area 문자열)는 무변경.
+- src/lib/ai-search.ts — 동일 공유 함수를 쓰던 AI 검색 비교 카드 라벨도 같이
+  교체(그룹핑/정렬 로직은 무변경).
+- src/app/apt/[name]/apt-client.tsx — Hero 가격 영역을 "가격+면적" 한 줄 /
+  "층·거래일" 한 줄의 2줄 구조로 재구성(사용자 요청), 거래타임라인 헤더 라벨
+  교체, 가격 블록 내부 여백 축소(폰트 크기 무변경).
+- src/app/apt/[name]/detail.module.css — `.priceBlock` margin/padding-top
+  1.1rem → 0.95rem.
+
+검증:
+
+prisma validate/migrate status(schema 무변경 재확인)·tsc --noEmit·eslint(수정
+파일 한정, 기존 경고 1건 외 에러 0)·next build 전부 통과. 로컬 프로덕션 dev
+서버 + 실브라우저로 대신푸르지오1차(230건) 실클릭 검증 — 칩 4종이 이제 각각
+정확한 소수점 ㎡로 구분 표시되고 "전체 평형" 드롭다운에서도 전부 구분됨을
+확인, 칩 클릭 시 가격/타임라인/헤더 카운트 갱신과 면적 일치 재확인. 390px
+근사 검증(창 리사이즈가 이 환경에서 미적용돼 iframe 임베드로 대체)에서 칩
+한 줄 유지+가로 스크롤, Hero 2줄 구조 확인. 차트/투자지표는 area 표시 함수를
+쓰지 않고 원본 문자열로만 그룹핑함을 코드로 재확인, 영향 없음.
+
+발견한 기존 버그(이번 STEP에서 미수정, 문서 §9):
+
+Hero의 층/거래일이 평형 필터와 무관하게 항상 전체 최신 거래 기준이라, 가격만
+필터된 평형 기준이고 층/날짜는 다른 평형 값이 붙어나오는 불일치가 있음. STEP 29
+이전부터 있던 기존 로직이라 "기존 필터 로직 보존" 지시에 따라 고치지 않고
+문서에만 기록.
+
+서비스 코드 변경:
+
+6개 프론트엔드/유틸 파일. API/DB/schema 변경 없음.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+면적 표기 통일 + Hero 밀도 개선 완료, 기존 평형 선택/필터/차트 연결 무손상,
+STOP 조건 미발생. 사용자 모바일 검수 가능한 상태. commit/push 하지 않았다.
+검수 통과 후 별도 승인을 받아 commit/push 진행.
+
+상태:
+
+APT DETAIL B1-FIX 구현 완료 / 검수중(2026-08-14).
+
+
+## 2026-08-15
+
+### STEP 31 — APT DETAIL B1-FIX2: 면적 라벨 충돌 + Hero 거래 일관성 최소 수정
+
+작업:
+
+STEP 30(B1-FIX)에서 발견된 후속 문제 2건만 최소 수정. (1) 기본 2자리 반올림 정책이
+59.8826㎡/59.8839㎡처럼 서로 다른 값을 둘 다 "59.88㎡"로 겹치게 만드는 사례(대신
+롯데캐슬 실측), (2) Hero의 층/거래일이 평형 필터와 무관하게 항상 전체 최신 거래를
+참조해 가격(필터된 평형 기준)과 다른 거래의 값이 한 Hero 안에 섞이던 기존 버그.
+상세는 docs/development/31-apartment-detail-b1-area-consistency-fix.md 참고.
+
+수정 파일 6개:
+
+- src/lib/area-utils.ts — `getUniqueAreaLabels()`(같은 목록 안에서 라벨이 겹치는
+  값만 필요한 만큼 2→3→4자리로 정밀도를 올려 고유 라벨을 만듦, 상한 4자리는 부산
+  5개 단지 1,800건+ 실측 기준) / `resolveAreaLabel()` 신설. `formatExclusiveArea`
+  (단일값 2자리)와 목록 충돌 해소 책임을 분리. `getAreaDetailLabel()`은 라벨 맵을
+  선택적으로 받도록 확장(하위 호환).
+- src/app/apt/[name]/apt-client.tsx — `heroTrade`(= `latestPrice`가 이미 쓰던
+  필터링 우선순위와 동일한 단일 거래 객체) 신설, Hero 면적/층/거래일을 전부 여기서만
+  가져오도록 변경. `areaLabels` 맵을 이 단지의 전체 거래 기준으로 한 번 계산해
+  AreaSelector/TradeTimelineList/FloorPlanPanel/Hero/거래타임라인 헤더 전부에 동일하게
+  전달(페이지 전체가 같은 원본 면적에 항상 같은 라벨을 쓰도록).
+- src/components/AreaSelector.tsx / TradeTimelineList.tsx / FloorPlanPanel.tsx —
+  `areaLabels?` prop 추가, 자체 계산 대신 부모가 만든 맵을 조회만 하도록 변경(평형이
+  이미 선택된 상태의 TradeTimelineList는 자기 prop만으론 충돌 판단 근거가 없어져
+  칩과 다른 라벨을 낼 수 있었음 — 계산 지점을 부모로 통일해 해결).
+- src/lib/ai-search.ts — 비교 카드의 `areaOptions`도 동일 성격의 "목록 안 라벨"이라
+  같은 `getUniqueAreaLabels()`를 적용(그룹핑/정렬 로직은 무변경).
+
+검증:
+
+Node 스크립트로 알고리즘을 실측 원본값에 직접 실행 — 대신롯데캐슬 59.8826/59.8839
+→ 59.883㎡/59.884㎡(스펙 예시와 정확히 일치), 대신푸르지오1차 84㎡대 4종은 2자리
+그대로 유지(불필요한 확장 없음), 명륜아이파크1단지 84.9194/84.919는 3자리에서도
+겹쳐 상한 4자리까지 확장. 명륜아이파크1단지 실브라우저(5년 필터)로 "84.919㎡(1건)"/
+"84.9194㎡(32건)" 별도 표시, "84.99㎡"/"85㎡" 2자리 유지 재확인. Hero 일관성은
+before/after 대조로 확인 — 대신푸르지오1차 "84.65㎡" 칩 선택 시 수정 전엔 가격만
+84.65㎡ 기준이고 면적/층/날짜는 84.94㎡ 거래가 섞여 나왔으나, 수정 후 가격·면적·층·
+날짜 전부 같은 거래(2026-07-22, 4층, 6억 3,200만)로 일치. 명륜아이파크1단지에서
+데이터 1건뿐인 평형(84.919㎡), 매매/전월세 토글(62.64㎡) 각각 Hero↔타임라인 일치를
+재확인. tsc/eslint(기존 무관 경고 1건 외 0)/prisma validate/migrate status/build
+전부 통과.
+
+발견한 한계(이번 STEP에서 미해결, 문서 기록):
+
+선택한 평형에 현재 매매/전월세 타입 거래가 아예 없을 때 Hero가 전체 최신 거래로
+fallback하며(기존 latestPrice의 fallback을 그대로 따름), 이 경우 화면상 선택 칩과
+Hero 표시 면적이 달라 보일 수 있다. 이번 STEP이 요청받은 범위(한 Hero 안의 가격·
+면적·층·날짜가 서로 같은 거래를 가리킬 것)는 충족하며, 이 fallback UX 자체의 개선
+여부는 범위 밖으로 남겨둔다. 대신롯데캐슬은 재검증 시점에 API가 캐시된 빈 응답을
+반환해 실브라우저 재확인은 하지 못했다(알고리즘 단위검증 + 동일 성격의 다른 단지
+실측으로 대체).
+
+서비스 코드 변경:
+
+6개 프론트엔드/유틸 파일. API/DB/schema 변경 없음.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+면적 라벨 충돌 해소 + Hero 거래 일관성 확보 완료, 기존 평형 선택/필터/차트 연결
+무손상, STOP 조건 미발생. 사용자 모바일 검수 가능한 상태. commit/push 하지 않았다.
+검수 통과 후 별도 승인을 받아 commit/push 진행.
+
+상태:
+
+APT DETAIL B1-FIX2 구현 완료 / 검수중(2026-08-15).
+
+
+## 2026-08-15
+
+### STEP 32 — APT DETAIL B1-FIX3: 선택 평형 거래 없음 cross-area fallback 제거
+
+작업:
+
+STEP 31이 도입한 `heroTrade`에 마지막으로 남아 있던 fallback 경로 제거. 선택한
+평형+현재 매매/전월세 조합에 거래가 하나도 없으면 `heroTrade`가 `trades[0]`(다른
+평형일 수 있는 전체 최신 거래)으로 넘어가던 것을, 그 경우 다른 평형으로 절대
+넘어가지 않고 Hero에 "해당 평형의 최근 거래가 없습니다." empty state를 보여주도록
+바꿨다. 상세는 docs/development/32-apartment-detail-b1-no-cross-area-fallback.md 참고.
+
+수정 파일 1개:
+
+- src/app/apt/[name]/apt-client.tsx — `heroTrade`의 `?? trades[0]` fallback을
+  제거(`selectedArea === '전체'`일 때는 area 필터가 no-op이라 별도 분기 없이 기존
+  동작 그대로 유지됨을 코드로 확인). `latestPrice`/`latestPriceNum`도 자기만의
+  독립적인 fallback 대신 `heroTrade`에서 파생하도록 통일(같은 버그가 가격 문자열에도
+  있었음). Hero 가격 영역을 `heroTrade` 유무로 분기해 특정 평형 empty state 문구를
+  추가(StickyPriceBar/대출한도 모달처럼 공간이 좁은 곳은 "거래 없음"이라는 짧은
+  문자열로, Hero 본문은 스펙이 제시한 전체 문장으로).
+
+검증:
+
+코드 추적 결과 최고가/최저가 블록·TradeTimelineList·InvestmentMetrics·
+PriceTrendChart는 전부 이미 올바르거나(다른 평형 fallback 없음)애초에
+selectedArea에 종속되지 않는 자기완결형 설계임을 확인해 손대지 않았다. curl로
+동일 단지의 매매/전세 area 집합을 비교해 실제 asymmetric 사례 2건을 찾음(명륜
+아이파크1단지 84.919㎡: 매매 있음/전세 없음, 대연힐스테이트푸르지오 163.69㎡: 전세
+있음/매매 없음). 두 사례 모두 실브라우저에서 정상 쪽은 가격·면적·층·날짜가 전부
+표시되고, 빈 쪽은 "해당 평형의 최근 거래가 없습니다." + "최고 - / 최저 -"만
+나타나며 선택 칩 상태는 그대로 유지됨을 확인. 반대 방향 토글(다시 데이터 있는
+쪽으로) 시 정상 복귀도 재확인. "전체" 선택 상태에서 매매/전세 각각 회귀 없음도
+재확인. tsc/eslint(기존 무관 경고 1건 외 0)/prisma validate/migrate status/build
+전부 통과.
+
+서비스 코드 변경:
+
+1개 프론트엔드 파일. API/DB/schema 변경 없음.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+선택 평형 cross-area fallback 제거 완료, STEP 30(면적 표기)·STEP 31(Hero 소스
+일관성) 정책은 그대로 유지, 기존 필터/차트/지표 연결 무손상, STOP 조건 미발생.
+사용자 모바일 검수 가능한 상태. commit/push 하지 않았다. 검수 통과 후 별도 승인을
+받아 commit/push 진행.
+
+상태:
+
+APT DETAIL B1-FIX3 구현 완료 / 검수중(2026-08-15).

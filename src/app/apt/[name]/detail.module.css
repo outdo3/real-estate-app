@@ -68,8 +68,8 @@
 
 /* B1 가격 핵심 블록 — Hero와 시각적으로 구분되도록 구분선만 추가, 나머지는 기존 spacing 유지 */
 .priceBlock {
-  margin-top: 1.1rem;
-  padding-top: 1.1rem;
+  margin-top: 0.95rem;
+  padding-top: 0.95rem;
   border-top: 1px solid var(--border-color);
 }
 

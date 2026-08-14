@@ -1,6 +1,6 @@
 import { callGeminiJSON, callGeminiText } from './gemini';
 import { fetchBuildingRegistryInfo, formatParking } from './apt-building-info';
-import { getCompactAreaLabel } from './area-utils';
+import { getUniqueAreaLabels, resolveAreaLabel } from './area-utils';
 import { REGION_DATA } from './regions';
 
 export type AiIntent = 'condition_search' | 'regional_stats' | 'compare';
@@ -385,8 +385,7 @@ export interface CompareComplexData {
   areaOptions: CompareAreaOption[];
 }
 
-// "국민평형" 84㎡(전용 80~89㎡, 공급 약 34평) 밴드 — area-utils.ts의 KNOWN_SUPPLY_PYUNG과
-// 동일한 구간을 그대로 쓴다.
+// "국민평형" 84㎡(전용 80~89㎡) 밴드 — 국토부 실거래 통계상 가장 거래가 많은 표준 구간.
 const NATIONAL_STANDARD_AREA_MIN = 80;
 const NATIONAL_STANDARD_AREA_MAX = 89;
 
@@ -442,9 +441,15 @@ async function fetchCompareTarget(name: string, lawdCd: string | null, requestUr
   const mostTraded = areaEntries.sort((a, b) => b[1].count - a[1].count)[0];
   const defaultEntry = nationalStandard || mostTraded;
 
+  // areaOptions는 사용자가 이 단지 안에서 평형을 골라 비교할 수 있는 선택지 목록이라
+  // AreaSelector 칩과 동일한 "같은 목록 안 라벨 충돌" 문제가 생길 수 있다 — 이 단지의
+  // areaEntries 전체를 기준으로 충돌 해소 라벨을 만든다(/apt/[name]과 별개 계산이라
+  // 완전히 동일한 문자열이 나오리라는 보장은 없지만, 같은 정책·같은 함수를 쓴다).
+  const areaLabels = getUniqueAreaLabels(areaEntries.map(([area]) => parseFloat(area)));
+
   const toOption = ([area, v]: [string, { latest: any; count: number }]): CompareAreaOption => ({
     area,
-    label: getCompactAreaLabel(parseFloat(area)),
+    label: resolveAreaLabel(parseFloat(area), areaLabels),
     latestPrice: v.latest.priceStr,
     latestArea: v.latest.area,
     tradeDate: v.latest.tradeDate,

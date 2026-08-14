@@ -1,15 +1,18 @@
 import React from 'react';
-import { getAreaInfo } from '@/lib/area-utils';
+import { getAreaDetailLabel } from '@/lib/area-utils';
 
 interface FloorPlanPanelProps {
   selectedArea: string; // '전체' 또는 전용면적(m²) 문자열
+  // AreaSelector 칩과 동일한 충돌 해소 라벨을 쓰기 위해 부모(apt-client.tsx)가
+  // 전체 거래 기준으로 만든 라벨 맵을 그대로 전달받는다.
+  areaLabels?: Map<number, string>;
 }
 
 // 평면도 이미지를 제공하는 실제 데이터 소스가 아직 없다 — 단지별 평면도는 건설사/분양 공고문
 // 이미지가 필요한데 이 앱에는 그런 자산이나 API가 연동돼 있지 않다. 없는 이미지를 만들어
 // 보여주는 대신, 선택된 평형 기준으로 "준비 중" 상태를 정직하게 보여주는 자리만 마련해둔다.
-export default function FloorPlanPanel({ selectedArea }: FloorPlanPanelProps) {
-  const areaLabel = selectedArea !== '전체' ? getAreaInfo(parseFloat(selectedArea)).label : null;
+export default function FloorPlanPanel({ selectedArea, areaLabels }: FloorPlanPanelProps) {
+  const areaLabel = selectedArea !== '전체' ? getAreaDetailLabel(parseFloat(selectedArea), areaLabels) : null;
 
   return (
     <div

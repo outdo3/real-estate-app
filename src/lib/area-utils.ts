@@ -1,66 +1,106 @@
-// 전용면적(m²)을 받아 전용 평형과 "공급 평형(근사치)"을 함께 계산한다.
+// 면적 표시 전용 helper. 아래 함수들은 오직 "화면에 어떻게 보여줄지"만 다루고,
+// 평형 선택/필터링/차트 그룹핑에 쓰이는 내부 key(원본 area 문자열, 예: "84.9404m²")는
+// 절대 건드리지 않는다 — 표시 문자열을 데이터 identity로 재사용하지 않는다.
 //
-// MOLIT 실거래 API는 전용면적만 제공하고 공급면적 데이터는 어디서도 얻을 수 없어서,
-// 자주 나오는 전용면적 구간은 업계에 잘 알려진 "국민평형" 매핑표를 우선 사용하고,
-// 표에 없는 값은 아파트 평균 전용률(약 77%) 공식으로 근사치를 계산한다.
-// 두 경우 모두 정확한 값이 아니므로 표시할 때는 항상 "약"을 붙인다.
-const KNOWN_SUPPLY_PYUNG: Array<{ min: number; max: number; supplyPyung: number }> = [
-  { min: 36, max: 43, supplyPyung: 15 },
-  { min: 45, max: 53, supplyPyung: 19 },
-  { min: 55, max: 63, supplyPyung: 24 },
-  { min: 69, max: 79, supplyPyung: 29 },
-  { min: 80, max: 89, supplyPyung: 34 },
-  { min: 97, max: 106, supplyPyung: 40 },
-  { min: 109, max: 119, supplyPyung: 45 },
-  { min: 129, max: 140, supplyPyung: 51 },
-  { min: 142, max: 154, supplyPyung: 59 },
-];
+// [B1-FIX 배경] 기존 getAreaInfo()는 전용면적을 정수로 절사하고 평형도 반올림해
+// "84(26평)"처럼 표기했는데, 실제 MOLIT 실거래 데이터는 같은 단지 안에서도
+// 84.36/84.38/84.69/84.92㎡처럼 서로 다른 전용면적이 흔하고, 이 값들이 전부
+// "84(26평)"으로 뭉개져 실제로는 다른 타입인데 같은 칩처럼 보이는 문제가 있었다
+// (부산 5개 단지 실측에서 확인). 이제는 소수점까지 살린 정확한 ㎡ 표기를 기본으로 쓴다.
+//
+// "공급 약 XX평형" 문구는 이번 STEP에서 제거했다 — MOLIT 실거래 API는 전용면적만
+// 제공하고, 기존 supplyPyung은 "국민평형" 매핑표 + 평균 전용률(77%) 근사치일 뿐 실제
+// 공급면적 데이터가 아니었다(분양 정보 도메인의 진짜 supplyArea(청약홈 SUPLY_AR)는
+// presales 테이블에만 존재하고 이 실거래 화면과는 무관). 근거가 약한 임의 추정치를
+// 계속 노출하는 대신 삭제했다.
 
-const AVERAGE_EXCLUSIVE_RATIO = 0.77;
-const M2_PER_PYUNG = 3.3058;
+// [B1-FIX2 배경] 기본 2자리 정책은 84㎡대는 잘 구분했지만, 59.8826㎡과 59.8839㎡처럼
+// 2자리로 반올림하면 "59.88㎡"로 똑같아지는 실사례(대신롯데캐슬 실측)가 나왔다.
+// 그렇다고 모든 면적을 무조건 3~4자리로 늘리면 이미 2자리에서 구분되는 값들까지
+// 불필요하게 길어진다. 그래서 "단일 값 포맷터"(formatExclusiveArea)와 "같은 목록
+// 안에서 라벨이 겹치는 값만 골라 필요한 만큼만 정밀도를 올리는 책임"
+// (getUniqueAreaLabels)을 분리했다. 정밀도 상한(MAX_AREA_PRECISION)은 부산 5개
+// 단지 1,800건+ 실측에서 관찰된 MOLIT 원본 최대 소수 자릿수(4자리)를 근거로
+// 정했다 — 추측치가 아니다. 그 이상 늘려도 라벨이 여전히 같다면 사실상 동일한
+// 면적으로 보고 더 늘리지 않는다.
+const M2_PER_PYEONG = 3.305785;
+const MAX_AREA_PRECISION = 4;
 
-export interface AreaInfo {
-  exclusiveM2: number;
-  exclusivePyung: number;
-  supplyPyung: number;
-  label: string;
+function roundToPrecision(m2: number, precision: number): number {
+  const factor = 10 ** precision;
+  return Math.round(m2 * factor) / factor;
 }
 
-export function getAreaInfo(rawExclusiveM2: number): AreaInfo {
-  if (Number.isNaN(rawExclusiveM2)) {
-    return {
-      exclusiveM2: 0,
-      exclusivePyung: 0,
-      supplyPyung: 0,
-      label: '면적 정보 없음',
-    };
+// 소수점 trailing zero 제거: 84 -> "84", 84.8 -> "84.8", 84.84 -> "84.84"
+function trimTrailingZeros(rounded: number, precision: number): string {
+  return parseFloat(rounded.toFixed(precision)).toString();
+}
+
+function labelAtPrecision(m2: number, precision: number): string {
+  return `${trimTrailingZeros(roundToPrecision(m2, precision), precision)}㎡`;
+}
+
+// 칩/거래목록처럼 좁은 공간에서 쓰는 정확한 전용면적 표기(기본 2자리). 예: "84.84㎡"
+// 주의: 이 함수는 단일 값만 보고 판단한다 — 같은 목록 안의 다른 값과 라벨이 겹칠
+// 수 있는 곳(AreaSelector 칩, 거래목록처럼 여러 값이 나란히 보이는 UI)에서는 이
+// 함수를 직접 쓰지 말고 getUniqueAreaLabels()로 만든 라벨 맵을 통해 조회할 것.
+export function formatExclusiveArea(rawExclusiveM2: number): string {
+  if (Number.isNaN(rawExclusiveM2)) return '면적 정보 없음';
+  return labelAtPrecision(rawExclusiveM2, 2);
+}
+
+// 평 환산(㎡ / 3.305785, 소수점 1자리) — 표시 전용. DB/raw 데이터에 저장하지 않는다.
+export function formatPyeong(rawExclusiveM2: number): string {
+  if (Number.isNaN(rawExclusiveM2)) return '';
+  const pyeong = Math.round((rawExclusiveM2 / M2_PER_PYEONG) * 10) / 10;
+  return `약 ${pyeong}평`;
+}
+
+// "같은 목록에 함께 나오는 면적들" 전체를 받아, 기본 2자리 라벨이 서로 겹치는
+// 값들만 겹치지 않을 때까지(최대 MAX_AREA_PRECISION자리) 정밀도를 올려 고유한
+// 라벨을 만든다. 이미 2자리에서 구분되는 값은 그대로 2자리를 유지한다 —
+// 목록 안 일부의 충돌 때문에 전체 목록의 정밀도를 함께 늘리지 않는다.
+// internal key(원본 area 문자열/숫자)는 만들지도, 바꾸지도 않는다 — 반환값은
+// 오직 "원본 숫자 -> 표시 문자열" 조회용 Map이다.
+export function getUniqueAreaLabels(rawAreasM2: number[]): Map<number, string> {
+  const labels = new Map<number, string>();
+  let remaining = new Set(rawAreasM2.filter((v) => !Number.isNaN(v)));
+
+  for (let precision = 2; precision <= MAX_AREA_PRECISION && remaining.size > 0; precision++) {
+    const byLabel = new Map<string, number[]>();
+    remaining.forEach((v) => {
+      const label = labelAtPrecision(v, precision);
+      const bucket = byLabel.get(label);
+      if (bucket) bucket.push(v);
+      else byLabel.set(label, [v]);
+    });
+
+    const stillColliding = new Set<number>();
+    byLabel.forEach((values, label) => {
+      const resolved = values.length === 1 || precision === MAX_AREA_PRECISION;
+      if (resolved) {
+        values.forEach((v) => labels.set(v, label));
+      } else {
+        values.forEach((v) => stillColliding.add(v));
+      }
+    });
+    remaining = stillColliding;
   }
 
-  const exclusiveM2 = Math.round(rawExclusiveM2 * 100) / 100;
-  const exclusivePyung = Math.round((exclusiveM2 / M2_PER_PYUNG) * 10) / 10;
-
-  const known = KNOWN_SUPPLY_PYUNG.find((r) => exclusiveM2 >= r.min && exclusiveM2 <= r.max);
-  const supplyPyung = known
-    ? known.supplyPyung
-    : Math.round(exclusiveM2 / AVERAGE_EXCLUSIVE_RATIO / M2_PER_PYUNG);
-
-  return {
-    exclusiveM2,
-    exclusivePyung,
-    supplyPyung,
-    label: `전용 ${exclusiveM2}㎡(${exclusivePyung}평) · 공급 약 ${supplyPyung}평형`,
-  };
+  return labels;
 }
 
-// 칩/테이블처럼 공간이 좁은 곳에서 쓰는 축약 표기. "전용 84.99㎡(25.7평) · 공급 약 34평형"
-// 대신 소수점 없이 "84(25평)"처럼 짧게 줄인다 — 전용면적 기준(공급면적은 애초에 근사치라
-// 좁은 자리에 같이 욱여넣으면 오히려 더 헷갈림).
-export function getCompactAreaLabel(rawExclusiveM2: number): string {
+// getUniqueAreaLabels()가 만든 맵에서 조회하고, 맵에 없는 값(예: 맵 생성 이후
+// 새로 등장한 값)은 기본 2자리 단일 포맷으로 안전하게 fallback한다.
+export function resolveAreaLabel(rawExclusiveM2: number, labels?: Map<number, string>): string {
   if (Number.isNaN(rawExclusiveM2)) return '면적 정보 없음';
-  // 반올림 대신 절사: 59.93㎡가 "60"으로 반올림되면 실제로는 "59타입"으로 불리는
-  // 매물이 "60타입"으로 오표기되는 문제가 있었다(부동산 실무 관행상 전용면적 타입은
-  // 절사 표기가 일반적).
-  const m2 = Math.floor(rawExclusiveM2);
-  const pyung = Math.round(rawExclusiveM2 / M2_PER_PYUNG);
-  return `${m2}(${pyung}평)`;
+  return labels?.get(rawExclusiveM2) ?? formatExclusiveArea(rawExclusiveM2);
+}
+
+// Hero/거래타임라인 헤더에서 쓰는 "전용 84.84㎡ · 약 25.7평" 형태. labels를 넘기면
+// 같은 페이지의 chip/거래목록과 동일한(충돌 해소된) 전용면적 라벨을 그대로 쓰고,
+// 넘기지 않으면 기본 2자리로 표시한다.
+export function getAreaDetailLabel(rawExclusiveM2: number, labels?: Map<number, string>): string {
+  if (Number.isNaN(rawExclusiveM2)) return '면적 정보 없음';
+  return `전용 ${resolveAreaLabel(rawExclusiveM2, labels)} · ${formatPyeong(rawExclusiveM2)}`;
 }

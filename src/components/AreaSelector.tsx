@@ -1,19 +1,23 @@
 'use client';
 
 import React, { useState } from 'react';
-import { getCompactAreaLabel } from '@/lib/area-utils';
+import { resolveAreaLabel } from '@/lib/area-utils';
 
 interface AreaSelectorProps {
   trades: Array<{ area: string }>;
   selectedArea: string;
   onSelect: (area: string) => void;
+  // 부모(apt-client.tsx)가 이 단지의 전체 거래 기준으로 미리 만든 충돌 해소 라벨
+  // 맵. Hero/거래목록과 동일한 라벨을 쓰기 위해 여기서 새로 계산하지 않고 그대로
+  // 조회만 한다.
+  areaLabels?: Map<number, string>;
 }
 
 const MAX_CHIPS = 4;
 
 // 거래량이 많은 상위 평형만 칩으로 노출하고, 나머지는 드롭다운(레이어)에서 선택한다.
 // 현재 선택된 평형이 상위권 밖이어도 칩에 항상 보이도록 강제 포함한다.
-export default function AreaSelector({ trades, selectedArea, onSelect }: AreaSelectorProps) {
+export default function AreaSelector({ trades, selectedArea, onSelect, areaLabels }: AreaSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const countByArea = new Map<string, number>();
@@ -32,7 +36,7 @@ export default function AreaSelector({ trades, selectedArea, onSelect }: AreaSel
     ? [...topAreas, selectedArea]
     : topAreas;
 
-  const renderAreaLabel = (area: string) => getCompactAreaLabel(parseFloat(area));
+  const renderAreaLabel = (area: string) => resolveAreaLabel(parseFloat(area), areaLabels);
 
   const chipStyle = (active: boolean): React.CSSProperties => ({
     padding: '0.5rem 1rem',

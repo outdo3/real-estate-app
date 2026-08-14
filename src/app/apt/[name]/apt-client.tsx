@@ -19,7 +19,7 @@ import SchoolDistrictPanel from '@/components/SchoolDistrictPanel';
 import CommunityPreview from '@/components/CommunityPreview';
 import StickyPriceBar from '@/components/StickyPriceBar';
 import AdContainer from '@/components/AdContainer';
-import { getAreaInfo } from '@/lib/area-utils';
+import { getAreaDetailLabel, getUniqueAreaLabels } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 
@@ -302,8 +302,27 @@ export default function ApartmentDetail() {
     return true;
   });
 
-  const latestPrice = filteredTrades.length > 0 ? filteredTrades[0].priceStr : (trades.length > 0 ? trades[0].priceStr : '조회 중...');
-  const latestPriceNum = filteredTrades.length > 0 ? filteredTrades[0].price : 0; // 억 단위 정수
+  // B1-FIX3 — 선택 평형(+현재 매매/전월세)에 거래가 없을 때 다른 평형의 거래로
+  // 넘어가지 않는다. selectedArea === '전체'일 때는 필터 자체가 area를 걸지 않으므로
+  // filteredTrades[0]가 원래도 "현재 거래유형 전체 최신 거래"와 같다 — 별도 분기 없이
+  // 이 한 줄로 두 정책(전체=전체 최신, 특정 평형=그 평형만)이 그대로 성립한다.
+  // filteredTrades가 비면 예전처럼 trades[0](다른 평형일 수 있는 전체 최신)으로
+  // fallback하지 않고 null로 둔다 — heroTrade가 없으면 Hero는 empty state를 보여준다.
+  const heroTrade = filteredTrades.length > 0 ? filteredTrades[0] : null;
+
+  // Hero의 큰 가격 표기와 별개로, StickyPriceBar·대출한도 모달처럼 문장형 안내를 넣을
+  // 공간이 없는 곳에서 쓰는 짧은 문자열. heroTrade가 없을 때 "아직 아무 거래도 못
+  // 불러온 상태"(trades 자체가 비어 있음 — 기존부터 있던 별개의 로딩/무데이터 표시)와
+  // "선택한 평형+거래유형에만 거래가 없는 상태"를 구분해, 후자도 다른 평형 가격을
+  // 빌려오지 않고 짧게 "거래 없음"으로만 표시한다.
+  const latestPrice = heroTrade ? heroTrade.priceStr : (trades.length > 0 ? '거래 없음' : '조회 중...');
+  const latestPriceNum = heroTrade ? heroTrade.price : 0; // 억 단위 정수
+
+  // AreaSelector 칩·거래목록·Hero·거래타임라인 헤더가 전부 같은 라벨을 쓰도록,
+  // 이 단지의 전체 거래(trades, 필터 무관)에 등장하는 모든 전용면적을 기준으로
+  // 라벨 충돌(예: 59.8826㎡ vs 59.8839㎡가 둘 다 "59.88㎡"가 되는 경우)을 한 번에
+  // 해소해 페이지 전체가 공유하는 라벨 맵을 만든다.
+  const areaLabels = getUniqueAreaLabels(trades.map((t) => parseFloat(t.area)));
 
   const firstTrade = trades.length > 0 ? trades[0] : null;
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
@@ -681,16 +700,33 @@ export default function ApartmentDetail() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
-                  <span className={styles.price}>{latestPrice}</span>
-                  {trades.length > 0 && (
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      {getAreaInfo(parseFloat(trades[0].area)).label} · {trades[0].floor}층 · {trades[0].tradeDate}
-                    </span>
+                <div style={{ marginTop: '0.3rem' }}>
+                  {heroTrade ? (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <span className={styles.price}>{heroTrade.priceStr}</span>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                          {getAreaDetailLabel(parseFloat(heroTrade.area), areaLabels)}
+                        </span>
+                      </div>
+                      <div style={{ marginTop: '0.15rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {heroTrade.floor}층 · {heroTrade.tradeDate}
+                      </div>
+                    </>
+                  ) : selectedArea !== '전체' ? (
+                    // 선택 평형(+현재 매매/전월세)에 거래가 없는 경우 — 다른 평형의
+                    // 거래를 대신 보여주지 않고, 사용자가 무엇을 선택했는지는 위
+                    // AreaSelector 칩 선택 상태에 그대로 남겨둔 채 이 자리에만
+                    // 명확한 empty state를 표시한다.
+                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                      해당 평형의 최근 거래가 없습니다.
+                    </div>
+                  ) : (
+                    <span className={styles.price}>{latestPrice}</span>
                   )}
                 </div>
 
-                <div style={{ marginTop: '0.5rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                <div style={{ marginTop: '0.4rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
                   <span style={{ color: 'var(--text-muted)' }}>
                     {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}:
                   </span>{' '}
@@ -700,7 +736,7 @@ export default function ApartmentDetail() {
 
               {/* 평형 선택 — 가격 확인 직후, 시세 흐름 확인 직전 */}
               <div style={{ marginTop: '1.25rem' }}>
-                <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} />
+                <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={areaLabels} />
               </div>
 
               <div style={{ marginTop: '1.25rem' }}>
@@ -757,7 +793,7 @@ export default function ApartmentDetail() {
         <div className={styles.panel}>
           <div>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', margin: '0 0 1rem' }}>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{selectedArea === '전체' ? '전체 평형' : getAreaInfo(parseFloat(selectedArea)).label} · 총 {filteredTrades.length}건</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{selectedArea === '전체' ? '전체 평형' : getAreaDetailLabel(parseFloat(selectedArea), areaLabels)} · 총 {filteredTrades.length}건</span>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
                   {['1년', '3년', '5년', '전체'].map(p => (
@@ -782,6 +818,7 @@ export default function ApartmentDetail() {
               apiError={apiError}
               visibleCount={visibleCount}
               onLoadMore={() => setVisibleCount((v) => v + 15)}
+              areaLabels={areaLabels}
             />
           </div>
 
@@ -801,7 +838,7 @@ export default function ApartmentDetail() {
             </div>
           )}
 
-          <FloorPlanPanel selectedArea={selectedArea} />
+          <FloorPlanPanel selectedArea={selectedArea} areaLabels={areaLabels} />
         </div>
       </div>
 
