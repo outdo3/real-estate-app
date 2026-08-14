@@ -418,8 +418,9 @@
 .aptCard {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 0.9rem;
-  margin-bottom: 0.65rem;
+  /* 세로밀도 개선(B4 모바일 검수 반영) — 좌우 padding은 그대로 두고 상하만 줄인다. */
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.45rem;
 }
 
 .aptCard:last-of-type {
@@ -430,18 +431,18 @@
   font-size: 0.95rem;
   font-weight: 800;
   color: var(--text-primary);
-  margin: 0 0 0.2rem;
+  margin: 0 0 0.12rem;
   word-break: keep-all;
 }
 
 .aptMeta {
   font-size: 0.78rem;
   color: var(--text-muted);
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.45rem;
 }
 
 .cardStatBlock {
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.38rem;
 }
 
 .cardStatLabel {
@@ -469,7 +470,7 @@
 .expandBtn {
   background: none;
   border: none;
-  padding: 0.3rem 0;
+  padding: 0.18rem 0;
   color: var(--primary-color);
   font-weight: 700;
   font-size: 0.82rem;
@@ -477,11 +478,11 @@
 }
 
 .txList {
-  margin-top: 0.5rem;
+  margin-top: 0.3rem;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  padding-top: 0.5rem;
+  gap: 0.25rem;
+  padding-top: 0.3rem;
   border-top: 1px dashed var(--border-color);
 }
 
@@ -501,8 +502,8 @@
 
 .moreBtn {
   width: 100%;
-  margin-top: 0.4rem;
-  padding: 0.7rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.7rem;
   border-radius: var(--radius-md);
   border: 1px dashed var(--border-color);
   background: white;

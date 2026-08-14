@@ -1924,4 +1924,67 @@ INFRA I2-B·M4-C·재개발·커뮤니티·전국 확장·SEO·B4 후속 고도�
 
 상태:
 
-구현 완료 / 모바일 검수중(2026-08-14).
+구현 완료 / 모바일 검수중(2026-08-14). B3 카드 세로밀도 개선 후
+사용자 최종 승인(같은 날, 아래 항목 참고).
+
+
+## 2026-08-14
+
+### PRESALE P2-D4-B4 FINAL — B3 카드 세로밀도 개선 + B4 최종 승인
+
+작업:
+
+사용자가 production(commit `d362a10`)에서 B4를 모바일로 검수했다.
+지도(위치/260px/marker/흐름/외부 링크)는 그대로 승인했고, B3 카드의
+최근 거래→최근 거래 대표가격→분양 최고가와 차이 사이 수직 여백이
+누적돼 카드가 필요 이상으로 길다는 피드백만 받아, 정보/기능/계산
+삭제 없이 `page.module.css`의 spacing 값만 최소 조정했다(JSX 무변경).
+`.aptCard` padding(좌우 유지, 상하만 축소)·margin-bottom, `.aptName`/
+`.aptMeta`/`.cardStatBlock` margin-bottom, `.expandBtn` padding,
+`.txList` margin/gap/padding, `.moreBtn` margin/padding을 조정했다.
+
+주요 발견:
+
+id=479 첫 comparison 카드를 브라우저에서 실측(`getBoundingClientRect`,
+임시 style override로 전/후 동일 페이지에서 직접 비교) — collapsed
+304.17px→276.00px(약 9.3%↓), expanded 391.46px→352.10px(약 10.1%↓).
+검증 도중 `nearby-market` network request가 2~4건으로 잘못 측정되는
+사건이 있었으나, 원인을 끝까지 추적한 결과 실제 코드 회귀가 아니라
+브라우저 자동화 절차에서 같은 URL로 `navigate`를 연속 2회 호출한
+측정 실수였음을 규명했다(production 빌드(`npm run start`) + 새 탭 +
+`navigate` 정확히 1회 절차로 재검증해 정확히 1건 재확인) — 추측으로
+덮지 않고 원인을 규명한 뒤 기록했다.
+
+서비스 코드 변경:
+
+있음(spacing만). 수정 `src/app/presales/[id]/page.module.css`. API,
+`nearby-market-section.tsx`(JSX), 지도 컴포넌트(`presale-nearby-map.tsx`),
+B1/B2 계산 로직은 전혀 수정하지 않았다.
+
+DB 변경:
+
+없음(read-only row count 재확인: ApartmentMaster 3,402 / Apartment 20
+/ Property 0 / Presale 1,046 / PresaleHouseTypeDetail 5,395 — 기존과
+일치).
+
+테스트 결과:
+
+`prisma validate` 통과, `migrate status` up to date, `tsc --noEmit`
+오류 0, lint 오류 0(기존 무관 경고 5건), `npm run build` 성공. 정보
+삭제 없음/문구 무변경/font-size 무변경(가격 숫자 포함)을 스크린샷으로
+확인. id=479(chip·지도·카드·collapsed/expanded·거리순/신축순)·
+id=801(지역경계 지도·B3·differenceAmount 음수 정상)·id=847(3km bounds
+fit·B3) 재검증 전부 정상. `nearby-market` 네트워크 요청 정확히
+1건(production 모드 재검증), `nearby-apartments` 추가 호출 0건. 상세는
+docs/development/24-presale-nearby-map-ui.md 참고.
+
+최종 판단:
+
+P2-D4-B4-A = 완료, P2-D4-B4 = 완료 / 사용자 최종 승인. B1/B2/B3/
+B3-FIX/B4 전체 정책·기능 유지, DB/schema/migration 변경 없음.
+INFRA I2-B·M4-C·재개발·커뮤니티·전국 확장·SEO·B4 후속 고도화로
+진행하지 않았다.
+
+상태:
+
+P2-D4-B4-A 완료 / P2-D4-B4 완료·사용자 최종 승인(2026-08-14).
