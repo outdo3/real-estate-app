@@ -31,6 +31,7 @@ type NearbyMarketComparison = {
 type NearbyMarketHouseType = {
   houseTypeDetailId: number;
   houseTy: string | null;
+  supplyArea: number | null;
   exclusiveArea: number | null;
   presaleTopAmount: number | null;
   comparisonAvailable: boolean;
@@ -70,11 +71,6 @@ function formatArea(v: number): string {
   return String(Math.round(v * 100) / 100);
 }
 
-// chip 라벨은 정수로 반올림(예: 59.984 -> "59㎡") — 한 줄 chip의 공간 제약을 고려한 표시 전용 처리.
-function formatAreaWhole(v: number): string {
-  return String(Math.round(v));
-}
-
 function extractTypeSuffix(houseTy: string | null): string {
   return houseTy?.match(/([A-Za-z]+)$/)?.[1] || '';
 }
@@ -94,13 +90,19 @@ function formatYearMonth(dealDate: string): string {
 
 function formatMonthsLabel(monthsSearched: number | null): string {
   if (monthsSearched == null) return '';
-  return `최근 ${monthsSearched}개월 거래 기준`;
+  return `최근 ${monthsSearched}개월 · 최대 3건 기준`;
 }
 
+// P2-D4-B3-FIX — 기존 "주택형·분양가" 섹션(presale-detail-client.tsx의 formatHouseTypeTitle)과
+// 정확히 같은 데이터(supplyArea·suffix)·같은 표시 규칙을 사용한다. exclusiveArea(houseTy 숫자부,
+// B2 비교 계산 전용 파생값)는 여기서 대표 표시명으로 쓰지 않는다 — 같은 페이지 안에서
+// "79.48㎡ B"(분양 주택형)와 "60㎡ B"(비교용 전용면적)가 동시에 보여 사용자가 서로 다른
+// 주택형으로 오인하는 문제(모바일 실기기 검수에서 발견)를 막기 위함이다.
 function houseTypeChipLabel(h: NearbyMarketHouseType): string {
-  if (h.exclusiveArea == null) return h.houseTy || '정보 없음';
   const suffix = extractTypeSuffix(h.houseTy);
-  return `${formatAreaWhole(h.exclusiveArea)}㎡${suffix ? ` ${suffix}` : ''}`;
+  return h.supplyArea != null
+    ? `${formatArea(h.supplyArea)}㎡${suffix ? ` ${suffix}` : ''}`
+    : h.houseTy || '정보 없음';
 }
 
 function sortHouseTypes(houseTypes: NearbyMarketHouseType[]): NearbyMarketHouseType[] {
@@ -134,6 +136,7 @@ function sortComparisons(comparisons: NearbyMarketComparison[], mode: SortMode):
 const INFO_TEXT =
   '선택한 분양 주택형과 전용면적 ±1㎡ 이내인 주변 아파트의 실제 거래를 비교합니다.\n\n' +
   '주변 단지는 최대 3km 범위에서 찾으며 최근 6개월 거래부터 확인하고, 필요한 경우 최대 24개월까지 조회합니다.\n\n' +
+  '최근 거래 대표가격은 비슷한 전용면적의 최근 거래 최대 3건을 기준으로 계산합니다. 3건이면 가운데 가격, 2건이면 두 거래의 평균, 1건이면 해당 거래가격을 사용합니다.\n\n' +
   '가격 차이는 참고정보이며 준공연도·층·향·입지·상품 구성 등에 따라 차이가 발생할 수 있습니다.';
 
 export default function NearbyMarketSection({ presaleId }: { presaleId: string }) {
@@ -249,6 +252,8 @@ export default function NearbyMarketSection({ presaleId }: { presaleId: string }
                 </div>
                 {selectedHouseType.exclusiveArea != null && (
                   <p className={styles.summaryNote}>
+                    비교 전용면적 약 {formatArea(selectedHouseType.exclusiveArea)}㎡
+                    <br />
                     비슷한 전용면적{' '}
                     {formatArea(selectedHouseType.exclusiveArea - 1)}㎡ ~ {formatArea(selectedHouseType.exclusiveArea + 1)}㎡의 주변
                     아파트 실거래와 비교합니다.
@@ -315,7 +320,7 @@ export default function NearbyMarketSection({ presaleId }: { presaleId: string }
 
                         {c.recentMedianPrice != null && (
                           <div className={styles.cardStatBlock}>
-                            <div className={styles.cardStatLabel}>최근 거래 중앙값</div>
+                            <div className={styles.cardStatLabel}>최근 거래 대표가격</div>
                             <div className={styles.cardStatValue}>{formatManwon(c.recentMedianPrice)}</div>
                             <div className={styles.cardStatDetail}>{formatMonthsLabel(result.monthsSearched)}</div>
                           </div>

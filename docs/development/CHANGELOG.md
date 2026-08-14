@@ -1698,3 +1698,81 @@ SEO로 진행하지 않았다.
 commit/push 진행. 실제 과거 production 장애 원인은 여전히 미확정 —
 이번 STEP은 오류 해결이 아니라 관측성 보강이며, 재발 시 이번에 추가한
 logging을 먼저 확인한 뒤 INFRA I2-B 필요 여부를 판단한다.
+
+
+## 2026-08-14
+
+### PRESALE P2-D4-B3-FIX — 주변 아파트 비교 주택형 표시 일관성 수정
+
+작업:
+
+모바일 실기기 검수에서 B3("주변 아파트 실거래 비교") chip이 기존
+"주택형·분양가" 섹션과 다른 숫자를 보여주는 문제가 발견됐다(예:
+"e편한세상 송도 더퍼스트비치" 79.48㎡ B ↔ B3 chip 60㎡ B). 코드 확인
+결과 원인은 두 표시가 애초에 다른 필드였다 — 기존 UI는
+`supplyArea`(공급면적) 기반, B3 chip은 `exclusiveArea`(houseTy 숫자부,
+P2-D4-B2에서 실거래 비교 계산 전용으로 승인된 파생값) 기반이었다.
+`nearby-market` API가 `supplyArea`를 아예 조회하지 않고 있던 게 근본
+원인 — additive로 `supplyArea` 필드를 추가하고, chip/선택 제목 표시를
+기존 상세 UI와 동일한 알고리즘(같은 반올림·같은 suffix 정규식)으로
+전환했다. `exclusiveArea`는 "비교 전용면적 약 OO㎡" 보조 문구로만
+남겼다. 연결은 기존과 동일하게 `houseTypeDetailId`(PresaleHouseTypeDetail
+실제 PK)로 이뤄지며 배열 index 매칭은 어디에도 없다.
+
+주요 발견:
+
+id=479(e편한세상 송도 더퍼스트비치)의 실제 12개 주택형 전부와, 추가로
+7개 공고(주택형 많은 공고·suffix 없는 공고·유사면적 여러 suffix·
+comparisons 없는 타입·6개월/24개월 사례 포함, 총 88개 주택형)를
+`houseTypeDetailId` 기준 교차검증해 오연결 0건을 확인했다. FIX 전/후
+`nearby-market` 응답을 `supplyArea` 필드만 제외하고 비교한 결과
+byte-identical — B2의 houseTy parser/±1㎡/aptSeq/6→12→24개월 fallback/
+median/differenceAmount 계산이 전혀 변경되지 않았음을 실측으로 증명했다.
+브라우저로 직접 확인한 결과 목표 UI 예시("79.48㎡ B" / "비교 전용면적
+약 59.63㎡" / "비슷한 전용면적 58.63㎡ ~ 60.63㎡")와 실제 결과가 정확히
+일치했다.
+
+서비스 코드 변경:
+
+있음(표시 전용, 최소). 수정
+`src/app/api/presales/[id]/nearby-market/route.ts`(select에 `supplyArea`
+추가, `buildHouseTypes()` 반환값에 `supplyArea` additive 필드 추가 — 기존
+필드 breaking change 없음),
+`src/app/presales/[id]/nearby-market-section.tsx`(chip/제목 라벨을
+`supplyArea` 기반으로 전환, "비교 전용면적" 보조 문구 추가, 미사용
+`formatAreaWhole` 제거). `presale-detail-client.tsx`(기존 주택형·분양가
+UI)와 `page.module.css`(chip CSS)는 한 줄도 수정하지 않았다. B1 API,
+B2 계산 정책(`presale-house-type.ts`) 전혀 수정하지 않았다.
+
+같은 미커밋 작업 위에서 추가로, "최근 거래 중앙값"이라는 통계 용어를
+일반 사용자가 이해하기 쉽도록 표시 문구만 수정했다 — 카드 라벨을
+"최근 거래 대표가격"으로, 보조 문구를 "최근 N개월 · 최대 3건 기준"으로
+바꾸고, ⓘ 안내문에 3건/2건/1건일 때의 계산 방식 설명을 추가했다.
+`recentMedianPrice` 필드명·median 계산 로직·API는 전혀 변경하지 않았다.
+
+DB 변경:
+
+없음(schema/migration 변경 없음, 전부 read-only 조회로 검증).
+
+테스트 결과:
+
+`prisma validate` 통과, `migrate status` up to date, `tsc --noEmit`
+오류 0, lint 오류 0, `npm run build` 성공. 로컬 dev 서버에서 4개 API
+전부 200 확인. 브라우저 자동화 도구의 실제 리사이즈 제약(문서 19번과
+동일 — 이 환경에서 360/375/390px 강제 리사이즈가 동작하지 않음)으로
+정확한 모바일 뷰포트 스크린샷은 확보하지 못했으나, chip CSS(`nowrap`+
+`overflow-x: auto`)를 전혀 수정하지 않았고 데스크톱 폭 스크린샷에서
+길어진 라벨도 줄바꿈 없이 정상 렌더링됨을 확인했다. 상세는
+docs/development/22-presale-nearby-market-ui-fix.md 참고.
+
+최종 판단:
+
+A(주택형 표시 일관성 FIX 완료, B3 계산/기능 무손상, 모바일 재검수
+가능). commit/push 하지 않았다. 사용자 모바일 재검수 전까지 B3를 최종
+완료 처리하지 않는다. B4·INFRA I2-B·M4-C·재개발·커뮤니티·전국 확장·
+SEO로 진행하지 않았다.
+
+상태:
+
+P2-D4-B3-FIX 구현 완료 / 모바일 최종 검수중(2026-08-14). 사용자 최종
+승인 전까지 B3를 완료 처리하지 않는다.

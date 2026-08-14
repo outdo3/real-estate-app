@@ -31,7 +31,7 @@ function dedupeKey(t: any): string {
 }
 
 function buildHouseTypes(
-  houseTypeDetails: { id: number; houseTy: string | null; topAmount: number | null }[],
+  houseTypeDetails: { id: number; houseTy: string | null; supplyArea: number | null; topAmount: number | null }[],
   items: NearbyApartmentItem[],
   tradesBySeq: Map<string, any[]>
 ) {
@@ -39,7 +39,7 @@ function buildHouseTypes(
     const parsed = parsePresaleHouseType(h.houseTy);
     if (!parsed) {
       return {
-        houseTypeDetailId: h.id, houseTy: h.houseTy, exclusiveArea: null,
+        houseTypeDetailId: h.id, houseTy: h.houseTy, supplyArea: h.supplyArea, exclusiveArea: null,
         presaleTopAmount: h.topAmount, comparisonAvailable: false, comparisons: [],
       };
     }
@@ -78,7 +78,7 @@ function buildHouseTypes(
       .sort((a, b) => a.apartment.distanceKm - b.apartment.distanceKm);
 
     return {
-      houseTypeDetailId: h.id, houseTy: parsed.raw, exclusiveArea: parsed.exclusiveArea,
+      houseTypeDetailId: h.id, houseTy: parsed.raw, supplyArea: h.supplyArea, exclusiveArea: parsed.exclusiveArea,
       presaleTopAmount: h.topAmount, comparisonAvailable: true, comparisons,
     };
   });
@@ -97,7 +97,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       where: { id: presaleId },
       select: {
         id: true, latitude: true, longitude: true,
-        houseTypeDetails: { select: { id: true, houseTy: true, topAmount: true }, orderBy: { modelNo: 'asc' } },
+        houseTypeDetails: { select: { id: true, houseTy: true, supplyArea: true, topAmount: true }, orderBy: { modelNo: 'asc' } },
       },
     });
 
