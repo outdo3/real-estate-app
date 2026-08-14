@@ -1,6 +1,30 @@
 # STEP 22 — PRESALE P2-D4-B3-FIX: 주택형 표시 일관성 수정
 
-상태: P2-D4-B3-FIX 구현 완료 / 모바일 최종 검수중
+상태: P2-D4-B3-FIX 구현 완료 / 사용자 최종 승인 (2026-08-14)
+
+## 최종 승인 기록 (2026-08-14)
+
+사용자 모바일 최종 검수 결과 이상 없음으로 확인되어 **완료 / 사용자
+최종 승인**으로 확정됐다. production commit `398d33a`("fix: align
+presale market comparison labels")로 배포되었고, 배포 후 production
+`nearby-market` API 응답에 `supplyArea` 필드가 실제로 포함되는 것을
+확인해 반영을 검증했다.
+
+**최종 확정 내용**:
+1. 대표 주택형 표시는 `supplyArea` 기반(기존 상세 UI와 동일 알고리즘)
+2. 비교 전용면적은 `exclusiveArea`(houseTy 숫자부) 보조 표시 —
+   "비교 전용면적 약 OO㎡"
+3. 두 개념을 사용자 UI에서 명확히 분리(같은 chip/제목에 섞이지 않음)
+4. `houseTypeDetailId`(PresaleHouseTypeDetail 실제 PK) 연결 유지,
+   index matching 없음
+5. B2 비교 계산 로직(houseTy parser/±1㎡/aptSeq/6→12→24개월 fallback)
+   변경 없음
+6. `recentMedianPrice` 계산 로직 변경 없음(3건=가운데값/2건=평균/
+   1건=해당값)
+7. 사용자 UI 라벨은 "최근 거래 대표가격"(구 "최근 거래 중앙값")
+8. ⓘ 안내문에 대표가격 계산 방식 설명 제공
+9. 모바일 검수 완료(사용자 최종 승인)
+10. production 반영 확인 완료(`supplyArea` 필드 실측 확인)
 
 ## 추가 UI 문구 수정 (같은 미커밋 작업 위에서)
 
@@ -219,4 +243,6 @@ recentTransactions·recentMedianPrice·differenceAmount)와
 
 ## 후속
 
-사용자 모바일 실기기 재검수 후 B3 최종 완료 여부를 결정한다.
+사용자 모바일 최종 검수 결과 이상 없음으로 확인되어, P2-D4-B3 및
+P2-D4-B3-FIX 모두 완료 / 사용자 최종 승인으로 확정됐다(§최종 승인 기록
+참고). B4(지도)는 별도 지시 전까지 착수하지 않는다.
