@@ -740,10 +740,10 @@ export default function ApartmentDetail() {
               </div>
 
               <div style={{ marginTop: '1.25rem' }}>
-                <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
+                <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
               </div>
 
-              <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} />
+              <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
 
               {/* 기존 단지 스펙 그리드(세대수/준공년월/용적률/건폐율/주차대수) — Hero 핵심
                   요약과는 별개로 삭제하지 않고 그대로 유지. address는 위 Hero에서 이미

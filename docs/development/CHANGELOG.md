@@ -2456,3 +2456,248 @@ DB 변경:
 상태:
 
 APT DETAIL B1-FIX3 구현 완료 / 검수중(2026-08-15).
+
+
+## 2026-08-15
+
+### STEP 33 — APT DETAIL B2-A: 단지 스펙 데이터 + 시세차트 구조 조사/설계
+
+작업:
+
+사용자 모바일 검수에서 나온 3가지 증상(용적률/건폐율/주차대수 "정보 준비중", 매매/
+전세 시세차트 색상 유사, 선택 평형이 차트/지표에 반영 안 됨)의 코드 근거를
+조사·설계만 했다(production 코드/DB/schema 변경 없음). 상세는
+docs/development/33-apartment-detail-b2-spec-chart-audit.md 참고.
+
+핵심 발견:
+
+- 용적률/건폐율/주차대수는 legacy `Apartment` 테이블(건축물대장 총괄표제부 캐시)
+  기준으로 캐시된 15건(부산)은 coverage 100%이나, 캐시 자체가 극소량이라 대부분의
+  단지가 첫 방문 시 "정보 준비중"으로 보인다 — 데이터 정확도 문제가 아니라 캐시
+  coverage 문제로 확정.
+- `ApartmentMaster`(M3) 모델은 AptSpecGrid와 무관하며 `far`/`bcr` 필드 자체가
+  스키마에 없어 그대로는 대체 불가.
+- 문서28(B0.5) `mgmBldrgstPk` BLOCKER는 건축물대장 다운로드 버튼(`/api/ledger`)
+  전용 문제로, AptSpecGrid가 쓰는 총괄표제부 조회(`apt-building-info.ts`)와는
+  완전히 별개 코드 경로임을 재확인.
+- PriceTrendChart의 매매(`var(--primary-color)` #03c75a)/전세(`#10b981`) 색상이
+  둘 다 초록 계열이라 구분이 어려움 — 기존 `--down-color`(#3152d6, 파란 계열) 팔레트
+  재사용을 제안.
+- PriceTrendChart/InvestmentMetrics는 `selectedArea`를 prop으로 받지 않는 의도된
+  자기완결형 설계(문서32에서도 이미 확인된 내용 재확인) — Hero와 기준이 달라지는
+  혼란 위험 존재.
+- 차트는 개별 거래를 집계 없이 그대로 연결해 평형 혼합으로 요동침 — 월별 중앙값
+  aggregation을 제안.
+- MOLIT 실데이터(read-only, DB 미기록)로 부산 5개 대표 단지(거래 많음/적음/평형
+  다양/대형 평형/전세 많음)를 표본 조사, 최근 12개월 평형별 거래 희소성(3건 미만
+  6.4%)을 근거로 selectedArea 자동 반영 + 데이터 부족 시 전체 평형 자동 폴백 정책을
+  추천.
+
+검증:
+
+read-only DB count/groupBy 쿼리(legacy Apartment/ApartmentMaster 테이블, 부산
+lawdCd 기준)와 read-only MOLIT 공공데이터 API 직접 호출(5개 대표 단지, 18개월치)로
+실측. 조사에 쓴 임시 스크립트는 실행 직후 전부 삭제, git status clean 유지 확인.
+
+서비스 코드 변경:
+
+없음. 조사/설계 문서만 생성.
+
+DB 변경:
+
+없음(read-only 쿼리만 실행, write 0건).
+
+최종 판단:
+
+3가지 신고 증상 모두 코드 근거로 원인 확정. B2 구현은 B2-1(스펙 표시 UX)/
+B2-2(차트 색상)/B2-3(selectedArea 연동+월별 중앙값 aggregation) 3단계 분리를
+제안하며, 리스크가 가장 낮은 B2-2(차트 색상)부터 시작할 것을 추천. commit/push
+하지 않았다. 다음 구현은 사용자 승인 후 진행.
+
+상태:
+
+APT DETAIL B2-A 조사·설계 완료 / 구현 승인 대기(2026-08-15).
+
+
+## 2026-08-15
+
+### STEP 34 — MAP INITIAL LOAD AUDIT: 시골 지역 최초 진입 시 구형 지도 UI 노출 조사
+
+작업:
+
+사용자가 시골 지역에서 모바일로 앱을 최초 실행했을 때 과거(2026-08-10~08-11에만
+실제 배포됐던) 구형 지도 UI가 보였다가, 홈→지도 재진입 시 최신 UI로 정상 표시된
+현상을 조사만 했다(production 코드/DB/schema 변경 없음). 상세는
+docs/development/34-map-initial-load-legacy-ui-audit.md 참고.
+
+핵심 발견:
+
+- 스크린샷의 "← 메인으로 / 단지 / 학교 / 재개발 / 경매" 가로 pill 탭 + "이 지역에서
+  재검색" UI는 현재 production 소스 어디에도 렌더링 코드가 없다 — `src/app/map/page.tsx`
+  주석에만 과거형으로 언급됨.
+- git 히스토리 확인 결과 해당 UI는 커밋 `e142456`(2026-08-10 13:06)에 도입되고
+  커밋 `f87d69e`(2026-08-11 17:23, "지도 UI 개편")에서 완전히 제거됨 — 약 28시간만
+  실제 production에 존재했던 진짜 과거 버전.
+- `/map`으로 가는 모든 진입 경로(A~F)가 동일한 단일 컴포넌트로 귀결되며, 지역/좌표/
+  geolocation 성공·실패에 따라 다른 UI "버전"을 그리는 분기는 코드에 없음(데이터
+  유무는 마커 표시에만 영향, UI 셸은 항상 동일).
+- 이 앱에는 Service Worker/PWA/manifest/localStorage 기반 지도 상태 캐시가 전혀
+  없음 — 저장소 전수 검색 결과 매치 없음.
+- `next build` 확인 결과 `/map`은 정적 프리렌더(`○`)이며, production 실측
+  응답 헤더는 `Cache-Control: public, max-age=0, must-revalidate` + Vercel
+  Edge 캐시 `HIT`(최신 빌드 반영, 구버전 아님).
+- 종합: 현재 코드 자체의 버그는 아니며, 가장 유력한 설명은 "한때 실제로 배포됐던
+  구버전 응답이 사용자 기기/네트워크 경로의 HTTP 캐시에 남아있다가, 신호가 약한
+  지역에서의 완전 문서 네비게이션(직접 진입/새로고침) 때 재검증 없이 재노출되고,
+  이후 클라이언트 사이드 전환(홈→지도)은 이미 로드된 최신 런타임을 써서 정상
+  표시됐다"는 것 — 단, 사용자 기기의 실제 캐시 상태를 직접 확인한 것은 아니라 완전
+  확정(A)이 아닌 "가능성 높음"(B/C)으로 판정.
+
+검증:
+
+전체 저장소 문자열/코드 전수 검색(구형 UI 텍스트, PWA/SW/캐시 관련 키워드,
+localStorage/sessionStorage, 지역 기반 UI 분기), `git log --follow -p`로 해당
+UI의 도입/제거 커밋 확정, `next build`로 정적/동적 렌더링 여부 확인, production
+도메인에 대한 읽기 전용 `curl` 요청으로 실제 응답 헤더 실측. 코드/DB/schema
+변경 없음, 임시 스크립트 없음.
+
+서비스 코드 변경:
+
+없음. 조사 문서만 생성.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+현재 코드에는 legacy UI 렌더 경로/지역별 UI 분기/잘못된 fallback이 존재하지
+않아 고칠 production 코드가 없었다. B2 작업(문서33)을 막는 BLOCKER 아님. 재현
+불가·1회성 관찰이라 지금 수정 우선순위는 낮음 — 원한다면 `/map` 응답에 더 강한
+캐시 무효화 헤더를 추가하는 예방 조치를 별도 STEP으로 검토 가능(사용자 승인
+필요). commit/push 하지 않았다.
+
+상태:
+
+MAP INITIAL LOAD AUDIT 조사 완료 / 수정 없음(2026-08-15).
+
+
+## 2026-08-15
+
+### STEP 35 — APT DETAIL B2-2: 시세차트 매매/전세 색상 분리
+
+작업:
+
+사용자 모바일 피드백(매매/전세 선이 둘 다 초록 계열이라 겹칠 때 구분 어려움)에
+따라 `src/components/PriceTrendChart.tsx`의 전세 시리즈 색상만 파랑 계열로
+분리했다. 데이터/집계/selectedArea/API/DB는 변경하지 않았다. 상세는
+docs/development/35-apartment-detail-b2-chart-colors.md 참고.
+
+핵심 변경:
+
+- 전세 line/tooltip 색상을 `#10b981`(초록)에서 `#3152d6`으로 변경. 매매(
+  `var(--primary-color)`)는 그대로 유지.
+- `globals.css`의 `--down-color`(#3152d6)와 같은 hex 값이지만, 그 변수 자체가
+  `ai-search-client.tsx`에서 실제 "가격 하락" 의미로 쓰이고 있어(문서33에서도
+  이미 지적된 위험) 변수명 대신 같은 hex를 직접 하드코딩해 의미 결합을 피했다.
+  차트에는 항상 "매매"/"전세" 텍스트 라벨이 함께 있어 등락 오인 가능성은 낮다고
+  판단해 STOP하지 않고 진행.
+- legend 스와치와 hover 시 active dot 색은 recharts가 `<Line stroke>` 값을
+  그대로 따르는 기본 동작이라, 코드 수정 없이도 자동으로 새 색상을 반영함을
+  코드 확인 및 로컬 검수로 확인.
+- grid/axis/tick/font/spacing/chart height/dot 표시 여부는 손대지 않음.
+
+검증:
+
+`npx tsc --noEmit`/`eslint`/`npm run build` 통과, `prisma validate`/`migrate
+status`로 DB/schema 무변경 재확인. 로컬 `next dev`로 거래량 많은 실제 단지(
+대신푸르지오1차, 부산 서구 lawdCd 26140)의 1년/3년/5년 차트에서 매매·전세
+선이 교차하는 구간까지 포함해 색상 구분 확인, InvestmentMetrics/AptSpecGrid/
+실거래타임라인/Hero/AreaSelector에 회귀 없음을 확인. 다만 자동화 브라우저
+환경의 제약으로 실제 좁은(모바일) 뷰포트 스크린샷은 얻지 못했다 — 이번 변경이
+반응형 분기 없는 고정 색상값 교체라 뷰포트와 무관함은 코드로 확인했으나, 실기기
+최종 확인은 사용자 검수로 대체.
+
+서비스 코드 변경:
+
+`src/components/PriceTrendChart.tsx` (전세 시리즈 색상 2곳).
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+시각(색상) 변경만으로 매매/전세 구분성 문제를 해결. 새 color token 생성 없이
+기존 `--down-color` 팔레트의 hex 값을 재사용했고, 의미 충돌 소지는 있으나
+STOP 조건(요청서 §21)에 해당하지 않는다고 판단해 진행했다 — 이 판단 근거를
+문서35 §4에 기록. selectedArea 연동/aggregation 변경(B2-3)은 이번 STEP에
+포함하지 않았다. commit/push 하지 않았다. 사용자 모바일 검수 후 완료 여부
+결정.
+
+상태:
+
+APT DETAIL B2-2 구현 완료 / 모바일 검수중(2026-08-15).
+
+
+## 2026-08-16
+
+### STEP 36 — APT DETAIL B2-3: 선택 평형 ↔ 시세차트/투자지표 데이터 일관성
+
+작업:
+
+AreaSelector에서 특정 전용면적을 선택해도 PriceTrendChart/InvestmentMetrics는
+항상 전체 평형 기준이던 불일치를 해소했다(Hero/실거래 타임라인은 기존부터
+selectedArea 반영). 데이터 집계 방식·API·DB/schema는 변경하지 않았다. 상세는
+docs/development/36-apartment-detail-b2-selected-area-consistency.md 참고.
+
+핵심 변경:
+
+- `PriceTrendChart`/`InvestmentMetrics`에 `selectedArea` prop 추가, 이미 받아온
+  매매/전세 배열을 `trade.area === selectedArea`로 클라이언트에서 필터링(추가
+  API 호출 0건 — fetch effect 의존성 배열에 selectedArea를 넣지 않음).
+- 데이터가 부족해도 다른 평형(전체) 데이터를 대신 보여주는 silent fallback은
+  금지 — 대신 선택 평형으로만 필터링한 뒤, 매매/전세 각각 독립적으로 부족
+  여부를 판단해 짧게 안내한다. 문서33이 제안했던 "전체 평형 자동 폴백"(D안)은
+  이번 STEP의 목적(Hero/차트/지표 기준 일치)과 상충한다고 판단해 채택하지
+  않고, A안(미표시+안내)으로 결정.
+- 차트의 "데이터 부족" 임계값은 문서33의 "3건" 기준(다른 목적의 통계)을
+  그대로 쓰지 않고, 현재 구현이 월별 집계 없이 개별 거래를 그대로 점으로
+  찍는다는 점(거래 건수 = 차트 점 개수)과 recharts Line이 선을 그리려면 점이
+  최소 2개 필요하다는 렌더링 제약을 근거로 "2건 미만"으로 새로 정함.
+- InvestmentMetrics의 기존 "매매와 다른 평형 전세로 폴백" 로직은 코드를 다시
+  쓰지 않고, 입력 배열을 먼저 선택 평형으로 좁히는 것만으로 선택 평형 모드에서
+  자연히 다른 평형이 섞이지 않게 만듦.
+
+검증:
+
+`tsc`/`eslint`/`build`/`prisma validate`/`migrate status` 전부 통과. 로컬
+`next dev`로 문서33 표본 단지들(대신푸르지오1차/레이카운티/엘지메트로시티3/
+명륜아이파크1단지)에서 거래 충분·부족 양쪽 사례, 84.919㎡/84.9194㎡ collision
+케이스, '전체' 선택 회귀를 전부 실측 확인 — 특히 엘지메트로시티3 243.35㎡(매매
+1건/전세 충분)에서 매매 선만 안내와 함께 숨고 전세 선은 정상 표시되는 것,
+명륜아이파크1단지 84.919㎡(5년 기준 매매 1건/전세 0건)에서 "매매·전세 모두
+적어" 안내가 뜨고 84.9194㎡(32건)의 데이터와 전혀 섞이지 않는 것을 확인. 모바일
+좁은 뷰포트는 도구 제약으로 스크린샷을 얻지 못해 코드 근거로만 뷰포트 무관성을
+판단(문서35와 동일한 한계).
+
+서비스 코드 변경:
+
+`src/app/apt/[name]/apt-client.tsx`(selectedArea prop 전달 2곳),
+`src/components/PriceTrendChart.tsx`(B2-2 색상 유지 + selectedArea 필터링/안내
+문구 추가), `src/components/InvestmentMetrics.tsx`(selectedArea 필터링 추가).
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+핵심 목표(평형 기준 일치, silent fallback 금지, 매매/전세 독립 판단, 추가 API
+호출 0건, B2-2 색상 유지) 전부 실측으로 확인. aggregation 변경(월별 중앙값)과
+Metrics의 6개월 고정 창 재검토는 범위 밖으로 남겨 별도 STEP 후보로 기록.
+commit/push 하지 않았다. 사용자 모바일 검수 후 B2-2와 함께 완료 여부 결정.
+
+상태:
+
+APT DETAIL B2-3 구현 완료 / 모바일 검수중(2026-08-16).
