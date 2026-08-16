@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-// 카카오 로컬 카테고리 코드 중 이 컴포넌트에서 실제로 사용하는 4종.
-// SC4(학교), SW8(지하철), HP8(병원), MT1(대형마트)
-type KakaoCategoryCode = 'SC4' | 'SW8' | 'HP8' | 'MT1';
+// 카카오 로컬 카테고리 코드 중 이 컴포넌트에서 실제로 사용하는 7종.
+// SC4(학교), SW8(지하철), HP8(병원), MT1(대형마트), CS2(편의점), PM9(약국),
+// PS3(어린이집,유치원 — Kakao 공식 category_group_name 자체가 이 둘을 묶어서
+// 부른다, 실측 확인. 그래서 이 카테고리를 쓰는 화면은 반드시 "어린이집·유치원"처럼
+// 두 시설을 함께 지칭하는 라벨을 써야 한다 — "어린이집"만 쓰면 유치원 결과가
+// 섞여 나오는데 라벨이 실제와 달라진다).
+type KakaoCategoryCode = 'SC4' | 'SW8' | 'HP8' | 'MT1' | 'CS2' | 'PM9' | 'PS3';
 
 interface Props {
   address: string;
@@ -23,6 +27,9 @@ const CATEGORY_ICON: Record<string, string> = {
   SW8: '🚇',
   HP8: '🏥',
   MT1: '🛒',
+  CS2: '🏪',
+  PM9: '💊',
+  PS3: '🧸',
 };
 
 const KEYWORD_ICON: Record<string, string> = {
@@ -126,7 +133,9 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
           .filter((p) => !EXCLUDED_NAME_SUBSTRINGS.some((s) => p.place_name.includes(s)));
 
         if (merged.length === 0) {
-          setError('주변에 해당 인프라가 없습니다.');
+          // [UI-C2] "주변에 없습니다"는 검색 반경(카테고리 1.5km/키워드 5km) 밖에도
+          // 실제로는 있을 수 있는데 단정하는 느낌을 준다 — 반경 기준임을 명시한다.
+          setError('검색 반경 내 정보가 없습니다.');
         } else {
           setPlaces(merged.slice(0, limit));
         }

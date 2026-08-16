@@ -2821,3 +2821,134 @@ DB 변경:
 상태:
 
 APT DETAIL B2-1 구현 완료 / 검수 대기(2026-08-16).
+
+
+## 2026-08-16
+
+### STEP 39 — APT DETAIL UI-C: 상세페이지 잔여 섹션 전수점검
+
+작업:
+
+아파트 상세페이지의 남은 12개 영역(단지 브리핑/교통/생활편의/학군/
+커뮤니티/퀵버튼/FloorPlanPanel/공유/StickyPriceBar/CommunityPreview/
+AdContainer/검색 진입점 부재)을 유지/개선/삭제/후속 STEP으로 분류하는
+조사·설계만 수행했다(코드 변경 없음). 상세는
+docs/development/39-apartment-detail-remaining-ui-audit.md 참고.
+
+핵심 발견:
+
+- 단지 브리핑(`buildAptBrief`)의 이전 통계 버그("소규모 단지 절대건수
+  오판", "단일 이상치 비교로 과장된 %")는 이미 수정돼 있음을 코드와
+  실측(부산 10개 단지, read-only)으로 재확인. 세대수 대비 거래 비율
+  기반 분류가 정확히 동작(예: 엘지메트로시티3 6건=한산 vs 레이카운티
+  62건=활발, 세대수 반영 없이는 반대로 보일 수 있는 케이스). 다만 거래
+  1건뿐인 소규모 단지에서 "활발한 편" 단정 표현이 나오는 잔여 개선
+  여지 발견.
+- 생활편의가 "공원/병원 위주"로 보이는 이유를 코드로 확정 —
+  `NeighborhoodInfoPanel.tsx`에 카테고리 2개(SW8/HP8)+키워드(KTX/공원)만
+  하드코딩. `KakaoPlaces.tsx`에 대형마트(MT1) 타입이 이미 정의돼 있으나
+  어디서도 호출되지 않는 미사용 상태 발견 — 저비용 확장 가능.
+- 버스 정보는 현재 코드에 전혀 없음(재확인). 카카오 로컬 키워드 검색
+  방식(기존 KTX/공원과 동일 패턴)으로 정류장 개수+최근접 거리 정도가
+  최소비용 구현 후보.
+- 상세페이지에 다른 단지 검색 진입점이 없는 문제 — `Header.tsx`가 이미
+  `searchSlot` prop을 지원하도록 설계돼 있으나(CSS 클래스까지 존재)
+  어느 페이지도 아직 사용하지 않음, `ApartmentAutocomplete`가 이미
+  `/map`·`/stats/[type]`·`RegionSelectModal`에서 재사용 중인 기존
+  컴포넌트임을 확인 — 신규 컴포넌트 없이 기존 두 자산을 연결하기만
+  하면 되는 낮은 리스크 구조.
+- 커뮤니티시설 퀵버튼: `communityFacilities` coverage가 여전히
+  27건 중 0건(0%, read-only 재확인) — 이전 audit과 동일.
+- "단지정보" 퀵버튼 모달과 AptSpecGrid 간 세대수/사용승인일/총주차대수
+  완전 중복, "글쓰기" CTA가 페이지 내 3곳(1구역 카드/CommunityPreview/
+  StickyPriceBar)에 중복 존재하는 것을 확인.
+
+검증:
+
+Hero/AreaSelector/Chart/Metrics/AptSpecGrid는 이미 B1~B2-1에서 검증됐으므로
+회귀 확인 수준으로만 재확인(이상 없음). 단지 브리핑은 production API를
+read-only로 직접 호출해 부산 10개 단지(88~7,374세대)로 실측. DB는
+`prisma.apartment.count()`(communityFacilities coverage) read-only
+조회만 수행, write 없음.
+
+서비스 코드 변경:
+
+없음.
+
+DB 변경:
+
+없음. schema/migration 변경 없음.
+
+최종 판단:
+
+유지/개선/삭제 매트릭스와 다음 구현 STEP 후보 3개(UI-C2 생활편의 확장 →
+UI-C1 검색 진입점 → UI-C3 버스, 추천 순서)를 정리했다. production
+code/API/DB/schema는 변경하지 않았고 commit/push 하지 않았다. 실제
+구현은 사용자 승인 후 별도 STEP으로 진행한다.
+
+상태:
+
+APT DETAIL UI-C 조사·설계 완료 / 구현 승인 대기(2026-08-16).
+
+
+## 2026-08-16
+
+### STEP 40 — APT DETAIL UI-C2: 생활편의 카테고리 확장
+
+작업:
+
+아파트 상세 "교통·편의시설" 탭의 생활편의를 병원·공원 2종에서 대형마트/
+편의점/약국/어린이집·유치원을 더한 6종으로 확장했다. 상세는
+docs/development/40-apartment-detail-living-convenience.md 참고.
+
+핵심 변경:
+
+- `src/components/KakaoPlaces.tsx`: `KakaoCategoryCode` 유니온에 `CS2`/
+  `PM9`/`PS3` 추가, 아이콘 매핑 추가. 4개 신규 카카오 카테고리 코드는
+  Kakao Local REST API로 직접 재검증(임의 코드 사용 없음) — `PS3`는
+  공식 `category_group_name`이 이미 "어린이집,유치원"임을 확인해 UI
+  라벨을 "어린이집·유치원"으로 확정.
+- `src/components/NeighborhoodInfoPanel.tsx`: 기존 교통·병원·공원 카드는
+  전혀 건드리지 않고(diff에 미등장, 회귀 없음) 같은 카드 패턴으로
+  카드 4개(대형마트/편의점/약국/어린이집·유치원)만 추가. 새 tab/공통
+  컴포넌트 없이 기존 "교통·편의시설" tab의 그리드를 그대로 확장.
+- `KakaoPlaces.tsx`의 결과 0건 문구를 "주변에 해당 인프라가 없습니다."
+  → "검색 반경 내 정보가 없습니다."로 개선(6개 카테고리 전체 공통 적용,
+  "정보 준비중" 사용 안 함).
+- `MT1`(대형마트) 타입은 이미 코드에 정의만 돼 있고 미사용 상태였던 것을
+  이번 STEP에서 실제로 연결.
+
+검증:
+
+`tsc`/`eslint`/`build`/`prisma validate`/`migrate status` 전부 통과.
+부산 5개 단지(도심/주거지역/대형마트 인접/소규모/외곽)를 Kakao Local
+REST API로 read-only 실측해 6개 카테고리 전부 반경 내 결과 존재, 오탐
+없음 확인. `apt-client.tsx`의 `infraTab` 기본값이 '환경'이라 이 섹션
+자체가 이미 tab-click 기반 lazy load였음을 재확인 — 페이지 최초 로딩에
+영향 없음. 카드 기준 API 호출 3배(콜 기준 약 1.8배) 증가는 탭을 실제로
+연 사용자에게만 발생.
+
+한계: 로컬 dev 서버(카카오 콘솔 미등록 도메인)에서 Kakao Maps JS SDK
+로드 자체가 차단돼(기존 병원·공원 카드도 동일 증상) 실제 데이터가 채워진
+화면·모바일 좁은 뷰포트는 이번 세션에서 확인하지 못했다 — production
+배포 후 재확인 필요. 결과 0건/API 실패 구분은 6개 호출부 전체에 영향을
+주는 변경이라 이번 STEP에서는 보류.
+
+서비스 코드 변경:
+
+`src/components/KakaoPlaces.tsx`, `src/components/NeighborhoodInfoPanel.tsx`.
+
+DB 변경:
+
+없음. schema/migration 변경 없음. 새 API/package 추가 없음.
+
+최종 판단:
+
+기존 Kakao Local 카테고리 검색 구조를 그대로 재사용해 최소 변경으로
+6종 확장을 구현했다. 데이터 정확도는 REST API로 검증했으나 실제 화면
+렌더링은 로컬 환경 제약으로 미확인 — commit/push 하지 않았고, 사용자
+모바일 검수 후 별도 지시를 기다린다.
+
+상태:
+
+APT DETAIL UI-C2 구현 완료 / 모바일 검수중(2026-08-16).
