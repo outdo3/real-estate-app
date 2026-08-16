@@ -19,9 +19,11 @@ import SchoolDistrictPanel from '@/components/SchoolDistrictPanel';
 import CommunityPreview from '@/components/CommunityPreview';
 import StickyPriceBar from '@/components/StickyPriceBar';
 import AdContainer from '@/components/AdContainer';
+import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import { getAreaDetailLabel, getUniqueAreaLabels } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
+import { recordApartmentVisit } from '@/lib/recent-apartments';
 
 // 차트 컴포넌트(recharts)는 번들이 무거워 메인 스레드를 오래 점유한다 — 상세페이지
 // 최초 렌더에 꼭 필요하지 않으므로 지연 로딩(ssr:false)해서 초기 로드를 가볍게 하고,
@@ -356,6 +358,14 @@ export default function ApartmentDetail() {
     if (!resolvedName) return;
     const complexId = `${lawdCdState}|${urlDong}|${resolvedName}`;
     setCurrentAptName(resolvedName);
+    // [UI-C1] "최근 본 단지" 기록 — pageReady가 처음 true가 되는(단지명·지역이 확정된)
+    // 이 시점에 위 조회 로그와 함께 딱 한 번만 남긴다. DB 저장 없음(localStorage만).
+    recordApartmentVisit({
+      name: resolvedName,
+      address: [heroRegionLabel, urlDong].filter(Boolean).join(' '),
+      lawdCd: lawdCdState,
+      dong: urlDong,
+    });
     fetch('/api/log/view', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -633,6 +643,15 @@ export default function ApartmentDetail() {
             </p>
           </div>
         );
+      case '빠른 검색':
+        // [UI-C1] 상세페이지에서 다른 단지로 즉시 이동. 기존 모달(activeModal/openModal/
+        // closeModal) 구조를 그대로 재사용 — 새 overlay 시스템을 만들지 않았다.
+        return (
+          <ApartmentQuickSearch
+            currentApt={{ name: displayName || aptName, dong: urlDong, address: primaryAddress }}
+            onClose={closeModal}
+          />
+        );
       default:
         return null;
     }
@@ -641,7 +660,31 @@ export default function ApartmentDetail() {
   return (
     <div className={styles.main}>
       <FullPageLoader active={!pageReady && !hasLoadedOnce} />
-      <Header />
+      <Header
+        searchSlot={
+          <button
+            type="button"
+            onClick={() => openModal('빠른 검색')}
+            aria-label="다른 아파트 검색"
+            title="다른 아파트 검색"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '38px',
+              height: '38px',
+              border: 'none',
+              background: 'transparent',
+              borderRadius: '50%',
+              fontSize: '1.2rem',
+              cursor: 'pointer',
+              color: 'var(--text-primary)',
+            }}
+          >
+            🔍
+          </button>
+        }
+      />
 
       {/* 팝업(모달) */}
       {activeModal && (

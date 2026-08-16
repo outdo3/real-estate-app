@@ -20,6 +20,16 @@ interface ApartmentAutocompleteProps {
   onSubmit?: (keyword: string) => void;
   autoFocus?: boolean;
   inputStyle?: React.CSSProperties;
+  // [UI-C1] 부모가 현재 검색어/결과 유무를 알아야 할 때만 선택적으로 구독한다(예: 검색어가
+  // 비어 있으면 "최근 본 단지"를, 결과가 0건이면 안내 문구를 보여주는 화면). 기존
+  // 호출부(지도/통계/지역선택)는 이 prop을 넘기지 않으므로 동작이 전혀 바뀌지 않는다.
+  onQueryStateChange?: (state: { keyword: string; hasResults: boolean }) => void;
+  // [UI-C1-FIX] 카카오 키워드 검색은 기본적으로 전국 범위라, 동명 단지가 전혀 다른
+  // 지역에서 1순위로 잡히는 오매칭 위험이 있다(실측: "금호어울림" 검색 시 경기 남양주
+  // 단지가 1순위). 이 좌표를 넘기면 그 위치에 가까운 결과가 우선 정렬된다(하드
+  // 반경 제한은 아님 — 전국 결과 자체는 그대로 나오되 순서만 바뀐다). 기존
+  // 호출부(지도/통계/지역선택)는 넘기지 않으므로 기존 정렬(정확도순) 그대로 유지된다.
+  biasLocation?: { lat: number; lng: number };
 }
 
 const DEFAULT_CATEGORY_FILTER = '아파트';
@@ -53,6 +63,8 @@ export default function ApartmentAutocomplete({
   onSubmit,
   autoFocus,
   inputStyle,
+  onQueryStateChange,
+  biasLocation,
 }: ApartmentAutocompleteProps) {
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -172,6 +184,7 @@ export default function ApartmentAutocomplete({
     if (!keyword.trim()) {
       setResults([]);
       setShowDropdown(false);
+      onQueryStateChange?.({ keyword: '', hasResults: false });
       return;
     }
 
@@ -179,6 +192,16 @@ export default function ApartmentAutocomplete({
       const runSearch = () => {
         if (!window.kakao?.maps?.services) return;
         const ps = new window.kakao.maps.services.Places();
+        // biasLocation이 있으면(예: 현재 보고 있는 단지 좌표) 카카오 검색에 위치를
+        // 함께 넘겨 관련성 순위 안에서 그 위치와 가까운 결과가 더 우선되도록 한다.
+        // sort를 DISTANCE로 강제하지는 않는다 — 실측 결과 DISTANCE 강제 정렬은 정확한
+        // 이름으로 검색해도 더 가까운 무관한 장소에 밀려 정답이 검색 결과 자체에서
+        // 빠져버리는 회귀를 만들었다(예: "동래래미안아이파크"가 상위 10건 밖으로
+        // 밀림). location만 넘기고 기본 정확도 정렬을 유지하면 이 회귀 없이도
+        // 동명 단지가 다른 지역에서 1순위로 잡히는 빈도를 줄이는 효과가 있었다(실측).
+        const searchOptions = biasLocation
+          ? { location: new window.kakao.maps.LatLng(biasLocation.lat, biasLocation.lng) }
+          : undefined;
         ps.keywordSearch(keyword, (data: any, status: any) => {
           if (status === window.kakao.maps.services.Status.OK) {
             // categoryFilter가 있으면 그 카테고리만 남긴다(예: '아파트'로 단지 검색 시 역/상점
@@ -190,11 +213,13 @@ export default function ApartmentAutocomplete({
             setResults(apartments);
             setShowDropdown(apartments.length > 0);
             enrichTopResults(apartments);
+            onQueryStateChange?.({ keyword, hasResults: apartments.length > 0 });
           } else {
             setResults([]);
             setShowDropdown(false);
+            onQueryStateChange?.({ keyword, hasResults: false });
           }
-        });
+        }, searchOptions);
       };
 
       if (window.kakao && window.kakao.maps) {

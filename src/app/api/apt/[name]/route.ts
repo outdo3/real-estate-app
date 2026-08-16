@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { geocodeApartmentName } from '@/lib/geocode-apt';
 import { getOrSetCache } from '@/lib/server-cache';
 import { logServerError } from '@/lib/log-server-error';
+import { aptNamesMatch } from '@/lib/apt-name-match';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,24 +91,21 @@ export async function GET(
       });
     }
 
-    const normalizeName = (name: string) => {
-      if (!name) return '';
-      return name.replace(/\s+/g, '').replace(/아파트$/, '');
-    };
-
-    const searchAptName = normalizeName(aptName);
     // 이름만으로는 같은 lawdCd(구/군) 안에 있는 서로 다른 단지가 섞여 잡힐 수 있다 —
     // 예: "롯데캐슬"로 검색하면 "대신롯데캐슬"뿐 아니라 다른 동의 "OO롯데캐슬2차"까지
     // 부분일치로 함께 잡히고, "푸르지오"는 서로 다른 두 단지("대신푸르지오1차" 서대신동2가,
     // "대신푸르지오2차" 서대신동1가)를 동시에 매칭해버리는 걸 실측으로 확인했다. dong은
     // 위에서 URL/DB/지오코딩으로 이미 최대한 확보했으므로, 있으면 그 동에 속한 거래만으로
     // 좁혀서 브랜드명이 겹치는 타 단지 데이터가 섞이는 걸 원천 차단한다.
+    // [UI-C1-FIX] 이름 비교 자체는 apt-name-match.ts(공백/아파트 접미사 제거는 기존
+    // 그대로, 건물번호 접미사·차수 위치·LG/엘지 alias만 안전하게 보강)로 옮겼다 — 이미
+    // 매칭되던 쌍을 깨뜨리지 않고 표기 차이만 추가로 흡수하는 상위집합이라 이 라우트를
+    // 쓰는 다른 진입 경로(지도, 직접 URL 등)에도 안전하다(회귀 없이 매칭만 넓어짐).
     const filteredTrades = allTrades
       .filter(item => {
         if (!item.name) return false;
         if (dong && item.dong !== dong) return false;
-        const itemName = normalizeName(item.name);
-        return itemName.includes(searchAptName) || searchAptName.includes(itemName);
+        return aptNamesMatch(item.name, aptName);
       })
       .map(item => {
         const priceStr = item.price;

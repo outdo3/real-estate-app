@@ -3005,3 +3005,143 @@ DB 변경:
 상태:
 
 APT DETAIL UI-C2-FIX 구현 완료 / 검수 대기(2026-08-16).
+
+
+## 2026-08-16
+
+### STEP 42 — APT DETAIL UI-C1: 상세페이지 빠른 단지검색 + 최근 본 단지
+
+작업:
+
+상세페이지에서 다른 아파트로 즉시 이동할 수 있는 "빠른 검색" 기능을
+구현했다. 상세는 docs/development/42-apartment-detail-quick-search.md
+참고.
+
+핵심 변경:
+
+- `Header.tsx`에 이미 있었지만 어느 페이지도 쓰지 않던 `searchSlot`
+  prop에 검색 아이콘(🔍, aria-label="다른 아파트 검색")을 연결 —
+  Header.tsx/CSS는 전혀 수정하지 않았다.
+- 검색 자체는 `/map`·`/stats`·`RegionSelectModal`에서 이미 쓰는
+  `ApartmentAutocomplete`를 그대로 재사용, 선택적 콜백 prop
+  `onQueryStateChange` 1개만 추가(기존 호출부 영향 없음).
+- `apt-client.tsx`의 기존 모달 시스템(activeModal/openModal/closeModal)에
+  `'빠른 검색'` case 하나만 추가 — 새 overlay 시스템을 만들지 않았다.
+- 검색 결과 선택 시 `ApartmentAutocomplete` 자신의 enrichTopResults()가
+  쓰는 것과 동일한 좌표→법정동 역지오코딩으로 lawdCd/dong을 얻어
+  기존 canonical URL(`/apt/[name]?lawdCd=..&dong=..`, /map "상세보기"
+  버튼과 동일 형태)로 직접 이동 — 홈/AI검색/지도를 거치지 않는다.
+- "최근 본 단지"는 신규 client-side localStorage(`ejip:recentApartments`,
+  최대 8개, name+dong 중복 갱신, 손상 방어)만 사용 — DB/로그인 연동 없음.
+  기록은 새 effect가 아니라 기존 조회 로그 effect(pageReady 확정 시점)를
+  확장해 모든 진입 경로를 자동으로 커버한다.
+- Android/브라우저 뒤로가기로 검색만 닫히고 상세페이지는 이탈하지
+  않도록 history.pushState+popstate를 이 컴포넌트에만 추가했다.
+
+검증:
+
+`tsc`/`eslint`/`build`/`prisma validate`/`migrate status` 전부 통과.
+로컬 next dev(포트 3000, Kakao 앱키 등록 도메인)에서 CASE A~G 실측 —
+검색→선택→즉시이동, 최근 본 단지 표시/현재 단지 제외, 취소, 결과없음
+empty state, 손상된 localStorage 방어(크래시 없음), history.back()
+시뮬레이션으로 popstate 동작까지 확인. CASE B에서 카카오 POI 검색명과
+MOLIT 등록명 불일치(ApartmentAutocomplete의 기존 한계, 이번 STEP 문제
+아님)를 발견해 정직하게 기록. 모바일 360/375/390px 자동 뷰포트는 도구
+제약으로 실측하지 못해 CSS 구조 근거로만 판단, 실기기 검수 필요.
+
+서비스 코드 변경:
+
+신규 `src/lib/recent-apartments.ts`, `src/components/ApartmentQuickSearch.tsx`.
+수정 `src/components/ApartmentAutocomplete.tsx`,
+`src/app/apt/[name]/apt-client.tsx`.
+
+DB 변경:
+
+없음. schema/migration 변경 없음. 새 외부 API 없음.
+
+최종 판단:
+
+기존 Header searchSlot·ApartmentAutocomplete·모달 시스템·canonical
+routing 4가지를 전부 재사용해 새 검색 시스템 없이 최소 코드로 구현했다.
+commit/push 하지 않았다. 사용자 검수 후 별도 지시를 기다린다.
+
+상태:
+
+APT DETAIL UI-C1 구현 완료 / 검수 대기(2026-08-16).
+
+
+## 2026-08-17
+
+### STEP 43 — APT DETAIL UI-C1-FIX: 빠른 단지검색 매칭 안정화
+
+작업:
+
+STEP 42의 "빠른 검색"에서 UI-C1-PRECHECK가 발견한 카카오 POI명 ↔
+MOLIT 등록명 표기 차이(검색 실패)와 동명 단지 오매칭(전국 검색) 위험을
+줄였다. 상세는
+docs/development/43-apartment-quick-search-matching-fix.md 참고.
+
+핵심 변경:
+
+- 신규 `src/lib/apt-name-match.ts` — 기존 route.ts의 정규화(공백 제거,
+  끝 "아파트" 제거)를 유지하면서 건물번호 접미사 제거, 차수(1차/2차)
+  위치 무관 토큰 비교, `LG↔엘지` 소수 brand alias만 안전하게 추가.
+  문자 유사도(Levenshtein 등)는 쓰지 않는다. 차수가 서로 다르면 즉시
+  불일치 처리하는 안전장치 포함.
+- `/api/apt/[name]/route.ts`의 이름 비교를 `aptNamesMatch()` 호출로
+  교체 — 기존 `dong` 필터는 완전히 그대로 유지, 매칭 범위만 상위집합
+  으로 확장(회귀 없음).
+- `ApartmentAutocomplete.tsx`에 선택적 `biasLocation` prop 추가 — 카카오
+  `keywordSearch`에 `location`만 소프트 tiebreaker로 전달(`sort:
+  DISTANCE` 강제는 실측 중 정확 매칭 회귀가 발견돼 제거). 기존
+  `/map`·`/stats`·`RegionSelectModal` 호출부는 prop을 넘기지 않아
+  기존 동작 그대로.
+- `ApartmentQuickSearch.tsx` — 현재 단지 주소로 bias 좌표 지오코딩,
+  검색 결과 선택 시 이동 전 `/api/apt/[name]`으로 실거래 존재를 먼저
+  확인하고, 없으면 다른 단지로 대체하지 않고 실패 안내 후 재검색을
+  유도(fail-safe). `recent-apartments.ts` 정책은 변경 없음.
+- `apt-client.tsx` — `ApartmentQuickSearch`에 `currentApt.address` 한
+  줄만 추가 전달(기존 `primaryAddress` 재사용).
+- 뒤로가기(history.pushState/popstate) 블록은 이번 STEP에서 수정하지
+  않았다 — history 이중 소비 이슈는 후속 STEP으로 유지.
+
+검증:
+
+`tsc`/`eslint`(무관한 기존 warning 1건 제외 0 error)/`next build`/
+`prisma validate`/`migrate status` 전부 통과. 로컬 next dev(포트 3000)
+라이브 브라우저로 대표 실패 사례 4건 재검증 — A(엘지메트로시티3)·
+B(대신푸르지오2차)는 실거래 데이터로 성공 이동, D(협성르네상스)는
+bias로 목표 지역이 상위권 진입해 성공 이동, C(금호어울림)는 브랜드명
+자체의 구조적 모호함으로 미해결(오매칭 재현 방지 위해 클릭하지 않고
+검색 결과만으로 판정, 문서에 한계로 기록). 정상 사례 5종(대신푸르지오
+1차/명륜아이파크1단지/동래래미안아이파크/레이카운티/화명롯데캐슬카이저)
+전부 API 직접 호출로 회귀 없음 확인(오류 0건). `/map`·`/stats`·
+`RegionSelectModal`은 `biasLocation` 미사용 확인(grep)으로 영향 없음.
+30개 이상 표본 종합 오매칭 0건(성공 기준 충족) — 상세 표는 문서 43
+참고.
+
+서비스 코드 변경:
+
+신규 `src/lib/apt-name-match.ts`. 수정 `src/app/api/apt/[name]/route.ts`,
+`src/components/ApartmentAutocomplete.tsx`,
+`src/components/ApartmentQuickSearch.tsx`,
+`src/app/apt/[name]/apt-client.tsx`.
+
+DB 변경:
+
+없음. schema/migration 변경 없음. 새 외부 API 없음. fuzzy matching
+패키지 추가 없음.
+
+최종 판단:
+
+이름 매칭은 규칙 기반 정규화만으로, 검색 순위는 소프트 위치 bias만으로,
+최종 안전장치는 이동 전 실거래 확인(fail-safe)으로 처리해 "오매칭
+금지"를 구조적으로 지켰다. 브랜드명만으로는 원천적으로 모호한 검색어
+(C 사례)는 완전히 해결하지 못했음을 정직하게 남겼다. AI 검색/홈 검색/
+지도 검색 UX/뒤로가기 수정/즐겨찾기/비교/버스/점수체계/이집 브리핑/
+평면도 등 다른 STEP은 시작하지 않았다. commit/push 하지 않았다.
+사용자 검수 후 별도 지시를 기다린다.
+
+상태:
+
+APT DETAIL UI-C1-FIX 구현 완료 / 검수 대기(2026-08-17).
