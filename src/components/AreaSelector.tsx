@@ -32,9 +32,14 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
     .slice(0, MAX_CHIPS)
     .map(([area]) => area);
 
-  const chipAreas = selectedArea !== '전체' && !topAreas.includes(selectedArea)
+  // 어떤 평형이 상위 칩으로 뽑히는지는 위 거래량 기준을 그대로 유지하고,
+  // 뽑힌 이후의 "보여지는 순서"만 모달(allAreas)과 동일하게 전용면적
+  // 오름차순으로 맞춘다 — 거래량순 정렬 결과를 그대로 노출하면 면적 기준으로
+  // 봤을 때 순서가 무작위처럼 보이는 문제(모바일 검수에서 확인)가 있었다.
+  const chipAreas = (selectedArea !== '전체' && !topAreas.includes(selectedArea)
     ? [...topAreas, selectedArea]
-    : topAreas;
+    : topAreas
+  ).sort((a, b) => parseFloat(a) - parseFloat(b));
 
   const renderAreaLabel = (area: string) => resolveAreaLabel(parseFloat(area), areaLabels);
 

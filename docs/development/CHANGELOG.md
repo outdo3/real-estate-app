@@ -2701,3 +2701,54 @@ commit/push 하지 않았다. 사용자 모바일 검수 후 B2-2와 함께 완�
 상태:
 
 APT DETAIL B2-3 구현 완료 / 모바일 검수중(2026-08-16).
+
+
+## 2026-08-16
+
+### STEP 37 — APT DETAIL B2-3 FIX: 평형 선택 순서 정렬
+
+작업:
+
+B2-2/B2-3 production 배포(commit 1ebd840) 후 사용자 모바일 검수에서 "평형
+선택 칩 순서가 무작위처럼 보인다"는 문제가 확인되어, 표시 순서만 수정했다.
+상세는 docs/development/37-apartment-detail-area-order-fix.md 참고.
+
+핵심 변경:
+
+- 원인: `AreaSelector.tsx`의 모달용 목록(`allAreas`)은 이미 `parseFloat`
+  오름차순 정렬이었으나, 상단 가로 칩용 목록(`topAreas`→`chipAreas`)은
+  "거래량 많은 상위 4개만 칩으로 노출"하기 위해 거래 건수(count) 내림차순
+  정렬만 되어 있어 화면상 면적 크기와 무관한 순서로 보였다.
+- 수정: 상위 4개(+현재 선택된 평형 강제 포함) 선정 로직은 그대로 두고,
+  최종 `chipAreas`를 렌더 직전 `parseFloat` 기준 전용면적 오름차순으로
+  재정렬. `allAreas`(모달)는 이미 정답이라 손대지 않음 — 두 목록이 동일
+  규칙을 쓰므로 상단 칩과 모달 순서가 항상 일치한다.
+- raw `trade.area` internal key, collision 해소 알고리즘(area-utils.ts),
+  '전체' sentinel 처리는 전혀 변경하지 않았다 — 정렬은 배열 순서만 바꾸는
+  문제라 이 정책들과 상호작용하지 않는다.
+
+검증:
+
+`tsc`/`eslint`/`build` 전부 통과. `git status --short` → `AreaSelector.tsx`
+1개 파일만 변경(DB/schema/migration 없음). 로컬 `next dev`로 명륜아이파크1
+단지(collision 84.92/84.99 독립 유지 확인), 엘지메트로시티3(243.35㎡ 거래
+부족 정책 회귀 없음 재확인), 대신푸르지오1차(회귀 없음) 실측 확인 — 세 단지
+모두 상단 칩·모달이 "전체 → 작은 면적 → 큰 면적" 순서로 일치.
+
+서비스 코드 변경:
+
+`src/components/AreaSelector.tsx` (`chipAreas` 정렬 추가, 1개 파일).
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+핵심 목표(전체→오름차순 정렬, 상단 칩/모달 순서 일치, raw key·collision
+정책·거래 부족 정책 무손상) 전부 실측으로 확인. commit/push 하지 않았다.
+사용자 모바일 검수 후 별도 지시를 기다린다.
+
+상태:
+
+APT DETAIL B2-3 FIX 구현 완료 / 모바일 검수중(2026-08-16).
