@@ -42,6 +42,21 @@ const KEYWORD_ICON: Record<string, string> = {
 // 인프라가 아닌 결과가 카테고리/키워드 검색에 섞여 들어오는 것을 막는다).
 const EXCLUDED_NAME_SUBSTRINGS = ['아파트', '빌라', '화장실', '맨션', '타워'];
 
+// [UI-C2-FIX] 'KTX'/'기차역' 키워드 검색은 상호명에 그 문자열이 "포함"되기만 하면
+// 걸리는 느슨한 검색이라, "KTX특송퀵서비스"(교통,수송 > 운송 > 퀵서비스), "KTX렌트카"
+// (서비스,산업 > 전문대행 > 렌터카), "KTX부동산"(부동산 > 부동산서비스 > 부동산중개업)
+// 처럼 실제 철도역이 아닌 업체가 섞여 들어온다(실측 확인). 반면 실제 역(부산역 등)은
+// category_name이 항상 "…기차,철도 > 기차역…" 경로를 갖는다 — 이건 Kakao가 매기는
+// 공식 분류이지 이름 추정이 아니라서, 특정 상호를 하드코딩하지 않고도 일반적으로
+// 걸러낼 수 있다.
+const isRailwayStation = (p: any): boolean => (p.category_name || '').includes('기차,철도 > 기차역');
+
+// "폐역"은 category_name 마지막 세그먼트에 Kakao가 명시적으로 붙이는 상태값이다
+// (예: "교통,수송 > 기차,철도 > 기차역 > 폐역" — 신선대역/우암역 등 실측 확인).
+// 이 명시적 표기가 있을 때만 제외한다 — 운행 중인 역을 이름만 보고 추정으로 걸러내는
+// 방식이 아니다.
+const isClosedStation = (p: any): boolean => (p.category_name || '').includes('폐역');
+
 const iconFor = (place: any, keyword?: string) => {
   if (place.category_group_code && CATEGORY_ICON[place.category_group_code]) {
     return CATEGORY_ICON[place.category_group_code];
@@ -130,7 +145,13 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
           // '공원' 키워드 검색은 카카오가 이름에 포함된 문자열만 보고 매칭해서 "OO공원아파트",
           // "공원빌라", "체육공원 화장실"처럼 실제로는 병원·약국·공원이 아닌 곳도 섞여 들어온다
           // — 이름에 이런 문자열이 포함된 결과는 제외한다.
-          .filter((p) => !EXCLUDED_NAME_SUBSTRINGS.some((s) => p.place_name.includes(s)));
+          .filter((p) => !EXCLUDED_NAME_SUBSTRINGS.some((s) => p.place_name.includes(s)))
+          // [UI-C2-FIX] 폐역은 어느 검색 경로로 왔든(카테고리/키워드) 항상 제외 — 카카오가
+          // 명시적으로 표기한 상태값만 근거로 삼는다.
+          .filter((p) => !isClosedStation(p))
+          // [UI-C2-FIX] 'KTX'/'기차역' 키워드로 찾은 결과만 "실제 철도역인지" 추가 검증한다
+          // (SW8 지하철 카테고리 결과나 다른 카테고리는 이 조건과 무관해 그대로 통과).
+          .filter((p) => !(p.__keyword === 'KTX' || p.__keyword === '기차역') || isRailwayStation(p));
 
         if (merged.length === 0) {
           // [UI-C2] "주변에 없습니다"는 검색 반경(카테고리 1.5km/키워드 5km) 밖에도

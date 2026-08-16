@@ -2952,3 +2952,56 @@ DB 변경:
 상태:
 
 APT DETAIL UI-C2 구현 완료 / 모바일 검수중(2026-08-16).
+
+
+## 2026-08-16
+
+### STEP 41 — APT DETAIL UI-C2-FIX: 교통 오탐/폐역 노출 최소 수정
+
+작업:
+
+UI-C2 모바일 검수 중 발견된 교통 카드 문제 2건만 최소 수정했다. 상세는
+docs/development/41-apartment-detail-transport-filter-fix.md 참고.
+
+핵심 발견 및 변경:
+
+- Kakao Local REST API 실측(read-only) 결과, "KTX특송퀵서비스"/"KTX렌트카"/
+  "KTX부동산" 등 오탐은 `category_name`이 "운송>퀵서비스"/"렌터카"/
+  "부동산중개업" 등으로 실제 역과 완전히 다른 반면, 진짜 역은 항상
+  "기차,철도 > 기차역" 경로를 가짐을 확인 — 특정 상호를 하드코딩하지 않고
+  이 공식 분류 경로 포함 여부로 일반 필터(`isRailwayStation`)를 추가했다.
+- 신선대역/우암역 같은 폐역은 `category_name` 마지막 세그먼트에 카카오가
+  명시적으로 "폐역"을 표기함을 확인 — 이 명시적 상태값만 근거로 필터
+  (`isClosedStation`)를 추가했다(운행 중인 역을 이름으로 추정 제거하지 않음).
+- `src/components/KakaoPlaces.tsx` 필터 체인에 두 줄만 추가. 새 필터는
+  `__keyword`가 'KTX'/'기차역'인 결과에만 적용돼 SW8 지하철 카테고리
+  결과와 생활편의 5종(병원/대형마트/편의점/약국/어린이집·유치원/공원)은
+  전혀 영향받지 않음.
+
+검증:
+
+`tsc`/`eslint`/`build`/`prisma validate`/`migrate status` 전부 통과.
+부산 5개 단지(대신푸르지오1차/남성한빛가든/엘지메트로시티3/명륜아이파크1
+단지/대가하이츠)에서 KakaoPlaces.tsx의 실제 필터 체인을 그대로 재현해
+REST API로 검증 — KTX특송퀵서비스·신선대역·우암역 전부 제거, 정상
+지하철역(동대신역/서대신역 등) 및 정상 KTX/기차역(부산역, 부산진화물역)은
+누락 없이 유지됨을 확인.
+
+서비스 코드 변경:
+
+`src/components/KakaoPlaces.tsx`.
+
+DB 변경:
+
+없음. schema/migration 변경 없음. 카드 디자인/radius/정렬/호출 수/신규
+카테고리/버스는 변경하지 않았다.
+
+최종 판단:
+
+두 문제 모두 Kakao 공식 분류값(category_name)만으로 특정 상호 하드코딩
+없이 일반적으로 해결했다. commit/push 하지 않았다. 사용자 검수 후 별도
+지시를 기다린다.
+
+상태:
+
+APT DETAIL UI-C2-FIX 구현 완료 / 검수 대기(2026-08-16).
