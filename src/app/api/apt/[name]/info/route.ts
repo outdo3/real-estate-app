@@ -78,6 +78,27 @@ export async function GET(
             approvalDate: cached.approvalDate,
           };
         }
+
+        // 이름(aptName)은 MOLIT 실거래 원본 표기 그대로라, 같은 물리적 건물이 실거래
+        // 데이터에서는 "엘지메트로시티1"/"엘지메트로시티3"/"…아파트"처럼 동/차수/접미사가
+        // 다른 여러 이름으로 등장할 수 있다(실측: 부산 캐시 24건 중 3건이 이런 이름 변형
+        // 중복). 건축물대장 총괄표제부 조회 자체가 이름이 아니라 지번(jibun)으로만
+        // 대상을 특정하므로, 같은 dong+jibun이면 물리적으로 같은 건물이라고 봐도
+        // 안전하다 — 이름 유사매칭(문자열 부분일치 등)이 아니라 지번 정확히 일치일 때만
+        // 재사용한다. jibun이 없으면(최초 병렬 조회 등) 이 조회는 건너뛴다.
+        if (jibun) {
+          const byJibun = await prisma.apartment.findFirst({ where: { dong: dongKey, jibun } });
+          if (byJibun && byJibun.parkingCount && byJibun.far && byJibun.bcr && byJibun.approvalDate) {
+            return {
+              parkingCount: byJibun.parkingCount,
+              far: byJibun.far,
+              bcr: byJibun.bcr,
+              totalHouseholds: byJibun.totalHouseholds ?? null,
+              approvalDate: byJibun.approvalDate,
+            };
+          }
+        }
+
         return null;
       } catch (e) {
         console.warn('Apartment DB lookup failed (DB 미설정 등 — 라이브 조회로 폴백)', e);
