@@ -1,0 +1,20 @@
+.symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+}
+
+.default {
+  background: var(--ejip-green);
+  color: #ffffff;
+}
+
+.light {
+  background: #ffffff;
+  color: var(--ejip-green);
+}

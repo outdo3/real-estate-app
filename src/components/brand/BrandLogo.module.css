@@ -1,0 +1,47 @@
+.logo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.main {
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.sub {
+  font-weight: 600;
+  font-size: 0.62em;
+  letter-spacing: 0.2px;
+  opacity: 0.7;
+}
+
+.default .main {
+  color: var(--ejip-green);
+}
+
+.default .sub {
+  color: var(--text-muted);
+}
+
+.light .main {
+  color: #ffffff;
+}
+
+.light .sub {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.horizontal .main {
+  font-size: 1.15rem;
+}
+
+.compact .main {
+  font-size: 1.05rem;
+}
+
+.compact .sub {
+  display: none;
+}

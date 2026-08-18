@@ -34,6 +34,18 @@
   --transition-fast: 0.15s ease-in-out;
   --transition-normal: 0.25s ease-in-out;
   --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* [BRAND STEP 56-B2] D안 브랜드 컬러 토큰. 기존 --primary-color(#03c75a,
+     네이버 그린 참고값)는 이번 STEP에서 값을 바꾸지 않는다 — 이 토큰들은
+     아직 어떤 화면에서도 참조하지 않는 추가 전용(additive) 정의이며,
+     실제 --primary-color 교체 여부는 시각 검수 후 STEP 57-A 이후 판단한다.
+     자세한 배경은 docs/development/56-brand-assets.md 참고. */
+  --ejip-green: #13A367;
+  --ejip-green-deep: #0A7A4F;
+  --ejip-mint: #E6F7EF;
+  --ejip-yellow: #FFCA3D;
+  --ejip-charcoal: #1F2937;
+  --ejip-gray-50: #F5F6F8;
 }
 
 * {

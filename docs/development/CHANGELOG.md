@@ -3989,3 +3989,81 @@ D안 브랜드를 로고(정적 정체성)와 이집이(상태 기반 안내자)
 
 BRAND STEP 56-A 설계 완료 / production code 무수정 / 사용자 검수
 대기 / commit·push 하지 않음(2026-08-18).
+
+
+## 2026-08-18
+
+### BRAND STEP 56-B2 — D안 개발용 브랜드 자산 패키지화
+
+작업:
+
+D안 브랜드를 실제 Next.js 코드에서 재사용 가능한 구조로 패키지화했다.
+Home/Header/상세 등 실제 화면은 변경하지 않았다. 상세는
+docs/development/56-brand-assets.md 참고.
+
+핵심 결과:
+
+- 신규 `src/components/brand/BrandLogo.tsx`/`BrandSymbol.tsx`(+
+  각 `.module.css`) — `variant`/`tone`/`size`/`ariaLabel` 최소 API.
+  실제 로고·심볼 벡터 자산이 없어 텍스트 워드마크/이니셜 모노그램으로
+  렌더링(이것이 "임시"가 아니라 자산 도착 전까지의 실제 운영 상태임을
+  문서에 명시).
+- `src/app/globals.css`에 D안 컬러 토큰(`--ejip-green` 등 6개)을
+  **추가 전용**으로 삽입 — 기존 `--primary-color`(#03c75a, 원본
+  코드 주석에 "네이버 그린"이라고 명시돼 있음을 확인) 값은 바꾸지
+  않음. 전역 변수 값 교체는 즉시 전체 화면에 영향을 주는 "실제 UI
+  적용"이라 이번 STEP 범위 밖으로 판단, `--primary-color` 유지 vs
+  `--ejip-green` 전환은 시각 검수 후 STEP 57-A 이후 결정 사항으로
+  남김.
+- `public/brand/mascot/README.md` 신규 — 이집이 7개 포즈 파일명 규칙/
+  포맷(WebP, 투명배경, 1024px 원본, 200KB 상한)/우선순위 정의. 실제
+  이미지 파일은 생성하지 않음(AI 시각화 보드 시안을 그대로 crop해
+  쓰지 않는다는 원칙 준수).
+- Typography 조사 결과 Pretendard가 이미 `globals.css` 1번째 줄
+  CDN import로 로드 중임을 확인 — 신규 폰트 설치 없음.
+- favicon(`src/app/favicon.ico`) 유효성만 확인(정상 ICO 바이너리),
+  변경하지 않음 — 심볼 아트웍이 placeholder뿐이라 지금 바꾸면 엉성한
+  아이콘을 확정하는 셈이라 판단.
+- Brand Voice 코드화(`brandCopy.*`)와 `EjipyPose` 타입 정의는 YAGNI
+  판단으로 미생성 — 소비할 컴포넌트(FullPageLoader 확장 등)가 아직
+  코드에 없어, 실제 소비처가 생기는 STEP 57-A에서 함께 정의하기로
+  함.
+- **BLOCKER로 보고**: 로고 벡터 워드마크, 심볼 벡터 마크, 이집이
+  마스코트 일러스트(7개 포즈) 전부 미제작. 컴포넌트 인프라는 지금
+  바로 쓸 수 있지만 "완성된 그래픽 자산이 들어간 최종 로고/심볼/
+  캐릭터"는 이 자산들이 나올 때까지 STEP 57-A에서도 적용 불가.
+
+서비스 코드 변경:
+
+- 수정: `src/app/globals.css`(컬러 토큰 추가만, 기존 값 무변경)
+- 신규: `src/components/brand/BrandLogo.tsx`,
+  `src/components/brand/BrandLogo.module.css`,
+  `src/components/brand/BrandSymbol.tsx`,
+  `src/components/brand/BrandSymbol.module.css`,
+  `public/brand/mascot/README.md`,
+  `docs/development/56-brand-assets.md`(이 문서)
+- Header/Home/상세/지도/AI검색 UI: 무변경(신규 컴포넌트를 아직 어느
+  화면에도 연결하지 않음)
+
+DB 변경:
+
+없음.
+
+정적 검증:
+
+`npx tsc --noEmit` 통과, `npx eslint src/components/brand/*.tsx`
+통과(0 errors), `npx next build` 통과(기존 30개 라우트 그대로,
+회귀 없음). `package.json`/`package-lock.json` 무변경(신규 의존성
+없음).
+
+최종 판단:
+
+D안 브랜드를 코드에서 즉시 재사용 가능한 컴포넌트/토큰 구조로
+준비했다. 실제 시각 자산(벡터 로고/심볼/마스코트 일러스트)은 디자인
+작업이 필요해 이번 STEP 범위 밖이며, 사용자 승인 없는 자산을
+production에 확정하지 않는다는 원칙에 따라 BLOCKER로 남긴다.
+
+상태:
+
+BRAND STEP 56-B2 완료 / 컴포넌트·토큰 준비 완료 / 그래픽 자산
+BLOCKER / 실제 화면 미적용 / commit·push 하지 않음(2026-08-18).
