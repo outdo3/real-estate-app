@@ -3699,3 +3699,61 @@ Navigation의 시각적 일관성을 확보했다. 이모지→SVG 전환은 새
 
 MAIN UI-B2 / STEP 53 구현 완료 / 사용자 및 ChatGPT 검수 대기 /
 commit·push 하지 않음(2026-08-18).
+
+
+## 2026-08-18
+
+### STEP 54 — Presales Production 500 원인 조사
+
+작업:
+
+STEP 53 배포 검수 중 재발견된 production `/api/presales` 500의 원인을
+조사만 했다(코드 변경 없음). 상세는
+docs/development/54-presales-production-500.md 참고.
+
+핵심 결과:
+
+- **root cause 확정**: Supabase Session Pooler(`pool_size: 15`) 동시
+  세션 한도 초과(`FATAL: (EMAXCONNSESSION)`). 이미 존재하는 관측 기능
+  (STEP 21에서 추가한 `ErrorLog` 테이블)을 읽기 전용으로 조회해 실제
+  예외 스택트레이스 5건을 확보했고, 진단 스크립트 자체도 같은 오류로
+  1회 거부되는 것을 라이브로 재현했다.
+- [STEP 20(INFRA I1)](./20-infra-db-connection-analysis.md)이
+  "구조적 위험(MEDIUM), 로그 없어 확정 불가"로 남겨둔 바로 그 후보가
+  이번에 확정 원인으로 격상됨 — DATABASE_URL이 서버리스 비권장 방식인
+  Session Pooler(포트 5432)를 사용하고 `connection_limit`/`DIRECT_URL`이
+  미설정인 구조는 STEP 20 이후 변경된 적 없음을 재확인.
+- STEP 53의 `lucide-react` 설치/package-lock 정규화와는 무관함을
+  확인(Prisma 버전 불변, lucide-react 런타임 의존성 0개, 오류 최초
+  관측 시각이 STEP 53 코드 배포보다 앞섬).
+- schema mismatch 아님(쿼리에 쓰이는 필드 전부 schema와 일치),
+  코드 버그 아님(로컬에서 항상 정상), 데이터 문제 아님 — 순수
+  connection 용량 문제.
+- 부하가 낮아진 시점(로컬 dev 서버 종료 후) 재확인한 production은
+  200으로 정상 회복 — "지금 안 터진다"이지 "고쳐졌다"가 아님. 근본
+  원인이 남아있는 한 동시 접속이 늘면 재발한다.
+- 해결에는 `DATABASE_URL`(Vercel 환경변수) 및/또는
+  `prisma/schema.prisma`(`directUrl`) 변경이 필요 — STEP 54 승인
+  범위(코드 전용 수정) 밖이라 실행하지 않고 STOP, 사용자 승인 대기.
+
+서비스 코드 변경:
+
+없음. 문서만 작성(`docs/development/54-presales-production-500.md`
+신규, 이 CHANGELOG 항목). 진단용 임시 스크립트는 조사 직후 삭제(git
+추적 대상 아니었음).
+
+DB 변경:
+
+없음(읽기 전용 조회만 수행).
+
+최종 판단:
+
+Production `/api/presales` 500의 root cause를 확정했다. 해결에는
+DB 연결 구조(Supabase Pooler 종류/`connection_limit`/`DIRECT_URL`)
+변경이 필요하며, 이는 STEP 20에서도 이미 "별도 승인 필요"로 분류해
+둔 항목이다. 사용자 승인 없이 변경하지 않았다. BLOCKER로 유지.
+
+상태:
+
+STEP 54 원인 조사 완료 / 코드 미수정 / 구조 변경 사용자 승인
+대기(2026-08-18).
