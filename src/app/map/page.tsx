@@ -145,17 +145,26 @@ export default function FullscreenMapPage() {
   // 지역이 들어와 단지 밀집 지역에서 칩이 서로 겹침) — 레벨 4로 1~2단계 더 확대해
   // 시작하면 DETAIL_ZOOM_LEVEL(4) 기준 상세 카드 모드로 시작해 칩 간격이 넉넉해진다.
   const [zoomLevel, setZoomLevel] = useState(4);
+  // [MAP-FIX] 이전에는 hover와 click이 같은 selectedMarkerId 하나를 공유해서, PC에서
+  // 마커에 마우스를 올리면 바텀시트가 뜨지만 마우스를 마커 밖(바텀시트 쪽)으로 옮기는
+  // 순간 onMouseLeave가 곧바로 selectedMarkerId를 지워버려 "상세보기"를 누르기 전에
+  // 시트가 사라지는 버그가 있었다. hover(선점, 마우스가 떠나면 사라짐)와 click(고정,
+  // 다른 곳을 클릭하기 전까지 유지)을 별도 state로 분리해 해결한다.
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
-  // 선택된 마커의 전체 정보(하단 요약 카드용) — 조기 return(로딩/에러 화면)보다 위에서
+  const [hoveredMarkerId, setHoveredMarkerId] = useState<string | null>(null);
+  // 클릭으로 고정된 마커가 있으면 그것을 우선하고, 없을 때만 hover 중인 마커를 보여준다 —
+  // 고정된 마커가 있는 동안에는 다른 마커를 hover해도 바텀시트가 바뀌지 않는다(§5 우선순위).
+  const activeMarkerId = selectedMarkerId ?? hoveredMarkerId;
+  // 바텀시트에 표시할 마커의 전체 정보 — 조기 return(로딩/에러 화면)보다 위에서
   // 계산해야 훅 호출 순서가 렌더마다 always 동일하게 유지된다(Rules of Hooks).
   const selectedMarker = useMemo(() => {
-    if (!selectedMarkerId) return null;
+    if (!activeMarkerId) return null;
     for (const cluster of aptClusters) {
-      const found = cluster.markers.find((m) => m.id === selectedMarkerId);
+      const found = cluster.markers.find((m) => m.id === activeMarkerId);
       if (found) return found;
     }
     return null;
-  }, [selectedMarkerId, aptClusters]);
+  }, [activeMarkerId, aptClusters]);
   // 현재 화면의 마커들을 조회할 때 실제로 사용한 lawdCd. 마커 클릭 시 상세페이지로 이 값을
   // 함께 넘겨야 한다 — 안 넘기면 상세페이지가 자기 자신의 하드코딩된 기본 지역(서울 강남구)으로
   // 실거래가를 조회해 엉뚱한 지역/빈 데이터가 뜨는 버그로 이어진다.
@@ -445,8 +454,11 @@ export default function FullscreenMapPage() {
     const highlightRing = selected
       ? '0 0 0 3px rgba(37, 99, 235, 0.35), 0 6px 14px rgba(0,0,0,0.22)'
       : '0 2px 5px rgba(0,0,0,0.12)';
-    const handleSelect = () => setSelectedMarkerId(marker.id);
-    const handleDeselect = () => setSelectedMarkerId((cur) => (cur === marker.id ? null : cur));
+    // [MAP-FIX] hover는 selectedMarkerId가 아닌 별도의 hoveredMarkerId만 건드린다 —
+    // PC에서 마우스가 마커를 떠나도 이미 클릭으로 고정된 선택(selectedMarkerId)은
+    // 지워지지 않는다.
+    const handleHoverEnter = () => setHoveredMarkerId(marker.id);
+    const handleHoverLeave = () => setHoveredMarkerId((cur) => (cur === marker.id ? null : cur));
     // 첫 클릭은 하단 요약 카드를 띄우고(마커 선택), 이미 선택된 마커를 다시 클릭하면
     // 그때 상세페이지로 이동한다 — 요약 카드가 뜰 새도 없이 바로 이동해버리면 카드 안의
     // 광고 구좌를 포함해 아무것도 보여줄 수 없기 때문.
@@ -479,8 +491,8 @@ export default function FullscreenMapPage() {
       return (
         <div
           onClick={handleClick}
-          onMouseEnter={handleSelect}
-          onMouseLeave={handleDeselect}
+          onMouseEnter={handleHoverEnter}
+          onMouseLeave={handleHoverLeave}
           style={{
             position: 'relative',
             background: marker.hasRecentPrice ? '#ecfdf5' : '#f1f5f9',
@@ -508,8 +520,8 @@ export default function FullscreenMapPage() {
     return (
       <div
         onClick={handleClick}
-        onMouseEnter={handleSelect}
-        onMouseLeave={handleDeselect}
+        onMouseEnter={handleHoverEnter}
+        onMouseLeave={handleHoverLeave}
         style={{
           background: 'white',
           border: `1.5px solid ${accent}`,
@@ -776,7 +788,7 @@ export default function FullscreenMapPage() {
             // 겹친 경우에도 항상 맨 위에서 보이게 한다.
             const cols = Math.ceil(Math.sqrt(cluster.markers.length));
             const rows = Math.ceil(cluster.markers.length / cols);
-            const clusterSelected = cluster.markers.some((m) => m.id === selectedMarkerId);
+            const clusterSelected = cluster.markers.some((m) => m.id === activeMarkerId);
             return (
               <CustomOverlayMap
                 key={cluster.id}
@@ -790,7 +802,7 @@ export default function FullscreenMapPage() {
                     const row = Math.floor(i / cols);
                     const offsetX = (col - (cols - 1) / 2) * (chipLayout.width + chipLayout.gap);
                     const offsetY = (row - (rows - 1) / 2) * (chipLayout.height + chipLayout.gap);
-                    const selected = marker.id === selectedMarkerId;
+                    const selected = marker.id === activeMarkerId;
                     return (
                       <div
                         key={marker.id}
@@ -812,7 +824,7 @@ export default function FullscreenMapPage() {
           }
 
           const marker = cluster.markers[0];
-          const selected = marker.id === selectedMarkerId;
+          const selected = marker.id === activeMarkerId;
           return (
             <CustomOverlayMap
               key={marker.id}

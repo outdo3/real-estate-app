@@ -3397,3 +3397,59 @@ DB 변경:
 
 APT DETAIL STEP 48 구현 완료 / commit·push 완료 / production 반영
 확인(2026-08-18).
+
+## 2026-08-18
+
+### MAP-FIX STEP 49 — 지도 마커/바텀시트 상세보기 hover 해제 버그 수정
+
+작업:
+
+`/map`(PC)에서 아파트 마커에 마우스를 올리면 하단에 바텀시트가
+나타나지만, "상세보기"를 누르려고 마우스를 그쪽으로 옮기면 hover가
+풀리며 시트가 사라지는 버그를 수정했다. STEP48에서 발견되어 별도
+이슈로만 기록해 뒀던 것을 이번 STEP에서 조사·수정했다. 상세는
+docs/development/49-map-marker-detail-hover-fix.md 참고.
+
+핵심 결과:
+
+- 원인: `selectedMarkerId` 하나를 hover(`onMouseEnter`/`onMouseLeave`)
+  와 click이 공유 — hover가 이미 값을 세팅해 시트가 뜨고, 마우스가
+  마커(바텀시트와 DOM상 분리된 `position: fixed` 영역)를 벗어나는
+  순간 곧바로 지워졌다. 부가적으로 hover 때문에 "첫 클릭은 카드 표시,
+  재클릭 시 이동"이라는 기존 설계 의도도 실제로는 작동하지 않고
+  있었다.
+- 수정: `hoveredMarkerId`(hover 전용) state를 신설하고
+  `selectedMarkerId`는 click 전용으로 좁혔다. 파생값
+  `activeMarkerId = selectedMarkerId ?? hoveredMarkerId`를 바텀시트
+  내용/마커 강조 표시에 공통으로 사용해, 클릭으로 고정된 선택은 hover
+  변화와 무관하게 유지된다.
+- `onMouseEnter`/`onMouseLeave`는 `hoveredMarkerId`만, `onClick`은
+  `selectedMarkerId`만 건드리도록 분리 — 상세 URL 생성 로직, 바텀시트
+  UI, 지도 검색, 하단 nav는 전혀 건드리지 않았다.
+- PC 7개 시나리오(hover 표시/click 고정/마우스 이동 유지/상세보기
+  이동/X 닫기/다른 마커 교체/빈 곳 클릭 해제) 전부 localhost
+  브라우저로 실측 통과 — 특히 "마우스를 마커에서 상세보기 버튼까지
+  이동해도 시트 유지"를 스크린샷으로 직접 확인.
+- 모바일은 `onMouseEnter`/`onMouseLeave`가 터치에서 발생하지 않고
+  `onClick` 로직을 한 글자도 수정하지 않아 코드 근거로 회귀 없음을
+  확인(직접 탭 재현은 하지 않음).
+
+서비스 코드 변경:
+
+수정 `src/app/map/page.tsx` 1개 파일만. 다른 컴포넌트/API
+route/ApartmentAutocomplete/Header/MapBottomNav는 무수정.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+hover(미리보기)와 click(고정) 상태를 분리해 PC에서 "상세보기"를
+안정적으로 클릭할 수 있게 했다. 상세 URL/검색/바텀시트 UI/하단
+nav는 전혀 건드리지 않았고, 정적 검증(tsc/eslint/build) 전부
+통과했다. commit/push는 하지 않았다. 사용자 검수 후 진행한다.
+
+상태:
+
+MAP-FIX STEP 49 구현 완료 / 사용자 검수 대기(2026-08-18).
