@@ -6,18 +6,12 @@ import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import FullPageLoader from '@/components/FullPageLoader';
 import AdContainer from '@/components/AdContainer';
+import { BOTTOM_NAV_ITEMS } from '@/lib/bottom-nav-items';
 
-// Header.tsx의 하단탭바(홈/지도/통계/재개발·분양/MY)와 동일한 5개 메뉴 — 지도 페이지는
-// 전체화면 커스텀 UI라 Header를 아예 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸
-// 막기 위함) 하단탭바만 이 페이지에도 동일하게 떠 있도록 별도로 둔다.
-const BOTTOM_NAV_ITEMS: { href: string; icon: string; label: string }[] = [
-  { href: '/', icon: '🏠', label: '홈' },
-  { href: '/map', icon: '🗺️', label: '지도' },
-  { href: '/stats', icon: '📊', label: '통계' },
-  { href: '/redevelopment', icon: '🏗️', label: '재개발·분양' },
-  { href: '/my', icon: '👤', label: 'MY' },
-];
-
+// Header.tsx의 하단탭바와 동일한 메뉴 구성(아이콘/active 판정 포함)을
+// src/lib/bottom-nav-items.tsx에서 공유해서 쓴다 — 지도 페이지는 전체화면 커스텀 UI라
+// Header를 아예 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸 막기 위함) 하단탭바만
+// 이 페이지에도 동일하게 떠 있도록 별도로 둔다.
 function MapBottomNav() {
   const pathname = usePathname();
   const router = useRouter();
@@ -37,7 +31,8 @@ function MapBottomNav() {
       }}
     >
       {BOTTOM_NAV_ITEMS.map((item) => {
-        const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+        const active = item.isActive(pathname);
+        const Icon = item.Icon;
         return (
           // <a href>가 아니라 버튼+router.push로 이동시킨다 — 실제 href가 있는 앵커는
           // 호버/포커스만 해도 브라우저가 화면 좌하단에 원본 URL을 상태표시줄로 띄우는데,
@@ -56,12 +51,12 @@ function MapBottomNav() {
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+              color: active ? 'var(--primary-color)' : 'var(--text-muted)',
               fontWeight: active ? 800 : 600,
               fontSize: '0.75rem',
             }}
           >
-            <span style={{ fontSize: '1.35rem' }}>{item.icon}</span>
+            <Icon width={22} height={22} strokeWidth={2} />
             <span>{item.label}</span>
           </button>
         );

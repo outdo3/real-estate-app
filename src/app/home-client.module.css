@@ -59,8 +59,9 @@
   left: 1.1rem;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 0.95rem;
-  opacity: 0.6;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
   pointer-events: none;
 }
 
@@ -187,10 +188,10 @@
   flex-direction: column;
   align-items: center;
   gap: 0.3rem;
-  padding: 1.25rem 0.75rem;
+  padding: 1rem 0.75rem;
   border-radius: 14px;
   border: 1px solid var(--border-color);
-  background: var(--bg-color);
+  background: var(--card-bg);
   text-decoration: none;
   transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
 }
@@ -202,7 +203,9 @@
 }
 
 .bigCardIcon {
-  font-size: 1.7rem;
+  width: 26px;
+  height: 26px;
+  color: var(--primary-color);
 }
 
 .bigCardTitle {
@@ -241,7 +244,9 @@
 }
 
 .iconCellIcon {
-  font-size: 1.35rem;
+  width: 22px;
+  height: 22px;
+  color: var(--text-primary);
 }
 
 .iconCellLabel {

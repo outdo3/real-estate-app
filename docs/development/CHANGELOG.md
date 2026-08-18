@@ -3636,3 +3636,66 @@ popstate 로직)은 재사용하지 않고 별도 구현으로 피했다. BLOCKE
 
 MAIN UI-B1 / STEP 52 구현 완료 / 사용자 모바일 검수 대기 / commit·push
 하지 않음(2026-08-18).
+
+
+## 2026-08-18
+
+### MAIN UI-B2 / STEP 53 — Home Explore Section + Header + Bottom Navigation UI 정리
+
+작업:
+
+B1(STEP 52) Search Hero 기능은 전혀 건드리지 않고, 그 아래 홈 탐색
+영역과 Header/Bottom Navigation의 이모지 중심 UI를 동일한 SVG line
+icon system으로 정리했다. 상세는
+docs/development/53-main-home-b2-navigation.md 참고.
+
+핵심 결과:
+
+- `lucide-react` 신규 설치(런타임 의존성 없는 무료 오픈소스 아이콘
+  라이브러리, React 19 공식 지원 확인 후 설치 — CLAUDE.md의 "유료
+  API/생성형 AI 의존성 확대 금지" 원칙과는 무관). 하단 nav 5개 +
+  Explore bigCard 2개 + iconGrid 6개 + B1 hero 2개 + 검색 아이콘 1개,
+  총 14곳의 이모지를 전부 교체.
+- Header: 홈(`pathname === '/'`)일 때만 뒤로가기 버튼을 숨기도록
+  수정(다른 모든 페이지는 조건에 안 걸려 기존 동작 100% 유지, 상세
+  페이지로 실측 확인). active 메뉴 색상을 이집 그린으로 통일
+  (데스크톱은 기존에 active 스타일 자체가 없던 버그였음).
+- 신규 `src/lib/bottom-nav-items.tsx`: 하단 nav 5개 항목(아이콘 +
+  active 판정)을 한 곳에 모았다. `Header.tsx`와
+  `src/app/map/page.tsx`의 `MapBottomNav`(지도 페이지는 Header를
+  렌더링하지 않아 별도로 존재하던 컴포넌트, 코드 확인으로 발견)가
+  이 설정을 공유 — "재개발·분양" 탭 active 판정을 `/presales`까지
+  포함하도록 넓혀 두 곳 모두에 동일하게 반영했다.
+- 홈 "핵심 Quick 메뉴" → "시장 둘러보기"로 개명(실제 항목 구성이
+  전부 시장/통계 성격이라는 판단), 큰 카드에 "재개발·분양"을 신규
+  추가(B1에서 B2로 명시적으로 이관해 둔 항목).
+- B1 기능(일반검색/지도 CTA/AI CTA/최근 본 단지) 전부 재검증 통과.
+  APT DETAIL V1 관련 파일 무수정. NextAuth 기존 오류는 이번 STEP
+  범위에서 완전히 제외.
+- 정적 검증(tsc/eslint/next build) 전부 통과. 모바일
+  360/375/390/430px + PC 전부 확인, overflow/라벨 잘림/safe-area
+  문제 없음.
+
+서비스 코드 변경:
+
+- 수정: `package.json`, `package-lock.json`, `src/app/home-client.tsx`,
+  `src/app/home-client.module.css`, `src/components/Header.tsx`,
+  `src/components/Header.module.css`,
+  `src/components/HomeApartmentSearch.tsx`, `src/app/map/page.tsx`
+- 신규: `src/lib/bottom-nav-items.tsx`
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+B1 Search Hero 기능을 유지하면서 홈 탐색 영역과 전역 Bottom
+Navigation의 시각적 일관성을 확보했다. 이모지→SVG 전환은 새 패키지
+1개(런타임 비용 없음) 추가로 해결했고, 큰 리팩터 없이 5줄 안팎의
+공용 설정 파일 하나로 Header/`/map` 중복을 통합했다. BLOCKER 없음.
+
+상태:
+
+MAIN UI-B2 / STEP 53 구현 완료 / 사용자 및 ChatGPT 검수 대기 /
+commit·push 하지 않음(2026-08-18).

@@ -3,8 +3,10 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import type { LucideIcon } from 'lucide-react';
 import HeaderAuthButton from './HeaderAuthButton';
 import { siteConfig } from '@/config/site';
+import { BOTTOM_NAV_ITEMS } from '@/lib/bottom-nav-items';
 import styles from './Header.module.css';
 
 interface HeaderProps {
@@ -32,12 +34,12 @@ interface HeaderProps {
 function NavButton({
   href,
   active,
-  icon,
+  Icon,
   label,
 }: {
   href: string;
   active: boolean;
-  icon: string;
+  Icon: LucideIcon;
   label: string;
 }) {
   const router = useRouter();
@@ -48,7 +50,7 @@ function NavButton({
       className={active ? styles.active : ''}
       style={{ color: 'inherit', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
     >
-      <span className={styles.icon}>{icon}</span>
+      <Icon className={styles.icon} strokeWidth={2} />
       <span>{label}</span>
     </button>
   );
@@ -57,18 +59,23 @@ function NavButton({
 const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge, pageTitleAlign = 'right' }: HeaderProps) => {
   const pathname = usePathname();
   const router = useRouter();
+  // [MAIN UI-B2] 홈은 최상위 화면이라 뒤로가기보다 브랜드 identity가 자연스럽다. 다른
+  // 모든 페이지의 뒤로가기 버튼 동작은 그대로 유지한다(홈 경로일 때만 숨김).
+  const isHome = pathname === '/';
 
   return (
     <header className={styles.header}>
       <div className={`container ${styles.nav}`}>
         <div className={styles.leftCluster}>
-          <button
-            onClick={() => router.back()}
-            className={styles.backBtn}
-            aria-label="이전 화면으로 돌아가기"
-          >
-            ←
-          </button>
+          {!isHome && (
+            <button
+              onClick={() => router.back()}
+              className={styles.backBtn}
+              aria-label="이전 화면으로 돌아가기"
+            >
+              ←
+            </button>
+          )}
 
           {!hideLogo && (
             <Link href="/" className={styles.logo}>
@@ -83,21 +90,11 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge
         )}
 
         <ul className={`${styles.menuList} ${hideMobileNav ? styles.menuListHideMobile : ''}`}>
-          <li className={styles.menuItem}>
-            <NavButton href="/" active={pathname === '/'} icon="🏠" label="홈" />
-          </li>
-          <li className={styles.menuItem}>
-            <NavButton href="/map" active={pathname === '/map'} icon="🗺️" label="지도" />
-          </li>
-          <li className={styles.menuItem}>
-            <NavButton href="/stats" active={pathname.startsWith('/stats')} icon="📊" label="통계" />
-          </li>
-          <li className={styles.menuItem}>
-            <NavButton href="/redevelopment" active={pathname.startsWith('/redevelopment')} icon="🏗️" label="재개발·분양" />
-          </li>
-          <li className={styles.menuItem}>
-            <NavButton href="/my" active={pathname.startsWith('/my')} icon="👤" label="MY" />
-          </li>
+          {BOTTOM_NAV_ITEMS.map((item) => (
+            <li key={item.href} className={styles.menuItem}>
+              <NavButton href={item.href} active={item.isActive(pathname)} Icon={item.Icon} label={item.label} />
+            </li>
+          ))}
         </ul>
 
         <HeaderAuthButton />

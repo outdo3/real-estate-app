@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Search } from 'lucide-react';
 import ApartmentAutocomplete, { ApartmentSearchResult } from './ApartmentAutocomplete';
 import styles from '@/app/home-client.module.css';
 
@@ -67,7 +68,7 @@ export default function HomeApartmentSearch() {
   return (
     <div>
       <div className={styles.searchBarWrap}>
-        <span className={styles.searchBarIcon}>🔍</span>
+        <Search className={styles.searchBarIcon} strokeWidth={2} />
         <ApartmentAutocomplete
           onSelect={handleSelect}
           placeholder="아파트 이름을 검색하세요"
