@@ -5,11 +5,45 @@ interface Props {
   address: string;
 }
 
+interface BusRoute {
+  routeNo: string;
+  routeType: string;
+}
+
 interface BusStopData {
-  nearestBusStop: { stopId: string; stopName: string; stopNo: string | null; distanceMeters: number } | null;
+  nearestBusStop: {
+    stopId: string;
+    stopName: string;
+    stopNo: string | null;
+    distanceMeters: number;
+    routes: BusRoute[] | null;
+  } | null;
+  // [UI-C3-3] 300m/500m 정류장 개수는 사용자 판단에 도움이 되지 않아 화면에서 제거했다
+  // (§1 지시) — 다만 향후 교통점수/이집 브리핑용으로 API 응답 자체에는 계속 유지한다.
   busStopCountWithin300m: number;
   busStopCountWithin500m: number;
   totalCount: number;
+}
+
+const MAX_VISIBLE_ROUTES = 4;
+
+// TAGO routeno는 "11"처럼 숫자형과 "A01"처럼 문자형이 섞여 온다(원본 응답 자체가 그렇다,
+// route.ts 참고) — 화면에는 숫자가 작은 순으로 먼저 보이는 편이 자연스러워 숫자 우선 정렬한다.
+function sortRoutes(routes: BusRoute[]): BusRoute[] {
+  return [...routes].sort((a, b) => {
+    const na = parseInt(a.routeNo, 10);
+    const nb = parseInt(b.routeNo, 10);
+    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+    if (Number.isFinite(na) !== Number.isFinite(nb)) return Number.isFinite(na) ? -1 : 1;
+    return a.routeNo.localeCompare(b.routeNo);
+  });
+}
+
+function formatRoutes(routes: BusRoute[]): string {
+  const sorted = sortRoutes(routes);
+  const visible = sorted.slice(0, MAX_VISIBLE_ROUTES).map((r) => r.routeNo);
+  const rest = sorted.length - visible.length;
+  return rest > 0 ? `${visible.join(' · ')} 외 ${rest}개` : visible.join(' · ');
 }
 
 // STEP 44에서 확인했듯 Kakao Local은 일반 시내버스 정류장을 검색하지 못해(문서
@@ -117,21 +151,31 @@ export default function BusAccessCard({ address }: Props) {
   if (error) return <div style={{ color: 'var(--text-muted)' }}>{error}</div>;
   if (!data) return null;
 
+  if (!data.nearestBusStop) return null;
+  const { stopName, distanceMeters, routes } = data.nearestBusStop;
+
   return (
     <div style={{ lineHeight: 1.8 }}>
-      {data.nearestBusStop && (
-        <>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>가까운 정류장</div>
-          <div>
-            <b>{data.nearestBusStop.stopName}</b>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-              ({data.nearestBusStop.distanceMeters}m, {formatEta(data.nearestBusStop.distanceMeters)})
-            </span>
-          </div>
-        </>
+      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>가장 가까운 정류장</div>
+      <div>
+        <b>{stopName}</b>
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
+          {distanceMeters}m · {formatEta(distanceMeters)}
+        </span>
+      </div>
+      {/* routes === null: 노선 조회 실패(정류장 자체는 정상) — 조용히 생략, 잘못된 값을
+          보여주지 않는다. routes.length === 0: 조회는 성공했지만 경유 노선이 없는 정류장. */}
+      {routes && routes.length > 0 && (
+        <div style={{ marginTop: '0.5rem', wordBreak: 'keep-all' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>운행 노선</div>
+          <div>{formatRoutes(routes)}</div>
+        </div>
       )}
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>주변 정류장</div>
-      <div>500m 이내 {data.busStopCountWithin500m}곳</div>
+      {routes && routes.length === 0 && (
+        <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          경유 노선 정보가 없습니다.
+        </div>
+      )}
     </div>
   );
 }
