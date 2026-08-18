@@ -3507,9 +3507,21 @@ DB 변경:
 
 조사 결과 항상 비어 있던 6개 UI 요소만 정리했고 나머지는 이미 실제
 데이터 또는 정직한 empty state로 잘 처리되고 있어 상세페이지는 V1
-LOCK이 가능하다고 판단했다. commit/push는 하지 않았다. 사용자 승인
-후 별도 STEP에서 진행한다.
+LOCK이 가능하다고 판단했다.
+
+commit/push:
+
+commit `fec4e3a`("feat: finalize apartment detail v1"), push 완료.
+production 4개 표본단지(대신푸르지오1차/명륜아이파크1단지/
+엘지메트로시티3/고원3단지아파트)에서 평면도·단지정보·커뮤니티시설·
+커뮤니티 배너·학군 placeholder·관리비 placeholder가 전부 미노출됨을
+재확인했다.
+
+**APT DETAIL V1 = LOCKED.** 상세는
+docs/development/50-apartment-detail-v1-cleanup.md의 LOCK 섹션 참고.
+다음 큰 개발 단계는 MAIN UI / HOME UX.
 
 상태:
 
-APT DETAIL STEP 50 구현 완료 / 사용자 승인 대기(2026-08-18).
+APT DETAIL STEP 50 구현 완료 / commit·push 완료 / production 반영
+확인 / **V1 LOCKED**(2026-08-18).
