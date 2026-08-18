@@ -3334,3 +3334,66 @@ DB 변경:
 상태:
 
 APT DETAIL UI-C3-3 구현 완료 / 사용자 승인 대기(2026-08-18).
+
+## 2026-08-18
+
+### STEP 48 — 단지 주변 생활정보 탭 UI 개선
+
+작업:
+
+기능/API 변경 없이 상세페이지 3구역(실거주 환경·교통·학군) 탭의
+시각적 존재감과 선택 상태 가독성만 개선했다. 상세는
+docs/development/48-apartment-detail-living-info-tab-ui.md 참고.
+
+핵심 결과:
+
+- 섹션 제목 "실거주 환경 & 학군 인프라" → "단지 주변 생활정보"로 변경
+  — 해당 문자열이 `apt-client.tsx` 한 곳에서만 쓰이는 순수 표시
+  텍스트임을 조사로 확인 후 진행.
+- 탭을 텍스트+밑줄에서 아이콘(위)+라벨(아래) 3열 카드형 그리드로
+  교체. 라벨: 실거주 환경→주거환경, 교통·편의시설→교통·편의, 학군
+  유지. `grid-template-columns: repeat(3, minmax(0, 1fr))` +
+  버튼 `min-width: 0`으로 좁은 화면에서도 줄바꿈/overflow 없이 3등분
+  유지.
+- 선택 상태를 연한 그린 배경(`#e6f9ee`)+그린 테두리(`--primary-color`)
+  +라벨 `font-weight: 700`으로 강화(기존 초록 텍스트+밑줄 대비 시인성
+  대폭 개선).
+- `infraTab` state, 탭 전환 로직, 각 탭이 렌더링하는 컴포넌트
+  (`LivingEnvironmentPanel`/`NeighborhoodInfoPanel`/
+  `SchoolDistrictPanel`)는 전혀 건드리지 않음 — 순수 마크업/스타일
+  변경.
+- 모바일 360/375/390px 검증: 이 환경의 claude-in-chrome
+  `resize_window`가 실제 뷰포트를 바꾸지 못하는 한계(STEP47에서 이미
+  확인)를 우회해, 동일 CSS/마크업을 담은 독립 iframe(자체 뷰포트를
+  가져 `@media` 쿼리가 정확히 평가됨)을 세 폭으로 생성해 실측 — 3개
+  폭 전부 3개 버튼 한 줄 유지, 라벨 잘림 없음, horizontal overflow
+  없음 확인. 단, 이는 실제 브라우저 창 리사이즈를 통한 검증이 아니라
+  사용자 실기기 검수를 대체하지 않는다.
+- production 배포 후 실측(6개 표본 중 대표 단지)으로 제목/카드형
+  탭/선택 상태/3개 탭 전환/기존 콘텐츠(대중교통·광역교통·생활편의·
+  학군)가 정상임을 확인.
+- 별도로 발견된 `/map` PC hover 상세보기 사라짐 문제는 이번 STEP과
+  무관해 코드를 건드리지 않고 문서의 "다음 STEP 후보"로만 기록
+  (MAP-FIX).
+
+서비스 코드 변경:
+
+수정 `src/app/apt/[name]/apt-client.tsx`(제목/탭 마크업),
+`src/app/apt/[name]/detail.module.css`(탭 스타일 재정의). 신규 파일
+없음. API route/컴포넌트 로직/DB/schema/migration 변경 없음.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+기능 변경 없이 탭의 시각적 존재감과 선택 상태만 개선했다. 정적
+검증(tsc/eslint/build) 전부 통과, 회귀 없음을 코드 근거와 브라우저
+실측으로 확인했다. 모바일 실측은 iframe 격리 테스트로 대체했으며
+실기기 검수를 완전히 대체하지 않는다는 점을 명시했다.
+
+상태:
+
+APT DETAIL STEP 48 구현 완료 / commit·push 완료 / production 반영
+확인(2026-08-18).

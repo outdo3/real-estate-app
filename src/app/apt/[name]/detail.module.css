@@ -357,42 +357,71 @@
   margin-bottom: 1rem;
 }
 
+/* [STEP48] 텍스트+밑줄 탭이 너무 작아 모바일 실기기에서 존재감이 약하다는 지적으로
+   카드형 탭으로 교체했다 — 3개 고정 폭 그리드라 라벨 길이와 무관하게 한 줄 유지, 360px
+   폭에서도(컨테이너/패널 패딩 제외 후 약 270px) 줄바꿈·overflow 없이 들어간다. */
 .infraTabBar {
-  display: flex;
-  gap: 0.5rem;
+  display: grid;
+  /* minmax(0, 1fr): 1fr 단독이면 트랙이 콘텐츠 min-content 폭 밑으로 줄어들지 않아
+     좁은 화면에서 grid 자체가 넘칠 수 있다 — 0을 하한으로 줘 항상 3등분되게 강제. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
   margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
 }
 
 .infraTabBtn {
-  padding: 0.6rem 1rem;
-  border: none;
-  background: transparent;
-  font-weight: 600;
-  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-width: 0; /* grid item 기본 min-width:auto를 풀어야 트랙이 실제로 줄어든다 */
+  padding: 0.9rem 0.4rem;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: #f8fafc;
   color: var(--text-secondary);
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
 }
 
+.infraTabIcon {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.infraTabLabel {
+  font-size: 0.85rem;
+  font-weight: 600;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 선택 상태를 연한 그린 배경+그린 테두리+굵은 글씨로 명확히 표시한다(기존 밑줄 방식보다
+   시인성 강화 지시). --primary-color(#03c75a)의 옅은 톤을 배경으로 사용. */
 .infraTabBtnActive {
+  background: #e6f9ee;
+  border-color: var(--primary-color);
   color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
+}
+
+.infraTabBtnActive .infraTabLabel {
+  font-weight: 700;
 }
 
 @media (max-width: 900px) {
   .infraTabBar {
-    gap: 0;
+    gap: 0.4rem;
   }
   .infraTabBtn {
-    flex: 1 1 0;
-    padding: 0.6rem 0.25rem;
+    padding: 0.7rem 0.25rem;
+  }
+  .infraTabIcon {
+    font-size: 1.15rem;
+  }
+  .infraTabLabel {
     font-size: 0.78rem;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 }
 

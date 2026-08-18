@@ -885,9 +885,9 @@ export default function ApartmentDetail() {
         </div>
       </div>
 
-      {/* ══════════ 3구역: 실거주 환경 & 학군 인프라 ══════════ */}
+      {/* ══════════ 3구역: 단지 주변 생활정보 ══════════ */}
       <div className={`container ${styles.sectionBlock}`}>
-        <h2 className={styles.zoneTitle}>실거주 환경 & 학군 인프라</h2>
+        <h2 className={styles.zoneTitle}>단지 주변 생활정보</h2>
         <div className={styles.panel}>
           <div className={styles.infraTabBar}>
             {(['환경', '교통', '학군'] as InfraTab[]).map((tab) => (
@@ -896,7 +896,8 @@ export default function ApartmentDetail() {
                 className={`${styles.infraTabBtn} ${infraTab === tab ? styles.infraTabBtnActive : ''}`}
                 onClick={() => setInfraTab(tab)}
               >
-                {tab === '환경' ? '🅿️ 실거주 환경' : tab === '교통' ? '🚇 교통·편의시설' : '🏫 학군'}
+                <span className={styles.infraTabIcon}>{tab === '환경' ? '🏡' : tab === '교통' ? '🚇' : '🏫'}</span>
+                <span className={styles.infraTabLabel}>{tab === '환경' ? '주거환경' : tab === '교통' ? '교통·편의' : '학군'}</span>
               </button>
             ))}
           </div>
