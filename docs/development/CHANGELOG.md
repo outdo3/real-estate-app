@@ -3756,4 +3756,172 @@ DB 연결 구조(Supabase Pooler 종류/`connection_limit`/`DIRECT_URL`)
 상태:
 
 STEP 54 원인 조사 완료 / 코드 미수정 / 구조 변경 사용자 승인
-대기(2026-08-18).
+대기(2026-08-18). commit `8d9f388`로 push 완료.
+
+
+## 2026-08-18
+
+### STEP 55 — Production DB Pooling Fix (조사·설계만, 변경 미실행)
+
+작업:
+
+STEP 54 root cause(Supabase Session Pooler 세션 한도 초과)의 해결책을
+실행하려 했으나, 실제 적용에 필요한 Vercel 접근 권한이 이 세션에 없어
+**목표 설정까지만 완료하고 코드/환경변수 변경 없이 STOP**했다. 상세는
+docs/development/55-production-db-pooling-fix.md 참고.
+
+핵심 결과:
+
+- 목표 구조 확정: `DATABASE_URL`을 기존과 동일 호스트에서 포트만
+  `5432`(Session Pooler) → `6543`(Transaction Pooler)로 바꾸고
+  `pgbouncer=true`, `connection_limit=1` 파라미터를 추가. 이 변경만으로
+  충분함을 코드 조사로 확인 — `DIRECT_URL`/`prisma/schema.prisma`
+  변경은 불필요(이 프로젝트는 migration을 Vercel 빌드가 아니라 로컬에서
+  수동 실행하는 구조라 production 런타임에 Direct connection이 필요한
+  경로가 없음).
+- **BLOCKER 2로 STOP**: 이 세션에는 Vercel CLI/링크/토큰이 전혀 없어
+  production 환경변수를 직접 읽거나 쓸 방법이 없다. 값을 추측해
+  적용하지 않았고, 사용자가 토큰을 전달해도 대신 입력하지 않는다(자격
+  증명 처리 금지 원칙).
+- 착수 시점 baseline 측정 중 **presales 외에 `/api/community/recent-activity`
+  (무관한 별도 Prisma 쿼리)도 동시에 500**임을 추가로 확인 — DB
+  connection pool 압박이 presales 국소 문제가 아니라 시스템 전역
+  진행 중임을 뒷받침, 시급성이 이전 판단보다 높음.
+- 코드/schema/migration/Supabase 설정 전부 무변경.
+
+서비스 코드 변경:
+
+없음. 문서만 작성(`docs/development/55-production-db-pooling-fix.md`
+신규, 이 CHANGELOG 항목). connection string 값은 어디에도 기록하지
+않음.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+해결책 자체는 저위험·저범위(환경변수 1개, 코드 무변경)로 설계
+완료했으나, 실행 권한이 없어 적용하지 못했다. 사용자가 Vercel
+대시보드에서 직접 값을 바꾸거나, 이 세션에 Vercel 접근을 연결해주면
+즉시 진행 가능한 상태다. BLOCKER로 유지.
+
+상태:
+
+STEP 55 설계 완료 / 변경 미실행 / commit·push 하지 않음(문서만,
+환경변수 변경 자체가 없어 이번 STEP은 커밋 대상 아님)(2026-08-18).
+
+
+## 2026-08-18
+
+### STEP 55 (재검증) — Transaction Pooler 적용 후 Production 검증 → 실패
+
+작업:
+
+사용자가 Vercel Production `DATABASE_URL`을 Transaction Pooler(6543)로
+직접 변경하고 redeploy를 완료했다고 알려와, 코드/설정을 전혀 건드리지
+않고 production을 재검증만 했다. 상세는
+docs/development/55-production-db-pooling-fix.md의 "적용 후 검증 결과"
+참고.
+
+핵심 결과 — **검증 실패**:
+
+- `GET /api/presales?page=1` 5회(3초 간격) 전부 500(기대: 5/5 200).
+  응답시간 5.17s로 이전 관측(0.75~1.1s 정상 구간)보다 크게 느림.
+- `/api/community/recent-activity`도 여전히 500.
+- `/api/apt/[name]`(다른 Prisma API)은 계속 200 정상 — 전면 장애는
+  아님.
+- production `/presales` UI도 "분양정보를 불러오지 못했습니다." 그대로.
+- **실제 예외 확인 실패**: `ErrorLog` 재조회를 시도했으나 로컬
+  진단 스크립트 자체가 3회(약 30~40초) 모두
+  `FATAL: (EMAXCONNSESSION) ... pool_size: 15`로 거부됨 — 로컬은
+  변경 대상이 아니었던 Session Pooler를 그대로 쓰므로, 이는 **Session
+  Pooler pool이 지금도 계속 가득 차 있다는 뜻**. Vercel이 실제로
+  Transaction Pooler를 쓰고 있는지, redeploy가 새 값을 반영했는지는
+  이 세션에서 확인할 방법이 없어(Vercel/Supabase 대시보드 접근 없음)
+  확정하지 못했다.
+- 문제를 발견한 상태에서 스스로 고치려 하지 않았다 — env 재변경/코드
+  변경 전부 없음. NextAuth 기존 오류는 범위 밖으로 유지, 변경 없음
+  확인.
+
+서비스 코드 변경:
+
+없음. `docs/development/55-production-db-pooling-fix.md`에 검증 결과
+섹션만 추가, 이 CHANGELOG 항목 추가.
+
+DB 변경:
+
+없음(읽기 전용 조회 시도만, 그마저도 pool 포화로 실패).
+
+최종 판단:
+
+Transaction Pooler 전환이 production에서 아직 효과를 보이지 않고
+있다. 코드/스키마 쪽 원인은 이미 배제됐으므로, 다음 확인은 전부
+Vercel(환경변수 실제 저장값·redeploy 반영 여부·Function Logs)과
+Supabase(Connection Pooling 대시보드) 쪽에서만 가능하다 — 둘 다 이
+세션 접근 밖이다. BLOCKER로 유지.
+
+상태:
+
+STEP 55 재검증 완료 / 여전히 실패 / 원인 미확정 / 사용자 확인
+필요(Vercel·Supabase 대시보드) / commit·push 하지 않음(2026-08-18).
+
+
+## 2026-08-18
+
+### STEP 55 (최종) — DB Connection Pooling Fix 해결 확인
+
+작업:
+
+사용자가 Transaction Pooler connection string에 남아있던
+`[YOUR-PASSWORD]` placeholder를 실제 DB 비밀번호로 교체하고 다시
+redeploy했다. 코드/설정을 전혀 건드리지 않고 production을 재검증했다.
+상세는 docs/development/55-production-db-pooling-fix.md의 "최종 결과"
+참고.
+
+핵심 결과 — **해결 확인**:
+
+- `GET /api/presales?page=1` 5회(3초 간격) **전부 200**, `success:true` +
+  실제 데이터(1,046건). 응답 3.1~3.3s로 안정적(이전 정상 구간
+  0.75~1.1s보다는 느리나 `connection_limit=1`의 예상된 트레이드오프,
+  timeout/오류 아님).
+- `/api/community/recent-activity` 3회 전부 200.
+- 기존 정상 API(`/api/apt/[name]` 실거래)와 추가로 선정한 Prisma API
+  (`/api/presales/[id]` 상세) 모두 200 정상 — 다른 기능 회귀 없음.
+- production UI를 실제 사용자 flow(홈→재개발·분양→"분양·청약" 탭→
+  "분양정보 전체 보기")로 확인, 카드 20건 정상 렌더 + pagination
+  "1/53" 정상.
+- `ErrorLog`(`/api/presales`, `/api/community/recent-activity`) 재조회
+  결과 신규 항목 0건 — 이전 실패 라운드(06:45:38, id=9)보다도 이전
+  기록이 마지막이며, `EMAXCONNSESSION`/prepared statement/password
+  인증 오류 전부 신규 발생 없음. 브라우저 콘솔도 기존 NextAuth 오류
+  외 신규 오류 없음.
+- **1차 시도(포트만 6543으로 전환) 때 여전히 500이었던 이유가 이번에
+  확정됨**: pooler 종류 전환 자체는 맞았으나, connection string의
+  `[YOUR-PASSWORD]` placeholder가 실제 비밀번호로 교체되지 않아 인증
+  단계에서 계속 실패하고 있었다. STEP 54의 원래 root cause(Session
+  Pooler 세션 한도 초과)도 실재했던 문제로 문서에 그대로 보존한다 —
+  이번 확인으로 대체되는 것이 아니라, "구조 문제 → 1차 전환 실패
+  원인 → 최종 해결"의 3단계 모두 실제로 있었던 사실이다.
+
+서비스 코드 변경:
+
+없음. `docs/development/55-production-db-pooling-fix.md`에 "최종
+결과"/"최종 정리" 섹션 추가, 이 CHANGELOG 항목 추가. connection
+string/password는 어디에도 기록하지 않았다.
+
+DB 변경:
+
+없음(읽기 전용 조회만 수행).
+
+최종 판단:
+
+STEP 54에서 확정한 root cause(Session Pooler 세션 한도 초과)가
+Transaction Pooler + `pgbouncer=true` + `connection_limit=1` + 정상
+자격증명 조합으로 해결됐음을 production에서 직접 검증했다.
+코드/schema/migration/데이터는 전 과정에서 무변경. BLOCKER 해제.
+
+상태:
+
+STEP 55 완료 / production 정상 확인 / commit·push 하지
+않음(2026-08-18).
