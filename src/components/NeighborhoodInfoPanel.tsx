@@ -1,5 +1,6 @@
 import React from 'react';
 import KakaoPlaces from './KakaoPlaces';
+import BusAccessCard from './BusAccessCard';
 
 interface NeighborhoodInfoPanelProps {
   address: string;
@@ -32,6 +33,17 @@ export default function NeighborhoodInfoPanel({ address, ready }: NeighborhoodIn
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🚇 교통 (지하철·KTX)</h4>
         {ready ? (
           <KakaoPlaces address={address} categories={['SW8']} keywords={['KTX', '기차역']} limit={4} />
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
+        )}
+      </div>
+      <div style={cardStyle}>
+        {/* [UI-C3-2] Kakao Local은 시내버스 정류장을 검색하지 못해(문서44) 국토교통부
+            TAGO 버스정류소정보(/api/transit/bus-stops)로 조회한다. 지하철/KTX 카드와
+            같은 cardStyle을 그대로 재사용. */}
+        <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🚌 버스</h4>
+        {ready ? (
+          <BusAccessCard address={address} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}

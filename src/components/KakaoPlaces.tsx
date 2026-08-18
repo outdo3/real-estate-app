@@ -68,7 +68,7 @@ const iconFor = (place: any, keyword?: string) => {
 // 도보 기준(분속 80m)이 비현실적인 거리(1km 초과)에서는 차량 이동시간(분속 500m, 시속 약
 // 30km 도심 평균 가정)을 함께 보여준다 — 둘 다 카카오 실측 직선거리 기반의 근사치이며,
 // 이 앱 다른 곳(학군 탭 walkTime)에서도 이미 쓰는 것과 같은 종류의 어림값이다.
-const formatEta = (distance: number) => {
+export const formatEta = (distance: number) => {
   const walkMin = Math.ceil(distance / 80);
   if (distance <= 1000) return `도보 약 ${walkMin}분`;
   const driveMin = Math.ceil(distance / 500);
