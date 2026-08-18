@@ -12,7 +12,6 @@ import AreaSelector from '@/components/AreaSelector';
 import KakaoShareButton from '@/components/KakaoShareButton';
 import AptSpecGrid from '@/components/AptSpecGrid';
 import TradeTimelineList from '@/components/TradeTimelineList';
-import FloorPlanPanel from '@/components/FloorPlanPanel';
 import LivingEnvironmentPanel from '@/components/LivingEnvironmentPanel';
 import NeighborhoodInfoPanel from '@/components/NeighborhoodInfoPanel';
 import SchoolDistrictPanel from '@/components/SchoolDistrictPanel';
@@ -804,29 +803,23 @@ export default function ApartmentDetail() {
           <div className={styles.quickButtons} style={{ justifyContent: 'center' }}>
             <button className={styles.quickBtn} onClick={() => openModal('지도')}>지도</button>
             <button className={styles.quickBtn} onClick={() => openModal('로드뷰')}>로드뷰</button>
-            <button className={styles.quickBtn} onClick={() => openModal('단지정보')}>단지정보</button>
             <button className={styles.quickBtn} onClick={() => openModal('대출한도')}>대출한도</button>
-            <button className={styles.quickBtn} onClick={() => openModal('커뮤니티 시설')}>⛳ 커뮤니티 시설</button>
-            {/* 건축물대장 버튼은 B0.5 검수에서 확인된 mgmBldrgstPk 정밀도 손상(BLOCKER)
-                때문에 이번 B1 새 퀵메뉴에서는 노출하지 않는다. 관련 API(/api/ledger)와
-                이 아래 renderModalContent()의 '건축물대장' case, ledgerType state는
-                별도 버그수정 STEP을 위해 삭제하지 않고 그대로 남겨둔다. */}
+            {/* [STEP50 V1 CLEANUP] '단지정보'/'건축물대장' 버튼은 노출하지 않는다.
+                '단지정보' 모달은 aptInfo가 실제로 가질 수 있는 키(세대수/총주차대수/
+                용적률/건폐율, /api/apt/[name]/info/route.ts 참고)가 전부 Hero 아래
+                AptSpecGrid에 이미 상시 노출돼 있어 100% 중복이었다(코드 확인 완료).
+                '커뮤니티 시설' 버튼은 communityFacilities 실데이터 coverage가 0/31
+                (DB 직접 조회 확인)이라 항상 "정보 없음" empty state만 반복 노출했다.
+                건축물대장 버튼은 B0.5 검수에서 확인된 mgmBldrgstPk 정밀도 손상(BLOCKER)
+                때문에 그 이전부터 이미 노출하지 않고 있었다. 셋 다 관련 API/모달 case/
+                state는 삭제하지 않고 그대로 남겨둔다 — 버튼(진입점)만 제거했다. */}
           </div>
 
-          <div className={styles.communityCard} style={{ marginTop: '1.5rem' }}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>💬 {aptName} 실거주민 이야기가 궁금하다면?</div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>커뮤니티에서 이 단지에 대한 이야기를 나눠보세요.</div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
-              <Link href={`/community/write?aptName=${encodeURIComponent(aptName)}`} className={styles.quickBtn} style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                이 단지로 글쓰기
-              </Link>
-              <Link href={`/community?aptName=${encodeURIComponent(aptName)}`} className={styles.quickBtn} style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                커뮤니티 가기 &gt;
-              </Link>
-            </div>
-          </div>
+          {/* [STEP50 V1 CLEANUP] 이 카드("실거주민 이야기가 궁금하다면?")는 아래 4구역
+              CommunityPreview 헤더의 "글쓰기"/"더보기" 링크와 완전히 동일한 목적·목적지의
+              CTA를 중복 노출했다(실제 커뮤니티 글 목록 등 고유 콘텐츠 없이 링크만 있는
+              배너). CommunityPreview는 실제 최근 글까지 함께 보여줘 더 자연스러운
+              위치이므로 그쪽 하나만 남기고 이 배너는 제거했다. */}
         </div>
       </div>
 
@@ -881,7 +874,10 @@ export default function ApartmentDetail() {
             </div>
           )}
 
-          <FloorPlanPanel selectedArea={selectedArea} areaLabels={areaLabels} />
+          {/* [STEP50 V1 CLEANUP] FloorPlanPanel은 항상 "평면도 이미지는 준비 중입니다"만
+              보여줬다 — 이 앱에 평면도 이미지/데이터 소스 자체가 없어(FloorPlanPanel.tsx
+              주석 참고) 어떤 단지에서도 예외 없이 empty state만 노출한다. 컴포넌트 자체는
+              삭제하지 않고(향후 데이터 확보 시 복원 가능) 호출만 제거했다. */}
         </div>
       </div>
 

@@ -3453,3 +3453,63 @@ nav는 전혀 건드리지 않았고, 정적 검증(tsc/eslint/build) 전부
 상태:
 
 MAP-FIX STEP 49 구현 완료 / 사용자 검수 대기(2026-08-18).
+
+## 2026-08-18
+
+### STEP 50 — 아파트 상세페이지 V1 CLEANUP
+
+작업:
+
+기능 추가가 아니라 상세페이지를 V1 출시 가능한 상태로 정리했다.
+production 코드를 처음부터 끝까지 다시 읽어 항상 비어 있는
+placeholder와 완전 중복 UI만 최소 범위로 숨겼다. 상세는
+docs/development/50-apartment-detail-v1-cleanup.md 참고.
+
+핵심 결과:
+
+- **평면도(FloorPlanPanel)**: 데이터 소스 자체가 없어 항상 "준비 중"만
+  노출 — 호출 제거(컴포넌트 파일은 보존).
+- **'단지정보' 퀵버튼**: `/api/apt/[name]/info` 코드를 읽어 aptInfo가
+  가질 수 있는 키가 세대수/총주차대수/용적률/건폐율 4개뿐임을 확인,
+  이미 상시 노출 중인 AptSpecGrid와 100% 중복임을 검증 후 버튼만 제거.
+- **'커뮤니티 시설' 퀵버튼**: DB 직접 조회로 communityFacilities
+  coverage 0/31 재확인, 버튼만 제거.
+- **1구역 커뮤니티 배너**("실거주민 이야기가 궁금하다면?"): 4구역
+  CommunityPreview 헤더와 완전 동일한 글쓰기/더보기 CTA 중복 — 실제
+  글 목록까지 보여주는 CommunityPreview 쪽만 남기고 제거.
+- **학군 "학년별 학생수 추이"/"특목고 진학률" placeholder 2개**,
+  **주거환경 "계절별 평균 관리비" placeholder**(추가 발견, 학군
+  placeholder와 동일 성격): 전부 데이터 소스 자체가 없어 항상 "준비
+  중"만 노출 — 카드 제거.
+- 단지 브리핑(`apt-brief.ts`)은 코드로 재검토 후 **유지, 수정 없음** —
+  규칙 기반(LLM 아님), 소표본 왜곡 방지 로직 이미 적용, Chart/Metrics
+  원시 수치와 다른 합성 해석 문장을 제공함을 확인.
+- STEP49 최종 채팅 보고서의 `activeMarkerId` 중복 표기는 실제 코드/
+  문서 어디에도 없는 채팅 메시지 단순 오타로 확인, 코드 수정 없음.
+- 4개 대표 단지(대신푸르지오1차/명륜아이파크1단지/엘지메트로시티3/
+  거래 0건인 고원3단지아파트)로 회귀 검증 — Hero/Chart/Metrics/빠른
+  검색/생활정보 3탭/모달 전부 정상. 고원3단지아파트에서 이번 STEP과
+  무관한 기존 동작(거래 0건 시 Hero 가격이 "조회 중..."에 멈춤)을
+  발견했으나 범위 밖이라 손대지 않고 기록만 함.
+
+서비스 코드 변경:
+
+수정 `src/app/apt/[name]/apt-client.tsx`,
+`src/components/SchoolDistrictPanel.tsx`,
+`src/components/LivingEnvironmentPanel.tsx` (3개 파일). 컴포넌트 파일
+자체(FloorPlanPanel.tsx 등)와 API route/schema/migration은 무수정.
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+조사 결과 항상 비어 있던 6개 UI 요소만 정리했고 나머지는 이미 실제
+데이터 또는 정직한 empty state로 잘 처리되고 있어 상세페이지는 V1
+LOCK이 가능하다고 판단했다. commit/push는 하지 않았다. 사용자 승인
+후 별도 STEP에서 진행한다.
+
+상태:
+
+APT DETAIL STEP 50 구현 완료 / 사용자 승인 대기(2026-08-18).

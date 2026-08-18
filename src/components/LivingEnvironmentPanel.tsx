@@ -54,17 +54,6 @@ function ParkingGauge({ aptInfo }: { aptInfo: Record<string, string> | null }) {
   );
 }
 
-// 계절별 관리비를 실제로 산출할 데이터 소스가 없다(관리비는 단지 관리사무소별로 다르고
-// 공개 API가 존재하지 않음) — 숫자를 지어내는 대신 정직하게 준비 중 상태를 보여준다.
-function MaintenanceFeePlaceholder() {
-  return (
-    <div style={cardStyle}>
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>💰 계절별 평균 관리비</div>
-      <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>데이터 준비 중입니다.</div>
-    </div>
-  );
-}
-
 // 쿠팡 로켓배송/SSG 새벽배송은 국내 대부분 아파트 단지에서 통상적으로 이용 가능한 서비스라서
 // 이 단지에 한정된 검증된 사실이 아니라 일반적인 생활 인프라 안내로 표시한다(단지별 확인 필요
 // 라는 문구로 특정 단지에 대한 확정적 주장이 되지 않도록 함).
@@ -85,7 +74,9 @@ export default function LivingEnvironmentPanel({ aptInfo }: LivingEnvironmentPan
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
       <ParkingGauge aptInfo={aptInfo} />
-      <MaintenanceFeePlaceholder />
+      {/* [STEP50 V1 CLEANUP] 계절별 평균 관리비는 공개 데이터 소스가 없어(관리비는 단지
+          관리사무소별로 다름) 항상 "데이터 준비 중입니다"만 노출했다 — 실데이터가 있는
+          주차공간/배송 생활권만 남기고 이 placeholder는 화면에서 제거했다. */}
       <DeliveryBadges />
     </div>
   );
