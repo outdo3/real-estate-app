@@ -1,19 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import AdContainer from '@/components/AdContainer';
-import { useRegion } from '@/contexts/RegionContext';
+import HomeApartmentSearch from '@/components/HomeApartmentSearch';
+import { getRecentApartments, RecentApartment } from '@/lib/recent-apartments';
 import styles from './home-client.module.css';
-
-const SUGGESTIONS = [
-  { icon: '✨', label: '부산 서구 5억 이하 주차 넉넉한 아파트' },
-  { icon: '📊', label: '부산 서구 최근 거래량 보여줘' },
-  { icon: '⚖️', label: '대신더샵과 대신롯데캐슬 비교해줘' },
-  { icon: '💰', label: '부산 서구 갭투자 인기 단지' },
-];
 
 const QUICK_MENU = [
   { icon: '📉', label: '최근하락', href: '/stats/decline' },
@@ -24,62 +17,53 @@ const QUICK_MENU = [
   { icon: '💰', label: '갭투자', href: '/stats/gap-invest' },
 ];
 
-export default function Home() {
-  const router = useRouter();
-  const { region } = useRegion();
-  const [query, setQuery] = useState('');
+// 홈에서는 상세페이지(최대 8개 보관)와 달리 첫 화면 공간을 고려해 최근 5개만 노출한다.
+const HOME_RECENT_LIMIT = 5;
 
-  const goSearch = (q: string) => {
-    const trimmed = q.trim();
-    if (!trimmed) return;
-    router.push(`/ai-search?q=${encodeURIComponent(trimmed)}&lawdCd=${region.lawdCd}`);
-  };
+export default function Home() {
+  const [recent, setRecent] = useState<RecentApartment[]>([]);
+
+  // localStorage는 클라이언트에서만 읽는다(SSR 중 접근 없음 — 하이드레이션 불일치 없음).
+  useEffect(() => {
+    setRecent(getRecentApartments().slice(0, HOME_RECENT_LIMIT));
+  }, []);
 
   return (
     <div className={styles.page}>
       <Header />
       <main className={styles.main}>
-        <section className={styles.aiZone}>
-          <h1 className={styles.headline}>니가 찾는 아파트가 뭐야?</h1>
+        <section className={styles.heroSection}>
+          <p className={styles.tagline}>복잡한 부동산, 이집으로 쉽게</p>
 
-          <form
-            className={styles.searchBar}
-            onSubmit={(e) => {
-              e.preventDefault();
-              goSearch(query);
-            }}
-          >
-            <span className={styles.searchIcon}>🔍</span>
-            <input
-              className={styles.searchInput}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="예: 부산 서구 5억 이하 신축 아파트"
-            />
-            <button type="submit" className={styles.searchBtn}>
-              ✨ AI 검색
-            </button>
-          </form>
+          <HomeApartmentSearch />
 
-          <div className={styles.suggestions}>
-            <span className={styles.suggestLabel}>💡 추천 프롬프트</span>
-            <div className={styles.chipScroll}>
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s.label}
-                  type="button"
-                  className={styles.chip}
-                  onClick={() => {
-                    setQuery(s.label);
-                    goSearch(s.label);
-                  }}
-                >
-                  {s.icon} {s.label}
-                </button>
-              ))}
-            </div>
+          <div className={styles.quickActionsRow}>
+            <Link href="/map" className={styles.quickActionBtn}>
+              🗺️ 지도에서 찾기
+            </Link>
+            <Link href="/ai-search" className={styles.quickActionBtn}>
+              ✨ 조건으로 집 찾기
+            </Link>
           </div>
         </section>
+
+        {recent.length > 0 && (
+          <section className={styles.recentSection}>
+            <div className={styles.recentHeading}>최근 본 단지</div>
+            <div className={styles.recentScroll}>
+              {recent.map((r) => (
+                <Link
+                  key={`${r.name}|${r.dong}`}
+                  href={`/apt/${encodeURIComponent(r.name)}?lawdCd=${encodeURIComponent(r.lawdCd)}&dong=${encodeURIComponent(r.dong)}`}
+                  className={styles.recentCard}
+                >
+                  <span className={styles.recentCardName}>{r.name}</span>
+                  {r.address && <span className={styles.recentCardAddress}>{r.address}</span>}
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <AdContainer variant="banner" slot="home-search-bottom" />
 
@@ -87,11 +71,6 @@ export default function Home() {
           <div className={styles.quickHeading}>핵심 Quick 메뉴</div>
 
           <div className={styles.bigCards}>
-            <Link href="/map" className={styles.bigCard}>
-              <span className={styles.bigCardIcon}>🗺️</span>
-              <span className={styles.bigCardTitle}>지도 검색</span>
-              <span className={styles.bigCardSubtitle}>지도에서 아파트 보기</span>
-            </Link>
             <Link href="/stats" className={styles.bigCard}>
               <span className={styles.bigCardIcon}>📊</span>
               <span className={styles.bigCardTitle}>시장통계 (인기)</span>

@@ -3525,3 +3525,114 @@ docs/development/50-apartment-detail-v1-cleanup.md의 LOCK 섹션 참고.
 
 APT DETAIL STEP 50 구현 완료 / commit·push 완료 / production 반영
 확인 / **V1 LOCKED**(2026-08-18).
+
+## 2026-08-18
+
+### MAIN UI-A / STEP 51 — 홈(HOME) UX 전수점검 및 V1 설계
+
+작업:
+
+APT DETAIL V1 LOCK 이후 다음 개발 영역인 홈(HOME) UX를 조사·설계만
+했다(구현 없음). production code 미수정, commit/push 없음. 상세는
+docs/development/51-main-home-ui-audit.md 참고.
+
+핵심 결과:
+
+- 현재 홈(`home-client.tsx`)은 검색창이 하나뿐이며 무조건 AI 검색
+  (`/ai-search`)으로만 연결된다 — 정확한 아파트명을 아는 사용자도
+  LLM 해석 단계를 강제로 거쳐야 한다는 것이 가장 큰 문제로 확인됨.
+  "최근 본 단지"/"재개발·분양" 진입점도 홈 본문에 없음.
+- **핵심 발견**: 상세페이지 UI-C1의 `ApartmentQuickSearch.tsx`가
+  이름 검색+최근 본 단지+오매칭 방지 검증까지 이미 전부 구현해
+  둔 상태라, 홈에 재배치하는 데 **신규 API/DB/매칭 로직이 전혀
+  필요 없음**을 코드 확인으로 검증.
+- AI 검색(`ai-search-client.tsx`, Gemini 3-intent)은 삭제하지 않고
+  "조건으로 집 찾기" Secondary CTA로 역할만 재배치하는 방향으로
+  설계 — 로직 무수정.
+- 하단 nav(`Header.tsx`) 아이콘은 전부 이모지이며 SVG 아이콘
+  라이브러리가 프로젝트에 전혀 설치돼 있지 않음(확인 완료) —
+  `lucide-react` 도입을 후보로 제시하되 이번 STEP에서 설치하지 않음.
+  "재개발·분양" 라벨은 iframe 격리 테스트(360/375/390px)로 실측한
+  결과 overflow/줄바꿈은 없었으나 다른 라벨 대비 2.4~5배 넓어 시각
+  불균형이 있음을 확인, 라벨 축약을 후속 STEP 후보로 기록.
+- 광고 슬롯 2곳은 `NEXT_PUBLIC_ADS_ENABLED=false`라 현재 완전
+  비활성(빈 placeholder조차 없음)임을 코드로 확인 — 문제 없음.
+- 구현을 MAIN UI-B1(검색 Hero 재구성)/MAIN UI-B2(탐색 섹션+하단nav
+  정리) 2개 STEP으로 분리 제안. 둘 다 신규 API/DB/schema 불필요.
+
+서비스 코드 변경:
+
+없음. 문서만 작성(`docs/development/51-main-home-ui-audit.md` 신규,
+이 CHANGELOG 항목).
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+홈 개편은 새 기능을 만드는 게 아니라 이미 존재하는 자산
+(ApartmentQuickSearch/AI검색/지도)의 역할과 배치만 재정리하면 되는
+것으로 확인됐다. BLOCKER 없음. commit/push는 사용자 승인 후 별도
+STEP에서 진행한다.
+
+상태:
+
+MAIN UI-A / STEP 51 조사·설계 완료 / 사용자 승인 대기(2026-08-18).
+
+
+## 2026-08-18
+
+### MAIN UI-B1 / STEP 52 — 홈 Search Hero + 빠른 탐색 + 최근 본 단지
+
+작업:
+
+STEP 51 설계대로 홈의 Primary를 AI 검색에서 일반 아파트 이름 검색으로
+재구성했다. 상세는 docs/development/52-main-home-search-hero.md 참고.
+
+핵심 결과:
+
+- 신규 `src/components/HomeApartmentSearch.tsx`: `ApartmentAutocomplete`를
+  그대로 재사용하고, 선택 시 상세 이동 전 실거래 검증은
+  `ApartmentQuickSearch.tsx`의 `handleSelect`와 동일한 방식을 홈 전용으로
+  새로 작성. `ApartmentQuickSearch` 자체는 상세페이지 모달 전제
+  (popstate="닫기" 흉내) 컴포넌트라 홈에 그대로 붙이면 사용자가 누르지
+  않은 뒤로가기를 소모하는 회귀가 생겨 재사용하지 않음 — 상세페이지
+  LOCK 대상 파일은 전혀 수정하지 않았다.
+- 검색 선택 즉시 상세 이동 확인(`대신푸르지오1차` 등, 브라우저 실측).
+- AI 검색(`ai-search-client.tsx`)은 로직 무수정, "조건으로 집 찾기"
+  버튼이 기존 `/ai-search` 페이지(자체 검색창+추천 프롬프트 3개 보유)로
+  연결되도록 역할만 Secondary로 재배치.
+- "지도에서 찾기" CTA 추가, 기존 핵심 Quick 메뉴의 "지도 검색" 큰
+  카드는 중복이라 제거(`bigCards` grid를 auto-fit으로 변경해 카드 1개일
+  때도 자연스럽게 채워지도록 함).
+- "최근 본 단지" 섹션 신규: 기존 `recent-apartments.ts`
+  (`ejip:recentApartments`, 최대 8개 저장)를 그대로 재사용, 홈에는
+  최근 5개만 가로 스크롤 카드로 노출. 가격 등 추가 API 호출 없음.
+  없으면 섹션 자체를 렌더하지 않음(빈 상태 확인 완료).
+- 신규 API/DB/schema 없음.
+- 정적 검증(tsc/eslint/next build) 전부 통과. 브라우저로 CASE A~G
+  전부 확인(모바일 360/375/390은 `resize_window` 도구가 이 환경에서
+  실제 창 크기를 바꾸지 못해 iframe 격리 기법으로 우회 검증) — overflow,
+  긴 단지명 잘림, 하단 nav 겹침 전부 없음.
+
+서비스 코드 변경:
+
+- 수정: `src/app/home-client.tsx`, `src/app/home-client.module.css`
+- 신규: `src/components/HomeApartmentSearch.tsx`
+
+DB 변경:
+
+없음.
+
+최종 판단:
+
+홈 Primary를 검색으로 재구성하는 목표를 기존 자산(ApartmentAutocomplete/
+recent-apartments/AI검색/지도) 재사용만으로 달성했다. 상세페이지 V1
+LOCK을 건드리지 않았고 회귀 위험이 있던 지점(ApartmentQuickSearch의
+popstate 로직)은 재사용하지 않고 별도 구현으로 피했다. BLOCKER 없음.
+
+상태:
+
+MAIN UI-B1 / STEP 52 구현 완료 / 사용자 모바일 검수 대기 / commit·push
+하지 않음(2026-08-18).
