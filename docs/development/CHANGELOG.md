@@ -4459,3 +4459,79 @@ DB/schema/migration 무변경 / commit·push 하지 않음(2026-08-19).
 
 **BRAND ROLLOUT (STEP 56~57) CLOSE.** 다음부터는 이집 핵심
 기능 개발로 복귀.
+
+
+## 2026-08-19
+
+### STEP R1 — 재개발 데이터 소스 검증
+
+작업:
+
+- `/redevelopment` 및 관련 Prisma 스키마(`RedevelopmentProject`,
+  `RedevelopmentStage`) 현재 상태 재확인 — 실데이터 연동 없는
+  정직한 placeholder임을 확인, 기존 코드 주석("전국 통합 공공데이터
+  없음")을 실제 데이터로 재검증.
+- 후보 A(국토부_전국 도시정비사업 통합 데이터, data.go.kr ID
+  15160169): 파일 데이터(CSV) 1,566건, 7개 컬럼(주소/좌표 없음,
+  진행단계·유형·시행자는 숫자 코드형), 갱신주기 연간. 브라우저로
+  미리보기 6건 실제 확인(강원 속초시/원주시). 부산 포함 여부는
+  전체 파일 미다운로드로 미확정.
+- 후보 B(전국재개발재건축정비사업표준데이터, ID 15155703,
+  `tn_pubr_public_redevelopment_reconstruction_project_api`):
+  기존 `DATA_GO_KR_API_KEY`로 실제 호출 시도 → HTTP 403
+  `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(이 API 별도 활용신청
+  미승인). 페이지 명세로 제공기관 9개(안산/진주/인천/군포/부산
+  3개구/대구서구/충주)만 확인 — "전국" 표방과 달리 실제 커버리지
+  매우 좁음, 사용자가 사전에 우려한 "제공기관 수 8~9건" 실측
+  확인됨.
+- 후보 C(부산광역시 정비사업 정보 API,
+  `MaintenanceBusinessStatus1/getMaintenanceBusiness1`): 동일 키로
+  실제 호출 성공(HTTP 200, totalCount 343, 343건 전수 수신).
+  23개 필드 전수 확인, 진행단계(`step`) distinct 12종 실측 확보
+  (기존 Prisma enum 6단계보다 세분화됨), 사업유형은 공식 필드
+  없이 areaName 접미사로만 추정(재개발171/재건축67/가로주택정비56/
+  소규모재건축49). 좌표 필드 없음, location 필드 78%만 채워지고
+  현장주소/조합사무실주소가 섞여 형식 불일치.
+- **중요 발견**: 부산 API(343건) 전체를 raw grep했으나 "서구"
+  문자열이 단 한 건도 없음 — 그런데 외부 검색(서구청 게시판,
+  부동산 정보 사이트)으로 아미동·서대신4구역 등 서구의 실제
+  재개발 사업 존재를 확인함. 이집 초기 타깃 지역인 서구가 부산
+  API에서 통째로 누락된 데이터 품질 문제로 판단, 원인은 미확정
+  (R2에서 재확인 필요).
+- 3개 후보 비교표(전국 커버리지/업데이트 주기/재개발재건축 구분/
+  주소/좌표/진행단계/세대수/시공사/조합/구역면적/용적률/건폐율/
+  이미지/관리기관/데이터기준일/API 제공 여부) 작성.
+- Master 후보 판단: **후보 A = 전국 존재-확인용 Master 후보**
+  (유일한 진짜 전국 데이터, 다만 얕음), **후보 C = 부산 상세
+  보강 후보**(필드 풍부, 다만 서구 누락 이슈 재확인 필요), 후보
+  B는 커버리지 부족 + API 미승인으로 후순위.
+- `docs/development/R1-redevelopment-data-source-audit.md` 신규
+  작성.
+
+DB/schema/migration 변경:
+
+없음(Prisma schema, migration 전혀 건드리지 않음).
+
+UI 변경:
+
+없음(`/redevelopment` 화면, 카드, 필터 무변경).
+
+API Key:
+
+`DATA_GO_KR_API_KEY`(.env.local) 존재 확인 — 값은 어디에도
+노출하지 않음. 후보 C에서 정상 동작, 후보 B에서는 별도 활용신청
+필요 상태(403)로 구분 기록. Busan/Redevelopment 전용 별도 키
+없음(data.go.kr 공용 키 구조).
+
+알려진 문제 / BLOCKER:
+
+하드 BLOCKER 없음. 소프트 제약 3가지: (1) 후보 B API 미승인,
+(2) 후보 A의 부산 포함 여부 미확정(전체 CSV 다운로드 필요),
+(3) 부산 API 서구 데이터 누락(원인 미상) — 전부 R2 권장사항으로
+문서에 기록.
+
+상태:
+
+STEP R1 완료 / 재개발 데이터 소스 3종 실측 비교 완료 / Master
+후보(국토부 전국 통합) + 부산 상세보강 후보(부산시 API) 판단 /
+DB/schema/migration·UI 무변경 / commit·push 하지 않음(2026-08-19).
