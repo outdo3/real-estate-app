@@ -5071,3 +5071,116 @@ STEP R4 완료 / Redevelopment Master DB Schema `prisma/schema.prisma`
 단 실제 데이터 투입 전 부산 sigungu 해석 문제 해결 또는 현재
 동작(sigungu 미상 레코드는 자동 매칭 제외) 명시적 승인 필요.
 
+## 2026-08-19
+
+### STEP R4.1 — 부산 시군구 해석 보정 + Redevelopment 실제 병합 품질 확정
+
+작업:
+
+- R4가 남긴 핵심 병목(부산 343건 sigungu 해석률 43%, "OO구" 리터럴
+  텍스트 매칭만 사용) 해결. 새 외부 API 추가 없이 이 프로젝트가
+  이미 쓰는 `REGCODE_PROXY`(`src/lib/region-utils.ts`)를 재사용해
+  법정동명 기반 해석을 추가(`src/lib/redevelopment/
+  sigunguResolver.ts`) — EXPLICIT/DONG_NAME/ROAD_ADDRESS/
+  PROJECT_NAME 4단계 우선순위, 각 단계 해석 결과를 정직하게 구분.
+- 도로명-only 레코드(343건 중 47건)만 Kakao 주소 검색으로 sigungu
+  복원(좌표 저장 안 함, 기존 `cheongyakService.ts` 패턴 재사용) —
+  이 중 26건(55%)이 office 의심 패턴과 동시 검출돼 자동 매칭에서
+  제외(조합사무실이 사업구역과 다른 구에 있을 위험 차단).
+- areaName(사업명) 기반 동명 추론은 공식 법정동명과 **정확히**
+  일치할 때만 채택(fuzzy 매칭 금지) — "명서1"(R3A 기록 사례,
+  실제로는 "명장동")처럼 글자가 다른 경우는 의도적으로
+  UNRESOLVED 유지, 잘못된 구로 배정하지 않음.
+- sigungu를 고쳐도 "서대신4"가 여전히 병합 안 되는 것을 실제로
+  발견 — 원인은 부산 실측 API의 `areaName`이 "서대신4 재개발"
+  (유형 접미사 포함)이라 저장용 `normalizedName`(접미사 보존)과
+  국토부의 "서대신4"(접미사 없음)가 문자열로 달랐기 때문. DB
+  저장 형식은 그대로 두고 `matching.ts`의 confidence 계산에서만
+  쓰는 비교 전용 `stripTypeSuffixForComparison()`을 추가(R3A
+  원래 파일럿 접미사 목록 재사용) — 오매칭 방지는 여전히 별도
+  `businessType` 비교가 담당(거제2 재개발/재건축 회귀 테스트
+  유지, 실물 데이터에서도 "대연3"이 RECONSTRUCTION/REDEVELOPMENT
+  두 프로젝트로 정확히 분리 유지되는 것으로 재확인).
+- R4 unresolved #5(`classifyLocationText()` 미배선)를 이번
+  STEP에서 연결 — `ingestRecord()`가 Project에 연결된
+  SourceRecord들의 rawLocation을 분류해 `locationType`/
+  `locationConfidence`를 채운다. 좌표(lat/lng)는 여전히 채우지
+  않고 `geocodeStatus`는 항상 `NOT_ATTEMPTED`(343건 전체 지오코딩
+  여전히 금지, office 의심 좌표를 PROJECT_SITE로 저장하지 않음).
+- `api/properties/route.ts`의 R4 변경분(`lawdCd`→`sido`/`sigungu`)
+  이유를 diff로 재확인 — schema에서 lawdCd 필드 자체가 제거돼
+  필수였던 변경으로 판정, 그대로 유지.
+
+실물 데이터 재검증 결과(DB 쓰기 없음, InMemoryStore 2회 연속 실행
+후 완전 동일 확인):
+
+```text
+부산 sigungu 해석률: 43.1%(148/343) -> 89.2%(306/343),
+  매칭에 안전하게 쓸 수 있는 건 81.6%(280/343)
+merged(양쪽 소스 연결) project: 2 -> 108 (54배)
+canonical projects: 1,904 -> 1,798
+EXACT match: 3 -> 109
+needsReview: 0 -> 13(더 많이 매칭되며 R3A가 예측한 businessType
+  충돌·세대수 30%+ 불일치 패턴이 정상적으로 표면화된 것)
+```
+
+- 서대신4: **canonical project 1개로 병합 성공**(MOLIT+BUSAN_CITY
+  양쪽 SourceRecord 연결), 착공/542세대 — R3A 예측과 정확히 일치.
+- 아미1/아미3: 변경 없음, MOLIT-only 그대로 유지(억지 매칭 없음).
+- 부산 서구 canonical project 20 -> 24건(R2의 MOLIT 20건 기준
+  BUSAN 매칭 8건 확인, R3A의 "최소 7건"보다 개선).
+- 수동 검증: merged 108건 중 25건을 14개 서로 다른 구/군에 걸쳐
+  표본 추출해 사업명/구군/유형/세대수/stage 전수 확인 — 오병합
+  0건. collision 검사: "대연3"이 재건축/재개발 두 프로젝트로
+  정확히 분리 유지되는 것으로 businessType 안전장치 재확인.
+
+테스트:
+
+신규 21건(`sigunguResolver.test.ts` 11건, `matching.test.ts`/
+`ingest.test.ts` 각 2건 등) 추가, 기존 45건과 합쳐 **전체 68개
+pass**. 실제 법정동명(서대신동2가/부민동2가/아미동1가/동대신동3가
+→ 서구) 개별 확인, 실제 동명이인(송정동: 해운대구/강서구) 안전
+판별(UNRESOLVED) 회귀 테스트로 고정.
+
+정적 검증:
+
+`npx tsc --noEmit` 통과(0 errors, 프로젝트 전체). 변경 파일 전체
+`npx eslint` 통과(0 errors). `npx next build` 통과, 기존 라우트
+회귀 없음.
+
+Schema/migration:
+
+**무변경.** `git diff --stat prisma/`가 R4와 완전히 동일 —
+R4.1에서 추가된 줄 없음. `npx prisma migrate status` 재확인,
+`20260819110211_redevelopment_master_schema_r4` 여전히 미적용.
+
+Production migration/ingestion:
+
+**둘 다 미실행.** 모든 검증은 `InMemoryRedevelopmentStore` 또는
+`--dry-run`으로만 수행.
+
+알려진 문제 / unresolved:
+
+1. UNRESOLVED 37건은 억지로 채우지 않고 그대로 유지(주로 location
+   자체가 빈 문자열).
+2. ROAD_ADDRESS로 sigungu를 알아낸 26건은 office 의심 때문에
+   보수적으로 매칭에서 제외 — 실제로는 병합 가능했을 수 있는
+   트레이드오프(의도된 설계, 오매칭보다 안전).
+3. R4의 기존 unresolved(conflicting duplicate 정책, office 좌표
+   실제 지오코딩 파일럿, similarity 임계치 0.7)는 이번 STEP
+   범위 밖으로 그대로 유지.
+
+상태:
+
+STEP R4.1 완료 / 부산 sigungu 해석률 43%->89% 개선(기존 공식
+REGCODE_PROXY 재사용, 새 API 추가 없음) / 매칭 접미사 비교 버그
+수정(서대신4 등 실제 병합 복구) / classifyLocationText 배선 완료
+(좌표/전체 지오코딩은 여전히 안 함) / merged project 2->108건,
+수동 검증 25건 오병합 0건 / schema/migration 무변경, production
+migration·ingestion 전부 미실행 / commit·push 하지 않음
+(2026-08-19).
+
+**PRODUCTION_INGEST 조건부 GO / R5_GO** — sigungu 해석 문제
+해결로 R4가 걸었던 조건 충족. MEDIUM 43건은 여전히 사람 검토
+필요(REVIEW_REQUIRED로 정상 유입), UNRESOLVED/unsafe 63건은
+보수적으로 BUSAN-only 유지.
