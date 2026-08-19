@@ -5479,3 +5479,147 @@ STEP SHARE-1.2 완료(코드 조사) / payload 실물 검증으로 코드 버그
 없음 확인(아파트 2곳) / Kakao Developers 콘솔 확인 항목 문서화 /
 실제 물리기기 클릭 검증은 사용자 액션 대기 / commit·push 하지
 않음(2026-08-19).
+
+## 2026-08-19
+
+### STEP SCORE S1 — 아파트 이집점수 데이터 감사 + 설계
+
+작업:
+
+- 점수 계산 코드/schema/migration/UI를 전혀 만들지 않고, production
+  DB에 read-only 쿼리로 실제 아파트 데이터 coverage를 감사.
+- `Apartment`(상세페이지가 실제로 쓰는 건축물대장 캐시): 32건, 전국
+  산발적 — parking/far/bcr/households 93.8%지만 표본이 너무 작고
+  비대표적. `communityFacilities` 0/32(STEP50에서 이미 0/31로 확인된
+  죽은 필드, 이번에 재확인해도 여전히 0).
+- `ApartmentMaster`(M3 pilot): 3,402건인데 **sido 전부 "부산"** —
+  전국 데이터가 아님을 이번 감사로 명확히 확인. buildYear 100%,
+  aptSeq(MOLIT 조인키) 100%, latLng 90.2%, totalHouseholds 38.5%,
+  parkingCount 25.8%. 부산 서구만 171건.
+- `TradeHistory` 0건(스키마 주석 자체가 "라이브 앱 미사용" — 오프라인
+  시드 전용), 실거래는 MOLIT API 라이브 호출만(개별 조회는 정확하나
+  배치 캐시 없음).
+- 8종 Kakao Places(지하철/버스 TAGO/KTX/병원·공원/마트/편의점/약국/
+  어린이집)와 NEIS 학교 데이터 전부 라이브 API 호출, DB 미저장 확인.
+  NEIS는 학교 실명/위치만 있고 진학률/학업성취도 데이터 소스 자체가
+  없음(STEP1.5-A/50에서 이미 확인된 사실 재확인) — **학군 카테고리는
+  V1/V2 어디에도 넣지 않고 NOT AVAILABLE로 결론**.
+- 부산 서구 `ApartmentMaster` 171건으로 read-only pilot 시뮬레이션
+  (DB 미저장) — 세대당 주차대수 계산 가능 26건(15.2%)뿐, 신축(2015+)
+  coverage 27.7% vs 구축 10.5%로 **결측이 준공연도와 상관관계 있음을
+  실측 확인**(결측=0점 금지 원칙의 실제 근거). Percentile 10개 표본
+  시뮬레이션에서 대단지/신축 편향 없음 확인, 이상치 1건(삼경빌라맨션,
+  0.29대/세대) 발견 — 데이터 품질 검수 절차 필요로 기록.
+- 6개 후보 카테고리(교통/생활편의/주차/학군/단지규모/가격) 전부
+  **PARTIAL 또는 NOT AVAILABLE — V1 INCLUDED가 하나도 없다는 것이
+  핵심 결론**(라이브 API는 벌크 계산 인프라 없음, DB 데이터는 부산
+  전용+coverage 부족).
+- Peer group은 기존 `findNearbyApartments()`(adaptive radius,
+  1→1.5→2→3km, 최소 5건) 재사용 제안 — 새 로직 불필요.
+- "전국 공통 Core Score"라는 원래 전제 자체가 현재 데이터로는
+  성립하지 않음(비교 가능한 지역이 부산 하나뿐)을 문서에 명시,
+  "부산(서구) pilot Core"로 범위를 좁히는 제품 결정 필요를 제안.
+
+DB/schema/migration/UI/production ingestion:
+
+**전부 무변경.** 조사에 쓴 임시 스크립트(`scripts/_score_s1_audit*.ts`,
+`_score_s1_pilot.ts`)는 문서 작성 후 삭제, 저장소에 남기지 않음.
+
+상태:
+
+STEP SCORE S1 완료(설계 문서만) / 실제 데이터 coverage 전수 감사 /
+6개 후보 카테고리 전부 PARTIAL/NOT AVAILABLE로 판정(V1 즉시 포함
+가능 카테고리 없음) / 결측 bias 실측 확인(신축 27.7% vs 구축 10.5%)
+/ 부산 서구 pilot 이상치 1건 발견 / peer group은 기존 함수 재사용
+제안 / "전국 Core"는 현재 데이터로 불가, 범위 축소 필요 / 점수
+계산 코드/schema/migration/UI 전부 무변경 / commit·push 하지
+않음(2026-08-19).
+
+**S2_조건부_GO** — 카테고리/가중치/지역보정을 지금 확정할 데이터가
+없음. 배치 캐시 스키마 별도 승인 또는 "부산 서구 한정 V0.5" 범위
+축소 결정 필요.
+
+## 2026-08-19
+
+### STEP SCORE S1.1 — Score Data Foundation + Regional Location Premium 설계
+
+작업:
+
+- S1의 결론(V1 INCLUDED 카테고리 없음, 전국 Core 전제 성립 안 함)은
+  뒤집지 않고, `ApartmentMaster` 전체 필드/coverage를 처음부터
+  재조사.
+- **핵심 재발견: `ApartmentMaster` 3,402건이 이미 부산 16개 구·군
+  전역을 커버**(S1은 서구만 pilot했지만 실제 데이터는 부산 전체) —
+  좌표(lat+lng) coverage 90.2%, 구별로도 서구 90.6%/해운대 80.2%/
+  수영구 90.0%/남구 87.0% 고르게 확보. 출처는 이미 실행된 MASTER
+  M4-B(`14-apartment-master-m4-expansion-analysis.md`)의 산출물임을
+  재확인(추정 아님).
+- `area`(면적) 필드가 schema에 없음을 확인(원 지시 후보였으나
+  실제로는 없음, 정직하게 보고). `useApprovalDate` 18.2%,
+  `mainBuildingCount` 40.1%, `roadAddress`/`jibunAddress` 40.8%도
+  실측.
+- **MOLIT 가격 API 재발견**: `fetchMolitData()`는 구/군+월 단위로 그
+  지역 전체 거래를 한 번에 반환 — 호출 비용이 아파트 수(3,402)가
+  아니라 (구·군×개월) 수에 비례. 16구×12개월=192회로 부산 전체 최근
+  1년 가격 raw feature 확보 가능(24개월 기준이면 384회로 M4 문서의
+  기존 추정과 정확히 교차검증됨).
+- **해변 접근성(BEACH_ACCESS) 계산 가능성을 실제 API 호출로 실증**
+  (해운대 좌표 기준 "해수욕장" 키워드 검색 → Kakao 공식
+  category_name "관광,명소 > 해수욕장,해변" 경로로 안전하게 필터
+  가능, 새 외부 API 불필요) — **오션뷰(OCEAN_VIEW)는 동/층/방향
+  데이터 자체가 없어 명확히 NOT_AVAILABLE로 분리 유지**.
+- `KakaoPlaces.tsx`는 브라우저 JS SDK 기반이라 서버 배치가 재사용
+  불가함을 확인 — REST API(기존 `cheongyakService.ts`/
+  `geocode-apt.ts` 패턴) 전환 필요를 설계에 명시.
+- API 예산 추정: Kakao 약 24,536회(3,067개 좌표단지×8종) + TAGO 약
+  3,067회 + MOLIT 192~384회 ≈ 28,000회. **TAGO는 10,000건/일로 이미
+  문서 확인됨**(STEP44), Kakao/MOLIT 일일 한도는
+  EXTERNAL_VERIFICATION_REQUIRED로 명시(M4 문서와 동일하게 추측
+  기록 안 함) — 다회차 batch 실행 전제로 설계.
+- Regional Location Premium을 Core/Regional 비중 분리(A안) 대신
+  **Core 자체를 지역 percentile로 정규화하고 Premium은 총점에
+  안 섞고 별도 배지로 분리(B안)**로 채택 — "85점의 의미가 지역마다
+  달라지는 문제"를 구조적으로 방지.
+- Peer group을 카테고리별로 재설계 제안(교통=기존
+  `findNearbyApartments()` 재사용, 주차/단지=같은 sigungu+연식 유사,
+  가격=같은 sigungu+세대수 규모 근사).
+- Cache schema 2개 제안(`ApartmentLocationFeature`/
+  `ApartmentMarketFeature`, 위치/시장 계열 갱신주기가 달라 분리) —
+  raw feature+source+fetchedAt+qualityFlag만 저장, score/weight
+  필드 없음(server-only 계산 원칙).
+- **Canonical identity를 `ApartmentMaster.aptSeq`로 결론** — 단
+  현재 상세페이지가 쓰는 `Apartment`(32건)와 아직 연결이 없어 S2
+  전 별도 backfill(스키마 변경) 필요를 명시(BLOCKER는 아니나 선행
+  과제).
+- 초기 출시 범위 A(서구 V0.5)/B(부산 전체 Beta)/C(전국 대기) 비교 —
+  **B(부산 전체 Beta) 추천**: 데이터가 이미 부산 전역을 커버하고,
+  "다른 플랫폼" 목표(지역 특성 비교, 예: 서구=생활인프라 vs
+  해운대=해변접근성)는 최소 2개 지역이 있어야 가능해 A로는 애초에
+  보여줄 수 없음.
+- S2를 S2A(Cache Schema)/S2B(Feature Collection)/S2C(Score Engine)
+  3단계로 재정의 제안 — 배치 인프라 없이 점수부터 만드는 순서를
+  방지.
+
+DB/schema/migration/UI/production write:
+
+**전부 무변경.** 실제 실행한 것은 read-only 쿼리(ApartmentMaster
+coverage 재확인)와 Kakao 키워드 검색 1회(해변 접근성 실증)뿐 — 대량
+API 호출(약 24,536회 견적)은 이번 STEP에서 실행하지 않음("임의로
+확장하여 수정하지 않는다" 원칙, 정식 배치 인프라 없이 실행하지
+않기로 판단). 조사용 임시 스크립트는 삭제.
+
+상태:
+
+STEP SCORE S1.1 완료(설계 문서만) / ApartmentMaster가 부산 전역
+커버함을 재확인(서구 pilot 한계 극복) / MOLIT 가격 API가 구·군+월
+단위 배치라 저비용 확인 / 해변 접근성 계산 가능성 실증, 오션뷰는
+NOT_AVAILABLE 유지 / Regional Premium B안(지역 percentile 정규화)
+채택 / cache schema 2종 제안 / identity를 ApartmentMaster.aptSeq로
+결론 / 부산 전체 Beta 출시 범위 추천 / S2를 3단계로 재정의 제안 /
+DB/schema/migration/UI 전부 무변경 / commit·push 하지 않음
+(2026-08-19).
+
+**S2_조건부_GO** — 구조 설계는 완결. S2 착수 전 (1) Apartment↔
+ApartmentMaster 연결 스키마 변경 승인, (2) cache schema 승인, (3)
+Kakao/MOLIT 일일 한도 사용자 확인 3가지 필요.
+
