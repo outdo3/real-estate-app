@@ -4374,3 +4374,88 @@ BRAND STEP 57-B 완료 / mascot 7종 전체 실제 화면 연결 완료
 (search·analyze·guide·error 신규) / illustration 3종·OG는
 계속 보류 / APT DETAIL V1·DB/schema/migration 무변경 /
 commit·push 하지 않음(2026-08-19).
+
+
+## 2026-08-19
+
+### STEP 57-C — 브랜드 마무리(OG/Metadata/자산 정리/BRAND CLOSE)
+
+작업:
+
+- OG 이미지 1200x630 production 자산 생성: 원본
+  `brand-source/og/ejip-og-main.png`(1672x941, B3 APPROVED)을
+  Pillow로 결정론적 가공(새 이미지 생성 AI 호출 없음) — 폭
+  1200px로 비율 유지 리사이즈 후 675→630px 상하 center-crop
+  (각 22~23px, 원본에서 콘텐츠 없는 여백 부분만 해당함을 육안
+  확인). JPEG quality 88, 108.4KB(<500KB 권장 통과).
+  `public/brand/og/ejip-og-main-1200x630.jpg`로 저장.
+- Open Graph/Twitter metadata 연결: `src/app/layout.tsx`의
+  root `openGraph.images`를 새 파일로 교체 + 신규
+  `metadata.twitter`(`summary_large_image`, 같은 이미지 재사용)
+  추가. `src/config/site.ts`의 `buildOpenGraph()`(14개 페이지가
+  공유하는 헬퍼)도 동일 경로로 교체해 홈/AI검색/통계/분양/
+  재개발/학교/커뮤니티/약관 등 전 페이지에 일괄 반영.
+  `src/components/KakaoShareButton.tsx`의 카카오톡 공유 이미지
+  URL도 동일 경로로 교체(기존 `window.location.origin` 기반
+  클라이언트 안전 패턴은 그대로 유지, 경로 문자열만 변경).
+  title/description은 변경하지 않음(SEO 전체 개편 아님).
+- 기존 `public/og-image.png`(2026-08-10 생성, "이집(e-zip)"
+  오탈자 + 파란 배경의 구브랜드 placeholder였음을 확인) — 이제
+  어디서도 참조하지 않지만 임의 삭제 금지 원칙에 따라 파일
+  자체는 삭제하지 않고 보존.
+- favicon 16px 최종 판정: **KEEP**. 16x16 원본을 nearest-neighbor
+  로 확대해 픽셀 단위로 직접 검사 — 노란 창문 등 세부 디테일은
+  뭉개지지만 초록 배경+흰 실루엣의 색상·형태 대비는 유지돼
+  브라우저 탭 구분이라는 실용적 목적은 충족한다고 판단, 새
+  simplified variant를 제작하지 않음.
+- illustration 3종(search/analyze/cheer): 자연스러운 사용처를
+  계속 찾지 못해 **RESERVED**로 최종 기록(`public/`에 반입하지
+  않고 `brand-source/`에만 유지). mono-white/vertical logo는
+  각각 원인 분석 완료 상태로 **DEFER** 확정(재작업하지 않음,
+  실제 소비처가 생기면 그때 결정론적 방식으로 재생성 권장).
+- `docs/development/57-brand-rollout-final.md` 신규 작성 —
+  STEP 56~57 전체를 아우르는 BRAND CLOSE 문서(ACTIVE/RESERVED/
+  DEFER 자산 목록, Brand Voice 실사례, APT DETAIL V1/DB 영향
+  요약, 향후 확장 원칙 6가지).
+
+production code 변경:
+
+- 수정: `src/app/layout.tsx`(openGraph.images 경로 교체 +
+  twitter 필드 신규), `src/config/site.ts`(buildOpenGraph
+  images 경로 교체), `src/components/KakaoShareButton.tsx`
+  (공유 이미지 경로 교체)
+- 신규: `public/brand/og/ejip-og-main-1200x630.jpg`,
+  `docs/development/57-brand-rollout-final.md`
+- Home/AI Search/Community/Map/Presales/Redevelopment/Apt
+  Detail UI, 검색 알고리즘, API, primary-color: 전부 무변경
+  (이번 STEP은 metadata + asset finalization + 문서화만).
+
+APT DETAIL V1 / DB:
+
+무변경(이번 STEP은 코드 3개 파일 전부 metadata/공유 URL
+문자열 교체뿐, 상세페이지 자체는 건드리지 않음). DB/schema/
+migration 무변경.
+
+정적 검증:
+
+`npx tsc --noEmit` 통과(0 errors). 변경 파일(`layout.tsx`,
+`site.ts`, `KakaoShareButton.tsx`) `npx eslint` 통과(0 errors).
+`npx next build` 통과, 기존 30개 라우트 회귀 없음.
+
+알려진 문제:
+
+- `public/og-image.png`(구버전, 미참조)는 정리하지 않고 보존
+  — 필요 시 사용자 확인 후 별도로 삭제 검토.
+- favicon simplified variant, mono-white/vertical logo 재작업은
+  전부 DEFER 상태로 backlog에 남아있으나 현재 BLOCKER 아님.
+
+상태:
+
+BRAND STEP 57-C 완료 / OG 1200x630 production 자산 생성 및
+Open Graph·Twitter·Kakao 공유 metadata 전체 연결 / favicon
+16px KEEP 판정 / illustration RESERVED, mono-white·vertical
+DEFER로 최종 정리 / BRAND CLOSE 문서 작성 / APT DETAIL V1·
+DB/schema/migration 무변경 / commit·push 하지 않음(2026-08-19).
+
+**BRAND ROLLOUT (STEP 56~57) CLOSE.** 다음부터는 이집 핵심
+기능 개발로 복귀.

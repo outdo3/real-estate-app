@@ -25,13 +25,19 @@ export const metadata: Metadata = {
     siteName: '이집',
     images: [
       {
-        url: 'https://real-estate-app-park11.vercel.app/og-image.png',
+        url: 'https://real-estate-app-park11.vercel.app/brand/og/ejip-og-main-1200x630.jpg',
         width: 1200,
         height: 630,
-        alt: '이집 메인 이미지',
+        alt: '이집 - 복잡한 부동산, 이집으로 쉽게',
       },
     ],
     type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: '이집',
+    description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
+    images: ['https://real-estate-app-park11.vercel.app/brand/og/ejip-og-main-1200x630.jpg'],
   },
 };
 

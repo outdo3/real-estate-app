@@ -96,7 +96,7 @@ export default function KakaoShareButton({ title, description, compact }: KakaoS
     return `${window.location.origin}${window.location.pathname}${window.location.search}`;
   };
 
-  const buildImageUrl = () => `${window.location.origin}/og-image.png`;
+  const buildImageUrl = () => `${window.location.origin}/brand/og/ejip-og-main-1200x630.jpg`;
 
   const sendShare = () => {
     const url = buildShareUrl();

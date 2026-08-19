@@ -37,10 +37,10 @@ export function buildOpenGraph(og: {
     type: og.type || 'website',
     images: [
       {
-        url: absoluteUrl('/og-image.png'),
+        url: absoluteUrl('/brand/og/ejip-og-main-1200x630.jpg'),
         width: 1200,
         height: 630,
-        alt: siteConfig.name,
+        alt: `${siteConfig.name} - 복잡한 부동산, 이집으로 쉽게`,
       },
     ],
   };
