@@ -201,7 +201,10 @@ export default function AiSearchClient() {
         {!loading && !error && result && (
           <div className={styles.resultArea}>
             <div className={styles.briefingBox}>
-              <span className={styles.briefingLabel}>🤖 AI 브리핑</span>
+              <span className={styles.briefingLabel}>
+                <img src="/brand/mascot/ejipy-analyze.webp" alt="" className={styles.briefingIcon} />
+                AI 브리핑
+              </span>
               <p className={styles.briefingText}>{result.briefing}</p>
             </div>
 
@@ -218,7 +221,10 @@ export default function AiSearchClient() {
         )}
 
         {!loading && !error && !result && (
-          <div className={styles.emptyBox}>궁금한 걸 물어보세요. 예: “부산 서구 5억 이하 신축 아파트”</div>
+          <div className={styles.emptyBox}>
+            <img src="/brand/mascot/ejipy-search.webp" alt="" className={styles.emptyMascot} />
+            궁금한 걸 물어보세요. 예: “부산 서구 5억 이하 신축 아파트”
+          </div>
         )}
       </main>
     </div>

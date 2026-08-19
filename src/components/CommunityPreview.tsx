@@ -51,11 +51,14 @@ export default function CommunityPreview({ aptName }: CommunityPreviewProps) {
 
   const communityHref = `/community?aptName=${encodeURIComponent(aptName)}`;
   const writeHref = `/community/write?aptName=${encodeURIComponent(aptName)}`;
+  // 단지명이 짧을 때만 "이집/이 집" 중의성을 살린 문구를 쓴다 — 긴 단지명에서는
+  // "OOOOOOOOOOO, 이집 어때요?"가 문장으로서 어색해져 일반 제목으로 대체한다.
+  const previewTitle = aptName.length <= 12 ? `💬 ${aptName}, 이집 어때요?` : `💬 ${aptName} 커뮤니티`;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>💬 {aptName} 커뮤니티</h3>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>{previewTitle}</h3>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <Link href={writeHref} style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary-color)', textDecoration: 'none' }}>
             ✏️ 글쓰기
@@ -72,7 +75,7 @@ export default function CommunityPreview({ aptName }: CommunityPreviewProps) {
         <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>⚠️ {error}</div>
       ) : posts!.length === 0 ? (
         <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          아직 이 단지 관련 글이 없습니다. 첫 글을 남겨보세요!
+          이집에 대해 궁금한 점을 남겨보세요. 첫 글을 기다리고 있어요!
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column' }}>

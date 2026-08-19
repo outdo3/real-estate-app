@@ -54,6 +54,15 @@
   background: var(--card-bg);
   border-radius: var(--radius-lg);
   border: 1px dashed var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.stateMascot {
+  width: 64px;
+  height: 64px;
 }
 
 .grid {

@@ -54,8 +54,9 @@
   text-align: center;
 }
 
-.emptyIcon {
-  font-size: 2rem;
+.emptyMascot {
+  width: 72px;
+  height: 72px;
   margin-bottom: 0.75rem;
 }
 

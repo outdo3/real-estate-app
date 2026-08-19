@@ -4254,3 +4254,123 @@ BRAND STEP 57-A 완료 / logo 4·icon 7·mascot 3포즈(default·loading·
 empty) 실제 화면 적용 / mascot 4(search·analyze·guide·error)·
 illustration·OG는 자산만 배치 / DB·APT DETAIL V1 구조 무변경 /
 commit·push 하지 않음(2026-08-19).
+
+
+## 2026-08-19
+
+### STEP 57-B — 이집이 기능별 역할 연결 + Brand Voice 2차 적용
+
+작업:
+
+- 실제 사용처를 `rg`로 전수 조사(추측 없이 진행) 후, 남아있던
+  mascot 4종(search/analyze/guide/error)을 아래처럼 실제 상태와
+  연결:
+  - `ejipy-search` → AI 검색 페이지의 "질문 대기"(idle) 상태 —
+    기존에도 존재하던 `!loading && !error && !result` 분기를
+    그대로 재사용, 새 상태/로직 추가 없음. 검색결과-없음 상태
+    (`ejipy-empty`, STEP 57-A)와 시각적으로 구분됨.
+  - `ejipy-analyze` → AI 브리핑 라벨의 🤖 이모지를 대체(18px
+    인라인 아이콘). 라벨 텍스트("AI 브리핑")는 구조적 레이블이라
+    바꾸지 않음 — 없는 분석을 과장하는 문장을 새로 만들지 않음.
+  - `ejipy-guide` → `/redevelopment`의 "준비 중" 카드 이모지
+    (🏢/🏗️) 대체, `/community/write` 상단에 안내 문구
+    ("이집에서 살아본 이야기를 들려주세요.") + 아이콘 신규 추가.
+  - `ejipy-error` → `/map`의 지도 로드 실패 전체화면 에러(제목
+    위에 아이콘만 추가, 원인 문구·재시도 버튼은 그대로),
+    `/presales` API 실패 상태(아이콘 추가, 에러 메시지 그대로
+    주정보 유지).
+  - `ejipy-empty` → `/community`(전체 글목록) 빈 목록,
+    `/presales` 조건에 맞는 분양정보 없음 — 2곳 신규 추가.
+- Brand Voice(커뮤니티): `CommunityPreview.tsx`(APT DETAIL
+  V1 페이지에 내장되지만 지시서가 "CommunityPreview 문구"만
+  명시적으로 허용) 제목을 단지명 12자 이하일 때만
+  `"{단지명}, 이집 어때요?"`로, 빈 목록 문구를
+  `"이집에 대해 궁금한 점을 남겨보세요. 첫 글을 기다리고
+  있어요!"`로 교체. **이미지(마스코트)는 추가하지 않음** —
+  V1 LOCK이 "새로운 mascot 영역 추가"를 명시적으로 금지해서,
+  이 컴포넌트에는 문구만 바꾸고 아이콘은 넣지 않았다(1차 구현
+  때 실수로 넣었다가 지시서 재확인 후 되돌림).
+- Map의 레이어별 "준비 중" 토스트(`COMING_SOON_MESSAGE`,
+  지도 위에 떠 있는 작은 pill 배너)는 **마스코트를 넣지 않기로
+  판단**했다 — 캐릭터를 넣기엔 배너가 너무 작고, 지도 콘텐츠
+  위에 뜨는 요소라 "map viewport를 가리지 않아야 한다"는
+  지시와 상충할 위험이 있어 텍스트만 유지.
+- illustration 3종(search/analyze/cheer)은 **이번 STEP에서도
+  사용하지 않음** — mascot 아이콘으로 이미 채워진 자리(AI 검색
+  idle/브리핑)에 "mascot와 illustration을 동시에 넣지 않는다"는
+  원칙에 따라 중복 배치하지 않았고, 그 외에 카드/온보딩 등
+  illustration이 자연스럽게 들어갈 명확한 신규 지점을 찾지
+  못해 "억지로 모두 사용하지 않는다"는 지시대로 보류.
+- Brand Voice 노출량 점검: 화면마다 동시에 보이는 "이집" 계열
+  텍스트가 최대 1~2개를 넘지 않는지 확인(예: apt 상세
+  커뮤니티 구역은 제목+빈상태 문구 합쳐 최대 2개, 둘은 동시에
+  보이지 않는 경우가 대부분).
+- `--primary-color`(#03c75a) 무변경, 전체 green 일괄 전환 없음.
+- OG metadata 연결/favicon simplified variant 제작 없음(지시대로
+  보류).
+
+production code 변경:
+
+- 수정: `src/app/ai-search/ai-search-client.tsx`,
+  `src/app/ai-search/ai-search-client.module.css`,
+  `src/components/CommunityPreview.tsx`,
+  `src/app/community/page.tsx`,
+  `src/app/community/page.module.css`,
+  `src/app/community/write/page.tsx`,
+  `src/app/community/write/page.module.css`,
+  `src/app/map/page.tsx`,
+  `src/app/presales/presales-client.tsx`,
+  `src/app/presales/page.module.css`,
+  `src/app/redevelopment/redevelopment-client.tsx`,
+  `src/app/redevelopment/redevelopment.module.css`
+- 신규 파일 없음(STEP 57-A에서 이미 배치한 mascot 자산만
+  재사용).
+- API 구조, 검색 알고리즘, 지도 로직, 실거래 로직, DB/schema/
+  migration은 무변경.
+
+APT DETAIL V1:
+
+- `CommunityPreview.tsx` 문구만 변경(카드 구조/데이터/순서
+  무변경, 새 mascot 영역 추가 없음). 공통 컴포넌트
+  (`FullPageLoader`)는 STEP 57-A와 동일하게 간접 반영.
+
+정적 검증:
+
+`npx tsc --noEmit` 통과(0 errors). 변경 파일 전체 `npx eslint`
+통과(0 errors — ai-search-client.tsx의 기존 무관 warning 1건
+동일하게 존재). `npx next build` 통과, 기존 30개 라우트 회귀
+없음.
+
+로컬 시각 검수(`localhost:3000`, PC + 375px 모바일 iframe 격리):
+
+- AI 검색: idle(`ejipy-search`) → 실제 검색 실행 →
+  브리핑(`ejipy-analyze` 아이콘) → 카드 결과, 흐름 전체 확인.
+- `/community`: AuthGate 로그인 모달 닫은 후 빈 목록
+  (`ejipy-empty`) 확인.
+- `/community/write`: 안내 문구+아이콘 정상 노출.
+- apt 상세(`/apt/대신롯데캐슬`): "대신롯데캐슬, 이집 어때요?"
+  제목 + 빈 목록 문구(아이콘 없음) 확인, 카드 구조/차트 등
+  기존 그대로.
+- `/redevelopment`: `ejipy-guide` 아이콘으로 두 탭(분양·청약/
+  재개발) 모두 정상 렌더링.
+- `/presales`: 실데이터 1,046건 정상 표시(회귀 없음). empty/
+  error 브랜치는 코드 리뷰 + 동일 패턴(다른 페이지에서 이미
+  검증됨)으로 확인, 실제 0건/에러 조건 재현은 하지 않음.
+- console 에러 없음 확인.
+
+알려진 문제:
+
+- presales의 empty/error 상태는 실제 데이터로 재현해 시각
+  확인하지 못함(코드 검토로만 확인) — 향후 재현 가능하면
+  확인 권장.
+- map "준비 중" 토스트, illustration 3종은 이번 STEP에서
+  의도적으로 미적용(위 사유 참고) — 필요 시 별도 STEP에서
+  재검토.
+- OG 1200x630 파생, favicon simplified variant는 계속 backlog.
+
+상태:
+
+BRAND STEP 57-B 완료 / mascot 7종 전체 실제 화면 연결 완료
+(search·analyze·guide·error 신규) / illustration 3종·OG는
+계속 보류 / APT DETAIL V1·DB/schema/migration 무변경 /
+commit·push 하지 않음(2026-08-19).

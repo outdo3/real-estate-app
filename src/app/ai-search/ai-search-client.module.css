@@ -126,9 +126,17 @@
 }
 
 .briefingLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--primary-color);
+}
+
+.briefingIcon {
+  width: 18px;
+  height: 18px;
 }
 
 .briefingText {

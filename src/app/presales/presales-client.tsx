@@ -145,9 +145,15 @@ export default function PresalesClient() {
         {isLoading ? (
           <div className={styles.stateBox}>목록을 불러오는 중입니다...</div>
         ) : fetchError ? (
-          <div className={styles.stateBox}>⚠️ {fetchError}</div>
+          <div className={styles.stateBox}>
+            <img src="/brand/mascot/ejipy-error.webp" alt="" className={styles.stateMascot} />
+            ⚠️ {fetchError}
+          </div>
         ) : items.length === 0 ? (
-          <div className={styles.stateBox}>조건에 맞는 분양정보가 없습니다.</div>
+          <div className={styles.stateBox}>
+            <img src="/brand/mascot/ejipy-empty.webp" alt="" className={styles.stateMascot} />
+            조건에 맞는 분양정보가 없습니다.
+          </div>
         ) : (
           <div className={styles.grid}>
             {items.map((p) => (

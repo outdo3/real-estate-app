@@ -33,7 +33,7 @@ export default function RedevelopmentClient() {
         </div>
 
         <div className={styles.emptyCard}>
-          <div className={styles.emptyIcon}>{activeTab === 'sale' ? '🏢' : '🏗️'}</div>
+          <img src="/brand/mascot/ejipy-guide.webp" alt="" className={styles.emptyMascot} />
           <div className={styles.emptyTitle}>
             {activeTab === 'sale' ? '분양·청약 정보 연동 준비 중입니다.' : '재개발·재건축 구역 정보 연동 준비 중입니다.'}
           </div>

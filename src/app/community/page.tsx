@@ -70,6 +70,7 @@ export default function CommunityPage() {
             <div className={styles.emptyState}>⚠️ {fetchError}</div>
           ) : posts.length === 0 ? (
             <div className={styles.emptyState}>
+              <img src="/brand/mascot/ejipy-empty.webp" alt="" className={styles.emptyMascot} />
               {aptName ? '아직 이 단지 관련 글이 없습니다. 첫 글을 남겨보세요!' : '아직 작성된 글이 없습니다. 첫 글을 남겨보세요!'}
             </div>
           ) : (

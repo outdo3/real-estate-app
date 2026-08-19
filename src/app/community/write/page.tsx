@@ -52,6 +52,10 @@ export default function WritePostPage() {
       <div className={styles.main}>
         <Header pageTitle="글쓰기" />
         <div className="container">
+          <div className={styles.writeIntro}>
+            <img src="/brand/mascot/ejipy-guide.webp" alt="" className={styles.writeIntroMascot} />
+            <span>이집에서 살아본 이야기를 들려주세요.</span>
+          </div>
           <div className={styles.form}>
             <input
               className={styles.aptNameInput}

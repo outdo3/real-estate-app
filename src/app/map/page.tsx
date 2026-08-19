@@ -645,6 +645,7 @@ export default function FullscreenMapPage() {
   if (mapLoadError) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: '2rem', textAlign: 'center', backgroundColor: '#FEE2E2', color: '#EF4444' }}>
+        <img src="/brand/mascot/ejipy-error.webp" alt="" style={{ width: 72, height: 72, marginBottom: '0.5rem' }} />
         <h2>지도를 불러오지 못했습니다.</h2>
         <p style={{ maxWidth: '480px', marginTop: '0.75rem' }}>{mapLoadError}</p>
         <div style={{ display: 'flex', gap: '0.75rem', marginTop: '2rem' }}>
