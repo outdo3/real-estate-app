@@ -190,42 +190,42 @@ model Apartment {
 // 한 행 = MOLIT aptSeq 1개(M2 §C 결론). 이름/동 문자열 매칭이 아니라 aptSeq(있으면)를
 // 우선 식별자로 쓰고, normalizedName은 검색 보조용일 뿐 identity로 쓰지 않는다(M2 §I).
 model ApartmentMaster {
-  id                Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   // 외부 식별자 — 내부 PK(id)와 분리, 둘 다 nullable(무거래/미확보 단지 수용, M2 §R)
-  aptSeq            String?  @unique @map("apt_seq") // MOLIT, "{lawdCd}-{일련번호}"
+  aptSeq       String? @unique @map("apt_seq") // MOLIT, "{lawdCd}-{일련번호}"
   // 건축물대장 총괄표제부 관리번호. 정수로 다루면 정밀도 손실 위험이 있어 문자열로만
   // 저장한다(M1 §K). 한 단지에 총괄표제부가 여러 건 잡히는 드문 사례가 있음이 기존
   // apt-building-info.ts 주석에서 이미 확인돼, DB unique 제약은 걸지 않는다(M3 §5).
-  mgmBldrgstPk      String?  @map("mgm_bldrgst_pk")
+  mgmBldrgstPk String? @map("mgm_bldrgst_pk")
 
-  name              String   // MOLIT aptNm 또는 건축물대장 bldNm 원본 표기
-  normalizedName    String   @map("normalized_name") // 공백/"아파트" 접미사 제거 — 매칭 보조용
+  name           String // MOLIT aptNm 또는 건축물대장 bldNm 원본 표기
+  normalizedName String @map("normalized_name") // 공백/"아파트" 접미사 제거 — 매칭 보조용
 
   // 지역/주소 — 원본 필드를 분리 보존한다(단일 텍스트 컬럼으로 뭉치지 않음, M2 §H)
-  sido              String?
-  sigungu           String?
-  sggCd             String?  @map("sgg_cd") // = lawdCd, MOLIT 원본
-  umdName           String?  @map("umd_name")
-  umdCd             String?  @map("umd_cd")
-  jibun             String?
-  roadAddress       String?  @map("road_address")  // 건축물대장 newPlatPlc(도로명주소 완성형)
-  jibunAddress      String?  @map("jibun_address")  // 건축물대장 platPlc(지번주소 완성형)
+  sido         String?
+  sigungu      String?
+  sggCd        String? @map("sgg_cd") // = lawdCd, MOLIT 원본
+  umdName      String? @map("umd_name")
+  umdCd        String? @map("umd_cd")
+  jibun        String?
+  roadAddress  String? @map("road_address") // 건축물대장 newPlatPlc(도로명주소 완성형)
+  jibunAddress String? @map("jibun_address") // 건축물대장 platPlc(지번주소 완성형)
 
   // 좌표 — Kakao geocoding만 원천(M2 §I). area_only(행정구역 대표좌표)는 저장하지 않는다.
-  latitude          Float?
-  longitude         Float?
-  geocodeQuality    String?  @map("geocode_quality") // 'exact' | 'normalized' | 'failed'
+  latitude       Float?
+  longitude      Float?
+  geocodeQuality String? @map("geocode_quality") // 'exact' | 'normalized' | 'failed'
 
   // 건물 정보 — 단지 총괄 값으로 확정 가능한 것만 저장(동 단위 값을 단지 전체처럼 저장 금지)
-  buildYear         Int?     @map("build_year")        // MOLIT 건축년도(참고용)
-  useApprovalDate   String?  @map("use_approval_date")  // 건축물대장 useAprDay 원본("YYYYMMDD")
-  mainBuildingCount Int?     @map("main_building_count") // 건축물대장 mainBldCnt(동수)
-  totalHouseholds   Int?     @map("total_households")   // 건축물대장 hhldCnt(총괄표제부 확정값만)
-  parkingCount      Int?     @map("parking_count")       // 건축물대장 totPkngCnt(총괄표제부 확정값만)
+  buildYear         Int?    @map("build_year") // MOLIT 건축년도(참고용)
+  useApprovalDate   String? @map("use_approval_date") // 건축물대장 useAprDay 원본("YYYYMMDD")
+  mainBuildingCount Int?    @map("main_building_count") // 건축물대장 mainBldCnt(동수)
+  totalHouseholds   Int?    @map("total_households") // 건축물대장 hhldCnt(총괄표제부 확정값만)
+  parkingCount      Int?    @map("parking_count") // 건축물대장 totPkngCnt(총괄표제부 확정값만)
 
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@index([sggCd])
   @@index([normalizedName])
@@ -268,48 +268,176 @@ enum PropertyCategory {
 // 매물 테이블을 새로 둔다 — 실제 데이터 수집(services/publicDataService.ts)이 채워지기
 // 전까지는 빈 테이블이며, /api/properties가 그대로 빈 배열을 정직하게 반환한다.
 model Property {
-  id                Int              @id @default(autoincrement())
-  category          PropertyCategory
-  name              String
-  dong              String?
-  lawdCd            String?          @map("lawd_cd")
-  totalHouseholds   Int?             @map("total_households")
-  totalParking      Int?             @map("total_parking")
-  buildYear         Int?             @map("build_year")
-  approvalDate      String?          @map("approval_date")
-  lat               Float?
-  lng               Float?
-  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at")
+  id              Int              @id @default(autoincrement())
+  category        PropertyCategory
+  name            String
+  dong            String?
+  lawdCd          String?          @map("lawd_cd")
+  totalHouseholds Int?             @map("total_households")
+  totalParking    Int?             @map("total_parking")
+  buildYear       Int?             @map("build_year")
+  approvalDate    String?          @map("approval_date")
+  lat             Float?
+  lng             Float?
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at")
 
   @@unique([category, name, dong])
   @@index([category])
   @@map("properties")
 }
 
+// ═══════════════════════════════════════════════════════════
+// STEP R4 — docs/development/R3B-redevelopment-master-schema-design.md
+// 확정안 적용. 기존 RedevelopmentProject/RedevelopmentStage(단일 테이블,
+// production 0건 확인)를 대체 — 원본 SourceRecord와 canonical Project를
+// 분리한 2-엔티티 구조로 국토부/부산 등 복수 source를 안전하게 병합한다.
+// ═══════════════════════════════════════════════════════════
+
+enum RedevelopmentBusinessType {
+  REDEVELOPMENT
+  RECONSTRUCTION
+  RESIDENTIAL_ENVIRONMENT
+  SMALL_RECONSTRUCTION
+  BLOCK_HOUSING
+  OTHER
+  UNKNOWN
+}
+
 enum RedevelopmentStage {
-  ZONE_DESIGNATED           // 구역지정
-  UNION_ESTABLISHED         // 조합설립
-  PROJECT_APPROVED          // 사업시행인가
-  MANAGEMENT_DISPOSAL_APPROVED // 관리처분인가
-  RELOCATION_DEMOLITION     // 이주철거
-  CONSTRUCTION              // 착공
+  PLANNED
+  ZONE_DESIGNATED
+  PROMOTION_COMMITTEE
+  ASSOCIATION_APPROVED
+  ARCHITECTURAL_REVIEW
+  PUBLIC_OPERATOR_DESIGNATED
+  PROJECT_IMPLEMENTATION_APPROVED
+  MANAGEMENT_DISPOSITION_APPROVED
+  RELOCATION_DEMOLITION
+  CONSTRUCTION
+  COMPLETED
+  TRANSFER_REGISTERED
+  DISSOLVED
+  CANCELLED
+  UNKNOWN
+}
+
+enum RedevelopmentProjectStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  UNKNOWN
+}
+
+enum RedevelopmentLocationType {
+  PROJECT_SITE
+  OFFICE
+  APPROXIMATE
+  UNKNOWN
+}
+
+enum RedevelopmentLocationConfidence {
+  HIGH
+  MEDIUM
+  LOW
+  UNKNOWN
+}
+
+enum RedevelopmentGeocodeStatus {
+  NOT_ATTEMPTED
+  SUCCESS
+  AMBIGUOUS
+  FAILED
+}
+
+enum RedevelopmentMatchConfidence {
+  EXACT
+  HIGH
+  MEDIUM
+  LOW
+  UNMATCHED
+}
+
+enum RedevelopmentMergeStatus {
+  AUTO_MATCHED
+  REVIEW_REQUIRED
+  MANUAL_MATCHED
+  UNMATCHED
 }
 
 model RedevelopmentProject {
-  id                Int                 @id @default(autoincrement())
-  zoneName          String              @map("zone_name")
-  lawdCd            String?             @map("lawd_cd")
-  stage             RedevelopmentStage
-  targetHouseholds  Int?                @map("target_households")
-  // 지도 위 구역 경계를 그리기 위한 GeoJSON(Polygon/MultiPolygon) — 실제 좌표가
-  // 수집되기 전까지는 null(지도에 지어낸 경계를 그리지 않기 위함).
-  polygonGeojson    Json?               @map("polygon_geojson")
-  lat               Float?
-  lng               Float?
-  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at")
+  id Int @id @default(autoincrement())
 
+  canonicalName  String @map("canonical_name")
+  normalizedName String @map("normalized_name")
+
+  sido    String
+  sigungu String
+
+  businessType  RedevelopmentBusinessType  @default(UNKNOWN) @map("business_type")
+  stage         RedevelopmentStage         @default(UNKNOWN)
+  projectStatus RedevelopmentProjectStatus @default(UNKNOWN) @map("project_status")
+
+  householdCount Int? @map("household_count")
+
+  lat                Float?
+  lng                Float?
+  locationType       RedevelopmentLocationType?       @map("location_type")
+  locationConfidence RedevelopmentLocationConfidence? @map("location_confidence")
+  geocodeStatus      RedevelopmentGeocodeStatus?      @map("geocode_status")
+  geocodeSource      String?                          @map("geocode_source")
+
+  // V2 polygon placeholder — geometry 컬럼은 아직 만들지 않음(R3B 참고).
+  polygonSource String? @map("polygon_source")
+  polygonRef    String? @map("polygon_ref")
+
+  primarySource   String    @map("primary_source")
+  sourceUpdatedAt DateTime? @map("source_updated_at")
+  collectedAt     DateTime  @map("collected_at")
+
+  needsReview Boolean @default(false) @map("needs_review")
+
+  sourceRecords RedevelopmentSourceRecord[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sido, sigungu])
+  @@index([businessType])
   @@index([stage])
+  @@index([normalizedName])
   @@map("redevelopment_projects")
+}
+
+model RedevelopmentSourceRecord {
+  id        Int                  @id @default(autoincrement())
+  projectId Int                  @map("project_id")
+  project   RedevelopmentProject @relation(fields: [projectId], references: [id])
+
+  source         String
+  sourceRecordId String @map("source_record_id")
+
+  rawName             String  @map("raw_name")
+  rawBusinessType     String? @map("raw_business_type")
+  rawBusinessTypeCode String? @map("raw_business_type_code")
+  rawStage            String? @map("raw_stage")
+  rawStageCode        String? @map("raw_stage_code")
+  rawHouseholdCount   String? @map("raw_household_count")
+  rawLocation         String? @map("raw_location")
+
+  rawPayload Json? @map("raw_payload")
+
+  matchConfidence RedevelopmentMatchConfidence? @map("match_confidence")
+  mergeStatus     RedevelopmentMergeStatus      @default(UNMATCHED) @map("merge_status")
+
+  sourceUpdatedAt DateTime? @map("source_updated_at")
+  collectedAt     DateTime  @map("collected_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([source, sourceRecordId])
+  @@index([projectId])
+  @@map("redevelopment_source_records")
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -319,8 +447,8 @@ model RedevelopmentProject {
 enum PresaleHouseType {
   APT
   OFFICETEL
-  URBAN   // 도시형생활주택
-  REMAIN  // 잔여세대(무순위)
+  URBAN // 도시형생활주택
+  REMAIN // 잔여세대(무순위)
 }
 
 model Presale {
@@ -353,32 +481,32 @@ model Presale {
   // 사업주체(시행사) — 시공사(constructCompany)와 별개 개념, API 원본 BSNS_MBY_NM.
   businessEntityName    String?          @map("business_entity_name")
 
-  announcementDate      DateTime?        @map("announcement_date")
+  announcementDate  DateTime? @map("announcement_date")
   // RCEPT_BGNDE/RCEPT_ENDDE에 매핑한다 — P2-A에서 이 두 필드가 특별공급/1·2순위·지역별
   // 세분화 접수기간 9종의 min/max와 50건 전수 정확히 일치함을 확인했으므로, 별도로
   // min/max를 계산하지 않고 API가 제공하는 이 값을 그대로 사용한다.
-  receiptStartDate      DateTime?        @map("receipt_start_date")
-  receiptEndDate        DateTime?        @map("receipt_end_date")
-  winnerDate            DateTime?        @map("winner_date")
+  receiptStartDate  DateTime? @map("receipt_start_date")
+  receiptEndDate    DateTime? @map("receipt_end_date")
+  winnerDate        DateTime? @map("winner_date")
   // 계약기간(CNTRCT_CNCLS_BGNDE/ENDDE) — P2-A 확인 결과 완결성이 높아(표본 50/50 non-null)
   // 저장 가치가 있다고 판단됨.
-  contractStartDate     DateTime?        @map("contract_start_date")
-  contractEndDate       DateTime?        @map("contract_end_date")
+  contractStartDate DateTime? @map("contract_start_date")
+  contractEndDate   DateTime? @map("contract_end_date")
   // 입주예정월(MVN_PREARNGE_YM) — "YYYYMM" 6자리 원본 문자열 그대로 보존한다. 일자 정보가
   // 없는 값을 DateTime으로 강제 변환(임의로 1일을 채우는 등)하지 않는다(P2-A 정책 확정).
-  moveInExpectedYm      String?          @map("move_in_expected_ym")
+  moveInExpectedYm  String?   @map("move_in_expected_ym")
 
   // 만원 단위(P2-A에서 실제 공고 3건을 언론 보도와 교차검증해 확정). PresaleHouseTypeDetail의
   // topAmount 값들 중 유효한(파싱 가능한, null이 아닌) 값의 min/max로 동기화 시점에 계산해
   // 캐싱한다 — 가격 정보가 하나도 없으면 0이 아니라 null로 유지한다.
-  minPrice              Int?             @map("min_price") // 만원 단위
-  maxPrice              Int?             @map("max_price") // 만원 단위
-  pblancUrl             String?          @map("pblanc_url")
+  minPrice  Int?    @map("min_price") // 만원 단위
+  maxPrice  Int?    @map("max_price") // 만원 단위
+  pblancUrl String? @map("pblanc_url")
 
-  createdAt             DateTime         @default(now()) @map("created_at")
-  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  houseTypeDetails      PresaleHouseTypeDetail[]
+  houseTypeDetails PresaleHouseTypeDetail[]
 
   @@index([receiptStartDate, receiptEndDate])
   @@map("presales")
@@ -391,31 +519,31 @@ model Presale {
 // 기존 프로젝트 관례(Comment.post → onDelete: Cascade)를 따라 Cascade로 결정했다 —
 // 임의로 넣은 기본값이 아니라 기존 스키마 패턴을 확인한 뒤 내린 결정이다.
 model PresaleHouseTypeDetail {
-  id            Int      @id @default(autoincrement())
-  presaleId     Int      @map("presale_id")
-  presale       Presale  @relation(fields: [presaleId], references: [id], onDelete: Cascade)
+  id        Int     @id @default(autoincrement())
+  presaleId Int     @map("presale_id")
+  presale   Presale @relation(fields: [presaleId], references: [id], onDelete: Cascade)
 
-  houseManageNo String   @map("house_manage_no") // 부모 Presale.houseManageNo와 동일(조인 편의 + API 원본 키 보존)
-  modelNo       String   @map("model_no") // "01", "02" ... 공고 내 유니크(P2-A 확인)
-  houseTy       String?  @map("house_ty") // 주택형 원본 코드(예: "055.9700A")
-  supplyArea    Float?   @map("supply_area") // 공급면적(㎡), SUPLY_AR
+  houseManageNo String  @map("house_manage_no") // 부모 Presale.houseManageNo와 동일(조인 편의 + API 원본 키 보존)
+  modelNo       String  @map("model_no") // "01", "02" ... 공고 내 유니크(P2-A 확인)
+  houseTy       String? @map("house_ty") // 주택형 원본 코드(예: "055.9700A")
+  supplyArea    Float?  @map("supply_area") // 공급면적(㎡), SUPLY_AR
 
   // 일반공급/특별공급 세대수 — API 원본 필드(SUPLY_HSHLDCO/SPSPLY_HSHLDCO) 그대로 보존.
   // 0은 "해당 유형 공급 없음"이라는 실제 값이므로 null과 구분한다(P2-A 확인).
-  generalSupply Int?     @map("general_supply")
-  specialSupply Int?     @map("special_supply")
+  generalSupply Int? @map("general_supply")
+  specialSupply Int? @map("special_supply")
   // totalSupply는 API 원본 필드가 아니라 generalSupply+specialSupply의 단순 합산이다(두
   // 값 다 있을 때만 계산, 하나라도 없으면 null) — 원본에 없는 값을 추측한 것이 아니라 실제
   // 저장된 두 숫자의 산술 합에 불과함을 분명히 한다. 필드 간 합계가 실제 API의 다른 값과
   // 어긋나더라도 임의로 보정하지 않는다.
-  totalSupply   Int?     @map("total_supply")
+  totalSupply   Int? @map("total_supply")
 
   // 해당 주택형의 분양 최고가(상한액). 만원 단위(P2-A 실측 교차검증으로 확정). 값이 없거나
   // 파싱 불가능하면 0이 아니라 null로 저장한다.
-  topAmount     Int?     @map("top_amount")
+  topAmount Int? @map("top_amount")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@unique([houseManageNo, modelNo])
   @@index([presaleId])
@@ -475,7 +603,7 @@ model ActiveSession {
 // 보여주므로 카드에 뜨는 숫자는 항상 진짜다(0건이면 정말 0건).
 model ErrorLog {
   id        Int      @id @default(autoincrement())
-  source    String   // 'client' | 'server'
+  source    String // 'client' | 'server'
   message   String   @db.Text
   stack     String?  @db.Text
   url       String?
@@ -489,13 +617,13 @@ model ErrorLog {
 // 있다(그래서 대시보드의 "미처리 신고 건수"는 실제로 항상 0으로 나온다). 신고 버튼을
 // 나중에 붙일 때 이 테이블에 INSERT만 하면 대시보드 카드가 바로 실제 값을 반영한다.
 model Report {
-  id        Int      @id @default(autoincrement())
-  postId    String?  @map("post_id")
-  commentId String?  @map("comment_id")
-  reporterId String? @map("reporter_id")
-  reason    String?  @db.Text
-  resolved  Boolean  @default(false)
-  createdAt DateTime @default(now()) @map("created_at")
+  id         Int      @id @default(autoincrement())
+  postId     String?  @map("post_id")
+  commentId  String?  @map("comment_id")
+  reporterId String?  @map("reporter_id")
+  reason     String?  @db.Text
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([resolved, createdAt])
   @@map("reports")

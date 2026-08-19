@@ -11,9 +11,10 @@
 //     준주택 통계는 지자체별로 흩어져 있어 통합 API가 없다). 없는 걸 있는 척 구현하는
 //     대신, 스텁 함수로 명시하고 실제 데이터 소스가 확정되면 바로 채울 수 있게 자리만
 //     잡아둔다.
-//   - 재개발: 정비사업 진행단계는 전국 통합 공공데이터가 없고(구청/조합 공고, 정비사업
-//     정보몽땅 등 지자체별 비정형 소스), 수동 입력 또는 지자체별 크롤러가 필요하다.
-//     upsertRedevelopmentProject는 그런 소스가 채워 넣을 수 있는 저장 함수만 제공한다.
+//   - 재개발: 국토부 전국 통합데이터 + 부산광역시 API 실물 검증(R1~R3B) 완료 후,
+//     STEP R4에서 실제 ingestion 구현으로 전환됐다 — src/lib/redevelopment/ 참고.
+//     (이 파일의 옛 upsertRedevelopmentProject 단일 테이블 저장 함수는 R3B에서 설계한
+//     Project+SourceRecord 2-엔티티 구조와 근본적으로 맞지 않아 R4에서 제거했다.)
 
 import { PropertyCategory } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -106,43 +107,3 @@ export async function enrichPropertyFromRegistry(
   return true;
 }
 
-export interface RedevelopmentProjectInput {
-  zoneName: string;
-  lawdCd?: string;
-  stage: 'ZONE_DESIGNATED' | 'UNION_ESTABLISHED' | 'PROJECT_APPROVED' | 'MANAGEMENT_DISPOSAL_APPROVED' | 'RELOCATION_DEMOLITION' | 'CONSTRUCTION';
-  targetHouseholds?: number;
-  polygonGeojson?: unknown;
-  lat?: number;
-  lng?: number;
-}
-
-// 재개발 구역 정보 저장 — 전국 통합 공공데이터가 없어(지자체/조합 공고 등 비정형
-// 소스) 자동 수집기가 아니라 관리자 입력·개별 크롤러가 채워 넣는 저장 함수로 둔다.
-// zoneName을 사실상의 키로 삼아 있으면 갱신, 없으면 생성한다.
-export async function upsertRedevelopmentProject(input: RedevelopmentProjectInput) {
-  const existing = await prisma.redevelopmentProject.findFirst({ where: { zoneName: input.zoneName } });
-  if (existing) {
-    return prisma.redevelopmentProject.update({
-      where: { id: existing.id },
-      data: {
-        lawdCd: input.lawdCd,
-        stage: input.stage as any,
-        targetHouseholds: input.targetHouseholds,
-        polygonGeojson: input.polygonGeojson as any,
-        lat: input.lat,
-        lng: input.lng,
-      },
-    });
-  }
-  return prisma.redevelopmentProject.create({
-    data: {
-      zoneName: input.zoneName,
-      lawdCd: input.lawdCd,
-      stage: input.stage as any,
-      targetHouseholds: input.targetHouseholds,
-      polygonGeojson: input.polygonGeojson as any,
-      lat: input.lat,
-      lng: input.lng,
-    },
-  });
-}

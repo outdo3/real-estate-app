@@ -4960,3 +4960,114 @@ STEP SHARE-1.1 완료 / 카카오 공유 전용 이미지 신규 분리로 실�
 crop 문제(로고 잘림 + 하단 메뉴 UI 노출) 해결 / SEO/Twitter OG
 이미지·SHARE-1의 URL 우선순위 해결책·APT DETAIL V1·DB/schema/
 migration 전부 무변경 / commit·push 하지 않음(2026-08-19).
+
+## 2026-08-19
+
+### STEP R4 — Redevelopment Master DB Schema 적용 + Ingestion/Sync 구현
+
+작업:
+
+- R3B 확정 schema(`RedevelopmentProject` + `RedevelopmentSourceRecord`
+  2-엔티티, 7종 BusinessType·15종 Stage·location 안전장치 포함)를
+  재설계 없이 그대로 `prisma/schema.prisma`에 적용. `npx prisma
+  migrate diff`로 destructive SQL(DROP COLUMN 4개, enum 값 교체)만
+  포함하고 다른 모델은 전혀 건드리지 않는 것을 확인한 뒤
+  `prisma/migrations/20260819110211_redevelopment_master_schema_r4/`
+  로 저장 — **production에는 미적용**(`migrate status`로 재확인,
+  `not yet been applied`).
+- 국토부 CSV importer(`scripts/redevelopment/import_molit.ts`):
+  R2가 문서화한 3-step 다운로드 흐름(selectFileDataDownload.do →
+  check-limit.json → fileDownload.do)을 코드로 재구현, 실제로 다시
+  다운로드해 123,933 bytes(R2 기록과 정확히 일치) 확인. CP949는
+  Node 표준 `TextDecoder('euc-kr')`로 디코딩(신규 의존성 없음).
+- 부산 API importer(`scripts/redevelopment/import_busan.ts`):
+  기존 `api-molit.ts`의 `fast-xml-parser` 패턴 재사용(type=json
+  파라미터에도 XML로 응답하는 것 재확인).
+- 정규화/매핑/매칭/병합 로직을 `src/lib/redevelopment/`에 순수
+  함수로 구현(normalize/businessType/stage/fingerprint/
+  officeDetector/matching/merge/parse/ingest) — R2/R3A/R3B가 실측·
+  설계한 코드/규칙을 그대로 코드화(임의 매핑 추가 없음, unknown은
+  UNKNOWN으로 정직하게 유지).
+- `ingest.ts`의 `ingestRecord()`가 match-or-create-Project → upsert
+  SourceRecord → canonical 필드 재계산까지 레코드 1건 파이프라인을
+  전담. Prisma에 구조적 타입으로만 의존해 `InMemoryRedevelopmentStore`
+  로 실제 DB 없이도 동일 코드 경로를 테스트/파일럿에 재사용 가능.
+- node:test 기반 단위/통합 테스트 53건 신규 작성(신규 npm
+  패키지 설치 없음, Node 내장 test runner + 기존 ts-node 사용) —
+  전부 pass. "거제2 재개발/재건축"·"촉진5(금정구/영도구)" 오매칭
+  방지, idempotency(반복 ingest해도 project/sourceRecord 수 불변),
+  needsReview 판정 2종을 회귀 테스트로 고정.
+- `scripts/redevelopment/quality_report.ts`로 MOLIT 1,566행 + 부산
+  343건 **실물 데이터**를 인메모리 스토어에 대해 실제로 ingest해
+  집계(DB 쓰기 없음): canonical project 1,904 / source record
+  1,907 / merged(양쪽 연결) 2 / matchConfidence EXACT 3·HIGH 0·
+  MEDIUM 67·LOW 455·UNMATCHED 1,382.
+- API route(`src/app/api/properties/route.ts`)의 REDEVELOPMENT
+  분기를 새 schema(lawdCd 대신 sido/sigungu 필터)에 맞게 최소
+  수정 — 이 분기를 실제로 호출하는 프론트엔드가 없음을 재확인
+  (`/map`의 재개발 레이어는 이미 "준비 중" 안내만 표시, 회귀 영향
+  없음). `publicDataService.ts`의 옛 `upsertRedevelopmentProject()`
+  (호출부 없음, 새 schema와 근본적으로 안 맞음, R3B TODO)는 제거.
+
+신규 발견(이번 STEP에서 실물 데이터로 처음 확인):
+
+- 국토부 conflicting duplicate 1건 신규 발견(대구 남구 봉덕1동,
+  세대수만 1091/621로 다름) — R2가 찾은 완전중복 1건과는 별개
+  사례. fingerprint가 stage/세대수를 안 보므로 CSV 나중 행 값이
+  최종적으로 남는다는 사실을 정직하게 로그/문서화.
+- **부산 sigungu 텍스트 해석률(148/343, 43%)이 cross-source 매칭의
+  실질적 병목**임을 실물 파일럿으로 확인 — "서대신4"(R3A가 "가장
+  깨끗한 EXACT 사례"로 꼽은 건)조차 부산 쪽 location 텍스트에
+  "서구"라는 문자열 자체가 없어("대영로45번길20, 3층(서대신동2가)")
+  자동 병합에 실패하고 MOLIT-only/BUSAN-only 두 프로젝트로
+  분리됐다 — 매칭 confidence 로직(51개 테스트로 검증됨) 문제가
+  아니라 sigungu 해석 단계의 근본 한계. 아미1/아미3(MOLIT-only,
+  주거환경개선/정비구역지정)는 R3A 예측과 정확히 일치.
+- 부산 서구 canonical project 20건 — R2의 "부산 서구 20건" CSV
+  집계와 정확히 일치(서구가 통째로 빠지는 일 없음 재확인).
+
+정적 검증:
+
+`npx tsc --noEmit` 통과(0 errors, 프로젝트 전체). 변경/신규 파일
+전체 `npx eslint` 통과(0 errors). `npx next build` 통과, 기존
+라우트 전부 회귀 없음.
+
+Production migration/ingestion:
+
+**둘 다 미실행**(섹션 47/48 지시). `prisma migrate deploy` 호출
+안 함, production `RedevelopmentProject`/`RedevelopmentSourceRecord`
+insert 0건. `import_molit.ts`/`import_busan.ts`는 `--dry-run`으로만
+실행, 실제 DB 쓰기 경로(`ingestRecord`)는 인메모리 스토어
+대상으로만 실행.
+
+기존 서비스 보호:
+
+`git diff --stat` 기준 `prisma/schema.prisma`(redevelopment 블록만),
+`api/properties/route.ts`, `publicDataService.ts` 3개 파일 외
+전부 신규 파일 — APT Detail/Map/AI Search/Presales/Community/
+Share/Auth 등 기존 기능 관련 파일은 전혀 건드리지 않음.
+
+알려진 문제 / unresolved:
+
+1. 부산 sigungu 해석률 43%가 매칭 병목(위 "신규 발견" 참고) —
+   R5/R6에서 해결 필요, 임의 매핑 생성 없이 Kakao 역지오코딩 또는
+   공식 행정동-자치구 매핑 데이터 결합 등 후보만 기록.
+2. 국토부 conflicting duplicate "마지막 행이 이긴다" 동작이 실제
+   원하는 정책인지 product 판단 필요.
+3. office 좌표 실제 지오코딩 파일럿은 R5/R6로 이관(로직 자체는
+   구현·테스트 완료).
+4. matching 유사도 임계치(0.7)는 R3A 문서에 숫자로 명시되지 않아
+   이번 STEP에서 정한 값 — MEDIUM 판정 샘플(67건) 사람 검수 권장.
+
+상태:
+
+STEP R4 완료 / Redevelopment Master DB Schema `prisma/schema.prisma`
+적용 + migration 생성(production 미적용) / 국토부·부산 importer
++ 정규화·매칭·병합 파이프라인 구현, 53개 테스트 전부 pass, 실물
+데이터 인메모리 파일럿 검증 완료 / production migration·ingestion
+전부 미실행(검수 대기) / commit·push 하지 않음(2026-08-19).
+
+**R5_조건부_GO** — schema/importer/matching 코드는 R5 진행 가능,
+단 실제 데이터 투입 전 부산 sigungu 해석 문제 해결 또는 현재
+동작(sigungu 미상 레코드는 자동 매칭 제외) 명시적 승인 필요.
+
