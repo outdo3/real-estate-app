@@ -5623,3 +5623,73 @@ DB/schema/migration/UI 전부 무변경 / commit·push 하지 않음
 ApartmentMaster 연결 스키마 변경 승인, (2) cache schema 승인, (3)
 Kakao/MOLIT 일일 한도 사용자 확인 3가지 필요.
 
+## 2026-08-19
+
+### STEP SCORE S2A — Apartment Score Feature Cache Schema + Canonical Identity
+
+작업:
+
+- S1.1에서 사용자가 승인한 5가지(Apartment↔ApartmentMaster 연결
+  설계 / 2-테이블 cache 구조 / 부산 전체 Beta / Regional Premium
+  총점 미포함 유지 / 서버 전용 계산)를 실제 Prisma 스키마로 확정.
+- `ApartmentMaster.aptSeq`를 점수 시스템 canonical identity로 확정
+  (기존 `@unique`, MOLIT 원본 문자열 식별자).
+- **Apartment 32건 매칭 감사를 실제 DB 조회로 재검증**(이름만으로
+  join 금지 원칙) — region(`lawdCd`+`dong`) 후보군 내에서 jibun을
+  이름보다 먼저 비교하도록 설계(1차 이름-우선 스크립트가 jibun
+  완전 일치 2건을 놓치는 것을 수동 검토로 발견해 재설계). 최종
+  결과: **MATCHED_EXACT 20 / AMBIGUOUS_SHARED_JIBUN 2("레이카운티"
+  1~5단지, "엘지메트로시티" 1~5단지 — 같은 지번을 여러 동이 공유,
+  강제 연결 안 함) / UNMATCHED_NO_REGION_CANDIDATE 10(전부 서울·
+  경남 진주 — ApartmentMaster가 부산만 커버해 범위 밖, 버그 아님)**.
+- MATCHED_EXACT 20건을 실측 재조회한 결과 **같은 aptSeq를 가리키는
+  Apartment row 중복 6쌍 발견**(예: "대신더샵"/"대신더샵아파트") —
+  `Apartment.@@unique([name, dong])`가 표기 차이를 못 막아 생긴
+  기존 중복. 이 발견이 `Apartment.aptSeq`를 **unique로 걸지 않는**
+  설계 근거가 됨(unique면 backfill 두 번째 row가 실패).
+- `Apartment.aptSeq String?` nullable 필드 추가(index만, unique/FK
+  관계 없음 — RedevelopmentSourceRecord.source를 String으로 남긴
+  기존 결정과 같은 이유: ApartmentMaster는 배치가 재구축하는
+  테이블이라 값 기반 느슨한 연결 채택).
+- `ApartmentLocationFeature`/`ApartmentMarketFeature` 2개 신규
+  테이블 필드 확정 — S1.1 제안에서 "실제 필요한 것만" 원칙으로
+  트리밍(중복 반경 필드 제거), 학군/오션뷰 등 데이터 없는 항목은
+  컬럼 자체를 만들지 않음, `daycareCount`는 Kakao PS3가 어린이집·
+  유치원을 공식적으로 묶어 분류한다는 사실을 필드명에 반영
+  (`daycareKindergartenCount500m`), `pricePerM2` 필드는 만들되 실제
+  MOLIT 응답의 면적 결측률은 `EXTERNAL_VERIFICATION_REQUIRED`로
+  명시(S2B 시작 시 최우선 확인).
+- 점수/가중치 컬럼(`totalScore`/`transportScore`/`regionalScore` 등)
+  전무 확인 — raw feature만 저장.
+- `prisma migrate dev --create-only`로 migration 초안 생성(적용
+  안 함, `prisma migrate status`로 미적용 재확인) — 생성된 SQL은
+  `Apartment.aptSeq` nullable 컬럼 추가 + 신규 테이블 2개 + index
+  1개뿐, DROP/TRUNCATE/DELETE 등 파괴적 문장 전혀 없음.
+- Backfill 계획만 설계(MATCHED_EXACT 20건 대상, AMBIGUOUS/UNMATCHED
+  12건 제외) — 실행은 다음 STEP.
+- 서버 전용 계산 구조(`src/lib/apartment-score/server/`) 설계만
+  기술, 코드 파일은 만들지 않음(다음 STEP).
+
+DB/schema/migration 적용/production write/UI/점수 계산:
+
+**production 변경 전부 무변경.** schema.prisma는 수정했고
+migration 파일도 생성했지만 `prisma migrate deploy`는 실행하지
+않음(`migrate status`로 "not yet been applied" 재확인). 매칭 감사용
+임시 스크립트 2개(이름-우선 버전, 중복 검증 버전) 모두 실행 후
+삭제 — 저장소에 남기지 않음.
+
+typecheck: `npx prisma format`/`validate`/`generate` 전부 성공,
+`npx tsc --noEmit` 0 errors(기존 코드가 신규 모델을 참조하지 않아
+회귀 없음).
+
+상태:
+
+STEP SCORE S2A 완료(스키마 설계 + migration 초안) / 32건 매칭 감사
+실측 완료(20 EXACT / 2 AMBIGUOUS / 10 범위밖) / aptSeq 중복 6쌍
+발견으로 unique 미적용 결정 / cache 테이블 2종 필드 확정 / migration
+생성만 하고 미적용 확인 / backfill·서버 계산 구조는 설계만 /
+commit·push 하지 않음(2026-08-19).
+
+**S2B_GO** — 스키마 기반 확정, 다음 STEP(실제 feature 수집 + backfill
+실행)으로 진행 가능. 조건: MOLIT 면적 필드 결측률 실측이 S2B
+착수 시 최우선.
