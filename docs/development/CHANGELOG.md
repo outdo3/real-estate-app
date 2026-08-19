@@ -5184,3 +5184,92 @@ migration·ingestion 전부 미실행 / commit·push 하지 않음
 해결로 R4가 걸었던 조건 충족. MEDIUM 43건은 여전히 사람 검토
 필요(REVIEW_REQUIRED로 정상 유입), UNRESOLVED/unsafe 63건은
 보수적으로 BUSAN-only 유지.
+
+## 2026-08-19
+
+### STEP R4 FINAL — Production Migration + 전국/부산 재개발 실데이터 적재
+
+작업:
+
+- R4/R4.1 최종 diff 재검수(redevelopment 관련 변경만, 다른 서비스
+  로직 무영향, debug 코드/secret/임시 파일 없음) 후 2개 commit으로
+  분리해 push: `feat: implement redevelopment master ingestion`
+  (schema/migration/importer/45 tests), `fix: improve
+  redevelopment regional matching`(sigungu resolver/접미사 비교
+  수정/location classification 배선/신규 21 tests).
+- `npx prisma migrate deploy`로 `20260819110211_redevelopment
+  _master_schema_r4`를 production(Supabase session pooler
+  5432)에 적용 — destructive SQL은 이미 R4/R4.1에서 재검토된
+  DROP COLUMN 4개+enum 교체뿐(DROP TABLE/TRUNCATE/DELETE 없음),
+  기존 RedevelopmentProject 0행이라 데이터 손실 없음. `migrate
+  status`로 "Database schema is up to date!" 확인.
+- MOLIT(1,566행) + BUSAN(343건) importer를 production DB에 실제
+  실행 — `RedevelopmentProject` 1,798건, `RedevelopmentSourceRecord`
+  1,907건 적재, R4.1 인메모리 파일럿과 정확히 일치.
+- **production에서 실제로 2회 연속 재실행해 idempotency 확인** —
+  1차/2차 모두 Project 1,798 / SourceRecord 1,907로 완전 동일,
+  BUSAN 2차 실행은 `createdProject: 0`(전부 자기 자신과
+  재매칭)로 row 폭증 없음 확인.
+
+신규 발견(production 재실행 중):
+
+- 2회차 실행 후 SourceRecord의 `matchConfidence`가 전부 EXACT로
+  덮어써지는 것을 발견 — 재실행 시 각 레코드가 자신이 이미
+  만든 canonical project를 후보로 재조회해 트리비얼하게
+  EXACT가 나오는 설계상 결과(버그 아님, Project/SourceRecord
+  행 수·연결 관계는 무영향). 다만 "최초 ingest 시점의 실제
+  매칭confidence 분포"라는 감사 이력 정보는 재동기화 때마다
+  사라진다는 한계를 문서에 기록 — R5/R6 주기적 sync 설계 시
+  고려 필요, 이번 STEP에서 코드는 바꾸지 않음.
+
+production 검증 결과:
+
+```text
+molitOnly 1,456 / busanOnly 234 / merged 108 / needsReview 13
+(R4.1 파일럿과 정확히 일치)
+location: PROJECT_SITE 73 / OFFICE 140 / APPROXIMATE 7 / UNKNOWN 1,578
+좌표(lat/lng) 채워진 project: 0건(전체 지오코딩 안 함, 설계대로)
+전국 17개 시도 전부 확인
+source+sourceRecordId unique 위반: 0건
+```
+
+- 서대신4: **canonical project 1개로 병합 성공**(MOLIT+BUSAN_CITY),
+  착공/542세대 — R3A 예측과 정확히 일치.
+- 아미1/아미3: 변경 없음, MOLIT-only 그대로.
+- 부산 서구 canonical project 24건, 실제 API
+  (`/api/properties?category=REDEVELOPMENT`)로도 재확인.
+- 대구 남구 봉덕1동 conflicting duplicate: production에서도
+  SourceRecord 1건만 존재(fingerprint 흡수, 삭제/임의 최신값
+  선택 없음, 정책 그대로).
+
+기존 서비스 smoke test(실제 배포 URL
+`real-estate-app-park11.vercel.app`):
+
+`/`, `/apt/대신롯데캐슬`, `/map`, `/presales`, `/community`,
+`/api/properties?category=REDEVELOPMENT` 전부 200, 500 없음.
+Migration/ingestion 과정에서 EMAXCONNSESSION/too many
+clients/prepared statement 에러 발생하지 않음(순차 upsert,
+배치 없음).
+
+정적 검증:
+
+Production 적용 전 `npx tsc --noEmit`/`eslint`/`next build`/
+전체 68개 테스트 재실행 — 전부 통과(R4/R4.1 검증 재확인).
+
+DB reset 여부:
+
+**없음.**
+
+상태:
+
+STEP R4 FINAL 완료 / migration production 적용 완료 / MOLIT+BUSAN
+실데이터 production 적재 완료(Project 1,798 / SourceRecord 1,907)
+/ production 2회 연속 재실행으로 idempotency 실증 확인(matchConfidence
+재계산 관련 감사 이력 한계는 문서화) / 서대신4 병합 성공, 아미1/
+아미3 유지, 부산 서구 24건, 전국 17개 시도 확인 / 기존 서비스
+smoke test 전부 200, DB connection 문제 없음 / commit 2개 push
+완료(2026-08-19).
+
+**R5_GO** — migration 적용/ingestion 성공/idempotent/전국
+coverage/서구·서대신4·아미1·아미3 검증/파괴적 회귀 없음/DB
+connection blocker 없음 전부 충족.
