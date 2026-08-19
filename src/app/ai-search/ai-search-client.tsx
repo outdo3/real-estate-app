@@ -194,7 +194,7 @@ export default function AiSearchClient() {
           ))}
         </div>
 
-        <FullPageLoader active={loading} message="AI가 데이터를 분석하고 있어요..." />
+        <FullPageLoader active={loading} message="이집이가 조건에 맞는 이집을 찾고 있어요." />
 
         {!loading && error && <div className={styles.errorBox}>{error}</div>}
 
@@ -229,7 +229,12 @@ function ConditionSearchResult({ complexes, lawdCd }: { complexes: ConditionSear
   const router = useRouter();
 
   if (complexes.length === 0) {
-    return <div className={styles.emptyBox}>해당하는 아파트 단지를 찾지 못했습니다. 검색어를 확인해주세요.</div>;
+    return (
+      <div className={styles.emptyBox}>
+        <img src="/brand/mascot/ejipy-empty.webp" alt="" className={styles.emptyMascot} />
+        찾는 이집이 아직 없어요. 검색 조건을 조금 바꿔보세요.
+      </div>
+    );
   }
 
   return (

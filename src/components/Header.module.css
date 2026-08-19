@@ -47,12 +47,10 @@
   align-items: center;
 }
 
-.logoText {
-  font-size: 1.15rem; /* 뒤로가기 버튼 옆에 깔끔하게 붙도록 기존보다 축소 */
-  font-weight: 800;
-  letter-spacing: -0.3px;
-  color: var(--primary-color);
-  white-space: nowrap;
+.logoImg {
+  height: 30px;
+  width: auto;
+  display: block;
 }
 
 /* 현재 페이지 타이틀: 헤더 우측 가장자리에 깔끔하게 배치 (검색창이 있는 페이지는 검색창이 대신 이 자리를 차지) */
@@ -222,8 +220,8 @@
     padding-left: 0;
   }
 
-  .logoText {
-    font-size: 1rem;
+  .logoImg {
+    height: 24px;
   }
 
   .pageTitle {

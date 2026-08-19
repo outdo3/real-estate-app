@@ -29,7 +29,7 @@ export default function FullPageLoader({ active, message = '스마트한 아파�
 
   return (
     <div className={`${styles.overlay} ${active ? styles.visible : ''}`} role="status" aria-live="polite">
-      <div className={styles.logo}>🏢 이집</div>
+      <img src="/brand/mascot/ejipy-loading.webp" alt="" className={styles.mascot} />
       <div className={styles.spinner} />
       <p className={styles.message}>{message}</p>
     </div>

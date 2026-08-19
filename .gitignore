@@ -47,3 +47,7 @@ scripts/_backfill_results/
 
 # MASTER M4-B 부산 전체 구축 — 구·군별 batch 원본 JSON 결과(재현 가능, 커밋 불필요)
 scripts/_m4b_results/
+
+# BRAND STEP 57-A — 브랜드 원본(PSD급 고해상도 PNG) 로컬 보관 전용.
+# production에서 실제로 서빙하는 최적화 자산은 public/brand/에 별도로 커밋된다.
+brand-source/

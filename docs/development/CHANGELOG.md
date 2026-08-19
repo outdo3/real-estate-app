@@ -4067,3 +4067,190 @@ production에 확정하지 않는다는 원칙에 따라 BLOCKER로 남긴다.
 
 BRAND STEP 56-B2 완료 / 컴포넌트·토큰 준비 완료 / 그래픽 자산
 BLOCKER / 실제 화면 미적용 / commit·push 하지 않음(2026-08-18).
+
+
+## 2026-08-19
+
+### STEP 56-B3 FINAL — Brand Asset Validation
+
+작업:
+
+- 사용자가 제작한 브랜드 원본 자산 24종(logo 6 / icon 7 / mascot 7 /
+  illustration 3 / og 1) 검수. 실제 원본 위치는 작업지시서가 가정한
+  `C:\Users\123\Downloads\`가 아니라 `D:\다운로드\이집 로고
+  아이콘\`(+ 하위 `ejip_icon_sizes\`)이었음을 확인.
+- `brand-source/{logo,icon,mascot,illustration,og}/`에 24종 전부
+  올바르게 분류돼 있었고, md5 비교로 원본과 100% 일치함을 검증.
+- 원본 폴더에서 24종 외 이상 파일 3종 발견: `ejip-asspp-icon-512.png`
+  (symbol.png의 오타 중복본, md5 동일), 최상위
+  `ejip-app-icon-512.png`(알파 없는 잘못된 버전, `ejip_icon_sizes/`
+  안의 올바른 버전과 이름만 같고 실제로는 다른 파일), ChatGPT 원시
+  생성 이미지 3개 — 전부 brand-source에 반입하지 않음(정상 처리
+  확인).
+- Pillow로 24종 전체 이미지 metadata(해상도/mode/alpha) 검사, icon
+  7종 사이즈 정확성 확인(512/192/180/96/48/32/16 전부 일치).
+- 투명배경 검수: alpha extrema로 "진짜 투명" 여부 확인 — 필수
+  16종 중 15종 PASS, `ejip-logo-mono-white.png` 1종만 alpha
+  채널이 노이즈로 손상(픽셀 34.6%가 중간값 alpha, 흰 로고를 흰
+  배경에서 배경제거하다 실패한 전형적 패턴)되어 REWORK 판정.
+- 로고 6종/심볼/앱아이콘/파비콘/마스코트 7종/일러스트 3종/OG를
+  전부 직접 렌더링해 시각 검수 — horizontal/mono-green/mono-dark는
+  플랫 스타일로 일관되나 vertical만 3D 글로시 스타일이라 불일치
+  기록. 마스코트 7종은 캐릭터 요소(지붕/창문/눈/볼/목도리/배지/
+  장화) 전부 일관됨을 확인, guide 포즈만 캔버스 크기가 다르고
+  empty와 표정·자세가 유사해 구분이 약함을 기록.
+- 파일 용량 검수: logo 중 vertical/mono-green, mascot 중 loading이
+  권장 상한 초과 — SOURCE_ONLY로 분류(WebP 변환 후 반입 권장).
+  OG 이미지는 표준 1.91:1과 비율이 달라 1200x630 파생 필요로 기록.
+- `docs/development/56-brand-assets-validation.md` 신규 작성(40개
+  항목 상세 검수 리포트).
+
+production code 변경:
+
+없음. `brand-source/` 외 어떤 파일도 수정하지 않음.
+
+DB 변경:
+
+없음.
+
+알려진 문제 / BLOCKER:
+
+- BLOCKER 없음. mono-white 1종만 REWORK 필요(전체 진행을 막지
+  않음).
+- STEP 57-A 실제 UI 적용 전 mono-white 재작업 여부와 vertical
+  로고의 3D 스타일 처리 방향을 사용자 확인 필요.
+
+상태:
+
+BRAND STEP 56-B3 FINAL 완료 / 24종 중 23종 APPROVED·SOURCE_ONLY,
+1종 REWORK / production 미적용 / commit·push 하지 않음(2026-08-19).
+
+
+## 2026-08-19
+
+### STEP 57-A — 브랜드 실제 UI 1차 적용
+
+작업:
+
+- B3에서 APPROVED된 자산 중 mono-white(alpha 손상)와 vertical(3D
+  글로시, horizontal/mono 계열과 스타일 불일치)을 제외하고 사용자
+  결정대로 logo 4종(horizontal/symbol/mono-green/mono-dark) +
+  icon 7종 + mascot 7종만 production으로 편입.
+- `public/brand/{logo,icon,mascot}/` 생성. logo/mascot는
+  `brand-source/`의 1254px/2172px 원본을 Pillow로 리사이즈
+  (logo 900px 폭, symbol 512px, mascot 800px 장변) 후 WebP
+  quality 88로 재인코딩(24~81KB/파일, 기존 mascot README가 정한
+  200KB 상한 이내). icon 7종은 이미 정확한 타깃 사이즈라 PNG
+  그대로 복사.
+- 이 프로젝트가 `next/image`를 쓰지 않고 `<img>` 태그를 그대로
+  쓰는 기존 패턴이라(전체 코드베이스 확인), 새 브랜드 이미지도
+  동일하게 `<img>`로 적용 — 새 의존성/패턴 추가 없음.
+- `src/components/Header.tsx`: 텍스트 워드마크(`{siteConfig.name}`)
+  대신 `ejip-logo-horizontal.webp` 적용. `aria-label`/`alt`로
+  접근성 유지, 데스크톱 30px/모바일 24px 높이로 반응형 처리.
+  `hideLogo`가 없는 모든 페이지(apt 상세 포함)에 일관 적용됨 —
+  상세페이지는 자체 구조를 건드리지 않고 공통 컴포넌트 변경으로
+  간접 반영된 것이라 V1 LOCK 위반 아님.
+- `src/app/layout.tsx`: `metadata.icons`에 favicon 16/32/48 +
+  app-icon 96/192/512(icon) + app-icon 180(apple) 연결.
+  `src/app/favicon.ico`는 `ejip-favicon-48.png` 기반으로
+  16/32/48 멀티 사이즈 ICO로 재생성(기존 플레이스홀더 심볼 대체) —
+  파일 자체를 삭제하지 않고 Next.js favicon 파일 컨벤션 경로를
+  그대로 유지하며 내용만 교체.
+- `src/components/FullPageLoader.tsx`: 펄싱하던 "🏢 이집" 텍스트를
+  `ejipy-loading.webp`(부드러운 float 애니메이션, CSS만)로 교체.
+  스피너/메시지 prop은 그대로 유지. 이 컴포넌트를 쓰는 3곳
+  (ai-search, apt 상세, map) 전부에 공통 반영됨 — apt 상세의 기본
+  메시지("스마트한 아파트 분석을 준비 중입니다...")는 실거래 도메인
+  문구라 판단해 텍스트는 바꾸지 않고 비주얼만 교체(V1 LOCK 준수).
+- `src/app/ai-search/ai-search-client.tsx`: 로딩 메시지를 "이집이가
+  조건에 맞는 이집을 찾고 있어요."로, 결과 없음 문구를
+  `ejipy-empty` 이미지 + "찾는 이집이 아직 없어요. 검색 조건을
+  조금 바꿔보세요."로 교체(둘 다 이 파일 자체의 문구라 Brand
+  Voice 적용 허용 범위).
+- `src/app/home-client.tsx`: hero 영역에 `ejipy-default`(56px)
+  인사 캐릭터 추가(태그라인 "복잡한 부동산, 이집으로 쉽게"는
+  기존 그대로 유지). "최근 본 단지" 섹션을 `recent.length === 0`일
+  때 완전히 숨기던 것에서, `ejipy-empty` + "아직 본 이집이 없어요.
+  관심 가는 단지를 둘러보세요." empty state로 항상 노출되도록 변경.
+- "검색 결과 없음"(스코프 판단): `ApartmentAutocomplete.tsx`는
+  /map·/stats·apt 상세에서도 재사용되는 공유 컴포넌트라 이번
+  STEP에서 손대지 않음(V1 LOCK 인접 리스크 회피) — Home 자체
+  검색의 "정확히 연결하지 못했습니다" 문구도 좁은 예외 케이스라
+  기존 텍스트 유지. "검색 결과 없음"은 AI 검색 결과 없음(위)으로
+  충족.
+- OG 이미지(`ejip-og-main.png`)는 지시대로 이번 STEP에서
+  metadata에 연결하지 않음(1200x630 파생 필요, 별도 STEP).
+  illustration 3종도 아직 소비하는 화면이 없어 production에
+  넣지 않음(불필요한 미사용 자산 방지).
+- `BrandLogo`/`BrandSymbol`(STEP 56-B2 placeholder 컴포넌트)은
+  아무 곳에서도 import되지 않은 상태를 확인 — Header는 이 추상화를
+  거치지 않고 직접 `<img>`를 썼다(기존 코드베이스 패턴과의 일관성
+  우선). 두 컴포넌트는 여전히 텍스트 placeholder로 남아있음, 이후
+  재사용처가 생기면 그때 실물 자산으로 교체 검토.
+- `.gitignore`에 `brand-source/` 추가(14MB 원본은 로컬 보관,
+  production 자산인 `public/brand/`만 추적).
+- `public/brand/mascot/README.md` 갱신 — 실제 파일 도착 및 적용
+  현황 반영.
+
+시각 검수(로컬 dev, `localhost:3000`):
+
+- 데스크톱 `/`: 로고/hero 캐릭터/최근 본 단지 정상 렌더링,
+  console 에러 없음.
+- 모바일 375px(iframe 격리 기법 — 이 환경은 `resize_window`가
+  실제 뷰포트를 바꾸지 못함, 기존에 기록된 이슈): 로고 24px에서도
+  선명, 잘림/겹침 없음, 검색바·퀵액션 버튼 정상.
+- `/ai-search` 결과 없음 검색어 실행: `FullPageLoader`
+  (ejipy-loading + 신규 메시지) → `ejipy-empty` 결과없음 카드까지
+  전체 흐름 확인.
+- `localStorage`의 `ejip:recentApartments` 임시 삭제 후 Home
+  재방문: "최근 본 단지" empty state(ejipy-empty + 카피) 정상
+  노출 확인.
+- apt 상세페이지(`/apt/대신롯데캐슬`) 진입: `FullPageLoader`
+  비주얼만 바뀌고 레이아웃/차트/탭 등 기존 구조 100% 그대로,
+  Header도 back 버튼+새 로고+검색 아이콘이 모바일 폭에서 겹침
+  없이 정상 표시.
+- `/map` 정상, Header 미노출 페이지라 영향 없음.
+
+production code 변경:
+
+- 수정: `src/app/layout.tsx`, `src/components/Header.tsx`,
+  `src/components/Header.module.css`,
+  `src/components/FullPageLoader.tsx`,
+  `src/components/FullPageLoader.module.css`,
+  `src/app/home-client.tsx`, `src/app/home-client.module.css`,
+  `src/app/ai-search/ai-search-client.tsx`,
+  `src/app/ai-search/ai-search-client.module.css`,
+  `src/app/favicon.ico`(바이너리 재생성), `.gitignore`
+- 신규: `public/brand/logo/*.webp`(4), `public/brand/icon/*.png`
+  (7), `public/brand/mascot/*.webp`(7)
+- Map/AI 검색 로직, apt 상세 구조, DB 접근 코드는 무변경.
+
+DB/schema/migration 변경:
+
+없음.
+
+정적 검증:
+
+`npx tsc --noEmit` 통과(0 errors). `npx eslint` 대상 5개 변경
+파일 통과(0 errors — ai-search-client.tsx에 무관한 기존
+warning 1건 있으나 이번 변경과 무관, react-hooks/exhaustive-deps
+가 전역 off라 예전 disable 주석이 unused로 잡히는 것). `npx next
+build` 통과, 기존 30개 라우트 그대로 회귀 없음.
+
+알려진 문제:
+
+- illustration 3종, mascot 3종(search/analyze/guide), OG는
+  자산만 배치/보류 상태이고 아직 어떤 화면도 소비하지 않음 —
+  다음 STEP에서 연결 필요.
+- favicon 16px 식별성은 B3에서 "조건부 PASS"로 남겨둔 상태 그대로
+  (이번 STEP은 simplified variant를 새로 만들지 않음, 지시사항
+  범위 밖).
+- 모바일 실기기 확인은 아직 못함(iframe 격리로 대체 확인).
+
+상태:
+
+BRAND STEP 57-A 완료 / logo 4·icon 7·mascot 3포즈(default·loading·
+empty) 실제 화면 적용 / mascot 4(search·analyze·guide·error)·
+illustration·OG는 자산만 배치 / DB·APT DETAIL V1 구조 무변경 /
+commit·push 하지 않음(2026-08-19).

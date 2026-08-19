@@ -78,8 +78,8 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge
           )}
 
           {!hideLogo && (
-            <Link href="/" className={styles.logo}>
-              <span className={styles.logoText}>{siteConfig.name}</span>
+            <Link href="/" className={styles.logo} aria-label={`${siteConfig.name} 홈으로 이동`}>
+              <img src="/brand/logo/ejip-logo-horizontal.webp" alt={siteConfig.name} className={styles.logoImg} />
             </Link>
           )}
         </div>

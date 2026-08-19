@@ -20,17 +20,22 @@
   pointer-events: auto;
 }
 
-.logo {
-  font-size: 1.75rem;
-  font-weight: 800;
-  color: var(--primary-color);
-  letter-spacing: -0.5px;
-  animation: logoPulse 1.6s ease-in-out infinite;
+.mascot {
+  width: 96px;
+  height: 96px;
+  animation: mascotFloat 1.8s ease-in-out infinite;
 }
 
-@keyframes logoPulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.08); opacity: 0.75; }
+@keyframes mascotFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@media (max-width: 900px) {
+  .mascot {
+    width: 76px;
+    height: 76px;
+  }
 }
 
 .spinner {

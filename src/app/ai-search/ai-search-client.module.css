@@ -95,6 +95,11 @@
   color: var(--up-color);
 }
 
+.emptyMascot {
+  width: 88px;
+  height: 88px;
+}
+
 .spinner {
   width: 28px;
   height: 28px;

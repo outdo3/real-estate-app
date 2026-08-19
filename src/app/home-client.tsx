@@ -34,6 +34,7 @@ export default function Home() {
       <Header />
       <main className={styles.main}>
         <section className={styles.heroSection}>
+          <img src="/brand/mascot/ejipy-default.webp" alt="" className={styles.heroMascot} />
           <p className={styles.tagline}>복잡한 부동산, 이집으로 쉽게</p>
 
           <HomeApartmentSearch />
@@ -50,9 +51,9 @@ export default function Home() {
           </div>
         </section>
 
-        {recent.length > 0 && (
-          <section className={styles.recentSection}>
-            <div className={styles.recentHeading}>최근 본 단지</div>
+        <section className={styles.recentSection}>
+          <div className={styles.recentHeading}>최근 본 단지</div>
+          {recent.length > 0 ? (
             <div className={styles.recentScroll}>
               {recent.map((r) => (
                 <Link
@@ -65,8 +66,13 @@ export default function Home() {
                 </Link>
               ))}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className={styles.recentEmpty}>
+              <img src="/brand/mascot/ejipy-empty.webp" alt="" className={styles.recentEmptyMascot} />
+              <span>아직 본 이집이 없어요. 관심 가는 단지를 둘러보세요.</span>
+            </div>
+          )}
+        </section>
 
         <AdContainer variant="banner" slot="home-search-bottom" />
 
