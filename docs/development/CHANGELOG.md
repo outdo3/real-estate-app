@@ -5273,3 +5273,91 @@ smoke test 전부 200, DB connection 문제 없음 / commit 2개 push
 **R5_GO** — migration 적용/ingestion 성공/idempotent/전국
 coverage/서구·서대신4·아미1·아미3 검증/파괴적 회귀 없음/DB
 connection blocker 없음 전부 충족.
+
+## 2026-08-19
+
+### STEP R5 — Redevelopment API / Service Layer
+
+작업:
+
+- `src/lib/redevelopment/service.ts` 신규 — API route가 Prisma
+  쿼리를 직접 쓰지 않고 이 파일의 함수만 호출한다.
+  `listRedevelopmentProjects()`(필터+검색+페이지네이션),
+  `getRedevelopmentProjectById()`(상세+source summary+data
+  quality+field provenance), `getRedevelopmentMapProjects()`(지도
+  전용, 안전 좌표만).
+- `GET /api/redevelopment`(목록: sido/sigungu/businessType/stage/
+  q/page/pageSize) + `GET /api/redevelopment/[id]`(상세) 신규 —
+  기존 `api/properties/route.ts`의 `{success,data}` 봉투 관례를
+  그대로 따름. pageSize 기본 20/최대 100(clamp), 잘못된 page/
+  pageSize는 500 대신 기본값으로, 잘못된 enum은 400.
+- sido 축약형("부산"→"부산광역시")을 `src/lib/regions.ts`의
+  `SIDO_LIST` 기준으로 정규화(매칭 안 되면 원본 유지, 추측 안 함).
+- 상세 API의 `sources[]`는 rawPayload를 제외한 요약만 노출
+  (source/rawName/rawBusinessType/rawStage/rawHouseholdCount/
+  sourceUpdatedAt/collectedAt/matchConfidence/mergeStatus) —
+  단위 테스트로 rawPayload가 응답 어디에도 없음을 확인.
+- `fieldProvenance`(예: "진행단계: 부산시 기준") — 새
+  provenance 테이블 없이 sources[]의 source 존재 여부 +
+  R2/R3B 고정 우선순위 규칙만으로 텍스트 서술.
+- `hasSafeMapLocation`(lat/lng 있고 locationType=PROJECT_SITE일
+  때만 true) — production에 좌표 0건이라 현재는 전부 false, 지어낸
+  좌표 없음(OFFICE를 지도 위치로 반환하지 않음, UNKNOWN에 임의
+  좌표 생성하지 않음).
+
+matchConfidence 재동기화 덮어쓰기 버그 수정(R4 FINAL에서 발견):
+
+- 원인 확인 — `ingestRecord()`가 이미 존재하는 SourceRecord를
+  재동기화할 때도 항상 후보 매칭을 다시 계산해, 자신이 이미 만든
+  project와 트리비얼하게 self-EXACT 매칭되어 원래 matchConfidence를
+  덮어썼음.
+- 수정 — `ingestRecord()` 시작 지점에서 기존 SourceRecord 존재
+  여부를 먼저 확인, 존재하면 매칭을 재계산하지 않고 raw 필드만
+  갱신, matchConfidence/mergeStatus/projectId는 보존.
+  `RedevelopmentPrismaClient`에 `update` 메서드 추가,
+  `IngestOutcome.action`에 `'resynced'` 추가. **schema 변경 없이
+  해결**(STOP 불필요).
+- 신규 회귀 테스트 3건(ingest.test.ts): MEDIUM 재ingest 후에도
+  MEDIUM 유지, EXACT 재ingest 후에도 EXACT 유지, 재동기화 시
+  raw 필드(stage 등)는 계속 최신화되지만 matchConfidence만 보존.
+- **production에는 이 fix를 재적재하지 않았다** — 코드 수정 +
+  인메모리 테스트 검증까지만, 기존 production SourceRecord의
+  matchConfidence(R4 FINAL 2차 재실행 때 덮어써진 값)는 소급
+  복구하지 않음(문서에 명시).
+
+Seo-gu/대표 사업 검증(local dev 서버가 production DATABASE_URL로
+연결, read-only):
+
+```text
+sido=부산&sigungu=서구  → total 24  (R4 FINAL과 일치)
+q=서대신4                → 1건, CONSTRUCTION/542세대,
+                            sources=[MOLIT,BUSAN_CITY], stage 부산시 기준
+q=아미1 / q=아미3        → 각 1건, MOLIT-only, RESIDENTIAL_ENVIRONMENT/
+                            ZONE_DESIGNATED, stage 국토부 기준
+sido=서울/경기/부산      → 644 / 241 / 461 (전부 R4 FINAL과 일치)
+```
+
+정적 검증:
+
+`npx tsc --noEmit`/`eslint`/`next build` 전부 통과. 전체 88개
+테스트 pass(기존 65 + service.test.ts 20건 + 재동기화 회귀 3건).
+기존 라우트(`/api/properties`, `/api/presales`, `/api/apt/[name]`,
+`/api/school/stats`) 로컬 smoke 회귀 없음.
+
+DB/schema/migration/production ingestion:
+
+**전부 무변경/미실행.** API/service 코드만 추가, production은
+read-only 조회만 수행.
+
+상태:
+
+STEP R5 완료 / Redevelopment API·Service Layer 구현(목록/검색/
+필터/페이지네이션/상세/지도 안전 좌표) / matchConfidence 재동기화
+덮어쓰기 버그 code-level 수정+테스트 검증(production 소급 복구는
+아님, 문서화) / 부산 서구 24건·서대신4·아미1·아미3·전국 필터
+API로 재확인 / DB/schema/migration/production ingestion 전부
+무변경 / commit·push 하지 않음(2026-08-19).
+
+**R6_GO** — list/detail/filter/search/pagination/서구 24건/
+서대신4/아미1·아미3/safe map semantics/matchConfidence fix/
+typecheck·lint·build·tests 전부 충족.

@@ -44,6 +44,13 @@ export class InMemoryRedevelopmentStore implements RedevelopmentPrismaClient {
       this.sourceRecords.push(created);
       return created;
     },
+    update: async (args: any) => {
+      const { source, sourceRecordId } = args.where.source_sourceRecordId;
+      const existing = this.sourceRecords.find((r) => r.source === source && r.sourceRecordId === sourceRecordId);
+      if (!existing) throw new Error(`SourceRecord ${source}/${sourceRecordId} not found`);
+      Object.assign(existing, args.data);
+      return existing;
+    },
     findMany: async (args: any) => {
       const where = args?.where ?? {};
       return this.sourceRecords.filter((r) => Object.entries(where).every(([k, v]) => r[k] === v));

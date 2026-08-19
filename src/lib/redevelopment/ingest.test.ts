@@ -151,6 +151,64 @@ test('MEDIUM 매칭 — REVIEW_REQUIRED로 새 Project 생성 + needsReview=true
   assert.equal(store.getAllProjects().length, 2);
 });
 
+test('R5 — 재동기화 시 matchConfidence가 보존된다(최초 MEDIUM이 재실행 후에도 MEDIUM 유지, self-EXACT로 덮어써지지 않음)', async () => {
+  const store = new InMemoryRedevelopmentStore();
+  await ingestRecord(store, molitRecord(), new Date());
+  const similar = molitRecord({
+    sourceRecordId: 'medium-case',
+    source: SOURCE_BUSAN,
+    normalizedName: '서대신4가',
+    householdCount: 560,
+    rawHouseholdCount: '560',
+  });
+  const firstOutcome = await ingestRecord(store, similar, new Date());
+  assert.equal(firstOutcome.matchConfidence, 'MEDIUM');
+  assert.equal(store.getAllSourceRecords().length, 2);
+  assert.equal(store.getAllProjects().length, 2);
+
+  // 같은 레코드를 다시 ingest(재동기화 시뮬레이션) — R4 FINAL에서 발견한 버그라면
+  // 여기서 자기 자신과 매칭돼 EXACT로 덮어써졌을 것이다.
+  const secondOutcome = await ingestRecord(store, similar, new Date());
+  assert.equal(secondOutcome.matchConfidence, 'MEDIUM');
+  assert.equal(secondOutcome.action, 'resynced');
+  assert.equal(secondOutcome.projectId, firstOutcome.projectId);
+  assert.equal(store.getAllSourceRecords().length, 2); // row 폭증 없음
+  assert.equal(store.getAllProjects().length, 2); // project 폭증 없음
+
+  const record = store.getAllSourceRecords().find((r: any) => r.sourceRecordId === 'medium-case');
+  assert.equal(record.matchConfidence, 'MEDIUM');
+});
+
+test('R5 — EXACT 매칭도 재동기화 후 그대로 EXACT 유지(회귀 방지)', async () => {
+  const store = new InMemoryRedevelopmentStore();
+  await ingestRecord(store, molitRecord(), new Date());
+  const exactMatch = molitRecord({ sourceRecordId: 'busan-exact', source: SOURCE_BUSAN });
+  const first = await ingestRecord(store, exactMatch, new Date());
+  assert.equal(first.matchConfidence, 'EXACT');
+
+  const second = await ingestRecord(store, exactMatch, new Date());
+  assert.equal(second.matchConfidence, 'EXACT');
+  assert.equal(second.action, 'resynced');
+  assert.equal(store.getAllProjects().length, 1);
+  assert.equal(store.getAllSourceRecords().length, 2);
+});
+
+test('R5 — 재동기화 시 stage 등 raw 필드는 계속 최신화된다(matchConfidence만 보존)', async () => {
+  const store = new InMemoryRedevelopmentStore();
+  await ingestRecord(store, molitRecord(), new Date());
+  const busanFirst = busanRecord({ stage: 'ASSOCIATION_APPROVED', rawStage: '조합설립인가' });
+  await ingestRecord(store, busanFirst, new Date());
+
+  const busanUpdated = busanRecord({ stage: 'CONSTRUCTION', rawStage: '착공' }); // 같은 sourceRecordId, stage만 진행
+  const outcome = await ingestRecord(store, busanUpdated, new Date());
+  assert.equal(outcome.action, 'resynced');
+
+  const record = store.getAllSourceRecords().find((r: any) => r.source === SOURCE_BUSAN);
+  assert.equal(record.rawStage, '착공'); // raw 필드는 최신화됨
+  const project = store.getAllProjects()[0];
+  assert.equal(project.stage, 'CONSTRUCTION'); // canonical도 재계산되어 반영됨
+});
+
 test('canonical 재계산 — BUSAN 레코드가 연결되면 Project.stage/householdCount가 BUSAN 값으로 갱신(source priority)', async () => {
   const store = new InMemoryRedevelopmentStore();
   await ingestRecord(

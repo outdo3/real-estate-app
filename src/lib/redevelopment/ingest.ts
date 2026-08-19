@@ -17,6 +17,7 @@ export interface RedevelopmentPrismaClient {
   redevelopmentSourceRecord: {
     findUnique: (args: any) => Promise<any | null>;
     upsert: (args: any) => Promise<any>;
+    update: (args: any) => Promise<any>;
     findMany: (args: any) => Promise<any[]>;
   };
 }
@@ -27,7 +28,7 @@ export interface IngestOutcome {
   rawName: string;
   matchConfidence: MatchConfidence;
   mergeStatus: 'AUTO_MATCHED' | 'REVIEW_REQUIRED' | 'UNMATCHED';
-  action: 'matched_existing' | 'created_project';
+  action: 'matched_existing' | 'created_project' | 'resynced';
   projectId: number;
   needsReview: boolean;
 }
@@ -106,6 +107,49 @@ export async function ingestRecord(
   record: ParsedSourceRecord,
   now: Date
 ): Promise<IngestOutcome> {
+  // STEP R5 — 재동기화(re-sync) 보정: 이 SourceRecord가 이미 존재하면(과거에 한 번
+  // ingest돼 어떤 Project에 연결돼 있으면) 후보 매칭을 다시 계산하지 않는다. 재계산하면
+  // 이미 자신이 만든 canonical project를 후보로 다시 조회하게 되어, 그 project의 값이
+  // 애초에 이 레코드 자신에게서 나온 것이므로 트리비얼하게 EXACT가 나오고 원래
+  // matchConfidence(최초 ingest 시점의 실제 cross-source 매칭 품질)를 덮어써버린다
+  // (R4 FINAL에서 production 2회 재실행으로 실제 발견 — 감사 이력 손실 문제, 이번
+  // STEP에서 수정). raw 필드(stage 진행 등 실제 갱신 가능한 값)는 계속 최신화한다.
+  const existing = await prisma.redevelopmentSourceRecord.findUnique({
+    where: { source_sourceRecordId: { source: record.source, sourceRecordId: record.sourceRecordId } },
+  });
+
+  if (existing) {
+    await prisma.redevelopmentSourceRecord.update({
+      where: { source_sourceRecordId: { source: record.source, sourceRecordId: record.sourceRecordId } },
+      data: {
+        rawName: record.rawName,
+        rawBusinessType: record.rawBusinessType,
+        rawBusinessTypeCode: record.rawBusinessTypeCode,
+        rawStage: record.rawStage,
+        rawStageCode: record.rawStageCode,
+        rawHouseholdCount: record.rawHouseholdCount,
+        rawLocation: record.rawLocation,
+        rawPayload: record.rawPayload,
+        collectedAt: now,
+        // matchConfidence/mergeStatus/projectId는 의도적으로 갱신하지 않는다 — 최초
+        // ingest 시점의 매칭 품질 이력을 보존한다.
+      },
+    });
+
+    await recomputeProjectCanonicalFields(prisma, existing.projectId, now);
+
+    return {
+      sourceRecordId: record.sourceRecordId,
+      source: record.source,
+      rawName: record.rawName,
+      matchConfidence: (existing.matchConfidence as MatchConfidence | null) ?? 'UNMATCHED',
+      mergeStatus: existing.mergeStatus,
+      action: 'resynced',
+      projectId: existing.projectId,
+      needsReview: existing.mergeStatus === 'REVIEW_REQUIRED',
+    };
+  }
+
   const candidateProjects = await prisma.redevelopmentProject.findMany({
     where: { sido: record.sido, sigungu: record.sigungu },
   });
@@ -157,6 +201,8 @@ export async function ingestRecord(
     action = 'created_project';
   }
 
+  // 이 지점은 findUnique로 이미 "존재하지 않음"을 확인한 뒤에만 도달한다(위 재동기화
+  // 분기 참고) — 그래서 create만 하면 되고 upsert의 update 분기는 필요 없다.
   await prisma.redevelopmentSourceRecord.upsert({
     where: { source_sourceRecordId: { source: record.source, sourceRecordId: record.sourceRecordId } },
     create: {
@@ -175,19 +221,7 @@ export async function ingestRecord(
       mergeStatus,
       collectedAt: now,
     },
-    update: {
-      projectId,
-      rawBusinessType: record.rawBusinessType,
-      rawBusinessTypeCode: record.rawBusinessTypeCode,
-      rawStage: record.rawStage,
-      rawStageCode: record.rawStageCode,
-      rawHouseholdCount: record.rawHouseholdCount,
-      rawLocation: record.rawLocation,
-      rawPayload: record.rawPayload,
-      matchConfidence: confidence === 'UNMATCHED' ? null : confidence,
-      mergeStatus,
-      collectedAt: now,
-    },
+    update: {},
   });
 
   await recomputeProjectCanonicalFields(prisma, projectId, now);
