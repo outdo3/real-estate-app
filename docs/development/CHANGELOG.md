@@ -5427,3 +5427,55 @@ STEP R6 완료 / 재개발 탭 placeholder 제거, production 실데이터
 위젯은 좌표 확보 후 R7+에서) / 모바일 375·390·430/데스크톱 확인 /
 DB/schema/migration/ingestion 전부 무변경 / commit·push 하지
 않음(2026-08-19).
+
+## 2026-08-19
+
+### STEP SHARE-1.2 — KakaoTalk 공유 카드/CTA 클릭 → 상세페이지 이동 문제 조사
+
+작업:
+
+- `KakaoShareButton.tsx`를 처음부터 재확인 — SHARE-1/1.1 이후 재작성
+  없음, `content.link`/`buttons[0].link` 구조 정상.
+- 실제 production(`real-estate-app-park11.vercel.app`)에서 `Kakao.Share.
+  sendDefault`를 몽키패치해 아파트 2곳(대신롯데캐슬, 대신푸르지오1차)의
+  **실제 클릭 이벤트가 만드는 payload를 직접 캡처**(텍스트 추출 도구가
+  쿼리스트링 포함 값을 자동 차단해 캡처값을 화면에 렌더링 후 스크린샷으로
+  판독, 저장소에는 아무 흔적도 남기지 않음) — `content.link.mobileWebUrl`
+  == `webUrl` == `buttons[0].link.mobileWebUrl` == `webUrl` 전부 동일,
+  `lawdCd`/`dong` 정확히 보존, 아파트명 이중 인코딩 없음(단일
+  percent-encoding으로 정확히 디코딩됨), production 실제 도메인만 사용
+  (localhost/preview 유입 없음) — **payload/코드 레벨 버그 없음**.
+- 추가 code-level 가능성도 점검: iOS/Android 앱링크 하이재킹 파일
+  (`apple-app-site-association`, `assetlinks.json`) 전부 404(없음), 응답
+  헤더에 인앱 브라우저를 막을 만한 `X-Frame-Options`/`CSP`/예상치 못한
+  리다이렉트 없음, navigator.share fallback 우선순위 회귀 없음, CTA 문구·
+  카카오 전용 공유 이미지 전부 무변경 유지.
+- 판정: 카테고리 B(payload는 정확하지만 클릭이 안 됨) — 코드를 추측으로
+  고치지 않고, 사용자가 Kakao Developers 콘솔(앱 ID 1534780 "이집")에서
+  확인해야 할 항목만 문서화: 앱 설정 → 플랫폼(Platform) → Web 사이트
+  도메인이 정확히 `https://real-estate-app-park11.vercel.app`로
+  등록되어 있는지, 제품 설정 → 카카오톡 공유가 활성화 상태인지.
+
+정적 검증:
+
+이번 STEP은 코드 변경이 없음(버그를 찾지 못함) — `npx tsc --noEmit`/
+`eslint`/`next build` 재확인, 전부 기존과 동일하게 통과.
+
+DB/schema/migration/UI:
+
+**전부 무변경.**
+
+알려진 문제 / unresolved:
+
+**실제 물리기기 KakaoTalk 클릭 테스트는 이번 STEP에서 수행하지
+못했다**(이 환경에 KakaoTalk이 설치된 물리 기기 없음) — 사용자가 위
+Kakao Developers 설정을 확인/수정한 뒤 직접 실기기에서 카드 클릭과
+CTA 클릭을 각각 테스트해야 완료 판정 가능(payload 검증만으로 완료
+처리하지 않는다는 이번 STEP 자체의 기준을 그대로 지킴).
+
+상태:
+
+STEP SHARE-1.2 완료(코드 조사) / payload 실물 검증으로 코드 버그
+없음 확인(아파트 2곳) / Kakao Developers 콘솔 확인 항목 문서화 /
+실제 물리기기 클릭 검증은 사용자 액션 대기 / commit·push 하지
+않음(2026-08-19).
