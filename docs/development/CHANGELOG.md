@@ -4880,3 +4880,83 @@ schema.prisma·migration·DB·UI 무변경 / commit·push 하지
 
 **R4_GO** — Schema 적용 + ingestion 구현 착수 가능 판단.
 
+## 2026-08-19
+
+### STEP SHARE-1.1 — 카카오톡 공유 카드 실기기 보정
+
+작업:
+
+- 실기기(사용자 리포트) 확인 사항 3건: (1) 긴 URL 노출 —
+  SHARE-1에서 이미 해결 확인, 이번 STEP 변경 없음. (2) 카카오톡
+  공유 시 앱 이름 표기 — 사용자가 카카오 디벨로퍼스 콘솔에서 직접
+  수정 완료, 코드 변경 불필요 확인. (3) 공유 카드 이미지 — 실기기
+  Kakao Feed 카드가 1200x630 원본을 정사각형에 가깝게 center-crop해
+  좌우 각 약 23.75%(285px)가 잘려나가는 것으로 진단 — 기존
+  `og-main` 이미지(좌측 로고 + 우측 캐릭터 + 하단 서비스 메뉴
+  배너 레이아웃)를 그대로 쓰면 왼쪽 로고가 crop으로 잘리고 하단
+  메뉴 UI까지 카드에 노출돼 산만해 보이는 원인으로 확인.
+- 카카오 공유 전용 신규 이미지
+  `public/brand/share/ejip-kakao-share-1200x630.jpg` 생성(Pillow,
+  결정론적 생성 — AI 이미지 재생성 없음). 기존 승인된 브랜드 자산만
+  재사용: `ejipy-default.webp`(마스코트, 260x260) + 상단 중앙,
+  `ejip-logo-horizontal.webp`(로고, 400px 폭) + 마스코트 하단 중앙,
+  슬로건 "복잡한 부동산, 이집으로 쉽게"(Malgun Gothic Bold 40px,
+  `--ejip-charcoal`) + 로고 하단 중앙. 배경 `--ejip-mint` 단색.
+  하단 서비스 메뉴 UI는 포함하지 않음(단순화). 모든 요소의 bounding
+  box(캐릭터 470~730px, 로고 400~800px, 텍스트 334~866px)가
+  1:1 center-crop 생존 영역(x=285~915px)에 완전히 포함되는지
+  디버그 오버레이로 검증 후 오버레이본은 삭제, 최종 JPEG만 보존.
+  1200x630, quality=90, 35,464 bytes(35.4KB).
+- `KakaoShareButton.tsx`의 `buildImageUrl()` 반환값만
+  `/brand/og/ejip-og-main-1200x630.jpg` → 새 카카오 전용 이미지
+  경로로 변경. 그 외 로직(SDK 우선순위, navigator.share/클립보드
+  폴백, title/description/buttons/link 조합, 긴 URL 해결책)은
+  바이트 단위로 동일 — diff는 이미지 경로 한 줄 + 진단 주석뿐.
+
+SEO/Twitter OG 무변경:
+
+`src/app/layout.tsx`, `src/config/site.ts`의 OG/Twitter 이미지
+경로(`/brand/og/ejip-og-main-1200x630.jpg`)는 전혀 건드리지 않음
+— 카카오 공유와 완전히 분리된 별도 이미지 파일로 대응.
+
+APT DETAIL V1 / DB / schema / migration:
+
+전부 무변경. `KakaoShareButton.tsx` 1개 파일의 이미지 경로 1줄
+수정 + 신규 이미지 파일 1개 추가가 diff 전부.
+
+정적 검증:
+
+`npx tsc --noEmit` 통과(0 errors). `npx eslint
+src/components/KakaoShareButton.tsx` 통과(0 errors). `npx next
+build` 통과("✓ Compiled successfully"), 기존 30개 라우트 회귀
+없음.
+
+로컬 검증(`localhost:3000/apt/대신롯데캐슬`):
+
+- 신규 이미지가 dev 서버에서 정상 서빙되는 것을 `curl`로 확인
+  (200, 35464 bytes).
+- `window.Kakao.Share.sendDefault` 몽키패치로 실제 payload 캡처 —
+  `imageUrl`이 새 경로(`/brand/share/ejip-kakao-share-1200x630.jpg`)
+  로 정확히 바뀐 것, `title`/`description`/`buttons[0].title`("이집
+  에서 자세히 보기")/`link`(lawdCd·dong 쿼리스트링 포함)는 SHARE-1
+  대비 전부 동일하게 유지된 것을 확인 — CTA 버튼이 payload에 정상
+  포함됨을 재확인.
+- PC + 375px + 430px(iframe 격리) 전부 확인 — 헤더/가격 카드/공유
+  버튼/하단 네비게이션 렌더 정상, 줄바꿈·잘림·overflow 없음.
+- console 에러 없음.
+
+알려진 문제 / DEVICE_TEST_REQUIRED:
+
+- 실제 KakaoTalk 앱에서의 최종 카드 렌더(crop 위치, 이미지 선명도)
+  는 이번 STEP(브라우저 자동화 환경)에서 물리적으로 확인 불가 —
+  crop 비율(23.75%/side)은 사용자 리포트를 근거로 한 진단이며,
+  안전 여백을 넉넉히 둬 다소 다른 실제 crop 비율에서도 견고하도록
+  설계했으나 실기기 최종 확인은 사용자 몫으로 남음. 하드 BLOCKER는
+  아님(기존 og-main보다 명백히 개선된 상태).
+
+상태:
+
+STEP SHARE-1.1 완료 / 카카오 공유 전용 이미지 신규 분리로 실기기
+crop 문제(로고 잘림 + 하단 메뉴 UI 노출) 해결 / SEO/Twitter OG
+이미지·SHARE-1의 URL 우선순위 해결책·APT DETAIL V1·DB/schema/
+migration 전부 무변경 / commit·push 하지 않음(2026-08-19).

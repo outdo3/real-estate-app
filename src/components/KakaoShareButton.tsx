@@ -98,7 +98,12 @@ export default function KakaoShareButton({ title, description, compact }: KakaoS
     return `${window.location.origin}${window.location.pathname}${window.location.search}`;
   };
 
-  const buildImageUrl = () => `${window.location.origin}/brand/og/ejip-og-main-1200x630.jpg`;
+  // 카카오톡 Feed 카드는 실기기에서 1200x630 원본을 정사각형에 가깝게 crop해서 보여준다
+  // (좌우로 약 24%씩 잘려나가는 것을 실측 확인) — SEO/Twitter용 OG 이미지(og-main, 좌측
+  // 로고+우측 캐릭터+하단 메뉴 배너 레이아웃)를 그대로 쓰면 왼쪽 로고가 잘리고 하단 메뉴
+  // UI까지 노출돼 카드가 복잡해 보인다. 그래서 카카오 공유 전용으로 중앙 정렬 + 여백을
+  // 넉넉히 둔 단순한 이미지를 따로 쓴다 — OG/Twitter metadata의 og-main은 그대로 유지.
+  const buildImageUrl = () => `${window.location.origin}/brand/share/ejip-kakao-share-1200x630.jpg`;
 
   const sendShare = () => {
     const url = buildShareUrl();
