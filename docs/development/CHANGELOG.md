@@ -5361,3 +5361,69 @@ API로 재확인 / DB/schema/migration/production ingestion 전부
 **R6_GO** — list/detail/filter/search/pagination/서구 24건/
 서대신4/아미1·아미3/safe map semantics/matchConfidence fix/
 typecheck·lint·build·tests 전부 충족.
+
+## 2026-08-19
+
+### STEP R6 — Redevelopment UI V1
+
+작업:
+
+- `/redevelopment` 페이지의 "재개발" 탭(기존 "준비 중" placeholder)을
+  R5 API 기반 실데이터 목록/검색/필터/상세 화면으로 교체.
+  "분양·청약" 탭은 완전히 무변경(코드 diff로 확인).
+- `src/lib/redevelopment/labels.ts` 신규 — 사업유형/진행단계 한글
+  라벨, stage 시각 그룹(active/done/stopped/unknown), source 한글
+  변환(MOLIT→국토교통부, BUSAN_CITY→부산광역시), 시도 축약 표기
+  (부산광역시→부산), 날짜 포맷(YYYY.MM). Prisma를 import하지 않는
+  순수 모듈이라 클라이언트 번들에 안전 — `service.ts`도 이 파일을
+  재사용하도록 리팩터(라벨 상수 중복 제거).
+- `RedevelopmentListSection.tsx`(재개발 탭 목록) — 검색(300ms
+  debounce) → 시도(기본 부산광역시)/시군구(`REGION_DATA` 재사용, 새
+  지역 시스템 없음)/사업유형/진행단계 필터 → 지도 안내 문구 → 결과
+  건수 → 카드 그리드(사업명/배지/지역/세대수/출처+갱신일) →
+  페이지네이션. 세대수 null은 "세대수 정보 없음"(0 표시 안 함).
+- `/redevelopment/[id]` 신규 — 상세 페이지(`generateMetadata`로
+  canonical 데이터 기반 SEO title/description, presales 상세 패턴
+  재사용). 히어로+배지+상태(진행 중/완료/취소/확인 중), 세대수/
+  진행단계/사업유형 각각 field
+  provenance 텍스트, 지도 안내 박스, source별 카드(원본 사업명/
+  진행단계/세대수/수집 시점 — matchConfidence/mergeStatus는 UI에
+  렌더링하지 않음), needsReview는 "일부 정보 확인 중"으로만 안내.
+- 지도 안전성: 실제 Kakao 지도 위젯은 이번 STEP에서 붙이지 않음
+  (production 안전 좌표 0건이라 검증할 마커가 없음 — R5의
+  `hasSafeMapLocation` 계약과 안내 UX만 준비, 좌표가 채워지기
+  시작하면 위젯만 나중에 끼우면 됨). OFFICE/APPROXIMATE/UNKNOWN을
+  사업현장 marker로 표시하는 코드 자체가 없음.
+
+브라우저 실검증(local dev, production DATABASE_URL 대상):
+
+```text
+재개발 탭 기본값 부산광역시 → 검색 결과 461건
+q=서대신4 → 1건(재개발/착공/542세대) → 상세 진입 →
+  국토교통부+부산광역시 두 출처 카드 정상 표시
+/redevelopment/649(아미1) → MOLIT-only, "세대수 정보 없음"
+/redevelopment/999999999 → 인라인 404 안내, 500 아님
+모바일 375/390/430(iframe 격리) → 필터 줄바꿈/카드/하단네비 전부 정상
+데스크톱 → 카드 3열 그리드
+console 에러 없음
+```
+
+정적 검증:
+
+`npx tsc --noEmit`/`eslint`/`next build` 전부 통과. 신규
+`labels.test.ts` 9건(projectStatusLabel 포함) 포함 전체 97개 테스트
+pass. 기존 라우트 회귀 없음.
+
+DB/schema/migration/production ingestion:
+
+**전부 무변경/미실행.** UI 코드만 추가, R5 API 계약 그대로 재사용,
+production에는 read-only 호출만.
+
+상태:
+
+STEP R6 완료 / 재개발 탭 placeholder 제거, production 실데이터
+목록/검색/필터/상세 UI 구현 / 분양·청약 탭 무변경 / 부산 서구·
+서대신4·아미1·아미3 브라우저 실검증 / 지도는 안전 계약만 준비(실제
+위젯은 좌표 확보 후 R7+에서) / 모바일 375·390·430/데스크톱 확인 /
+DB/schema/migration/ingestion 전부 무변경 / commit·push 하지
+않음(2026-08-19).

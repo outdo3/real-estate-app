@@ -1,4 +1,5 @@
 import { SIDO_LIST } from '@/lib/regions';
+import { BUSINESS_TYPE_VALUES, STAGE_VALUES } from './labels';
 import { SOURCE_BUSAN, SOURCE_MOLIT } from './types';
 import type { CanonicalBusinessType, CanonicalStage } from './types';
 import type { PrismaClient } from '@prisma/client';
@@ -6,63 +7,10 @@ import type { PrismaClient } from '@prisma/client';
 // R5 — Redevelopment API/Service Layer. API route는 이 파일의 함수만 호출하고
 // Prisma 쿼리를 직접 쓰지 않는다(섹션 3). schema/migration은 건드리지 않는다 — R4/R4.1이
 // 만든 canonical 필드만 그대로 읽는다.
-
-export const BUSINESS_TYPE_VALUES: CanonicalBusinessType[] = [
-  'REDEVELOPMENT',
-  'RECONSTRUCTION',
-  'RESIDENTIAL_ENVIRONMENT',
-  'SMALL_RECONSTRUCTION',
-  'BLOCK_HOUSING',
-  'OTHER',
-  'UNKNOWN',
-];
-
-export const STAGE_VALUES: CanonicalStage[] = [
-  'PLANNED',
-  'ZONE_DESIGNATED',
-  'PROMOTION_COMMITTEE',
-  'ASSOCIATION_APPROVED',
-  'ARCHITECTURAL_REVIEW',
-  'PUBLIC_OPERATOR_DESIGNATED',
-  'PROJECT_IMPLEMENTATION_APPROVED',
-  'MANAGEMENT_DISPOSITION_APPROVED',
-  'RELOCATION_DEMOLITION',
-  'CONSTRUCTION',
-  'COMPLETED',
-  'TRANSFER_REGISTERED',
-  'DISSOLVED',
-  'CANCELLED',
-  'UNKNOWN',
-];
-
-// R6이 바로 쓸 수 있는 stage 한글 라벨(R3B enum 정의 그대로, 새로 만들지 않음).
-export const STAGE_LABELS: Record<CanonicalStage, string> = {
-  PLANNED: '예정구역지정',
-  ZONE_DESIGNATED: '정비구역지정',
-  PROMOTION_COMMITTEE: '추진위원회구성',
-  ASSOCIATION_APPROVED: '조합설립인가',
-  ARCHITECTURAL_REVIEW: '건축심의',
-  PUBLIC_OPERATOR_DESIGNATED: '사업시행자지정',
-  PROJECT_IMPLEMENTATION_APPROVED: '사업시행인가',
-  MANAGEMENT_DISPOSITION_APPROVED: '관리처분인가',
-  RELOCATION_DEMOLITION: '이주철거',
-  CONSTRUCTION: '착공',
-  COMPLETED: '준공',
-  TRANSFER_REGISTERED: '이전고시',
-  DISSOLVED: '조합해산',
-  CANCELLED: '해제',
-  UNKNOWN: '확인 필요',
-};
-
-export const BUSINESS_TYPE_LABELS: Record<CanonicalBusinessType, string> = {
-  REDEVELOPMENT: '재개발',
-  RECONSTRUCTION: '재건축',
-  RESIDENTIAL_ENVIRONMENT: '주거환경개선',
-  SMALL_RECONSTRUCTION: '소규모재건축',
-  BLOCK_HOUSING: '가로주택정비',
-  OTHER: '기타',
-  UNKNOWN: '확인 필요',
-};
+//
+// 라벨 상수(BUSINESS_TYPE_VALUES/STAGE_VALUES 등)는 R6에서 labels.ts로 옮겼다 —
+// 클라이언트 컴포넌트가 Prisma 타입을 끌어오지 않고도 같은 라벨을 재사용할 수 있게.
+export { BUSINESS_TYPE_VALUES, STAGE_VALUES } from './labels';
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;

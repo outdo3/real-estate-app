@@ -1,0 +1,229 @@
+.main {
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+.backLink {
+  display: inline-block;
+  margin: 1rem 0 0.75rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.stateBox {
+  padding: 3.5rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.stateMascot {
+  width: 64px;
+  height: 64px;
+}
+
+.heroCard {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 1.25rem 1.25rem 1.1rem;
+  margin-bottom: 0.9rem;
+}
+
+.heroTitleRow {
+  margin-bottom: 0.5rem;
+}
+
+.heroTitle {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.badgeRow {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-pill);
+}
+
+.badgeType {
+  color: var(--ejip-green-deep);
+  background: var(--ejip-mint);
+}
+
+.badgeActive {
+  color: #3152d6;
+  background: #eaf0fe;
+}
+
+.badgeDone {
+  color: var(--text-muted);
+  background: #f0f0f0;
+}
+
+.badgeStopped {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.badgeUnknown {
+  color: var(--text-muted);
+  background: #f0f0f0;
+}
+
+.heroRegion {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.reviewNote {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-md);
+  background: #fef3c7;
+  color: #92702a;
+  font-size: 0.8rem;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.infoItem {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.6rem;
+  text-align: center;
+}
+
+.infoLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.infoValue {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.infoProvenance {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.mapBox {
+  margin-bottom: 0.9rem;
+}
+
+.mapNote {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  background: var(--ejip-mint);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.9rem;
+  line-height: 1.55;
+}
+
+.mapPlaceholder {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--card-bg);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.sourceSection {
+  margin-bottom: 0.5rem;
+}
+
+.sourceTitle {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 0.6rem;
+}
+
+.sourceCard {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.sourceName {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--ejip-green-deep);
+  margin-bottom: 0.35rem;
+}
+
+.sourceDetailRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  padding: 0.15rem 0;
+}
+
+.sourceDetailRow > span:first-child {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sourceDetailRow > span:last-child {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.freshness {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin: 0.5rem 0 0;
+}
+
+@media (max-width: 400px) {
+  .infoGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+  }
+
+  .infoItem {
+    padding: 0.6rem 0.4rem;
+  }
+}

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Header from '@/components/Header';
+import RedevelopmentListSection from './RedevelopmentListSection';
 import styles from './redevelopment.module.css';
 
 const TABS = [
@@ -32,22 +33,20 @@ export default function RedevelopmentClient() {
           </div>
         </div>
 
-        <div className={styles.emptyCard}>
-          <img src="/brand/mascot/ejipy-guide.webp" alt="" className={styles.emptyMascot} />
-          <div className={styles.emptyTitle}>
-            {activeTab === 'sale' ? '분양·청약 정보 연동 준비 중입니다.' : '재개발·재건축 구역 정보 연동 준비 중입니다.'}
-          </div>
-          <div className={styles.emptyDesc}>
-            {activeTab === 'sale'
-              ? '청약홈 등 공공데이터 연동이 완료되는 대로 지역별 분양 일정과 경쟁률을 제공할 예정입니다.'
-              : '정비구역 지정 현황 데이터셋이 연동되는 대로 재개발·재건축 진행 단계를 지도와 함께 제공할 예정입니다.'}
-          </div>
-          {activeTab === 'sale' && (
+        {activeTab === 'sale' ? (
+          <div className={styles.emptyCard}>
+            <img src="/brand/mascot/ejipy-guide.webp" alt="" className={styles.emptyMascot} />
+            <div className={styles.emptyTitle}>분양·청약 정보 연동 준비 중입니다.</div>
+            <div className={styles.emptyDesc}>
+              청약홈 등 공공데이터 연동이 완료되는 대로 지역별 분양 일정과 경쟁률을 제공할 예정입니다.
+            </div>
             <Link href="/presales" className={styles.emptyLink}>
               분양정보 전체 보기 →
             </Link>
-          )}
-        </div>
+          </div>
+        ) : (
+          <RedevelopmentListSection />
+        )}
       </div>
     </div>
   );
