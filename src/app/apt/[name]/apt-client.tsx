@@ -23,6 +23,7 @@ import { getAreaDetailLabel, getUniqueAreaLabels } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 import { recordApartmentVisit } from '@/lib/recent-apartments';
+import { siteConfig } from '@/config/site';
 
 // 차트 컴포넌트(recharts)는 번들이 무거워 메인 스레드를 오래 점유한다 — 상세페이지
 // 최초 렌더에 꼭 필요하지 않으므로 지연 로딩(ssr:false)해서 초기 로드를 가볍게 하고,
@@ -727,8 +728,8 @@ export default function ApartmentDetail() {
                 </div>
                 <KakaoShareButton
                   compact
-                  title={`${aptName} - 실거래가 & 단지정보 | 이집`}
-                  description="최근 실거래가, 세대당 주차대수, 커뮤니티 시설 정보를 확인해보세요."
+                  title={`${aptName} 실거래가·시세 - ${siteConfig.name}`}
+                  description={`${aptName}의 실거래가, 시세 변동 추이, 평형별 거래 내역을 확인하세요.`}
                 />
               </div>
 

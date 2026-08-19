@@ -4535,3 +4535,106 @@ API Key:
 STEP R1 완료 / 재개발 데이터 소스 3종 실측 비교 완료 / Master
 후보(국토부 전국 통합) + 부산 상세보강 후보(부산시 API) 판단 /
 DB/schema/migration·UI 무변경 / commit·push 하지 않음(2026-08-19).
+
+
+## 2026-08-19
+
+### STEP SHARE-1 — Kakao Share UX(R1과 무관한 독립 STEP)
+
+작업:
+
+- `KakaoShareButton.tsx` 조사 결과: `Kakao.Share.sendDefault()`
+  Feed 템플릿(content.title/description/imageUrl + content.link +
+  buttons[].link) 자체는 이미 URL을 텍스트에 직접 넣지 않는
+  구조였음을 확인. 실제 원인은 `handleShare()`가
+  `navigator.share()`를 최우선으로 시도하던 것 — 모바일에서 OS
+  공유 시트가 뜨고 사용자가 거기서 카카오톡을 선택하면, OS가
+  title+text+url을 이어붙인 일반 텍스트로 카카오톡에 넘겨 채팅창에
+  긴 URL이 그대로 보이는 구조였다(코드 리뷰로 확인, 브라우저
+  자동화 환경 특성상 실제 카카오톡 수신 화면은 확인 못함).
+- `handleShare()` 우선순위 재정렬: **카카오 SDK(Feed 템플릿) →
+  navigator.share() → 클립보드 복사** 순으로 변경. SDK는 마운트
+  시점에 이미 로드/초기화돼 있어(`sdkReadyRef`) 클릭 시 await 없이
+  동기 호출 — 기존에 이미 해결해둔 "팝업 차단" 문제를 재발시키지
+  않음. 마운트 직후 클릭처럼 SDK가 아직 준비 안 된 극히 드문
+  경우에만 navigator.share()로 폴백(기존에 있던 "SDK를 await로
+  재시도" 경로는 그 자체가 팝업 차단 위험을 안고 있어, 이미 더
+  안전한 대안(navigator.share)이 있으므로 제거 — 실제 폴백 기능은
+  그대로 유지, 위험한 재시도 경로만 뺌).
+- 공유 CTA 버튼 텍스트를 "이집에서 단지정보 보기" →
+  "이집에서 자세히 보기"로 통일.
+- Apt Detail의 공유 title/description을 `page.tsx`의
+  `generateMetadata`(SEO/OG)와 동일한 문자열 공식으로 통일
+  (`${aptName} 실거래가·시세 - ${siteConfig.name}` /
+  `${aptName}의 실거래가, 시세 변동 추이, 평형별 거래 내역을
+  확인하세요.`) — 기존에 별도로 작성돼 있던 문구를 대체.
+  `imageUrl`은 이미 STEP 57-C의 `/brand/og/ejip-og-main-1200x630.jpg`
+  를 쓰고 있어 변경 없음.
+- 공유 버튼(compact variant, Apt Detail Hero 우측 — 실제로
+  production에서 렌더되는 유일한 variant) 가시성 강화:
+  `KakaoShareButton.module.css` 신규 생성, 흰 배경+얇은 테두리의
+  작은 pill → `var(--ejip-green)` 배경 + 흰 텍스트 + `lucide-react`
+  `Share2` 아이콘(신규 의존성 설치 없이 기존 패키지 사용) + "공유하기"
+  텍스트로 교체. hover(`--ejip-green-deep`)/active(살짝 축소)/
+  focus-visible(아웃라인) 상태 추가, `min-height: 44px`로 모바일
+  터치영역 확보. 아파트명(1.35rem, 800)·가격(더 큼)보다는 작게
+  유지해 과하게 튀지 않도록 함.
+  아이콘엔 `aria-hidden="true"`, 텍스트가 항상 보이므로 별도
+  aria-label은 추가하지 않음(중복 방지).
+  전체(non-compact, 카카오 옐로) variant는 현재 어디서도 렌더되지
+  않는 코드라 로직만 우선순위 변경 영향을 받고, 시각 디자인은
+  카카오 브랜드 옐로를 유지(별도 CSS 클래스로만 정리).
+- 영향 범위 확인: `KakaoShareButton`을 사용하는 곳은
+  `apt-client.tsx` 한 곳뿐(다른 페이지 없음) — 컴포넌트 변경이
+  다른 화면에 영향을 주지 않음.
+
+APT DETAIL V1:
+
+Hero 영역의 `KakaoShareButton` 렌더 결과(모양)만 바뀌고, 레이아웃
+(`.heroTop` 등 `detail.module.css`)·카드 구조·데이터·탭·순서는
+전혀 건드리지 않음. `apt-client.tsx`에서 변경한 것은 import 1줄
+추가(`siteConfig`)와 `KakaoShareButton`에 넘기는 title/description
+문자열 2줄뿐.
+
+R1 문서 보호:
+
+`docs/development/R1-redevelopment-data-source-audit.md`는 이번
+STEP에서 전혀 수정하지 않음(내용 확인만).
+
+정적 검증:
+
+`npx tsc --noEmit` 통과(0 errors). 변경 파일
+(`KakaoShareButton.tsx`, `apt-client.tsx`) `npx eslint` 통과
+(0 errors — apt-client.tsx에 무관한 기존 warning 1건, 이 STEP과
+무관한 위치·원인 확인). `npx next build` 통과, 기존 30개 라우트
+회귀 없음.
+
+로컬 검증(`localhost:3000/apt/대신롯데캐슬`):
+
+- `window.Kakao.Share.sendDefault`를 몽키패치해 실제 클릭 시
+  전달되는 payload를 캡처 — title/description이 SEO 문구와
+  정확히 일치, imageUrl이 OG 이미지 경로, `content.link`/
+  `buttons[0].link` 모두 현재 페이지 URL(lawdCd/dong 쿼리스트링
+  포함)과 정확히 일치, 버튼 타이틀 "이집에서 자세히 보기" 확인 —
+  URL 문자열이 title/description 어디에도 섞여 있지 않음을
+  직접 확인.
+- PC + 375px + 430px(iframe 격리) 전부 확인 — 버튼 줄바꿈/잘림/
+  overflow 없음, 아파트명·가격과 시각적 충돌 없음.
+- console 에러 없음.
+- Kakao JS SDK 키(`NEXT_PUBLIC_KAKAO_MAP_API_KEY`) 존재 확인,
+  실제 SDK 로드·초기화(`Kakao.isInitialized() === true`)까지
+  확인 — BLOCKER 아님.
+
+알려진 문제:
+
+- 실제 카카오톡 앱에서의 최종 수신 화면은 이번 STEP(브라우저
+  자동화 환경)에서 확인하지 못함 — payload 캡처로 데이터 정확성은
+  검증했으나, 사용자가 실기기로 한 번 확인하는 것을 권장.
+
+상태:
+
+STEP SHARE-1 완료 / Kakao 공유 우선순위 재정렬로 긴 URL 노출
+경로 제거 / 공유 버튼 E-jip Green + Share2 아이콘으로 가시성
+강화 / SEO 문구 재사용으로 title·description 통일 / APT DETAIL
+V1 구조·데이터, R1 문서, DB/schema/migration 무변경 / commit·push
+하지 않음(2026-08-19).

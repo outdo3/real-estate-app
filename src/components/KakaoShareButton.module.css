@@ -1,0 +1,67 @@
+.shareBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0.55rem 0.95rem;
+  background: var(--ejip-green);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, transform 0.05s ease;
+}
+
+.shareBtn:hover {
+  background: var(--ejip-green-deep);
+}
+
+.shareBtn:active {
+  transform: scale(0.97);
+}
+
+.shareBtn:focus-visible {
+  outline: 2px solid var(--ejip-green-deep);
+  outline-offset: 2px;
+}
+
+.shareBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* 카카오 브랜드 옐로 버튼(현재 어디서도 렌더되지 않는 variant) — 상태색만 D안 토큰 없이
+   카카오 고유 브랜드색을 유지한다(카카오 공유 버튼은 카카오 자체 브랜드 가이드 관례). */
+.fullBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.75rem 1.5rem;
+  background-color: #fee500;
+  color: #191919;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.fullBtn:hover {
+  background-color: #f5dc00;
+}
+
+.fullBtn:focus-visible {
+  outline: 2px solid #191919;
+  outline-offset: 2px;
+}

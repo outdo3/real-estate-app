@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Share2 } from 'lucide-react';
+import styles from './KakaoShareButton.module.css';
 
 interface KakaoShareButtonProps {
   title: string;
@@ -109,7 +111,7 @@ export default function KakaoShareButton({ title, description, compact }: KakaoS
         link: { mobileWebUrl: url, webUrl: url },
       },
       buttons: [
-        { title: '이집에서 단지정보 보기', link: { mobileWebUrl: url, webUrl: url } },
+        { title: '이집에서 자세히 보기', link: { mobileWebUrl: url, webUrl: url } },
       ],
     });
   };
@@ -117,13 +119,29 @@ export default function KakaoShareButton({ title, description, compact }: KakaoS
   const handleShare = async () => {
     const url = buildShareUrl();
 
-    // 모바일 브라우저(iOS Safari, Android Chrome 등)는 navigator.share()를 지원하며,
-    // 클릭 즉시 OS 자체 공유 시트를 띄운다 — 카카오톡이 설치돼 있으면 그 목록에 바로
-    // 나타난다. 카카오 JS SDK의 sendDefault()는 데스크톱에서 팝업을 여는 방식이라
-    // "사용자 클릭과 완전히 동기적으로 이어지지 않으면 팝업이 차단되고 SDK 내부에서
-    // null.focus() 예외로 조용히 실패"하는 문제가 있다는 게 카카오 공식 답변으로
-    // 확인됐다(devtalk.kakao.com) — 이 앱을 실제 만졌던 브라우저 환경에서도 재현됨.
-    // navigator.share()는 이 문제 자체가 없는 더 안정적인 경로라 있으면 최우선으로 쓴다.
+    // 버튼이 "카카오톡으로 공유하기"를 명시하므로, 우리가 완전히 통제하는 Feed 템플릿
+    // (OG 이미지 + 제목 + 설명 + "이집에서 자세히 보기" 버튼)을 최우선으로 시도한다 —
+    // 이 경로는 본문에 URL 텍스트가 노출되지 않는다(link는 버튼/카드의 링크 필드에만
+    // 실린다). navigator.share()로 먼저 OS 공유 시트를 띄우면 사용자가 거기서 카카오톡을
+    // 선택했을 때 OS가 title+text+url을 이어붙인 일반 텍스트로 넘겨 카카오톡 채팅창에
+    // 긴 URL이 그대로 보이는 문제가 있었다 — 그래서 카카오 전용 버튼에서는 이 경로를
+    // 더 이상 최우선으로 쓰지 않는다.
+    // SDK는 마운트 시점에 이미 로드/초기화해뒀으므로(sdkReadyRef), 여기서 await 없이
+    // 동기적으로 호출해야 브라우저가 팝업을 차단하지 않는다(loadKakaoShareSdk 주석 참고).
+    if (getAppKey() && sdkReadyRef.current && window.Kakao?.isInitialized?.()) {
+      try {
+        sendShare();
+        setStatus('idle');
+        return;
+      } catch {
+        // 카카오 제품(공유하기)이 콘솔에서 비활성화돼 있는 등 호출 자체가 실패하면
+        // 아래 경로로 계속 폴백한다.
+      }
+    }
+
+    // 카카오 SDK가 아직 준비되지 않았거나(마운트 직후 클릭 등) 키가 없는 경우의 폴백.
+    // navigator.share()는 window.open 기반이 아니라 팝업 차단 문제가 없는 안정적인
+    // 경로라 — SDK를 새로 await해서 재시도하는 것보다 이쪽이 더 안전하다.
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({ title, text: description, url });
@@ -133,61 +151,39 @@ export default function KakaoShareButton({ title, description, compact }: KakaoS
         // 사용자가 공유 시트에서 취소한 경우(AbortError)는 실패가 아니라 정상 취소이므로
         // 에러 상태로 넘어가지 않는다.
         if (e instanceof Error && e.name === 'AbortError') return;
-        // 그 외 실패면 아래 카카오 SDK/클립보드 경로로 계속 폴백한다.
+        // 그 외 실패면 아래 클립보드 복사로 계속 폴백한다.
       }
     }
 
     try {
-      if (!getAppKey()) throw new Error('카카오 키 없음');
-
-      if (sdkReadyRef.current && window.Kakao?.isInitialized?.()) {
-        // 이미 준비돼 있으면 await 없이 곧바로 호출 — 클릭 이벤트와 동기적으로 이어져야
-        // 브라우저가 팝업을 차단하지 않는다.
-        sendShare();
-      } else {
-        await loadKakaoShareSdk();
-        if (!ensureInitialized()) throw new Error('카카오 SDK 초기화 실패');
-        sendShare();
-      }
-      setStatus('idle');
-    } catch (e) {
-      try {
-        await navigator.clipboard.writeText(url);
-        setStatus('copied');
-        setTimeout(() => setStatus('idle'), 2000);
-      } catch {
-        setStatus('error');
-        setTimeout(() => setStatus('idle'), 2000);
-      }
+      await navigator.clipboard.writeText(url);
+      setStatus('copied');
+      setTimeout(() => setStatus('idle'), 2000);
+    } catch {
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 2000);
     }
   };
 
   if (compact) {
     return (
-      <button
-        type="button"
-        onClick={handleShare}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.75rem',
-          backgroundColor: 'white', color: 'var(--text-secondary)', border: '1px solid var(--border-color)',
-          borderRadius: '999px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
-        }}
-      >
-        {status === 'copied' ? '복사됨' : status === 'error' ? '공유 실패' : <>↗ 공유</>}
+      <button type="button" onClick={handleShare} className={styles.shareBtn} title="공유하기">
+        {status === 'copied' ? (
+          '복사됨'
+        ) : status === 'error' ? (
+          '공유 실패'
+        ) : (
+          <>
+            <Share2 className={styles.icon} aria-hidden="true" />
+            공유하기
+          </>
+        )}
       </button>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleShare}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem',
-        backgroundColor: '#FEE500', color: '#191919', border: 'none', borderRadius: '8px',
-        fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer',
-      }}
-    >
+    <button type="button" onClick={handleShare} className={styles.fullBtn} title="카카오톡으로 공유하기">
       💬 {status === 'copied' ? '링크가 복사되었습니다' : status === 'error' ? '공유에 실패했습니다' : '카카오톡으로 공유하기'}
     </button>
   );
