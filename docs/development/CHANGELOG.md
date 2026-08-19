@@ -4795,3 +4795,88 @@ DB/schema/migration·UI 무변경 / commit·push 하지 않음(2026-08-19).
 **R3B_GO** — Master DB Schema 설계 착수 가능 판단.
 
 
+## 2026-08-19
+
+### STEP R3B — Redevelopment Master DB Schema 설계
+
+작업:
+
+- 기존 `RedevelopmentProject`(단일 테이블, `zoneName` 단일 필드로
+  존재 판단)/`RedevelopmentStage`(6단계) 구조와 `upsertRedevelopmentProject()`
+  저장 함수(시군구 없이 이름만 봐서 `촉진5`(금정구/영도구 동명
+  이인) 같은 사례를 오판할 수 있는 실제 결함 재확인), 호출부
+  없음을 코드로 확인.
+- **production `RedevelopmentProject` 실제 row 수를 read-only
+  count 쿼리로 직접 확인 — 0건.** MIGRATION_RISK 없음으로 결론.
+- 설계 원칙 확정: (A) canonical/raw 값 분리, (B) Project와
+  SourceRecord를 별도 엔티티로 분리(1:N) — 안 A(2테이블) vs
+  안 B(단일테이블 덮어쓰기) 비교 후 안 A 채택(R1~R3A가 반복
+  발견한 "두 source 값 불일치"가 안 B를 배제하는 결정적 근거).
+- `RedevelopmentBusinessType`(7종: REDEVELOPMENT/RECONSTRUCTION/
+  RESIDENTIAL_ENVIRONMENT/SMALL_RECONSTRUCTION/BLOCK_HOUSING/
+  OTHER/UNKNOWN), `RedevelopmentStage`(기존 6종 → 14종 재설계,
+  국토부·부산 실측 코드 전부 매핑표 작성), `RedevelopmentProjectStatus`
+  (ACTIVE/COMPLETED/CANCELLED/UNKNOWN, stage와 분리) 확정.
+  `RELOCATION_DEMOLITION`은 실사용 관측값 없음을 재확인하되
+  향후 대비 유지, `DISSOLVED`(조합해산)는 완료/좌초 구분 불가
+  (대연2 사례: 3,149세대+조합해산 = 완료 후 해산으로 추정되나
+  확정 못함)를 이유로 projectStatus=UNKNOWN으로 정직하게 남김.
+- identity: Project에 공격적 composite unique를 걸지 않고
+  (sido+sigungu+normalizedName) index만 두어 매칭 후보 조회용으로
+  쓰고, 실제 병합 판단은 R4 애플리케이션 로직(matchConfidence)의
+  책임으로 분리. normalizedName은 안전한 정규화만(유형 접미사
+  유지 — R3A 오매칭 실증 반영), matchName 별도 필드는 만들지
+  않음(필드 최소화).
+- sourceRecordId를 국토부처럼 native id가 없는 source를 위해
+  결정론적 fingerprint(source+sido+sigungu+rawName+rawBusinessType,
+  stage/세대수 제외)로 설계 — R2에서 발견한 유일한 완전중복 행도
+  이 방식으로 안전하게 흡수됨.
+- location 안전장치를 스키마 레벨로 명시: `locationType`
+  (PROJECT_SITE/OFFICE/APPROXIMATE/UNKNOWN), `locationConfidence`,
+  `geocodeStatus` — R3A의 "지오코딩 성공 82%가 사무실 주소 위험"
+  발견을 직접 반영, 향후 R4/R6이 이 필드로 위험을 관리하도록
+  설계.
+- `source`/`geocodeSource` 필드는 enum이 아닌 String으로 설계
+  (지역 확장 시마다 migration이 필요한 enum의 확장성 문제 회피,
+  트레이드오프를 문서에 명시).
+- rawPayload(Json) 보존 결정 — 개인정보 아님(법인/공공정보)·
+  용량 문제 없음 확인, 라이선스 상세 재확인은 R4로 이관.
+- StageHistory/Review 전용 테이블은 YAGNI로 미생성(현재 source가
+  이력을 제공하지 않고, boolean 플래그로 V1 충분).
+- polygon은 `polygonSource`/`polygonRef` nullable placeholder
+  2필드만 추가, 실제 geometry 컬럼은 만들지 않음(POINT_FIRST_OK).
+- `docs/development/R3B-redevelopment-master-schema-design.md`
+  신규 작성(전체 proposal Prisma 코드블록 포함).
+
+DB/schema/migration 변경:
+
+없음(`prisma/schema.prisma` 전혀 건드리지 않음, 문서 안에
+proposal 코드블록으로만 작성).
+
+UI 변경:
+
+없음.
+
+production 데이터 접근:
+
+`RedevelopmentProject` row count 확인을 위해 read-only COUNT
+쿼리 1회 실행(0건 확인), 그 외 어떤 쓰기/삭제도 하지 않음.
+
+알려진 문제 / BLOCKER:
+
+하드 BLOCKER 없음. Risks 3건 문서에 기록(office 좌표 오노출
+위험은 스키마가 아니라 R4/R6 로직 구현이 지켜야 함, 국토부
+내부 중복행은 구조적으로 보존되지만 자동 해소 안 됨, DISSOLVED
+모호성은 스키마로 완전히 해결 불가).
+
+상태:
+
+STEP R3B 완료 / Redevelopment Master DB Schema 설계안 확정
+(RedevelopmentProject + RedevelopmentSourceRecord 2-엔티티,
+7종 BusinessType·14종 Stage·location 안전장치 포함) / 기존
+production 데이터 0건 확인(MIGRATION_RISK 없음) / 실제
+schema.prisma·migration·DB·UI 무변경 / commit·push 하지
+않음(2026-08-19).
+
+**R4_GO** — Schema 적용 + ingestion 구현 착수 가능 판단.
+
