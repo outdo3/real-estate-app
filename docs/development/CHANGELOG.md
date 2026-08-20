@@ -5781,3 +5781,85 @@ ChatGPT 검수 후 처리, 2026-08-20).
 EXTERNAL_VERIFICATION_REQUIRED로 재확인), Kakao 45-cap 필드는 "≥45"로
 해석, `transactionCount12m` 최소 표본 조건을 점수 엔진 설계에
 명시적으로 반영할 것.
+
+## 2026-08-20 (2)
+
+### STEP SCORE S2C — Score Engine + Explanation Engine + Algorithmic Briefing Engine
+
+작업:
+
+- S2B를 `feat: collect apartment score raw features`(`b115202`)로 커밋·푸시.
+  score 컬럼 없음/하드코딩 secret 없음/신규 public route 없음 재검수 통과.
+- 구현 전 `scripts/apartment-score/analyze-score-pilot.ts`(read-only)로
+  서구·해운대 raw feature 실측 분석(coverage, dong별 peer 표본 크기,
+  거래표본 분포, beach/subway-price Spearman 상관)을 먼저 수행하고 그
+  결과를 사용자에게 제시해 Market 총점 제외 여부와 hospitalCount1000m
+  45-cap 처리 방식을 명시적으로 승인받은 뒤 구현 착수(CLAUDE.md
+  분석→설계→승인→구현 원칙).
+- `src/lib/apartment-score/server/`에 서버 전용 Score Engine 구현: types/
+  config(scoreVersion=`EJIP_SCORE_V1_BETA`)/percentile(tie-aware, §8 null
+  의미 분리)/peer-groups(LOCAL→SIGUNGU→REGION_WIDE 3단계 폴백)/
+  category-helper(sub-metric 결측 비례 재분배)/categories(transport·
+  living·parking·complex·schoolAccess 5개 + market은 informational-only
+  별도)/regional-premium(하드코딩 없는 지역 내 percentile 기반 판정)/
+  explain(결정론적 문장)/briefing(Algorithmic Briefing Engine, AI 호출
+  없음)/calculate(오케스트레이터, DB read-only, score 미저장).
+- `GET /api/apt/[name]/score` 신규 route 추가 — 기존 `/api/apt/[name]/
+  route.ts`와 동일한 lawdCd/dong identity 관례 재사용,
+  `ApartmentMaster.aptSeq`를 `sggCd`+`umdName`+`aptNamesMatch`로 확정,
+  매칭 0건/2건 이상은 각각 NOT_FOUND/AMBIGUOUS로 안전 응답(다른 단지
+  score 오반환 방지). weight/raw percentile/peer 규칙/정규화 공식은
+  응답에 없음.
+- `src/app/apt/[name]/apt-client.tsx`의 기존 "단지 브리핑"
+  (`src/lib/apt-brief.ts`)을 감사한 결과 **이미 완전히 규칙 기반이라
+  AI 호출이 전혀 없음**을 확인(`callGeminiJSON`은 홈 AI 검색 기능에서만
+  쓰임) — 스펙이 가정한 "AI briefing" 전제와 실제 상태가 다름을 문서에
+  정정 기록, 이번 STEP에서 제거/교체하지 않음.
+- `scripts/apartment-score/verify-score-engine.ts`(25개 assert, DB
+  미사용) + `scripts/apartment-score/run-score-pilot.ts`(DB read-only,
+  서구 155건 + 해운대 247건 실제 score 산출) 작성·실행.
+- **QA 중 실제 문제 발견·수정**: briefing 종합 문장에서 "단지" 카테고리가
+  유일 강점일 때 "단지는 ... 눈여겨볼 만한 단지입니다"처럼 주어가
+  반복되는 부자연스러운 문장을 20건 QA에서 발견 — 종결부를 "곳입니다"로
+  바꿔 모든 카테고리 라벨과 겹치지 않도록 수정, 재검수로 확인.
+- bias test(신축/대단지/가격/지역/missing) 전부 심각한 편향 없음을 확인.
+  가격(medianPricePerM2)과 score의 중간 정도 상관(rho 0.30~0.34)은
+  Market weight=0인데도 나타나는 실세계 상관관계(측정하는 입지·인프라가
+  실제 가격과도 연관됨)로 판단, 회로가 가격을 직접 참조하지 않음을
+  재확인. sensitivity test(카테고리 1개씩 제외)에서 서구 top10 구성이
+  10/10 그대로 유지되어 특정 카테고리 독점 없음을 확인.
+- 지역 간 비교: 해운대 median(50)이 서구 median(53)보다 오히려 낮아
+  "해운대가 무조건 서구보다 고득점" 편향이 없음을 실측으로 확인.
+- 보안: `next build` 클라이언트 번들(`.next/static`) 전체를 weight/
+  threshold 관련 식별자로 grep — 0건. API secrecy는
+  verify-score-engine.ts 정적 검사로 커버.
+
+DB/schema/UI/score 저장:
+
+**DB schema/migration 변경 없음**(`prisma/schema.prisma` git diff 없음).
+score를 어떤 테이블에도 저장하지 않음(`calculate.ts`는 순수 조회+계산).
+UI/페이지/컴포넌트 변경 없음(API route 신규 추가만, 아직 어디서도 호출
+안 됨 — S3 연결 전).
+
+typecheck: `npx tsc --noEmit` 0 errors, `npx eslint src/lib/apartment-score
+"src/app/api/apt/[name]/score" scripts/apartment-score` clean, `npx next
+build` 성공(`/api/apt/[name]/score` 라우트 등록 확인), 신규 unit
+25/25 pass, pilot script 실행 완료(서구 155 + 해운대 247건).
+
+known limitation(다음 STEP 대상): `resolvePeerPool`의 REGION_WIDE
+폴백에서 타 지역 조회는 아직 구현하지 않음(현재 sigungu 표본이 항상
+충분해 발동한 적 없음). "단지" 카테고리가 briefing 강점으로 과대표집되는
+경향(buildYear 단일 sub-metric 의존도가 높음) — weight 재검토는 별도
+승인 필요, 이번 STEP에서 임의 조정하지 않음.
+
+상태:
+
+STEP SCORE S2C 구현 완료 / Score Engine·Explanation Engine·Algorithmic
+Briefing Engine 전부 구현 / API route 신규 추가(UI 미연결) / 서구·해운대
+실데이터 pilot 완료(402건 raw feature 전부 활용, OK 402건 중 155+247)
+/ bias/sensitivity 이상 없음 / briefing QA로 실제 문장 버그 1건
+발견·수정 / DB/UI 무변경, score 미저장 / **commit·push 하지
+않음**(사용자 지시, ChatGPT 검수 후 처리, 2026-08-20).
+
+**S3_GO** — 조건: known limitation 2건(REGION_WIDE 폴백 미구현, "단지"
+카테고리 과대표집 경향)을 S3 UI 연결 설계 시 인지하고 진행할 것.
