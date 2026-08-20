@@ -1,7 +1,9 @@
 import React from 'react';
+import KakaoPlaces from './KakaoPlaces';
 
 interface LivingEnvironmentPanelProps {
-  aptInfo: Record<string, string> | null;
+  address: string;
+  ready: boolean; // 단지 위치(address) 확정 전에는 검색을 시작하지 않는다
 }
 
 const cardStyle: React.CSSProperties = {
@@ -11,48 +13,11 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid var(--border-color)',
 };
 
-// "{count}대 (세대당 {ratio}대)" 형식으로 이미 계산되어 오는 실제 총주차대수 문자열에서
-// 세대당 주차대수만 뽑아 게이지로 시각화한다 — 새 데이터를 만드는 게 아니라 기존 aptInfo
-// 값을 파싱만 하는 것이라 추정치를 추가하지 않는다.
-const parseParkingRatio = (raw: string | null): number | null => {
-  if (!raw) return null;
-  const match = raw.match(/세대당\s*([\d.]+)\s*대/);
-  if (!match) return null;
-  const ratio = parseFloat(match[1]);
-  return isNaN(ratio) ? null : ratio;
-};
+// [APT DETAIL QA/IA v1 §11/§12] 세대당 주차대수는 상단 AptSpecGrid("주차대수")에 이미
+// 핵심 숫자로 표시된다 — 여기서 같은 값을 게이지로 한 번 더 보여주던 카드를
+// 제거했다(중복 제거, 데이터 자체를 없앤 게 아니라 표시 위치만 상단으로 일원화).
 
-function ParkingGauge({ aptInfo }: { aptInfo: Record<string, string> | null }) {
-  const parkingRaw = aptInfo?.['총주차대수'] || null;
-  const ratio = parseParkingRatio(parkingRaw);
-
-  if (!parkingRaw) {
-    return (
-      <div style={cardStyle}>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>🅿️ 주차공간</div>
-        <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>정보 없음</div>
-      </div>
-    );
-  }
-
-  // 세대당 1.5대 이상이면 게이지를 꽉 채운 것으로 취급(그 이상은 여유가 더 있다는 의미이므로
-  // 굳이 막대를 넘치게 그리지 않음). 세대당 대수 자체가 없는 응답(전체 대수만 있는 경우)이면
-  // 게이지 없이 원본 텍스트만 보여준다.
-  const capped = ratio !== null ? Math.min(ratio / 1.5, 1) : null;
-  const color = ratio === null ? 'var(--text-muted)' : ratio < 1 ? '#ef4444' : ratio < 1.3 ? '#f59e0b' : '#10b981';
-
-  return (
-    <div style={cardStyle}>
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>🅿️ 주차공간 (세대당)</div>
-      <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>{parkingRaw}</div>
-      {capped !== null && (
-        <div style={{ width: '100%', height: '8px', borderRadius: '999px', background: '#e5e7eb', overflow: 'hidden' }}>
-          <div style={{ width: `${capped * 100}%`, height: '100%', background: color, borderRadius: '999px' }} />
-        </div>
-      )}
-    </div>
-  );
-}
+const NEW_CATEGORY_LIMIT = 2;
 
 // 쿠팡 로켓배송/SSG 새벽배송은 국내 대부분 아파트 단지에서 통상적으로 이용 가능한 서비스라서
 // 이 단지에 한정된 검증된 사실이 아니라 일반적인 생활 인프라 안내로 표시한다(단지별 확인 필요
@@ -70,13 +35,67 @@ function DeliveryBadges() {
   );
 }
 
-export default function LivingEnvironmentPanel({ aptInfo }: LivingEnvironmentPanelProps) {
+// [APT DETAIL QA/IA v1 §13/§14] 기존에는 이 카드들(마트/편의점/약국/어린이집·유치원/
+// 공원/병원)이 전부 "교통" 탭(NeighborhoodInfoPanel)에 있었다 — 교통과 무관한 생활편의
+// 정보라 사용자 지적대로 "주거환경"으로 옮긴다. 컴포넌트(KakaoPlaces)는 그대로
+// 재사용하고 어느 탭에서 렌더링되는지만 바꿨다(회귀 위험 최소화, 로직 변경 없음).
+// 기존에 "병원·공원" 한 카드로 묶여 있던 걸 여기서는 의료/녹지 성격이 달라 분리했다.
+export default function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
-      <ParkingGauge aptInfo={aptInfo} />
+      <div style={cardStyle}>
+        <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🛒 대형마트</h4>
+        {ready ? (
+          <KakaoPlaces address={address} categories={['MT1']} limit={NEW_CATEGORY_LIMIT} />
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
+        )}
+      </div>
+      <div style={cardStyle}>
+        <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🏪 편의점</h4>
+        {ready ? (
+          <KakaoPlaces address={address} categories={['CS2']} limit={NEW_CATEGORY_LIMIT} />
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
+        )}
+      </div>
+      <div style={cardStyle}>
+        <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>💊 약국</h4>
+        {ready ? (
+          <KakaoPlaces address={address} categories={['PM9']} limit={NEW_CATEGORY_LIMIT} />
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
+        )}
+      </div>
+      <div style={cardStyle}>
+        {/* Kakao 공식 category_group_name 자체가 "어린이집,유치원"이라 라벨도 두
+            시설을 함께 지칭한다 — 실제로는 어린이집/유치원이 섞여서 나온다. */}
+        <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🧸 어린이집·유치원</h4>
+        {ready ? (
+          <KakaoPlaces address={address} categories={['PS3']} limit={NEW_CATEGORY_LIMIT} />
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
+        )}
+      </div>
+      <div style={cardStyle}>
+        <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🌳 공원</h4>
+        {ready ? (
+          <KakaoPlaces address={address} categories={[]} keywords={['공원']} limit={NEW_CATEGORY_LIMIT} />
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
+        )}
+      </div>
+      <div style={cardStyle}>
+        <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🏥 병원</h4>
+        {ready ? (
+          <KakaoPlaces address={address} categories={['HP8']} limit={NEW_CATEGORY_LIMIT} />
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
+        )}
+      </div>
       {/* [STEP50 V1 CLEANUP] 계절별 평균 관리비는 공개 데이터 소스가 없어(관리비는 단지
           관리사무소별로 다름) 항상 "데이터 준비 중입니다"만 노출했다 — 실데이터가 있는
-          주차공간/배송 생활권만 남기고 이 placeholder는 화면에서 제거했다. */}
+          항목만 남기고 이 placeholder는 화면에서 제거했다. */}
       <DeliveryBadges />
     </div>
   );

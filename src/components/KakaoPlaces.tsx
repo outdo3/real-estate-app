@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import styles from '@/app/apt/[name]/detail.module.css';
 
 // 카카오 로컬 카테고리 코드 중 이 컴포넌트에서 실제로 사용하는 7종.
 // SC4(학교), SW8(지하철), HP8(병원), MT1(대형마트), CS2(편의점), PM9(약국),
@@ -223,7 +224,16 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
     }
   }, [address, categoriesKey, keywordsKey, limit]);
 
-  if (loading) return <div>검색 중입니다...</div>;
+  // UX QA — 옆에 나란히 붙는 BusAccessCard와 로딩 시 시각적으로 어긋나 보이지 않도록
+  // 같은 skeleton 스타일을 쓴다.
+  if (loading) {
+    return (
+      <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className={styles.skeletonBar} style={{ width: '70%' }} />
+        <div className={styles.skeletonBar} style={{ width: '55%' }} />
+      </div>
+    );
+  }
   if (error) return <div style={{ color: 'var(--text-muted)' }}>{error}</div>;
 
   const isSchoolOnly = categoriesKey === 'SC4' && keywords.length === 0;

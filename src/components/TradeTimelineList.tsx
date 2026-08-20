@@ -42,7 +42,7 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
 
   const thStyle: React.CSSProperties = {
     padding: '0.4rem 0.3rem',
-    fontSize: '0.7rem',
+    fontSize: '0.78rem',
     fontWeight: 700,
     color: 'var(--text-muted)',
     textAlign: 'left',
@@ -82,8 +82,8 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
             let diffBadge: React.ReactNode = null;
             if (prevTrade && isSale && prevTrade.area === t.area) {
               const diff = t.price - prevTrade.price;
-              if (diff > 0) diffBadge = <span style={{ fontSize: '0.65rem', marginLeft: '0.25rem', color: '#ef4444', fontWeight: 700 }}>▲{diff.toFixed(1)}</span>;
-              else if (diff < 0) diffBadge = <span style={{ fontSize: '0.65rem', marginLeft: '0.25rem', color: '#3b82f6', fontWeight: 700 }}>▼{Math.abs(diff).toFixed(1)}</span>;
+              if (diff > 0) diffBadge = <span style={{ fontSize: '0.72rem', marginLeft: '0.25rem', color: '#ef4444', fontWeight: 700 }}>▲{diff.toFixed(1)}</span>;
+              else if (diff < 0) diffBadge = <span style={{ fontSize: '0.72rem', marginLeft: '0.25rem', color: '#3b82f6', fontWeight: 700 }}>▼{Math.abs(diff).toFixed(1)}</span>;
             }
 
             const [ymPart, dPart] = t.tradeDate.split('-').length === 3

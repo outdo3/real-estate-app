@@ -1,0 +1,46 @@
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 44px;
+  padding: 0 1rem;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.trigger:hover {
+  border-color: var(--primary-color);
+  background: white;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.placeholder {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+@media (max-width: 480px) {
+  .trigger {
+    padding: 0 0.75rem;
+  }
+  .placeholder {
+    font-size: 0.82rem;
+  }
+}

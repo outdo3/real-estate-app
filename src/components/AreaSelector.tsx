@@ -13,10 +13,13 @@ interface AreaSelectorProps {
   areaLabels?: Map<number, string>;
 }
 
-const MAX_CHIPS = 4;
-
-// 거래량이 많은 상위 평형만 칩으로 노출하고, 나머지는 드롭다운(레이어)에서 선택한다.
-// 현재 선택된 평형이 상위권 밖이어도 칩에 항상 보이도록 강제 포함한다.
+// [APT DETAIL QA/IA v1] 이전에는 거래량 상위 4개만 칩 상한을 둬서 노출하고 나머지는
+// "▼ 전체 평형" 모달에서만 선택 가능했다 — 실측(서구/해운대 활성 단지 20곳) 결과
+// 85%가 실제 평형 종류 5개 이상이었고, 일부는 최대 39종까지 있어 기본 화면에서
+// 절반 이상의 실존 평형이 안 보이는 문제로 이어졌다(데이터 손실이 아니라 상한값
+// 자체가 원인). 상한을 없애고 전체를 가로 스크롤 칩으로 노출한다 — 컨테이너는
+// 이미 overflowX:'auto'라 칩이 많아도 스크롤만 될 뿐 깨지지 않는다. 모달은 평형이
+// 많은 단지에서 빠르게 점프하는 보조 수단으로만 남긴다.
 export default function AreaSelector({ trades, selectedArea, onSelect, areaLabels }: AreaSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -27,19 +30,7 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
 
   const allAreas = Array.from(countByArea.keys()).sort((a, b) => parseFloat(a) - parseFloat(b));
 
-  const topAreas = Array.from(countByArea.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_CHIPS)
-    .map(([area]) => area);
-
-  // 어떤 평형이 상위 칩으로 뽑히는지는 위 거래량 기준을 그대로 유지하고,
-  // 뽑힌 이후의 "보여지는 순서"만 모달(allAreas)과 동일하게 전용면적
-  // 오름차순으로 맞춘다 — 거래량순 정렬 결과를 그대로 노출하면 면적 기준으로
-  // 봤을 때 순서가 무작위처럼 보이는 문제(모바일 검수에서 확인)가 있었다.
-  const chipAreas = (selectedArea !== '전체' && !topAreas.includes(selectedArea)
-    ? [...topAreas, selectedArea]
-    : topAreas
-  ).sort((a, b) => parseFloat(a) - parseFloat(b));
+  const chipAreas = allAreas;
 
   const renderAreaLabel = (area: string) => resolveAreaLabel(parseFloat(area), areaLabels);
 

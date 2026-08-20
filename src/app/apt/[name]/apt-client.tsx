@@ -19,8 +19,9 @@ import CommunityPreview from '@/components/CommunityPreview';
 import StickyPriceBar from '@/components/StickyPriceBar';
 import AdContainer from '@/components/AdContainer';
 import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
+import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
-import { getAreaDetailLabel, getUniqueAreaLabels } from '@/lib/area-utils';
+import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
@@ -94,6 +95,16 @@ export default function ApartmentDetail() {
   const [saleFilter, setSaleFilter] = useState<'all' | 'sale' | 'rent'>('all');
   const [visibleCount, setVisibleCount] = useState<number>(15);
   const [infraTab, setInfraTab] = useState<InfraTab>('환경');
+  // UX QA — 탭을 조건부 렌더(unmount/remount)하면 환경↔교통↔학군을 오갈 때마다
+  // KakaoPlaces/BusAccessCard/SchoolDistrictPanel이 매번 새로 geocode+API를 호출했다
+  // (버스는 TAGO 캐시가 없는 좌표에서 최초 호출이 수 초 걸림 — 재호출할수록 그 지연을
+  // 반복 체감). 한 번 연 탭은 계속 마운트해두고 display만 토글해 재방문 시 재호출을
+  // 없앤다 — 처음 열 때까지는 그대로 지연 렌더(마운트 안 됨)라 방문한 적 없는 탭 때문에
+  // API 호출이 늘지는 않는다.
+  const [visitedInfraTabs, setVisitedInfraTabs] = useState<Set<InfraTab>>(new Set(['환경']));
+  // APT DETAIL QA/IA v1 §6/§10 — 기본 단위는 기존 UX 그대로 ㎡ 유지. localStorage로
+  // 가볍게 기억만 하고(세션/서버 저장 아님), 과도한 persistence는 두지 않는다.
+  const [areaUnit, setAreaUnit] = useState<AreaUnit>('㎡');
 
   // 단지 커뮤니티 시설(골프연습장/수영장 등) — scripts/crawl_facilities.py가 채워둔 값을
   // 모달을 처음 열 때만 조회한다. null은 "정보 없음"(미조사 또는 DB에 값이 없음),
@@ -141,6 +152,15 @@ export default function ApartmentDetail() {
   useEffect(() => {
     setVisibleCount(15);
   }, [selectedArea, tradeTypeFilter, periodFilter, saleFilter]);
+
+  // 이전에 이 페이지에서 선택했던 면적 단위를 기억만 한다(§10) — 서버 저장/세션 없음.
+  useEffect(() => {
+    const saved = window.localStorage.getItem('ejip:areaUnit');
+    if (saved === '㎡' || saved === '평') setAreaUnit(saved);
+  }, []);
+  useEffect(() => {
+    window.localStorage.setItem('ejip:areaUnit', areaUnit);
+  }, [areaUnit]);
 
   useEffect(() => {
     if (!aptName) return;
@@ -332,6 +352,10 @@ export default function ApartmentDetail() {
   // 라벨 충돌(예: 59.8826㎡ vs 59.8839㎡가 둘 다 "59.88㎡"가 되는 경우)을 한 번에
   // 해소해 페이지 전체가 공유하는 라벨 맵을 만든다.
   const areaLabels = getUniqueAreaLabels(trades.map((t) => parseFloat(t.area)));
+  // APT DETAIL QA/IA v1 §9 — ㎡|평 토글은 chip/거래표에만 적용한다(areaLabels는 항상
+  // ㎡라 Hero/헤더의 "전용 X㎡ · 약 Y평" 이중표기는 그대로 둔다 — chipAreaLabels를 거기
+  // 넣으면 "전용 25.4평 · 약 25.4평"처럼 평이 중복 표기되는 문제가 생긴다).
+  const chipAreaLabels = getAreaLabelsForUnit(trades.map((t) => parseFloat(t.area)), areaUnit);
 
   const firstTrade = trades.length > 0 ? trades[0] : null;
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
@@ -694,29 +718,7 @@ export default function ApartmentDetail() {
     <div className={styles.main}>
       <FullPageLoader active={!pageReady && !hasLoadedOnce} />
       <Header
-        searchSlot={
-          <button
-            type="button"
-            onClick={() => openModal('빠른 검색')}
-            aria-label="다른 아파트 검색"
-            title="다른 아파트 검색"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '38px',
-              height: '38px',
-              border: 'none',
-              background: 'transparent',
-              borderRadius: '50%',
-              fontSize: '1.2rem',
-              cursor: 'pointer',
-              color: 'var(--text-primary)',
-            }}
-          >
-            🔍
-          </button>
-        }
+        searchSlot={<ApartmentSearchTrigger onOpen={() => openModal('빠른 검색')} />}
       />
 
       {/* 팝업(모달) */}
@@ -811,8 +813,32 @@ export default function ApartmentDetail() {
               </div>
 
               {/* 평형 선택 — 가격 확인 직후, 시세 흐름 확인 직전 */}
-              <div style={{ marginTop: '1.25rem' }}>
-                <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={areaLabels} />
+              <div style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={chipAreaLabels} />
+                </div>
+                <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '999px', padding: '2px' }}>
+                  {(['㎡', '평'] as AreaUnit[]).map((u) => (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => setAreaUnit(u)}
+                      aria-pressed={areaUnit === u}
+                      style={{
+                        padding: '0.3rem 0.65rem',
+                        borderRadius: '999px',
+                        border: 'none',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: areaUnit === u ? 'var(--primary-color)' : 'transparent',
+                        color: areaUnit === u ? 'white' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {u}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div style={{ marginTop: '1.25rem' }}>
@@ -896,7 +922,7 @@ export default function ApartmentDetail() {
               apiError={apiError}
               visibleCount={visibleCount}
               onLoadMore={() => setVisibleCount((v) => v + 15)}
-              areaLabels={areaLabels}
+              areaLabels={chipAreaLabels}
             />
           </div>
 
@@ -939,7 +965,10 @@ export default function ApartmentDetail() {
               <button
                 key={tab}
                 className={`${styles.infraTabBtn} ${infraTab === tab ? styles.infraTabBtnActive : ''}`}
-                onClick={() => setInfraTab(tab)}
+                onClick={() => {
+                  setInfraTab(tab);
+                  setVisitedInfraTabs((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
+                }}
               >
                 <span className={styles.infraTabIcon}>{tab === '환경' ? '🏡' : tab === '교통' ? '🚇' : '🏫'}</span>
                 <span className={styles.infraTabLabel}>{tab === '환경' ? '주거환경' : tab === '교통' ? '교통·편의' : '학군'}</span>
@@ -947,9 +976,21 @@ export default function ApartmentDetail() {
             ))}
           </div>
 
-          {infraTab === '환경' && <LivingEnvironmentPanel aptInfo={aptInfo} />}
-          {infraTab === '교통' && <NeighborhoodInfoPanel address={primaryAddress} ready={addressReady} />}
-          {infraTab === '학군' && <SchoolDistrictPanel address={primaryAddress} ready={addressReady} lawdCd={lawdCdState} />}
+          {visitedInfraTabs.has('환경') && (
+            <div style={{ display: infraTab === '환경' ? 'block' : 'none' }}>
+              <LivingEnvironmentPanel address={primaryAddress} ready={addressReady} />
+            </div>
+          )}
+          {visitedInfraTabs.has('교통') && (
+            <div style={{ display: infraTab === '교통' ? 'block' : 'none' }}>
+              <NeighborhoodInfoPanel address={primaryAddress} ready={addressReady} />
+            </div>
+          )}
+          {visitedInfraTabs.has('학군') && (
+            <div style={{ display: infraTab === '학군' ? 'block' : 'none' }}>
+              <SchoolDistrictPanel address={primaryAddress} ready={addressReady} lawdCd={lawdCdState} />
+            </div>
+          )}
         </div>
       </div>
 

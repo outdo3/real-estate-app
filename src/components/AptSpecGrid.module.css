@@ -24,11 +24,14 @@
   border-radius: 10px;
   padding: 0.6rem 0.4rem;
   text-align: center;
-  min-height: 68px;
+  min-height: 76px;
 }
 
+/* [APT DETAIL UX QA] 라벨/미표기/제보링크가 각각 10.9px/11.5px/9.9px로 모바일에서
+   읽기 어렵다는 실사용 피드백 — 정보 밀도는 유지하되(그리드/셀 구조 그대로) 최소
+   12px 이상으로 상향. .cell min-height도 늘어난 텍스트에 맞춰 68px→76px로 소폭 조정. */
 .cellLabel {
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
   font-weight: 600;
 }
@@ -41,13 +44,13 @@
 }
 
 .cellMissing {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
 .reportLink {
   margin-top: 0.15rem;
-  font-size: 0.62rem;
+  font-size: 0.75rem;
   font-weight: 600;
   padding: 0.1rem 0.4rem;
   border-radius: 999px;

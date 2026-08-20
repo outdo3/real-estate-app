@@ -5932,3 +5932,127 @@ selection priority 개선 / mobile 3폭+desktop 검증 / DB/score weight
 **S3_CLOSE 가능** — BLOCKER 없음. **APT_DETAIL_QA_GO** — 조건: 이번에
 고친 identity matching이 서구/해운대 외 지역에서도 정상 동작하는지 더
 넓은 QA 필요.
+
+## 2026-08-20 (4)
+
+### APT DETAIL QA/IA v1 — 상세페이지 데이터 일관성 + 정보구조 정리
+
+작업:
+
+- S3를 `feat: add apartment score ui and briefing`(`c7cc192`)로 커밋·푸시.
+- **평형칩 누락 실측 audit**: 서구/해운대 활성 거래 단지 20곳을 살아있는
+  API로 직접 조회해 원인을 확정 — `AreaSelector.tsx`의 `MAX_CHIPS=4`(거래량
+  상위 4개만 기본 노출) 상한이 원인이었고 데이터 손실은 아니었다(85%
+  단지가 실제 5종 이상, 최대 39종까지 있어 기본 화면에서 다수 평형이
+  안 보였음). 사용자 승인에 따라 상한을 제거하고 전체를 가로 스크롤 칩으로
+  노출(컨테이너는 이미 overflowX:auto).
+- **㎡↔평 토글 신규 구현**: `area-utils.ts`에 `getUniquePyeongLabels`(㎡
+  버전과 동일한 "임의 반올림으로 다른 평형을 합치지 않는" 충돌 해소
+  알고리즘을 평 단위에 적용, 공식은 정확히 `1평=3.305785㎡`)와
+  `getAreaLabelsForUnit` 단일 진입점 추가. `apt-client.tsx`에 기본값 ㎡인
+  토글 state(localStorage로 가볍게 기억) 추가, AreaSelector 칩·거래표
+  "타입" 컬럼에 일관되게 적용. Hero의 "전용 X㎡ · 약 Y평" 이중표기는
+  토글과 무관하게 유지(평 모드로 바꾸면 "약 25.4평 · 약 25.4평"처럼
+  중복되는 새 버그를 피하기 위한 의도적 결정). 실거래 데이터에서
+  18.009평/18.014평처럼 정밀도 escalation이 실제로 발동하는 사례를
+  브라우저로 직접 확인.
+- **주차정보 중복 제거**: 상단 `AptSpecGrid`와 주거환경 탭
+  `LivingEnvironmentPanel`이 동일한 `총주차대수` 값을 반복 표시하던
+  `ParkingGauge`를 주거환경에서 제거(상단 핵심 스펙은 유지).
+- **교통/편의 IA 분리**: "교통" 탭에 섞여있던 대형마트/편의점/약국/
+  어린이집·유치원/공원/병원(기존엔 "병원·공원" 한 카드) 6개 생활편의
+  카드를 "주거환경" 탭으로 이동, 교통 탭은 대중교통(지하철·버스)/
+  광역교통(KTX)만 남김. 컴포넌트(KakaoPlaces) 자체는 재사용, 렌더 위치만
+  변경, 신규 API/카테고리 없음.
+- **점수-상세 중복 검토**: 점수카드/상단 spec/주거환경/브리핑 간 실제
+  3중 반복은 점수카드가 원본 숫자를 전혀 반복하지 않는 기존 설계
+  덕분에 애초에 존재하지 않았음을 코드+실측으로 확인(추가 수정 없음).
+- **score identity matching 광역 QA**: 수영구/남구/동래구/연제구/
+  부산진구 각 10곳(총 50곳)을 살아있는 score API로 직접 호출 —
+  NOT_FOUND/AMBIGUOUS/잘못된 지역 fallback 전부 0건, 전부 정상적으로
+  INSUFFICIENT_DATA. 부산 전체 3,402개 apt를 대상으로 이름 충돌
+  전수 스캔 — S3에서 발견된 fuzzy 매칭 충돌 461건 중 453건이 S3의
+  exact-match-우선 수정으로 이미 해소됐고, 나머지 4쌍(8건)은 같은 동에
+  실제로 완전히 동일한 이름의 apt가 2건씩 존재하는 경우라 AMBIGUOUS로
+  안전하게 처리되는 것이 맞음(DATA_REVIEW_CANDIDATE로 분류, 임의 병합
+  안 함).
+- `scripts/apartment-score/verify-apt-detail-ia.ts` 신규(13개 assert) —
+  평 변환 공식/면적 무병합/toggle 단일 진입점/칩 상한 제거/주차 중복
+  제거/교통·주거환경 IA 이동을 정적+로직 검증.
+
+DB/schema/UI:
+
+DB schema/migration 변경 없음. 신규 feature collection 없음. UI는
+`AreaSelector`/`apt-client.tsx`/`LivingEnvironmentPanel`/
+`NeighborhoodInfoPanel` 4개 파일만 수정 — section 전체 재배치는 사용자
+결정에 따라 이번 STEP에서 하지 않음(다음 STEP 후보로 남김).
+
+typecheck: `npx tsc --noEmit` 0 errors, eslint clean, `npx next build`
+성공, 기존 `verify-score-engine.ts` 26/26 pass(회귀 없음) + 신규
+`verify-apt-detail-ia.ts` 13/13 pass.
+
+상태:
+
+APT DETAIL QA/IA v1 구현 완료 / 평형칩 누락 근본원인 확정 및 수정
+(UI_DESIGN_LIMITATION, 데이터 문제 아님) / ㎡↔평 토글 신규 구현 / 주차
+중복 제거 / 교통·편의 IA 분리 / score identity matching 부산 전역
+검증(50곳 실호출 + 3,402개 전수 스캔, wrong score fallback 0건) /
+DB/score weight 무변경 / **commit·push 하지 않음**(사용자 지시, ChatGPT
+검수 후 처리, 2026-08-20).
+
+**APT_DETAIL_QA_CLOSE** — BLOCKER 없음. unresolved 3건(진짜 동일이름
+4쌍 데이터 검토, section 전체 재배치, Hero 이중표기-토글 통합 여부)은
+전부 다음 STEP 후보로 문서화.
+
+## 2026-08-20 (5)
+
+### APT DETAIL QA/IA v1 FINAL — typography / 버스 로딩 / 검색 UI 추가 QA
+
+작업:
+
+- **Typography audit**: 상세페이지 전체 font-size를 grep 전수 확인, 11
+  ~12px 미만 텍스트 7곳 발견해 상향(AptSpecGrid 라벨 0.68rem→0.78rem,
+  "정보 없음" 0.72rem→0.8rem, "제보/수정" **0.62rem(9.9px)→0.75rem
+  (12px)**, StickyPriceBar 라벨/거래표 헤더 0.7rem→0.78rem, 거래표
+  증감 배지 0.65rem→0.72rem, 이집점수 Beta 배지 0.7rem→0.75rem).
+  AptSpecGrid `.cell` min-height도 68px→76px로 소폭 조정. 브랜드 전체
+  typography 체계는 새로 만들지 않고 상세페이지 범위 개별 값만 수정,
+  이미 12px 이상인 텍스트는 그대로 둠.
+- **버스 로딩 지연 원인 추적**: `/api/transit/bus-stops` 실측 결과 최초
+  (캐시 미스) 호출 **3.4초**, 캐시 hit 시 **0.02~0.03초** — 서버는 이미
+  `getOrSetCache`로 6시간 캐싱 중이었고, 지연의 실체는 **TAGO(국토교통부
+  공공데이터) 외부 API 자체의 콜드 스타트 응답 시간**임을 확정(정류소
+  조회 후 노선 조회가 구조상 순차적이라 지연이 누적됨) — 프론트엔드
+  워터폴 문제가 아님. 실제 개선: (1) `apt-client.tsx`의 환경/교통/학군
+  탭이 조건부 렌더로 매번 unmount/remount되며 재방문마다 재호출하던
+  문제를 `visitedInfraTabs` state로 고쳐 한 번 연 탭은 계속 마운트해두고
+  `display:none`만 토글(첫 방문 전에는 마운트 안 해 호출 증가 없음,
+  브라우저로 재방문 시 `bus-stops` 요청 0건 확인) — API 호출 수 증가
+  없이 재방문 재호출 제거. (2) `BusAccessCard`/`KakaoPlaces`의 밋밋한
+  "검색 중입니다..." 텍스트를 최종 콘텐츠 모양의 skeleton으로 교체(외부
+  API 지연 자체는 줄이지 않되 체감 개선). geocoding 공유 구조 변경은
+  검토했으나 지연의 실질 원인이 TAGO 자체라 효과 대비 위험이 커 보류.
+- **상세 상단 검색 UI**: `ApartmentSearchTrigger.tsx` 신규 — 기존 38×38
+  원형 이모지(🔍) 아이콘 버튼(Header가 이미 잡아둔 flex:1/max-width:320px
+  검색창 자리에 어중간하게 떠 있던 것)을 Lucide `Search` 아이콘 + "아파트명,
+  지역명 검색" placeholder가 보이는 완성된 검색창 모양으로 교체 — height
+  44px(터치 영역), hover/focus-visible 상태 추가, 클릭 시 여는 기존
+  `ApartmentQuickSearch` 모달/라우팅은 완전히 그대로.
+
+DB/schema/UI:
+
+DB schema/migration 변경 없음. UI는 typography 값/버스 skeleton/검색
+버튼/탭 캐싱 로직만 수정 — 새 라우트·새 API 없음.
+
+typecheck: `npx tsc --noEmit` 0 errors, eslint clean, `npx next build`
+성공, 기존 unit 26/26 + 13/13 pass(회귀 없음), 브라우저 실측(375/430+
+desktop, console error 0건, 탭 재방문 시 bus-stops 재호출 0건).
+
+상태:
+
+APT DETAIL QA/IA v1(1차 + 추가 UX QA) 전체 완료 — 평형칩/주차중복/교통
+편의 IA/score identity 광역 QA(1차) + typography/버스로딩/검색UI(추가)
+전부 tsc/eslint/build/unit test/실브라우저 검증 통과.
+**commit·push 진행**(사용자 지시, 2026-08-20).
+
+**APT_DETAIL_QA_CLOSE(FINAL)** — BLOCKER 없음.

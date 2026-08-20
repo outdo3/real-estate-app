@@ -40,6 +40,64 @@ function labelAtPrecision(m2: number, precision: number): string {
   return `${trimTrailingZeros(roundToPrecision(m2, precision), precision)}㎡`;
 }
 
+// APT DETAIL QA/IA v1 — ㎡↔평 토글(§6~8). "표시 문자열이 서로 다른 두 원본 면적을
+// 같은 값으로 뭉개지 않는다"는 getUniqueAreaLabels의 원칙을 평 단위에도 그대로
+// 적용한다 — 84.84㎡와 84.99㎡는 1자리 평(둘 다 25.7평)에서 겹치므로, 겹치는 것만
+// 겹치지 않을 때까지(최대 MAX_PYEONG_PRECISION) 정밀도를 올린다. ㎡ 버전과 알고리즘은
+// 동일하고 "무엇으로 변환해서 비교하느냐"만 다르다.
+const MAX_PYEONG_PRECISION = 3;
+
+function toPyeong(m2: number): number {
+  return m2 / M2_PER_PYEONG;
+}
+
+function pyeongLabelAtPrecision(m2: number, precision: number): string {
+  return `${trimTrailingZeros(roundToPrecision(toPyeong(m2), precision), precision)}평`;
+}
+
+// getUniqueAreaLabels/getUniquePyeongLabels가 공유하는 충돌 해소 알고리즘.
+// labelFn만 단위별로 다르게 주입한다(㎡ 표시값 자체를 변환하지 않음 — 내부 key는
+// 항상 원본 ㎡ 숫자 그대로).
+function buildUniqueLabels(
+  rawAreasM2: number[],
+  labelFn: (m2: number, precision: number) => string,
+  minPrecision: number,
+  maxPrecision: number
+): Map<number, string> {
+  const labels = new Map<number, string>();
+  let remaining = new Set(rawAreasM2.filter((v) => !Number.isNaN(v)));
+
+  for (let precision = minPrecision; precision <= maxPrecision && remaining.size > 0; precision++) {
+    const byLabel = new Map<string, number[]>();
+    remaining.forEach((v) => {
+      const label = labelFn(v, precision);
+      const bucket = byLabel.get(label);
+      if (bucket) bucket.push(v);
+      else byLabel.set(label, [v]);
+    });
+
+    const stillColliding = new Set<number>();
+    byLabel.forEach((values, label) => {
+      const resolved = values.length === 1 || precision === maxPrecision;
+      if (resolved) {
+        values.forEach((v) => labels.set(v, label));
+      } else {
+        values.forEach((v) => stillColliding.add(v));
+      }
+    });
+    remaining = stillColliding;
+  }
+
+  return labels;
+}
+
+// 평 단위 표시용 충돌 해소 라벨 맵(㎡ 버전과 동일 원칙, §5 "임의 round로 다른 평형을
+// 합치지 않는다"). 기본 1자리에서 시작 — 평은 관행적으로 소수 1자리까지만 봐도 대부분
+// 구분되고(3.3㎡ 차이가 1평), 필요할 때만 최대 3자리까지 올린다.
+export function getUniquePyeongLabels(rawAreasM2: number[]): Map<number, string> {
+  return buildUniqueLabels(rawAreasM2, pyeongLabelAtPrecision, 1, MAX_PYEONG_PRECISION);
+}
+
 // 칩/거래목록처럼 좁은 공간에서 쓰는 정확한 전용면적 표기(기본 2자리). 예: "84.84㎡"
 // 주의: 이 함수는 단일 값만 보고 판단한다 — 같은 목록 안의 다른 값과 라벨이 겹칠
 // 수 있는 곳(AreaSelector 칩, 거래목록처럼 여러 값이 나란히 보이는 UI)에서는 이
@@ -63,31 +121,16 @@ export function formatPyeong(rawExclusiveM2: number): string {
 // internal key(원본 area 문자열/숫자)는 만들지도, 바꾸지도 않는다 — 반환값은
 // 오직 "원본 숫자 -> 표시 문자열" 조회용 Map이다.
 export function getUniqueAreaLabels(rawAreasM2: number[]): Map<number, string> {
-  const labels = new Map<number, string>();
-  let remaining = new Set(rawAreasM2.filter((v) => !Number.isNaN(v)));
+  return buildUniqueLabels(rawAreasM2, labelAtPrecision, 2, MAX_AREA_PRECISION);
+}
 
-  for (let precision = 2; precision <= MAX_AREA_PRECISION && remaining.size > 0; precision++) {
-    const byLabel = new Map<string, number[]>();
-    remaining.forEach((v) => {
-      const label = labelAtPrecision(v, precision);
-      const bucket = byLabel.get(label);
-      if (bucket) bucket.push(v);
-      else byLabel.set(label, [v]);
-    });
+export type AreaUnit = '㎡' | '평';
 
-    const stillColliding = new Set<number>();
-    byLabel.forEach((values, label) => {
-      const resolved = values.length === 1 || precision === MAX_AREA_PRECISION;
-      if (resolved) {
-        values.forEach((v) => labels.set(v, label));
-      } else {
-        values.forEach((v) => stillColliding.add(v));
-      }
-    });
-    remaining = stillColliding;
-  }
-
-  return labels;
+// APT DETAIL QA/IA v1 §9 — chip/거래표/토글이 전부 같은 이 함수 하나만 거쳐가게 해서
+// "한 곳만 바뀌고 다른 곳은 ㎡로 남는" 불일치를 구조적으로 막는다(호출부는 단위 분기
+// 로직을 갖지 않고 이 함수가 돌려준 라벨 맵만 그대로 쓴다).
+export function getAreaLabelsForUnit(rawAreasM2: number[], unit: AreaUnit): Map<number, string> {
+  return unit === '평' ? getUniquePyeongLabels(rawAreasM2) : getUniqueAreaLabels(rawAreasM2);
 }
 
 // getUniqueAreaLabels()가 만든 맵에서 조회하고, 맵에 없는 값(예: 맵 생성 이후

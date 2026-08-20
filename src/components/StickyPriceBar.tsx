@@ -13,7 +13,7 @@ export default function StickyPriceBar({ aptName, latestPrice }: StickyPriceBarP
   return (
     <div className={styles.stickyBar}>
       <div className={styles.stickyBarPrice}>
-        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
+        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
         <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--primary-color)' }}>{latestPrice}</span>
       </div>
       <Link href={`/community/write?aptName=${encodeURIComponent(aptName)}`} className={styles.stickyBarWriteBtn}>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { formatEta } from './KakaoPlaces';
+import styles from '@/app/apt/[name]/detail.module.css';
 
 interface Props {
   address: string;
@@ -147,7 +148,22 @@ export default function BusAccessCard({ address }: Props) {
     };
   }, [address]);
 
-  if (loading) return <div>검색 중입니다...</div>;
+  // UX QA — TAGO(국토교통부 버스정류소정보)는 서버 캐시(6h)가 없는 좌표를 처음 조회할
+  // 때 실측 3초 이상 걸릴 수 있다(외부 공공데이터 API 자체 지연, 캐시 적중 시 20ms대로
+  // 확인됨 — 프론트 구조 문제가 아니라 최초 방문에서만 발생). 재호출 없이 체감을
+  // 개선하기 위해 최종 콘텐츠와 같은 모양의 skeleton으로 대기 상태를 보여준다.
+  if (loading) {
+    return (
+      <div style={{ lineHeight: 1.8 }} aria-busy="true">
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>가장 가까운 정류장</div>
+        <div className={styles.skeletonBar} style={{ width: '65%', height: '1.1rem', marginTop: '0.25rem' }} />
+        <div style={{ marginTop: '0.6rem' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>운행 노선</div>
+          <div className={styles.skeletonBar} style={{ width: '80%', height: '1rem', marginTop: '0.25rem' }} />
+        </div>
+      </div>
+    );
+  }
   if (error) return <div style={{ color: 'var(--text-muted)' }}>{error}</div>;
   if (!data) return null;
 
