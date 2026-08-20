@@ -6419,3 +6419,110 @@ STATISTICS V2 완료. **commit·push 하지 않음**(사용자 지시, ChatGPT
 
 **STATISTICS_V2_CLOSE** — BLOCKER 없음. **SCORE_V1_1_GO** 조건부 —
 이집점수 배치 조회 API가 먼저 필요.
+
+## 2026-08-20 (11)
+
+### STATISTICS V2 — commit + push
+
+STATISTICS V2 ChatGPT 검수 승인 반영: 11개 파일(수정 5 + 신규 6)을
+`feat: redesign ejip statistics experience`(`dcc5168`)로 커밋하고
+origin/main에 push했다. Push 후 `git status` clean, `HEAD ==
+origin/main == dcc5168` 확인.
+
+### STATISTICS V2.1 — Gap Investment Data Correctness Hotfix
+
+작업:
+
+- **실측으로 버그 규모 확인**: 부산 서구(lawdCd 26350) 최근 3개월
+  실거래로 기존 gapInvest 로직을 재현 — 갭 후보 133건 중 **68건(51%)
+  이 서로 다른 전용면적의 매매/전세를 뺀 값**이었다(예: "엘지"
+  49.83㎡ 매매 vs 134.94㎡ 전세). "가끔 발생하는 예외"가 아니라
+  단지명만으로 묶고 배열 순서를 신뢰하던 구조적 결함이었음을 확인.
+- `src/lib/gap-invest-calc.ts` 신규 — pairing 로직을 API 라우트에서
+  순수 함수(`buildGapCandidates`)로 분리해 단위 테스트 가능하게 함.
+  pair key를 `(정규화된 단지명, 정확한 raw 전용면적)`으로 변경(AREA
+  MODEL V1 원칙 그대로 — 84.99와 84.996은 병합하지 않음), "최근"
+  거래는 `dealDate` 기준 명시 정렬로 선택(API 응답 순서를 신뢰하지
+  않음), 취소(해제)된 매매 거래 제외.
+- **트레이스 중 추가 발견**: gapInvest가 전세+월세를 필터링 없이 섞어
+  쓰고 있었다(같은 파일의 전세가율 계산은 이미 순수 전세만 사용 —
+  gapInvest만 빠져 있었음). 표본에서 46%(637/1,373건)가 월세였다 —
+  함께 수정(순수 전세만 사용).
+- `/api/stats/dashboard/route.ts`의 gapInvest 블록을 이 함수 호출로
+  교체(순수 리팩터, 전세가율(§6) 계산은 기존 단지명 단위 그대로 유지
+  — 이번 STEP 감사 대상 아님).
+- 갭투자 화면 disclaimer 문구를 계산과 정확히 일치하도록 수정 —
+  "면적이 다를 수 있음"(이제 항상 동일 면적이라 부정확한 문구, 제거)
+  → "동일 전용면적의 최근 매매·전세 거래 기준, 계약 시점은 다를 수
+  있음"(실측 결과 시간차 0~72일·평균 21일로 여전히 남아있는 실제
+  한계라 유지).
+- `scripts/apartment-score/verify-statistics-v2-1-gap-invest.ts`
+  신규 — 사용자 지정 테스트 케이스 A~H(동일면적 pair/다른면적 no-pair/
+  다중매매·전세 최신선택/입력순서 무관/매매or전세 결측시 no-gap/근접
+  정밀도 강제병합 없음) 전부 + 추가 3건, 총 15개 assert.
+
+DB 변경:
+
+없음(`prisma/schema.prisma` 미변경)
+
+API/비즈니스 로직 변경:
+
+**있음, 의도된 것** — `/api/stats/dashboard/route.ts`의 gapInvest
+계산 로직을 수정했다(이번 STEP의 목적 자체가 이 계산의 correctness
+hotfix). 다른 모든 계산(전세가율/거래량/hotIssues/topPrices 등)과
+Statistics UI는 변경하지 않았다.
+
+검증:
+
+`npx tsc --noEmit` 0 errors / `npx eslint src` 0 errors(무관 기존
+warning 3건만) / `npx next build` 성공(동일 30 route) / 기존 73개 +
+신규 15개 = **88개 전부 PASS** / `/stats/gap-invest` 375·390·430·
+1024·1280px 가로 overflow 0건.
+
+상태:
+
+STATISTICS V2.1 완료. **commit·push 하지 않음**(사용자 지시, ChatGPT
+검수 후 처리, 2026-08-20).
+
+**STATISTICS_V2_1_CLOSE** — BLOCKER 없음.
+
+## 2026-08-20 (12)
+
+### STATISTICS V2.1 — FINAL IDENTITY CHECK
+
+gapInvest pair identity를 부산 4개구(해운대/부산진/동래/서구, 5,695건,
+835개 정규화 단지명) 실측으로 최종 검증했다.
+
+- **정정**: 직전 STEP 문서가 lawdCd 26350을 "부산 서구"로 잘못 표기한
+  것을 발견 — 실제로는 해운대구였다(공공 법정동코드 API로 직접 확인
+  후 정정, 우동/좌동/재송동 등 동 이름이 근거).
+- **aptSeq 필드가 4개구 전체에서 100% 존재**(2,134/2,068/1,113/380건)
+  하고, 매매 API·전세 API 간 교차 일치율 99.5%(404/406)임을 확인.
+  불일치 2건을 직접 조사해 **데이터 결함이 아니라 실제로 이름·동까지
+  같은 서로 다른 단지**였음을 확인(부산진구 "수목하우스" 양정동 —
+  지번 343-3 vs 141-10, aptSeq 26230-2325 vs 26230-2485). **동(dong)
+  단위 폴백만으로는 이 충돌을 잡지 못한다**는 걸 실측으로 증명.
+- 같은 정규화 이름이 2개 이상 동에 분산된 사례 11/835(1.3%, 예: "삼익"
+  이 부산진구·동래구 각각에서 서로 다른 동에 2곳씩 존재) — 오늘 표본
+  에서는 동일 면적 충돌이 0건이었지만 구조적으로 배제되지 않는 위험.
+- `src/lib/gap-invest-calc.ts`의 pair key를 **aptSeq 우선(없을 때만
+  (dong, 정규화 이름) 폴백) + exact exclusiveArea**로 승격 — 오늘의
+  사고를 되돌린 게 아니라 향후 발생할 수 있었던 동명이인 오염을
+  선제적으로 막는 하드닝.
+- `dashboard/route.ts`가 요청당 정확히 하나의 `lawdCd`만 해석하고
+  캐시 키까지 그 값에 고정됨을 코드로 확인 — 다른 지역 동명이인 혼입은
+  구조적으로 불가능함을 문서화(추정이 아닌 코드 인용).
+- `verify-statistics-v2-1-gap-invest.ts`에 6개 신규 assert 추가(총
+  21개, "수목하우스" 실측 사례를 축소한 회귀 테스트 포함) — 전부 PASS.
+
+DB 변경: 없음. API 변경: `gap-invest-calc.ts`의 identity key만 강화
+(계산 공식 자체는 직전 STEP과 동일, 폴백 시 결과 동일 보장).
+
+검증: `npx tsc --noEmit` 0 / `npx eslint src` 0 errors / `npx next
+build` 성공(동일 30 route) / 기존 88개 + 신규 6개(21개 파일 합계) =
+**94개 전부 PASS**.
+
+상태: STATISTICS V2.1 FINAL 완료, 검수 승인 후 commit(`fix: ensure
+accurate gap investment matching`) + push 진행.
+
+**STATISTICS_V2_1_FINAL_CLOSE** — BLOCKER 없음.

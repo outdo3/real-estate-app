@@ -138,9 +138,9 @@ check('갭투자 화면에 면적/시점 불일치 가능성 disclaimer가 있�
   const src = readSrc('src/app/stats/[type]/type-client.tsx');
   assert.ok(src.includes('면적') && src.includes('시점'), 'gapInvest disclaimer 문구가 없음');
 });
-check('gapInvest API 계산 로직(dashboard/route.ts)은 이번 STEP에서 변경하지 않음', () => {
+check('gapInvest API 계산 로직은 이 STEP(V2) 시점에는 변경하지 않았음(계산 자체는 STATISTICS V2.1에서 수정 — verify-statistics-v2-1-gap-invest.ts 참고)', () => {
   const src = readSrc('src/app/api/stats/dashboard/route.ts');
-  assert.ok(src.includes('gap = latestApt.dealAmount - latestRent.dealAmount'), '기존 계산식이 그대로 남아있어야 함(UI만 개선, 계산 임의 변경 금지 원칙)');
+  assert.ok(src.includes('gap:') && src.includes('dealAmount'), 'gapInvest 계산 코드 자체가 사라지면 안 됨');
 });
 
 // ---- 7. 12px 이하 typography 금지(§38) ----

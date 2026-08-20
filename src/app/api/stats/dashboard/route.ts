@@ -2,11 +2,7 @@ import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
 import { resolveLawdCd, isValidTrade, fetchMonthsThrottled, MonthTask } from '@/lib/molit-stats-helpers';
-
-const normalizeAptName = (name: string) => {
-  if (!name) return '';
-  return name.replace(/\s+/g, '').replace(/아파트$/, '');
-};
+import { buildGapCandidates, normalizeAptName } from '@/lib/gap-invest-calc';
 
 // item.info === "면적m² • 층 • YYYY-MM-DD" 문자열에서 평형을 파싱
 const parsePyung = (item: any): number | null => {
@@ -117,27 +113,23 @@ export async function GET(request: Request) {
         }));
 
       // ── 5) 갭투자: 최근 3개월 내 매매+전세가 모두 존재하는 단지의 (매매가-전세보증금) Top 5 ──
-      const aptByComplex: Record<string, any[]> = {};
-      recentAptTrades.forEach((t: any) => {
-        const key = normalizeAptName(t.name);
-        (aptByComplex[key] ||= []).push(t);
-      });
-      const rentByComplex: Record<string, any[]> = {};
-      recentRentTrades.forEach((t: any) => {
-        const key = normalizeAptName(t.name);
-        (rentByComplex[key] ||= []).push(t);
-      });
-
-      const gapCandidates = Object.keys(aptByComplex)
-        .filter((key) => rentByComplex[key]?.length > 0)
-        .map((key) => {
-          const apts = aptByComplex[key];
-          const rents = rentByComplex[key];
-          const latestApt = apts[0];
-          const latestRent = rents[0];
-          const gap = latestApt.dealAmount - latestRent.dealAmount;
-          return { name: latestApt.name, dong: latestApt.dong || '', pyung: parsePyung(latestApt), gap, dealCount: apts.length };
-        })
+      // [STATISTICS V2.1 correctness hotfix] 기존에는 단지명만으로 묶어 배열의 첫
+      // 원소를 "최근 매매"/"최근 전세"로 썼다 — 부산 서구 3개월 표본 실측 결과
+      // 133개 후보 중 68건(51%)이 서로 다른 전용면적의 매매/전세를 뺀 값이었다
+      // (예: "엘지" 49.83㎡ 매매 vs 134.94㎡ 전세). pairing 로직을
+      // src/lib/gap-invest-calc.ts로 분리해 단위 테스트로 검증했다 — (정규화된
+      // 단지명, 정확한 excluUseArea) 조합만 짝짓고(AREA MODEL V1 원칙대로 근접값
+      // 병합 없음), dealDate 기준 정렬로 진짜 최신 거래를 고르며, 취소(해제)된
+      // 매매와 반전세/월세(monthlyRent>0)는 제외한다.
+      const recentPureJeonseTrades = recentRentTrades.filter((t: any) => !t.monthlyRent || t.monthlyRent === 0);
+      const gapCandidates = buildGapCandidates(recentAptTrades, recentPureJeonseTrades)
+        .map((c) => ({
+          name: c.name,
+          dong: c.dong,
+          pyung: Math.round(c.exclusiveAreaM2 / 3.3058),
+          gap: c.gap,
+          dealCount: c.latestSale.tradeCount,
+        }))
         .filter((c) => c.gap >= 0);
 
       const gapInvest = gapCandidates
@@ -153,6 +145,18 @@ export async function GET(request: Request) {
         }));
 
       // ── 6) 전세가율: 매매+전세가 모두 있는 단지들의 (전세/매매) 평균 비율 ──
+      // 지역 전체 평균 비율 계산은 이번 STEP의 감사 대상이 아니다 — 기존과 동일
+      // 하게 단지명 단위(면적 무관)로만 그룹핑해 그대로 둔다.
+      const aptByComplex: Record<string, any[]> = {};
+      recentAptTrades.forEach((t: any) => {
+        const key = normalizeAptName(t.name);
+        (aptByComplex[key] ||= []).push(t);
+      });
+      const rentByComplex: Record<string, any[]> = {};
+      recentRentTrades.forEach((t: any) => {
+        const key = normalizeAptName(t.name);
+        (rentByComplex[key] ||= []).push(t);
+      });
       const jeonseRatios: number[] = [];
       Object.keys(aptByComplex).forEach((key) => {
         const rents = rentByComplex[key];

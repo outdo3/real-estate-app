@@ -320,7 +320,7 @@ function GapInvestView({ lawdCd }: { lawdCd: string }) {
       <div className={styles.panelHeader}>
         <SectionHeader
           title="소액 갭투자 단지 TOP 5"
-          description="최근 3개월 · 매매-전세 근사 갭. 단지 내 최근 매매 1건과 전세 1건을 비교한 근사값으로, 두 거래의 면적·시점이 다를 수 있습니다."
+          description="최근 3개월 · 동일 전용면적의 최근 매매·전세 거래 기준. 두 거래의 계약 시점(날짜)은 다를 수 있어 참고용으로 활용하세요."
         />
       </div>
       {list.length === 0 ? (
