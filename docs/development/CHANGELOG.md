@@ -6625,3 +6625,182 @@ calibration-and-busan-coverage.md` 작성. **commit·push 하지 않음**
 2곳만 READY, 나머지 14곳은 LIMITED(=사실상 BLOCKED, 위치 feature
 수집 자체가 안 됨 — score 엔진 결함이 아니라 데이터 수집 범위 문제).
 **부산 전체 지원 완료라고 말할 수 없음**(§40 no-fake-completeness).
+
+## 2026-08-20 (14)
+
+### BUSAN SCORE DATA V1 — 부산 16개 구·군 Feature 확대 + 학교거리 Correctness Preflight
+
+SCORE V1.1을 커밋·푸시(`1da0c0a fix: calibrate school accessibility
+score explanations`, HEAD==origin/main 확인)한 뒤, SCORE V1.1에서
+발견만 하고 미수정했던 두 항목을 실제로 고치고, 서구·해운대 전용이던
+feature 수집 파이프라인을 부산 16개 구·군 전체로 확장했다.
+
+- **"송도 +5분" 하드코딩 제거**: `api/school/apartments/route.ts`에서
+  학교 이름에 "송도"가 포함되면 인근 아파트 도보시간에 +5분을 일괄
+  가산하던 코드를 찾아 git history로 근거를 추적했다 — 과거
+  "특정 지형(송도) 언덕 페널티 보정" 코멘트가 있었으나 리팩터 중
+  유실됐고, "+5"는 실측 경사 데이터가 아닌 임의값이었다. 다른 숫자로
+  대체하지 않고 제거했다(실측: e편한세상송도더퍼스트비치 도보 14분→
+  9분, 통제군인 비-송도 학교는 무변화 확인).
+- **walking time wording**: 같은 라우트의 "도보 N분"에 "약"이 빠져
+  있던 것을 발견해 "도보 약 N분"으로 수정(KakaoPlaces.tsx는 이미 "약"
+  표기 중이었음, 실제로는 직선거리÷속도 근사이지 실제 보행경로 API가
+  아니므로).
+- **regionLabel 정확도 수정**: `calculate.ts`가 카테고리별 실제
+  peerLevel(LOCAL/SIGUNGU/REGION_WIDE)과 무관하게 항상 sigungu 이름을
+  써서, 실측상 92.9%가 실제로는 동(LOCAL) 단위 비교인데도 "서구 비교
+  단지보다"로 표현되던 문제를 고쳤다. 신규 `region-label.ts`가
+  `CategoryResult.peerLevel`을 보고 LOCAL→동 이름/주차 LOCAL→"{구}
+  유사 연식"/SIGUNGU→구 이름/REGION_WIDE→"부산 전체"를 고른다.
+  **score 값 자체는 무변경**(구덕금호 26140-11 실측: 수정 전후 54점
+  동일, 텍스트만 "서구"→"동대신동3가"로 정확해짐).
+- **부산 16개 구·군 feature 확대**: `collect-location-features.ts`에
+  임의 `--sggCd=` 모드 추가(기존 canary/seogu/haeundae 유지),
+  `collect-market-features.ts`의 REGIONS를 2개→16개 구·군 전체로
+  확장(MOLIT은 저비용이라 즉시 전체 실행, 2,937건 upsert). 신규
+  `expand-busan-location-features.ts`가 사용자 지정 순서(부산진구→
+  기장군)로 나머지 13개 구·군을 순차 수집 — 기존 idempotent upsert +
+  freshness-skip 로직을 그대로 재사용해 새 상태 관리 없이 재실행만으로
+  이어서 진행 가능(429 연속 5회 시 안전 중단).
+- 검증 배치로 중구(55건) 전체 수집 성공(429 0건), 재실행 시 55건 전부
+  freshness-skip되는 것으로 idempotency/resume을 실측 확인. 이 STEP
+  작성 시점까지 부산진구(378건 중 121건+, 진행 중) 수집이 백그라운드로
+  계속 진행 중 — **나머지 12개 구·군은 순서상 아직 미도달**(완료를
+  사실과 다르게 주장하지 않음, §40 원칙 유지).
+- `busan-coverage-audit.ts`에 구별 score distribution, wrong-score
+  prevention(coverage<0.6인데 OK/교차 구·군 오염/중복 aptSeq), READY/
+  LIMITED/BLOCKED 초안 분류를 추가 — 전부 이상 0건으로 통과.
+
+DB 변경: 없음(`prisma/schema.prisma` 미변경, `git diff --stat`으로
+확인). API 응답 스키마 변경 없음(텍스트 내용만 정확해짐).
+
+검증: `npx tsc --noEmit` 0 / `npx eslint` 0 errors(기존 무관 warning
+3건만) / `npx next build` 성공(동일 30 route) / `verify-score-engine.ts`
+기존 38개 + 신규 9개(regionLabel 정확도 7개 + 확장 배치 리스트 불변식
+2개) = **47개 전부 PASS**.
+
+상태: 코드/파이프라인/테스트/빌드 전부 완료. 데이터 수집 자체는 진행
+중(서구/해운대/중구 READY, 부산진구 진행 중, 나머지 12개 구·군 대기) —
+**commit·push 하지 않음**(사용자 지시, ChatGPT 검수 후 처리).
+
+**BUSAN_SCORE_DATA_V1** — 코드 완료, 데이터 수집 NOT_CLOSE(진행 중).
+BLOCKER 없음.
+
+## 2026-08-21 (15)
+
+### BUSAN SCORE DATA V1 — 데이터 수집 완료(부산 16개 구·군 전체)
+
+(14)에서 진행 중이던 13개 구·군 location feature 수집을 완료했다.
+백그라운드 실행이 외부 요인으로 한 번 중단됐으나(부산진구 100%,
+동래구 100%, 연제구 146/222 시점) `expand-busan-location-features.ts`를
+그대로 재실행하는 것만으로 이어서 완료됐다 — freshness-skip이 이미
+끝난 816건을 자동으로 건너뛰고 나머지부터 재개함을 실측으로 증명했다
+(§19 resume, 상태 파일 없이도 재개 가능함을 실제로 확인).
+
+- **최종 결과**: 부산 16개 구·군 **전체**가 location feature를 확보
+  (80.2~95.5% coverage, 합계 `ApartmentLocationFeature` 3,067건).
+  `calculateApartmentScore()` 전수 실행 결과 3,059/3,067건(99.7%) OK,
+  score 분포 정상(min14~max81, ≤10/≥90점 0건, 16개 구 median이 모두
+  47~53 좁은 범위), wrong-score prevention 전부 통과(coverage<0.6인데
+  OK 0건, 중복 aptSeq 0건). 429(rate limit) 전 과정 0건.
+- **서구/해운대/중구 regression 확인**: 재수집되지 않고 원본 그대로
+  보존됨(구덕금호 26140-11의 `fetchedAt`이 이 STEP 이전 시각 그대로).
+- **school anomaly 직접 조사**: 0m 거리 1건(수영구 "광남" — 반경 내
+  학교 2곳 존재, 단지가 학교와 붙어있는 실제 초품아 케이스로 확인),
+  null-but-complete 16건(전부 기장군 일광·기장읍 해안 저밀도 지역과
+  해운대 송정 서핑마을 — 실제로 반경 1000m 내 초등학교가 없는 지역이
+  맞음을 지리적으로 확인) — 둘 다 데이터 결함이 아니라 실제 상태.
+- **cross-district 오염 검사 정교화**: 최초 점검에서 aptSeq 접두어
+  기준 불일치 1건(래미안포레스티지1단지, aptSeq `26260-3648`, 현재
+  sigungu=금정구인데 접두어는 옛 동래구 코드)이 나왔으나, score
+  engine이 실제로 쓰는 cohort key는 aptSeq 접두어가 아니라 `sggCd`
+  필드임을 코드로 재확인하고, "sggCd가 2개 이상 sigungu에 걸쳐
+  쓰이는가"로 검사를 다시 짰다 — 결과 0건. 원래 발견은 1988년 금정구가
+  동래구에서 분리된 행정구역 변천사로 MOLIT aptSeq 접두어가 옛 코드를
+  유지하고 있는 것으로 확인했다(score에는 무해, SCHOOL V2/향후 참고용
+  으로만 기록).
+
+DB 변경: 없음. API 변경: 없음(이미 (14)에서 완료).
+
+검증: 위 실행은 전부 기존 `calculateApartmentScore()`/`busan-coverage-
+audit.ts`(§25 검사 정교화만 반영) 재실행 — 코드 변경은 감사 스크립트의
+cross-district 검사 로직 개선 1건뿐, `npx tsc --noEmit` 0 / `npx eslint`
+0 errors 재확인.
+
+상태: 코드/파이프라인/데이터 수집 전부 완료. **commit·push 하지
+않음**(사용자 지시, ChatGPT 검수 후 처리).
+
+**BUSAN_SCORE_DATA_V1_CLOSE** — BLOCKER 없음. 부산 16개 구·군 전체
+READY. parking coverage(74.2% 결측)는 기존부터 있던 별개 한계로
+이번 STEP 범위 밖.
+
+## 2026-08-21 (16)
+
+### BUSAN SCORE DATA V1 — 최종 8건 재조사 + PEER FALLBACK HOTFIX
+
+(15)에서 "정상 준비중"으로 결론 냈던 non-OK 8건을 commit 전 최종 점검
+차원에서 `calculateApartmentScore()`/`resolvePeerPool()`/
+`computeCategoryFromSubMetrics()`를 직접 재현해 개별 조사한 결과,
+기존 결론이 부정확했음을 발견했다.
+
+**발견한 문제**: 8건 전부(중구 대청동4가 4건, 기장군 일광읍 이천리
+4건) raw location feature 값 자체는 정상 존재했다. 실제 원인은
+`resolvePeerPool()`이 LOCAL(동) 후보를 "존재 개수"만으로 선택하고, 그
+후보들이 실제로 해당 sub-metric 값을 갖고 있는지는 보지 않는 구조적
+엣지케이스였다 — 두 동 모두 LOCAL 후보 수가 정확히 `PEER_SAMPLE_MEDIUM`
+(5)이라 SIGUNGU(중구 55건/기장군 136건의 훨씬 안정적인 표본)로
+폴백하지 않았고, 그 5명 중 일부가 특정 feature를 결측하면
+`includedCount<5`로 sub-metric이 전부 제외되며 카테고리 전체가
+NOT_SCORED로 빠졌다. `FEATURE_CACHE_MISSING`(§18 taxonomy)으로 분류된
+게 실제로는 부정확한 라벨이었다(수집은 이미 됐고 peer-pool 경계조건
+문제였다).
+
+**PEER FALLBACK HOTFIX(승인된 설계, Option C)**:
+
+- `src/lib/apartment-score/server/peer-groups.ts` — `resolvePeerPoolLevels()`
+  신규 추가(LOCAL→SIGUNGU→REGION_WIDE 시도 순서 배열 반환). 기존
+  `resolvePeerPool()`은 `resolvePeerPoolLevels()[0]`에 위임하도록만
+  변경 — 반환값/동작 100% 동일 유지(신규 테스트로 동등성 assert).
+- `src/lib/apartment-score/server/calculate.ts` — `computeCategoryWithFallback()`
+  신규 추가. 카테고리 단위로 LOCAL→SIGUNGU→REGION_WIDE를 순서대로
+  시도하다 `status!=='NOT_SCORED'`가 나오면 즉시 채택한다. 기존
+  3,059건은 1차(LOCAL) 시도에서 바로 성공해 동작·성능 영향 없음.
+- `src/lib/apartment-score/server/types.ts` — `PeerLevel` 타입 주석에
+  REGION_WIDE가 현재 구현상(`cohortOtherRegions` 미지정 시) SIGUNGU와
+  동일한 후보 집합이라는 사실을 명시(이름과 실제 동작 불일치 문서화).
+- **변경하지 않은 것**(승인된 범위 그대로): `category-helper.ts`,
+  `percentile.ts`, `config.ts`(weight/threshold/`PEER_SAMPLE_MEDIUM`
+  전부 무변경), 5개 category 파일, DB/schema.
+
+**Target 8 결과**: 8건 전부 preparing → OK로 회복(새들맨션 51점,
+경우빌라 42점, 동호이루마시티 59점, 동림 46점, 동부산쏠마레 34점,
+일광신도시비스타동원2차 63점, 가화일광타워 32점, 부전비치 44점).
+
+**부산 3,067건 전체 regression**: OK 3,059→**3,067건**(+8),
+preparing 8→**0건**(우연히 8건 전부 SIGUNGU에서 해결 가능한 동일
+패턴이었을 뿐, 억지로 100%를 만들지 않았다 — REGION_WIDE까지 실패하는
+케이스는 여전히 정직하게 preparing으로 남도록 테스트로 고정돼 있음).
+
+**기존 3,059건 score drift**: 30건(0.981%) 변경, 평균 |변화| 5.13점,
+최대 -9점. **transport/living/complex/schoolAccess는 0건(0.000%)
+변경**으로 완전히 안정적이었고, **parking만 33건(1.079%) 변경** —
+parking의 sigungu+buildYear decade-band LOCAL도 §18-A와 동일한
+구조적 버그를 갖고 있어서, 이전엔 숨겨져 있던(NOT_SCORED로 제외되고
+가중치가 재분배되던) 낮은 주차 점수가 이번 수정으로 정직하게
+드러났다(예: 26710-35 현대, coverage 0.85→1.0, 총점 69→60). weight/
+formula 변경이 아니라 이미 있던 데이터를 이제는 빼지 않고 반영한
+결과다. 서구(155건 중 4건)/해운대구(247건 중 1건) 모두 동일 패턴.
+
+DB 변경: 없음. score weight/threshold/percentile 공식: 무변경.
+지역별 하드코딩: 없음. 0-대체: 없음(테스트로 고정).
+
+검증: `verify-score-engine.ts` 56개 assert 전부 PASS(신규 12개 —
+resolvePeerPool/Levels 동등성 2개, A~F/H 엣지케이스 6개, 결정론 1개
+등). `npx tsc --noEmit` 0 errors. `npx eslint .` 0 errors(기존 무관
+warning 5건만). `npx next build` 성공.
+
+상태: 완료. `docs/development/BUSAN-SCORE-DATA-V1-expansion-and-
+readiness.md` §18-A(원인 재조사)/§18-B(hotfix 결과)로 기록.
+
+**BUSAN_SCORE_DATA_V1_CLOSE = YES.** BUSAN_SCORE_READINESS = READY
+(3,067/3,067 OK). SCHOOL_V2_GO = YES(다음 STEP 진행 가능).

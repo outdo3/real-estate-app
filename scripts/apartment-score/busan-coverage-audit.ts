@@ -229,6 +229,60 @@ async function main() {
     console.log(`  n=${coverages.length}, min=${coverages[0].toFixed(2)}, median=${percentile(coverages, 50)?.toFixed(2)}, max=${coverages[coverages.length - 1].toFixed(2)}`);
   }
 
+  // ---- [BUSAN SCORE DATA V1 §27] 구·군별 score distribution ----
+  console.log('\n=== BUSAN SCORE DATA V1 §27: 구·군별 score distribution ===');
+  Object.entries(byGuOutcome).forEach(([gu, rows]) => {
+    const guScores = rows.filter((r) => r.score != null).map((r) => r.score!).sort((a, b) => a - b);
+    if (guScores.length === 0) return;
+    console.log(`  ${gu}: n=${guScores.length}, min=${guScores[0]}, p25=${percentile(guScores, 25)}, median=${percentile(guScores, 50)}, p75=${percentile(guScores, 75)}, max=${guScores[guScores.length - 1]}`);
+  });
+
+  // ---- [BUSAN SCORE DATA V1 §25] wrong-score prevention 검사 ----
+  console.log('\n=== BUSAN SCORE DATA V1 §25: wrong-score prevention ===');
+  const belowThreshold = outcomes.filter((o) => o.status === 'OK' && o.coverage != null && o.coverage < 0.6);
+  console.log(`  OK인데 coverage<0.6: ${belowThreshold.length}건(있으면 안 됨)`);
+  // [진짜 중요한 검사] score engine(calculate.ts)은 cohort/peer를 항상 master.sggCd로
+  // 묶는다(아래 aptSeq 접두어가 아니다) — 그러니 실제 오염 위험은 "같은 sggCd 값을
+  // 가진 행들이 서로 다른 sigungu를 갖고 있는가"(=sggCd 자체가 자기 불일치)이지
+  // "aptSeq 접두어가 현재 sigungu와 같은가"가 아니다. 후자는 1988년 금정구가
+  // 동래구에서 분리되는 등 행정구역 변천사로 MOLIT 단지 고유번호(aptSeq)가 옛
+  // lawdCd 접두어를 그대로 갖고 있는 경우가 있어(실측 확인: 26260-3648 래미안
+  // 포레스티지1단지, 현재 sigungu=금정구·sggCd=26410인데 aptSeq 접두어는 옛
+  // 동래구 코드 26260) 참고 정보일 뿐 실제 채점 오류가 아니다.
+  const sigunguBySggCd = new Map<string, Set<string>>();
+  allMaster.forEach((m) => {
+    if (!m.sggCd || !m.sigungu) return;
+    const set = sigunguBySggCd.get(m.sggCd) ?? new Set<string>();
+    set.add(m.sigungu);
+    sigunguBySggCd.set(m.sggCd, set);
+  });
+  const sggCdSelfConsistency = [...sigunguBySggCd.entries()].filter(([, sigungus]) => sigungus.size > 1);
+  console.log(`  master.sggCd가 2개 이상 sigungu에 걸쳐 쓰인 경우(실제 score cohort 오염 위험): ${sggCdSelfConsistency.length}건(있으면 안 됨)`);
+
+  const sggCdToSigungu = new Map<string, string>();
+  allMaster.forEach((m) => { if (m.sggCd && m.sigungu && !sggCdToSigungu.has(m.sggCd)) sggCdToSigungu.set(m.sggCd, m.sigungu); });
+  const crossDistrictLeak = outcomes.filter((o) => {
+    const sggCdPrefix = o.aptSeq.split('-')[0];
+    const expectedGu = sggCdToSigungu.get(sggCdPrefix);
+    return expectedGu && o.gu && expectedGu !== o.gu;
+  });
+  console.log(`  [참고, score 무관] aptSeq 접두어와 현재 sigungu 불일치(MOLIT 옛 행정구역 코드 잔존 가능성): ${crossDistrictLeak.length}건`);
+  const dupAptSeq = new Map<string, number>();
+  allMaster.forEach((m) => { if (m.aptSeq) dupAptSeq.set(m.aptSeq, (dupAptSeq.get(m.aptSeq) ?? 0) + 1); });
+  const dupCount = [...dupAptSeq.values()].filter((c) => c > 1).length;
+  console.log(`  ApartmentMaster 내 중복 aptSeq: ${dupCount}건(있으면 안 됨)`);
+
+  // ---- BUSAN SCORE READINESS(READY/LIMITED/BLOCKED) ----
+  console.log('\n=== BUSAN SCORE READINESS 분류(초안) ===');
+  Object.entries(guSummaryRows.reduce((acc: Record<string, typeof guSummaryRows[0]>, r) => { acc[r.gu] = r; return acc; }, {})).forEach(([gu, r]: [string, any]) => {
+    const coveragePct = r.total > 0 ? (100 * r.withLoc) / r.total : 0;
+    let status: string;
+    if (coveragePct === 0) status = 'BLOCKED(feature 미수집)';
+    else if (coveragePct < 50) status = 'LIMITED(부분 수집)';
+    else status = 'READY';
+    console.log(`  ${gu}: location coverage ${coveragePct.toFixed(1)}% → ${status}`);
+  });
+
   // ---- 샘플 export(QA용) ----
   console.log('\n=== 샘플(구별 최대 3건, QA용) ===');
   for (const gu of BUSAN_GUGUN) {

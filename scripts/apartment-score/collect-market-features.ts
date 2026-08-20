@@ -20,9 +20,27 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env.local'), quiet: true }
 import { prisma } from '@/lib/prisma';
 import { fetchRegionMonthTrades, aggregateByAptSeq, recentMonths, type MolitTradeRaw } from '@/lib/apartment-score/collectors/market';
 
+// [BUSAN SCORE DATA V1 §7~§9] 서구/해운대 2곳뿐이던 목록을 부산 16개 구·군
+// 전체로 확장 — MOLIT은 구·군+월 단위 호출이라(단지별 아님) 16개 전체를 한 번에
+// 돌려도 16×12=192회로 비용이 낮다(§9 배치 우선순위는 location feature 쪽에
+// 적용, market은 이미 저비용이라 분리할 필요가 없다).
 const REGIONS = [
   { label: '서구', lawdCd: '26140' },
   { label: '해운대', lawdCd: '26350' },
+  { label: '부산진구', lawdCd: '26230' },
+  { label: '동래구', lawdCd: '26260' },
+  { label: '연제구', lawdCd: '26470' },
+  { label: '남구', lawdCd: '26290' },
+  { label: '수영구', lawdCd: '26500' },
+  { label: '사하구', lawdCd: '26380' },
+  { label: '동구', lawdCd: '26170' },
+  { label: '중구', lawdCd: '26110' },
+  { label: '영도구', lawdCd: '26200' },
+  { label: '북구', lawdCd: '26320' },
+  { label: '사상구', lawdCd: '26530' },
+  { label: '금정구', lawdCd: '26410' },
+  { label: '강서구', lawdCd: '26440' },
+  { label: '기장군', lawdCd: '26710' },
 ];
 const MONTHS_BACK = 12;
 

@@ -1,6 +1,7 @@
 import type { Band, CategoryKey, CategoryResult, ExplainedCategory } from './types';
 import { absoluteSchoolDistanceBand } from './school-distance-band';
 import { buildSchoolAccessSentence } from './school-access-sentence';
+import { regionLabelForPeerLevel } from './region-label';
 
 // §32: explanation은 raw metric(카테고리 점수)+peer 결과에서만 결정론적으로 생성한다.
 // AI 호출 없음, 임의 자연어 판단 없음.
@@ -63,7 +64,8 @@ function deterministicIndex(seed: string, mod: number): number {
 export function explainCategory(
   aptSeq: string,
   cat: CategoryResult,
-  regionLabel: string,
+  sigungu: string,
+  umdName: string | null,
   schoolAccessDistanceM?: number | null
 ): ExplainedCategory {
   const label = CATEGORY_LABELS[cat.key];
@@ -73,6 +75,9 @@ export function explainCategory(
   }
 
   const band = bandOf(cat.score);
+  // [BUSAN SCORE DATA V1 §3] 이 카테고리에 실제로 쓰인 peerLevel에 맞는 지역
+  // 표현 — score/band 자체는 변경 없음, 문구만 correctness 수정.
+  const regionLabel = regionLabelForPeerLevel(cat.peerLevel, sigungu, umdName, cat.key === 'parking');
 
   // [SCORE V1.1 §5~§11] schoolAccess는 절대 거리(체감)를 항상 먼저 말하고 상대
   // percentile은 모순되지 않는 보조 문장으로만 붙인다 — 다른 4개 카테고리는
@@ -103,10 +108,11 @@ export function explainCategory(
 export function explainAllCategories(
   aptSeq: string,
   categories: CategoryResult[],
-  regionLabel: string,
+  sigungu: string,
+  umdName: string | null,
   schoolAccessDistanceM?: number | null
 ): ExplainedCategory[] {
-  return categories.map((c) => explainCategory(aptSeq, c, regionLabel, schoolAccessDistanceM));
+  return categories.map((c) => explainCategory(aptSeq, c, sigungu, umdName, schoolAccessDistanceM));
 }
 
 export { bandOf };

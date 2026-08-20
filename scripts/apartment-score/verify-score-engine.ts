@@ -12,14 +12,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import assert from 'assert';
 import { rankFeature, scoreFromPercentile } from '@/lib/apartment-score/server/percentile';
-import { resolvePeerPool } from '@/lib/apartment-score/server/peer-groups';
-import { computeCategoryFromSubMetrics } from '@/lib/apartment-score/server/category-helper';
+import { resolvePeerPool, resolvePeerPoolLevels, type PeerCandidate } from '@/lib/apartment-score/server/peer-groups';
+import { computeCategoryFromSubMetrics, type SubMetricSpec } from '@/lib/apartment-score/server/category-helper';
+import { computeCategoryWithFallback } from '@/lib/apartment-score/server/calculate';
 import { computeMarketInfo } from '@/lib/apartment-score/server/categories/market';
 import { computeRegionalStrengths } from '@/lib/apartment-score/server/regional-premium';
 import { buildBriefing } from '@/lib/apartment-score/server/briefing';
 import { explainCategory } from '@/lib/apartment-score/server/explain';
 import { absoluteSchoolDistanceBand } from '@/lib/apartment-score/server/school-distance-band';
 import { classifyPreparingReason } from '@/lib/apartment-score/server/preparing-reason';
+import { regionLabelForPeerLevel } from '@/lib/apartment-score/server/region-label';
 import type { CategoryResult, RawLocationFeature, RawMarketFeature } from '@/lib/apartment-score/server/types';
 import { aptNamesMatch, normalizeAptName } from '@/lib/apt-name-match';
 
@@ -208,19 +210,19 @@ check('표본(§25 min 20) 미달이면 strength 생성 안 함', () => {
 console.log('--- briefing determinism & naturalness ---');
 check('같은 입력 → 같은 briefing(random 없음)', () => {
   const categories = mkCategories({ transport: 90, living: 88, parking: 40, complex: 60, schoolAccess: 55 });
-  const b1 = buildBriefing(categories, [], '서구');
-  const b2 = buildBriefing(categories, [], '서구');
+  const b1 = buildBriefing(categories, [], '서구', null);
+  const b2 = buildBriefing(categories, [], '서구', null);
   assert.deepStrictEqual(b1, b2);
 });
 check('강점 최대 2개, 확인사항 최대 1개', () => {
   const categories = mkCategories({ transport: 95, living: 92, parking: 90, complex: 88, schoolAccess: 20 });
-  const b = buildBriefing(categories, [], '해운대구')!;
+  const b = buildBriefing(categories, [], '해운대구', null)!;
   assert.ok(b.strengths.length <= 2);
   assert.ok(b.caution === null || typeof b.caution === 'string');
 });
 check('과장 표현 금지 어휘 미포함', () => {
   const categories = mkCategories({ transport: 95, living: 92, parking: 90, complex: 88, schoolAccess: 20 });
-  const b = buildBriefing(categories, [], '해운대구')!;
+  const b = buildBriefing(categories, [], '해운대구', null)!;
   const text = [b.summary, ...b.strengths, b.caution ?? ''].join(' ');
   for (const banned of ['최고', '완벽', '반드시', '명문', '강력 추천', '투자가치가 높']) {
     assert.ok(!text.includes(banned), `banned word found: ${banned}`);
@@ -238,7 +240,7 @@ check('카테고리 전부 NOT_SCORED면 briefing null', () => {
     usedSubMetrics: [],
     missingSubMetrics: [],
   }));
-  assert.strictEqual(buildBriefing(categories, [], '서구'), null);
+  assert.strictEqual(buildBriefing(categories, [], '서구', null), null);
 });
 
 // ---- 7. API 응답 보안(§44): route.ts가 내부 config를 직접 import하지 않는지 정적 확인 ----
@@ -314,33 +316,33 @@ check('§6 절대 거리 band는 실측 percentile에 앵커링된 threshold를 
 });
 
 check('시나리오 A: 실거리 250m(CLOSE) + 상대 낮음(BELOW_AVERAGE)이어도 단독 "아쉽다"가 아니라 절대 긍정을 먼저 말한다(실제 버그 재현 케이스, aptSeq 26140-11 구덕금호 기준)', () => {
-  const explained = explainCategory('t', mkSchoolCategory(41), '서구', 250);
+  const explained = explainCategory('t', mkSchoolCategory(41), '서구', null, 250);
   assert.ok(explained.explanation!.startsWith('초등학교까지 가까운'), '절대 사실(가깝다)을 먼저 말해야 함');
   assert.ok(!/^초등학교[^.]*아쉬운 편/.test(explained.explanation!), '문장이 "아쉽다"로 단독 시작하면 안 됨');
   assert.ok(explained.explanation!.includes('더 가까운 단지도 있습니다'), '상대는 부드러운 caveat로만 붙어야 함');
 });
 
 check('시나리오 B: 실거리 900m(FAR) + 상대 높음(GOOD)이어도 "매우 좋다"로 단독 과장하지 않고 거리 caveat를 남긴다', () => {
-  const explained = explainCategory('t', mkSchoolCategory(75), '해운대구', 900);
+  const explained = explainCategory('t', mkSchoolCategory(75), '해운대구', null, 900);
   assert.ok(explained.explanation!.startsWith('초등학교까지 거리가 있는'), '절대 사실(멀다)을 먼저 말해야 함');
   assert.ok(explained.explanation!.includes('다만'), '상대가 좋아도 절대적으로 먼 사실에 대한 caveat가 있어야 함');
 });
 
 check('시나리오 C: 실거리 250m(CLOSE) + 상대 높음(EXCELLENT)은 강한 긍정 문장이어도 됨(모순 없음)', () => {
-  const explained = explainCategory('t', mkSchoolCategory(90), '서구', 250);
+  const explained = explainCategory('t', mkSchoolCategory(90), '서구', null, 250);
   assert.ok(explained.explanation!.includes('가까운'));
   assert.ok(explained.explanation!.includes('상대적으로 좋은 편'));
   assert.ok(!explained.explanation!.includes('아쉬운'));
 });
 
 check('시나리오 D: 실거리 900m(FAR) + 상대 낮음(BELOW_AVERAGE)은 caution을 포함해도 된다(절대도 이미 멀다는 사실과 일치)', () => {
-  const explained = explainCategory('t', mkSchoolCategory(20), '서구', 900);
+  const explained = explainCategory('t', mkSchoolCategory(20), '서구', null, 900);
   assert.ok(explained.explanation!.startsWith('초등학교까지 거리가 있는'));
   assert.ok(explained.explanation!.includes('아쉬운'));
 });
 
 check('시나리오 E: 학교 데이터 자체가 없으면(UNKNOWN) 품질/거리 추정을 하지 않고, briefing caution 후보에서도 제외된다', () => {
-  const explained = explainCategory('t', mkSchoolCategory(20), '서구', null);
+  const explained = explainCategory('t', mkSchoolCategory(20), '서구', null, null);
   assert.strictEqual(explained.explanation, '인근 1000m 이내에서 초등학교 접근성 정보가 확인되지 않았습니다.');
   assert.ok(!explained.explanation!.includes('아쉬운'), '없는 데이터로 품질을 추정하면 안 됨');
 
@@ -349,20 +351,20 @@ check('시나리오 E: 학교 데이터 자체가 없으면(UNKNOWN) 품질/거�
     { key: 'transport', status: 'SCORED', score: 70, baseWeight: 30, peerLevel: 'SIGUNGU', peerTier: 'HIGH', peerSampleSize: 100, usedSubMetrics: [], missingSubMetrics: [] },
     mkSchoolCategory(20),
   ];
-  const briefing = buildBriefing(categories, [], '서구', null);
+  const briefing = buildBriefing(categories, [], '서구', null, null);
   assert.strictEqual(briefing?.caution, null, 'UNKNOWN 거리인 schoolAccess가 caution으로 선택되면 안 됨');
 });
 
 check('§11 briefing caution도 explain과 동일하게 절대 우선 + 상대 caveat 구조를 쓴다(구덕금호 실제 재현)', () => {
   const categories: CategoryResult[] = [mkSchoolCategory(41)];
-  const briefing = buildBriefing(categories, [], '서구', 201);
+  const briefing = buildBriefing(categories, [], '서구', null, 201);
   assert.ok(briefing?.caution?.startsWith('초등학교까지 가까운'));
   assert.ok(briefing?.caution?.includes('더 가까운 단지도 있습니다'));
 });
 
 check('§34 F: schoolAccess 문장은 middle/high 관련 어휘를 절대 포함하지 않는다(수집 자체가 elementary 전용이라 문장에도 섞이지 않아야 함)', () => {
   for (const [score, dist] of [[41, 201], [90, 250], [20, 900], [75, 900]] as const) {
-    const explained = explainCategory('t', mkSchoolCategory(score), '서구', dist);
+    const explained = explainCategory('t', mkSchoolCategory(score), '서구', null, dist);
     for (const banned of ['중학교', '고등학교', '중·고']) {
       assert.ok(!explained.explanation!.includes(banned), `schoolAccess 문장에 ${banned} 혼입`);
     }
@@ -371,7 +373,7 @@ check('§34 F: schoolAccess 문장은 middle/high 관련 어휘를 절대 포함
 
 check('§35 금지 어휘(좋은 학군/교육 수준/명문)는 schoolAccess 문장 어디에도 없다', () => {
   for (const [score, dist] of [[41, 201], [90, 250], [20, 900], [75, 900], [20, null]] as const) {
-    const explained = explainCategory('t', mkSchoolCategory(score), '서구', dist);
+    const explained = explainCategory('t', mkSchoolCategory(score), '서구', null, dist);
     for (const banned of ['좋은 학군', '교육 수준', '명문', '학군']) {
       assert.ok(!explained.explanation!.includes(banned), `금지 어휘 발견: ${banned}`);
     }
@@ -396,6 +398,258 @@ check('parking 하나만 NOT_SCORED면 MISSING_PARKING(실측 75.4% 케이스)',
 check('여러 카테고리가 부분적으로 NOT_SCORED면 INSUFFICIENT_TOTAL_COVERAGE', () => {
   const categories = [mkCat('transport', 60), mkCat('living', null), mkCat('parking', null), mkCat('complex', 50), mkCat('schoolAccess', 70)];
   assert.strictEqual(classifyPreparingReason(categories), 'INSUFFICIENT_TOTAL_COVERAGE');
+});
+
+// ---- 11. [BUSAN SCORE DATA V1 §3] regionLabel이 실제 peerLevel을 반영하는지 ----
+console.log('--- BUSAN SCORE DATA V1: regionLabel accuracy ---');
+
+check('LOCAL(동)은 동 이름을, SIGUNGU는 구 이름을, REGION_WIDE는 "부산 전체"를 쓴다', () => {
+  assert.strictEqual(regionLabelForPeerLevel('LOCAL', '서구', '동대신동3가', false), '동대신동3가');
+  assert.strictEqual(regionLabelForPeerLevel('SIGUNGU', '서구', '동대신동3가', false), '서구');
+  assert.strictEqual(regionLabelForPeerLevel('REGION_WIDE', '서구', '동대신동3가', false), '부산 전체');
+});
+check('주차(decade-band LOCAL)는 동 이름이 아니라 "{구} 유사 연식"을 쓴다(주차 LOCAL은 동 단위가 아니므로)', () => {
+  assert.strictEqual(regionLabelForPeerLevel('LOCAL', '서구', '동대신동3가', true), '서구 유사 연식');
+});
+check('umdName이 없으면 LOCAL이어도 sigungu로 안전 폴백', () => {
+  assert.strictEqual(regionLabelForPeerLevel('LOCAL', '서구', null, false), '서구');
+});
+
+check('explainCategory: 실제로 LOCAL(동) 비교면 문장에 동 이름이 나오고 구 이름은 나오지 않는다(구덕금호 실측 재현)', () => {
+  const cat: CategoryResult = { key: 'transport', status: 'SCORED', score: 55, baseWeight: 30, peerLevel: 'LOCAL', peerTier: 'MEDIUM', peerSampleSize: 6, usedSubMetrics: [], missingSubMetrics: [] };
+  const explained = explainCategory('t', cat, '서구', '동대신동3가');
+  assert.ok(explained.explanation!.includes('동대신동3가'), 'LOCAL 비교인데 동 이름이 없음');
+  assert.ok(!explained.explanation!.includes('서구'), 'LOCAL 비교인데 구 이름("서구")이 나오면 실제보다 넓은 비교처럼 보임');
+});
+check('explainCategory: SIGUNGU 비교면 구 이름을 쓴다(기존 동작 유지)', () => {
+  const cat: CategoryResult = { key: 'transport', status: 'SCORED', score: 55, baseWeight: 30, peerLevel: 'SIGUNGU', peerTier: 'HIGH', peerSampleSize: 150, usedSubMetrics: [], missingSubMetrics: [] };
+  const explained = explainCategory('t', cat, '서구', '동대신동3가');
+  assert.ok(explained.explanation!.includes('서구'));
+});
+check('explainCategory: parking은 LOCAL이어도 동 이름이 아니라 "유사 연식" 표현을 쓴다', () => {
+  const cat: CategoryResult = { key: 'parking', status: 'SCORED', score: 60, baseWeight: 15, peerLevel: 'LOCAL', peerTier: 'HIGH', peerSampleSize: 12, usedSubMetrics: [], missingSubMetrics: [] };
+  const explained = explainCategory('t', cat, '서구', '동대신동3가');
+  assert.ok(explained.explanation!.includes('유사 연식'));
+  assert.ok(!explained.explanation!.includes('동대신동3가'), 'parking LOCAL은 동 단위 비교가 아니므로 동 이름을 쓰면 안 됨');
+});
+check('buildBriefing: caution 후보가 LOCAL이면 caution 문장에 동 이름이 쓰인다(전체 briefing 하나에 카테고리별로 다른 peerLevel이 섞여도 각자 정확해야 함)', () => {
+  const categories: CategoryResult[] = [
+    { key: 'transport', status: 'SCORED', score: 20, baseWeight: 30, peerLevel: 'LOCAL', peerTier: 'MEDIUM', peerSampleSize: 6, usedSubMetrics: [], missingSubMetrics: [] },
+  ];
+  const briefing = buildBriefing(categories, [], '서구', '동대신동3가', null);
+  assert.ok(briefing?.caution?.includes('동대신동3가'));
+});
+
+// ---- 12. [BUSAN SCORE DATA V1 §18/§28] 확장 배치의 구조적 안전장치 ----
+// DB/네트워크 의존 동작(idempotent upsert, freshness-skip resume, 429 STOP)은
+// 이 프로젝트 관례대로 실제 스크립트 실행으로 검증하고 보고서에 남긴다(순수
+// 로직만 assert로 검증 — verify-score-engine.ts 파일 맨 위 설명과 동일 원칙).
+// 여기서는 정적으로 검증 가능한 부분만 assert로 고정한다: district 목록에 중복/
+// 이미-완료 구가 섞이면 안 된다는 불변식.
+console.log('--- BUSAN SCORE DATA V1: district batch list invariants ---');
+check('확장 대상 구 목록에 중복 sggCd가 없다', () => {
+  const mod = fs.readFileSync(path.resolve(__dirname, 'expand-busan-location-features.ts'), 'utf-8');
+  const sggCds = [...mod.matchAll(/sggCd:\s*'(\d+)'/g)].map((m) => m[1]);
+  assert.ok(sggCds.length >= 13, `구 목록이 너무 적음: ${sggCds.length}`);
+  assert.strictEqual(new Set(sggCds).size, sggCds.length, '중복 sggCd 발견');
+});
+check('확장 대상 구 목록에 이미 완료된 서구(26140)/해운대(26350)가 다시 섞여있지 않다(중복 수집 방지)', () => {
+  const mod = fs.readFileSync(path.resolve(__dirname, 'expand-busan-location-features.ts'), 'utf-8');
+  assert.ok(!mod.includes("sggCd: '26140'"), '서구가 확장 목록에 다시 포함됨');
+  assert.ok(!mod.includes("sggCd: '26350'"), '해운대가 확장 목록에 다시 포함됨');
+});
+
+// ---- 13. [PEER FALLBACK HOTFIX] resolvePeerPoolLevels + computeCategoryWithFallback ----
+console.log('--- PEER FALLBACK HOTFIX: category-level LOCAL→SIGUNGU→REGION_WIDE retry ---');
+
+function mkCandidate(aptSeq: string, umdName: string, buildYear = 2000): PeerCandidate {
+  return { aptSeq, sggCd: '26110', umdName, buildYear };
+}
+
+// 대청동4가/일광읍 이천리 실측 재현: 같은 동 후보가 정확히 5명(target 포함)이고,
+// SIGUNGU 전체는 훨씬 크다.
+function mkLocalExact5Cohort(): PeerCandidate[] {
+  return [
+    mkCandidate('t', '대청동4가'),
+    mkCandidate('p1', '대청동4가'),
+    mkCandidate('p2', '대청동4가'),
+    mkCandidate('p3', '대청동4가'),
+    mkCandidate('p4', '대청동4가'),
+    ...Array.from({ length: 50 }, (_, i) => mkCandidate(`q${i}`, `기타동${i % 10}`)),
+  ];
+}
+
+const SINGLE_SUB_METRIC: SubMetricSpec[] = [
+  { key: 'x', weight: 100, direction: 'higherIsBetter', treatCompleteNullAsWorst: false },
+];
+
+check('resolvePeerPool()과 resolvePeerPoolLevels()[0]이 항상 동일하다(기존 동작 100% 보존, LOCAL 충족)', () => {
+  const target = mkCandidate('t', '대청동4가');
+  const cohort = mkLocalExact5Cohort();
+  const single = resolvePeerPool(target, cohort, false);
+  const levels = resolvePeerPoolLevels(target, cohort, false);
+  assert.deepStrictEqual(single, levels[0]);
+  assert.strictEqual(single.level, 'LOCAL');
+});
+check('resolvePeerPool()과 resolvePeerPoolLevels()[0]이 항상 동일하다(LOCAL 미충족 → SIGUNGU)', () => {
+  const target = mkCandidate('t', '외딴동');
+  const cohort = [target, ...Array.from({ length: 20 }, (_, i) => mkCandidate(`p${i}`, `동${i}`))];
+  const single = resolvePeerPool(target, cohort, false);
+  const levels = resolvePeerPoolLevels(target, cohort, false);
+  assert.deepStrictEqual(single, levels[0]);
+  assert.strictEqual(single.level, 'SIGUNGU');
+});
+
+// [실측 프로덕션 패턴 재현] transport.ts/living.ts 등 실제 category 파일은
+// computeCategoryFromSubMetrics를 호출하기 "직전"에 그때 시도 중인 peerPool.aptSeqs
+// 기준으로 rowsByFeature를 매번 새로 만든다(§2 trace 확인) — computeCategoryFromSubMetrics
+// 자체는 넘겨받은 rows를 그대로 쓸 뿐 peerPool.aptSeqs로 필터링하지 않는다. 그래서
+// fallback을 재현하는 테스트도 "ground-truth 값 맵 → 시도 중인 pool.aptSeqs 기준으로
+// 매번 새로 rows 생성"이라는 실제 프로덕션 패턴을 그대로 따라야 한다.
+function buildRowsFn(valueByAptSeq: Map<string, number | null>) {
+  return (pool: { aptSeqs: string[] }) => ({
+    x: pool.aptSeqs.map((seq) => ({
+      aptSeq: seq,
+      value: valueByAptSeq.has(seq) ? valueByAptSeq.get(seq)! : null,
+      isComplete: valueByAptSeq.has(seq) ? valueByAptSeq.get(seq) !== null : false,
+    })),
+  });
+}
+
+check('[A] LOCAL 5명 전원 usable → LOCAL 유지, fallback 발생 안 함', () => {
+  const cohort = mkLocalExact5Cohort();
+  const levels = resolvePeerPoolLevels(mkCandidate('t', '대청동4가'), cohort, false);
+  const values = new Map<string, number | null>(cohort.map((c, i) => [c.aptSeq, 100 + i])); // 전원 값 있음
+  const buildRows = buildRowsFn(values);
+  const result = computeCategoryWithFallback(
+    (aptSeq, pool) => computeCategoryFromSubMetrics('transport', aptSeq, SINGLE_SUB_METRIC, pool, buildRows(pool)),
+    't',
+    levels,
+    null
+  );
+  assert.strictEqual(result.status, 'SCORED');
+  assert.strictEqual(result.peerLevel, 'LOCAL', 'usable 표본이 충분하면 LOCAL을 그대로 써야 함');
+});
+
+check('[B] LOCAL 5명 중 1명 결측(usable 4명, §18-A 실측 재현) → SIGUNGU로 fallback, peerLevel=SIGUNGU 정확히 반환', () => {
+  const cohort = mkLocalExact5Cohort();
+  const levels = resolvePeerPoolLevels(mkCandidate('t', '대청동4가'), cohort, false);
+  assert.strictEqual(levels[0].level, 'LOCAL');
+  assert.strictEqual(levels[0].aptSeqs.length, 5);
+
+  // LOCAL 5명(t,p1,p2,p3,p4) 중 p1만 결측, 나머지(SIGUNGU 전체 포함)는 전부 값 있음
+  // — §18-A 실측(새들맨션 등)과 동일 패턴: 대상 단지 자신의 값은 멀쩡하지만 같은
+  // 동의 다른 1명이 결측이라 LOCAL 전체가 죽는 경우.
+  const values = new Map<string, number | null>(cohort.map((c, i) => [c.aptSeq, 100 + i]));
+  values.set('p1', null);
+  const buildRows = buildRowsFn(values);
+  const result = computeCategoryWithFallback(
+    (aptSeq, pool) => computeCategoryFromSubMetrics('transport', aptSeq, SINGLE_SUB_METRIC, pool, buildRows(pool)),
+    't',
+    levels,
+    null
+  );
+  assert.strictEqual(result.status, 'SCORED', 'SIGUNGU 표본으로는 충분히 계산 가능해야 함');
+  assert.strictEqual(result.peerLevel, 'SIGUNGU', 'fallback 후 CategoryResult.peerLevel이 실제 사용된 레벨(SIGUNGU)을 정확히 반영해야 함');
+  assert.ok(result.score !== null, 'SIGUNGU fallback으로 실제 점수가 나와야 함(§18-A 8건이 이걸로 복구됨)');
+});
+
+check('[C] LOCAL 4명(문턱 미달) → 처음부터 SIGUNGU 채택(기존 resolvePeerPool 동작 그대로)', () => {
+  const target = mkCandidate('t', '소규모동');
+  const cohort = [
+    target,
+    mkCandidate('p1', '소규모동'),
+    mkCandidate('p2', '소규모동'),
+    mkCandidate('p3', '소규모동'),
+    ...Array.from({ length: 20 }, (_, i) => mkCandidate(`q${i}`, `기타동${i}`)),
+  ];
+  const levels = resolvePeerPoolLevels(target, cohort, false);
+  assert.strictEqual(levels[0].level, 'SIGUNGU', 'LOCAL 4명은 문턱(5) 미달이라 처음부터 SIGUNGU');
+});
+
+check('[D] SIGUNGU도 usable 부족 → REGION_WIDE로 재시도(REGION_WIDE 현재 구현상 SIGUNGU와 동일 후보라 결과도 동일하게 유지됨을 확인)', () => {
+  const target = mkCandidate('t', '대청동4가');
+  const cohort = mkLocalExact5Cohort();
+  const levels = resolvePeerPoolLevels(target, cohort, false);
+  assert.strictEqual(levels.length, 3, 'LOCAL/SIGUNGU/REGION_WIDE 3단계 전부 존재해야 함');
+  assert.strictEqual(levels[2].level, 'REGION_WIDE');
+  // [추가 확인 1] REGION_WIDE가 cohortOtherRegions 미지정 시 SIGUNGU와 완전히 동일한 후보 집합인지 확인
+  assert.deepStrictEqual(
+    [...levels[1].aptSeqs].sort(),
+    [...levels[2].aptSeqs].sort(),
+    'cohortOtherRegions 없이 호출하면 REGION_WIDE는 이름과 달리 SIGUNGU와 동일한 후보 집합이어야 함(실제 동작 확인)'
+  );
+
+  // SIGUNGU 표본 전체가 결측이어도 REGION_WIDE(=동일 후보)도 마찬가지로 결측 → 최종 NOT_SCORED
+  const buildRowsAllNull = (pool: { aptSeqs: string[] }) => ({
+    x: pool.aptSeqs.map((seq) => ({ aptSeq: seq, value: null, isComplete: false })),
+  });
+  const result = computeCategoryWithFallback(
+    (aptSeq, pool) => computeCategoryFromSubMetrics('transport', aptSeq, SINGLE_SUB_METRIC, pool, buildRowsAllNull(pool)),
+    't',
+    levels,
+    null
+  );
+  assert.strictEqual(result.status, 'NOT_SCORED');
+  assert.strictEqual(result.peerLevel, 'REGION_WIDE', '전부 실패하면 마지막으로 시도한 레벨(REGION_WIDE)을 반환해야 함');
+});
+
+check('[E] 표본 자체가 5 미만(REGION_WIDE까지도 부족) → NOT_SCORED, 0으로 채우지 않음', () => {
+  const target = mkCandidate('t', 'X동');
+  const cohort = [target, mkCandidate('p1', 'X동'), mkCandidate('p2', 'Y동')]; // 총 3명뿐
+  const levels = resolvePeerPoolLevels(target, cohort, false);
+  assert.strictEqual(levels.length, 1, 'LOCAL/SIGUNGU 둘 다 미충족이면 REGION_WIDE 하나만 남아야 함');
+  assert.strictEqual(levels[0].tier, 'NOT_SCORED');
+  const buildRows = buildRowsFn(new Map(cohort.map((c) => [c.aptSeq, 100])));
+  const result = computeCategoryWithFallback(
+    (aptSeq, pool) => computeCategoryFromSubMetrics('transport', aptSeq, SINGLE_SUB_METRIC, pool, buildRows(pool)),
+    't',
+    levels,
+    null
+  );
+  assert.strictEqual(result.status, 'NOT_SCORED');
+  assert.strictEqual(result.score, null, '표본 부족을 0점으로 대체하면 안 됨');
+});
+
+check('[F/H] 카테고리마다 다른 레벨로 fallback되어도(mixed) 서로 영향 없음 — 카테고리 A는 LOCAL 성공, 카테고리 B는 SIGUNGU로 fallback', () => {
+  const cohort = mkLocalExact5Cohort();
+  const levels = resolvePeerPoolLevels(mkCandidate('t', '대청동4가'), cohort, false);
+
+  const buildRowsFullyUsable = buildRowsFn(new Map(cohort.map((c, i) => [c.aptSeq, 100 + i])));
+  const categoryA = computeCategoryWithFallback(
+    (aptSeq, pool) => computeCategoryFromSubMetrics('living', aptSeq, SINGLE_SUB_METRIC, pool, buildRowsFullyUsable(pool)),
+    't',
+    levels,
+    null
+  );
+  assert.strictEqual(categoryA.peerLevel, 'LOCAL');
+
+  const valuesMissingOne = new Map<string, number | null>(cohort.map((c, i) => [c.aptSeq, 100 + i]));
+  valuesMissingOne.set('p1', null);
+  const buildRowsMissingOne = buildRowsFn(valuesMissingOne);
+  const categoryB = computeCategoryWithFallback(
+    (aptSeq, pool) => computeCategoryFromSubMetrics('schoolAccess', aptSeq, SINGLE_SUB_METRIC, pool, buildRowsMissingOne(pool)),
+    't',
+    levels,
+    null
+  );
+  assert.strictEqual(categoryB.peerLevel, 'SIGUNGU', '카테고리마다 독립적으로 다른 레벨에 착지할 수 있어야 함(사용자 확인 #2)');
+});
+
+check('[결정론] 동일 입력 → computeCategoryWithFallback도 항상 동일 결과(random 없음)', () => {
+  const cohort = mkLocalExact5Cohort();
+  const levels = resolvePeerPoolLevels(mkCandidate('t', '대청동4가'), cohort, false);
+  const values = new Map<string, number | null>(cohort.map((c, i) => [c.aptSeq, 100 + i]));
+  values.set('p1', null);
+  const buildRows = buildRowsFn(values);
+  const run = () =>
+    computeCategoryWithFallback(
+      (aptSeq, pool) => computeCategoryFromSubMetrics('transport', aptSeq, SINGLE_SUB_METRIC, pool, buildRows(pool)),
+      't',
+      levels,
+      null
+    );
+  assert.deepStrictEqual(run(), run());
 });
 
 function mkLocation(aptSeq: string, overrides: Partial<RawLocationFeature>): RawLocationFeature {

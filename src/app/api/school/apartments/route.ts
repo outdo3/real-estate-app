@@ -248,7 +248,14 @@ export async function GET(request: Request) {
         return { ...apt, buildYear: registryBuildYear ?? apt.buildYear };
       }));
 
-      // 5. 프론트엔드용 데이터 가공 (현실적인 도보 시간 계산 알고리즘)
+      // 5. 프론트엔드용 데이터 가공 (직선거리 → 도보시간 근사, 실제 보행경로 API 아님)
+      // [BUSAN SCORE DATA V1 §1] 이전에는 schoolName.includes('송도')면 walkMin+5를
+      // 더했다("특정 지형(송도) 언덕 페널티 보정" — 과거 커밋 코멘트, 이후 리팩터에서
+      // 코멘트만 유실됨). 학교 이름 문자열 매칭으로 그 학교 인근 모든 아파트에 획일
+      // 적용되고(개별 아파트의 실제 고저차와 무관), "+5"는 실측 경사/고도 데이터가
+      // 아닌 임의 추정치였다 — "학교거리 임의 보정 금지" 원칙에 따라 제거했고, 다른
+      // 숫자로도 대체하지 않았다(§1). 실제 경사 반영이 필요하면 SCHOOL V2에서 정식
+      // 보행경로 API로 처리할 사안이다.
       return withRegistryBuildYear.map(apt => {
         const realDistance = apt.dist * 1.45;
 
@@ -261,17 +268,13 @@ export async function GET(request: Request) {
           walkMin += 3;
         }
 
-        if (schoolName.includes('송도')) {
-          walkMin += 5;
-        }
-
         walkMin = Math.max(3, walkMin);
 
         return {
           id: apt.id,
           name: apt.name,
           price: apt.price,
-          walkTime: `도보 ${walkMin}분`,
+          walkTime: `도보 약 ${walkMin}분`,
           distance: apt.dist,
           buildYear: apt.buildYear
         };

@@ -1,14 +1,17 @@
 /**
  * STEP SCORE S2B — ApartmentLocationFeature 실제 수집(Kakao + TAGO).
+ * [BUSAN SCORE DATA V1 §7~§8] 서구/해운대 전용이던 mode에 임의 sggCd를 받는
+ * 일반 모드를 추가해 부산 16개 구·군 전체로 확장한다 — 수집 로직/idempotency
+ * (upsert)/resumability(freshness skip) 자체는 그대로 재사용, 새로 만들지 않는다.
  *
- * 대상: --mode=canary(서구 5 + 해운대 5, 미리 선정된 다양성 표본) | seogu | haeundae
+ * 대상: --mode=canary(서구 5 + 해운대 5) | seogu | haeundae | --sggCd=<코드>(임의 구·군)
  * 옵션:
  *   --dry-run  대상/예상 API 호출량만 출력하고 실제 호출/DB 쓰기 없음
  *   --force    fresh cache(validUntil > now)가 있어도 재수집
  *
  * 사용법:
  *   npx ts-node --transpile-only --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
- *     -r ./scripts/_register-paths.js scripts/apartment-score/collect-location-features.ts --mode=canary --dry-run
+ *     -r ./scripts/_register-paths.js scripts/apartment-score/collect-location-features.ts --sggCd=26230 --dry-run
  */
 import * as dotenv from 'dotenv';
 import * as path from 'path';
@@ -38,7 +41,7 @@ const CANARY_APT_SEQS = [
   '26350-3370', // 드파인센텀, 반여동, 2024 — 신축, 내륙
 ];
 
-async function resolveTargets(mode: string): Promise<LocationFeatureTarget[]> {
+async function resolveTargets(mode: string, sggCdArg: string | null): Promise<LocationFeatureTarget[]> {
   if (mode === 'canary') {
     const masters = await prisma.apartmentMaster.findMany({
       where: { aptSeq: { in: CANARY_APT_SEQS } },
@@ -49,8 +52,12 @@ async function resolveTargets(mode: string): Promise<LocationFeatureTarget[]> {
       .map((m) => ({ aptSeq: m.aptSeq as string, latitude: m.latitude as number, longitude: m.longitude as number }));
   }
 
-  const sggCd = mode === 'seogu' ? '26140' : mode === 'haeundae' ? '26350' : null;
-  if (!sggCd) throw new Error(`unknown mode: ${mode}`);
+  // [BUSAN SCORE DATA V1 §7] --sggCd가 있으면 seogu/haeundae 외 임의 구·군도
+  // 그대로 받는다 — coordinate가 있는 단지만 대상으로 하고(§11 "좌표 없는 단지는
+  // 분리"), 좌표 없는 단지는 이 함수가 자연히 걸러 missing으로 남긴다(0/기본값
+  // 대체 없음).
+  const sggCd = sggCdArg ?? (mode === 'seogu' ? '26140' : mode === 'haeundae' ? '26350' : null);
+  if (!sggCd) throw new Error(`unknown mode: ${mode} (또는 --sggCd=<코드> 지정 필요)`);
 
   const masters = await prisma.apartmentMaster.findMany({
     where: { sggCd, latitude: { not: null }, longitude: { not: null }, aptSeq: { not: null } },
@@ -61,11 +68,12 @@ async function resolveTargets(mode: string): Promise<LocationFeatureTarget[]> {
 
 async function main() {
   const args = process.argv.slice(2);
-  const mode = (args.find((a) => a.startsWith('--mode='))?.split('=')[1]) ?? 'canary';
+  const sggCdArg = args.find((a) => a.startsWith('--sggCd='))?.split('=')[1] ?? null;
+  const mode = (args.find((a) => a.startsWith('--mode='))?.split('=')[1]) ?? (sggCdArg ? 'sggCd' : 'canary');
   const dryRun = args.includes('--dry-run');
   const force = args.includes('--force');
 
-  const allTargets = await resolveTargets(mode);
+  const allTargets = await resolveTargets(mode, sggCdArg);
 
   // checkpoint — fresh(validUntil > now) 캐시가 있는 aptSeq는 --force 없으면 skip
   const now = new Date();

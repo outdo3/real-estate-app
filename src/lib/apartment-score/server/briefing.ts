@@ -1,8 +1,9 @@
-import type { Band, Briefing, CategoryKey, CategoryResult, RegionalStrength, RegionalStrengthType } from './types';
+import type { Band, Briefing, CategoryKey, CategoryResult, PeerLevel, RegionalStrength, RegionalStrengthType } from './types';
 import { CATEGORY_WEIGHTS } from './config';
 import { CATEGORY_LABELS, bandOf } from './explain';
 import { absoluteSchoolDistanceBand } from './school-distance-band';
 import { buildSchoolAccessCaution, buildSchoolAccessSentence } from './school-access-sentence';
+import { regionLabelForPeerLevel } from './region-label';
 
 // §33~§39: 서버 알고리즘 Algorithmic Briefing Engine. AI 호출 없음(§32/§52),
 // random 선택 없음(같은 데이터 → 같은 출력, §36), 과장 표현 금지(§37).
@@ -24,6 +25,10 @@ interface Candidate {
   labelNoun: string; // 본문 문장용("교통 접근성")
   band: Band;
   priority: number;
+  // [BUSAN SCORE DATA V1 §3] 이 후보가 실제로 사용한 peer level — regionLabel을
+  // 카테고리별로 정확히 고르기 위해 필요. regional strength(key=null)는 항상
+  // sigungu 범위라 null로 둔다(regionLabelForPeerLevel이 SIGUNGU와 동일하게 처리).
+  peerLevel: PeerLevel | null;
 }
 
 const CATEGORY_NOUN_FOR_BRIEFING: Record<CategoryKey, string> = {
@@ -60,7 +65,8 @@ const CAUTION_PREDICATE_VARIANTS = [(region: string) => `${region} 비교 단지
 export function buildBriefing(
   categories: CategoryResult[],
   regionalStrengths: RegionalStrength[],
-  regionLabel: string,
+  sigungu: string,
+  umdName: string | null,
   schoolAccessDistanceM?: number | null
 ): Briefing | null {
   const scoredCategories = categories.filter((c): c is CategoryResult & { score: number } => c.score != null);
@@ -78,6 +84,7 @@ export function buildBriefing(
       // briefing QA에서 확인). 이 곱셈은 selection *priority*만 바꾸는 것이고
       // CATEGORY_WEIGHTS/score 산출 공식 자체는 그대로다(§14 지시대로 formula/weight 불변).
       priority: c.score * CATEGORY_WEIGHTS[c.key],
+      peerLevel: c.peerLevel,
     }))
     .filter((c) => c.band === 'EXCELLENT' || c.band === 'GOOD')
     .sort((a, b) => b.priority - a.priority);
@@ -101,6 +108,7 @@ export function buildBriefing(
         labelNoun: REGIONAL_STRENGTH_NOUN[topRegional.type],
         band: topRegional.level === 'STRONG' ? 'EXCELLENT' : 'GOOD',
         priority: topRegional.percentileInSigungu * 20,
+        peerLevel: 'SIGUNGU', // computeRegionalStrengths는 항상 sigungu 범위(regional-premium.ts)
       });
     }
   }
@@ -124,6 +132,7 @@ export function buildBriefing(
   // 이미 그 caveat를 포함한 전용 문장을 만들어주므로 그대로 쓴다(자체에 주어가 있어
   // 일반 "{noun}{조사} {predicate}." 틀을 씌우지 않는다).
   const strengths: string[] = topStrengths.map((s, i) => {
+    const regionLabel = regionLabelForPeerLevel(s.peerLevel, sigungu, umdName, s.key === 'parking');
     if (s.key === 'schoolAccess') {
       const absBand = absoluteSchoolDistanceBand(schoolAccessDistanceM);
       return buildSchoolAccessSentence(absBand, s.band, regionLabel);
@@ -134,6 +143,7 @@ export function buildBriefing(
 
   const cautionText = cautionCandidate
     ? (() => {
+        const regionLabel = regionLabelForPeerLevel(cautionCandidate.peerLevel, sigungu, umdName, cautionCandidate.key === 'parking');
         // schoolAccess caution은 절대 거리를 먼저 말하는 전용 문장을 쓴다(§11) —
         // 다른 카테고리는 raw 원본이 explain.ts로 이미 검증된 상대-percentile-only
         // 템플릿을 그대로 쓴다(§13, 이 STEP의 문제는 schoolAccess 한정).

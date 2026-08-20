@@ -10,7 +10,12 @@ export type Direction = 'lowerIsBetter' | 'higherIsBetter';
 export type PeerTier = 'HIGH' | 'MEDIUM' | 'NOT_SCORED';
 
 // LOCAL = dong(생활/교통/단지/학교) 또는 sigungu+buildYear decade band(주차),
-// SIGUNGU = 구·군 전체, REGION_WIDE = feature 테이블에 존재하는 전체 지역(§14)
+// SIGUNGU = 구·군 전체, REGION_WIDE = feature 테이블에 존재하는 전체 지역(§14).
+// [PEER FALLBACK HOTFIX 확인] calculate.ts가 resolvePeerPoolLevels()의
+// cohortOtherRegions를 항상 생략(빈 배열)하기 때문에, 실제 구현상 REGION_WIDE는
+// 이름과 달리 "부산 전체/타 지역"이 아니라 SIGUNGU와 완전히 동일한 후보 집합이다
+// (peer-groups.ts의 resolvePeerPool()/resolvePeerPoolLevels() 주석 참고). 진짜
+// 타 지역 조회가 필요하면 cohortOtherRegions를 채워 넣는 별도 STEP이 필요하다.
 export type PeerLevel = 'LOCAL' | 'SIGUNGU' | 'REGION_WIDE';
 
 export interface PeerPoolResult {
