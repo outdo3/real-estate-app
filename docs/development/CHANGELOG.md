@@ -6056,3 +6056,140 @@ APT DETAIL QA/IA v1(1차 + 추가 UX QA) 전체 완료 — 평형칩/주차중�
 **commit·push 진행**(사용자 지시, 2026-08-20).
 
 **APT_DETAIL_QA_CLOSE(FINAL)** — BLOCKER 없음.
+
+## 2026-08-20 (6)
+
+### DESIGN SYSTEM 1 — 전체 UI/UX 아이덴티티 감사 + 디자인 시스템 설계
+
+작업(전부 audit/문서, **페이지 코드 변경 없음**):
+
+- 4개 병렬 조사로 Home/Map/AI검색, Statistics(16개 메뉴 전체),
+  Presale/Redevelopment/School/Community/Auth/My, design tokens+
+  component inventory를 실제 코드 읽기 기반으로 전수 조사.
+- **핵심 발견 1**: `globals.css`가 모바일(≤768px)에서 root font-size를
+  16px→14px로 전역 12.5% 축소(`:98-101`, 주석에 의도적으로 명시) —
+  직전 STEP(APT DETAIL QA/IA)에서 "12px 이상"으로 상향한 값들도 모바일
+  에서는 그보다 12.5% 작게 렌더링됨을 확인. "글자가 너무 작다" 반복
+  피드백의 구조적 원인 후보로 문서화, 제거는 제안만(승인 필요).
+- **핵심 발견 2**: 브랜드 그린이 두 값(`--primary-color:#03c75a` 기존
+  vs `--ejip-green:#13A367` 신규, BRAND STEP 56-B2) 공존 중이며 결정이
+  계속 보류돼 있음 — 신규 토큰은 Redevelopment 일부 배지 + KakaoShareButton
+  + Brand 컴포넌트 6개 파일 19곳에서만 부분 사용돼 그 자체로 새 불일치를
+  만들고 있음을 확인.
+- **Statistics 전수 감사**(가장 중요 지시대로): 16개 메뉴(10 live+6
+  soon) 중 라이브 10개가 **6개의 서로 다른 컴포넌트 구현**으로 나뉘어
+  있고, 공유 filter 컴포넌트가 하나도 없으며, `#ef4444` 빨강이 4가지
+  무관한 의미(상승률/갭투자 절대값/5분위 최고구간/랭킹 1등)로 재사용되고,
+  서로 무관한 두 개의 5색 팔레트가 존재하며, Lucide 아이콘 0개(16개
+  메뉴 전부 emoji), 진짜 skeleton 로딩은 1곳뿐(나머지는 평문 "분석
+  중입니다..."), "미구현" 상태와 "0건" empty 상태가 시각적으로 구분
+  불가함을 실측 확인.
+- 정의되지 않은 CSS 변수(`--background-color`, `--bg-light`)가
+  Community/My/School/Stats/Admin/Home에서 실제로 참조되고 있음(dangling
+  reference), `--primary-color`를 우회한 하드코딩 리터럴 3곳(`stats/
+  page.module.css:627`, `map/page.tsx:698,725`) 발견.
+- radius 14종 리터럴 분산(pill만 4가지 값: `999px`/`99px`/`9999px`/
+  토큰), 하드코딩 hex 260개(83 tsx + 177 css, apartment-score 모듈
+  제외), 인라인 fontSize 135곳(26개 파일) — 전부 `globals.css`의
+  `.text-h1~.text-xs` 유틸리티(정의만 있고 실사용 0건, 죽은 코드)를
+  우회.
+- 컴포넌트 인벤토리: `src/components/` 38개 중 7개(18%, `KakaoScriptLoader`
+  /`SearchFilter`/`Hero`/`MarketInsights`/`TableList`/`CardList`/
+  `SearchFilterBar`)가 어디서도 import되지 않는 죽은 컴포넌트로 확인.
+  School/Neighborhood/LivingEnvironment 3개 패널이 동일한 `cardStyle`
+  객체를 복사-붙여넣기 중인 것도 확인.
+- 클러스터별 baseline(Apartment Detail 토큰 준수) 대비 정렬도: Presale
+  최고 정렬 → Redevelopment(카드는 정렬, 탭 라벨에 emoji 직접 포함이
+  흠) → Home/AI-search(자체적으로 일관됨, Map만 예외) → School/
+  Community/My(토큰 거의 미사용, 하드코딩 radius/shadow/border, 최다
+  emoji) 순으로 실측 정리.
+- 24개 섹션(typography/color/spacing/radius/shadow/button/search/
+  filter/chip/badge/card/header/nav/loading/empty/error/mascot/table/
+  responsive/a11y/archetype/statistics/inventory/token/roadmap)에 걸쳐
+  구체적 제안값을 문서화 — typography scale(Display~Caption 7단계,
+  12px 하한 명문화), color semantic 테이블(신규 `--warning-color`/
+  `--error-color`/`--info-color` 제안, `--up-color`를 에러 텍스트와
+  분리), spacing/radius/z-index 토큰 제안, Statistics V2 선행조건
+  8개 항목 확정.
+
+DB/schema/UI 변경: **없음.** 이번 STEP은 원칙대로 감사+설계 문서만
+생성했다 — 페이지/컴포넌트 코드를 전혀 수정하지 않았다. 토큰 추가,
+모바일 전역 폰트 축소 제거, 브랜드 그린 통일, `--text-muted` contrast
+조정 등 시각적 영향이 있는 foundation 변경은 전부 **제안만 하고 구현
+전 승인 요청**으로 문서에 명시(DS-2 단계).
+
+상태:
+
+DESIGN SYSTEM 1(감사+설계) 완료 — 8개 페이지 클러스터 + 16개 Statistics
+메뉴 + design tokens + 38개 컴포넌트 전수 조사, 가장 심한 불일치 10개
+확정, migration roadmap(DS-2~DS-6) 및 Statistics V2 선행조건 8개 문서화.
+**commit·push 하지 않음**(사용자 지시, ChatGPT 검수 후 처리, 2026-08-20).
+
+**DESIGN_SYSTEM_2_GO** — 조건: 그린 색상 결정(§2-2)과 모바일 전역
+폰트 축소 제거 여부(§3.3)를 DS-2 착수 전 먼저 승인할 것 — 이후 단계의
+색/타이포 작업이 전부 이 두 결정에 의존한다.
+
+## 2026-08-20 (7)
+
+### AREA MODEL V1 — 아파트 면적/평형 정보모델 감사 + 사용자 표기 기준 확정
+
+작업(전부 audit/read-only 조사, **코드 변경 없음**):
+
+- 면적 관련 실제 source 전수 조사: MOLIT 실거래 API(전용면적, 필드명
+  자체가 `전용면적`/`excluUseAr`으로 확인), `ApartmentMaster`(3,402건,
+  면적 필드 0개), `Apartment`(32건, 면적 필드 0개), `PresaleHouseTypeDetail`
+  (5,395건, `supplyArea`+`houseTy` 실존 — 단 청약홈 분양공고 도메인
+  전용). 건축물대장 수집기(`apt-building-info.ts`)도 재확인했으나
+  단지 전체 합산값만 제공해 타입별 면적 분해가 원천적으로 불가능함을
+  확인.
+- **공급면적 coverage 실측**: 서구+해운대 `ApartmentMaster`(479건)와
+  부산 `Presale`(85건)을 `aptNamesMatch`로 전수 대조 — fuzzy 매칭
+  37건 발생했으나 대부분 "롯데"/"경남" 등 짧은 이름의 명백한 오탐,
+  실제 동일 단지 가능성이 있는 건 1건("e편한세상송도더퍼스트비치")뿐
+  — **공급면적 coverage는 사실상 0%**, `SUPPLY_AREA_NOT_AVAILABLE`로
+  명확히 선언.
+- **near-duplicate 실측 감사**: 서구 3곳/해운대 3곳/부산진구 2곳/
+  동래구 2곳(10개 단지, 5,240건 거래) 살아있는 API로 전수 조회 — diff
+  <0.05㎡ 근접쌍(동일 타입일 가능성 높음)과 0.15~0.47㎡ 근접쌍(다른
+  타입일 가능성 높음)이 뚜렷이 두 그룹으로 나뉨을 확인. 특히 "경동"
+  단지에서 서로 무관한 3개 면적대(220/221/222㎡대)가 전부 정확히
+  동일한 0.0045㎡ 차이를 보여 시스템적 정밀도 변환 흔적으로 추정.
+  단, 타입코드 부재로 개별 사례를 최종 확정(B/C)하지 못하고 대부분
+  "E. 판단 불가"로 정직하게 분류.
+- **grouping 정책 확정**: type code(§13 우선순위 1)/supply+exclusive
+  (2)/verified mapping(3)이 전부 오늘 사용 불가함을 확인 → 유일하게
+  안전한 4번(정확한 전용면적, 병합 없음)을 유지하는 것이 결론 —
+  diff<0.05㎡의 통계적 경향이 있어도 자동 병합 기능을 새로 제안하지
+  않음(직전 STEP에서 칩 상한을 이미 제거해 "칩이 너무 많다"는 문제
+  자체가 해소돼 있어 병합의 실익보다 위험이 크다고 판단).
+- "평형" 사용 조건 확정: 검증된 공급면적이 있을 때만 사용, 전용면적만
+  있으면 "약 N평"(평형 아님)으로만 표시 — 기존 `formatPyeong()`이
+  이미 이 원칙을 지키고 있음을 확인, 단 칩 레벨 평 라벨("N평")과
+  Hero 표기("약 N평")의 "약" 접두어 불일치를 발견(경미한 unresolved).
+- `AreaChip` contract 제안(§19) — `supplyAreaM2: number | null` 필드
+  하나로 오늘(전용만)과 향후(공급 확보 시) 두 상태를 자동 분기하도록
+  최소 설계, `exclusiveAreaVariants` 같은 병합 배열은 포함하지 않음
+  (병합 자체를 채택하지 않았으므로).
+- 부산 pilot(서구 3+해운대 3+부산진구 2+동래구 2 = 10개 단지) 표
+  작성 — 전부 공급면적 미존재, 전부 현재 정책이 최선의 안전한 선택
+  임을 확인.
+
+DB/schema/UI 변경: **없음.** 이번 STEP은 결론 자체가 "현재 정책이
+이미 안전한 최선이라 코드를 바꿀 필요가 없다"였다 — 임시 조사
+스크립트는 실행 후 전부 삭제.
+
+상태:
+
+AREA MODEL V1(감사+설계) 완료 — 전용/공급/계약면적 의미 분리, 공급면적
+coverage 0% 실측 확정, near-duplicate 10개 단지 5,240건 전수 분석,
+grouping 정책(병합 없음 유지) 확정, AreaChip contract를 DESIGN SYSTEM 2에
+전달. **commit·push 하지 않음**(사용자 지시, ChatGPT 검수 후 처리,
+2026-08-20).
+
+**AREA_MODEL_V1_CLOSE** — BLOCKER 없음. unresolved 3건(약 접두어
+통일, e편한세상송도더퍼스트비치 1건 매칭 검증, 공급면적 외부 수집은
+별도 승인 STEP)은 전부 다음 STEP 후보로 문서화.
+
+**DESIGN_SYSTEM_2_GO** — AREA MODEL V1의 AreaChip contract(§32)가
+DS-2의 chip/typography/touch-target 규칙에 이미 반영 가능한 형태로
+준비됨.
