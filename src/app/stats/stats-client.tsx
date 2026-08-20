@@ -3,11 +3,13 @@
 import React, { useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { MapPin, ChevronDown, School, Wrench } from 'lucide-react';
 import Header from '@/components/Header';
 import RegionSelectModal from '@/components/RegionSelectModal';
+import SectionHeader from '@/components/ui/SectionHeader';
 import { useRegion, RegionState } from '@/contexts/RegionContext';
 import { resolveLawdCdByNames } from '@/lib/region-utils';
-import { STATS_MENU } from './statsMenu';
+import { STATS_MENU, STATS_CATEGORIES } from './statsMenu';
 import styles from './page.module.css';
 
 // ?sido=...&sigungu=...로 진입한 경우(사이트맵/공유 링크) 최초 1회만 URL의 지역으로
@@ -51,35 +53,45 @@ export default function StatsPage() {
         {/* 상단 지역 선택: 실거래가 탭과 동일한 전역 지역 선택 모달을 공유한다 */}
         <div className={styles.headerTop}>
           <button className={styles.regionTrigger} onClick={openRegionModal}>
-            <span>📍 {region.displayRegionName}</span>
-            <span className={styles.regionTriggerCaret}>▾</span>
+            <MapPin size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} />
+            <span>{region.displayRegionName}</span>
+            <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
           </button>
         </div>
 
-        {/* 16개 핵심 통계/분석 메뉴 그리드 */}
-        <div className={styles.menuGrid}>
-          {STATS_MENU.map((item) => (
-            <Link key={item.slug} href={`/stats/${item.slug}`} className={styles.menuCard}>
-              {item.status === 'soon' && <span className={styles.menuSoonBadge}>준비중</span>}
-              <span className={styles.menuIcon}>{item.icon}</span>
-              <span className={styles.menuTitle}>{item.title}</span>
-              <span className={styles.menuSubtitle}>{item.subtitle}</span>
-            </Link>
-          ))}
-        </div>
+        {/* [STATISTICS V2 §35] 16개 메뉴를 5개 카테고리로 grouping — emoji
+            대신 Lucide, 카드 배경색 남발 없이 브랜드 그린 하나로 통일. */}
+        {STATS_CATEGORIES.map((category) => (
+          <div key={category} className={styles.categorySection}>
+            <h2 className={styles.categoryTitle}>{category}</h2>
+            <div className={styles.menuGrid}>
+              {STATS_MENU.filter((item) => item.category === category).map((item) => (
+                <Link key={item.slug} href={`/stats/${item.slug}`} className={styles.menuCard}>
+                  {item.status === 'soon' && <span className={styles.menuSoonBadge}>준비중</span>}
+                  <span className={styles.menuIcon}><item.Icon size={26} strokeWidth={1.8} aria-hidden="true" /></span>
+                  <span className={styles.menuTitle}>{item.title}</span>
+                  <span className={styles.menuSubtitle}>{item.subtitle}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
 
         {/* 하단 탭바 개편으로 전용 탭이 사라진 학군정보/부동산 도구는 여기서 계속 진입 가능 */}
-        <div className={styles.menuGrid}>
-          <Link href="/school" className={styles.menuCard}>
-            <span className={styles.menuIcon}>🏫</span>
-            <span className={styles.menuTitle}>학군 정보</span>
-            <span className={styles.menuSubtitle}>학교·학원가 정보</span>
-          </Link>
-          <Link href="/tools" className={styles.menuCard}>
-            <span className={styles.menuIcon}>🛠️</span>
-            <span className={styles.menuTitle}>부동산 도구</span>
-            <span className={styles.menuSubtitle}>계산기·체크리스트</span>
-          </Link>
+        <div className={styles.categorySection}>
+          <h2 className={styles.categoryTitle}>기타</h2>
+          <div className={styles.menuGrid}>
+            <Link href="/school" className={styles.menuCard}>
+              <span className={styles.menuIcon}><School size={26} strokeWidth={1.8} aria-hidden="true" /></span>
+              <span className={styles.menuTitle}>학군 정보</span>
+              <span className={styles.menuSubtitle}>학교·학원가 정보</span>
+            </Link>
+            <Link href="/tools" className={styles.menuCard}>
+              <span className={styles.menuIcon}><Wrench size={26} strokeWidth={1.8} aria-hidden="true" /></span>
+              <span className={styles.menuTitle}>부동산 도구</span>
+              <span className={styles.menuSubtitle}>계산기·체크리스트</span>
+            </Link>
+          </div>
         </div>
       </div>
 

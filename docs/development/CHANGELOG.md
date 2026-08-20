@@ -6340,3 +6340,82 @@ DESIGN SYSTEM 3(공용 컴포넌트 + 내비게이션 통합) 완료. **commit·
 **STATISTICS_V2_GO** — Filter/Card/SectionHeader가 실제 페이지에서
 wiring+검증된 상태로 확보됨(단, 16개 메뉴 emoji 정리를 V2 착수 시
 함께 처리 권장).
+
+## 2026-08-20 (10)
+
+### DESIGN SYSTEM 3 — commit + push
+
+DS-3 ChatGPT 검수 승인 반영: 37개 파일(수정 15 + 신규 22)을
+`feat: unify ejip common components and navigation`(`a7f786e`)로
+커밋하고 origin/main에 push했다. Push 후 `git status` clean,
+`HEAD == origin/main == a7f786e` 확인.
+
+### STATISTICS V2 — 전체 통계 UX/정보구조 재설계 + 이집형 판단형 통계 플랫폼
+
+작업:
+
+- **데이터 로직 감사(계산 변경 없음)**: `/api/stats/rankings`(추세
+  N건 평균 비교, rent 오염 필터링)와 `/api/stats/dashboard`(gapInvest,
+  전세가율)를 전수 감사 — 기존 로직이 대부분 이미 건전함을 확인했고,
+  **gapInvest가 매매/전세 비교 시 같은 면적인지 검증하지 않는 ISSUE를
+  발견**했다(BLOCKER 아님, 계산은 그대로 두고 화면에 disclaimer만
+  추가).
+- 공용 helper 신규 2개: `src/lib/stats-format.ts`(퍼센트/거래건수/
+  방향색/저표본 판정), `src/lib/stats-insight.ts`(deterministic
+  1줄 판단 요약 — AI 생성 없음, "매수 추천"류 표현 없음, 표본 3건
+  미만은 항상 "적어 참고용" 명시).
+- `src/components/ui/RankingRow.tsx`(+`RankingList`) 신규 — 기존
+  `compactItem` 순위 리스트 마크업을 그대로 공용 컴포넌트로 승격,
+  decline/record-high/rising/top-traded/jeonse-risk/gap-invest
+  6개 화면이 공유.
+- `/stats/[type]` 5개 뷰(RankingListView/VolumeView/GapInvestView/
+  CompareView/PriceMapView) 전부에 SectionHeader/Empty/ErrorState/
+  InlineLoading/FilterChip(매매·전세·월세 토글, DS-3에서 미사용이던
+  컴포넌트 첫 실사용) wiring, "데이터 → 해석 → 판단" 구조로 통계
+  헤더 최상단에 deterministic insight 문장을 노출.
+- 순위 색상을 하드코딩 근사값('#ef4444'/'#3b82f6')에서 DS-2 시맨틱
+  토큰(`--up-color`/`--down-color`)으로 통일.
+- **emoji 전수 제거**(이번 STEP이 직접 손댄 파일만): 16개 메뉴
+  아이콘 + 지역선택 📍 + 분석팁 💡 + 그래프/표 토글 + 준비중 카드
+  📦 + 학군/도구 바로가기, 전부 Lucide로 교체. `STATS_MENU`에
+  `category`(5개: 가격/거래/수요·공급/지역/비교·분석)/`Icon` 필드
+  추가.
+- `/stats` landing을 5개 카테고리 그리드로 재설계(라우트/메뉴 구성은
+  그대로, grouping과 아이콘만 교체).
+- 12px 미만 typography(`0.65rem`/`0.6rem`/`0.72rem`, 순위 리스트·
+  뱃지·토글 버튼) 전부 `--font-size-caption`(12px)로 상향.
+- 이제 미사용이 된 `compactList`/`compactItem`/`emptyState`류 CSS를
+  `stats/page.module.css`에서 제거.
+
+미구현/다음 STEP 대상(`STATISTICS-V2-design-and-judgment-system.md`
+§41):
+
+gapInvest 면적 매칭 정확도 개선(계산 로직 변경 필요, 별도 승인),
+이집점수 배치 조회 API 부재로 랭킹 화면 점수 통합 보류, 필터 state
+(기간/거래유형)의 URL 미보존, 공유 버튼 실제 구현(SHARE-2),
+`SectionSkeleton` 실사용처 없음.
+
+DB 변경:
+
+없음(`prisma/schema.prisma` 미변경)
+
+API/비즈니스 로직 변경:
+
+없음(`/api/stats/*` 라우트 코드 미변경 — 감사만 수행, UI/설정
+파일만 수정)
+
+검증:
+
+`npx tsc --noEmit` 0 errors / `npx eslint src` 0 errors(무관 기존
+warning 3건만) / `npx next build` 성공(동일 30 route) / 신규
+`verify-statistics-v2.ts` 20개 + 기존 53개(DS-2/DS-3/APT-IA) = 73개
+전부 PASS / 375·390·430·1024·1280px, live 10개+soon 3개+landing = 13
+route 가로 overflow 0건, console 에러 0건.
+
+상태:
+
+STATISTICS V2 완료. **commit·push 하지 않음**(사용자 지시, ChatGPT
+검수 후 처리, 2026-08-20).
+
+**STATISTICS_V2_CLOSE** — BLOCKER 없음. **SCORE_V1_1_GO** 조건부 —
+이집점수 배치 조회 API가 먼저 필요.

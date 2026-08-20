@@ -221,108 +221,8 @@
   padding: 1.5rem;
 }
 
-/* 컴팩트 순위 리스트: 단지명/평형 | 가격·갭 | 거래건수를 한 줄에 압축 표시 */
-.compactList {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.compactItem {
-  display: flex;
-  align-items: center;
-  padding: 0.6rem 1.25rem;
-  border-bottom: 1px solid var(--border-color);
-  gap: 0.75rem;
-  min-width: 0; /* 자식 플렉스 아이템의 ellipsis 축소가 실제로 동작하도록 보장 */
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.compactItem:last-child {
-  border-bottom: none;
-}
-
-.compactItem:hover {
-  background-color: #f8fafc;
-}
-
-.compactRank {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--primary-color);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 0.75rem;
-  flex-shrink: 0;
-}
-
-.rankBadgeTop1 {
-  background: #ef4444; /* 1등 강조 */
-}
-
-.rankBadgeTop2 {
-  background: #f97316; /* 2등 강조 */
-}
-
-.rankBadgeTop3 {
-  background: #eab308; /* 3등 강조 */
-}
-
-.compactInfo {
-  flex: 1;
-  min-width: 0;
-}
-
-.compactName {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compactMeta {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compactValue {
-  text-align: right;
-  flex-shrink: 0;
-  max-width: 45%; /* 좁은 화면(모바일 2열)에서도 가격 영역이 단지명 영역을 밀어내지 않도록 상한 지정 */
-}
-
-.compactPrice {
-  font-size: 0.9rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.compactSub {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.emptyState {
-  padding: 2rem 1.25rem;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
+/* [STATISTICS V2 §8/§12] 컴팩트 순위 리스트(compact*)와 emptyState는 공용
+   RankingRow/Empty 컴포넌트(src/components/ui/)로 전부 대체됐다 — 제거. */
 
 /* 그래프/표 보기 토글 */
 .viewToggle {
@@ -372,7 +272,7 @@
 
   .viewToggleBtn {
     padding: 0.4rem 0.6rem;
-    font-size: 0.72rem;
+    font-size: var(--font-size-caption);
     white-space: pre-line;
     line-height: 1.25;
     text-align: center;
@@ -676,9 +576,15 @@
   box-shadow: 0 6px 14px rgba(0,0,0,0.08);
 }
 
+/* [STATISTICS V2 §35] emoji(1.6rem 텍스트 글리프) 대신 Lucide 아이콘을
+   담는 고정 크기 컨테이너 — 브랜드 그린 하나로 통일(카드 배경색 남발 금지, §35). */
 .menuIcon {
-  font-size: 1.6rem;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--primary-color);
 }
 
 .menuTitle {
@@ -688,8 +594,10 @@
   line-height: 1.25;
 }
 
+/* [STATISTICS V2 §38] 0.65rem(10.4px)은 12px 하한 원칙 위반이라 caption
+   토큰(0.75rem/12px)으로 올렸다 — DS-2에서 이미 정한 최소 UI text 기준. */
 .menuSubtitle {
-  font-size: 0.65rem;
+  font-size: var(--font-size-caption);
   color: var(--text-muted);
   line-height: 1.2;
 }
@@ -698,12 +606,23 @@
   position: absolute;
   top: 6px;
   right: 6px;
-  font-size: 0.6rem;
+  font-size: var(--font-size-caption);
   font-weight: 700;
   color: var(--text-muted);
   background: #f1f5f9;
   border-radius: 999px;
   padding: 0.1rem 0.4rem;
+}
+
+.categorySection {
+  margin-bottom: 1.5rem;
+}
+
+.categoryTitle {
+  font-size: var(--font-size-body-sm);
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin: 0 0 0.6rem;
 }
 
 .backLink {

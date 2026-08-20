@@ -6,11 +6,19 @@ import useSWR from 'swr';
 import {
   ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import { BarChart3, Table2, Lightbulb, MapPin, ChevronDown } from 'lucide-react';
 import Header from '@/components/Header';
 import RegionSelectModal from '@/components/RegionSelectModal';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import SectionHeader from '@/components/ui/SectionHeader';
 import ErrorState from '@/components/ui/ErrorState';
+import Empty from '@/components/ui/Empty';
+import { RankingList } from '@/components/ui/RankingRow';
+import RankingRow from '@/components/ui/RankingRow';
+import FilterChip from '@/components/ui/FilterChip';
+import InlineLoading from '@/components/ui/InlineLoading';
+import { formatPercentChange } from '@/lib/stats-format';
+import { buildRankingInsight } from '@/lib/stats-insight';
 import { useRegion } from '@/contexts/RegionContext';
 import { getStatsMenuItem } from '../statsMenu';
 import styles from '../page.module.css';
@@ -39,10 +47,14 @@ interface RankingConfig {
   filter: (c: RankingComplex) => boolean;
   sort: (a: RankingComplex, b: RankingComplex) => number;
   value: (c: RankingComplex) => string;
-  valueColor?: string;
+  /** 색상 방향 판단용(위 value와 별개) — null이면 방향성 없는 중립 지표(최고가/거래량). */
+  direction: (c: RankingComplex) => number | null;
   meta: (c: RankingComplex) => string;
   emptyText: string;
   note: string;
+  /** [§27/§44] "이 화면을 보고 어떤 결정을 할 수 있는가"의 근거가 되는 순위
+      기준 구(조사 없이) — buildRankingInsight()가 그대로 조립해 쓴다. */
+  criterionPhrase: string;
 }
 
 const RANKING_CONFIGS: Record<string, RankingConfig> = {
@@ -50,49 +62,56 @@ const RANKING_CONFIGS: Record<string, RankingConfig> = {
     apiType: 'apt',
     filter: (c) => c.pctChange !== null && c.pctChange <= -3,
     sort: (a, b) => (a.pctChange ?? 0) - (b.pctChange ?? 0),
-    value: (c) => `${c.pctChange}%`,
-    valueColor: '#3b82f6',
+    value: (c) => formatPercentChange(c.pctChange),
+    direction: (c) => c.pctChange,
     meta: (c) => `${c.pyung ? `${c.pyung}평 · ` : ''}최근 ${c.latestPrice}`,
     emptyText: '최근 12개월 내 뚜렷한 하락 거래가 없습니다.',
     note: '최근 거래 평균과 과거 거래 평균을 비교한 하락폭입니다(최근 12개월).',
+    criterionPhrase: '하락폭이 큰',
   },
   'record-high': {
     apiType: 'apt',
     filter: () => true,
     sort: (a, b) => b.maxDealAmount - a.maxDealAmount,
     value: (c) => c.maxPrice,
+    direction: () => null,
     meta: (c) => `${c.maxDate} 거래`,
     emptyText: '표시할 데이터가 없습니다.',
     note: '최근 12개월 내 단지별 최고 거래가 기준입니다(전체 역사상 최고가가 아닙니다).',
+    criterionPhrase: '최근 신고가를 기록한',
   },
   rising: {
     apiType: 'apt',
     filter: (c) => c.pctChange !== null && c.pctChange >= 3,
     sort: (a, b) => (b.pctChange ?? 0) - (a.pctChange ?? 0),
-    value: (c) => `+${c.pctChange}%`,
-    valueColor: '#ef4444',
+    value: (c) => formatPercentChange(c.pctChange),
+    direction: (c) => c.pctChange,
     meta: (c) => `${c.pyung ? `${c.pyung}평 · ` : ''}최근 ${c.latestPrice}`,
     emptyText: '최근 12개월 내 뚜렷한 상승 거래가 없습니다.',
     note: '최근 거래 평균과 과거 거래 평균을 비교한 상승폭입니다(최근 12개월).',
+    criterionPhrase: '상승폭이 큰',
   },
   'top-traded': {
     apiType: 'apt',
     filter: () => true,
     sort: (a, b) => b.tradeCount - a.tradeCount,
     value: (c) => `${c.tradeCount}건`,
+    direction: () => null,
     meta: (c) => `최근 ${c.latestPrice}`,
     emptyText: '표시할 데이터가 없습니다.',
     note: '최근 12개월 매매 거래 건수 기준입니다.',
+    criterionPhrase: '최근 거래가 많은',
   },
   'jeonse-risk': {
     apiType: 'rent',
     filter: (c) => c.pctChange !== null && c.pctChange <= -3,
     sort: (a, b) => (a.pctChange ?? 0) - (b.pctChange ?? 0),
-    value: (c) => `${c.pctChange}%`,
-    valueColor: '#3b82f6',
+    value: (c) => formatPercentChange(c.pctChange),
+    direction: (c) => c.pctChange,
     meta: (c) => `${c.pyung ? `${c.pyung}평 · ` : ''}최근 전세 ${c.latestPrice}`,
     emptyText: '최근 12개월 내 전세가 하락 조짐이 뚜렷한 단지가 없습니다.',
     note: '최근 전세 거래 평균이 과거 대비 하락한 단지입니다. 실제 역전세 위험은 집주인의 매입가·대출 상황에 따라 다르니 참고용으로만 활용하세요.',
+    criterionPhrase: '전세가 하락 조짐이 있는',
   },
 };
 
@@ -100,19 +119,17 @@ function ComingSoonCard({ title, reason }: { title: string; reason?: string }) {
   return (
     <div className={styles.panel}>
       <div className={styles.panelBody}>
-        <div className={styles.emptyState}>
-          📦 <b>{title}</b> 데이터는 아직 집계 중입니다.
-          {reason && <div style={{ marginTop: '0.5rem', fontSize: '0.82rem' }}>{reason}</div>}
-          <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            임의의 추정치를 보여드리지 않기 위해 실제 데이터가 연동될 때까지 비워둡니다.
-          </div>
-        </div>
+        <Empty
+          variant="notReady"
+          title={`${title} 데이터는 아직 집계 중입니다.`}
+          description={[reason, '임의의 추정치를 보여드리지 않기 위해 실제 데이터가 연동될 때까지 비워둡니다.'].filter(Boolean).join(' ')}
+        />
       </div>
     </div>
   );
 }
 
-function RankingListView({ slug, lawdCd }: { slug: string; lawdCd: string }) {
+function RankingListView({ slug, lawdCd, regionLabel }: { slug: string; lawdCd: string; regionLabel: string }) {
   const router = useRouter();
   const config = RANKING_CONFIGS[slug];
   const { data: apiResponse, isLoading } = useSWR(
@@ -126,46 +143,49 @@ function RankingListView({ slug, lawdCd }: { slug: string; lawdCd: string }) {
     return complexes.filter(config.filter).sort(config.sort).slice(0, 30);
   }, [apiResponse, config]);
 
+  // [STATISTICS V2 §5/§27] deterministic 한 줄 요약 — 실제 filter 결과에서만 조립.
+  const insight = useMemo(
+    () => buildRankingInsight({
+      regionLabel,
+      criterionPhrase: config.criterionPhrase,
+      items: list.map((c) => ({ name: c.name, valueLabel: config.value(c), tradeCount: c.tradeCount })),
+    }),
+    [list, config, regionLabel]
+  );
+
   if (isLoading) {
-    return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>분석 중입니다...</div>;
+    return <InlineLoading message="분석 중입니다..." />;
   }
   if (apiResponse && !apiResponse.success) {
-    return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>⚠️ {apiResponse.error}</div>;
+    return <ErrorState variant="section" message={apiResponse.error} />;
   }
 
   return (
     <div className={styles.panel}>
       <div className={styles.panelHeader}>
-        <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{config.note}</span>
+        {/* [§40 visual hierarchy] 판단 문장(insight)을 방법론 설명(note)보다
+            우선 노출 — "숫자 나열"이 아니라 "판단"이 1순위가 되도록. */}
+        <SectionHeader title={insight || config.note} description={insight ? config.note : undefined} />
       </div>
       {list.length === 0 ? (
-        <div className={styles.emptyState}>{config.emptyText}</div>
+        <Empty variant="noResult" title={config.emptyText} />
       ) : (
-        <ul className={styles.compactList}>
+        <RankingList>
           {list.map((c, i) => (
-            <li
+            <RankingRow
               key={`${c.dong}-${c.name}`}
-              className={styles.compactItem}
               onClick={() => router.push(`/apt/${encodeURIComponent(c.name)}?lawdCd=${lawdCd}&dong=${encodeURIComponent(c.dong)}`)}
-              role="button"
-              tabIndex={0}
-            >
-              <div className={`${styles.compactRank} ${i === 0 ? styles.rankBadgeTop1 : i === 1 ? styles.rankBadgeTop2 : i === 2 ? styles.rankBadgeTop3 : ''}`}>
-                {i + 1}
-              </div>
-              <div className={styles.compactInfo}>
-                <div className={styles.compactName}>{c.name}</div>
-                <div className={styles.compactMeta}>{config.meta(c)}</div>
-              </div>
-              <div className={styles.compactValue}>
-                <div className={styles.compactPrice} style={config.valueColor ? { color: config.valueColor } : undefined}>
-                  {config.value(c)}
-                </div>
-                <div className={styles.compactSub}>거래 {c.tradeCount}건</div>
-              </div>
-            </li>
+              data={{
+                rank: i + 1,
+                name: c.name,
+                contextLabel: config.meta(c),
+                metricLabel: config.value(c),
+                metricDirection: config.direction(c),
+                tradeCount: c.tradeCount,
+              }}
+            />
           ))}
-        </ul>
+        </RankingList>
       )}
     </div>
   );
@@ -197,29 +217,28 @@ function VolumeView({ lawdCd, displayRegionName }: { lawdCd: string; displayRegi
   const yearlyTable = yearlyTableByType?.[dealType] || (yearlyResponse?.success ? yearlyResponse.data.yearlyTable : null);
   const dealTypeMeta = DEAL_TYPE_OPTIONS.find((o) => o.key === dealType)!;
 
-  if (isLoading) return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>분석 중입니다...</div>;
-  if (!data) return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>⚠️ 거래량 데이터를 불러오지 못했습니다.</div>;
+  if (isLoading) return <InlineLoading message="분석 중입니다..." />;
+  if (!data) return <ErrorState variant="section" message="거래량 데이터를 불러오지 못했습니다." />;
 
   return (
     <div className={styles.panel}>
       <div className={styles.panelHeader}>
-        <h2 className={styles.panelTitle}>📊 거래량·시세 추이</h2>
+        <SectionHeader title="거래량·시세 추이" />
         <div className={styles.viewToggle}>
-          <button className={`${styles.viewToggleBtn} ${chartView === 'graph' ? styles.viewToggleActive : ''}`} onClick={() => setChartView('graph')}>{'📊 그래프\n보기'}</button>
-          <button className={`${styles.viewToggleBtn} ${chartView === 'table' ? styles.viewToggleActive : ''}`} onClick={() => setChartView('table')}>{'📋 표로\n보기'}</button>
+          <button className={`${styles.viewToggleBtn} ${chartView === 'graph' ? styles.viewToggleActive : ''}`} onClick={() => setChartView('graph')} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <BarChart3 size={14} aria-hidden="true" />그래프
+          </button>
+          <button className={`${styles.viewToggleBtn} ${chartView === 'table' ? styles.viewToggleActive : ''}`} onClick={() => setChartView('table')} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <Table2 size={14} aria-hidden="true" />표
+          </button>
         </div>
       </div>
 
       <div className={styles.dealTypeChipRow}>
         {DEAL_TYPE_OPTIONS.map((opt) => (
-          <button
-            key={opt.key}
-            type="button"
-            className={`${styles.dealTypeChip} ${dealType === opt.key ? styles.dealTypeChipActive : ''}`}
-            onClick={() => setDealType(opt.key)}
-          >
+          <FilterChip key={opt.key} active={dealType === opt.key} onClick={() => setDealType(opt.key)}>
             {opt.label}
-          </button>
+          </FilterChip>
         ))}
       </div>
 
@@ -238,11 +257,11 @@ function VolumeView({ lawdCd, displayRegionName }: { lawdCd: string; displayRegi
             </ComposedChart>
           </ResponsiveContainer>
           <div className={styles.tipBox}>
-            <span>💡 <strong>분석 팁:</strong> 최근 12개월 실거래 기준, {displayRegionName}의 {dealTypeMeta.label} 거래량과 가격지수(최초 유효월=100 기준) 추이입니다.</span>
+            <span><Lightbulb size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} /><strong>분석 팁:</strong> 최근 12개월 실거래 기준, {displayRegionName}의 {dealTypeMeta.label} 거래량과 가격지수(최초 유효월=100 기준) 추이입니다.</span>
           </div>
           <div className={styles.marketGuideCard}>
             <span>
-              💡 <strong>시장 지표 가이드</strong>: 전세지수 상승 &amp; 매매지수 하락은 실거주 수요 대비 매매 심리가 위축된 상태입니다. 전세가율이 높아짐에 따라 매매가 하방 지지선이 형성되며, 추후 매수 전환 수요 유입 가능성을 나타냅니다.
+              <Lightbulb size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} /><strong>시장 지표 가이드</strong>: 전세지수 상승 &amp; 매매지수 하락은 실거주 수요 대비 매매 심리가 위축된 상태입니다. 전세가율이 높아짐에 따라 매매가 하방 지지선이 형성되며, 추후 매수 전환 수요 유입 가능성을 나타냅니다.
             </span>
           </div>
         </div>
@@ -292,33 +311,37 @@ function GapInvestView({ lawdCd }: { lawdCd: string }) {
   );
   const data = apiResponse?.success ? apiResponse.data : null;
 
-  if (isLoading) return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>분석 중입니다...</div>;
+  if (isLoading) return <InlineLoading message="분석 중입니다..." />;
   if (!data) return <ErrorState variant="section" message="갭투자 데이터를 불러오지 못했습니다." />;
 
   const list = data.gapInvest || [];
   return (
     <div className={styles.panel}>
       <div className={styles.panelHeader}>
-        <SectionHeader title="소액 갭투자 단지 TOP 5" description="최근 3개월 · 매매-전세 근사 갭" />
+        <SectionHeader
+          title="소액 갭투자 단지 TOP 5"
+          description="최근 3개월 · 매매-전세 근사 갭. 단지 내 최근 매매 1건과 전세 1건을 비교한 근사값으로, 두 거래의 면적·시점이 다를 수 있습니다."
+        />
       </div>
       {list.length === 0 ? (
-        <div className={styles.emptyState}>최근 3개월 내 매매·전세가 함께 확인된 단지가 없습니다.</div>
+        <Empty variant="noResult" title="최근 3개월 내 매매·전세가 함께 확인된 단지가 없습니다." />
       ) : (
-        <ul className={styles.compactList}>
+        <RankingList>
           {list.map((item: any) => (
-            <li key={item.rank} className={styles.compactItem} onClick={() => router.push(`/apt/${encodeURIComponent(item.name)}?lawdCd=${lawdCd}&dong=${encodeURIComponent(item.dong || '')}`)} role="button" tabIndex={0}>
-              <div className={`${styles.compactRank} ${item.rank === 1 ? styles.rankBadgeTop1 : item.rank === 2 ? styles.rankBadgeTop2 : item.rank === 3 ? styles.rankBadgeTop3 : ''}`}>{item.rank}</div>
-              <div className={styles.compactInfo}>
-                <div className={styles.compactName}>{item.name}</div>
-                <div className={styles.compactMeta}>{item.pyung ? `${item.pyung}평` : ''}</div>
-              </div>
-              <div className={styles.compactValue}>
-                <div className={styles.compactPrice} style={{ color: '#ef4444' }}>{item.gap}</div>
-                <div className={styles.compactSub}>거래 {item.dealCount}건</div>
-              </div>
-            </li>
+            <RankingRow
+              key={item.rank}
+              onClick={() => router.push(`/apt/${encodeURIComponent(item.name)}?lawdCd=${lawdCd}&dong=${encodeURIComponent(item.dong || '')}`)}
+              data={{
+                rank: item.rank,
+                name: item.name,
+                contextLabel: item.pyung ? `${item.pyung}평` : undefined,
+                metricLabel: item.gap,
+                metricDirection: null,
+                tradeCount: item.dealCount,
+              }}
+            />
           ))}
-        </ul>
+        </RankingList>
       )}
     </div>
   );
@@ -373,8 +396,7 @@ function CompareView({ lawdCd, maxComplexes }: { lawdCd: string; maxComplexes: n
   return (
     <div className={styles.panel}>
       <div className={styles.panelHeader}>
-        <h2 className={styles.panelTitle}>{maxComplexes === 2 ? '⚖️ 단지 2곳 시세 비교' : '🏘️ 여러 단지 시세 비교'}</h2>
-        <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 3년 · 매매 기준</span>
+        <SectionHeader title={maxComplexes === 2 ? '단지 2곳 시세 비교' : '여러 단지 시세 비교'} description="최근 3년 · 매매 기준" />
       </div>
       <div>
         {selected.map((s, i) => (
@@ -396,9 +418,9 @@ function CompareView({ lawdCd, maxComplexes }: { lawdCd: string; maxComplexes: n
       </div>
       <div className={styles.panelBody} style={{ height: '360px' }}>
         {selected.length === 0 ? (
-          <div className={styles.emptyState}>비교할 단지를 {maxComplexes === 2 ? '2곳' : '2곳 이상'} 검색해서 추가해주세요.</div>
+          <Empty variant="noData" title={`비교할 단지를 ${maxComplexes === 2 ? '2곳' : '2곳 이상'} 검색해서 추가해주세요.`} showMascot={false} />
         ) : loading ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>불러오는 중...</div>
+          <InlineLoading message="불러오는 중..." />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
@@ -490,8 +512,7 @@ function PriceMapView({ lawdCd }: { lawdCd: string }) {
   return (
     <div className={styles.panel}>
       <div className={styles.panelHeader}>
-        <h2 className={styles.panelTitle}>🗺️ 평당가 분위 지도</h2>
-        <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 12개월 · 5분위 색상</span>
+        <SectionHeader title="평당가 분위 지도" description="최근 12개월 · 5분위 색상(낮음→높음: 파랑-초록-노랑-주황-빨강, 브랜드 그린과 무관한 별도 5단계 배색)" />
       </div>
       <div style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 1.25rem', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
         {['1분위(낮음)', '2분위', '3분위', '4분위', '5분위(높음)'].map((label, i) => (
@@ -503,11 +524,11 @@ function PriceMapView({ lawdCd }: { lawdCd: string }) {
       </div>
       <div style={{ height: '500px', position: 'relative' }}>
         {!apiKey || !isMapReady || !KakaoMap ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>지도를 불러오는 중입니다...</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><InlineLoading message="지도를 불러오는 중입니다..." /></div>
         ) : loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>가격 데이터를 분석 중입니다...</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><InlineLoading message="가격 데이터를 분석 중입니다..." /></div>
         ) : markers.length === 0 ? (
-          <div className={styles.emptyState}>표시할 좌표 데이터가 없습니다.</div>
+          <Empty variant="noData" title="표시할 좌표 데이터가 없습니다." showMascot={false} />
         ) : (
           <KakaoMap.Map
             center={{ lat: markers[0].lat, lng: markers[0].lng }}
@@ -540,19 +561,22 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
 
   return (
     <div className={styles.main}>
-      <Header pageTitle={`${item.icon} ${item.title}`} />
+      {/* [STATISTICS V2 §12] 상세 화면 헤더에는 emoji를 더 이상 붙이지 않는다
+          (STATS_MENU.icon은 landing 그리드의 Lucide 매핑 키로만 남음, §35). */}
+      <Header pageTitle={item.title} />
       <div className="container">
         <div className={styles.headerTop}>
           <button className={styles.regionTrigger} onClick={openRegionModal}>
-            <span>📍 {region.displayRegionName}</span>
-            <span className={styles.regionTriggerCaret}>▾</span>
+            <MapPin size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} />
+            <span>{region.displayRegionName}</span>
+            <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
           </button>
         </div>
 
         {item.status === 'soon' ? (
           <ComingSoonCard title={item.title} reason={item.soonReason} />
         ) : slug in RANKING_CONFIGS ? (
-          <RankingListView slug={slug} lawdCd={region.lawdCd} />
+          <RankingListView slug={slug} lawdCd={region.lawdCd} regionLabel={region.displayRegionName} />
         ) : slug === 'volume' ? (
           <VolumeView lawdCd={region.lawdCd} displayRegionName={region.displayRegionName} />
         ) : slug === 'gap-invest' ? (

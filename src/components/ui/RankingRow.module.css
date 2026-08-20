@@ -1,0 +1,99 @@
+/* [STATISTICS V2 §8] stats/page.module.css의 기존 compactItem 계열(순위
+   원형 배지 + 단지명/메타 + 값/부가정보)을 그대로 옮겨 공용화했다 — 값
+   변경 없음, decline/record-high/rising/top-traded/jeonse-risk 5개
+   화면이 동일 시각을 공유하게 된다. */
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  gap: 0.75rem;
+  min-width: 0;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item:hover,
+.item:focus-visible {
+  background-color: var(--surface-subtle);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
+.rank {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.rankTop1 { background: #ef4444; }
+.rankTop2 { background: #f97316; }
+.rankTop3 { background: #eab308; }
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.valueCol {
+  text-align: right;
+  flex-shrink: 0;
+  max-width: 45%;
+}
+
+.value {
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* [STATISTICS V2 §38] 0.72rem(11.52px)는 12px 하한 위반 — caption 토큰으로. */
+.sub {
+  font-size: var(--font-size-caption);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.lowSample {
+  color: var(--warning-color);
+}
