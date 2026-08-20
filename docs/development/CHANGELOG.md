@@ -5693,3 +5693,91 @@ commit·push 하지 않음(2026-08-19).
 **S2B_GO** — 스키마 기반 확정, 다음 STEP(실제 feature 수집 + backfill
 실행)으로 진행 가능. 조건: MOLIT 면적 필드 결측률 실측이 S2B
 착수 시 최우선.
+
+## 2026-08-20
+
+### STEP SCORE S2B — Feature Cache Production 적용 + 부산 서구·해운대 Raw Feature Collection Pilot
+
+작업:
+
+- S1/S1.1/S2A를 2개 논리적 commit(`4f75f50` docs, `0da7368` feat)으로
+  분리해 push. production `prisma migrate deploy` 실행 성공
+  (`20260819145602_score_s2a_feature_cache_schema`) — 적용 전후
+  Apartment/ApartmentMaster/RedevelopmentProject/Presale row count
+  전부 불변 확인.
+- S2A의 jibun-우선 매칭 로직을 재구현해 dry-run한 결과가 S2A 감사
+  (MATCHED_EXACT 20/AMBIGUOUS 2/UNMATCHED 10)와 정확히 일치함을
+  확인한 뒤 20건만 `Apartment.aptSeq`에 backfill — 동일 backfill 2회
+  실행으로 idempotency 확인.
+- `KakaoPlaces.tsx`(브라우저 전용) 대신 `ai-search.ts`/
+  `bus-stops/route.ts`가 이미 production에서 검증한 서버 REST 패턴을
+  재사용해 `src/lib/apartment-score/collectors/{kakao,tago,location,
+  market}.ts` 신규 작성 — 새 API 키 추가 없음(기존
+  `NEXT_PUBLIC_KAKAO_MAP_API_KEY` 서버 재사용 관례 그대로).
+- **서구 5 + 해운대 5 canary batch 실행 중 실제 버그 발견·수정**:
+  Kakao "해수욕장" 키워드 검색이 상호명에 "해수욕장"이 붙은 주변
+  업체(안경점/PC방/화장실 등)로 상위 15건이 채워져 진짜 해변이
+  누락되는 사례를 반여동(`26350-156`) 단지에서 실측으로 발견 —
+  공식 category_name 일치가 나올 때까지 최대 3페이지 조기종료
+  방식(`keywordSearchNearestMatch`)으로 수정, 이후 정상 수집(5,079m)
+  확인. canary idempotency(fresh-skip 0호출 + force 재실행 값 동일)
+  검증 완료, 429/실패 0건.
+- Canary 통과 후 사용자 사전 승인에 따라 별도 확인 없이 서구
+  eligible 150건(canary 5건 제외) + 해운대 eligible 242건(canary
+  5건 제외) 전체 수집 — **양쪽 다 429 rate-limit 0건, 실패 0건**.
+  `ApartmentLocationFeature` 최종 402 rows.
+- MOLIT 시세는 아파트별 호출 없이 서구/해운대 최근 12개월(24회
+  호출)로 배치 수집 — 5,980건 원본 거래에서 **excluUseArea/
+  dealAmount/aptSeq 전부 100% non-null 확인**(S2A의
+  EXTERNAL_VERIFICATION_REQUIRED 우려가 기우였음을 실측으로 확정).
+  이름 fuzzy matching 없이 MOLIT 원본 aptSeq로 직접 매핑. `priceChange12m`은
+  24개월 기준선이 없어 계산하지 않고 null 유지(무리한 통계 금지
+  원칙). `ApartmentMarketFeature` 최종 417 rows, 2회 실행 idempotency
+  확인.
+- Feature coverage 실측: 지하철 접근성 79~80%(실제 지하철 사각지대
+  반영, 이상치 아님), 생활 POI 100%, 학교 접근성 98.4~100%(S2A가
+  DEFER 검토 대상으로 남겼던 것과 달리 안정적으로 연결됨을 확인해
+  DEFER 취소), 해변 접근성 100%(버그 수정 후).
+- **Kakao `pageable_count` 45건 상한을 실측으로 확인**:
+  `hospitalCount1000m`이 정확히 45로 찍힌 단지가 서구 74.8%, 해운대
+  71.3% — 이 필드는 "정확한 개수"가 아니라 "45개 이상"으로 해석해야
+  함을 S2C에 명시.
+- 이상치: 음수/불가능값 0건. 기존 `ApartmentMaster` 주차대수/세대수로
+  계산한 세대당 주차 비율에서 서구 2건(0.20~0.29대), 해운대 5건
+  (3.19~4.84대) 극단값 발견 — raw 그대로 두고 quality 검수 후보로만
+  기록. `transactionCount12m == 1`인 aptSeq가 서구 33.8%, 해운대
+  17.6% — S2C 점수 엔진에서 최소 표본 조건을 별도로 걸어야 함을 명시.
+- `scripts/apartment-score/verify-collectors.ts`(이 프로젝트에 별도
+  테스트 러너가 없어 기존 assert 기반 관례 재사용) 작성 중 실제 버그
+  발견: `median()`이 표본 1건일 때 반올림을 누락해 `Int` 컬럼에 소수를
+  insert하려던 문제 — 모든 분기에 `Math.round` 적용해 수정.
+
+DB/schema/UI/score/public API:
+
+**migration은 production에 실제 적용했다**(§승인 범위 내). 새 점수/가중치
+컬럼 없음, 새 public API route 없음(`next build` 라우트 목록 확인), UI
+변경 없음, 학군 점수/오션뷰 추정 없음. `ApartmentLocationFeature` 402
+rows, `ApartmentMarketFeature` 417 rows, `Apartment.aptSeq` 20 rows
+backfilled — 전부 raw feature/backfill이며 점수 계산은 없음.
+
+typecheck: `npx prisma validate`/`generate` 성공, `npx tsc --noEmit` 0
+errors, `npx eslint src/lib/apartment-score scripts/apartment-score`
+clean, `npx next build` 성공(신규 라우트 없음), 신규 unit 검증
+10/10 pass.
+
+상태:
+
+STEP SCORE S2B 완료(migration 적용 + 실제 raw feature 수집) / backfill
+20건 idempotent / canary에서 실제 버그 1건(해변 검색 크라우딩아웃)과
+unit test에서 실제 버그 1건(median 반올림 누락) 발견·수정 / 서구
+150 + 해운대 242 전체 eligible 수집, 429/실패 0건 / MOLIT 면적·가격
+결측률 우려 해소(100% coverage 실측) / 지하철 접근성 결측은 실제
+사각지대 반영(이상치 아님) / 학교 접근성 DEFER 취소 / Kakao 45-cap
+한계 문서화 / 주차·거래표본 이상치 기록(자동수정 안 함) / 점수·가중치·
+UI·public API 전부 무변경 / **commit·push 하지 않음**(사용자 지시,
+ChatGPT 검수 후 처리, 2026-08-20).
+
+**S2C_GO** — 조건: `priceChange12m`/36개월 feature(S2C에서
+EXTERNAL_VERIFICATION_REQUIRED로 재확인), Kakao 45-cap 필드는 "≥45"로
+해석, `transactionCount12m` 최소 표본 조건을 점수 엔진 설계에
+명시적으로 반영할 것.
