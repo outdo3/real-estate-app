@@ -5863,3 +5863,72 @@ Briefing Engine 전부 구현 / API route 신규 추가(UI 미연결) / 서구·
 
 **S3_GO** — 조건: known limitation 2건(REGION_WIDE 폴백 미구현, "단지"
 카테고리 과대표집 경향)을 S3 UI 연결 설계 시 인지하고 진행할 것.
+
+## 2026-08-20 (3)
+
+### STEP SCORE S3 — 아파트 상세 이집점수 UI + Algorithmic Briefing 적용
+
+작업:
+
+- S2C를 `feat: add apartment score engine`(`8cfdbfd`)로 커밋·푸시.
+- `src/components/ApartmentScoreCard.tsx` 신규 — 이집점수 카드를 Hero
+  직후·실거래 타임라인 직전에 배치(§3 권장 배치, 기존 JSX 삭제/이동 없이
+  순수 추가). 총점+Beta 배지, 카테고리 compact chip(펼치면 explanation),
+  Regional Strength(있을 때만), "지역 비교 기준" 캡션(80점 이상만 좋다는
+  오해 방지, §19) 구성 — "학군" 표현 없이 "학교 접근성"만 사용, coverage/
+  confidence 원문 enum 미노출, Market 별도 카드 없음(기존 시세 UI와 중복
+  판단), 새 디자인 토큰 없이 기존 CSS 변수만 재사용.
+- `src/lib/apartment-score/client-types.ts` 신규 — client에는 API 응답과
+  동일한 순수 타입만 두고 `server/` 디렉토리는 어디서도 import하지 않음.
+  `next build` 후 클라이언트 번들에 weight/threshold 관련 식별자 0건 재확인.
+- `apt-client.tsx`에 독립적인 score fetch `useEffect` 추가(`pageReady`와
+  무관, 실패해도 catch로 조용히 degrade) + 기존 "💡 단지 브리핑" 카드의
+  리스트 콘텐츠만 조건부 교체 — score API의 Algorithmic Briefing(강점
+  최대2/확인점 최대1/종합문장, AI 미사용)을 1순위로, score 데이터 부족 시
+  기존 `apt-brief.ts`(원래부터 non-AI 규칙기반이었음, 이번에 재확인)로
+  자동 폴백. `gemini.ts`/`callGeminiJSON`은 `ai-search.ts`(홈 AI 검색)
+  에서만 계속 쓰이므로 삭제하지 않음.
+- S2C known limitation("단지" 카테고리 briefing 과대표집)을 score
+  formula/weight 변경 없이 `briefing.ts`의 selection priority 계산만
+  수정(`score × weight` 곱셈으로 변경, 이전엔 band 격차가 weight 격차를
+  완전히 압도) — pilot 재실행으로 강점 순서가 실제로 개선됨을 확인
+  (weight 30인 "교통"이 weight 15인 "단지"보다 이제 올바르게 우선).
+- **브라우저 실사용 검증 중 실제 identity matching 버그 발견·수정**: 서구
+  "구덕하이츠"가 같은 동의 "구덕"과 부분포함 매칭돼(기존
+  `aptNamesMatch` 관대한 규칙) 2건 매칭 → AMBIGUOUS로 잘못 표시됨을 발견.
+  `route.ts`에 "정규화 후 완전 일치하는 이름이 있으면 그것만 채택, 없을
+  때만 느슨한 규칙 폴백" 로직 추가 — 실측 결과 이 버그로 실제로는 계산
+  가능한데 AMBIGUOUS로 잘못 표시됐을 apt가 **서구 14건 + 해운대 43건(총
+  57건)**, 수정 후 두 지역 모두 AMBIGUOUS 0건. `verify-score-engine.ts`에
+  회귀 테스트 추가(25→26개).
+- 대표 apt 실브라우저 검증(서구 골든캐슬/구덕하이츠, 해운대
+  해운대파크에비뉴, 서울 강남 래미안개포루체하임아파트=score 없는 지역)
+  + mobile 375/390/430(iframe 폭 고정 방식, `resize_window` 미동작 확인된
+  환경 특성 재확인) + desktop 전부 정상 렌더 확인. score-briefing 모순은
+  동일 API 응답을 그대로 재사용하는 구조라 애초에 발생 불가능함을 실측
+  으로도 재확인(구덕하이츠: 교통 6점 ↔ 브리핑 "교통 접근성은 다소 아쉬운
+  편" 일치).
+
+DB/schema/UI/score weight:
+
+DB schema/migration 변경 없음. 신규 feature collection 없음. **score
+formula/weight 변경 없음**(`CATEGORY_WEIGHTS` 등 `config.ts` 전부 S2C
+그대로) — 이번 STEP에서 바뀐 로직은 briefing 노출 우선순위와 apt identity
+매칭 두 가지뿐, 점수 계산 자체는 무변경. 기존 apt detail 기능(거래/시세/
+대출/지도) 전부 회귀 없음(실측 확인).
+
+typecheck: `npx tsc --noEmit` 0 errors, eslint clean, `npx next build`
+성공, `verify-score-engine.ts` 26/26 pass, `run-score-pilot.ts` 재실행
+정상(서구 155 + 해운대 247건).
+
+상태:
+
+STEP SCORE S3 구현 완료 / 이집점수 카드+Algorithmic Briefing 상세페이지
+적용 / QA 중 identity matching 실버그(57건 영향) 발견·수정 / briefing
+selection priority 개선 / mobile 3폭+desktop 검증 / DB/score weight
+무변경 / **commit·push 하지 않음**(사용자 지시, ChatGPT 검수 후 처리,
+2026-08-20).
+
+**S3_CLOSE 가능** — BLOCKER 없음. **APT_DETAIL_QA_GO** — 조건: 이번에
+고친 identity matching이 서구/해운대 외 지역에서도 정상 동작하는지 더
+넓은 QA 필요.

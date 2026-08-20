@@ -19,8 +19,10 @@ import CommunityPreview from '@/components/CommunityPreview';
 import StickyPriceBar from '@/components/StickyPriceBar';
 import AdContainer from '@/components/AdContainer';
 import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
+import ApartmentScoreCard from '@/components/ApartmentScoreCard';
 import { getAreaDetailLabel, getUniqueAreaLabels } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
+import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 import { recordApartmentVisit } from '@/lib/recent-apartments';
 import { siteConfig } from '@/config/site';
@@ -98,6 +100,11 @@ export default function ApartmentDetail() {
   // undefined는 "아직 조회 전"으로 구분한다.
   const [facilities, setFacilities] = useState<string[] | null | undefined>(undefined);
   const [facilitiesLoading, setFacilitiesLoading] = useState(false);
+
+  // STEP SCORE S3 — 이집점수. trades/aptInfo 로딩과 완전히 독립된 자체 상태다 — 점수
+  // API가 느리거나 실패해도 상세페이지 나머지(FullPageLoader/pageReady)를 막지 않는다(§25/26).
+  const [scoreResult, setScoreResult] = useState<ApartmentScoreApiResponse | null>(null);
+  const [scoreLoading, setScoreLoading] = useState(true);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -378,6 +385,32 @@ export default function ApartmentDetail() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageReady, displayName, aptName, lawdCdState, urlDong]);
+
+  // STEP SCORE S3 — 이집점수 API 조회. pageReady를 기다리지 않고 aptName이 확정되는
+  // 대로 바로 호출한다(§25 — score 로딩이 전체 상세페이지 로딩을 막으면 안 됨). 실패해도
+  // catch에서 조용히 null로 남겨 카드가 "산정 준비 중"으로 graceful degradation한다(§26).
+  useEffect(() => {
+    if (!aptName) return;
+    let cancelled = false;
+    setScoreLoading(true);
+    const query = new URLSearchParams();
+    if (lawdCdState) query.set('lawdCd', lawdCdState);
+    if (urlDong) query.set('dong', urlDong);
+    fetch(`/api/apt/${encodeURIComponent(aptName)}/score?${query.toString()}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: ApartmentScoreApiResponse | null) => {
+        if (!cancelled) setScoreResult(data);
+      })
+      .catch(() => {
+        if (!cancelled) setScoreResult(null);
+      })
+      .finally(() => {
+        if (!cancelled) setScoreLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aptName, lawdCdState, urlDong]);
 
   const openModal = (modalName: string) => {
     setActiveModal(modalName);
@@ -799,6 +832,14 @@ export default function ApartmentDetail() {
         </div>
       </div>
 
+      {/* STEP SCORE S3 — Hero 직후, 실거래 타임라인 직전(§3 권장 배치). pageReady와
+          무관한 독립 카드라 이 위치에 pageReady 조건 밖으로 둔다. */}
+      {pageReady && (
+        <div className="container">
+          <ApartmentScoreCard result={scoreResult} loading={scoreLoading} />
+        </div>
+      )}
+
       <div className="container">
         <div className={styles.panel}>
           <div className={styles.quickButtons} style={{ justifyContent: 'center' }}>
@@ -863,14 +904,21 @@ export default function ApartmentDetail() {
             <div className={styles.briefCard}>
               <div className={styles.briefTitle}>💡 단지 브리핑</div>
               <ul className={styles.briefList}>
-                {buildAptBrief({
-                  trades: filteredTrades,
-                  tradeTypeFilter,
-                  totalHouseholds: aptInfo?.['세대수'] ?? null,
-                  buildYear: trades.length > 0 && trades[0].buildYear ? parseInt(trades[0].buildYear, 10) : null,
-                }).map((sentence, i) => (
-                  <li key={i}>{sentence}</li>
-                ))}
+                {/* STEP SCORE S3 §13/§16 — score API의 Algorithmic Briefing(강점/확인점/
+                    종합문장, AI 미사용)을 1순위로 쓰고, score 데이터가 부족할 때만 기존
+                    non-AI 규칙기반 buildAptBrief(거래추세/세대수/거래빈도)로 폴백한다.
+                    AI로 채우지 않는다(§16) — scoreResult는 score/briefing이 같은 API
+                    응답에서 나오므로 점수-브리핑 모순이 구조적으로 발생하지 않는다(§17). */}
+                {scoreResult?.status === 'OK' && scoreResult.briefing
+                  ? [...scoreResult.briefing.strengths, ...(scoreResult.briefing.caution ? [scoreResult.briefing.caution] : []), scoreResult.briefing.summary].map(
+                      (sentence, i) => <li key={i}>{sentence}</li>
+                    )
+                  : buildAptBrief({
+                      trades: filteredTrades,
+                      tradeTypeFilter,
+                      totalHouseholds: aptInfo?.['세대수'] ?? null,
+                      buildYear: trades.length > 0 && trades[0].buildYear ? parseInt(trades[0].buildYear, 10) : null,
+                    }).map((sentence, i) => <li key={i}>{sentence}</li>)}
               </ul>
             </div>
           )}

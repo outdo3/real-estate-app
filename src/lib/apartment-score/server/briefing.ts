@@ -69,7 +69,12 @@ export function buildBriefing(
       labelShort: CATEGORY_LABELS[c.key],
       labelNoun: CATEGORY_NOUN_FOR_BRIEFING[c.key],
       band: bandOf(c.score),
-      priority: (bandOf(c.score) === 'EXCELLENT' ? 200 : 100) + CATEGORY_WEIGHTS[c.key],
+      // [S3 §14] score(0~100) × category weight(합 100)로 순위를 매긴다 — score만 쓰면
+      // weight 15인 "단지"가 buildYear 단일 sub-metric 의존도가 높아 극단적 percentile이
+      // 자주 나와(S2C known limitation) weight 30인 "교통"보다 자주 앞섰다(실측
+      // briefing QA에서 확인). 이 곱셈은 selection *priority*만 바꾸는 것이고
+      // CATEGORY_WEIGHTS/score 산출 공식 자체는 그대로다(§14 지시대로 formula/weight 불변).
+      priority: c.score * CATEGORY_WEIGHTS[c.key],
     }))
     .filter((c) => c.band === 'EXCELLENT' || c.band === 'GOOD')
     .sort((a, b) => b.priority - a.priority);
@@ -82,12 +87,17 @@ export function buildBriefing(
     const related = REGIONAL_RELATED_CATEGORY[topRegional.type];
     const relatedAlreadyTop2 = related != null && categoryCandidates.slice(0, 2).some((c) => c.key === related);
     if (!relatedAlreadyTop2) {
+      // regional strength는 core category weight가 없어 percentile을 카테고리와 같은
+      // 스케일(0~100 점수 × weight)에 놓기 위해 임의의 weight 20을 이 우선순위 계산에만
+      // 쓴다(schoolAccess/parking/complex의 15보다 조금 높은 정도 — "지역 내 눈에 띄는
+      // 강점"이 평범한 카테고리 강점보다 약간 더 주목받을 만하다는 편집 판단, score
+      // engine의 실제 weight/formula와는 무관).
       strengthPool.push({
         key: null,
         labelShort: null,
         labelNoun: REGIONAL_STRENGTH_NOUN[topRegional.type],
         band: topRegional.level === 'STRONG' ? 'EXCELLENT' : 'GOOD',
-        priority: (topRegional.level === 'STRONG' ? 200 : 100) + 5,
+        priority: topRegional.percentileInSigungu * 20,
       });
     }
   }

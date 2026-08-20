@@ -18,7 +18,7 @@ import { computeMarketInfo } from '@/lib/apartment-score/server/categories/marke
 import { computeRegionalStrengths } from '@/lib/apartment-score/server/regional-premium';
 import { buildBriefing } from '@/lib/apartment-score/server/briefing';
 import type { CategoryResult, RawLocationFeature, RawMarketFeature } from '@/lib/apartment-score/server/types';
-import { aptNamesMatch } from '@/lib/apt-name-match';
+import { aptNamesMatch, normalizeAptName } from '@/lib/apt-name-match';
 
 let passed = 0;
 function check(label: string, fn: () => void) {
@@ -269,6 +269,21 @@ check('동일 이름이 여러 dong에 있으면(=여러 후보) 매칭 로직�
 });
 check('다른 차수(1차/2차)는 매칭되지 않음', () => {
   assert.strictEqual(aptNamesMatch('대신푸르지오1차', '대신푸르지오2차'), false);
+});
+check('[S3 QA에서 실측 발견] 짧은 이름이 부분포함으로 걸려도 정확히 같은 이름이 있으면 그것만 채택(불필요한 AMBIGUOUS 방지)', () => {
+  // 실측 사례: 서구 서대신동3가에 "구덕"과 "구덕하이츠"가 공존 — aptNamesMatch만 쓰면
+  // "구덕하이츠" 검색이 "구덕"에도 부분포함으로 걸려 2건 매칭(AMBIGUOUS)됐었다(2026-08-20 발견).
+  const candidates = [
+    { aptSeq: '26140-38', name: '구덕' },
+    { aptSeq: '26140-209', name: '구덕하이츠' },
+  ];
+  const aptName = '구덕하이츠';
+  const fuzzy = candidates.filter((c) => aptNamesMatch(c.name, aptName));
+  assert.strictEqual(fuzzy.length, 2, '수정 전에는 2건이 fuzzy 매칭됐어야 재현 조건이 맞음');
+  const exact = candidates.filter((c) => normalizeAptName(c.name) === normalizeAptName(aptName));
+  const matched = exact.length > 0 ? exact : fuzzy;
+  assert.strictEqual(matched.length, 1);
+  assert.strictEqual(matched[0].aptSeq, '26140-209');
 });
 
 function mkLocation(aptSeq: string, overrides: Partial<RawLocationFeature>): RawLocationFeature {

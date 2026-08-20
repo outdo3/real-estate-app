@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { aptNamesMatch } from '@/lib/apt-name-match';
+import { aptNamesMatch, normalizeAptName } from '@/lib/apt-name-match';
 import { calculateApartmentScore } from '@/lib/apartment-score/server/calculate';
 import { logServerError } from '@/lib/log-server-error';
 
@@ -51,7 +51,14 @@ export async function GET(
       select: { aptSeq: true, name: true },
     });
 
-    const matched = candidates.filter((c) => aptNamesMatch(c.name, aptName));
+    // 실측 QA(서구 "구덕하이츠")에서 발견: aptNamesMatch는 부분포함도 매칭시켜(예:
+    // "구덕" ⊂ "구덕하이츠") 짧은 이름의 다른 단지와 함께 걸려 정확한 이름이 있는데도
+    // AMBIGUOUS로 떨어지는 문제가 있었다. 정확히 같은 이름(정규화 후 동일)이 하나라도
+    // 있으면 그것만 채택하고, 없을 때만 aptNamesMatch의 느슨한 부분포함 규칙으로
+    // 폴백한다 — 오매칭 허용폭을 넓히는 게 아니라 불필요한 AMBIGUOUS를 줄이는 방향이라
+    // §41/§52 원칙(다른 단지 score 오반환 방지)과 상충하지 않는다.
+    const exactMatches = candidates.filter((c) => normalizeAptName(c.name) === normalizeAptName(aptName));
+    const matched = exactMatches.length > 0 ? exactMatches : candidates.filter((c) => aptNamesMatch(c.name, aptName));
 
     if (matched.length === 0) {
       return NextResponse.json(emptyResponse('NOT_FOUND'));
