@@ -1,0 +1,53 @@
+/* [DESIGN SYSTEM 3 §13] Error는 Empty와 시각적으로 분리한다 — 점선 테두리/
+   마스코트 대신 실선 테두리 + AlertCircle 아이콘(신뢰감 우선, mascot README
+   의 기존 결정과 일치: "에러 상태는 신뢰감을 캐릭터보다 우선"). */
+.box {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.icon {
+  color: var(--error-color);
+}
+
+.message {
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+  max-width: 28rem;
+}
+
+.retry {
+  margin-top: var(--space-1);
+}
+
+/* inline — 한 줄, 아이콘+텍스트+(선택)재시도 */
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  flex-direction: row;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+/* page — 더 넉넉한 여백 */
+.page {
+  padding: var(--space-12) var(--space-4);
+  min-height: 40vh;
+  justify-content: center;
+}
+
+.page .icon svg {
+  width: 40px;
+  height: 40px;
+}

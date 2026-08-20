@@ -14,6 +14,13 @@ import {
   sidoShortLabel,
   formatDataUpdatedAt,
 } from '@/lib/redevelopment/labels';
+import FilterBar from '@/components/ui/FilterBar';
+import SelectFilter from '@/components/ui/SelectFilter';
+import Card from '@/components/ui/Card';
+import Empty from '@/components/ui/Empty';
+import ErrorState from '@/components/ui/ErrorState';
+import Button from '@/components/ui/Button';
+import InlineLoading from '@/components/ui/InlineLoading';
 import styles from './redevelopment-list.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -110,42 +117,27 @@ export default function RedevelopmentListSection() {
         />
       </div>
 
-      <div className={styles.filterBar}>
-        <select className={styles.filterSelect} value={sido} onChange={handleSidoChange} aria-label="시도 선택">
-          {SIDO_LIST.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-
-        <select className={styles.filterSelect} value={sigungu} onChange={handleFilterChange(setSigungu)} aria-label="시군구 선택">
-          <option value="">전체 시군구</option>
-          {sigunguOptions.map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </select>
-
-        <select className={styles.filterSelect} value={businessType} onChange={handleFilterChange(setBusinessType)} aria-label="사업유형 선택">
-          <option value="">전체 유형</option>
-          {BUSINESS_TYPE_VALUES.filter((v) => v !== 'UNKNOWN').map((v) => (
-            <option key={v} value={v}>
-              {BUSINESS_TYPE_LABELS[v]}
-            </option>
-          ))}
-        </select>
-
-        <select className={styles.filterSelect} value={stage} onChange={handleFilterChange(setStage)} aria-label="진행단계 선택">
-          <option value="">전체 단계</option>
-          {STAGE_VALUES.filter((v) => v !== 'UNKNOWN').map((v) => (
-            <option key={v} value={v}>
-              {STAGE_LABELS[v]}
-            </option>
-          ))}
-        </select>
-      </div>
+      <FilterBar>
+        <SelectFilter value={sido} onChange={handleSidoChange} aria-label="시도 선택" options={SIDO_LIST.map((s) => ({ value: s, label: s }))} />
+        <SelectFilter
+          value={sigungu}
+          onChange={handleFilterChange(setSigungu)}
+          aria-label="시군구 선택"
+          options={[{ value: '', label: '전체 시군구' }, ...sigunguOptions.map((g) => ({ value: g, label: g }))]}
+        />
+        <SelectFilter
+          value={businessType}
+          onChange={handleFilterChange(setBusinessType)}
+          aria-label="사업유형 선택"
+          options={[{ value: '', label: '전체 유형' }, ...BUSINESS_TYPE_VALUES.filter((v) => v !== 'UNKNOWN').map((v) => ({ value: v, label: BUSINESS_TYPE_LABELS[v] }))]}
+        />
+        <SelectFilter
+          value={stage}
+          onChange={handleFilterChange(setStage)}
+          aria-label="진행단계 선택"
+          options={[{ value: '', label: '전체 단계' }, ...STAGE_VALUES.filter((v) => v !== 'UNKNOWN').map((v) => ({ value: v, label: STAGE_LABELS[v] }))]}
+        />
+      </FilterBar>
 
       <p className={styles.mapNote}>
         정확한 사업 위치가 확인된 구역부터 지도에 표시됩니다. 목록에서는 모든 사업을 확인할 수 있습니다.
@@ -158,30 +150,15 @@ export default function RedevelopmentListSection() {
       )}
 
       {isLoading ? (
-        <div className={styles.stateBox}>목록을 불러오는 중입니다...</div>
+        <div className={styles.stateBox}><InlineLoading message="목록을 불러오는 중입니다..." /></div>
       ) : fetchError ? (
-        <div className={styles.stateBox}>
-          <img src="/brand/mascot/ejipy-error.webp" alt="" className={styles.stateMascot} />
-          <div>{fetchError}</div>
-        </div>
+        <ErrorState variant="section" message={fetchError} />
       ) : items.length === 0 ? (
-        <div className={styles.stateBox}>
-          <img src="/brand/mascot/ejipy-empty.webp" alt="" className={styles.stateMascot} />
-          <div>조건에 맞는 정비사업이 없습니다.</div>
-        </div>
+        <Empty variant="noResult" title="조건에 맞는 정비사업이 없습니다." />
       ) : (
         <div className={styles.grid}>
           {items.map((item) => (
-            <div
-              key={item.id}
-              className={styles.card}
-              role="button"
-              tabIndex={0}
-              onClick={() => router.push(`/redevelopment/${item.id}`)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') router.push(`/redevelopment/${item.id}`);
-              }}
-            >
+            <Card key={item.id} variant="interactive" onClick={() => router.push(`/redevelopment/${item.id}`)}>
               <div className={styles.cardTitle}>{item.name}</div>
               <div className={styles.cardMetaRow}>
                 <span className={`${styles.badge} ${styles.badgeType}`}>{BUSINESS_TYPE_LABELS[item.businessType as keyof typeof BUSINESS_TYPE_LABELS] ?? item.businessType}</span>
@@ -197,22 +174,18 @@ export default function RedevelopmentListSection() {
                 {sourceLabel(item.primarySource)}
                 {formatDataUpdatedAt(item.dataUpdatedAt) && ` · 데이터 갱신 ${formatDataUpdatedAt(item.dataUpdatedAt)}`}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
       {totalPages > 1 && (
         <div className={styles.pagination}>
-          <button className={styles.pageBtn} disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            이전
-          </button>
+          <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>
           <span className={styles.pageInfo}>
             {page} / {totalPages}
           </span>
-          <button className={styles.pageBtn} disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-            다음
-          </button>
+          <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>다음</Button>
         </div>
       )}
     </div>

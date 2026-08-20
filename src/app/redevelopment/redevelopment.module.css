@@ -45,40 +45,5 @@
   color: var(--primary-color);
 }
 
-.emptyCard {
-  margin-top: 1rem;
-  padding: 3rem 1.5rem;
-  border-radius: 16px;
-  border: 1px dashed var(--border-color);
-  background: var(--card-bg);
-  text-align: center;
-}
-
-.emptyMascot {
-  width: 72px;
-  height: 72px;
-  margin-bottom: 0.75rem;
-}
-
-.emptyTitle {
-  font-weight: 800;
-  font-size: 1.05rem;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
-}
-
-.emptyDesc {
-  font-size: 0.88rem;
-  color: var(--text-muted);
-  line-height: 1.6;
-  max-width: 420px;
-  margin: 0 auto;
-}
-
-.emptyLink {
-  display: inline-block;
-  margin-top: 1.1rem;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--primary-color);
-}
+/* [DESIGN SYSTEM 3 §12] empty* 클래스는 공용 Empty 컴포넌트(variant="notReady")로
+   대체됐다 — 제거. */

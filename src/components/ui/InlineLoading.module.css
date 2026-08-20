@@ -1,0 +1,21 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--font-size-body-sm);
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: inline-loading-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes inline-loading-spin {
+  to { transform: rotate(360deg); }
+}

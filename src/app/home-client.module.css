@@ -78,28 +78,10 @@
   margin: 1.1rem auto 0;
 }
 
+/* [DESIGN SYSTEM 3 §18] 시각 스타일은 공용 Button(secondary)이 담당 —
+   여기서는 quickActionsRow 안에서 두 버튼이 폭을 나눠 갖는 레이아웃만 유지. */
 .quickActionBtn {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  padding: 0.85rem 1rem;
-  border-radius: 14px;
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-  color: var(--text-primary);
-  font-weight: 700;
-  font-size: 0.9rem;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
-}
-
-.quickActionBtn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--primary-color);
 }
 
 /* ── 최근 본 단지 ── */

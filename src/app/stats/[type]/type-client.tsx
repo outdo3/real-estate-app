@@ -9,6 +9,8 @@ import {
 import Header from '@/components/Header';
 import RegionSelectModal from '@/components/RegionSelectModal';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
+import SectionHeader from '@/components/ui/SectionHeader';
+import ErrorState from '@/components/ui/ErrorState';
 import { useRegion } from '@/contexts/RegionContext';
 import { getStatsMenuItem } from '../statsMenu';
 import styles from '../page.module.css';
@@ -291,14 +293,13 @@ function GapInvestView({ lawdCd }: { lawdCd: string }) {
   const data = apiResponse?.success ? apiResponse.data : null;
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>분석 중입니다...</div>;
-  if (!data) return <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>⚠️ 갭투자 데이터를 불러오지 못했습니다.</div>;
+  if (!data) return <ErrorState variant="section" message="갭투자 데이터를 불러오지 못했습니다." />;
 
   const list = data.gapInvest || [];
   return (
     <div className={styles.panel}>
       <div className={styles.panelHeader}>
-        <h2 className={styles.panelTitle}>💰 소액 갭투자 단지 TOP 5</h2>
-        <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>최근 3개월 · 매매-전세 근사 갭</span>
+        <SectionHeader title="소액 갭투자 단지 TOP 5" description="최근 3개월 · 매매-전세 근사 갭" />
       </div>
       {list.length === 0 ? (
         <div className={styles.emptyState}>최근 3개월 내 매매·전세가 함께 확인된 단지가 없습니다.</div>

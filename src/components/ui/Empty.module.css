@@ -1,0 +1,38 @@
+/* [DESIGN SYSTEM 3 §12] presales/redevelopment의 기존 .stateBox/.emptyCard
+   (점선 테두리, text-muted, 중앙 정렬)를 그대로 토큰화했다. */
+.box {
+  padding: 3.5rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mascot {
+  width: 64px;
+  height: 64px;
+}
+
+.title {
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+}
+
+.description {
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-normal);
+  max-width: 28rem;
+}
+
+.action {
+  margin-top: var(--space-1);
+  color: var(--primary-color);
+  font-weight: 700;
+  font-size: var(--font-size-body-sm);
+}

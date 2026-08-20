@@ -49,8 +49,9 @@ function NavButton({
       onClick={() => router.push(href)}
       className={active ? styles.active : ''}
       style={{ color: 'inherit', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+      aria-current={active ? 'page' : undefined}
     >
-      <Icon className={styles.icon} strokeWidth={2} />
+      <Icon className={styles.icon} strokeWidth={2} aria-hidden="true" />
       <span>{label}</span>
     </button>
   );

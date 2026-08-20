@@ -4,6 +4,13 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import Header from '@/components/Header';
+import FilterBar from '@/components/ui/FilterBar';
+import SelectFilter from '@/components/ui/SelectFilter';
+import Card from '@/components/ui/Card';
+import Empty from '@/components/ui/Empty';
+import ErrorState from '@/components/ui/ErrorState';
+import Button from '@/components/ui/Button';
+import InlineLoading from '@/components/ui/InlineLoading';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -112,61 +119,39 @@ export default function PresalesClient() {
           <p className={styles.desc}>현재 청약 가능한 분양부터 최근 3년 분양정보까지 확인하세요.</p>
         </div>
 
-        <div className={styles.filterBar}>
-          <select className={styles.filterSelect} value={region} onChange={handleFilterChange(setRegion)}>
-            <option value="">전체 지역</option>
-            {regions.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-
-          <select className={styles.filterSelect} value={status} onChange={handleFilterChange(setStatus)}>
-            <option value="">전체 상태</option>
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-
-          <select className={styles.filterSelect} value={priceMax} onChange={handleFilterChange(setPriceMax)}>
-            {PRICE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label === '전체' ? '전체 가격' : o.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <FilterBar>
+          <SelectFilter
+            value={region}
+            onChange={handleFilterChange(setRegion)}
+            aria-label="지역 선택"
+            options={[{ value: '', label: '전체 지역' }, ...regions.map((r) => ({ value: r, label: r }))]}
+          />
+          <SelectFilter
+            value={status}
+            onChange={handleFilterChange(setStatus)}
+            aria-label="상태 선택"
+            options={[{ value: '', label: '전체 상태' }, ...STATUS_OPTIONS]}
+          />
+          <SelectFilter
+            value={priceMax}
+            onChange={handleFilterChange(setPriceMax)}
+            aria-label="가격 선택"
+            options={PRICE_OPTIONS.map((o) => ({ value: o.value, label: o.label === '전체' ? '전체 가격' : o.label }))}
+          />
+        </FilterBar>
 
         {!isLoading && !fetchError && <div className={styles.resultCount}>검색 결과 {total.toLocaleString()}건</div>}
 
         {isLoading ? (
-          <div className={styles.stateBox}>목록을 불러오는 중입니다...</div>
+          <div className={styles.stateBox}><InlineLoading message="목록을 불러오는 중입니다..." /></div>
         ) : fetchError ? (
-          <div className={styles.stateBox}>
-            <img src="/brand/mascot/ejipy-error.webp" alt="" className={styles.stateMascot} />
-            ⚠️ {fetchError}
-          </div>
+          <ErrorState variant="section" message={fetchError} />
         ) : items.length === 0 ? (
-          <div className={styles.stateBox}>
-            <img src="/brand/mascot/ejipy-empty.webp" alt="" className={styles.stateMascot} />
-            조건에 맞는 분양정보가 없습니다.
-          </div>
+          <Empty variant="noResult" title="조건에 맞는 분양정보가 없습니다." />
         ) : (
           <div className={styles.grid}>
             {items.map((p) => (
-              <div
-                key={p.id}
-                className={styles.card}
-                role="button"
-                tabIndex={0}
-                onClick={() => router.push(`/presales/${p.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') router.push(`/presales/${p.id}`);
-                }}
-              >
+              <Card key={p.id} variant="interactive" onClick={() => router.push(`/presales/${p.id}`)}>
                 <div className={styles.cardTitle}>{p.houseName}</div>
                 <div className={styles.cardMetaRow}>
                   <span className={`${styles.badge} ${STATUS_BADGE_CLASS[p.status]}`}>{STATUS_LABEL[p.status]}</span>
@@ -188,22 +173,18 @@ export default function PresalesClient() {
                     청약홈에서 공고 보기 ↗
                   </a>
                 )}
-              </div>
+              </Card>
             ))}
           </div>
         )}
 
         {totalPages > 1 && (
           <div className={styles.pagination}>
-            <button className={styles.pageBtn} disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              이전
-            </button>
+            <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>
             <span className={styles.pageInfo}>
               {page} / {totalPages}
             </span>
-            <button className={styles.pageBtn} disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-              다음
-            </button>
+            <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>다음</Button>
           </div>
         )}
       </div>

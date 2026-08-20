@@ -6258,3 +6258,85 @@ Apt-Detail, 375·390·430px+데스크톱).
 
 DESIGN SYSTEM 2(foundation 구현) 완료. **commit·push 하지 않음**
 (사용자 지시, ChatGPT 검수 후 처리, 2026-08-20).
+
+## 2026-08-20 (9)
+
+### DESIGN SYSTEM 2 — commit + push
+
+DS-2 ChatGPT 검수 승인 반영: 실제 변경 파일(6개 수정 + 11개 신규,
+DS-2 보고의 "신규 5개"는 정정)을 `feat: establish ejip design system
+foundation`(`88d074d`)로 커밋하고 origin/main에 push했다. Push 후
+`git status` clean, `HEAD == origin/main == 88d074d` 확인.
+
+### DESIGN SYSTEM 3 — Common Components + Header / Bottom Navigation Integration
+
+작업:
+
+- 공용 foundation 컴포넌트 8개 신규(`src/components/ui/`): `Button`
+  (primary/secondary/tertiary/destructive/icon × sm/md/lg), `FilterBar`/
+  `FilterChip`/`SelectFilter`, `Card`(basic/interactive/status 1개
+  컴포넌트로 통합), `Empty`(noData/noResult/notReady), `ErrorState`
+  (inline/section/page, **마스코트 미사용** — 기존 mascot README 정책
+  준수), `BottomNav`(map 페이지의 인라인 MapBottomNav 대체),
+  `SectionSkeleton`/`InlineLoading`(컴포넌트만, 실사용처는 다음 STEP).
+- Search는 재구현 없이 기존 `HomeApartmentSearch`(HeroSearch 역할)/
+  `ApartmentSearchTrigger`(HeaderSearchTrigger 역할)를 그대로 확정.
+  Header.tsx도 재작성 없이 감사만(이미 prop 기반 variant 구조로 DS1의
+  "4 variant" 요건을 충족하고 있었음) — 활성 탭 `aria-current`,
+  모바일 하단탭바 `safe-area-inset-bottom`만 보강.
+- **BottomNav 5개 메뉴 감사 완료**: 홈/지도/통계/재개발·분양/MY 각각
+  역할·중복 없음 확인, 5개 유지 결정. 6개 시뮬레이션(개발용 임시
+  실험, 제품 미반영) 결과 항목당 폭이 75px→62.5px(-17%)로 줄어
+  향후 여유가 사라지는 것을 실측 확인 — 5개 유지를 뒷받침.
+- **AREA MODEL V1 §24/§33 unresolved 해소**: Hero의 "약 N평"과 칩/
+  거래표의 "N평" 불일치를 `area-utils.ts`의 `pyeongLabelAtPrecision()`에
+  "약 " 접두어를 추가해 통일(값/정밀도 로직은 미변경, 문자열만).
+  이로 인해 `TradeTimelineList`가 375px에서 재발한 overflow(60건 중
+  21건)를 재실측으로 잡아 colgroup 비율을 ㎡/평 두 단위 모두 0건이
+  되도록 재조정(16/13/43/28%, padding 0.15rem).
+- **wiring 중 발견+수정한 실제 버그**: presales/redevelopment 에러
+  상태가 기존에 확정된 mascot 정책("에러 상태는 신뢰감을 캐릭터보다
+  우선")을 위반해 `ejipy-error.webp`(+presales는 `⚠️` emoji까지)를
+  쓰고 있었다 — `ErrorState` 컴포넌트로 교체하며 정책 위반을 함께
+  해소했다.
+- presales-client.tsx/RedevelopmentListSection.tsx에 FilterBar+
+  SelectFilter+Card+Empty+ErrorState+Button 전부 wiring(두 파일이
+  거의 동일한 filterBar/stateBox/card/pageBtn 패턴을 반복하고 있어
+  동시 적용), 각 CSS 모듈에서 대체된 중복 스타일 제거(30~60줄씩).
+  redevelopment-client.tsx 탭 emoji(🏢/🏗️)를 Lucide로 교체.
+  Home 퀵액션 2개, apt 상세 quick buttons 3개(LOCKED 구조의 명시적
+  승인 예외), `/stats/[type]` 갭투자 패널 1곳(SectionHeader+ErrorState)
+  에도 최소 wiring.
+
+미구현/다음 STEP 대상(`DESIGN-SYSTEM-3-common-components-and-navigation.md`
+§23-24):
+
+Statistics 16개 메뉴 + 다른 통계 패널들의 emoji 대량 잔존(Statistics
+전체 개편 금지 원칙과 충돌 방지 위해 이번 STEP에서 건드리지 않음),
+SectionSkeleton/InlineLoading/FilterChip 실사용처 미연결.
+
+DB 변경:
+
+없음(`prisma/schema.prisma` 미변경)
+
+API/비즈니스 로직 변경:
+
+없음(통계 계산·순위·필터 state 로직 미변경, UI wrapper만 교체)
+
+검증:
+
+`npx tsc --noEmit` 0 errors / `npx eslint src` 0 errors(무관 기존
+warning 3건만) / `npx next build` 성공(동일 30 route) / 신규
+`verify-design-system-3.ts` 18개 + 기존 22개(DS-2) + 13개(APT DETAIL
+QA/IA) = 53개 전부 PASS / 375·390·430·1024·1280px 가로 overflow 0건 /
+브라우저 실측(Home/Map/Apartment Detail/Statistics/Presales/
+Redevelopment/School/Community).
+
+상태:
+
+DESIGN SYSTEM 3(공용 컴포넌트 + 내비게이션 통합) 완료. **commit·push
+하지 않음**(사용자 지시, ChatGPT 검수 후 처리, 2026-08-20).
+
+**STATISTICS_V2_GO** — Filter/Card/SectionHeader가 실제 페이지에서
+wiring+검증된 상태로 확보됨(단, 16개 메뉴 emoji 정리를 V2 착수 시
+함께 처리 권장).

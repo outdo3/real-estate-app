@@ -21,25 +21,8 @@
   border-color: var(--ejip-green);
 }
 
-.filterBar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.filterSelect {
-  flex: 1 1 auto;
-  min-width: 7rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
+/* [DESIGN SYSTEM 3 §6] filterBar/filterSelect는 공용 FilterBar/SelectFilter
+   컴포넌트로 대체됐다 — 제거. */
 
 .mapNote {
   font-size: 0.78rem;
@@ -70,10 +53,8 @@
   gap: 0.6rem;
 }
 
-.stateMascot {
-  width: 64px;
-  height: 64px;
-}
+/* [DESIGN SYSTEM 3 §12] stateMascot은 공용 Empty/ErrorState 컴포넌트가
+   자체 처리 — 제거. stateBox는 로딩 상태 wrapper로만 유지. */
 
 .grid {
   display: grid;
@@ -81,18 +62,8 @@
   gap: 0.75rem;
 }
 
-.card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 1rem 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 0;
-  cursor: pointer;
-}
+/* [DESIGN SYSTEM 3 §5] card는 공용 Card 컴포넌트(variant="interactive")로
+   대체됐다 — 제거. */
 
 .cardTitle {
   font-weight: 700;
@@ -166,20 +137,7 @@
   margin-top: 1.25rem;
 }
 
-.pageBtn {
-  padding: 0.5rem 0.9rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-  color: var(--text-primary);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.pageBtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+/* [DESIGN SYSTEM 3 §3] pageBtn은 공용 Button 컴포넌트로 대체됐다 — 제거. */
 
 .pageInfo {
   color: var(--text-secondary);
@@ -189,10 +147,6 @@
 @media (min-width: 768px) {
   .grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .filterSelect {
-    flex: 0 1 10rem;
   }
 }
 

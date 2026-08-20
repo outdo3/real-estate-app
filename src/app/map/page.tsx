@@ -1,69 +1,18 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import FullPageLoader from '@/components/FullPageLoader';
 import AdContainer from '@/components/AdContainer';
-import { BOTTOM_NAV_ITEMS } from '@/lib/bottom-nav-items';
+import BottomNav from '@/components/ui/BottomNav';
 
-// Header.tsx의 하단탭바와 동일한 메뉴 구성(아이콘/active 판정 포함)을
-// src/lib/bottom-nav-items.tsx에서 공유해서 쓴다 — 지도 페이지는 전체화면 커스텀 UI라
-// Header를 아예 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸 막기 위함) 하단탭바만
-// 이 페이지에도 동일하게 떠 있도록 별도로 둔다.
-function MapBottomNav() {
-  const pathname = usePathname();
-  const router = useRouter();
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '60px',
-        background: 'white',
-        borderTop: '1px solid var(--border-color)',
-        boxShadow: '0 -2px 10px rgba(0,0,0,0.08)',
-        display: 'flex',
-        zIndex: 1000,
-      }}
-    >
-      {BOTTOM_NAV_ITEMS.map((item) => {
-        const active = item.isActive(pathname);
-        const Icon = item.Icon;
-        return (
-          // <a href>가 아니라 버튼+router.push로 이동시킨다 — 실제 href가 있는 앵커는
-          // 호버/포커스만 해도 브라우저가 화면 좌하단에 원본 URL을 상태표시줄로 띄우는데,
-          // 하단탭바 자리가 그 위치와 겹쳐 탭바 위에 주소가 뜨는 문제로 이어졌다.
-          <button
-            key={item.href}
-            type="button"
-            onClick={() => router.push(item.href)}
-            style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: active ? 'var(--primary-color)' : 'var(--text-muted)',
-              fontWeight: active ? 800 : 600,
-              fontSize: '0.75rem',
-            }}
-          >
-            <Icon width={22} height={22} strokeWidth={2} />
-            <span>{item.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// [DESIGN SYSTEM 3 §9] 지도 페이지는 전체화면 커스텀 UI라 Header를 아예
+// 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸 막기 위함) 하단탭바만
+// 공용 BottomNav 컴포넌트로 별도 렌더링한다 — 기존에는 이 페이지가 동일한
+// 마크업/스타일을 인라인으로 직접 그렸는데, Header.tsx의 모바일 버전과
+// 로직이 갈라질 위험이 있어 공용 컴포넌트로 대체했다(시각적 변경 없음).
 
 const apiKey =
   process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ||
@@ -913,7 +862,7 @@ export default function FullscreenMapPage() {
         </div>
       )}
 
-      <MapBottomNav />
+      <BottomNav />
     </div>
   );
 }

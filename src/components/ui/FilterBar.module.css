@@ -1,0 +1,16 @@
+/* [DESIGN SYSTEM 3 §6] presales/redevelopment의 기존 .filterBar(flex-wrap:wrap,
+   gap 0.5rem, 768px+에서 각 필터가 flex:0 1 12rem으로 고정폭이 되며 한 줄
+   density 우선)를 그대로 토큰화했다 — 새 정책을 만들지 않고 이미 검증된
+   레이아웃을 공통 컴포넌트로 승격했다. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .bar {
+    flex-wrap: nowrap;
+  }
+}

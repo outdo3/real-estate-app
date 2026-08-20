@@ -51,8 +51,14 @@ function toPyeong(m2: number): number {
   return m2 / M2_PER_PYEONG;
 }
 
+// [DESIGN SYSTEM 3 §15] AREA MODEL V1 §24/§33에서 발견된 "약" 접두어 불일치를
+// 여기서 해소한다 — Hero(formatPyeong)는 항상 "약 N평"이었는데 칩/거래표
+// (getUniquePyeongLabels 경유)는 "N평"만 반환해, 같은 근사 평 환산값이 화면
+// 위치에 따라 "정확한 값"처럼 보일 위험이 있었다. 공급면적이 검증되지 않은
+// 전용면적 기반 평 환산은 항상 근사값이므로, 어디서 쓰이든 "약" 접두어를
+// 붙인다(값 자체나 충돌 해소 정밀도 로직은 변경하지 않음 — 문자열 접두어만).
 function pyeongLabelAtPrecision(m2: number, precision: number): string {
-  return `${trimTrailingZeros(roundToPrecision(toPyeong(m2), precision), precision)}평`;
+  return `약 ${trimTrailingZeros(roundToPrecision(toPyeong(m2), precision), precision)}평`;
 }
 
 // getUniqueAreaLabels/getUniquePyeongLabels가 공유하는 충돌 해소 알고리즘.

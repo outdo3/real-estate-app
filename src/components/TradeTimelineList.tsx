@@ -41,7 +41,7 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
   const visible = trades.slice(0, visibleCount);
 
   const thStyle: React.CSSProperties = {
-    padding: '0.4rem 0.2rem',
+    padding: '0.4rem 0.15rem',
     fontSize: '0.78rem',
     fontWeight: 700,
     color: 'var(--text-muted)',
@@ -50,7 +50,7 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
     whiteSpace: 'nowrap',
   };
   const tdStyle: React.CSSProperties = {
-    padding: '0.5rem 0.2rem',
+    padding: '0.5rem 0.15rem',
     fontSize: '0.82rem',
     color: 'var(--text-primary)',
     borderBottom: '1px solid #f1f5f9',
@@ -61,16 +61,16 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
     <>
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
-          {/* [DESIGN SYSTEM 2 §33] root font-size 16px 복구 후 가격 셀(굵은 가격+
-              증감 배지)이 말줄임(...)되는 걸 375px 폭에서 실측으로 확인했다 —
-              14px로 되돌리는 대신, 각 셀의 실제 렌더링 폭(scrollWidth)을 측정해
-              컬럼 비율을 다시 배분했다. 연도 표기를 4자리→2자리로 줄인
-              계약월 포맷 변경(아래 ymPart)과 세트로 적용해야 375px에서 여유가
-              생긴다. */}
-          <col style={{ width: '17%' }} />
-          <col style={{ width: '14%' }} />
-          <col style={{ width: '44%' }} />
-          <col style={{ width: '25%' }} />
+          {/* [DESIGN SYSTEM 2 §33 / DESIGN SYSTEM 3 §15] root font-size 16px
+              복구 후 가격 셀 말줄임을 375px 실측으로 잡았던 비율이었지만,
+              DS-3에서 평 라벨에 "약" 접두어를 추가하며(§15, Hero와 표기 통일)
+              타입 컬럼("약 25.7평" 등)이 다시 넘치는 걸 재실측으로 확인했다 —
+              ㎡/평 두 단위 모두에서 60건 전수 overflow 0건이 되도록 비율을
+              다시 배분했다(가격 42→43%, 타입 25→28%, 나머지 축소). */}
+          <col style={{ width: '16%' }} />
+          <col style={{ width: '13%' }} />
+          <col style={{ width: '43%' }} />
+          <col style={{ width: '28%' }} />
         </colgroup>
         <thead>
           <tr>

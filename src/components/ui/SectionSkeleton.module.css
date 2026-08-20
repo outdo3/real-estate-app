@@ -1,0 +1,19 @@
+/* [DESIGN SYSTEM 3 §11] ApartmentScoreCard.module.css의 기존 skeletonLine
+   pulse 패턴을 공용 컴포넌트로 승격했다 — 새 애니메이션 언어를 만들지
+   않는다. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.line {
+  background-color: var(--bg-color);
+  border-radius: var(--radius-sm);
+  animation: section-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes section-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

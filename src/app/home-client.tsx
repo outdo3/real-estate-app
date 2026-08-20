@@ -6,6 +6,7 @@ import { Map as MapIcon, Sparkles, BarChart3, Building2, TrendingDown, Award, Tr
 import Header from '@/components/Header';
 import AdContainer from '@/components/AdContainer';
 import HomeApartmentSearch from '@/components/HomeApartmentSearch';
+import Button from '@/components/ui/Button';
 import { getRecentApartments, RecentApartment } from '@/lib/recent-apartments';
 import styles from './home-client.module.css';
 
@@ -40,14 +41,12 @@ export default function Home() {
           <HomeApartmentSearch />
 
           <div className={styles.quickActionsRow}>
-            <Link href="/map" className={styles.quickActionBtn}>
-              <MapIcon width={18} height={18} strokeWidth={2} />
+            <Button href="/map" variant="secondary" className={styles.quickActionBtn} icon={<MapIcon width={18} height={18} strokeWidth={2} />}>
               지도에서 찾기
-            </Link>
-            <Link href="/ai-search" className={styles.quickActionBtn}>
-              <Sparkles width={18} height={18} strokeWidth={2} />
+            </Button>
+            <Button href="/ai-search" variant="secondary" className={styles.quickActionBtn} icon={<Sparkles width={18} height={18} strokeWidth={2} />}>
               조건으로 집 찾기
-            </Link>
+            </Button>
           </div>
         </section>
 

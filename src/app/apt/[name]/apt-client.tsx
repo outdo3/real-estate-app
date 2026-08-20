@@ -6,6 +6,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
 import FullPageLoader from '@/components/FullPageLoader';
+import Button from '@/components/ui/Button';
 import styles from './detail.module.css';
 import KakaoMapEmbed from '@/components/KakaoMapEmbed';
 import AreaSelector from '@/components/AreaSelector';
@@ -869,9 +870,12 @@ export default function ApartmentDetail() {
       <div className="container">
         <div className={styles.panel}>
           <div className={styles.quickButtons} style={{ justifyContent: 'center' }}>
-            <button className={styles.quickBtn} onClick={() => openModal('지도')}>지도</button>
-            <button className={styles.quickBtn} onClick={() => openModal('로드뷰')}>로드뷰</button>
-            <button className={styles.quickBtn} onClick={() => openModal('대출한도')}>대출한도</button>
+            {/* [DESIGN SYSTEM 3 §19] apt 상세는 LOCKED 구조지만, 이번 STEP의
+                공통 Button foundation 적용은 명시적으로 승인된 예외다 —
+                구조/순서/동작은 그대로, 버튼 구현만 공용 컴포넌트로 교체. */}
+            <Button variant="secondary" size="sm" onClick={() => openModal('지도')}>지도</Button>
+            <Button variant="secondary" size="sm" onClick={() => openModal('로드뷰')}>로드뷰</Button>
+            <Button variant="secondary" size="sm" onClick={() => openModal('대출한도')}>대출한도</Button>
             {/* [STEP50 V1 CLEANUP] '단지정보'/'건축물대장' 버튼은 노출하지 않는다.
                 '단지정보' 모달은 aptInfo가 실제로 가질 수 있는 키(세대수/총주차대수/
                 용적률/건폐율, /api/apt/[name]/info/route.ts 참고)가 전부 Hero 아래

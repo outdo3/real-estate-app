@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
+import { FileText, Building2 } from 'lucide-react';
 import Header from '@/components/Header';
 import RedevelopmentListSection from './RedevelopmentListSection';
+import Empty from '@/components/ui/Empty';
 import styles from './redevelopment.module.css';
 
+// [DESIGN SYSTEM 3 §22] 이 파일을 이번 STEP에서 직접 손대는 김에 탭 emoji를
+// Lucide로 교체했다(전체 emoji 일괄 교체는 범위 밖 — 이 영역만).
 const TABS = [
-  { id: 'sale', name: '🏢 분양·청약' },
-  { id: 'redevelopment', name: '🏗️ 재개발' },
+  { id: 'sale', name: '분양·청약', Icon: FileText },
+  { id: 'redevelopment', name: '재개발', Icon: Building2 },
 ];
 
 export default function RedevelopmentClient() {
@@ -27,6 +30,7 @@ export default function RedevelopmentClient() {
                 className={`${styles.tab} ${activeTab === tab.id ? styles.activeTab : ''}`}
                 onClick={() => setActiveTab(tab.id)}
               >
+                <tab.Icon size={16} strokeWidth={2} aria-hidden="true" style={{ marginRight: '0.35rem', verticalAlign: '-3px' }} />
                 {tab.name}
               </button>
             ))}
@@ -34,16 +38,12 @@ export default function RedevelopmentClient() {
         </div>
 
         {activeTab === 'sale' ? (
-          <div className={styles.emptyCard}>
-            <img src="/brand/mascot/ejipy-guide.webp" alt="" className={styles.emptyMascot} />
-            <div className={styles.emptyTitle}>분양·청약 정보 연동 준비 중입니다.</div>
-            <div className={styles.emptyDesc}>
-              청약홈 등 공공데이터 연동이 완료되는 대로 지역별 분양 일정과 경쟁률을 제공할 예정입니다.
-            </div>
-            <Link href="/presales" className={styles.emptyLink}>
-              분양정보 전체 보기 →
-            </Link>
-          </div>
+          <Empty
+            variant="notReady"
+            title="분양·청약 정보 연동 준비 중입니다."
+            description="청약홈 등 공공데이터 연동이 완료되는 대로 지역별 분양 일정과 경쟁률을 제공할 예정입니다."
+            action={{ label: '분양정보 전체 보기', href: '/presales' }}
+          />
         ) : (
           <RedevelopmentListSection />
         )}

@@ -258,6 +258,10 @@
     width: 100%;
     z-index: 1000;
     gap: 0;
+    /* [DESIGN SYSTEM 3 §9] 홈 인디케이터가 있는 기기에서 탭바가 그 아래로
+       깔리지 않도록 안전영역만큼 여백 확보(src/components/ui/BottomNav.module.css와 동일 처리). */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    height: calc(60px + env(safe-area-inset-bottom, 0px));
   }
   
   .menuListHideMobile {
