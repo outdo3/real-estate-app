@@ -11,6 +11,7 @@ import { computeMarketInfo } from './categories/market';
 import { computeRegionalStrengths } from './regional-premium';
 import { explainAllCategories } from './explain';
 import { buildBriefing } from './briefing';
+import { classifyPreparingReason } from './preparing-reason';
 
 /**
  * S2C Score Engine 진입점(§3, §41 API가 이 함수 하나만 호출한다).
@@ -113,6 +114,12 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
   const regionalStrengths = computeRegionalStrengths(targetMaster.aptSeq, locationByAptSeq);
   const market = computeMarketInfo(marketByAptSeq.get(targetMaster.aptSeq) ?? null);
 
+  // [SCORE V1.1 §5~§11] schoolAccess 설명이 상대 percentile만으로 실제 생활 거리와
+  // 모순되지 않도록, 대상 단지의 원본 nearestElementaryDistanceM을 explain/briefing에
+  // 그대로 넘긴다. 여기서만 raw 값을 읽고 school-access.ts의 점수 계산(peer 비교)
+  // 로직 자체는 건드리지 않는다.
+  const schoolAccessDistanceM = locationByAptSeq.get(targetMaster.aptSeq)?.nearestElementaryDistanceM ?? null;
+
   if (coverage < MIN_TOTAL_COVERAGE || scoredCategories.length === 0) {
     return {
       status: 'INSUFFICIENT_DATA',
@@ -120,10 +127,11 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
       scoreVersion: SCORE_VERSION,
       coverage,
       confidence: null,
-      categories: explainAllCategories(targetMaster.aptSeq, categories, regionLabel),
+      categories: explainAllCategories(targetMaster.aptSeq, categories, regionLabel, schoolAccessDistanceM),
       regionalStrengths,
       market,
       briefing: null,
+      preparingReason: classifyPreparingReason(categories),
     };
   }
 
@@ -140,10 +148,11 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
     scoreVersion: SCORE_VERSION,
     coverage,
     confidence,
-    categories: explainAllCategories(targetMaster.aptSeq, categories, regionLabel),
+    categories: explainAllCategories(targetMaster.aptSeq, categories, regionLabel, schoolAccessDistanceM),
     regionalStrengths,
     market,
-    briefing: buildBriefing(categories, regionalStrengths, regionLabel),
+    briefing: buildBriefing(categories, regionalStrengths, regionLabel, schoolAccessDistanceM),
+    preparingReason: null,
   };
 }
 
@@ -166,5 +175,6 @@ function emptyResult(status: 'NOT_FOUND' | 'INSUFFICIENT_DATA' | 'AMBIGUOUS'): F
     regionalStrengths: [],
     market: null,
     briefing: null,
+    preparingReason: status === 'INSUFFICIENT_DATA' ? 'OTHER' : null,
   };
 }

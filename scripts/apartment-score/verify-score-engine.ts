@@ -17,6 +17,9 @@ import { computeCategoryFromSubMetrics } from '@/lib/apartment-score/server/cate
 import { computeMarketInfo } from '@/lib/apartment-score/server/categories/market';
 import { computeRegionalStrengths } from '@/lib/apartment-score/server/regional-premium';
 import { buildBriefing } from '@/lib/apartment-score/server/briefing';
+import { explainCategory } from '@/lib/apartment-score/server/explain';
+import { absoluteSchoolDistanceBand } from '@/lib/apartment-score/server/school-distance-band';
+import { classifyPreparingReason } from '@/lib/apartment-score/server/preparing-reason';
 import type { CategoryResult, RawLocationFeature, RawMarketFeature } from '@/lib/apartment-score/server/types';
 import { aptNamesMatch, normalizeAptName } from '@/lib/apt-name-match';
 
@@ -284,6 +287,115 @@ check('[S3 QA에서 실측 발견] 짧은 이름이 부분포함으로 걸려도
   const matched = exact.length > 0 ? exact : fuzzy;
   assert.strictEqual(matched.length, 1);
   assert.strictEqual(matched[0].aptSeq, '26140-209');
+});
+
+// ---- 9. [SCORE V1.1] 학교 접근성 절대/상대 분리 + 모순 방지(§34 A~F, §41) ----
+console.log('--- SCORE V1.1: school access absolute/relative calibration ---');
+
+function mkSchoolCategory(score: number): CategoryResult {
+  return {
+    key: 'schoolAccess', status: 'SCORED', score, baseWeight: 15,
+    peerLevel: 'SIGUNGU', peerTier: 'HIGH', peerSampleSize: 150,
+    usedSubMetrics: ['nearestElementaryDistanceM'], missingSubMetrics: [],
+  };
+}
+
+check('§6 절대 거리 band는 실측 percentile에 앵커링된 threshold를 따른다', () => {
+  assert.strictEqual(absoluteSchoolDistanceBand(150), 'VERY_CLOSE');
+  assert.strictEqual(absoluteSchoolDistanceBand(200), 'VERY_CLOSE');
+  assert.strictEqual(absoluteSchoolDistanceBand(201), 'CLOSE');
+  assert.strictEqual(absoluteSchoolDistanceBand(400), 'CLOSE');
+  assert.strictEqual(absoluteSchoolDistanceBand(401), 'NORMAL');
+  assert.strictEqual(absoluteSchoolDistanceBand(650), 'NORMAL');
+  assert.strictEqual(absoluteSchoolDistanceBand(651), 'FAR');
+  assert.strictEqual(absoluteSchoolDistanceBand(933), 'FAR');
+  assert.strictEqual(absoluteSchoolDistanceBand(934), 'VERY_FAR');
+  assert.strictEqual(absoluteSchoolDistanceBand(null), 'UNKNOWN');
+});
+
+check('시나리오 A: 실거리 250m(CLOSE) + 상대 낮음(BELOW_AVERAGE)이어도 단독 "아쉽다"가 아니라 절대 긍정을 먼저 말한다(실제 버그 재현 케이스, aptSeq 26140-11 구덕금호 기준)', () => {
+  const explained = explainCategory('t', mkSchoolCategory(41), '서구', 250);
+  assert.ok(explained.explanation!.startsWith('초등학교까지 가까운'), '절대 사실(가깝다)을 먼저 말해야 함');
+  assert.ok(!/^초등학교[^.]*아쉬운 편/.test(explained.explanation!), '문장이 "아쉽다"로 단독 시작하면 안 됨');
+  assert.ok(explained.explanation!.includes('더 가까운 단지도 있습니다'), '상대는 부드러운 caveat로만 붙어야 함');
+});
+
+check('시나리오 B: 실거리 900m(FAR) + 상대 높음(GOOD)이어도 "매우 좋다"로 단독 과장하지 않고 거리 caveat를 남긴다', () => {
+  const explained = explainCategory('t', mkSchoolCategory(75), '해운대구', 900);
+  assert.ok(explained.explanation!.startsWith('초등학교까지 거리가 있는'), '절대 사실(멀다)을 먼저 말해야 함');
+  assert.ok(explained.explanation!.includes('다만'), '상대가 좋아도 절대적으로 먼 사실에 대한 caveat가 있어야 함');
+});
+
+check('시나리오 C: 실거리 250m(CLOSE) + 상대 높음(EXCELLENT)은 강한 긍정 문장이어도 됨(모순 없음)', () => {
+  const explained = explainCategory('t', mkSchoolCategory(90), '서구', 250);
+  assert.ok(explained.explanation!.includes('가까운'));
+  assert.ok(explained.explanation!.includes('상대적으로 좋은 편'));
+  assert.ok(!explained.explanation!.includes('아쉬운'));
+});
+
+check('시나리오 D: 실거리 900m(FAR) + 상대 낮음(BELOW_AVERAGE)은 caution을 포함해도 된다(절대도 이미 멀다는 사실과 일치)', () => {
+  const explained = explainCategory('t', mkSchoolCategory(20), '서구', 900);
+  assert.ok(explained.explanation!.startsWith('초등학교까지 거리가 있는'));
+  assert.ok(explained.explanation!.includes('아쉬운'));
+});
+
+check('시나리오 E: 학교 데이터 자체가 없으면(UNKNOWN) 품질/거리 추정을 하지 않고, briefing caution 후보에서도 제외된다', () => {
+  const explained = explainCategory('t', mkSchoolCategory(20), '서구', null);
+  assert.strictEqual(explained.explanation, '인근 1000m 이내에서 초등학교 접근성 정보가 확인되지 않았습니다.');
+  assert.ok(!explained.explanation!.includes('아쉬운'), '없는 데이터로 품질을 추정하면 안 됨');
+
+  // schoolAccess가 유일한 BELOW_AVERAGE 후보라도, 거리 UNKNOWN이면 caution에 뽑히지 않아야 한다.
+  const categories: CategoryResult[] = [
+    { key: 'transport', status: 'SCORED', score: 70, baseWeight: 30, peerLevel: 'SIGUNGU', peerTier: 'HIGH', peerSampleSize: 100, usedSubMetrics: [], missingSubMetrics: [] },
+    mkSchoolCategory(20),
+  ];
+  const briefing = buildBriefing(categories, [], '서구', null);
+  assert.strictEqual(briefing?.caution, null, 'UNKNOWN 거리인 schoolAccess가 caution으로 선택되면 안 됨');
+});
+
+check('§11 briefing caution도 explain과 동일하게 절대 우선 + 상대 caveat 구조를 쓴다(구덕금호 실제 재현)', () => {
+  const categories: CategoryResult[] = [mkSchoolCategory(41)];
+  const briefing = buildBriefing(categories, [], '서구', 201);
+  assert.ok(briefing?.caution?.startsWith('초등학교까지 가까운'));
+  assert.ok(briefing?.caution?.includes('더 가까운 단지도 있습니다'));
+});
+
+check('§34 F: schoolAccess 문장은 middle/high 관련 어휘를 절대 포함하지 않는다(수집 자체가 elementary 전용이라 문장에도 섞이지 않아야 함)', () => {
+  for (const [score, dist] of [[41, 201], [90, 250], [20, 900], [75, 900]] as const) {
+    const explained = explainCategory('t', mkSchoolCategory(score), '서구', dist);
+    for (const banned of ['중학교', '고등학교', '중·고']) {
+      assert.ok(!explained.explanation!.includes(banned), `schoolAccess 문장에 ${banned} 혼입`);
+    }
+  }
+});
+
+check('§35 금지 어휘(좋은 학군/교육 수준/명문)는 schoolAccess 문장 어디에도 없다', () => {
+  for (const [score, dist] of [[41, 201], [90, 250], [20, 900], [75, 900], [20, null]] as const) {
+    const explained = explainCategory('t', mkSchoolCategory(score), '서구', dist);
+    for (const banned of ['좋은 학군', '교육 수준', '명문', '학군']) {
+      assert.ok(!explained.explanation!.includes(banned), `금지 어휘 발견: ${banned}`);
+    }
+  }
+});
+
+// ---- 10. [SCORE V1.1 §18] 준비중 reason taxonomy ----
+console.log('--- SCORE V1.1: preparing-reason taxonomy ---');
+
+function mkCat(key: string, score: number | null): CategoryResult {
+  return { key: key as any, status: score == null ? 'NOT_SCORED' : 'SCORED', score, baseWeight: 20, peerLevel: score == null ? null : 'SIGUNGU', peerTier: score == null ? null : 'HIGH', peerSampleSize: 0, usedSubMetrics: [], missingSubMetrics: [] };
+}
+
+check('transport+living+schoolAccess 전부 NOT_SCORED면 FEATURE_CACHE_MISSING(실측 14/16 구·군의 실제 지배적 원인)', () => {
+  const categories = [mkCat('transport', null), mkCat('living', null), mkCat('parking', 50), mkCat('complex', 60), mkCat('schoolAccess', null)];
+  assert.strictEqual(classifyPreparingReason(categories), 'FEATURE_CACHE_MISSING');
+});
+check('parking 하나만 NOT_SCORED면 MISSING_PARKING(실측 75.4% 케이스)', () => {
+  const categories = [mkCat('transport', 60), mkCat('living', 55), mkCat('parking', null), mkCat('complex', 50), mkCat('schoolAccess', 70)];
+  assert.strictEqual(classifyPreparingReason(categories), 'MISSING_PARKING');
+});
+check('여러 카테고리가 부분적으로 NOT_SCORED면 INSUFFICIENT_TOTAL_COVERAGE', () => {
+  const categories = [mkCat('transport', 60), mkCat('living', null), mkCat('parking', null), mkCat('complex', 50), mkCat('schoolAccess', 70)];
+  assert.strictEqual(classifyPreparingReason(categories), 'INSUFFICIENT_TOTAL_COVERAGE');
 });
 
 function mkLocation(aptSeq: string, overrides: Partial<RawLocationFeature>): RawLocationFeature {

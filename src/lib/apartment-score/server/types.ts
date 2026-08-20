@@ -21,6 +21,17 @@ export interface PeerPoolResult {
 
 export type CategoryKey = 'transport' | 'living' | 'parking' | 'complex' | 'schoolAccess';
 
+// [SCORE V1.1 §5~§9] "학교 접근성" 설명 전용 — 실제 생활 체감 거리(절대값)를 나타낸다.
+// 상대(percentile) 점수와 개념적으로 완전히 분리한다: 이 값은 nearestElementaryDistanceM
+// 원본에서만 결정되고, 다른 단지와의 비교와는 무관하다. UNKNOWN = 반경 1000m 내
+// 초등학교가 확인되지 않음(수집 자체가 1000m 반경 검색이라 "없다"를 단정하지 않고
+// "확인되지 않음"으로만 표현한다).
+export type AbsoluteDistanceBand = 'VERY_CLOSE' | 'CLOSE' | 'NORMAL' | 'FAR' | 'VERY_FAR' | 'UNKNOWN';
+
+// explain.ts의 상대(percentile) 밴드. school-access-sentence.ts가 explain.ts와
+// briefing.ts 양쪽에서 공용으로 참조해야 해서(순환 import 방지) 여기 둔다.
+export type Band = 'EXCELLENT' | 'GOOD' | 'AVERAGE' | 'BELOW_AVERAGE';
+
 export type CategoryStatus = 'SCORED' | 'PARTIAL' | 'NOT_SCORED';
 
 export interface CategoryResult {
@@ -76,6 +87,23 @@ export interface Briefing {
 
 export type ScoreStatus = 'OK' | 'INSUFFICIENT_DATA' | 'NOT_FOUND' | 'AMBIGUOUS';
 
+// [SCORE V1.1 §18~§21] "이집점수 준비 중" 원인 진단 코드 — INTERNAL/ADMIN 전용이다.
+// 절대 공개 API 응답에 넣지 않는다(route.ts가 필드를 하나씩 whitelist로 골라 응답을
+// 만들기 때문에, 이 필드를 FinalScoreResult에 추가해도 자동으로 노출되지 않는다 —
+// 새 공개 API를 추가할 때 이 필드를 절대 포함하지 말 것).
+// FEATURE_CACHE_MISSING = ApartmentLocationFeature 행 자체가 없음(실측상 부산 14/16
+// 구·군의 지배적 원인). MISSING_* = 해당 카테고리 1개만 단독으로 빠짐. INSUFFICIENT_
+// TOTAL_COVERAGE = 여러 카테고리가 부분적으로 빠져 threshold 미달. OTHER = 방어적 폴백.
+export type PreparingReasonCode =
+  | 'FEATURE_CACHE_MISSING'
+  | 'MISSING_TRANSPORT'
+  | 'MISSING_LIVING'
+  | 'MISSING_PARKING'
+  | 'MISSING_COMPLEX'
+  | 'MISSING_SCHOOL'
+  | 'INSUFFICIENT_TOTAL_COVERAGE'
+  | 'OTHER';
+
 export interface FinalScoreResult {
   status: ScoreStatus;
   score: number | null;
@@ -86,6 +114,9 @@ export interface FinalScoreResult {
   regionalStrengths: RegionalStrength[];
   market: MarketInfo | null;
   briefing: Briefing | null;
+  // status가 'OK'면 항상 null. INTERNAL/ADMIN 전용(위 PreparingReasonCode 주석 참고) —
+  // 공개 API route는 이 필드를 절대 응답에 포함하지 않는다.
+  preparingReason: PreparingReasonCode | null;
 }
 
 // ---- Raw feature row shapes (S2B DB 컬럼, read-only) ----

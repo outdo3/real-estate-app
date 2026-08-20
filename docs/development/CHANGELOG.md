@@ -6526,3 +6526,102 @@ build` 성공(동일 30 route) / 기존 88개 + 신규 6개(21개 파일 합계)
 accurate gap investment matching`) + push 진행.
 
 **STATISTICS_V2_1_FINAL_CLOSE** — BLOCKER 없음.
+
+## 2026-08-20 (13)
+
+### SCORE V1.1 — 학교 접근성 설명 보정 + 부산 16개 구·군 Coverage Audit
+
+실제 Apartment Detail(구덕금호, 서구 동대신동3가, aptSeq 26140-11)에서
+초등학교가 201m(도보 약 3분)인데도 이집점수 briefing이 "서구 비교
+단지보다 다소 아쉬운 편입니다"라고 말하는 모순 사례를 실측으로 재현하고
+근본 원인을 고쳤다. 이어서 부산 16개 구·군 전체의 점수 coverage를
+실측 감사했다.
+
+- **근본 원인(§4 분류: D — percentile interpretation 문제)**:
+  `explain.ts`/`briefing.ts`가 학교 접근성 문장을 오직 상대 percentile
+  점수(`bandOf`)로만 생성하고, 수집된 원본 `nearestElementaryDistanceM`
+  (실제 생활 체감 거리)을 전혀 참조하지 않았다. 거리 수집 자체
+  (`collectors/location.ts`, Kakao SC4 카테고리 검색 → 최근접 초등학교
+  직선거리)와 percentile 계산(`percentile.ts`, `category-helper.ts`)은
+  검증 결과 모두 정상 — identity/거리소스/초중고 혼입 문제(A/B/C)는
+  전부 배제됐다. **score 산출 공식은 변경하지 않았다** — 설명 생성
+  로직만 고쳤다(§13 지시대로).
+- **절대(실제 거리) vs 상대(지역 내 순위) 분리**: 부산 실측 분포(location
+  feature 402건 중 non-null 398건 — min=45, p10=138, p25=214,
+  median=329, p75=472, p90=647, max=933m)에 앵커링해 절대 거리 band
+  (VERY_CLOSE≤200 / CLOSE≤400 / NORMAL≤650 / FAR≤933 / VERY_FAR>933 /
+  UNKNOWN=null)를 `school-distance-band.ts`에 새로 정의했다. 임의
+  하드코딩이 아니라 실측 percentile 근처의 값을 채택했다는 근거를
+  파일 주석에 남겼다.
+- **모순 방지 규칙**(`school-access-sentence.ts`): 문장은 항상 절대
+  거리를 먼저 말하고, 상대 percentile은 모순되지 않는 보조 caveat로만
+  붙인다. 절대=CLOSE 이하 + 상대=BELOW_AVERAGE는 단독 "아쉽다"가 아니라
+  "가까운 편입니다. 다만 서구 내에서는 더 가까운 단지도 있습니다"
+  형태로 강제한다(구덕금호 실제 재현 케이스로 확인). 절대=FAR + 상대=
+  GOOD/EXCELLENT는 반대로 "매우 좋다"고 단독 과장하지 않고 거리 caveat를
+  남긴다(해운대구 에이스스카이뷰, aptSeq 26350-2374 실측 확인). 거리
+  UNKNOWN(반경 1000m 내 학교 미확인)이면 품질/거리 추정을 하지 않고
+  briefing caution 후보에서도 제외한다.
+- `calculate.ts`가 대상 단지의 원본 `nearestElementaryDistanceM`을 읽어
+  `explainAllCategories`/`buildBriefing`에 넘기도록 수정(다른 4개
+  카테고리 설명 로직·score 계산 자체는 무변경).
+- `KakaoPlaces.tsx`의 초품아 배지 문구에서 "교육 환경이 매우 우수합니다"
+  (§35 금지 어휘 "교육 수준" 계열과 사실상 동일)를 제거하고 "도보 통학이
+  가능한 거리입니다"로 순수 근접성 문구로 교체했다.
+- **부산 16개 구·군 coverage 실측 감사** (`busan-coverage-audit.ts`):
+  `ApartmentMaster` 3,402건 중 location/market feature가 존재하는 곳은
+  **서구·해운대구 2개 구뿐**(location 402건=11.8%) — 나머지 14개 구·군은
+  전부 0%. 이 2개 구 내 402건 전체는 `calculateApartmentScore()`
+  100% OK(coverage 0.85~1.00, score 16~78, 극단값·이상 클러스터링 없음).
+  parking만 75.4%(303/402) 미채점 — 기존에 알려진 실제 결측(§17 "missing
+  ≠0점" 원칙대로 집계). 비-pilot 14개 구 샘플 실측 결과 coverage가
+  0.15~0.30에 그쳐 `MIN_TOTAL_COVERAGE=0.6`에 항상 못 미쳐 정확히
+  INSUFFICIENT_DATA로 처리됨을 확인 — **threshold 자체는 변경하지
+  않음**(변경 근거 없음, 오히려 의도대로 동작 확인).
+- **준비중 원인 진단 taxonomy**(`preparing-reason.ts`, 내부/운영자
+  전용 — `FinalScoreResult.preparingReason`, 공개 API route는 이 필드를
+  절대 응답에 포함하지 않음): `FEATURE_CACHE_MISSING`(위치 feature
+  자체 없음 — 14/16 구·군의 실제 지배적 원인) / `MISSING_TRANSPORT`
+  /`MISSING_LIVING`/`MISSING_PARKING`/`MISSING_COMPLEX`/`MISSING_SCHOOL`
+  (단일 카테고리 결측) / `INSUFFICIENT_TOTAL_COVERAGE`(복합 결측) /
+  `OTHER`. 사용자 노출 문구는 원인과 무관하게 항상 "이집점수 준비 중 —
+  일부 단지 정보가 아직 충분하지 않습니다"로 고정(내부 구조 추측 방지).
+- peer-level fallback 실측(§25): LOCAL 94.3%/SIGUNGU 5.7%/REGION_WIDE
+  0%(pilot 402건) — REGION_WIDE 폴백은 실제로 발생하지 않음. Regional
+  Premium 실측(§26): 402건 중 65.7%가 strength 1개 이상, 특정 타입
+  과다 발동 이상 없음(각 8~15% 수준 고르게 분포).
+- 발견했으나 이번 STEP 범위 밖으로 판단해 수정하지 않은 항목(SCHOOL V2
+  후보로 handoff): (1) `explain.ts`/`briefing.ts`의 `regionLabel`이
+  실제 peer level(LOCAL/SIGUNGU/REGION_WIDE)과 무관하게 항상 sigungu
+  이름을 쓴다 — 5개 카테고리 전체에 영향을 주는 구조적 변경이라
+  schoolAccess 단독 calibration 범위를 넘어선다고 판단해 이번엔 보류.
+  (2) `/api/school/apartments/route.ts`의 도보시간 계산에 문서화되지
+  않은 `schoolName.includes('송도') → +5분` 단일 지역 하드코딩이 존재 —
+  Score Engine이 아닌 별개 기능(학교 상세페이지)이라 이번 STEP에서
+  손대지 않고 그대로 보고만 한다.
+
+DB 변경: 없음(`prisma/schema.prisma` 미변경). API 변경: `/api/apt/
+[name]/score` 응답 스키마는 기존과 동일(설명 문구 내용만 달라짐,
+`preparingReason`은 내부용이라 route.ts가 응답에 넣지 않음 — 기존
+whitelist 방식 재확인).
+
+검증: `npx tsc --noEmit` 0 errors / `npx eslint` 0 errors(대상 파일) /
+`npx next build` 성공(동일 라우트 구성) / `verify-score-engine.ts`
+기존 26개 + 신규 12개(schoolAccess 절대/상대 시나리오 A~F, band
+경계값, preparing-reason taxonomy) = **38개 전부 PASS** / 실제 DB
+데이터(구덕금호 26140-11, 해오름 26140-917, 봄여름가을겨울 26140-212,
+e편한세상송도더퍼스트비치 26140-1361, 석포로얄캐슬3차 26140-154,
+대신푸르지오2차 26140-1290, 에이스스카이뷰 26350-2374, 해운대경보
+이리스힐 26350-2335)로 수정 전/후 문장 직접 비교 + 브라우저로 구덕금호
+Apartment Detail 실제 렌더링 확인(score 카드/단지 브리핑/학군 탭
+세 곳 모두 "가까운 편입니다. 다만 서구 내에서는 더 가까운 단지도
+있습니다"로 일관, 학군 탭 "동신초등학교 201m 도보 약 3분"과 모순 없음).
+
+상태: SCORE V1.1 완료. 문서 `docs/development/SCORE-V1-1-school-
+calibration-and-busan-coverage.md` 작성. **commit·push 하지 않음**
+(사용자 지시, ChatGPT 검수 후 처리).
+
+**SCORE_V1_1_CLOSE** — BLOCKER 없음. 부산 16개 구·군 중 서구·해운대구
+2곳만 READY, 나머지 14곳은 LIMITED(=사실상 BLOCKED, 위치 feature
+수집 자체가 안 됨 — score 엔진 결함이 아니라 데이터 수집 범위 문제).
+**부산 전체 지원 완료라고 말할 수 없음**(§40 no-fake-completeness).

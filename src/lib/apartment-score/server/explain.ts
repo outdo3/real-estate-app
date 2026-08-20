@@ -1,4 +1,6 @@
-import type { CategoryKey, CategoryResult, ExplainedCategory } from './types';
+import type { Band, CategoryKey, CategoryResult, ExplainedCategory } from './types';
+import { absoluteSchoolDistanceBand } from './school-distance-band';
+import { buildSchoolAccessSentence } from './school-access-sentence';
 
 // §32: explanation은 raw metric(카테고리 점수)+peer 결과에서만 결정론적으로 생성한다.
 // AI 호출 없음, 임의 자연어 판단 없음.
@@ -23,8 +25,6 @@ const CATEGORY_NOUN: Record<CategoryKey, NounPhrase> = {
   complex: { noun: '단지 특성', particle: '이' },
   schoolAccess: { noun: '초등학교 접근성', particle: '이' },
 };
-
-type Band = 'EXCELLENT' | 'GOOD' | 'AVERAGE' | 'BELOW_AVERAGE';
 
 function bandOf(score: number): Band {
   if (score >= 85) return 'EXCELLENT';
@@ -60,7 +60,12 @@ function deterministicIndex(seed: string, mod: number): number {
   return h % mod;
 }
 
-export function explainCategory(aptSeq: string, cat: CategoryResult, regionLabel: string): ExplainedCategory {
+export function explainCategory(
+  aptSeq: string,
+  cat: CategoryResult,
+  regionLabel: string,
+  schoolAccessDistanceM?: number | null
+): ExplainedCategory {
   const label = CATEGORY_LABELS[cat.key];
 
   if (cat.score == null) {
@@ -68,6 +73,21 @@ export function explainCategory(aptSeq: string, cat: CategoryResult, regionLabel
   }
 
   const band = bandOf(cat.score);
+
+  // [SCORE V1.1 §5~§11] schoolAccess는 절대 거리(체감)를 항상 먼저 말하고 상대
+  // percentile은 모순되지 않는 보조 문장으로만 붙인다 — 다른 4개 카테고리는
+  // 원본 상대-percentile-only 템플릿을 그대로 쓴다(§13: formula/다른 카테고리
+  // 설명 로직은 바꾸지 않는다, 이 STEP의 문제는 schoolAccess 한정이었다).
+  if (cat.key === 'schoolAccess') {
+    const absBand = absoluteSchoolDistanceBand(schoolAccessDistanceM);
+    return {
+      key: cat.key,
+      label,
+      score: Math.round(cat.score),
+      explanation: buildSchoolAccessSentence(absBand, band, regionLabel),
+    };
+  }
+
   const variants = BAND_TEMPLATES[band];
   const variant = variants[deterministicIndex(`${aptSeq}:${cat.key}`, variants.length)];
   const { noun, particle } = CATEGORY_NOUN[cat.key];
@@ -80,8 +100,13 @@ export function explainCategory(aptSeq: string, cat: CategoryResult, regionLabel
   };
 }
 
-export function explainAllCategories(aptSeq: string, categories: CategoryResult[], regionLabel: string): ExplainedCategory[] {
-  return categories.map((c) => explainCategory(aptSeq, c, regionLabel));
+export function explainAllCategories(
+  aptSeq: string,
+  categories: CategoryResult[],
+  regionLabel: string,
+  schoolAccessDistanceM?: number | null
+): ExplainedCategory[] {
+  return categories.map((c) => explainCategory(aptSeq, c, regionLabel, schoolAccessDistanceM));
 }
 
 export { bandOf };

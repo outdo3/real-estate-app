@@ -261,7 +261,7 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
       ))}
       {places.length > 0 && isSchoolOnly && places[0].distance < 300 && (
          <li style={{color: 'var(--primary-color)', fontWeight: 600, marginTop: '1rem', listStyle: 'none', marginLeft: '-1.2rem'}}>
-           🏆 초품아(학세권) 단지로 교육 환경이 매우 우수합니다.
+           🏫 초품아(학세권) 단지로 도보 통학이 가능한 거리입니다.
          </li>
       )}
       {places.length > 0 && isSubwayOnly && places[0].distance < 500 && (
