@@ -695,7 +695,7 @@
   min-width: 84px;
   font-size: 0.9rem;
   font-weight: 700;
-  color: #03C75A;
+  color: var(--primary-color);
   text-align: right;
   white-space: nowrap;
 }
@@ -722,7 +722,7 @@
 
 .loadMoreBtn:hover {
   background: #f8fafc;
-  color: #03C75A;
+  color: var(--primary-color);
 }
 
 /* 아실 스타일 전면 지역 선택 모달은 src/components/RegionSelectModal.module.css로 이동

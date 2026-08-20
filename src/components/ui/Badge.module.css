@@ -1,0 +1,49 @@
+/* [DESIGN SYSTEM 2 §20] Badge = 상태/정보를 보여주기만 하는 non-interactive
+   표시. Chip과 padding/radius/타이포는 공유하되 클릭 인터랙션(hover/active/
+   focus-visible)은 의도적으로 두지 않는다. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-caption);
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.beta {
+  color: var(--primary-color);
+  background-color: var(--ejip-mint);
+}
+
+.status {
+  color: var(--text-secondary);
+  background-color: var(--bg-color);
+}
+
+.positive {
+  color: var(--up-color);
+  background-color: rgba(244, 54, 30, 0.1);
+}
+
+.negative {
+  color: var(--down-color);
+  background-color: rgba(49, 82, 214, 0.1);
+}
+
+.warning {
+  color: var(--warning-color);
+  background-color: rgba(245, 158, 11, 0.12);
+}
+
+.neutral {
+  color: var(--text-muted);
+  background-color: var(--surface-subtle);
+}
+
+.regionalStrength {
+  color: var(--primary-hover);
+  background-color: var(--ejip-mint);
+}

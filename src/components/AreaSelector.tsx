@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { resolveAreaLabel } from '@/lib/area-utils';
+import Chip from '@/components/ui/Chip';
+import AreaChip, { AreaChipData } from '@/components/ui/AreaChip';
 
 interface AreaSelectorProps {
   trades: Array<{ area: string }>;
@@ -34,40 +36,27 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
 
   const renderAreaLabel = (area: string) => resolveAreaLabel(parseFloat(area), areaLabels);
 
-  const chipStyle = (active: boolean): React.CSSProperties => ({
-    padding: '0.5rem 1rem',
-    borderRadius: '999px',
-    fontWeight: 600,
-    border: '1px solid',
-    cursor: 'pointer',
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
-    backgroundColor: active ? 'var(--primary-color)' : 'white',
-    color: active ? 'white' : 'var(--text-secondary)',
-    borderColor: active ? 'var(--primary-color)' : 'var(--border-color)',
+  // [AREA MODEL V1 §19/§32] 오늘은 공급면적 데이터가 없어(SUPPLY_AREA_NOT_AVAILABLE)
+  // supplyAreaM2/pyeongLabel은 항상 null이다 — AreaChip이 이 null을 보고 "평형"
+  // 라벨을 스스로 만들지 않도록 구조적으로 강제한다.
+  const toAreaChipData = (area: string): AreaChipData => ({
+    id: area,
+    exclusiveAreaM2: parseFloat(area),
+    displayLabel: renderAreaLabel(area),
+    supplyAreaM2: null,
+    pyeongLabel: null,
+    tradeCount: countByArea.get(area) || 0,
   });
 
   return (
     <div style={{ position: 'relative' }}>
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '0.25rem' }}>
-        <button onClick={() => onSelect('전체')} style={chipStyle(selectedArea === '전체')}>
-          전체
-        </button>
+        <Chip active={selectedArea === '전체'} onClick={() => onSelect('전체')}>전체</Chip>
         {chipAreas.map((area) => (
-          <button key={area} onClick={() => onSelect(area)} style={chipStyle(selectedArea === area)}>
-            {renderAreaLabel(area)}
-          </button>
+          <AreaChip key={area} data={toAreaChipData(area)} active={selectedArea === area} onClick={() => onSelect(area)} />
         ))}
         {allAreas.length > 0 && (
-          <button
-            onClick={() => setIsOpen(true)}
-            style={{
-              padding: '0.5rem 1rem', borderRadius: '999px', fontWeight: 600, border: '1px dashed var(--border-color)', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
-              backgroundColor: 'white', color: 'var(--text-secondary)',
-            }}
-          >
-            ▼ 전체 평형
-          </button>
+          <Chip dashed onClick={() => setIsOpen(true)}>▼ 전체 평형</Chip>
         )}
       </div>
 

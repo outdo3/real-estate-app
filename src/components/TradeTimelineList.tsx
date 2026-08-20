@@ -41,7 +41,7 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
   const visible = trades.slice(0, visibleCount);
 
   const thStyle: React.CSSProperties = {
-    padding: '0.4rem 0.3rem',
+    padding: '0.4rem 0.2rem',
     fontSize: '0.78rem',
     fontWeight: 700,
     color: 'var(--text-muted)',
@@ -50,7 +50,7 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
     whiteSpace: 'nowrap',
   };
   const tdStyle: React.CSSProperties = {
-    padding: '0.5rem 0.3rem',
+    padding: '0.5rem 0.2rem',
     fontSize: '0.82rem',
     color: 'var(--text-primary)',
     borderBottom: '1px solid #f1f5f9',
@@ -61,10 +61,16 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
     <>
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
-          <col style={{ width: '22%' }} />
+          {/* [DESIGN SYSTEM 2 §33] root font-size 16px 복구 후 가격 셀(굵은 가격+
+              증감 배지)이 말줄임(...)되는 걸 375px 폭에서 실측으로 확인했다 —
+              14px로 되돌리는 대신, 각 셀의 실제 렌더링 폭(scrollWidth)을 측정해
+              컬럼 비율을 다시 배분했다. 연도 표기를 4자리→2자리로 줄인
+              계약월 포맷 변경(아래 ymPart)과 세트로 적용해야 375px에서 여유가
+              생긴다. */}
+          <col style={{ width: '17%' }} />
           <col style={{ width: '14%' }} />
-          <col style={{ width: '36%' }} />
-          <col style={{ width: '28%' }} />
+          <col style={{ width: '44%' }} />
+          <col style={{ width: '25%' }} />
         </colgroup>
         <thead>
           <tr>
@@ -82,12 +88,16 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
             let diffBadge: React.ReactNode = null;
             if (prevTrade && isSale && prevTrade.area === t.area) {
               const diff = t.price - prevTrade.price;
-              if (diff > 0) diffBadge = <span style={{ fontSize: '0.72rem', marginLeft: '0.25rem', color: '#ef4444', fontWeight: 700 }}>▲{diff.toFixed(1)}</span>;
-              else if (diff < 0) diffBadge = <span style={{ fontSize: '0.72rem', marginLeft: '0.25rem', color: '#3b82f6', fontWeight: 700 }}>▼{Math.abs(diff).toFixed(1)}</span>;
+              if (diff > 0) diffBadge = <span style={{ fontSize: '0.72rem', marginLeft: '0.15rem', color: '#ef4444', fontWeight: 700 }}>▲{diff.toFixed(1)}</span>;
+              else if (diff < 0) diffBadge = <span style={{ fontSize: '0.72rem', marginLeft: '0.15rem', color: '#3b82f6', fontWeight: 700 }}>▼{Math.abs(diff).toFixed(1)}</span>;
             }
 
+            {/* [DESIGN SYSTEM 2 §33] 375px 폭 가격 셀 말줄임을 해소하려고 연도를
+                4자리(2026.08)→2자리(26.08)로 줄였다 — 값 자체는 그대로, 표시
+                폭만 좁혔다(계약월 컬럼이 확보하는 실측 여유가 이 포맷 변경과
+                아래 colgroup 재배분이 합쳐져야 나온다). */}
             const [ymPart, dPart] = t.tradeDate.split('-').length === 3
-              ? [t.tradeDate.slice(0, 7).replace('-', '.'), t.tradeDate.slice(8, 10)]
+              ? [t.tradeDate.slice(2, 7).replace('-', '.'), t.tradeDate.slice(8, 10)]
               : [t.tradeDate, ''];
 
             return (

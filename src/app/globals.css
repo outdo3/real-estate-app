@@ -1,51 +1,130 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
 :root {
-  --primary-color: #03c75a; /* 네이버 그린 */
-  --primary-hover: #02b351;
-  --bg-color: #f5f6f8; /* 네이버 배경색과 유사한 연회색 */
+  /* [DESIGN SYSTEM 2] 브랜드 그린 결정 확정 — 이집 Main Green = --ejip-green
+     (#13A367). --primary-color/--primary-hover는 이제 이 값의 alias다(직접
+     hex를 다시 적지 않음 — 나중에 그린을 조정할 때 한 곳만 바꾸면 되게).
+     기존 #03c75a(네이버 그린 참고값)는 legacy/deprecated 방향으로만 남기고
+     즉시 삭제하지 않는다(점진 migration 원칙, DS1 §2-2/§40 결정). */
+  --primary-color: var(--ejip-green);
+  --primary-hover: var(--ejip-green-deep);
+  --bg-color: #f5f6f8;
   --card-bg: #FFFFFF;
   --text-primary: #242424;
   --text-secondary: #5e5e5e;
-  --text-muted: #8f8f8f;
+  /* [DESIGN SYSTEM 2 §6] 기존 #8f8f8f는 흰 배경 대비 약 3.5:1로 WCAG AA
+     본문 기준(4.5:1) 미달이었다(DS1 §29 발견). #6b7280(같은 계열의 더 어두운
+     회색, 흰 배경 대비 ~4.8:1)로 조정 — caption류에도 핵심 정보가 있을 수
+     있어 "흐리게 보이되 읽을 수는 있어야 한다"는 원칙을 지킨다. */
+  --text-muted: #6b7280;
   --border-color: #e4e8eb;
-  
-  --rank-1: #03c75a;
+
+  --rank-1: var(--primary-color);
   --rank-2: #8f8f8f;
   --rank-3: #8f8f8f;
   --rank-other: #f5f6f8;
 
-  --up-color: #f4361e; /* 빨간색 (네이버 증권/부동산 스타일 상승색) */
+  --up-color: #f4361e; /* 빨간색 (한국 부동산/증권 관행상 상승색 — DS1 §8.2에서 유지 결정) */
   --down-color: #3152d6; /* 파란색 (하락색) */
-  
+  /* [DESIGN SYSTEM 2 §5] semantic color 분리 — 상승색(--up-color)을 더 이상
+     "에러"/"경고"와 겹쳐 쓰지 않는다(DS1 §2-1/§2-5에서 발견된 재사용 문제).
+     브랜드 그린도 "모든 긍정"에 자동으로 쓰지 않는다 — 아래 3개가 각자의
+     의미를 전담한다. */
+  --warning-color: #f59e0b;
+  --info-color: #3b82f6;
+  --error-color: #ef4444;
+  /* "표면(surface)" semantic alias — 기존 --card-bg/--bg-color 값을 바꾸지
+     않고 이름만 의미 중심으로 추가 제공(실사용은 --card-bg/--bg-color 그대로
+     둬도 무방, 신규 컴포넌트는 --surface* 사용 권장). */
+  --surface: var(--card-bg);
+  --surface-subtle: #f8fafc; /* LivingEnvironmentPanel 등에서 이미 광범위하게 쓰이던 값을 토큰화 */
+
+  /* [DESIGN SYSTEM 2 §28] Community/My/School/Stats/Admin 등에서 정의 없이
+     참조되던 --background-color/--bg-light(DS1 §2-4에서 발견) — 실제 사용
+     맥락(페이지 wrapper 배경)을 확인한 결과 --bg-color와 같은 의미로 쓰려던
+     것이 명확해 해당 값으로 정의한다. 지금까지는 transparent로 풀려 있었고
+     상위 body가 이미 --bg-color라 시각적으로는 동일하게 보였다(School의
+     .linkBtn 배경만 미세하게 옅은 회색이 새로 생김 — 의도된 값 없음이 미완성
+     스타일로 보여 안전한 보정으로 판단). */
+  --background-color: var(--bg-color);
+  --bg-light: var(--bg-color);
+
   --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.04);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
   --shadow-card: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px 0 rgba(0,0,0,0.04);
-  
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
+  --radius-2xl: 16px; /* [DS2 §11] School/Community/My가 이미 광범위하게 쓰던 16px를 정식 토큰으로 승격 */
   --radius-pill: 9999px;
-  
+
+  /* [DESIGN SYSTEM 2 §13] 44px = 모바일 터치 타깃 기준(WCAG/HIG 공통 권장치).
+     compact control이 필요해도 실제 clickable area는 44px을 유지한다. */
+  --control-height-sm: 36px;
+  --control-height-md: 44px;
+  --control-height-lg: 52px;
+
+  /* [DESIGN SYSTEM 2 §8] Typography scale — DS1 §3.2에서 제안한 7단계를
+     그대로 토큰화. 11px 이하 금지, 12px는 caption/metadata 전용, 일반 본문은
+     14~16px, 핵심 설명은 15~16px을 우선한다는 원칙을 값으로 고정한다. */
+  --font-size-display: 1.75rem;      /* 28px — Hero 숫자(가격/점수) */
+  --font-size-page-title: 1.25rem;   /* 20px */
+  --font-size-section-title: 1.125rem; /* 18px */
+  --font-size-card-title: 1rem;      /* 16px */
+  --font-size-body: 0.9375rem;       /* 15px — 본문 기본값 */
+  --font-size-body-sm: 0.875rem;     /* 14px */
+  --font-size-caption: 0.75rem;      /* 12px — 하한선, caption/metadata 전용 */
+
+  --line-height-tight: 1.3;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+
+  /* [DESIGN SYSTEM 2 §9] font-weight hierarchy — 숫자를 전부 800으로 만들지
+     않는다: 핵심 KPI(가격/점수/순위)만 bold/extrabold, 나머지는 regular~semibold. */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* [DESIGN SYSTEM 2 §10] spacing scale — 기존 코드가 이미 관행적으로 쓰던
+     0.25rem 단위 값들을 그대로 토큰화(값 변경 없음, 이름만 부여). */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --z-header: 100;
+  --z-dropdown: 500;
+  --z-modal: 1000;
+  --z-toast: 2000;
+
   --font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', '맑은 고딕', helvetica, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
-  
+
   --transition-fast: 0.15s ease-in-out;
   --transition-normal: 0.25s ease-in-out;
   --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* [BRAND STEP 56-B2] D안 브랜드 컬러 토큰. 기존 --primary-color(#03c75a,
-     네이버 그린 참고값)는 이번 STEP에서 값을 바꾸지 않는다 — 이 토큰들은
-     아직 어떤 화면에서도 참조하지 않는 추가 전용(additive) 정의이며,
-     실제 --primary-color 교체 여부는 시각 검수 후 STEP 57-A 이후 판단한다.
-     자세한 배경은 docs/development/56-brand-assets.md 참고. */
+  /* 이집 브랜드 컬러 원본 토큰(BRAND STEP 56-B2에서 추가, DS1/DS2 감사로
+     Main Green 채택 확정 — 위 --primary-color가 이제 이 값을 그대로 가리킨다). */
   --ejip-green: #13A367;
   --ejip-green-deep: #0A7A4F;
   --ejip-mint: #E6F7EF;
   --ejip-yellow: #FFCA3D;
   --ejip-charcoal: #1F2937;
   --ejip-gray-50: #F5F6F8;
+
+  /* legacy/deprecated — 즉시 삭제하지 않는다(점진 migration). 새 코드에서
+     참조 금지, 기존 하드코딩된 참조가 있다면 --primary-color로 교체 권장. */
+  --legacy-naver-green: #03c75a;
 }
 
 * {
@@ -96,9 +175,12 @@ ul, ol {
 }
 
 @media (max-width: 768px) {
-  html {
-    font-size: 14px; /* 모바일에서 폰트 사이즈 전체 12.5% 축소 (16px -> 14px) */
-  }
+  /* [DESIGN SYSTEM 2 §7] 전역 html font-size 14px 축소 규칙을 제거했다 —
+     모든 rem 값이 모바일에서 추가로 12.5% 작아지던 원인(DS1 §3.3에서
+     "글자가 너무 작다" 피드백의 구조적 원인으로 지목). root는 이제
+     모바일에서도 16px 그대로 유지된다. 모바일에서 정말 줄여야 하는 값은
+     이 규칙이 아니라 각 컴포넌트의 개별 @media 규칙으로 처리한다(이미
+     ApartmentScoreCard.module.css가 이 방식을 올바르게 쓰고 있음). */
   .container {
     padding: 0 16px; /* 모바일 표준 패딩 */
   }

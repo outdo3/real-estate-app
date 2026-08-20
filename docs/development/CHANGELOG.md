@@ -6193,3 +6193,68 @@ grouping 정책(병합 없음 유지) 확정, AreaChip contract를 DESIGN SYSTEM
 **DESIGN_SYSTEM_2_GO** — AREA MODEL V1의 AreaChip contract(§32)가
 DS-2의 chip/typography/touch-target 규칙에 이미 반영 가능한 형태로
 준비됨.
+
+## 2026-08-20 (8)
+
+### DESIGN SYSTEM 2 — Foundation Tokens + Typography + Semantic Color + Core Components
+
+작업:
+
+- `globals.css` 토큰 foundation 전면 재작성: 브랜드 그린 `#13A367`을
+  `--primary-color`/`--rank-1` alias로 확정(`#03c75a`는
+  `--legacy-naver-green`으로 보존, 즉시 삭제 안 함), semantic color
+  (`--warning/--info/--error-color`)를 `--up/--down-color`와 분리,
+  `--text-muted` WCAG AA 대비 조정(`#8f8f8f`→`#6b7280`), typography
+  scale 7단계(`--font-size-display`~`--font-size-caption`, 12px 하한),
+  spacing 9단계/radius 6단계/control-height 3단계(md=44px 터치 타깃)
+  토큰화, undefined 토큰(`--background-color`/`--bg-light`) 해소.
+- 모바일(≤768px) root font-size 14px 전역 축소 규칙 제거 — 16px로
+  통일(DS-1에서 지목된 "글자가 너무 작다" 구조적 원인 제거).
+- 하드코딩된 `#03c75a` 3곳(`stats/page.module.css`, `page.module.css`
+  2곳)을 `--primary-color`로 교체.
+- 신규 foundation 컴포넌트 4개 추가: `Chip`/`Badge`/`SectionHeader`/
+  `AreaChip`(`src/components/ui/`) — `AreaChip`은 AREA MODEL V1 §19
+  contract를 그대로 구현하고, "`supplyAreaM2`가 null이면 `pyeongLabel`이
+  있어도 평형 표기 금지" 규칙을 `src/lib/area-chip-rules.ts`의 순수
+  함수로 분리해 구조적으로 강제(개발 모드 계약 위반 시 `console.warn`).
+- `AreaSelector.tsx`의 인라인 칩 마크업을 위 `Chip`/`AreaChip`으로
+  교체 — 라벨/active 스타일/전체 가로 스크롤/모달 동작을 브라우저
+  실측으로 100% 동일 확인(시각적 변경 없음, 리팩터링만).
+- **회귀 발견 및 수정**: root font-size 16px 복구 후 375px 폭에서
+  `TradeTimelineList`(아파트 상세 실거래 테이블)의 가격 셀이 말줄임
+  (`...`)되는 걸 실측 발견 — 14px로 되돌리는 우회 대신 각 셀의 실제
+  렌더링 폭을 측정해 `colgroup` 비율 재배분(22/14/36/28%→17/14/44/25%)
+  + 계약월 연도 표기 4자리→2자리 축소로 원인 자체를 수정. 375/390/
+  430px + 데스크톱에서 로드된 60개 행(최고 33억) 전부 overflow 없음
+  확인.
+- `scripts/apartment-score/verify-design-system-2.ts` 신규(22개 assert:
+  AreaChip 평형 게이팅, AreaSelector wiring, 토큰 foundation, 하드코딩
+  제거, 접근성, 375px 회귀 수정 정적 검증) — 기존
+  `verify-apt-detail-ia.ts`(13개)도 재실행해 회귀 없음 재확인.
+
+미구현(문서만, DS-3 대상으로 명시 — `DESIGN-SYSTEM-2-foundation.md` §10):
+
+Search 변형(HeaderSearchTrigger/HeroSearch), Button 변형, Card
+foundation(BasicCard/ListRow/StatusCard), Filter foundation, BottomNav/
+Header 컴포넌트 추출, Loading/Empty/Error 3-tier 공통 컴포넌트 — 전부
+코드로 구현하지 않고 다음 STEP 대상으로만 문서화했다.
+
+DB 변경:
+
+없음(`prisma/schema.prisma` 미변경)
+
+API/비즈니스 로직 변경:
+
+없음
+
+검증:
+
+`npx tsc --noEmit` 0 errors / `npx eslint src` 0 errors(무관 기존
+warning 3건만) / `npx next build` 성공 / 신규 22개 + 기존 13개 assert
+전부 PASS / 브라우저 실측(Home/Statistics/Map/Redevelopment/Presales/
+Apt-Detail, 375·390·430px+데스크톱).
+
+상태:
+
+DESIGN SYSTEM 2(foundation 구현) 완료. **commit·push 하지 않음**
+(사용자 지시, ChatGPT 검수 후 처리, 2026-08-20).

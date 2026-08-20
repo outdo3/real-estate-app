@@ -624,7 +624,7 @@
   flex-shrink: 0;
   font-size: 0.9rem;
   font-weight: 800;
-  color: #03C75A;
+  color: var(--primary-color);
   white-space: nowrap;
 }
 

@@ -1,0 +1,47 @@
+/* [DESIGN SYSTEM 2 §16] Chip = 클릭해서 선택 상태를 바꾸는 인터랙티브 컨트롤.
+   상태를 그대로 보여주기만 하는 Badge와는 시각적으로 분리한다(필/보더 형태는
+   같아 보여도 Chip은 항상 클릭 가능해야 한다). */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: var(--control-height-md);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  background-color: var(--surface, #fff);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.chip:hover:not(.disabled):not(.active) {
+  background-color: var(--surface-subtle);
+  border-color: var(--text-muted);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.active {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: #fff;
+}
+
+.dashed {
+  border-style: dashed;
+}
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

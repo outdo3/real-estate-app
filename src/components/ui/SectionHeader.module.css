@@ -1,0 +1,46 @@
+/* [DESIGN SYSTEM 2 §22] Statistics V2가 그대로 재사용할 수 있게 최소 계약만
+   둔다 — title(필수)/description(optional)/action(optional). */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.textGroup {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-section-title);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: var(--line-height-tight);
+}
+
+.description {
+  margin: 0.25rem 0 0;
+  font-size: var(--font-size-body-sm);
+  color: var(--text-muted);
+  line-height: var(--line-height-normal);
+}
+
+.action {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0.25rem 0;
+  font-family: inherit;
+  font-size: var(--font-size-body-sm);
+  font-weight: 600;
+  color: var(--primary-color);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
