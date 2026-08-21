@@ -7067,3 +7067,61 @@ verify-school-normalization.ts). schema 변경 0건(C1 schema로 충분).
 `SCHOOL_MASTER_DATA_READY = YES(부산)`. `NATIONWIDE_SCHOOL_
 ARCHITECTURE_READY = YES`(office-code 파라미터화, 부산 전용 분기
 없음, 전국 실제 실행은 미실시).
+
+## 2026-08-21 (24) — SCHOOL V2-C5 거리/접근성 정확도 감사 (AUDIT ONLY)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c5`, branch
+`school-v2-c5-distance-audit`, base `da17c0a`=school-v2-c2a)에서 진행.
+main dirty worktree, C2A/C2B/C3B/score-geocode-recovery 브랜치 전부
+미접촉.
+
+핵심 발견: "학교까지 거리"가 서로 참조하지 않는 **3개 독립
+파이프라인**(Score `schoolAccess`/`/school/[id]` 인근 아파트/AI 검색
+조건검색)으로 존재하고, 셋 다 STRAIGHT_LINE_DISTANCE(Turf 또는
+Kakao 자체 distance 필드)만 계산하면서 그중 둘(`/school/[id]`,
+AI 검색)은 서로 다른 임의 보정식으로 "도보 N분"을 만들어낸다 —
+같은 700m 직선거리가 화면에 따라 "9분"과 "22분"으로 2배 이상
+차이난다.
+
+재검증 결과 부산 서구 송도동 하드코딩 폴백
+(`api/school/apartments/route.ts` `[129.0225, 35.0772]` +
+대신동/송도동/충무동 동단위 보정)이 **여전히 존재**하며, `/school`
+목록→상세 진입 경로는 lat/lng를 넘기지 않아 이 폴백이 실제로
+도달 가능한 경로임을 확인. 추가로 repo root의 `fix_coords.ts`/
+`fix_songdo_coords.ts`(2026-08-07 커밋 cb5d606)가 특정 아파트
+7곳의 좌표를 "도보 3분 거리 셋팅" 등 주석과 함께 손으로 지정해
+학교 대비 상대 거리 순위를 조작한 이력을 신규 발견(BLOCKER,
+프로덕션 반영 여부는 미확인 — 후속 STEP 확인 필요).
+
+`School`/`Kindergarten`/`Childcare` 세 모델 모두
+`latitude/longitude/coordinateSource/coordinateType`(CoordinateType
+enum: OFFICIAL_POINT/ADDRESS_GEOCODE/ENTRANCE/CENTER/UNKNOWN)을
+이미 동일 shape로 스키마에 보유 — SCHOOL V2 거리 데이터 계약을
+세 기관에 공통 재사용하는 데 마이그레이션이 불필요함을 확인. 단
+NEIS 적재 스크립트가 이 필드들을 채우지 않아 실제로는 전부
+UNKNOWN(C2A CHANGELOG "좌표는 전부 null" 기록과 일치).
+
+10개 표본(서구/해운대구/부산진구/동래구/사하구/강서구/기장군/수영구)은
+`ApartmentMaster`의 실제 exact-geocode 좌표로 Kakao SC4 카테고리
+검색(read-only, 아파트당 1회, 총 10회)을 실행해 실측 직선거리만
+기록 — 보행 분은 route API 없이 추측하지 않음.
+
+Route provider 조사: Kakao Mobility 도보 길찾기는 공식 페이지에서
+"사전 제휴 계약 필요"(제휴 전용 API)임을 1차 문서로 확인. Naver
+Directions 5/TMAP 보행자 경로는 JS 렌더링 문서라 가격/quota/caching
+정책을 1차 문서로 확인하지 못해 EXTERNAL_VERIFICATION_REQUIRED로
+명시(추측 기재 없음).
+
+코드/DB 변경 없음(schema, production route, UI 전부 미변경). 신규
+read-only 감사 스크립트 1건(`scripts/education/c5-sample-distance-audit.ts`,
+tsc/eslint 0 errors) + 신규 문서
+`docs/development/SCHOOL-V2-C5-distance-accessibility-audit.md`.
+
+상태: BLOCKER 2건 발견(서구 하드코딩 폴백, fix_coords 계열 좌표
+조작) — 이번 STEP에서는 제거하지 않고 목록만 작성(지시사항). Score
+V1 formula 변경 없음. main merge 없음.
+
+**SCHOOL_V2_C5_AUDIT_CLOSE = YES** —
+`DISTANCE_DATA_SAFE_FOR_PARENT_UX = NO(as-is)` — `/school/[id]`·AI
+검색의 "도보 N분" 표현이 직선거리 기반 추정을 실제 도보시간처럼
+보여주고 있어 C5-A(문구 교정) 전에는 그대로 노출하면 안 됨.
