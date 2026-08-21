@@ -7014,3 +7014,56 @@ schema.prisma만(애플리케이션 코드 변경 0건). 외부 API 호출: 0건
 **SCHOOL_V2_C1_CLOSE** — BLOCKER 없음. `DB_SCHEMA_READY = YES`(7개
 core 테이블 기준). 다음 ingestion STEP(SCHOOL V2-C3A 어린이집 등)은
 자동 진행하지 않고 대기.
+
+## 2026-08-21 (23)
+
+### SCHOOL V2-C2A — NEIS 학교기본정보 기반 부산 School canonical master ingestion
+
+별도 worktree(`school-v2-c2a` branch, base `82f4914`)에서 진행 —
+main worktree의 SCHOOL V2-C3A(어린이집) 미커밋 작업물은 건드리지
+않았다.
+
+NEIS 학교기본정보(`schoolInfo`) API로 부산 664개교를 `School`
+테이블에 canonical master로 최초 ingestion했다. `neisSchoolCode`
+(NEIS `SD_SCHUL_CODE`)를 canonical identity로 사용했고, 학교명은
+canonical key로 쓰지 않았다(실제로 "송정초등학교"가 해운대구/강서구
+서로 다른 코드로 2건 존재함을 확인해 이 원칙의 필요성이 실측으로
+입증됨).
+
+핵심 발견: NEIS 응답에 **아직 개교하지 않은 예정 학교가
+`SD_SCHUL_CODE` 공백 상태로 섞여 있음**을 확인(부산 667건 중 3건,
+전부 "(가칭)OOO학교" 표기 + 미래 설립일) — 학교명 기반 임시 코드를
+만들지 않고 skip 처리했다. 기존 V1 audit의 "부산 667개교" 총량은
+정확히 재확인됐고(변동 없음), 그 667 안에 이런 세부가 있었음을
+새로 밝혔다.
+
+Legal gate: NEIS 이용약관 제11조("저작자 및 출처 표시 조건으로
+자유이용 허락") + 학교기본정보 데이터셋 페이지("이용 허락 범위
+제한없음", 갱신주기 매주) 두 공식 페이지가 상충 없이 일치해
+`EducationSource(code=neis_school_info)`를 CLEARED로 등록.
+
+부산 16개 구·군 전부 실데이터 확인(합계 664), 필수 필드
+(schoolCode/schoolName) coverage 100%, 선택 필드도 97~99% 수준.
+`neisSchoolCode` 중복 0건. 두 번째 실행에서도 중복 생성 0건(핵심
+idempotency 확인) — 단 필드 diff 없이 매번 재기록하는 한계는
+문서에 정직하게 남김.
+
+`SchoolStat`은 의도적으로 0행 유지(학교알리미 C2B 범위, 이번 STEP
+아님). 기존 `/api/school*` production route, UI 변경 0건. 좌표는
+전부 null(대량 geocoding 금지 지시 준수).
+
+DB 변경: `School` 664행 신규, `EducationSource` 1행 신규(id=3, 기존
+2건 변경 없음). 코드 변경: `scripts/education/`에 신규 스크립트
+3건(ingest-schools-neis.ts, register-neis-school-source.ts,
+verify-school-normalization.ts). schema 변경 0건(C1 schema로 충분).
+
+검증: `verify-school-normalization.ts` 21개 assertion 전부 PASS,
+`tsc`/`eslint`(0 errors)/`next build` 전부 통과.
+
+상태: BLOCKER 없음, 부산 coverage 정상, idempotency(중복방지 기준)
+확인 — commit/push 진행.
+
+**SCHOOL_V2_C2A_CLOSE = YES(부산 pilot 기준)** —
+`SCHOOL_MASTER_DATA_READY = YES(부산)`. `NATIONWIDE_SCHOOL_
+ARCHITECTURE_READY = YES`(office-code 파라미터화, 부산 전용 분기
+없음, 전국 실제 실행은 미실시).
