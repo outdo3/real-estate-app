@@ -6804,3 +6804,104 @@ readiness.md` §18-A(원인 재조사)/§18-B(hotfix 결과)로 기록.
 
 **BUSAN_SCORE_DATA_V1_CLOSE = YES.** BUSAN_SCORE_READINESS = READY
 (3,067/3,067 OK). SCHOOL_V2_GO = YES(다음 STEP 진행 가능).
+
+## 2026-08-21 (17)
+
+### SCHOOL DATA/API AUDIT V1 — 학교·학군·유치원·어린이집 기존 연동 전수 감사
+
+AUDIT ONLY. 코드/DB/UI 변경 없음, 신규 API 신청/연동 없음, backfill
+없음, commit/push 없음. `docs/development/SCHOOL-DATA-API-AUDIT-V1.md`
+신규 작성.
+
+핵심 발견:
+
+- **School 관련 DB model이 전혀 없다**(`prisma/schema.prisma` 23개
+  model 전수 확인, School/SchoolFeature/ApartmentSchool 등 0건). 모든
+  학교 데이터는 매 요청마다 NEIS/Kakao를 실시간 호출해서만 존재하고
+  DB에 저장되지 않는다.
+- 학교 관련 API route 3개(`/api/school`, `/api/school/stats`,
+  `/api/school/apartments`) 전부 실제 작동 중 — NEIS 연동은 1회 검증
+  호출로 활성 확인(부산 667개교, `INFO-000 정상 처리`). NEIS가 실제
+  제공하는 20개 필드 중 4개만 사용 중이고 16개(설립구분/남녀공학/
+  홈페이지/주소 등)는 이미 응답에 있는데 파싱하지 않고 버려짐.
+- 학생수/학급수/학급당 학생수/학년별 학생수/교원현황/진학률/늘봄·
+  돌봄/방과후/급식/통학구역은 NEIS `schoolInfo`에 애초에 없는
+  값이라 UI에 아예 없거나(대부분) "데이터 준비 중" placeholder만
+  존재(`/school` 목록·상세 각 2~4개 카드). 학교알리미 연동은 프로젝트
+  전체에 0건 — 이 항목들을 채울 유일한 현실적 후보이나 미조사 상태.
+- 유치원/어린이집은 전용 API/DB/route/component가 전부 0건. 유일한
+  흔적은 Kakao PS3 카테고리(유치원+어린이집을 Kakao가 자체적으로
+  묶어 분류, 개수만) — Score Engine feature와 아파트 상세 카드 2곳
+  에서만 사용, 개별 시설 상세는 전혀 없음.
+- 과거 존재했던 가짜 진학률/학생수 수치(커밋 `94c2aa0`, `86a2258`로
+  제거됨)가 재발했는지 재확인 — **0건, 전부 정직하게 placeholder로
+  유지되고 있음**을 확인.
+- "근처 초등학교 찾기" 로직이 Kakao SC4를 각자 호출하는 4개 독립
+  구현으로 중복 존재(Score Engine 수집기/AI검색/아파트 상세 패널/
+  지도 마커) — 당장 통합 필수는 아니나 SCHOOL V2-A 후보로 기록.
+  `/api/school/apartments`에는 서구 특정 동 이름 기준 좌표 하드코딩
+  폴백이 여전히 남아있음(§12).
+
+SCHOOL V2 후속 STEP 5개 제안(A~E, 문서 §24) — 특히 B(학교알리미 등
+공식 source 실존 여부 조사)가 §19 매트릭스의 NOT_CONNECTED 대부분을
+푸는 진짜 병목으로 식별됨.
+
+DB 변경: 없음. 코드 변경: 없음(문서 1건만 신규 생성). 외부 API 호출:
+NEIS 1회(검증용, 실서비스 로직과 무관한 audit 전용 호출).
+
+상태: 완료. **commit·push 하지 않음**(사용자 지시, ChatGPT 검수 후
+처리).
+
+**SCHOOL_API_AUDIT_CLOSE** — BLOCKER 없음(audit 자체는 완결). SCHOOL
+V2 착수 여부는 §21/§24에서 식별된 학교알리미 source 조사(SCHOOL
+V2-B) 결과에 따라 재판단 필요.
+
+## 2026-08-21 (18)
+
+### SCHOOL V2-B — 공식 학교알리미/유치원알리미/어린이집 source 실존 조사
+
+SOURCE VERIFICATION ONLY. production 코드/DB/UI 변경 0건, 신규 API
+연동 0건, 인증키 신청 0건, commit/push 없음.
+`docs/development/SCHOOL-V2-B-official-source-verification.md` 신규
+작성.
+
+핵심 발견:
+
+- **학교알리미(schoolinfo.go.kr) OpenAPI 실존 확인** — SNS 로그인 후
+  인증키 신청 필요(개발단계 자동승인/운영단계 심의승인). 단
+  **같은 기관(KERIS) 데이터인데 API 경로는 KOGL 제3유형(변경금지),
+  파일 경로는 제1유형(자유)으로 라이선스가 갈리는 것을 확인** —
+  LEGAL_REVIEW_REQUIRED로 기록.
+- 학교알리미 제공 카테고리(학생현황/교원현황/시설/급식/학업성취 등)는
+  공식 설명으로 확인됐으나, **진학률/학업성취도가 실제 API 필드로
+  기계 파싱 가능한지는 확정하지 못함**(웹페이지가 JS 동적 렌더링 +
+  개발자가이드가 이미지 전용 PDF라 OCR 불가) — NOT_CONFIRMED로 명시,
+  "웹에 보이니 API에도 있다"는 가정을 하지 않음(사용자 원칙 준수).
+- **유치원알리미도 API별로 상업적 이용 가능/불가가 갈리는 것을 확인**
+  (이용안내 페이지에 "상업적 이용이 불가능한 API" 문구 명시) —
+  마찬가지로 LEGAL_REVIEW_REQUIRED. 반면 유치원 통합현황 파일데이터
+  (`data.go.kr 15037485`, 학급수/원아수/교직원현황 포함)는 **이용허락
+  범위 제한 없음**으로 확인돼 가장 마찰이 적은 경로로 식별됨.
+- **어린이집은 전국 통합 API**(한국사회보장정보원,
+  `data.go.kr 15101155`)가 확인됨 — 부산 16개 구·군별 API 조사가
+  불필요해짐. 좌표(위도/경도)·유형(국공립/민간 등)·정원/현원·CCTV·
+  통학차량·고유 시설코드까지 필드로 확인됐고 **이용허락범위 제한
+  없음**(비용무료) — TIER 1 최우선 후보로 식별.
+- **통학구역/배정권역 공식 GIS source 존재 확인**(`schoolzone.emac.kr`
+  학구도안내서비스, 초/중/고 학구·학군·학교군 SHP 파일 제공 +
+  `data.go.kr 15021149` 전국초등학교통학구역표준데이터, 부산 데이터
+  포함 확인) — 예상보다 잘 갖춰진 source라 별도 STEP(SCHOOL V2-E)으로
+  승격 제안.
+- 학원(전국학원및교습소표준데이터)·도서관(전국도서관표준데이터,
+  도서관정보나루) 공식 source도 존재만 확인, TIER 3로 분류.
+
+DB 변경: 없음. 코드 변경: 없음(문서 1건만 신규 생성). 외부 API 호출:
+0건(전부 읽기 전용 웹 조사, 인증키 발급/API 호출 없음).
+
+상태: 완료. **commit·push 하지 않음**(사용자 지시, ChatGPT 검수 후
+처리).
+
+**SCHOOL_V2_B_CLOSE** — BLOCKER 없음(조사 자체는 완결). 다만 §11
+LEGAL_REVIEW_REQUIRED 2건(학교알리미 API 경로, 유치원알리미 API별
+라이선스)은 실제 연동 착수 전 반드시 재확인 필요. SCHOOL_V2
+IMPLEMENTATION GO 여부는 사용자/ChatGPT 검토 후 결정.
