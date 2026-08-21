@@ -739,3 +739,332 @@ model Report {
   @@index([resolved, createdAt])
   @@map("reports")
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// SCHOOL V2-C1 — Education core schema(학교/유치원/어린이집). 설계는
+// docs/development/SCHOOL-V2-C-education-data-architecture.md,
+// NOW/LATER 최종 결정은 docs/development/SCHOOL-V2-C1-core-education-schema.md
+// 참고. 이번 STEP은 스키마만 생성한다 — ingestion 코드는 없고, 아래 모든
+// 테이블은 배포 직후 row 0건이 정상이다.
+//
+// 설계 원칙(SCHOOL V2-C §2/§5 결론 그대로):
+// - School/Kindergarten/Childcare는 통합 폴리모픽 테이블로 만들지 않고
+//   완전히 분리한다(Option B, ApartmentMaster/RedevelopmentProject처럼
+//   단일 concrete 타입 + companion 테이블 컨벤션 재사용).
+// - 학교명/유치원명 등 문자열을 canonical key로 쓰지 않는다 — 공식
+//   기관코드(NEIS 학교코드/어린이집 시설코드)를 우선하고, 아직 코드
+//   자체가 확인 안 된 유치원은 identityConfidence로 그 사실을 명시한다.
+// - 세부 API field schema가 미확정인 항목(학년별 상세, 연령별 원아수
+//   등)은 typed column을 만들지 않고 Json으로만 열어둔다 — 나중에
+//   schema가 확정되면 별도 migration으로 typed column을 추가한다.
+// - 폐교/폐원은 hard delete가 아니라 isActive=false로 표현한다
+//   (공공기관 데이터의 일반적 성격 — SCHOOL V2-C §20).
+// - Stat 테이블은 EducationSource로 formal relation을 건다(핵심
+//   reference 테이블이라 배치 재구축 대상인 ApartmentMaster류와 달리
+//   FK가 안전하다) — 반대로 EducationSource → Stat 방향은 onDelete를
+//   지정하지 않아(Prisma 기본 Restrict) source row를 실수로 지워도
+//   이미 적재된 기관/통계 데이터가 함께 사라지지 않는다.
+// ══════════════════════════════════════════════════════════════════════════
+
+enum EducationDataQuality {
+  COMPLETE
+  PARTIAL
+  STALE
+  IDENTITY_UNRESOLVED
+  COORDINATE_APPROX
+  SOURCE_ERROR
+}
+
+// 통계 한 행이 실제로 "그 라운드에 공시된 값"인지 아닌지를 숫자 필드의
+// null/0 여부와 별개로 명시한다 — 0(진짜 0)과 null(미수집)과 "이번
+// 라운드엔 공시 안 됨"과 "이 학교급엔 해당 없음"을 전부 구분하기 위함
+// (SCHOOL V2-C §14/§27, CLAUDE.md 원칙 4 "데이터가 없으면 임의의 값을
+// 생성하지 않는다"의 연장).
+enum DisclosureStatus {
+  AVAILABLE
+  NOT_DISCLOSED
+  NOT_APPLICABLE
+  UNKNOWN
+  SOURCE_ERROR
+}
+
+// 주소 중심좌표(지오코딩)와 실제 정문/출입구 좌표를 같은 값으로 취급하지
+// 않기 위한 구분(SCHOOL V2-C §16) — 현재 확보 가능한 좌표는 전부 Kakao
+// 지오코딩 기반이라 초기 데이터는 대부분 ADDRESS_GEOCODE 또는 UNKNOWN이다.
+enum CoordinateType {
+  OFFICIAL_POINT
+  ADDRESS_GEOCODE
+  ENTRANCE
+  CENTER
+  UNKNOWN
+}
+
+// EducationSource 하나가 상업적 서비스인 이집에서 실제로 써도 되는지의
+// 게이트. ingestion 코드(이번 STEP에는 없음)는 반드시 CLEARED인 source만
+// 적재해야 한다 — SCHOOL V2-B에서 확인된 LEGAL_REVIEW_REQUIRED source
+// (학교알리미 API 경로, 유치원알리미 API 일부)를 이 필드로 코드 레벨에서
+// 막기 위함(SCHOOL V2-C §21/§29).
+enum LegalReviewStatus {
+  UNKNOWN
+  REVIEW_REQUIRED
+  CLEARED
+  BLOCKED
+}
+
+// 유치원 공식 기관코드 존재 여부 자체가 SCHOOL V2-B 조사에서 확인되지
+// 않았다 — officialCode가 비어 있는 동안 이 row의 identity가 이름/주소
+// 기반 임시값에 불과하다는 사실을 명시적으로 남기기 위한 필드.
+enum IdentityConfidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// 학교알리미/유치원알리미/어린이집 API 등 source별 메타데이터 + 법적
+// 게이트 registry. 다른 모든 education 테이블의 provenance가 여기로
+// 값 또는 FK로 연결된다 — source 자체를 여기 한 곳에서만 관리해
+// 라이선스 재확인 시 여러 테이블을 뒤질 필요가 없게 한다.
+model EducationSource {
+  id          Int    @id @default(autoincrement())
+  code        String @unique // 'neis' | 'schoolinfo_api' | 'schoolinfo_file' | 'kindergarten_moe_file' | 'kindergarten_api' | 'childcare_national_api' | ...
+  displayName String @map("display_name") // 사용자 화면 표시용, 예: "학교알리미"
+
+  provider   String? // 예: "한국교육학술정보원"
+  datasetId  String? @map("dataset_id") // data.go.kr 데이터셋 id(있으면), 예: "15098092"
+  sourceType String  @map("source_type") // 'API' | 'FILE' | 'STANDARD_DATASET' — ingestion 코드 분기용 자유 태그, enum으로 확정하지 않음(SCHOOL V2-C §13 "필요 최소만" 원칙)
+  sourceUrl  String? @map("source_url")
+
+  licenseCode          String?  @map("license_code") // 예: "KOGL-1", "KOGL-3", "UNRESTRICTED" — SCHOOL V2-B에서 확인된 값 그대로
+  attributionRequired  Boolean  @default(true) @map("attribution_required")
+  // null = 아직 확인 안 됨(UNKNOWN), false와 명확히 구분(SCHOOL V2-C1 §6 지시)
+  commercialUseAllowed Boolean? @map("commercial_use_allowed")
+  modificationAllowed  Boolean? @map("modification_allowed")
+
+  legalReviewStatus LegalReviewStatus @default(UNKNOWN) @map("legal_review_status")
+  termsCheckedAt    DateTime?         @map("terms_checked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  schoolStats       SchoolStat[]
+  kindergartenStats KindergartenStat[]
+  childcareStats    ChildcareStat[]
+
+  @@map("education_sources")
+}
+
+// 학교 canonical entity. identity는 NEIS SD_SCHUL_CODE를 우선한다
+// (SCHOOL V2-C §4-1) — 학교알리미 식별자와의 매핑은 아직 미확정이라
+// 이 테이블에는 만들지 않는다(EducationIdentityMapping은 LATER,
+// SCHOOL-V2-C1 §NOW/LATER 참고). schoolName은 절대 canonical key로
+// 쓰지 않는다 — unique 제약을 걸지 않았다.
+model School {
+  id             Int     @id @default(autoincrement())
+  neisSchoolCode String? @unique @map("neis_school_code") // NEIS SD_SCHUL_CODE, 미확보 school도 저장 가능하도록 nullable
+
+  schoolName        String  @map("school_name") // NEIS SCHUL_NM — canonical key 아님, unique 없음
+  schoolLevel       String? @map("school_level") // NEIS SCHUL_KND_SC_NM 원문 그대로("초등학교" 등)
+  establishmentType String? @map("establishment_type") // NEIS FOND_SC_NM(공립/사립)
+  genderType        String? @map("gender_type") // NEIS COEDU_SC_NM(남녀공학 구분)
+
+  address     String? @map("address")
+  roadAddress String? @map("road_address")
+  sidoCode    String? @map("sido_code")
+  sigunguCode String? @map("sigungu_code")
+  dongName    String? @map("dong_name")
+
+  latitude         Float?
+  longitude        Float?
+  coordinateSource String?        @map("coordinate_source")
+  coordinateType   CoordinateType @default(UNKNOWN) @map("coordinate_type")
+
+  phone    String?
+  homepage String?
+
+  isActive    Boolean              @default(true) @map("is_active") // 폐교 시 false로만 전환, row는 유지(§20)
+  qualityFlag EducationDataQuality @default(COMPLETE) @map("quality_flag")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  stats SchoolStat[]
+
+  @@index([sidoCode, sigunguCode])
+  @@index([schoolLevel])
+  @@map("schools")
+}
+
+// 학교 × 공시연도 temporal statistic(SCHOOL V2-C §6/§9). 세부 API
+// field가 실제로 확인된 값만 typed column으로 두고(totalStudentCount 등
+// 아님 — 아직 학교알리미 필드 레벨 스키마가 SCHOOL V2-B에서 미확정이라
+// studentCount 등도 실제로는 ingestion 시점까지 항상 null일 수 있다),
+// 학년별 세부는 gradeBreakdown Json으로만 열어둔다. 13-다 졸업생 진로
+// 현황은 이 테이블에 넣지 않는다 — GraduateOutcomeSnapshot은 별도
+// 테이블(LATER, 법적 게이트 미해소).
+model SchoolStat {
+  id       Int    @id @default(autoincrement())
+  schoolId Int    @map("school_id")
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  referenceYear  Int       @map("reference_year") // 통계 기준연도(필수 — idempotency key)
+  disclosureYear Int?      @map("disclosure_year") // 실제 공시연도(기준연도와 다를 수 있어 분리)
+  referenceDate  DateTime? @map("reference_date") // 더 정밀한 기준일이 확인되면 사용
+
+  studentCount   Int?  @map("student_count")
+  classCount     Int?  @map("class_count")
+  teacherCount   Int?  @map("teacher_count")
+  gradeBreakdown Json? @map("grade_breakdown") // 학년별 세부 — 필드 스키마 미확정 상태이므로 typed column화하지 않음
+
+  sourceId        Int             @map("source_id")
+  source          EducationSource @relation(fields: [sourceId], references: [id])
+  sourceRecordId  String?         @map("source_record_id")
+  fetchedAt       DateTime        @map("fetched_at")
+  sourceUpdatedAt DateTime?       @map("source_updated_at")
+
+  qualityFlag      EducationDataQuality @default(COMPLETE) @map("quality_flag")
+  disclosureStatus DisclosureStatus     @default(UNKNOWN) @map("disclosure_status")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([schoolId, sourceId, referenceYear])
+  @@index([schoolId])
+  @@index([sourceId])
+  @@map("school_stats")
+}
+
+// 유치원 canonical entity. 공식 기관코드 존재 자체가 SCHOOL V2-B에서
+// 확인되지 않아 officialCode를 필수로 강제하지 않는다 — 코드가 없는
+// 동안은 identityConfidence=LOW로 명시하고, 이름+주소만으로 DB unique
+// canonical key를 강제하지 않는다(SCHOOL V2-C §4-2, 이번 STEP §9 지시).
+model Kindergarten {
+  id           Int     @id @default(autoincrement())
+  officialCode String? @unique @map("official_code") // 확인되면 채움, 미확인 상태로도 row 생성 가능
+
+  kindergartenName  String  @map("kindergarten_name") // canonical key 아님, unique 없음
+  establishmentType String? @map("establishment_type") // 공립/사립 등
+
+  address     String? @map("address")
+  roadAddress String? @map("road_address")
+  sidoCode    String? @map("sido_code")
+  sigunguCode String? @map("sigungu_code")
+
+  latitude         Float?
+  longitude        Float?
+  coordinateSource String?        @map("coordinate_source")
+  coordinateType   CoordinateType @default(UNKNOWN) @map("coordinate_type")
+
+  identityConfidence IdentityConfidence @default(LOW) @map("identity_confidence")
+
+  isActive    Boolean              @default(true) @map("is_active")
+  qualityFlag EducationDataQuality @default(COMPLETE) @map("quality_flag")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  stats KindergartenStat[]
+
+  @@index([sidoCode, sigunguCode])
+  @@map("kindergartens")
+}
+
+model KindergartenStat {
+  id             Int          @id @default(autoincrement())
+  kindergartenId Int          @map("kindergarten_id")
+  kindergarten   Kindergarten @relation(fields: [kindergartenId], references: [id], onDelete: Cascade)
+
+  referenceYear Int       @map("reference_year") // idempotency key(§SCHOOL-V2-C1 §10)
+  referenceDate DateTime? @map("reference_date")
+
+  capacity     Int?  @map("capacity") // 정원
+  enrollment   Int?  @map("enrollment") // 현원
+  classCount   Int?  @map("class_count")
+  staffCount   Int?  @map("staff_count")
+  ageBreakdown Json? @map("age_breakdown") // 연령별 원아수 — 필드 스키마 미확정, Json으로만 보존
+
+  hasShuttle     Boolean? @map("has_shuttle")
+  hasAfterSchool Boolean? @map("has_after_school")
+
+  sourceId        Int             @map("source_id")
+  source          EducationSource @relation(fields: [sourceId], references: [id])
+  sourceRecordId  String?         @map("source_record_id")
+  fetchedAt       DateTime        @map("fetched_at")
+  sourceUpdatedAt DateTime?       @map("source_updated_at")
+
+  qualityFlag      EducationDataQuality @default(COMPLETE) @map("quality_flag")
+  disclosureStatus DisclosureStatus     @default(UNKNOWN) @map("disclosure_status")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([kindergartenId, sourceId, referenceYear])
+  @@index([kindergartenId])
+  @@index([sourceId])
+  @@map("kindergarten_stats")
+}
+
+// 어린이집 canonical entity. 시설코드가 SCHOOL V2-B에서 실제 확인된
+// 공식 필드라 유치원과 달리 필수 unique key로 채택한다(SCHOOL V2-C §4-3).
+model Childcare {
+  id           Int    @id @default(autoincrement())
+  facilityCode String @unique @map("facility_code") // 공식 시설코드, 확인된 identity — 필수
+
+  childcareName String  @map("childcare_name")
+  facilityType  String? @map("facility_type") // 국공립/민간/가정/직장 등
+
+  address     String? @map("address")
+  roadAddress String? @map("road_address")
+  sidoCode    String? @map("sido_code")
+  sigunguCode String? @map("sigungu_code")
+
+  latitude         Float?
+  longitude        Float?
+  coordinateSource String?        @map("coordinate_source")
+  coordinateType   CoordinateType @default(UNKNOWN) @map("coordinate_type")
+
+  isActive    Boolean              @default(true) @map("is_active")
+  qualityFlag EducationDataQuality @default(COMPLETE) @map("quality_flag")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  stats ChildcareStat[]
+
+  @@index([sidoCode, sigunguCode])
+  @@map("childcares")
+}
+
+// 어린이집은 정확한 갱신 주기가 SCHOOL V2-B에서 미확인("수시" 수준까지만
+// 확인)이라 referenceYear 대신 referenceDate를 필수 temporal key로 쓴다
+// (SCHOOL-V2-C1 §12 지시 그대로) — 연 단위로 확정되면 향후 별도
+// migration으로 referenceYear를 추가할 수 있다.
+model ChildcareStat {
+  id          Int       @id @default(autoincrement())
+  childcareId Int       @map("childcare_id")
+  childcare   Childcare @relation(fields: [childcareId], references: [id], onDelete: Cascade)
+
+  referenceDate DateTime @map("reference_date")
+
+  capacity   Int?     @map("capacity")
+  enrollment Int?     @map("enrollment")
+  staffCount Int?     @map("staff_count")
+  cctvCount  Int?     @map("cctv_count")
+  hasShuttle Boolean? @map("has_shuttle")
+
+  sourceId        Int             @map("source_id")
+  source          EducationSource @relation(fields: [sourceId], references: [id])
+  sourceRecordId  String?         @map("source_record_id")
+  fetchedAt       DateTime        @map("fetched_at")
+  sourceUpdatedAt DateTime?       @map("source_updated_at")
+
+  qualityFlag      EducationDataQuality @default(COMPLETE) @map("quality_flag")
+  disclosureStatus DisclosureStatus     @default(UNKNOWN) @map("disclosure_status")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([childcareId, sourceId, referenceDate])
+  @@index([childcareId])
+  @@index([sourceId])
+  @@map("childcare_stats")
+}

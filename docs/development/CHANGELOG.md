@@ -6905,3 +6905,112 @@ DB 변경: 없음. 코드 변경: 없음(문서 1건만 신규 생성). 외부 A
 LEGAL_REVIEW_REQUIRED 2건(학교알리미 API 경로, 유치원알리미 API별
 라이선스)은 실제 연동 착수 전 반드시 재확인 필요. SCHOOL_V2
 IMPLEMENTATION GO 여부는 사용자/ChatGPT 검토 후 결정.
+
+## 2026-08-21 (19)
+
+### SCHOOL V2-C — Education Data Architecture & Ingestion Design
+
+DESIGN ONLY. `schema.prisma` 실제 수정 0건, migration 생성/실행 0건,
+DB write 0건, production API/ingestion 구현 0건, UI 변경 0건, 신규
+API key 신청 0건, commit/push 없음.
+`docs/development/SCHOOL-V2-C-education-data-architecture.md` 신규
+작성.
+
+핵심 설계 결정(전부 승인 대기, 미구현):
+
+- **entity model**: School/Kindergarten/Childcare를 단일 폴리모픽
+  테이블로 통합하지 않고 **분리 유지(Option B)** — 기존
+  `ApartmentMaster`/`RedevelopmentProject` 컨벤션(단일 concrete
+  타입 + companion 테이블, 값 기반 느슨한 연결, formal FK 미사용)과
+  일치시킴. 신규 테이블 후보 13개를 row-level provenance 컨벤션
+  재사용으로 10개로 축소(SchoolFacility/EducationSourceSnapshot/
+  EducationInstitutionAlias 병합).
+- **canonical identity**: 학교=NEIS `SD_SCHUL_CODE` 우선, 학교알리미
+  identifier와의 매핑은 여전히 미확정이라 추정 규칙을 만들지 않고
+  `EducationIdentityMapping`(review queue, `RedevelopmentSourceRecord`의
+  matchConfidence/mergeStatus 패턴 재사용)으로 unresolved 상태를
+  명시 보존. 유치원 고유코드 존재 자체가 미확인이라 복합키 fallback +
+  `identityConfidence: LOW` 명시. 어린이집은 시설코드가 확인돼
+  canonical key로 채택.
+- **13-다 졸업생 진로 현황**: `SchoolStat`과 완전히 분리된
+  `GraduateOutcomeSnapshot` 테이블로 격리(법적 게이트/스키마 미확정
+  상태가 다른 학교 통계 ingestion에 영향 주지 않도록) — 일반고/
+  자사고/특성화고 등 세부 진학유형 컬럼은 전혀 만들지 않고
+  `rawPayload Json` + `schemaVersion="unconfirmed-v0"`만 확정, 실제
+  키 발급 후 필드 확인 시에만 별도 migration으로 컬럼 확정.
+- **법적 게이트**: `EducationSource.legalReviewStatus` 필드로
+  ingestion pipeline이 실행 전 반드시 확인하도록 설계 — 학교알리미
+  API 경로/유치원알리미 API/13-다는 `CLEARED`가 되기 전까지
+  ingestion 자체가 실행되지 않는 구조.
+- **derived metrics**: Score Engine의 기존 "RAW≠SCORE" 원칙을 그대로
+  적용 — 학급당 학생수 등 파생값은 원칙적으로 DB에 저장하지 않고
+  런타임 계산, source가 이미 계산해서 제공하는 것으로 확인된 값만
+  `SOURCE_PROVIDED`로 구분 저장.
+- **거리 모델**: 현재 1.45배 근사 도보시간을 `walkingDurationSec`에
+  저장하지 않도록 명시 — `estimatedWalkMinutes`(근사)와
+  `walkingDurationSec`(실제 route API 도입 후 전용) 필드를 분리.
+- **통학구역**: PostGIS 등 신규 공간 인프라 도입 없이 이번 phase는
+  외부 SHP/GeoJSON(학구도안내서비스) 유지, DB 테이블 생성 보류
+  (FUTURE).
+
+Implementation phases 재제안: V2-C1(schema만) → V2-C2(NEIS+학교알리미)
+/V2-C3(유치원+어린이집, 라이선스 마찰 적어 C2보다 먼저 실행 가능) →
+V2-C4(identity reconciliation) → V2-C5(ApartmentEducationLink) →
+V2-C6(통학구역) → V2-C7(13-다, 별도 법적 게이트 해제 후) → V2-D(UX).
+
+기존 테이블(`ApartmentMaster`, `ApartmentLocationFeature` 등) 변경
+필요 없음(값 기반 연결 컨벤션 유지) — migration impact는 전부
+additive로 설계.
+
+DB 변경: 없음. 코드 변경: 없음(문서 1건 신규 작성). 외부 API 호출:
+0건.
+
+상태: 완료. **commit·push 하지 않음**(사용자 지시, ChatGPT/사용자
+설계 승인 후 처리).
+
+**SCHOOL_V2_C_DESIGN_CLOSE** — BLOCKER 없음(설계 자체는 완결).
+`DB_SCHEMA_CHANGE_REQUIRED = YES`(승인 시). `IMPLEMENTATION_GO`는
+§27의 8개 결정사항에 대한 사용자 승인 이후로 보류.
+
+## 2026-08-21 (20)
+
+### SCHOOL V2-C1 — 교육 데이터 적재를 위한 core schema 추가
+
+`prisma/schema.prisma`에 학교/유치원/어린이집 canonical entity +
+temporal 통계를 위한 최소 core schema 7개 모델(`EducationSource`,
+`School`, `SchoolStat`, `Kindergarten`, `KindergartenStat`,
+`Childcare`, `ChildcareStat`)과 enum 5개를 신규 추가하고, migration
+(`20260821021307_education_v2c1_core_schema`)을 생성·적용했다.
+
+**아직 실제 학교/유치원/어린이집 데이터 ingestion은 미실행이다** —
+7개 테이블 전부 배포 직후 row 0건이며(스모크 테스트로 확인), seed
+데이터도 만들지 않았다. 기존 `/api/school`, `/api/school/stats`,
+`/api/school/apartments` route는 코드 변경이 전혀 없어 지금 이
+스키마를 읽지 않는다(다음 ingestion STEP 이후에만 연결).
+
+SCHOOL V2-C 설계문서(10개 proposed table)에서 이번 C1은 즉시
+필요한 7개만 실제 생성하고, cross-source identity 매핑
+(`EducationIdentityMapping`)·아파트-교육기관 거리 materialization
+(`ApartmentEducationLink`)·13-다 졸업생 진로 현황
+(`GraduateOutcomeSnapshot`) 3개는 각각 실제로 필요해지는 후속
+STEP(C4/C5/C7)까지 스키마 생성을 미뤘다(설계 자체는 문서에 유지).
+
+기존 테이블(`ApartmentMaster`, `RedevelopmentProject` 등)은 1바이트도
+변경하지 않았다 — migration은 `CREATE TYPE`/`CREATE TABLE`/
+`CREATE INDEX`/신규 FK만 포함하는 순수 추가형이다(`DROP`/`TRUNCATE`/
+기존 컬럼 변경 0건, 적용 전 SQL 직접 검토 완료).
+
+DB 변경: 신규 테이블 7개, 신규 enum 5개(전부 additive). 코드 변경:
+schema.prisma만(애플리케이션 코드 변경 0건). 외부 API 호출: 0건.
+
+검증: `tsc --noEmit` 0 errors, `eslint` 0 errors(무관한 기존 warning
+5건만), `next build` 성공(school 관련 라우트 출력 기존과 동일),
+`information_schema`/`pg_enum` 직접 조회로 PK/FK/unique/index/enum
+값 전수 확인.
+
+상태: 완료. **commit·push 하지 않음**(사용자 지시, ChatGPT 검수 후
+처리).
+
+**SCHOOL_V2_C1_CLOSE** — BLOCKER 없음. `DB_SCHEMA_READY = YES`(7개
+core 테이블 기준). 다음 ingestion STEP(SCHOOL V2-C3A 어린이집 등)은
+자동 진행하지 않고 대기.
