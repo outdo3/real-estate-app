@@ -7141,3 +7141,69 @@ crosswalk 키·좌표질/schulKndCode 전체 코드표 등은 확인됐으나, (
 실측, (c) 라이선스(제3유형 변경금지가 "학급당학생수 같은 파생값
 계산·표시"에 저촉되는지) 최종 법무 판단이 남아 있어 전면 ingestion
 전 추가 확인 필요.
+
+## 2026-08-22 (28) — SCHOOL V2-C2B-A SchoolInfo↔NEIS identity resolver 확정 (AUDIT+DESIGN)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c2ba`, branch
+`school-v2-c2ba-identity`, base `e9062a9`=school-v2-c2b)에서 진행.
+DB write/SchoolStat ingestion/SchoolInfo coordinate write/migration/
+main merge 전부 없음. 다른 병렬 브랜치(C2A/LEGAL-1/C3B/C5B/score) 전부
+미접촉.
+
+부산 canonical School 664건 × SchoolInfo 부산 전체 671건(16개 구군×
+schulKndCode 02~07 전수 fetch, apiType=0만)에 순수함수 resolver를
+실제로 돌렸다. 이름+시군구만으로는 638 DIRECT_UNIQUE/4 AMBIGUOUS/22
+NO_MATCH였으나, **학교급(4+1 버킷 정규화) + canonical School.dongName
+기반 2차 disambiguation**을 추가하자 강서구 동명이교 4그룹(송정초x2,
+대저중앙초, 가락중학교 — 신규로 경일중학교도 발견) 중 **3그룹 전부
+HIGH로 안전하게 해소**됐다(NEIS dongName과 SchoolInfo 주소가 서로
+독립적으로 일치 — 예: 강서구 송정초등학교의 NEIS dongName이 "신호동"
+이라는 사실이 SchoolInfo 주소와 정확히 맞아떨어짐). 남은 1건
+(경일중학교)은 NEIS dongName 필드 자체가 "명지동, 경일중학교"로
+오염돼 있어(기존 NEIS ingestion 데이터 품질 이슈, 이번 STEP 범위
+밖) 자동 확정하지 않고 LOW로 정직하게 남김 — 무결성 체크(서로 다른
+canonical School이 같은 SCHUL_CODE에 HIGH 매칭된 사례) 전수 조사
+결과 WRONG_MERGE = 0건 확정.
+
+최종 TRUE_IDENTITY_COVERAGE = HIGH 633/664 = **95.3%**(학교급별:
+초등 100%, 중 96.6%, 고 89.2%, 특수 100%, 기타 11.1% — 방송통신고/
+평생학교/외국인학교 등 비표준 유형은 낮게 유지, 억지로 끌어올리지
+않음).
+
+부수 발견: SchoolInfo-only 25건(C5-B가 "분교 추정"으로 근거 없이
+남겨뒀던 것) 전수 확인 결과 **전부 `ABSCH_YN='Y'`(폐교)** — 분교가
+아니라 폐교였음을 확정. NEIS 기반 canonical School은 폐교 학교를
+애초에 활성 목록에 포함하지 않는 것으로 추정.
+
+BNHH_YN(분교여부)은 이번 8개 중복 사례 전부 'N'이라 disambiguation에
+실질적 도움은 안 됐으나(전부 동일값), resolver는 향후 실제 분교
+사례를 대비해 BNHH_YN='Y'인 유일 후보를 MEDIUM으로 처리하도록 이미
+설계함. 좌표는 canonical School이 여전히 0% 보유(C5-B의 write 보류
+결정 유지)라 보조 증거로 사용하지 못함(설계상 준비는 돼 있음).
+
+신규 재사용 가능 모듈 `scripts/education/lib/schoolinfo-identity-resolver.ts`
+(순수 함수) + fixture 테스트
+`schoolinfo-identity-resolver.test.ts`(이 프로젝트 기존 관례인
+`node:test`+`npx tsx --test` 그대로 따름, DB/네트워크 미접근,
+12/12 PASS) + `EducationIdentityMapping` future crosswalk 테이블
+설계 제안(migration 없음, 문서화만).
+
+LEGAL-1 게이트는 이번 STEP에서 변경하지 않음 —
+`SCHOOLINFO_COORDINATE_USE_GATE`/`SCHOOLINFO_STATISTICS_USE_GATE`
+둘 다 CONDITIONAL 그대로 유지(문서에도 CLEARED로 잘못 쓰지 않음).
+
+검증: `tsc --noEmit` 0 errors, `eslint`(신규 파일 전체) 0 errors,
+resolver fixture test 12/12 PASS.
+
+문서: `docs/development/SCHOOL-V2-C2BA-identity-disambiguation.md`
+신규(기존 C2B/C5B/LEGAL-1 문서 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C2BA_CLOSE = YES** —
+`IDENTITY_READY_FOR_INGESTION = CONDITIONAL`(HIGH 633건만 자동
+ingestion 후보, MEDIUM/LOW/NO_MATCH는 reconciliation queue로 분리
+권장 — identity 게이트는 CONDITIONAL이지만 legal 게이트
+(SCHOOLINFO_COORDINATE_USE_GATE/SCHOOLINFO_STATISTICS_USE_GATE)가
+여전히 CONDITIONAL이라 실제 ingestion은 두 게이트 모두 해소돼야
+착수 가능).
