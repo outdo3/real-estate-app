@@ -7014,3 +7014,58 @@ schema.prisma만(애플리케이션 코드 변경 0건). 외부 API 호출: 0건
 **SCHOOL_V2_C1_CLOSE** — BLOCKER 없음. `DB_SCHEMA_READY = YES`(7개
 core 테이블 기준). 다음 ingestion STEP(SCHOOL V2-C3A 어린이집 등)은
 자동 진행하지 않고 대기.
+
+## 2026-08-21 (26)
+
+### BUSAN SCORE DATA V1.1 — Geocoding Recovery + Missing Feature Backfill
+
+SCORE DISPLAY BUG AUDIT(해운대동백두산위브더제니스 "점수 산정 준비
+중" 이슈)에서 확정된 원인 — 부산 ApartmentMaster 3,402건 중 335건이
+`geocodeQuality='failed'`라 `ApartmentLocationFeature` 수집 대상에서
+원천 제외돼 있었던 것 — 을 실제로 해소했다.
+
+335건의 실제 주소 데이터를 분석한 결과 44건은 완전한 도로명/지번
+주소를 이미 갖고 있었음에도 실패해 있었고(원인: 기존 지오코딩
+스크립트가 Kakao 전용 주소 geocoder `search/address.json` 대신
+POI 키워드 검색 `search/keyword.json`만 썼고, 처음 배치 시점에
+일시적으로 실패했던 것으로 추정), 나머지는 저장된 주소 문자열이
+없어 이름 단독 키워드 검색에 의존했을 것으로 추정된다(실측: 아파트
+이름만으로 검색하면 완전히 다른 지역의 동명 건물이 잡히는 사례
+확인). 신규 복구 스크립트(`recover-missing-geocodes.ts`)는
+`address.json`을 최우선으로 쓰고, 시도+시군구 일치 검증과 좌표
+충돌 검사를 통과한 경우에만 write하도록 설계했다.
+
+335건 중 **334건(99.7%) 복구 성공**, 1건(에코델타호반써밋스마트시티,
+강서구)은 MOLIT 원본 지번 필드 자체가 `"가-"`로 불완전해(2024년
+준공 신축 택지지구) unresolved로 남겼다 — 임의 좌표를 만들지
+않았다. 복구된 334건에 대해 기존 `collect-location-features.ts`를
+코드 변경 없이 재실행해 `ApartmentLocationFeature`를 채웠고,
+`calculateApartmentScore()`(수정 없는 production 함수)로 재계산한
+결과 334건 전부 OK, score 분포도 기존 3,059건과 사실상 동일했다.
+
+대상 단지(`26350-2360`)는 이제 `status=OK, score=57, coverage=1,
+confidence=HIGH`로 정상 표시된다. 기존 정상 6개 단지(해운대/서구/
+부산진구 샘플) regression 확인 결과 전부 변화 없음 — score
+formula/weight/threshold는 이번 STEP에서 전혀 수정하지 않았다.
+
+**Readiness 정의를 두 지표로 분리**: (A) feature 보유 단지 중 OK
+비율 = 100%, (B) 부산 전체 ApartmentMaster 중 OK 비율(진짜 커버리지)
+= 3,401/3,402 = 99.97%. 기존 BUSAN SCORE DATA V1 문서(§9, §15-17)의
+"3,067/3,067 OK"는 사실 (A) 기준이었음을 신규 문서(V1.1)에서 명시했다
+— 원본 V1 문서는 당시 기록 그대로 보존하고 수정하지 않았다.
+
+DB 변경: `ApartmentMaster` 334행 update(latitude/longitude/
+geocodeQuality만, schema 변경 없음), `ApartmentLocationFeature` 334행
+신규(기존 collector 그대로). 코드 변경: `scripts/apartment-score/`에
+신규 스크립트 3건(recover-missing-geocodes.ts,
+verify-recovery-scores.ts, audit-score-status.ts) — production
+score 로직/route/UI 변경 0건.
+
+검증: `tsc`/`eslint`(0 errors)/`next build` 전부 통과, regression
+샘플 6건 전부 무변화 확인.
+
+상태: BLOCKER 없음(1건 unresolved는 별도 후속 STEP 대상으로 분류,
+전체 작업의 BLOCKER 아님), coverage 99.97% 달성 — commit/push 진행.
+
+**BUSAN_SCORE_DATA_V1_1_CLOSE = YES** —
+`TRUE_BUSAN_SCORE_COVERAGE_READY = YES(99.97%, 1건 unresolved)`.
