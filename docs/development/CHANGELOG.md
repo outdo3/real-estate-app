@@ -7067,3 +7067,77 @@ verify-school-normalization.ts). schema 변경 0건(C1 schema로 충분).
 `SCHOOL_MASTER_DATA_READY = YES(부산)`. `NATIONWIDE_SCHOOL_
 ARCHITECTURE_READY = YES`(office-code 파라미터화, 부산 전용 분기
 없음, 전국 실제 실행은 미실시).
+
+## 2026-08-21 (24) — SCHOOL V2-C2B RESUME: 학교알리미(SchoolInfo) OpenAPI 실제 인증/응답 검증
+
+사용자가 발급받은 `SCHOOLINFO_API_KEY`를 `.env.local`에 저장 후 재개.
+DB write/대량 ingestion/schema migration 없음, read-only 검증만
+진행(`scripts/education/c2b-verify-schoolinfo-api.ts`). apiKey 값은
+로그/문서/커밋 어디에도 남기지 않음.
+
+인증 성공, `apiType=09`(공식 개발자 가이드 `OpenAPI_Output.xlsx` 기준
+"학년별·학급별 학생수") 실호출로 wrapper(`{resultCode,resultMsg,list}`,
+NEIS와 다른 평평한 구조)와 필드(`SCHUL_NM`/`SCHUL_CODE`/학년별
+`COL_C{n}`·`COL_S{n}`·`COL_{n}`(학급수/학생수/학급당학생수, 후자는
+API가 이미 계산해 반환)/`TEACH_CNT`/`TEACH_CAL`)를 확인. 참고: 사이트
+자체 검색 UI의 내부 드롭다운 코드(`m_gongsi`)는 공식 가이드의 apiType
+번호 체계와 서로 다르다(둘 다 "09"라는 우연의 일치 없음 — UI 쪽 09는
+"자격종별 교원현황", 공식 API 쪽 09는 "학년별·학급별 학생수") —
+"실제 응답이 문서와 다르면 실제 응답 우선" 원칙에 따라 공식 가이드+실
+호출 결과를 채택.
+
+`sidoCode`/`sggCode` 실제 형식을 실측으로 확정: NEIS 3자리 교육청코드
+(`C10`)도, 사이트 내부 AJAX의 10자리 법정동코드(`2600000000`)도 아닌,
+이 프로젝트가 MOLIT 조회에 이미 쓰는 **5자리 lawdCd 그대로**
+(`sidoCode=26`, `sggCode=26140`)였다 — 새 코드표 불필요.
+
+`SCHUL_CODE`(학교알리미 자체 식별자, 예 `"S020001449"`)는 NEIS
+`SD_SCHUL_CODE`와 형식·값 모두 다름을 확인 — **코드 기반 직접 매핑
+불가**로 확정(이전 UNKNOWN 판정 정정). 안전한 crosswalk 키는
+(학교명, 시군구) 조합이며, 부산 16개 구·군 NEIS 적재 초등학교 305건
+전부가 이 키로 학교알리미 2025년 자료와 일치(100%), 학교알리미 쪽에
+12건 추가 존재(가덕도 등 소규모/분교 추정, 원인 미확정). 단
+(학교명,시군구) 조합조차 완전한 유일키가 아님을 실측으로 발견 —
+강서구 안에서 "송정초등학교"·"대저중앙초등학교"가 각각 서로 다른
+`SCHUL_CODE`로 2건씩 존재(분교/이력 중복 추정). 별도로 부산 664개
+NEIS 적재 학교 전체를 대상으로 동명이교 전수 조사(구·군 간)한 결과는
+"송정초등학교"(해운대구/강서구) 1건만 확인됨.
+
+공시년도(`pbanYr`) 유효범위 실측: 2026/2025/2024 성공, 2023은
+"최근 3년만 제공"으로 거부 — 롤링 3년 윈도우가 실제로 동작함을
+확인(기존 문서상 법령 근거와 일치). 응답에는 연도/공시차수/기준일을
+echo하는 필드가 없음 — 공식 가이드 34개 오퍼레이션 전체를 훑어
+확인(요청 시 넘긴 `pbanYr`을 저장측이 별도로 기록해야 함, 응답만으로는
+복원 불가).
+
+참고 보너스 발견(이번 STEP 범위 밖, ingestion 안 함): `apiType=0`
+(학교기본정보) 응답에 `LTTUD`/`LGTUD`(위도/경도)가 실제로 채워져 있음
+확인 — SCHOOL V2-C5 거리 감사에서 "School 자체 공식 좌표 소스 없음
+(UNKNOWN)"으로 남긴 항목의 유력 후보. C5-B에서 재검토 권고.
+
+`SchoolStat` 스키마(school-v2-c2a 시점부터 이미 존재:
+`studentCount`/`classCount`/`teacherCount`/`gradeBreakdown Json`/
+`sourceRecordId`) 재판정 결과 **수정 없이 이번에 확인한 실제 필드를
+그대로 담을 수 있음** — `sourceRecordId`에 `SCHUL_CODE` 저장,
+`gradeBreakdown`에 학년별 `COL_*` 전체 저장 가능. 마이그레이션 불필요.
+
+라이선스(§1-2, 제3유형: 출처표시+변경금지)는 이번 STEP에서 재확인하지
+않음 — SCHOOL-V2-B 기존 판정 유지.
+
+문서: `SCHOOL-V2-B-official-source-verification.md` §1-3/§1-6/§1-7
+갱신 + 신규 §1-8("실제 호출 방식") 추가(기존 조사 내용 삭제 없이
+"2026-08-21 SCHOOL V2-C2B RESUME 실측" 표기로 덧붙임). 신규 스크립트
+`scripts/education/c2b-verify-schoolinfo-api.ts`(read-only, tsc/eslint
+0 errors).
+
+상태: BLOCKER 없음. 13-다 졸업생 진로현황은 여전히 별도 LATER 유지
+(이번 STEP에서 호출하지 않음, §1-4 판정 변경 없음).
+
+**SCHOOL_V2_C2B_CLOSE = YES(apiType=09 한정 실측 기준)** —
+`SCHOOLINFO_DATA_INGESTION_READY = CONDITIONAL`: 필드 스키마·
+crosswalk 키·좌표질/schulKndCode 전체 코드표 등은 확인됐으나, (a)
+동명이교조차 완전히 해소 못하는 (학교명,시군구) 키의 잔여 모호성
+처리 로직, (b) apiType=08/22(직위별 교원현황) 등 나머지 오퍼레이션
+실측, (c) 라이선스(제3유형 변경금지가 "학급당학생수 같은 파생값
+계산·표시"에 저촉되는지) 최종 법무 판단이 남아 있어 전면 ingestion
+전 추가 확인 필요.
