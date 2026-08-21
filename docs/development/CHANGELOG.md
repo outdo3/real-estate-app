@@ -7297,3 +7297,81 @@ errors. UI/route 변경 없어(scripts/ 한정) `next build` 미실행.
 상태) — 단 `SCHOOLINFO_STATISTICS_USE_GATE`/`SCHOOLINFO_COORDINATE_
 USE_GATE`가 여전히 CONDITIONAL이라 실제 ingestion 착수는 LEGAL-1의
 공식 회신을 기다려야 함.
+
+## 2026-08-22 (30) — SCHOOL V2-C6 공식 학구도(통학구역) 연동 감사 + 부산 파일럿
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c6`, branch
+`school-v2-c6-attendance-zone`, base `9ac7320`=school-v2-c2bb)에서
+진행. SchoolInfo 통계 트랙(C2B) 재개 없음, SchoolInfo legal gate
+변경 없음, migration/production write/main merge 전부 없음.
+SchoolInfo와 완전히 별개인 새 공식 source(학구도)를 다룸.
+
+**공식 source 확정**: 한국교육시설안전원(2026-01-01부로 재단법인
+한국지방교육행정연구재단에서 업무 이관, 학구도안내서비스
+schoolzone.emac.kr 운영), 초등학교통학구역(SHP)·학교학구도연계정보
+(CSV) 등 "학구도 공공데이터 7종"을 매년 3월·9월 배포. data.go.kr
+라이선스 섹션에서 **"이용허락범위 제한 없음"** 원문을 직접 확인 —
+SchoolInfo의 KOGL 제3유형(변경금지)과 달리 상업적 이용·가공 전부
+자유로운 조건. `ATTENDANCE_ZONE_LEGAL_GATE = CLEARED`(원본 파일
+기준)로 판정 — LEGAL-1의 SchoolInfo CONDITIONAL 게이트와는 완전히
+별개.
+
+**데이터 종류 실측 구분**: "학구도" 안에 최소 3가지 다른 구조가 섞여
+있음을 실제 조회로 확인 — (1) 초등학교 순수 1:1 통학구역, (2)
+초등학교 **공동통학구역**(대칭/비대칭 "일방" 두 유형 다 실측 확인,
+후자는 "큰/작은" 우선순위 필드까지 존재하나 정확한 행정적 의미는
+미확인), (3) 중/고등학교 **학교군**(여러 학교 pool, 1:1 배정 아님 —
+초중등교육법 시행령 제68조 근거).
+
+School identifier 검증: CSV의 "학교ID"는 `"B000005015"` 형식(B+9자리
+숫자)으로 NEIS `SD_SCHUL_CODE`와도 SchoolInfo `SCHUL_CODE`와도 다른
+제3의 코드 체계 — **OFFICIAL_OTHER_CODE**로 분류, 학교명 단독
+자동조인 금지, C2B-A에서 이미 검증된 identity resolver와 동일
+방법론(이름+시군구+학교급+동)을 재사용하는 것이 유일한 실용적
+경로임을 확정(코드로 구현하지는 않음, 원본 대량 데이터 미확보).
+
+**부산 파일럿(목표 10건 → 실제 7건, 원본 SHP를 프로그래밍적으로
+받지 못해 공식 라이브 조회 UI로 건별 확인, 축소 사유 정직하게
+기록)**: 서구/해운대구/강서구×2/동래구/부산진구/사하구 실제
+ApartmentMaster 7개 단지를 공식 UI로 직접 조회 — **7건 중 2건(29%)이
+이미 단일 학교가 아닌 공동학구/공동통학구역**이었다(향원에이스타운:
+동신초/대신초 2개교 선택형, 신화타워: 온천초(큰)/금성초·공덕초
+(작은) 3개교). 나머지 5건은 단일 학구였고, 그중 3건은 C5 audit의
+직선거리 최근접 결과와 동일 학교로 일치(오차 수 m 수준, 소스 차이).
+임의로 가장 가까운 학교를 배정학교로 채운 사례는 0건.
+
+공식 사이트 자체의 고지사항 원문을 그대로 확보: "단순 열람용으로
+참조하시기 바라며, '재산권 등의 법적효력'이 없음... 학교 배정 등
+학구(통학구역)에 대한 정확한 사항은 관할 교육청(교육지원청)에 반드시
+확인" — 이집 UI도 이 이상으로 확정적으로 표현할 근거가 없음을
+확인, "배정학교" 대신 "공식 통학구역 기준 학교" 표현을 채택, 중/고는
+"OO학교군(N개교 중 배정)" 형태로만.
+
+데이터 모델(`AttendanceZone`/`AttendanceZoneSchool`, N:M 관계 —
+공동학구/학교군을 자연스럽게 표현), 저장 방식(원본 파일 보존 +
+offline point-in-polygon(`@turf/turf` 재사용) + 사전계산 결과 저장,
+PostGIS 도입 없음), 갱신 파이프라인(3월/9월 배포 감지→다운로드→
+validate→diff→rematch), coverage 지표 이원화
+(`BUSAN_APARTMENT_ATTENDANCE_ZONE_COVERAGE` vs
+`ELEMENTARY_ZONE_SOURCE_COVERAGE`), SCHOOL V2-D용 data contract
+(`nearbySchools`/`attendanceZone` 분리, zoneType이 GROUP/JOINT면
+schools 배열 2개 이상 필수)까지 설계만 완료 — 전부 미구현.
+
+**한계로 정직하게 기록**: data.go.kr의 세션 기반 다운로드(POST+쿠키)
+를 이번 STEP에서 자동화하지 못해 원본 SHP/geometry(CRS, polygon
+유효성, overlap 등)를 직접 검증하지 못함 — §4/§13 상당 부분 미확인
+상태로 남김, 후속 STEP 과제로 명시.
+
+코드 변경 없음(문서만) — tsc/lint/build 실행 대상 없음.
+
+문서: `docs/development/SCHOOL-V2-C6-attendance-zone-audit.md`
+신규(기존 문서 전부 보존, 겹치는 내용 없음).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C6_AUDIT_CLOSE = YES** —
+`ATTENDANCE_ZONE_DATA_READY = CONDITIONAL`(라이선스는 CLEARED,
+identity 조인 방법론도 확정됐으나 원본 geometry 파일 미확보로 실제
+구현 착수 전 조달 방법 확정 필요). `SCHOOL_V2_D_READY_AFTER_C6 =
+CONDITIONAL`(data contract·UI 원칙은 준비됐으나 원본 데이터 확보가
+선행 조건).
