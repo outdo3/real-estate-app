@@ -7375,3 +7375,80 @@ identity 조인 방법론도 확정됐으나 원본 geometry 파일 미확보로
 구현 착수 전 조달 방법 확정 필요). `SCHOOL_V2_D_READY_AFTER_C6 =
 CONDITIONAL`(data contract·UI 원칙은 준비됐으나 원본 데이터 확보가
 선행 조건).
+
+
+## 2026-08-22 (31) — SCHOOL V2-C6-A 부산 통학구역 실데이터 빌드(SHP/CSV 실제 파싱)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c6a`, branch
+`school-v2-c6a-busan-zone-build`, base `dfadbf0`=school-v2-c6)에서
+진행. C6에서 SHP 다운로드를 자동화하지 못해 미검증으로 남겼던
+geometry/좌표계/부산 전수 coverage를, 사용자가 직접 다운로드한 공식
+원본 3개 파일(초등학교통학구역.zip, 중학교학교군.zip,
+학교학구도연계정보.csv, `D:\anti2\aaa\schoolzone-data\`)로 실제
+빌드했다. DB/schema 변경, production write, main merge, Score 변경
+전부 없음.
+
+**CRS 실측 확정**: `.prj` WKT가 `Korea_2000_Korea_Central_Belt_2010`
+(EPSG:5186)임을 확인, proj4 파라미터를 PRJ 원문 그대로 옮겨 WGS84로
+변환 — 변환 결과가 실제 부산 좌표 범위와 일치함을 확인(추정 아님).
+
+**부수 발견**: SHP 속성의 `SD_CD`+`SGG_CD`가 이 프로젝트의
+`School.sigunguCode`(=MOLIT lawdCd)와 완전히 동일한 5자리 포맷임을
+부산 16개 구·군 전부(16/16) 대조로 확인 — 별도 crosswalk 테이블 없이
+지역 조인 가능.
+
+**geometry quality audit**: 전국 규모(7,140+1,684건) 정밀 검사는 CPU
+비용 문제로 중단하고 부산 subset(308+24건)만 전량 실행 — 부산 초등
+305/308 valid(invalid 3건: 장림초/개포초/신덕초통학구역, 자체교차,
+repair 안 함, 매칭 아파트 25건 플래그만 남김), 부산 중학교군 24/24
+valid.
+
+**identity resolver 2단계로 확장**: C2B-A 방법론(이름+지역+학교급
+정확 매칭, fuzzy 금지)을 재사용하되, 1차(같은 lawdCd)에서 실패한
+19건 중 18건이 **공동(일방)통학구역의 opt-in 학교가 zone 관할
+구·군과 다른 구·군에 실제로 위치**하는 구조적 사실임을 실측 확인
+(예: 금성초·공덕초는 canonical sigunguCode=26410(금정구)이지만
+26260/26320/26470 소속 zone에서 opt-in 대상으로 연결됨) — 부산
+전역 재검색 2차 tier(MEDIUM)를 추가해 이름+학교급 유일 매칭만
+채택(fuzzy 아님, 지역 범위만 확장). 최종: HIGH 319, MEDIUM 18,
+LOW 0, NO_MATCH 1(신연초등학교(휴교) — 명칭 불일치, 임의 판단 안
+함).
+
+**부산 3,402개 아파트 전체 point-in-polygon 실행**: MATCHED_SINGLE
+3,191 / MATCHED_SHARED 76 / IDENTITY_UNRESOLVED 130(대부분
+MEDIUM으로 실사용 가능, 진짜 미해결 1건) / OVERLAP 0 / NO_MATCH
+4(REVIEW_REQUIRED로 남김, 임의 배정 없음) / COORDINATE_MISSING 1.
+`ZONE_GEOMETRY_MATCH_COVERAGE` 99.85%, `USABLE_SCHOOL_IDENTITY_
+COVERAGE`(HIGH+MEDIUM) 99.82%, `HIGH_CONFIDENCE_ONLY_COVERAGE`
+96.03% — 세 단계로 정직하게 분리(착시 방지).
+
+**C6 라이브 파일럿과 교차검증**: 향원에이스타운(79)→대신초/동신초,
+신화타워→온천초(큰)/공덕초·금성초(작은) 결과가 이번 STEP의 대량
+파일 기반 파이프라인 결과와 **완전히 일치** — 두 독립된 방법(라이브
+GIS UI vs 원본 파일 대량 처리)이 서로를 뒷받침.
+
+**nearest vs 공식 통학구역 비교**(School 좌표 0%라 부산 초등 305개교
+Kakao 키워드 검색으로 읽기전용 geocoding 후 비교, DB 저장 안 함):
+SAME 72.2%(2,452건), DIFFERENT 22.0%(749건), MULTIPLE_ZONE_OPTIONS
+5.8%(196건) — "가장 가까운 학교=배정학교" 가정이 5건 중 1건 이상
+틀린다는 것을 실측으로 확인.
+
+**중학교 학교군 실측**: 부산 24개 zone, 소속 학교 수 1~18개로 편차
+큼(1개교뿐인 zone 7개는 사실상 단일 배정과 동일). 10개 구·군
+아파트 샘플 lookup 전부 실행.
+
+라이브러리 3개 신설(`attendance-zone-source.ts`,
+`zone-school-identity-resolver.ts`, `attendance-zone-matcher.ts`) +
+node:test 기준 29개 신규 테스트 전부 통과(기존 119개 포함 148/148
+회귀 없음). tsc/eslint/build 전부 clean.
+
+문서: `docs/development/SCHOOL-V2-C6A-busan-attendance-zone-build.md`
+신규(기존 문서 전부 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C6A_CLOSE = YES** — `ATTENDANCE_ZONE_DATA_READY =
+CONDITIONAL`(파이프라인·coverage·identity 전부 실증됐으나 NO_MATCH
+4건 + 신연초 1건 REVIEW_REQUIRED, School 좌표 미확보가 남은 조건).
+`SCHOOL_V2_D_READY = CONDITIONAL`(§17 data contract 확정, 실제 연동은
+후속 STEP).
