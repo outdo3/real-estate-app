@@ -7207,3 +7207,93 @@ ingestion 후보, MEDIUM/LOW/NO_MATCH는 reconciliation queue로 분리
 (SCHOOLINFO_COORDINATE_USE_GATE/SCHOOLINFO_STATISTICS_USE_GATE)가
 여전히 CONDITIONAL이라 실제 ingestion은 두 게이트 모두 해소돼야
 착수 가능).
+
+## 2026-08-22 (29) — SCHOOL V2-C2B-B school bucket 정정 + 중/고/특수 live 검증 (AUDIT ONLY)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c2bb`, branch
+`school-v2-c2bb-type-verification`, base `b94bfe0`=school-v2-c2ba)에서
+진행. DB ingestion/SchoolStat write/coordinate write/migration/main
+merge 전부 없음. 다른 병렬 브랜치 전부 미접촉.
+
+**C2A(elementary305/middle172/high145/special16/other26)와
+C2B-A(305/176/158/16/9) 버킷 총합 불일치의 근본 원인을 두 함수를
+그대로 복사해 664건에 재실행해 정확히 재현했다**: 둘 다 substring
+매칭에 의존하는데 "각종학교(중)"/"평생학교(중)-2년6학기"류는
+문자열 안에 "중학교"가 연속으로 등장하지 않아(괄호가 끼어있음) C2A가
+전부 놓쳐 OTHER로 떨어뜨렸고(주석은 잡힌다고 적혀있었지만 실제
+코드는 그렇게 동작하지 않음 — 주석·코드 불일치 확인), C2B-A는
+`.includes('(중)')`/`.includes('(고)')`로 이 문제는 고쳤지만 대신
+괄호가 없는 "고등기술학교"(1개교, 부산국제영화고등학교)를 놓쳐
+OTHER로 떨어뜨렸다. 19개교 전수 diff를 School.id 단위로 확정.
+
+**최종 canonical taxonomy 확정**: 부산 664건에 실존하는 14개 원문
+schoolLevel 값을 전부 exact-value로 명시 매핑(같은 종류의
+substring-누락 버그 재발 방지, 신규 모듈
+`scripts/education/lib/school-type-taxonomy.ts`) — ELEMENTARY 305 /
+MIDDLE 176 / HIGH **159**(C2B-A의 158에서 고등기술학교 보정 +1) /
+SPECIAL 16 / OTHER **8**(9에서 -1). 합계 664 확인, 이 숫자를 이후
+SCHOOL V2 canonical denominator 단일 기준으로 채택.
+
+**identity 매칭 로직은 전혀 바꾸지 않고**(지시사항) 리포트 그룹핑만
+새 taxonomy로 교체해 재집계 — 전체 결과 완전히 동일(HIGH 633/LOW
+1/NO_MATCH 30, 95.3%, WRONG_MERGE 0). 학교급별: 초등 100%/중
+96.6%/고 89.3%/특수 100%/기타 0.0%.
+
+부산 중학교 5개(지역분산)·고등학교 5개(과학고 대체로 외고/공고/
+사립/공립 분산)·특수학교 2개 apiType=09 실측 — 전부 success, 초등
+표본과 동일 필드 구조(COL_S{n}/COL_C{n}/COL_SUM/TEACH_CNT) 확인.
+고등학교 apiType=0 응답에서 `HS_KND_SC_NM`(고교유형명, 예
+"특성화고등학교") 필드 신규 확인. 방송통신고/고등기술학교류 3건은
+표준 schulKndCode(02~07) 전부로 재시도해도 apiType=09 목록에 아예
+없음을 확인 — **SOURCE_NOT_APPLICABLE**로 확정(요청 파라미터 실수
+아님, 이 오퍼레이션이 다루지 않는 학교 유형). apiType=22(직위별
+교원현황) 2건 실측 결과 직위 15단계로 과도하게 세분화돼 있어 부모
+UX엔 불필요 판단, SchoolStat 최소 구조에서 제외.
+
+부모 UX 최소 SchoolStat 구조 확정(설계만): 전체학생수/학급수/
+교사수(총원)/학년별학생수/학급당학생수(API 제공값 그대로) — 기존
+C1 스키마(`studentCount`/`classCount`/`teacherCount`/
+`gradeBreakdown`/`sourceRecordId`)에 이미 정확히 맞음, 스키마 변경
+불필요.
+
+NEIS-only 30건 전수 분류 완료: **IDENTITY_UNRESOLVED 7건**
+(canonical School.sigunguCode 자체가 null — SchoolInfo 문제 아니라
+우리쪽 NEIS ingestion 주소 데이터 갭, 한국과학영재학교 등) +
+**SOURCE_NOT_APPLICABLE 23건**(방송통신/평생학교/외국인학교/
+공동실습소/각종학교 계열, §7 실측 패턴과 일치) — "원인불명" 0건.
+
+**coverage denominator 이원화 신규 확정**:
+`CANONICAL_SCHOOL_IDENTITY_COVERAGE`(HIGH/664=95.3%, identity 그
+자체) vs `SCHOOLINFO_ELIGIBLE_STAT_COVERAGE`(HIGH matched 중
+SchoolInfo 공시 대상인 canonical 664-7-23=634건 분모 기준
+**633/634=99.8%**) — 664 대비 100% 미달의 대부분이 SchoolInfo
+데이터 오류가 아니라 우리쪽 갭(7)과 공시 비대상(23)임을 명확히
+구분, "데이터 오류"로 표현하지 않음.
+
+3년 이력 재검증(초/중/고/특수 각 1건, 2026/2025/2024 성공·2023
+거부) — 학교급 무관 일관 확인.
+
+Legal gate 변경 없음 —
+`SCHOOLINFO_COORDINATE_USE_GATE`/`SCHOOLINFO_STATISTICS_USE_GATE`
+둘 다 CONDITIONAL 유지. ingestion plan은 설계만(HIGH∩공시대상 633건
+자동 후보, LOW/NO_MATCH는 reconciliation queue, idempotency는 값
+변경시만 update, 연도별 history row 보존) — 실행하지 않음.
+
+신규 테스트 `school-type-taxonomy.test.ts`(10케이스) +
+기존 `schoolinfo-identity-resolver.test.ts`(12케이스, 재사용) =
+22/22 PASS.
+
+검증: `tsc --noEmit` 0 errors, `eslint`(신규/수정 파일 전체) 0
+errors. UI/route 변경 없어(scripts/ 한정) `next build` 미실행.
+
+문서: `docs/development/SCHOOL-V2-C2BB-type-and-operation-verification.md`
+신규(기존 문서 전부 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C2BB_CLOSE = YES** —
+`STAT_PIPELINE_TECHNICALLY_READY = YES`(필드/구조/coverage/no-op
+설계까지 전부 확인 및 설계 완료, 기술적으로는 바로 구현 가능한
+상태) — 단 `SCHOOLINFO_STATISTICS_USE_GATE`/`SCHOOLINFO_COORDINATE_
+USE_GATE`가 여전히 CONDITIONAL이라 실제 ingestion 착수는 LEGAL-1의
+공식 회신을 기다려야 함.
