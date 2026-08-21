@@ -58,6 +58,11 @@ const isRailwayStation = (p: any): boolean => (p.category_name || '').includes('
 // 방식이 아니다.
 const isClosedStation = (p: any): boolean => (p.category_name || '').includes('폐역');
 
+// SCHOOL V2-C5-A §5: 학교(SC4)·어린이집/유치원(PS3)만 대상. 다른 카테고리(지하철/병원/
+// 마트/편의점/약국/공원 등)는 이번 STEP 범위 밖이라 formatEta의 "도보/차량" 표현을 그대로
+// 유지한다 — 교육시설만 "실제 보행경로가 아니라 직선거리"라는 사실을 명시한다.
+const isEducationPlace = (place: any) => place.category_group_code === 'SC4' || place.category_group_code === 'PS3';
+
 const iconFor = (place: any, keyword?: string) => {
   if (place.category_group_code && CATEGORY_ICON[place.category_group_code]) {
     return CATEGORY_ICON[place.category_group_code];
@@ -255,13 +260,13 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
             <b>{p.place_name}</b>
           )}
           <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-            ({p.distance}m, {formatEta(Number(p.distance))})
+            {isEducationPlace(p) ? `(직선거리 약 ${p.distance}m)` : `(${p.distance}m, ${formatEta(Number(p.distance))})`}
           </span>
         </li>
       ))}
       {places.length > 0 && isSchoolOnly && places[0].distance < 300 && (
          <li style={{color: 'var(--primary-color)', fontWeight: 600, marginTop: '1rem', listStyle: 'none', marginLeft: '-1.2rem'}}>
-           🏫 초품아(학세권) 단지로 도보 통학이 가능한 거리입니다.
+           🏫 초품아(학세권) — 초등학교와 직선거리 300m 이내인 단지입니다.
          </li>
       )}
       {places.length > 0 && isSubwayOnly && places[0].distance < 500 && (

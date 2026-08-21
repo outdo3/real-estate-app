@@ -13,7 +13,6 @@ type AiIntent = 'condition_search' | 'regional_stats' | 'compare';
 interface NearestSchoolInfo {
   name: string;
   distanceM: number;
-  walkMinutes: number;
 }
 
 interface ConditionSearchComplex {
@@ -261,7 +260,8 @@ function ConditionSearchResult({ complexes, lawdCd }: { complexes: ConditionSear
           </div>
           {c.nearestSchool && (
             <div className={styles.schoolBadge}>
-              🏫 {c.nearestSchool.distanceM <= 300 ? '초품아' : `${c.nearestSchool.name} 도보 ${c.nearestSchool.walkMinutes}분`}
+              {/* SCHOOL V2-C5-A: 직선거리 기준 — 실제 보행경로가 아니므로 "도보 N분"으로 표시하지 않는다 */}
+              🏫 {c.nearestSchool.distanceM <= 300 ? '초품아' : `${c.nearestSchool.name} 직선거리 약 ${c.nearestSchool.distanceM}m`}
             </div>
           )}
         </div>

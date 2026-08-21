@@ -248,33 +248,36 @@ export async function GET(request: Request) {
         return { ...apt, buildYear: registryBuildYear ?? apt.buildYear };
       }));
 
-      // 5. 프론트엔드용 데이터 가공 (직선거리 → 도보시간 근사, 실제 보행경로 API 아님)
-      // [BUSAN SCORE DATA V1 §1] 이전에는 schoolName.includes('송도')면 walkMin+5를
-      // 더했다("특정 지형(송도) 언덕 페널티 보정" — 과거 커밋 코멘트, 이후 리팩터에서
-      // 코멘트만 유실됨). 학교 이름 문자열 매칭으로 그 학교 인근 모든 아파트에 획일
-      // 적용되고(개별 아파트의 실제 고저차와 무관), "+5"는 실측 경사/고도 데이터가
-      // 아닌 임의 추정치였다 — "학교거리 임의 보정 금지" 원칙에 따라 제거했고, 다른
-      // 숫자로도 대체하지 않았다(§1). 실제 경사 반영이 필요하면 SCHOOL V2에서 정식
-      // 보행경로 API로 처리할 사안이다.
+      // 5. 프론트엔드용 데이터 가공 (SCHOOL V2-C5-A: 실제 보행경로 API가 없는 상태에서
+      // "도보 N분"을 만들어 보여주면 확보하지 못한 정확도를 확보한 것처럼 오해하게
+      // 만든다 — Turf 직선거리에 임의 보정계수(1.45배 + 분당 15분 환산 + 거리별 flat
+      // 보정)를 적용해 "도보 약 N분"으로 표시하던 이전 로직을 제거하고, 실제로 갖고
+      // 있는 값(직선거리)만 그 사실 그대로("직선거리 약 Nm") 노출한다. 도보/차량
+      // 소요시간이 필요하면 SCHOOL V2-C5-C(정식 보행경로 provider 연동) 이후에나
+      // 정직하게 추가할 수 있다.
+      //
+      // [BUSAN SCORE DATA V1 §1] 참고로 과거엔 schoolName.includes('송도')면
+      // walkMin+5를 더하는 "특정 지형(송도) 언덕 페널티 보정"이 있었으나 실측 근거
+      // 없는 임의 추정치라 이미 제거됐다(§1) — 이번 STEP은 그 walkMin 산출 로직
+      // 자체를 없애는 것이라 이 이력은 더 이상 해당하지 않는다.
+      //
+      // `walkTime` 필드명은 하위 호환을 위해 유지하되(응답 shape 유지, breaking
+      // change 최소화) 값은 더 이상 "도보 N분"이 아니라 `distanceLabel`과 동일한
+      // 직선거리 문구를 담는다 — @deprecated, 신규 소비자는 `distanceMeters`/
+      // `distanceLabel`을 쓰고 이 필드는 다른 소비자가 없음이 확인되면 제거한다
+      // (docs/development/SCHOOL-V2-C5A-distance-label-correction.md 참고).
       return withRegistryBuildYear.map(apt => {
-        const realDistance = apt.dist * 1.45;
-
-        let walkMin = Math.round(realDistance * 15);
-
-        if (apt.dist > 0.1) {
-          walkMin += 4;
-        }
-        if (apt.dist > 0.5) {
-          walkMin += 3;
-        }
-
-        walkMin = Math.max(3, walkMin);
+        const distanceMeters = Math.round(apt.dist * 1000);
+        const distanceLabel = `직선거리 약 ${distanceMeters}m`;
 
         return {
           id: apt.id,
           name: apt.name,
           price: apt.price,
-          walkTime: `도보 약 ${walkMin}분`,
+          distanceMeters,
+          distanceLabel,
+          /** @deprecated use distanceLabel/distanceMeters instead — no longer "도보 N분" */
+          walkTime: distanceLabel,
           distance: apt.dist,
           buildYear: apt.buildYear
         };
@@ -282,7 +285,7 @@ export async function GET(request: Request) {
     });
 
     const finalResult = result.length === 0
-      ? [{ id: -1, name: '인근 아파트 매물 없음', price: '-', walkTime: '-', distance: 0, buildYear: null }]
+      ? [{ id: -1, name: '인근 아파트 매물 없음', price: '-', distanceMeters: null, distanceLabel: '-', walkTime: '-', distance: 0, buildYear: null }]
       : result;
 
     return NextResponse.json({ success: true, data: finalResult });

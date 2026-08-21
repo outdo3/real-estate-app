@@ -7125,3 +7125,74 @@ V1 formula 변경 없음. main merge 없음.
 `DISTANCE_DATA_SAFE_FOR_PARENT_UX = NO(as-is)` — `/school/[id]`·AI
 검색의 "도보 N분" 표현이 직선거리 기반 추정을 실제 도보시간처럼
 보여주고 있어 C5-A(문구 교정) 전에는 그대로 노출하면 안 됨.
+
+## 2026-08-21 (25) — SCHOOL V2-C5-A misleading walking label 교정 + fix_coords 영향 확인
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c5a`, branch
+`school-v2-c5a-distance-label`, base `91a1a8d`=school-v2-c5-distance-audit)에서
+진행. main/C2A/C2B/C3B/score-geocode-recovery 전부 미접촉.
+
+C5 감사에서 확인된 8곳의 misleading "도보 N분" 노출을 전부 "직선거리
+약 Nm"로 교정(계산 로직/데이터 자체는 불변, 표현만 정직해짐):
+`/api/school/apartments`(1.45배+분당15분+flat보정 로직 삭제),
+`school-detail-client.tsx`, `ai-search.ts`
+`findNearestElementarySchool`(distance/80 삭제),
+`api/ai-search/route.ts`(Gemini 데이터요약), `ai-search-client.tsx`
+(카드 배지), `ai-search.ts`의 Gemini 가드레일 프롬프트,
+`KakaoPlaces.tsx`(학교 SC4·어린이집/유치원 PS3 항목만 — 지하철/병원/
+마트/약국/공원 등 다른 카테고리는 `/apt/[name]`(V1 잠금) 공용
+컴포넌트라 그대로 유지, `isEducationPlace()`로 항목 단위 분기).
+
+`/api/school/apartments` 하위호환: `walkTime` 필드 키는 유지하되
+값을 안전한 문구로 교체(@deprecated 표시), 신규 `distanceMeters`/
+`distanceLabel` 필드 추가 — 실제 소비자가 이 파일 하나뿐임을 grep으로
+확인 후 소비자도 신규 필드로 전환.
+
+AI 검색의 "도보 N분 이내" 자연어 조건 위험을 조사한 결과, 애초에
+분(分) 단위를 파싱하는 필드가 스키마에 없어(모든 학교 근접 표현이
+`nearElementarySchool` boolean 하나 + 고정 500m 반경으로 뭉개짐)
+"허위로 조건 만족을 주장"하는 코드 경로 자체가 없었음을 확인 —
+UNSUPPORTED_ROUTE_CONDITION 같은 신규 메커니즘은 조건 파싱 확장이라
+범위 밖으로 판단해 만들지 않고, 응답이 항상 실제 직선거리로만
+표현되도록 하는 것으로 위험을 낮췄다(한계는 문서에 기록).
+
+fix_coords.ts/fix_songdo_coords.ts 프로덕션 영향 read-only 확인
+(`scripts/education/c5a-fix-coords-impact-check.ts`): 두 스크립트가
+실제로 write한 `Transaction` 테이블이 **현재 총 0행**이고 `src/`
+어디에서도 `prisma.transaction`을 참조하지 않는 완전한 dead
+table임을 확인 — 7개 대상 단지 전부 **NO_PRODUCTION_IMPACT**로 확정
+(추정이 아니라 직접 조회로 확인). ApartmentMaster(Score가 실제로
+쓰는 테이블)엔 7곳 중 2곳만 존재하고 좌표는 하드코딩 값과 다른
+정상 지오코딩 값(2026-08-13 갱신, score-geocode-recovery로 추정) —
+fix_coords.ts가 건드린 적 없는 테이블이라 예상대로 무관함을 재확인.
+Transaction 모델엔 `updatedAt` 컬럼 자체가 없어 "언제 반영됐는지"는
+확인 불가(테이블이 비어있어 실익 없음). 로컬 DATABASE_URL이 Vercel
+프로덕션과 정확히 같은 인스턴스인지는 대시보드 접근 없이 암호학적
+확인은 못해 UNKNOWN으로 남김(정황상 SAME 가능성 높음, 단일
+DATABASE_URL만 존재).
+
+UI regression: 서구2/해운대2/동래·사하 각1(총 6개) 실제 API
+호출로 거리값 불변·문구만 교정 확인 + 브라우저로 `/school/[id]`,
+`/ai-search`(실제 Gemini 질의) 육안 확인 — caveat 문구 정상 노출,
+"도보" 텍스트 전무.
+
+신규 회귀 가드 스크립트
+`scripts/education/c5a-verify-no-walking-labels.ts`(vitest/jest 없는
+이 프로젝트 관례대로 tsx 직접실행 assertion 방식) — PASS. Score
+파이프라인(`school-access-sentence.ts`) 불변도 같은 스크립트로 재확인.
+
+서구 하드코딩 폴백(§8 지시)과 fix_coords 스크립트 자체는 이번
+STEP에서 제거하지 않고 C5-B로 이월. Score V1 formula/weight/
+ApartmentLocationFeature 전부 미변경.
+
+검증: `tsc --noEmit` 0 errors, `eslint`(수정 파일 전체) 0 errors,
+`next build` 성공.
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C5A_CLOSE = YES** —
+`PARENT_DISTANCE_LABEL_SAFE = YES` — 학교/유치원/어린이집 거리
+UI 전 구간에서 "도보 N분"이 더 이상 노출되지 않으며 실제 직선거리로만
+표현된다. `MANUAL_COORDINATE_C5B_PRIORITY = LOW`(fix_coords 관련
+production impact가 NO로 확정돼 긴급성 낮음, 그러나 좌표 provenance
+정리 자체는 여전히 C5-B에서 필요).

@@ -27,6 +27,12 @@ interface NearbyApartment {
   id: number;
   name: string;
   price: string;
+  // SCHOOL V2-C5-A: 직선거리 문구("직선거리 약 Nm") — 실제 보행경로가 아니므로
+  // "도보 N분"으로 표시하지 않는다. distanceMeters/distanceLabel이 항상 채워지지만,
+  // API 응답 shape 변경에 방어적으로 대응하기 위해 optional로 둔다.
+  distanceMeters?: number | null;
+  distanceLabel?: string;
+  /** @deprecated distanceLabel을 대신 쓸 것 */
   walkTime: string;
   distance: number;
   buildYear: number | null;
@@ -147,6 +153,7 @@ export default function SchoolDetailClient() {
               </button>
             </div>
           </div>
+          <p className={styles.aptDistanceCaveat}>직선거리 기준이며, 실제 통학 경로는 다를 수 있어요.</p>
           {aptLoading ? (
             <div className={styles.dataPending} style={{ padding: '1rem 0' }}>
               불러오는 중...
@@ -164,7 +171,7 @@ export default function SchoolDetailClient() {
                       {apt.name} {apt.buildYear && <span className={styles.aptRowYear}>{apt.buildYear}년</span>}
                     </div>
                     <div className={styles.aptRowMeta}>
-                      {apt.walkTime} · {apt.price}
+                      {apt.distanceLabel ?? apt.walkTime} · {apt.price}
                     </div>
                   </div>
                   <div className={styles.aptRowBtns}>
