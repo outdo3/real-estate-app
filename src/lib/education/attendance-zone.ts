@@ -1,10 +1,18 @@
 // SCHOOL V2-C6-B §9 — SCHOOL V2-D가 바로 사용할 수 있는 read-only 헬퍼.
 // data/education/attendance-zone/의 precomputed local artifact만 읽는다(DB 접근
 // 없음, production write 없음). scripts/education/c6b-04-final-pipeline.ts가 생성한
-// 산출물과 1:1 대응되는 타입만 정의한다 — 이 파일 자체는 아직 어떤 API route에서도
-// import되지 않는다(SCHOOL V2-D 범위, 이번 STEP은 계약 준비까지만).
+// 산출물과 1:1 대응되는 타입만 정의한다.
+//
+// SCHOOL V2-D1 §21: 5.76MB artifact를 절대 client bundle에 포함시키지 않는다.
+// npm `server-only` 패키지는 Next.js 번들러의 조건부 exports에 의존해 plain
+// `node:test`(tsx --test, 이 프로젝트의 실제 test 실행 방식)에서는 무조건 throw하며
+// 기존 테스트를 깨뜨린다 — 그래서 패키지 대신 동일 효과의 최소 runtime guard만 둔다.
 import { readFileSync } from 'fs';
 import path from 'path';
+
+if (typeof window !== 'undefined') {
+  throw new Error('src/lib/education/attendance-zone.ts는 서버 전용입니다 — client component에서 import하지 마세요.');
+}
 
 export type AttendanceStatus = 'AVAILABLE' | 'SHARED' | 'REVIEW_REQUIRED' | 'NOT_AVAILABLE';
 export type SchoolIdentityConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'NO_MATCH';

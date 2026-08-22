@@ -7967,3 +7967,63 @@ C5-A/C5-B/C6/C6-A/LEGAL-1/SCORE 전부) 커밋 해시 불변 확인 — 미접�
 (product code + tooling + docs 전부 한 branch에 통합, test/tsc/lint/build
 전부 clean). `SCHOOL_V2_D_READY = YES`(§13 dependency map 확정, 실제 UI/route
 연동만 남음).
+
+
+## 2026-08-22
+
+### STEP — SCHOOL V2-D1: 부모 의사결정형 교육환경 UX 구현
+
+`school-v2-integration`을 base로 `school-v2-d1-parent-education-ui` 브랜치에서
+단지 상세(`/apt/[name]`)의 "학군" 탭을 실제 부모용 UI로 구현했다. 기존
+`SchoolDistrictPanel`(카카오 POI 나열)을 신규 `EducationPanel`로 대체(중복
+section 없음).
+
+신규 `GET /api/apt/[name]/education` route(기존 `/info`/`/score`/`/facilities`
+형제 route)를 만들었다 — `getApartmentEducationZone()`이 5.76MB artifact를
+읽는 무거운 호출이라 기존 route에 얹지 않기로 결정, aptSeq 해석은 `/score`
+route와 동일한 안전 매칭 원칙만 재사용(코드 공유 아님, `/score` 자체는
+미변경). Kindergarten(367건, turf 거리)과 고등학교(Kakao 키워드검색 +
+이름+lawdCd+HIGH 완전일치일 때만 canonical 설립유형 부착)를 서버에서
+직접 조회하는 신규 lib(`nearby-education.ts`)도 추가했다.
+
+초등학교는 "공식 통학구역"과 "가까운 초등학교"를 절대 합치지 않고 분리했고,
+"가까운 학교와 통학구역 학교는 다를 수 있어요" 짧은 안내를 덧붙였다(부산
+22.0% nearest≠zone 통계 자체는 UI에 노출하지 않음). 중학교는 학교군
+accordion, 어린이집은 "0곳" 대신 "준비 중" 고정 문구, 졸업생 진로/SchoolInfo
+통계는 데이터가 없어 section 자체를 만들지 않았다(§14/§15 지시대로 "준비 중"
+남발 금지).
+
+**브라우저 QA 중 발견한 문제 1건**: 아파트 좌표 자체가 없는 경우
+(COORDINATE_MISSING)에도 유치원/고등학교 요약이 "2km 이내 없음"으로 나와
+"검색했는데 없었다"처럼 읽혔다 — "확인된 부재"와 "확인 불가"를 구분하지
+않은 것. `reasonCode` 신호로 분리해 "확인 불가"/"단지 위치를 확인할 수
+없어..." 문구로 수정.
+
+`server-only` npm 패키지는 이 프로젝트의 실제 test 실행 방식(tsx --test,
+plain Node)과 충돌해(무조건 throw) 기존 테스트를 깨뜨림을 확인하고 채택하지
+않았다 — 대신 `typeof window !== 'undefined'` 최소 runtime guard를 직접
+추가. 빌드 후 `.next/static`에 artifact 문자열 0건, `.next/server`에는 정상
+포함됨을 grep으로 실측 확인(client bundle 위험 없음).
+
+향원에이스타운(SHARED)/신화타워(SHARED, MEDIUM 포함)/한진(REVIEW_REQUIRED)/
+에코델타호반써밋스마트시티(NOT_AVAILABLE)/비스타동원더비치테라스(AVAILABLE
+단일) 5개 샘플 + 중학교군/유치원/고등학교 실제 데이터 전부 브라우저(390px)·
+API로 QA 완료 — school name 정확, wrong-region 0건, 최근접 fallback을
+통학구역 대신 쓴 사례 0건, "배정학교"/허위 도보/가짜 SchoolInfo 통계/어린이집
+"0곳" 전부 0건.
+
+신규 테스트 18개(라벨/분기 로직 10 + source-content guard 8, DOM 렌더링
+프레임워크가 없어 순수 함수+소스 검사로 대체) + 기존 167개 포함 185/185
+통과. tsc/eslint 0 errors, build 성공(신규 route 정상 컴파일, 기존 라우트
+회귀 없음). 360/375/430/desktop 개별 뷰포트 스크린샷은 브라우저 자동화 도구
+불안정으로 미완료(정직하게 기록).
+
+문서: `docs/development/SCHOOL_V2_D1_PARENT_EDUCATION_UX.md` 신규(기존 문서
+전부 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_D1_CLOSE = YES** — `PARENT_EDUCATION_UX_READY = YES`(초등/중학교/
+유치원/고등학교/어린이집 전부 실제 데이터 또는 정직한 준비-중 상태로 구현).
+`SCHOOL_V2_D2_READY = YES`(SchoolInfo/13-다/Childcare 데이터 확보 시 확장할
+자리와 원칙 확정).
