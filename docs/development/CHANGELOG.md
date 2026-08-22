@@ -7142,6 +7142,70 @@ crosswalk 키·좌표질/schulKndCode 전체 코드표 등은 확인됐으나, (
 계산·표시"에 저촉되는지) 최종 법무 판단이 남아 있어 전면 ingestion
 전 추가 확인 필요.
 
+## 2026-08-22 (27) — SCHOOL V2-LEGAL-1 SchoolInfo 라이선스/이용 게이트 확정 (AUDIT ONLY)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-legal1`, branch
+`school-v2-legal1-schoolinfo-gate`, base `e9062a9`=school-v2-c2b)에서
+진행. DB write/migration/School coordinate write/SchoolStat
+ingestion/main merge 전부 없음.
+
+**핵심 신규 발견**: 기존 V2-B/C2B 감사는 data.go.kr 카탈로그 등록
+(`15098092`, "공공누리 제3유형: 출처표시+변경금지")만 근거로 삼았는데,
+이번에 schoolinfo.go.kr 자신의 "API 제공목록" 안 **오퍼레이션별
+메타정보 페이지**(각 공시항목 클릭 시 나오는 "이용허락조건" 섹션)를
+처음으로 직접 확인했다. 3개 오퍼레이션(학교기본정보=apiType0,
+학년별·학급별학생수=apiType09, 직위별교원현황=apiType22)에서
+**동일한 문구**를 확인: "출처표시하면 영리 목적의 이용이나 변경 및
+2차적저작물의 작성을 포함한 자유 이용을 할 수 있습니다" — data.go.kr의
+"변경금지"보다 명백히 관대하다. 두 공식 출처가 서로 다른 조건을
+제시한다는 사실 자체를 그대로 기록했고, 어느 쪽이 우선인지 판단할
+근거는 찾지 못해 단일 KOGL 유형으로 확정하지 않고 `UNKNOWN`으로 남김.
+
+schoolinfo.go.kr의 "공공데이터 이용정책"(OpenAPI 하위 메뉴, 공공데이터법
+§1/§3 근거)도 별도 확인 — "영리 목적의 이용을 포함한 자유로운 활용이
+보장됩니다"로 상업적 이용은 재확인. 다만 "API 이용안내" 페이지가
+"상업적 이용이 불가능한 API를 상업적으로 활용하는 경우"를 금지행위로
+명시해, API별로 조건이 갈릴 수 있음을 공식적으로 인정 — 확인한 3개
+오퍼레이션 밖으로는 일반화하지 않음.
+
+§4에서 "원본값 그대로 표시"(A~D, 학생수/학급수/교사수/API제공
+파생값)는 SAFE로 판정(두 출처 어느 쪽 기준으로도 안전). 반면
+차트/시계열(E,F), 증감률 계산(G), **이집 자체 점수 생성(H)**은
+REVIEW_REQUIRED로 유지 — data.go.kr 제3유형과의 불일치가 해소되지
+않은 게 유일한 걸림돌이며, 특히 H(여러 원본값을 조합한 자체 점수)는
+가장 신중해야 할 영역으로 별도 강조. 좌표(I,J)도 같은 이유로
+REVIEW_REQUIRED이나, 원본 그대로 저장·표시·정렬(sort)까지는 상대적으로
+안전한 영역으로 구분.
+
+출처표시 의무는 모든 유형에서 예외 없이 필수임을 저작권정책 페이지
+공식 예시 문구로 재확인(기관명/작성연도/공공누리유형/저작물명/
+작성자/URL). 이집 UI 초안 문구를 제안했으나 화면 내 짧은 표기만으로는
+공식 예시의 전 요소를 충족 못해 별도 출처 상세페이지 병행을 권고.
+
+최근 3년 제한(교육관련기관 정보공개 특례법 시행령 제3조3항)은 API
+접근 가능 기간에 대한 규정으로 읽히지 취득 후 보관기간을 규율하는
+근거는 찾지 못함 — 그래도 `HISTORICAL_RETENTION = REVIEW_REQUIRED`로
+유지(지시사항 기본값).
+
+EducationSource 등록안(제안값만, write 없음) 및 후속 확인 권고
+(학교알리미 고객센터 서면 문의, 로그인 후 약관 원문 확인) 문서화.
+
+문서: `docs/development/SCHOOL-V2-LEGAL1-schoolinfo-usage-gate.md`
+신규(기존 V2-B/C2B/C5B 감사 결과 보존, 덮어쓰지 않음).
+
+상태: BLOCKER 없음(단, 아래 두 게이트 모두 CONDITIONAL — CLEARED
+아님).
+
+**SCHOOL_V2_LEGAL1_CLOSE = YES** —
+`SCHOOLINFO_COORDINATE_USE_GATE = CONDITIONAL`(원본 저장·가공없는
+표시·정렬은 안전 범위, 직선거리 계산·순위화는 REVIEW_REQUIRED).
+`SCHOOLINFO_STATISTICS_USE_GATE = CONDITIONAL`(원본값 그대로 표시만
+안전, 차트/증감률/자체 점수화는 REVIEW_REQUIRED — 특히 자체 점수화는
+서면 확인 전 착수 금지 권고). 두 게이트 모두 CLEARED가 아니므로
+C5-B1(School 좌표 ingestion)과 SchoolStat ingestion 모두 "무조건
+진행 가능"은 아니고, CONDITIONAL 허용 범위 내에서만 사용자/ChatGPT
+승인 후 제한적 착수를 검토할 것.
+
 ## 2026-08-22 (28) — SCHOOL V2-C2B-A SchoolInfo↔NEIS identity resolver 확정 (AUDIT+DESIGN)
 
 별도 worktree(`D:/anti2/aaa/e-jip-school-c2ba`, branch
