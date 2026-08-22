@@ -8027,3 +8027,32 @@ API로 QA 완료 — school name 정확, wrong-region 0건, 최근접 fallback�
 유치원/고등학교/어린이집 전부 실제 데이터 또는 정직한 준비-중 상태로 구현).
 `SCHOOL_V2_D2_READY = YES`(SchoolInfo/13-다/Childcare 데이터 확보 시 확장할
 자리와 원칙 확정).
+
+
+## 2026-08-22
+
+### STEP — SCHOOL V2-D1-QA: 부모 교육 UX 반응형 시각 검수
+
+D1에서 미완료로 남았던 360/375/430/desktop 개별 뷰포트 실측을 마무리했다.
+새 기능 개발 없음, `school-v2-d1-parent-education-ui` 브랜치 그대로 사용.
+
+5개 뷰포트(360×800/375×812/390×844/430×932/1440×900) × 5개 status 샘플
+(신화타워=SHARED+MEDIUM, 비스타동원더비치테라스=AVAILABLE, 한진=
+REVIEW_REQUIRED, 향원에이스타운=SHARED 대칭, 에코델타호반써밋스마트시티=
+NOT_AVAILABLE)을 브라우저로 실제 렌더링해 확인, 스크린샷 5장 저장해
+사용자에게 전달했다.
+
+**실제 버그 1건 발견 및 수정**: 360px에서 유치원 카드의 "직선거리 약 418m"와
+"더보기" 버튼이 줄바꿈 없이 붙어 보이는 문제 — `.expandToggle`이
+`display: inline-flex`라 앞선 인라인 텍스트와 한 줄에 머물 수 있었던 것이
+원인. `display: flex`로 변경해 항상 새 줄에서 시작하도록 수정. 그 외 발견된
+문제는 없음(overflow/clipping/bottom-nav 충돌/touch-target 전부 정상).
+
+CSS 1개 파일만 수정해 tests(185/185, 변동 없음)/tsc/eslint/build 재실행,
+전부 clean. `SCHOOL_V2_D1_PARENT_EDUCATION_UX.md`에 §26으로 결과를
+append(기존 기록 삭제 없음).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_D1_VISUAL_QA_CLOSE = YES** — **SCHOOL_V2_D1_FINAL_CLOSE = YES**
+(기능 구현+반응형 시각 검수 전부 완료).

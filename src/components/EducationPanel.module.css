@@ -141,7 +141,10 @@
 }
 
 .expandToggle {
-  display: inline-flex;
+  /* [D1-QA] 360px 실측: inline-flex는 앞선 인라인 텍스트(직선거리 등)와 같은
+     줄에 붙어버려("418m더보기"처럼 붙어 보임) — 항상 새 줄에서 시작하도록
+     block 레벨 flex로 변경. */
+  display: flex;
   align-items: center;
   gap: 0.2rem;
   margin-top: 0.5rem;
