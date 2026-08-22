@@ -54,3 +54,6 @@ scripts/redevelopment/_results/
 # BRAND STEP 57-A — 브랜드 원본(PSD급 고해상도 PNG) 로컬 보관 전용.
 # production에서 실제로 서빙하는 최적화 자산은 public/brand/에 별도로 커밋된다.
 brand-source/
+
+# git worktree isolation (local dev only)
+.worktrees/
