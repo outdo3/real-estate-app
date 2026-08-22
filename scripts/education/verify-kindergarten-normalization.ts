@@ -14,6 +14,7 @@
  *   미사용 필드라 매핑에는 영향 없음)
  * ingest-kindergartens.ts는 이 실측 결과를 반영해 이미 수정됨.
  */
+export {}; // SCHOOL V2-INTEGRATION-1: 파일 스코프 격리(다른 script와 top-level 변수 충돌 방지)
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env'), quiet: true });
 

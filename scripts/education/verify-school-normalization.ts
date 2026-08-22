@@ -9,6 +9,7 @@
  * 등 SD_SCHUL_CODE 공백 사례, "부산솔빛학교"의 "부산광역시"→"부산"
  * 축약 주소 사례를 그대로 포함한다.
  */
+export {}; // SCHOOL V2-INTEGRATION-1: 파일 스코프 격리(다른 script와 top-level 변수 충돌 방지)
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env'), quiet: true });
 

@@ -7898,3 +7898,72 @@ attendance-zone.ts`) + node:test 기준 신규 19개 테스트 전부 통과(기
 **SCHOOL_V2_C6B_CLOSE = YES** — `ATTENDANCE_ZONE_PRODUCT_READY = YES`(status
 모델·artifact·API contract 전부 확정). `SCHOOL_V2_D_READY = YES`(read-only 헬퍼
 구현 완료, 실제 route 연동만 남음).
+
+
+## 2026-08-22
+
+### STEP — SCHOOL V2-INTEGRATION-1: 승인된 SCHOOL V2 branch 통합
+
+여러 격리 worktree에 흩어져 있던 SCHOOL V2 작업(C2A/C2B/C2B-A/C2B-B/LEGAL-1/
+C3B/C5/C5-A/C5-B/C6/C6-A/C6-B)을 SCHOOL V2-D 구현 전에 하나의 clean branch로
+통합했다. 새 기능/UI 구현/migration/production write/main merge 없음.
+
+main의 `.gitignore` 전용 커밋(`ec23919`)을 `git show --name-status`로 재확인해
+C3A 파일 혼입 0건을 재검증(push는 하지 않음), C3A 미커밋 작업은 파일시스템
+조회로만 확인하고 손대지 않았다.
+
+**ancestry 실측 재검증** 결과 보고서 전제와 다른 사실을 확인: C3B는 C2A조차
+포함하지 않고 C1에서 직접 분기했고, LEGAL-1은 C2B-A/C2B-B를 포함하지 않는
+형제 branch이며, C5 계열은 C2B 계열과 완전히 독립이었다. 실제 공통 조상
+82f4914(C1)에서 새 worktree/branch(`school-v2-integration`)를 만들고 4회
+`git merge --no-ff`로 통합(C6-B chain → LEGAL-1 → C5 chain → C3B).
+
+conflict는 3회 모두 `docs/development/CHANGELOG.md` 1개 파일에서만 발생(같은
+날짜 병렬 작업으로 인한 append 충돌), product code/schema 파일 conflict는
+0건 — 최신 우선이 아니라 실제 branch 분기 시점(ancestry)에 맞춰 항목을
+재배치해 해결했다. LEGAL-1과 C2B-A가 4050166에서 독립적으로 만든
+near-duplicate 파일(`c2b-verify-schoolinfo-api.ts`,
+`SCHOOL-V2-B-official-source-verification.md`)은 git이 동일 content로 인식해
+conflict 없이 자동 병합됨을 확인.
+
+과거 "clean 아니오(검토용 보존)" 기록이 있던 C3B worktree를 재확인한 결과
+**실제로는 clean**이었다 — 최초 확인 시 `--git-dir`를 main으로 강제 지정해
+main HEAD와 비교하는 바람에 전체 파일이 오탐으로 modified 표시된 내 실수였다.
+`git -C`(자동 감지)로 재확인해 정정.
+
+**통합에서만 드러난 실제 correctness 문제 1건 발견 및 수정**: C2A의
+`verify-school-normalization.ts`와 C3B의 `verify-kindergarten-normalization.ts`는
+각 branch 단독으로는 문제없었지만, 둘 다 top-level import/export가 없어
+TypeScript가 전역 스크립트로 취급 — 두 branch가 처음 한 프로젝트에 공존하자
+`tsc --noEmit`에서 변수 재선언 충돌 10건이 새로 발생했다. 각 파일에
+`export {};` 한 줄을 추가해 모듈 스코프로 격리(로직 변경 없음).
+
+읽기 전용 검증: School canonical taxonomy(초등305/중176/고159/특수16/기타8,
+합계664) 재확인, Kindergarten 부산 367건(officialCode 중복 0, OFFICIAL_POINT
+provenance, capacity/enrollment/classCount/ageBreakdown 전부 유지) 확인 —
+실제 ingestion 재실행 없음. attendance-zone artifact(3,402건, geometry 미포함,
+checksum 존재) 무결성 확인, `getApartmentEducationZone()` 회귀(향원에이스타운/
+신화타워/invalid geometry/NO_MATCH/COORDINATE_MISSING) 전부 기대대로 통과.
+distance wording/hardcoded fallback 전수검사 — `WRONG_REGION_FALLBACK_COUNT =
+0`, "도보 N분" 오표기 0건(유일한 매치는 지하철 역세권 표현으로 무관 확인).
+
+artifact(5.76MB)는 현재 어떤 route에서도 import되지 않아 client bundle 위험
+0건이나, SCHOOL V2-D 연동 시 서버 전용 호출을 강제할 것을 권고(코드는
+추가하지 않음). SCHOOL V2-D dependency map(`/apt/[name]` →
+`SchoolDistrictPanel` → 신규 카드 필요 지점) 조사만 완료, 코드 변경 없음.
+
+신규 테스트 없음(기존 코드 재사용/재배치만), 기존 167개 전부 통과(lib 61 +
+redevelopment 97 + education helper 9 — redevelopment "97"은 과거 문서의
+"119" 표기가 부정확했던 것으로 확인, 통합 과정에서 누락된 테스트 없음).
+tsc(수정 후 0 errors)/eslint(0 errors)/build(성공, 기존 라우트 그대로) 전부
+clean.
+
+문서: `docs/development/SCHOOL_V2_INTEGRATION1.md` 신규(기존 문서 전부 보존).
+
+상태: BLOCKER 없음. main merge 없음. 병렬 branch(C2A/C2B/C2B-A/C2B-B/C3B/C5/
+C5-A/C5-B/C6/C6-A/LEGAL-1/SCORE 전부) 커밋 해시 불변 확인 — 미접촉.
+
+**SCHOOL_V2_INTEGRATION1_CLOSE = YES** — `SCHOOL_V2_INTEGRATION_READY = YES`
+(product code + tooling + docs 전부 한 branch에 통합, test/tsc/lint/build
+전부 clean). `SCHOOL_V2_D_READY = YES`(§13 dependency map 확정, 실제 UI/route
+연동만 남음).
