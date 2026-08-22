@@ -7068,6 +7068,224 @@ verify-school-normalization.ts). schema 변경 0건(C1 schema로 충분).
 ARCHITECTURE_READY = YES`(office-code 파라미터화, 부산 전용 분기
 없음, 전국 실제 실행은 미실시).
 
+## 2026-08-21 (24) — SCHOOL V2-C5 거리/접근성 정확도 감사 (AUDIT ONLY)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c5`, branch
+`school-v2-c5-distance-audit`, base `da17c0a`=school-v2-c2a)에서 진행.
+main dirty worktree, C2A/C2B/C3B/score-geocode-recovery 브랜치 전부
+미접촉.
+
+핵심 발견: "학교까지 거리"가 서로 참조하지 않는 **3개 독립
+파이프라인**(Score `schoolAccess`/`/school/[id]` 인근 아파트/AI 검색
+조건검색)으로 존재하고, 셋 다 STRAIGHT_LINE_DISTANCE(Turf 또는
+Kakao 자체 distance 필드)만 계산하면서 그중 둘(`/school/[id]`,
+AI 검색)은 서로 다른 임의 보정식으로 "도보 N분"을 만들어낸다 —
+같은 700m 직선거리가 화면에 따라 "9분"과 "22분"으로 2배 이상
+차이난다.
+
+재검증 결과 부산 서구 송도동 하드코딩 폴백
+(`api/school/apartments/route.ts` `[129.0225, 35.0772]` +
+대신동/송도동/충무동 동단위 보정)이 **여전히 존재**하며, `/school`
+목록→상세 진입 경로는 lat/lng를 넘기지 않아 이 폴백이 실제로
+도달 가능한 경로임을 확인. 추가로 repo root의 `fix_coords.ts`/
+`fix_songdo_coords.ts`(2026-08-07 커밋 cb5d606)가 특정 아파트
+7곳의 좌표를 "도보 3분 거리 셋팅" 등 주석과 함께 손으로 지정해
+학교 대비 상대 거리 순위를 조작한 이력을 신규 발견(BLOCKER,
+프로덕션 반영 여부는 미확인 — 후속 STEP 확인 필요).
+
+`School`/`Kindergarten`/`Childcare` 세 모델 모두
+`latitude/longitude/coordinateSource/coordinateType`(CoordinateType
+enum: OFFICIAL_POINT/ADDRESS_GEOCODE/ENTRANCE/CENTER/UNKNOWN)을
+이미 동일 shape로 스키마에 보유 — SCHOOL V2 거리 데이터 계약을
+세 기관에 공통 재사용하는 데 마이그레이션이 불필요함을 확인. 단
+NEIS 적재 스크립트가 이 필드들을 채우지 않아 실제로는 전부
+UNKNOWN(C2A CHANGELOG "좌표는 전부 null" 기록과 일치).
+
+10개 표본(서구/해운대구/부산진구/동래구/사하구/강서구/기장군/수영구)은
+`ApartmentMaster`의 실제 exact-geocode 좌표로 Kakao SC4 카테고리
+검색(read-only, 아파트당 1회, 총 10회)을 실행해 실측 직선거리만
+기록 — 보행 분은 route API 없이 추측하지 않음.
+
+Route provider 조사: Kakao Mobility 도보 길찾기는 공식 페이지에서
+"사전 제휴 계약 필요"(제휴 전용 API)임을 1차 문서로 확인. Naver
+Directions 5/TMAP 보행자 경로는 JS 렌더링 문서라 가격/quota/caching
+정책을 1차 문서로 확인하지 못해 EXTERNAL_VERIFICATION_REQUIRED로
+명시(추측 기재 없음).
+
+코드/DB 변경 없음(schema, production route, UI 전부 미변경). 신규
+read-only 감사 스크립트 1건(`scripts/education/c5-sample-distance-audit.ts`,
+tsc/eslint 0 errors) + 신규 문서
+`docs/development/SCHOOL-V2-C5-distance-accessibility-audit.md`.
+
+상태: BLOCKER 2건 발견(서구 하드코딩 폴백, fix_coords 계열 좌표
+조작) — 이번 STEP에서는 제거하지 않고 목록만 작성(지시사항). Score
+V1 formula 변경 없음. main merge 없음.
+
+**SCHOOL_V2_C5_AUDIT_CLOSE = YES** —
+`DISTANCE_DATA_SAFE_FOR_PARENT_UX = NO(as-is)` — `/school/[id]`·AI
+검색의 "도보 N분" 표현이 직선거리 기반 추정을 실제 도보시간처럼
+보여주고 있어 C5-A(문구 교정) 전에는 그대로 노출하면 안 됨.
+
+## 2026-08-21 (25) — SCHOOL V2-C5-A misleading walking label 교정 + fix_coords 영향 확인
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c5a`, branch
+`school-v2-c5a-distance-label`, base `91a1a8d`=school-v2-c5-distance-audit)에서
+진행. main/C2A/C2B/C3B/score-geocode-recovery 전부 미접촉.
+
+C5 감사에서 확인된 8곳의 misleading "도보 N분" 노출을 전부 "직선거리
+약 Nm"로 교정(계산 로직/데이터 자체는 불변, 표현만 정직해짐):
+`/api/school/apartments`(1.45배+분당15분+flat보정 로직 삭제),
+`school-detail-client.tsx`, `ai-search.ts`
+`findNearestElementarySchool`(distance/80 삭제),
+`api/ai-search/route.ts`(Gemini 데이터요약), `ai-search-client.tsx`
+(카드 배지), `ai-search.ts`의 Gemini 가드레일 프롬프트,
+`KakaoPlaces.tsx`(학교 SC4·어린이집/유치원 PS3 항목만 — 지하철/병원/
+마트/약국/공원 등 다른 카테고리는 `/apt/[name]`(V1 잠금) 공용
+컴포넌트라 그대로 유지, `isEducationPlace()`로 항목 단위 분기).
+
+`/api/school/apartments` 하위호환: `walkTime` 필드 키는 유지하되
+값을 안전한 문구로 교체(@deprecated 표시), 신규 `distanceMeters`/
+`distanceLabel` 필드 추가 — 실제 소비자가 이 파일 하나뿐임을 grep으로
+확인 후 소비자도 신규 필드로 전환.
+
+AI 검색의 "도보 N분 이내" 자연어 조건 위험을 조사한 결과, 애초에
+분(分) 단위를 파싱하는 필드가 스키마에 없어(모든 학교 근접 표현이
+`nearElementarySchool` boolean 하나 + 고정 500m 반경으로 뭉개짐)
+"허위로 조건 만족을 주장"하는 코드 경로 자체가 없었음을 확인 —
+UNSUPPORTED_ROUTE_CONDITION 같은 신규 메커니즘은 조건 파싱 확장이라
+범위 밖으로 판단해 만들지 않고, 응답이 항상 실제 직선거리로만
+표현되도록 하는 것으로 위험을 낮췄다(한계는 문서에 기록).
+
+fix_coords.ts/fix_songdo_coords.ts 프로덕션 영향 read-only 확인
+(`scripts/education/c5a-fix-coords-impact-check.ts`): 두 스크립트가
+실제로 write한 `Transaction` 테이블이 **현재 총 0행**이고 `src/`
+어디에서도 `prisma.transaction`을 참조하지 않는 완전한 dead
+table임을 확인 — 7개 대상 단지 전부 **NO_PRODUCTION_IMPACT**로 확정
+(추정이 아니라 직접 조회로 확인). ApartmentMaster(Score가 실제로
+쓰는 테이블)엔 7곳 중 2곳만 존재하고 좌표는 하드코딩 값과 다른
+정상 지오코딩 값(2026-08-13 갱신, score-geocode-recovery로 추정) —
+fix_coords.ts가 건드린 적 없는 테이블이라 예상대로 무관함을 재확인.
+Transaction 모델엔 `updatedAt` 컬럼 자체가 없어 "언제 반영됐는지"는
+확인 불가(테이블이 비어있어 실익 없음). 로컬 DATABASE_URL이 Vercel
+프로덕션과 정확히 같은 인스턴스인지는 대시보드 접근 없이 암호학적
+확인은 못해 UNKNOWN으로 남김(정황상 SAME 가능성 높음, 단일
+DATABASE_URL만 존재).
+
+UI regression: 서구2/해운대2/동래·사하 각1(총 6개) 실제 API
+호출로 거리값 불변·문구만 교정 확인 + 브라우저로 `/school/[id]`,
+`/ai-search`(실제 Gemini 질의) 육안 확인 — caveat 문구 정상 노출,
+"도보" 텍스트 전무.
+
+신규 회귀 가드 스크립트
+`scripts/education/c5a-verify-no-walking-labels.ts`(vitest/jest 없는
+이 프로젝트 관례대로 tsx 직접실행 assertion 방식) — PASS. Score
+파이프라인(`school-access-sentence.ts`) 불변도 같은 스크립트로 재확인.
+
+서구 하드코딩 폴백(§8 지시)과 fix_coords 스크립트 자체는 이번
+STEP에서 제거하지 않고 C5-B로 이월. Score V1 formula/weight/
+ApartmentLocationFeature 전부 미변경.
+
+검증: `tsc --noEmit` 0 errors, `eslint`(수정 파일 전체) 0 errors,
+`next build` 성공.
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C5A_CLOSE = YES** —
+`PARENT_DISTANCE_LABEL_SAFE = YES` — 학교/유치원/어린이집 거리
+UI 전 구간에서 "도보 N분"이 더 이상 노출되지 않으며 실제 직선거리로만
+표현된다. `MANUAL_COORDINATE_C5B_PRIORITY = LOW`(fix_coords 관련
+production impact가 NO로 확정돼 긴급성 낮음, 그러나 좌표 provenance
+정리 자체는 여전히 C5-B에서 필요).
+
+## 2026-08-22 (26) — SCHOOL V2-C5-B 교육시설 좌표 provenance 정리 + 서구 폴백 제거
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c5b`, branch
+`school-v2-c5b-coordinate-provenance`, base `d457100`=school-v2-c5a)에서
+진행. main/C2A/C2B/C3B/score-geocode-recovery 전부 미접촉.
+
+**SchoolInfo apiType=0 좌표 실측 확정**: `LTTUD`/`LGTUD` 필드 실존
+확인(공식 개발자가이드 필드명), 부산 662건(16개 구군×초/중/고/특수)
+기준 coverage 99.7%(660/662), invalid 0건, out-of-Busan 0건. 10개
+표본을 Kakao SC4 POI와 대조한 결과 **9/9 성공 케이스가 델타 0.0m로
+완전히 동일한 좌표값** — SchoolInfo가 Kakao보다 더 정확하다는 근거는
+없으며(사실상 동일 원천으로 추정, 공식 확인은 아님), 이 소스를 쓰는
+실용적 이점은 정확도가 아니라 안정성/재사용성/coverage 완전성(부산성우학교
+사례처럼 Kakao 커버리지가 성긴 곳도 SchoolInfo는 있음)임을 명확히 기록.
+
+**School.latitude/longitude write는 이번 STEP에서 하지 않음** —
+`EducationSource` 테이블을 직접 조회(read-only)한 결과 SchoolInfo/
+학교알리미 관련 source가 단 1건도 등록돼 있지 않음을 확인(등록된
+4건: childcare_national_api=CLEARED, childcare_national_sheet=
+REVIEW_REQUIRED, neis_school_info=CLEARED,
+moe_kindergarten_basicinfo_api=CLEARED — SchoolInfo 없음). 이 프로젝트
+스스로 설계한 "legalReviewStatus=CLEARED 전엔 ingestion 자체가
+실행되지 않는 구조"를 그대로 지켜 write하지 않고 C5-B1으로 이월.
+대신 `lookupCanonicalSchoolCoordinate()`(schoolName+sigunguCode 유일
+매칭일 때만 사용, 모호하면 null) 함수를 미리 구현해둬 좌표가 채워지면
+코드 변경 없이 즉시 활성화되게 함.
+
+**Kindergarten.coordinateType 정리 완료**(실제 반영): 367건 전부
+`UNKNOWN`→`OFFICIAL_POINT`. 이미 저장된 좌표(C3B, source=
+moe_kindergarten_api)가 EducationSource 조회로 CLEARED임을 확인한
+뒤 진행 — 새 데이터 도입이 아니라 이미 승인된 데이터에 정확한 라벨을
+붙인 metadata 정리라 School과 달리 write 조건 충족으로 판단.
+Childcare는 여전히 0행(C3A 미착수)이라 확인/조치 대상 없음.
+
+**Identity crosswalk 확장**(C2B는 초등만 봤던 것을 전 급으로): 부산
+전체 662건 기준 이름 중복 5그룹, 그중 **구·군 내부에서도 중복돼
+unsafe한 게 3그룹·7건**(전부 강서구: 송정초등학교/대저중앙초등학교/
+가락중학교) — `BNHH_YN`(분교여부)으로도 구분 안 됨(셋 다 N), 동
+단위 주소로는 구분 가능해 보이나 이번 STEP에서 구현하지 않음(좌표를
+실제로 매핑하지 않기로 했으므로).
+
+**부산 서구 하드코딩 폴백 완전 제거**(`api/school/apartments/route.ts`
+`[129.0225, 35.0772]` + 대신동/송도동/충무동 보정 블록 삭제). 새 해석
+순서: lat/lng 파라미터 → canonical School 좌표(현재 항상 미확보) →
+Kakao 실시간 검색(기존 유지, 폴백 아니라 그 학교 자체를 찾는 시도) →
+그래도 없으면 **null**(다른 좌표로 대체하지 않음) → 기존에 이미 있던
+"인근 아파트 매물 없음" 안전 경로로 자연 합류. 실측 확인: 존재하지
+않는 가짜 학교명으로 호출 시 예전엔 서구 좌표로 계산됐을 것이 이제는
+정직하게 빈 결과로 처리됨.
+
+**미해결로 정직하게 기록한 위험**: `lawdCd`가 주어져도 Kakao 키워드
+검색이 그 지역으로 스코핑되지 않아, 동명이교(송정초등학교)가 `lat/lng`
+없이 조회되면 현재는 우연히 맞는 지역이 나오지만 보장된 동작이 아님 —
+regcodes 병렬 fetch 순서 재구성이 필요해 이번 STEP 범위를 넘어선다고
+판단해 구현하지 않고 위험만 명시적으로 남김(§11/§12/§19).
+
+`fix_coords.ts`/`fix_songdo_coords.ts` 삭제(git rm — history는 보존).
+C5-A에서 이미 NO_PRODUCTION_IMPACT 확정, package.json/다른 스크립트/
+문서 어디에서도 미참조 재확인 후 제거.
+
+신규 공용 가드 `scripts/education/lib/coordinate-guard.ts`
+(`validateCoordinate`: 범위/0·0/source 필수/manual·hardcode·fix_
+패턴 명시적 차단/부산 bounds, `findExcessiveDuplicateCoordinates`:
+경고만, 자동 reject 안 함) + 회귀 가드
+`c5b-05-verify-provenance-guards.ts`(9개 케이스 전부 PASS, 정적 패턴
+검사 1건은 최초 실행 시 내 설명 주석이 오탐돼 대입 코드만 보도록
+정규식 교정).
+
+거리 계산 semantics 불변(STRAIGHT_LINE_DISTANCE, "직선거리 약 Nm"),
+Score(`ApartmentLocationFeature`/`nearestElementaryDistanceM`/
+`school-access-sentence.ts` 등) 전부 미접촉, SchoolStat/대량
+SchoolInfo 통계 ingestion 없음.
+
+Regression: 서구2/해운대2/강서2/기타4(총10) 실제 API 호출 전부 정상,
+가짜 학교명으로 no-fallback 확인, 브라우저로 `/school/[id]`(lat/lng
+없이 진입) 정상 렌더 확인.
+
+검증: `tsc --noEmit` 0 errors, `eslint`(수정/신규 파일 전체) 0
+errors, `next build` 성공.
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C5B_CLOSE = YES** —
+`DISTANCE_DATA_SAFE_FOR_PARENT_UX = YES`(C5-A 유지 + 서구 폴백까지
+제거돼 지역 오매칭 위험도 낮아짐, 단 동명이교 스코핑 미해결 위험은
+남음). `OFFICIAL_SCHOOL_COORDINATE_READY = NO`(SchoolInfo 소스가
+EducationSource CLEARED 전까지는 School 좌표를 canonical로 쓸 수
+없음 — C5-B1 필요). `C5C_ROUTE_PILOT_READY = NO`(§18 준비자료만 갱신,
+provider 계약/가격 미해결 그대로).
 ## 2026-08-21 (24) — SCHOOL V2-C2B RESUME: 학교알리미(SchoolInfo) OpenAPI 실제 인증/응답 검증
 
 사용자가 발급받은 `SCHOOLINFO_API_KEY`를 `.env.local`에 저장 후 재개.
