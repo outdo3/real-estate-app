@@ -7015,6 +7015,102 @@ schema.prisma만(애플리케이션 코드 변경 0건). 외부 API 호출: 0건
 core 테이블 기준). 다음 ingestion STEP(SCHOOL V2-C3A 어린이집 등)은
 자동 진행하지 않고 대기.
 
+## 2026-08-21 (24)
+
+### SCHOOL V2-C3B — 유치원알리미 공식 API 검증(결론: 유망한 source 확인, 인증키 BLOCKER)
+
+별도 worktree(`school-v2-c3b` branch, base `82f4914`)에서 진행 —
+main의 SCHOOL V2-C3A(어린이집) 미커밋 작업물, `school-v2-c2a`
+branch(학교 master) 전부 건드리지 않았다.
+
+기존 V2-B가 유력 후보로 봤던 "교육부_통합제공 유치원 현황"
+(`15037485`, 파일데이터)을 재확인한 결과, 실제로는 어린이집 SHEET
+건과 동일하게 **시도/공시차수 드롭다운 선택 후 다운로드해야 하는
+수동 UI**임을 확인해 primary 후보에서 제외했다. 대신 같은 포털의
+**유치원알리미 OpenAPI "일반현황"(`basicInfo2`, REST/JSON)**을
+직접 확인했더니, **공식 기관코드(`kinderCode`)와 좌표
+(`lttdcdnt`/`lngtcdnt`)까지 포함한 32개 응답 필드**를 가진 진짜
+자동화 가능한 API였다 — 파일 경로보다 명백히 우월해 이쪽을
+primary로 채택했다.
+
+핵심 발견:
+
+- **공식 유치원 기관코드 존재 확인**(`kinderCode`) — V2-B에서
+  UNKNOWN으로 남았던 질문 해소, `Kindergarten.officialCode`를
+  `identityConfidence=HIGH`로 채택 가능해짐.
+- 라이선스: 어린이집 cpmsapi021과 동일한 명확한 문구("영리목적의
+  이용을 포함한 변경 및 자유이용 허락") — `EducationSource
+  (code=moe_kindergarten_basicinfo_api)`를 CLEARED로 등록(id=4,
+  기존 3건 변경 없음).
+- **심의여부: 자동승인**(어린이집은 개발/운영 모두 수동 심의) —
+  향후 키 신청 마찰이 더 낮을 것으로 예상.
+- 응답에 정원(`prmstfcnt`, 총계)과 연령별 학급수/정원/원아수는
+  있으나 **총계 원아수/학급수 필드는 없다** — 임의로 합산해
+  만들지 않고 `ageBreakdown`(정규화 JSON)에만 세부를 보존했다.
+- 교직원수/통학차량/방과후는 이 오퍼레이션 범위 밖(별도 API
+  카테고리) — NOT_AVAILABLE로 정직하게 기록.
+
+**BLOCKER**: 이 API 전용 인증키가 없다 — placeholder 키로 실제
+호출한 결과 `{"status":"DENIED","message":"유효하지 않은 키"}` 확인.
+신규 키는 사용자 승인 없이 신청하지 않았다.
+
+DB 변경: `EducationSource` 1행 추가(id=4). `Kindergarten`/
+`KindergartenStat`은 **0행 그대로**(가짜/추정 데이터 없음). schema
+변경 없음(C1 schema로 필수 요건 충족 확인). 코드 변경:
+`scripts/education/`에 신규 스크립트 3건.
+
+검증: `verify-kindergarten-normalization.ts` 17개 assertion 전부
+PASS(실 API 응답이 아닌 필드명 구조 검증용 fixture임을 스크립트에
+명시), `tsc`/`eslint`(0 errors)/`next build` 전부 통과.
+
+상태: coverage 미달성(부산 실 ingestion 0건)으로 §36 commit 조건
+미충족 — **commit·push 하지 않음**.
+
+**SCHOOL_V2_C3B_CLOSE = NO(BLOCKER)** — `KINDERGARTEN_DATA_READY =
+NO`. `NATIONWIDE_KINDERGARTEN_ARCHITECTURE_READY = YES(조건부)`.
+
+## 2026-08-21 (25)
+
+### SCHOOL V2-C3B RESUME — 부산 유치원 공식 데이터 ingestion 완료
+
+`KINDERGARTEN_API_KEY` 발급 후 유치원알리미 basicInfo2 API로 부산
+367개 유치원을 `Kindergarten`/`KindergartenStat`에 실제 ingestion
+했다.
+
+**실제 sample 호출로 명세-실물 불일치 2건을 발견·수정**: 문서화된
+요청/응답 명세 표는 식별자 필드명을 `kinderCode`(camelCase)로,
+응답 배열 위치를 암묵적 최상위로 적었으나, 실제 응답은 각각
+`kindercode`(소문자)와 `{ kinderInfo: [...] }` wrapper였다 — 명세만
+믿고 그대로 구현했다면 매 실행 0건으로 조용히 실패했을 지점을 sample
+호출이 미리 잡아냈다.
+
+결과: officialCode(`kindercode`) coverage 367/367(100%), 중복 0건.
+16개 구·군 전부 READY(각 구·군 address/establishment/coordinate/
+capacity coverage 100%). 좌표 367건 전부 부산 범위 내, coordinateType은
+의미 불명확해 UNKNOWN 유지(ENTRANCE 등 추정 안 함). 동명 유치원 6쌍
+발견 — 전부 실제 주소가 다른 별개 기관으로 확인해 자동 merge하지
+않았다. 연령별 원아수 합이 인가정원을 1명 초과하는 사례 2건 발견,
+오류로 단정하지 않고 사실만 기록.
+
+2차 실행(idempotency 재검증)에서 core/stat 중복 0건 확인 — 단
+필드 diff 없이 매번 재기록하는 한계는 학교(C2A)/어린이집(C3A)과
+동일하게 남아있다(정직하게 기록, 전국 확장 전 개선 후보).
+
+DB 변경: `Kindergarten` 367행, `KindergartenStat` 367행 신규.
+`EducationSource`는 이미 §2에서 CLEARED로 등록된 것을 그대로 사용
+(추가 변경 없음). schema 변경 0건. 기존 `/api/school*` production
+route, UI 변경 0건.
+
+검증: `verify-kindergarten-normalization.ts`를 실제 API 응답(2개
+샘플 row)으로 교체해 20개 assertion 전부 PASS, `tsc`/`eslint`
+(0 errors)/`next build` 전부 통과.
+
+상태: BLOCKER 없음, 부산 16개 구·군 coverage 100%, idempotency(중복
+방지 기준) 확인 — commit/push 진행.
+
+**SCHOOL_V2_C3B_CLOSE = YES(부산 pilot 기준)** —
+`KINDERGARTEN_DATA_READY = YES(부산)`.
+`NATIONWIDE_KINDERGARTEN_ARCHITECTURE_READY = YES`.
 ## 2026-08-21 (23)
 
 ### SCHOOL V2-C2A — NEIS 학교기본정보 기반 부산 School canonical master ingestion
