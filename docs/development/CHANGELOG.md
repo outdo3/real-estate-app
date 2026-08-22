@@ -7452,3 +7452,71 @@ CONDITIONAL`(파이프라인·coverage·identity 전부 실증됐으나 NO_MATCH
 4건 + 신연초 1건 REVIEW_REQUIRED, School 좌표 미확보가 남은 조건).
 `SCHOOL_V2_D_READY = CONDITIONAL`(§17 data contract 확정, 실제 연동은
 후속 STEP).
+
+
+## 2026-08-22
+
+### STEP — SCHOOL V2-C6-B: 통학구역 예외 해소 + V2 persistence 준비
+
+C6-A(브랜치 `school-v2-c6a-busan-zone-build`)를 base로 새 워크트리에서 작업(main
+체크아웃의 무관한 C3A 미커밋 변경과 격리). C6-A의 4가지 미해결 항목을 실측으로
+정리했다.
+
+**NO_MATCH 4건**: 전부 zone 경계 17~84m 이내, 1983~2004년 준공(신규 개발 아님).
+3건은 `geocodeQuality='normalized'`(좌표 오차 가능성), 1건(글로벌빌라트)은
+`'exact'`인데도 zone 밖(polygon gap 쪽 근거 강함) — A/B 원인을 단정하지 않고
+`REVIEW_REQUIRED`로 통일.
+
+**invalid geometry 25건**: 기존 `classifyApartmentZoneStatus()`(C6-A, 수정 안 함)가
+`geometryInvalid` 플래그를 최종 status에 전혀 반영하지 않아 25건 전부
+`MATCHED_SINGLE`(확정처럼 노출)로 나오고 있었음을 실측 확인 — 새 status 레이어에서
+`REVIEW_REQUIRED`(`INVALID_ZONE_GEOMETRY`)로 분리.
+
+**신연초등학교**: 지시문이 전제한 "canonical School 664"는 실제로 조회하니
+효림초등학교였다(전제 오류 정정). 신연초 후보(`School.id=454`, 남구, lawdCd 일치,
+유일 후보)는 실제로 있었으나 "(휴교)" 표기의 실제 의미를 이 STEP만으로 확정할
+근거가 없어 identity는 NO_MATCH 유지(억지 연결 금지). 좁은 접미사 인식 규칙을
+설계 제안만 남김(미적용).
+
+**MEDIUM 18건(129개 아파트)**: resolver 코드 자체가 "이름+학교급 부산 전역 유일
+매칭"일 때만 MEDIUM을 주도록 설계돼 있어, 이는 identity 불확실이 아니라
+"학교는 확정, 행정구역만 교차"임을 확인 — `REGION_CROSSING_BUT_IDENTITY_CONFIRMED`로
+판정, REVIEW_REQUIRED로 내려보내지 않음. 이 과정에서 **공동학구가 아닌 일반 단일
+zone에도 같은 행정구역 교차 패턴이 있다**는 C6-A에 없던 사실을 추가로 발견
+(금성초통학구역/양동초통학구역, 2개 zone).
+
+**최종 status 모델**: 기존 C6-A 코드(geometry matcher, identity resolver)는
+전혀 수정하지 않고, 그 출력을 입력받는 새 순수 함수
+`scripts/education/lib/attendance-zone-status.ts::resolveFinalAttendanceStatus()`를
+추가해 내부 기술상태와 사용자 표시상태(`AVAILABLE`/`SHARED`/`REVIEW_REQUIRED`/
+`NOT_AVAILABLE`)를 분리. "배정학교"/"오류" 표현 없음, 최근접 학교 fallback 없음.
+
+**최종 coverage**: 초등 AVAILABLE 3,175 / SHARED 196 / REVIEW_REQUIRED 30 /
+NOT_AVAILABLE 1(합계 3,402) — AVAILABLE+SHARED = 99.09%. 중학교 AVAILABLE 3,400 /
+REVIEW_REQUIRED 1 / NOT_AVAILABLE 1.
+
+**precomputed artifact**: `data/education/attendance-zone/busan-attendance-zone-
+20260320.json`(부산 3,402건 전체, geometry 미포함, 약 5.8MB, 결정론적 checksum
+포함) 신규 생성. `scripts/education/c6b-04-final-pipeline.ts`로 재생성 가능.
+
+**read-only API 헬퍼**: `src/lib/education/attendance-zone.ts::
+getApartmentEducationZone(aptSeq)` 신규(DB 접근 없음, 아직 어떤 route에서도
+import 안 됨 — SCHOOL V2-D 범위).
+
+**regression**: 향원에이스타운(대신초+동신초 SHARED), 신화타워(온천초 HIGH +
+공덕초·금성초 MEDIUM, SHARED — REVIEW_REQUIRED 아님), NO_MATCH 4건, invalid
+geometry 샘플, 중학교 학교군 샘플 전부 기대대로 통과.
+
+라이브러리 2개 신설(`attendance-zone-status.ts`, `src/lib/education/
+attendance-zone.ts`) + node:test 기준 신규 19개 테스트 전부 통과(기존 148개 포함
+167/167 회귀 없음). tsc/eslint/build 전부 clean. DB write/migration/Score
+변경/main merge 없음.
+
+문서: `docs/development/SCHOOL_V2_C6B_ATTENDANCE_ZONE_EXCEPTIONS.md` 신규(기존
+문서 전부 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C6B_CLOSE = YES** — `ATTENDANCE_ZONE_PRODUCT_READY = YES`(status
+모델·artifact·API contract 전부 확정). `SCHOOL_V2_D_READY = YES`(read-only 헬퍼
+구현 완료, 실제 route 연동만 남음).
