@@ -7117,3 +7117,43 @@ redesign = 부분적 필요(explainability 우선, weight 재산정은 그 다�
 병렬 worktree 전부 미접촉.
 
 **SCORE_V2_STEP0_CLOSE = YES**.
+
+## 2026-08-23 (2)
+
+### STEP — E-JIP SCORE V2 STEP 0.5: Transport Data Truth Audit (AUDIT ONLY)
+
+STEP 0이 "대신해모로보다 지하철이 가까운 peer 8곳"이라 보고한 것을 raw
+데이터 레벨까지 완전히 재검증. 결과: 정확히는 7곳(경미한 카운트 오차
+정정)이며, **거리 계산 로직 자체는 완벽히 정확했다**(Kakao 실시간
+재조회 좌표로 Turf Haversine 재계산 시 저장값과 delta -1~+1m, 사실상
+100% 일치). 서대신역/동대신역도 실존하는 별개 역으로 확인(654~767m
+이격, 좌표 중복이나 오류 아님) — station-center 단위 POI(출입구별
+데이터는 Kakao에 없음)라는 것도 실측으로 확정.
+
+**진짜 문제는 계산이 아니라 peer 구성이었다**: "더 가까운 7곳" 전부
+건축물대장(총괄표제부) 연결이 없고(`totalHouseholds`/`roadAddress`/
+`jibunAddress` 전부 null), TradeHistory 이름 매칭 거래도 0건이며, 그중
+5곳은 실제 주소가 아니라 "동+건물명" Kakao 키워드 검색으로 좌표를 채운
+`geocodeQuality='normalized'`다. 대신해모로가 속한 동(서대신동2가) 지하철
+거리 TOP 20 중 18곳(90%)이 이런 "registry 미연결" 항목이고, 진짜
+건축물대장 등록 대단지(대신해모로 733세대, 대신푸르지오2차 815세대)는
+각각 8위·16위로 밀려나 있었다. 부산 전체로 확대하면 ApartmentMaster
+3,401건 중 1,725건(50.7%)이 이 "고위험 조합"에 해당 — 서대신동 국지
+사례가 아니라 부산 전역 transport peer pool의 구조적 특성임을 확인했다.
+
+root cause 판정: E(PEER_UNIVERSE_ERROR) 확정(주원인), B(APARTMENT_
+COORDINATE_ERROR) 의심·미확정(보조), STEP 0의 A/G(모델 설계) 결론은
+유효 — C(역 좌표 오류)/D(역 identity 오류)/F(거리 계산 오류)/H(중복
+POI)/I(데이터 노후화)는 전부 이번 STEP 실측으로 배제했다.
+
+`scripts/apartment-score/step05-01~05*.ts` 5개 read-only 스크립트 신규
+(production 코드 0줄 수정, DB write 0건). tsc/eslint 신규 파일 0
+errors. `docs/development/EJIP_SCORE_V2_STEP05_TRANSPORT_DATA_TRUTH_AUDIT.md`
+신규(16개 섹션, 36개 항목 최종 보고).
+
+상태: BLOCKER 없음. **TRANSPORT_DATA_TRUSTED = PARTIAL**(대상 단지
+자신의 raw distance는 신뢰 가능, peer 비교 구성은 신뢰 불가).
+**SCORE_V2_STEP1_READY = NO** — weight 재설계 전에 peer 품질 필터링을
+먼저 권고. main 및 병렬 worktree 전부 미접촉.
+
+**SCORE_V2_STEP05_CLOSE = YES**.
