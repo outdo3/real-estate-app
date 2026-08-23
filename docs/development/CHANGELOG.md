@@ -7157,3 +7157,57 @@ errors. `docs/development/EJIP_SCORE_V2_STEP05_TRANSPORT_DATA_TRUTH_AUDIT.md`
 먼저 권고. main 및 병렬 worktree 전부 미접촉.
 
 **SCORE_V2_STEP05_CLOSE = YES**.
+
+## 2026-08-23 (3)
+
+### STEP — E-JIP SCORE V2 STEP 0.6: Peer Data Quality & Eligibility Model (DESIGN ONLY)
+
+STEP 0.5가 확정한 "부산 50.7%(1,725/3,401)가 registry 미연결+저신뢰
+좌표 고위험 조합"이라는 문제에 대한 직접 처방. "어떤 ApartmentMaster
+row가 다른 row의 점수 산정 peer가 될 자격이 있는가"를 실제 evidence
+(registry 연결/주소 존재/좌표 geocode 방식/MOLIT 거래이력)만으로
+분류하는 quality model을 설계했다 — Score formula/weight는 전혀 건드리지
+않았다.
+
+**IDENTITY(HIGH/MEDIUM/LOW/UNRESOLVED)**와 **COORDINATE(HIGH/LOW/
+UNRESOLVED — 스키마가 실제로 갖고 있는 exact/normalized/failed 3단계만
+반영, 근거 없는 중간 등급은 만들지 않음)** 두 축을 조합해
+**PEER_FULL/PEER_LIMITED/DISPLAY_ONLY/UNRESOLVED** 4단계 peer
+eligibility를 정의하고, transport/life/school(좌표 기반)과 parking/
+complex(registry 기반)를 서로 다른 조건으로 나눴다. 부산 전체 실측:
+PEER_FULL 38.2%, DISPLAY_ONLY 51.0%(=STEP 0.5가 확정한 오염원과 정확히
+일치), parking처럼 registry 의존 도메인은 eligible이 25.3%까지 떨어진다.
+
+**대신해모로센트럴/협성르네상스로 실제 filtered-peer simulation을
+돌려본 결과**(read-only, production 미변경): 대신해모로는 필터링 후
+"실제 등록된 대단지(PEER_FULL)" 중에서는 자신의 동에서 지하철
+최근접이었고, 협성은 순위가 2/27→1/10로 개선됐다 — quality 필터가
+실제로 문제를 해소한다는 것을 확인했다. **세 번째 benchmark인
+구덕금호는 신규로 뜻밖의 사실이 드러났다: 이 단지 자기 자신의 좌표가
+`normalized`(키워드 geocode) 등급이라, 새 모델 기준으로는 다른 단지의
+peer가 될 수 없을 뿐 아니라 자신의 raw 데이터 신뢰도도 낮다** — 숨기지
+않고 기록, 3단지 regression sample은 그대로 유지(오히려 유용한
+negative-case로 활용 권장).
+
+구·군별로는 PEER_FULL 비율이 중구 8.5%~강서구 75.0%로 8.8배 차이,
+동(dong) 단위 LOCAL peer는 필터링 후 46~61%가 표본 5 미만으로
+붕괴(SIGUNGU 레벨로 올리면 대부분 안정화되나 parking은 중구 등
+소규모 구에서 여전히 위험). 최소 peer 표본은 10을 추천(기존
+5에서 상향), parking은 decade-band 완화까지 함께 검토 필요. 고위험
+1,725건 중 81%(1,398건)는 MOLIT 거래이력을 활용해 identity를 강화할
+여지가 있음을 확인 — 전부 버릴 필요는 없다.
+
+`scripts/apartment-score/lib/peer-quality.ts`(prototype, production
+score engine에서 import 안 됨) + fixture test 20개 + read-only 분석
+스크립트 4개 신규. 전체 테스트 117/117 PASS, tsc/eslint 0 errors.
+`docs/development/EJIP_SCORE_V2_STEP06_PEER_DATA_QUALITY.md` 신규(28개
+섹션, 65개 항목 최종 보고).
+
+상태: BLOCKER 없음. **PEER_DATA_MODEL_READY = YES(prototype, production
+미연결)**. **TRANSPORT_PEER_TRUSTED = CONDITIONAL**(필터링하면 신뢰
+가능, 필터링 전인 현재 production 상태는 여전히 불가). **SCORE_V2_STEP1_READY
+= NO**(변경 없음) — quality model을 실제 production peer 조회 경로에
+연결하는 것이 다음 단계. DB write/migration/production score 변경
+전부 없음. main 및 병렬 worktree 전부 미접촉.
+
+**SCORE_V2_STEP06_CLOSE = YES**.
