@@ -8056,3 +8056,43 @@ append(기존 기록 삭제 없음).
 
 **SCHOOL_V2_D1_VISUAL_QA_CLOSE = YES** — **SCHOOL_V2_D1_FINAL_CLOSE = YES**
 (기능 구현+반응형 시각 검수 전부 완료).
+
+## 2026-08-23
+
+### STEP — SCHOOL V2-C2C: 13-다(졸업생의 진로 현황) 공식 데이터 확보 경로 감사 (AUDIT ONLY)
+
+`school-v2-c2c-graduate-outcome-audit` 브랜치(base: `school-v2-d1-parent-education-ui`).
+13-다가 OpenAPI 35개 카테고리에 없다는 기존 SCHOOL V2-C2B(§10) 판단을 실 API
+제공목록 화면(학사/학생·재정/시설/설비·보건/복지 3개 탭, 총 34개 오퍼레이션)
+직접 순회로 재확인하고, 대신 사용자가 실제로 확인한 웹 공시 페이지 경로를
+처음부터 실측했다.
+
+**핵심 발견**: `Pneiss_b01_s0.do?SHL_IDF_CD={school-uuid}&GS_HANGMOK_CD=06`
+(로그인/세션/CSRF 불필요, 완전 공개)로 13-다 데이터에 직접 접근 가능함을
+경남고등학교(일반고)·부산외국어고등학교(특목고) 실 데이터로 확인, 부산컴퓨터
+과학고등학교(특성화고)는 "입력된 데이터가 없습니다"로 정상적인 NO_DATA 케이스도
+확보. 공식 "엑셀다운로드" 버튼(`POST /cm/include/ExcelPrint.do`)은 존재하나
+조사 시점 5회 연속 HTTP 503(학교·항목 무관, fetch 재현으로도 동일) — 서버측
+SERVICE_ERROR로 판단, 자동화 난이도 문제로 오판하지 않음.
+
+school identifier `SHL_IDF_CD`(schoolinfo 내부 UUID)가 기존 `School.neisSchoolCode`/
+C2B-A 리졸버 어느 것과도 연결되지 않는 새로운 identity 갭으로 확인됨 —
+자동 ingestion 전 별도 crosswalk 설계 필요.
+
+라이선스: 13-다는 OpenAPI 오퍼레이션 자체가 없어 LEGAL-1이 확인한 "오퍼레이션별
+관대한 이용조건"의 적용 대상이 아니며, 사이트 공통 저작권정책만 적용됨을 확인 →
+`GRADUATE_OUTCOME_LEGAL_GATE = REVIEW_REQUIRED`로 판정(CLEARED 아님).
+
+`scripts/education/lib/graduate-outcome-parser.ts`(타입+산술검증 함수) +
+`.test.ts`(8케이스: 정상/취업0/해외0/해외분해/NO_DATA/비율포맷/정합성위반/
+연도별중복) 신규 — 전부 실측값 기반, 가상 데이터 없음. 8/8 PASS, tsc/eslint
+신규 파일 0 errors. DB write/migration/production ingestion/UI 변경 전부 없음.
+
+`SCHOOL-V2-B-official-source-verification.md` §1-4 뒤에 이번 재조사 결과를
+append(기존 "AVAILABLE_API" 오판 기록은 삭제하지 않고 보존).
+
+상태: BLOCKER 3건(Excel 서비스 503 / identity crosswalk 부재 / 라이선스
+REVIEW_REQUIRED) — 전부 해소 전까지 production 착수 안 함. main merge 없음.
+
+**SCHOOL_V2_C2C_CLOSE = YES** — **GRADUATE_OUTCOME_DATA_READY = NO**,
+**SCHOOL_V2_D2_GRADUATE_READY = NO**(3건 블로커 해소 후 재검토).
