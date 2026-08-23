@@ -7069,3 +7069,51 @@ score 로직/route/UI 변경 0건.
 
 **BUSAN_SCORE_DATA_V1_1_CLOSE = YES** —
 `TRUE_BUSAN_SCORE_COVERAGE_READY = YES(99.97%, 1건 unresolved)`.
+
+## 2026-08-23
+
+### STEP — E-JIP SCORE V2 STEP 0: 현재 Score 법의학적 감사 (AUDIT ONLY)
+
+`score-v2-step0-forensic-audit` 브랜치(base: `score-geocode-recovery`,
+main보다 실제 score 데이터가 더 완전해 이쪽을 base로 채택 — main은 이
+branch가 가진 좌표 복구 커밋을 아직 병합받지 못한 상태였음을 git diff로
+확인). "대신해모로센트럴(신축·대단지·초역세권 체감)이 협성르네상스(구축)보다
+종합점수가 낮다"는 사용자 위화감의 실제 원인을 코드+실 데이터로 완전히
+해부했다 — weight/formula 변경 없음, DB write 없음.
+
+**핵심 결론**: 계산 공식 자체는 정확하다(가중합 재현 100% 일치, Seo-gu
+171건 전수 검사에서 명백한 monotonicity 위반 없음). "이상해 보이는" 결과의
+진짜 원인은 **모든 카테고리가 순수 peer-relative percentile만 쓰고 절대
+품질 개념이 전혀 없다**는 구조적 특성이었다 — 대신해모로의 지하철 140m(객관적으로
+매우 가까움)가 percentile 61%에 그친 건 같은 동(서대신동2가)에 8곳이나
+더 가까운 단지가 있기 때문이고, 주차 1.09대→18점 vs 1.58대→95점은 준공연대별
+peer 표본이 5~8건으로 극소해 작은 절대 차이가 순위 뒤집힘으로 증폭된
+것이었다(실측 percentile 14.3%/100% → score 정확히 18/95 재현). 부산 3,401건
+전체 계산으로 이 패턴이 개별 사례가 아니라 구조적임을 정량 확인: parking만
+유일하게 저-coverage(25.3%)+극단분포(≤10점 10.4%, ≥90점 8.5%)를 보였다.
+
+"단지" 카테고리는 buildYear가 50% sub-weight인데 households/mainBuildingCount
+coverage가 15~34%뿐이라 실무적으로 거의 buildYear 단독 도메인이다
+(buildYear↔complexScore 상관계수 0.825로 재확인) — FAR/BCR/브랜드/커뮤니티는
+전혀 반영되지 않아 "단지"라는 이름과 실제 의미가 크게 어긋난다. 학교
+접근성도 "거리"만이고 SCHOOL V2의 공식 통학구역/학교군/유치원 데이터와는
+완전히 분리 운영 중임을 재확인(코드 레벨, import 0건).
+
+좋은 소식도 확인: market(가격) weight는 이미 0으로 분리돼 "가격=좋음" 편향을
+막고 있고, `school-access-sentence.ts`가 이미 "절대 사실 → 상대 비교" 순서로
+모순 방지 문장을 만드는 패턴을 구현해 뒀다 — V2의 explainability 설계는
+이 기존 패턴을 4개 도메인으로 일반화하는 것으로 시작하면 된다.
+
+`scripts/apartment-score/step0-01~05*.ts` 5개 read-only 분석 스크립트 신규
+(production 코드 0줄 수정). 대신해모로/협성르네상스/구덕금호 3단지 full
+trace, Seo-gu 171건 전수 ranking, 부산 3,401건 전체 분포, 28건 benchmark
+set을 실측으로 확보. tsc/eslint 신규 파일 0 errors.
+
+`docs/development/EJIP_SCORE_V2_STEP0_FORENSIC_AUDIT.md` 신규(23개 섹션,
+64개 항목 최종 보고 포함). trust decision = KEEP_BETA_WITH_WARNING,
+redesign = 부분적 필요(explainability 우선, weight 재산정은 그 다음).
+
+상태: BLOCKER 없음. Score code/DB/migration/UI 변경 전부 없음. main 및
+병렬 worktree 전부 미접촉.
+
+**SCORE_V2_STEP0_CLOSE = YES**.
