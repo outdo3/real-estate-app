@@ -8096,3 +8096,49 @@ REVIEW_REQUIRED) — 전부 해소 전까지 production 착수 안 함. main mer
 
 **SCHOOL_V2_C2C_CLOSE = YES** — **GRADUATE_OUTCOME_DATA_READY = NO**,
 **SCHOOL_V2_D2_GRADUATE_READY = NO**(3건 블로커 해소 후 재검토).
+
+## 2026-08-23 (2)
+
+### STEP — SCHOOL V2 FINAL QA / CLOSE: 부산 전역 부모용 교육정보 출시 승인 심사
+
+`school-v2-final-qa` 브랜치(base: `school-v2-c2c-graduate-outcome-audit`,
+D1 반응형 QA 커밋 `c3e7401` 포함 확인됨). "현재 확보한 실제 데이터만으로
+SCHOOL V2를 부산 사용자에게 공개해도 안전한가?"를 최종 판정하는 RELEASE
+ACCEPTANCE QA — 새 기능 개발 없음.
+
+**핵심 결과: SCHOOL_V2_RELEASE_READY = YES, BLOCKER 0건.** canonical 부산
+데이터(School 664/Kindergarten 367/Apartment 3,402/attendance artifact
+3,402건)를 DB·artifact 실측으로 재확인, 전부 지시사항 기대치와 정확히
+일치(invalid geometry 25 / boundary-gap 4 / coordinate-missing 1 / SHARED 196
+등). 부산 16개 구·군 대표 단지 전수 + 서구 5건 심층(SHARED/REVIEW_REQUIRED
+포함) + 해운대 API 실측으로 wrong-region 0건 확인, 브라우저 실측으로 "공식
+통학구역"과 "가까운 학교" 카드가 명확히 분리 렌더링됨을 눈으로 확인(중학교
+학교군은 8개교 전체 나열, 임의 대표 선택 없음). 동명이교(송정초/대저중앙초/
+가락중/경일중) 회귀 0건, 신연초(휴교) NO_MATCH 안전 처리 확인 — 다만
+`School.isActive`가 664건 전부 true이고 canonical School 쿼리 경로 일부가
+isActive 필터를 아직 걸지 않는 구조적 한계(NEIS에 폐교 판정 필드 자체가
+없어 발생, 현재 실피해 0건)를 신규로 문서화해 V2.1 backlog에 추가했다.
+
+**실제로 발견해 수정한 버그는 2건**(카테고리 D, 오해 소지 있는 UX): `/school`,
+`/school/[id]` 페이지의 SEO `<meta description>`이 항상 "데이터 준비 중"으로만
+표시되는 특목고 진학률/학년별 학생수를 마치 확인 가능한 것처럼 광고하고
+있었다 — 해당 문구를 제거(1줄씩 2개 파일). SchoolInfo 통계(0건)/Childcare(0건)/
+13-다 진로(코드 자체에 부재)는 전부 정직하게 숨김/"준비 중" 처리돼 있어
+가짜 데이터 노출 0건, "도보 N분" 표현도 education 범위에서 0건(C5-A에서
+이미 해결된 것을 재확인) — 별도 수정 불필요.
+
+worktree에 자체 `node_modules`가 없어 최초 `next dev`/`next build`가
+Turbopack workspace-root 오류로 실패 — `npm ci`로 로컬 설치 후 정상 빌드
+확인, 프로덕션 `.next/static`을 실제로 grep해 5.76MB attendance-zone
+artifact가 클라이언트 번들에 전혀 포함되지 않음을 실측 확인(이전엔 파일
+부재로 확인 불가였던 것을 이번에 최초로 실측 검증). `npm ci` 이후 전체
+테스트 193/193 PASS, tsc/eslint 신규 오류 0건(설치 전 관찰된 shapefile류
+7건은 코드 결함이 아니라 worktree에 `node_modules`가 없던 환경 문제였음을
+확인).
+
+`docs/development/SCHOOL_V2_FINAL_QA_AND_CLOSE.md` 신규(62개 항목 최종
+보고 포함). DB write/migration/SchoolInfo ingestion/Childcare ingestion/
+13-다 scraping/Score 변경 전부 없음. main C3A 및 병렬 worktree 전부 미접촉.
+main merge 없음.
+
+**SCHOOL_V2_RELEASE_READY = YES** — **SCHOOL_V2_FINAL_CLOSE = YES**.
