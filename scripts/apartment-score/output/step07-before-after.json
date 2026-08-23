@@ -1,0 +1,132 @@
+{
+ "before": {
+  "byPeer": {
+   "PEER_FULL": 1301,
+   "DISPLAY_ONLY": 1734,
+   "PEER_LIMITED": 366,
+   "UNRESOLVED": 1
+  },
+  "domains": {
+   "transport": 1667,
+   "life": 1667,
+   "school": 1667,
+   "parking": 862,
+   "complex": 3000
+  },
+  "total": 3402
+ },
+ "afterIdentityOnly": {
+  "byPeer": {
+   "PEER_FULL": 1301,
+   "DISPLAY_ONLY": 1734,
+   "PEER_LIMITED": 366,
+   "UNRESOLVED": 1
+  },
+  "domains": {
+   "transport": 1667,
+   "life": 1667,
+   "school": 1667,
+   "parking": 862,
+   "complex": 3000
+  },
+  "total": 3402
+ },
+ "afterWithRegeocodeProjected": {
+  "byPeer": {
+   "PEER_FULL": 2537,
+   "DISPLAY_ONLY": 498,
+   "PEER_LIMITED": 366,
+   "UNRESOLVED": 1
+  },
+  "domains": {
+   "transport": 2903,
+   "life": 2903,
+   "school": 2903,
+   "parking": 862,
+   "complex": 3000
+  },
+  "total": 3402
+ },
+ "districtRows": [
+  {
+   "lawd": "26110",
+   "beforePct": 8.474576271186441,
+   "afterPct": 62.71186440677966
+  },
+  {
+   "lawd": "26140",
+   "beforePct": 15.789473684210526,
+   "afterPct": 66.66666666666667
+  },
+  {
+   "lawd": "26170",
+   "beforePct": 22.22222222222222,
+   "afterPct": 67.67676767676768
+  },
+  {
+   "lawd": "26530",
+   "beforePct": 27.814569536423843,
+   "afterPct": 76.82119205298014
+  },
+  {
+   "lawd": "26410",
+   "beforePct": 28.896103896103895,
+   "afterPct": 72.72727272727273
+  },
+  {
+   "lawd": "26500",
+   "beforePct": 30.677290836653388,
+   "afterPct": 72.50996015936255
+  },
+  {
+   "lawd": "26350",
+   "beforePct": 33.44155844155844,
+   "afterPct": 71.75324675324676
+  },
+  {
+   "lawd": "26230",
+   "beforePct": 35.148514851485146,
+   "afterPct": 71.2871287128713
+  },
+  {
+   "lawd": "26710",
+   "beforePct": 40.13157894736842,
+   "afterPct": 66.44736842105263
+  },
+  {
+   "lawd": "26380",
+   "beforePct": 44.37869822485207,
+   "afterPct": 75.14792899408285
+  },
+  {
+   "lawd": "26260",
+   "beforePct": 45.22292993630573,
+   "afterPct": 83.12101910828025
+  },
+  {
+   "lawd": "26470",
+   "beforePct": 45.49180327868852,
+   "afterPct": 76.63934426229508
+  },
+  {
+   "lawd": "26200",
+   "beforePct": 46.61654135338346,
+   "afterPct": 78.94736842105263
+  },
+  {
+   "lawd": "26290",
+   "beforePct": 47.82608695652174,
+   "afterPct": 76.28458498023716
+  },
+  {
+   "lawd": "26320",
+   "beforePct": 65.89595375722543,
+   "afterPct": 87.28323699421965
+  },
+  {
+   "lawd": "26440",
+   "beforePct": 75,
+   "afterPct": 81.81818181818181
+  }
+ ]
+}

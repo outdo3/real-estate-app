@@ -7211,3 +7211,54 @@ score engine에서 import 안 됨) + fixture test 20개 + read-only 분석
 전부 없음. main 및 병렬 worktree 전부 미접촉.
 
 **SCORE_V2_STEP06_CLOSE = YES**.
+
+## 2026-08-23 (4)
+
+### STEP 0.7 — Apartment Identity Recovery: MOLIT/건축물대장 Evidence 기반 (READ-ONLY AUDIT)
+
+STEP 0.6이 발견한 "고위험 1,725건 중 1,398건(81%)이 MOLIT 거래이력으로
+identity 강화 여지가 있다"를 실제로 검증했다. 결정적(deterministic)
+근거만 사용: 각 row가 이미 갖고 있는 MOLIT 원본 jibun/dong으로
+건축물대장을 조회해 그 row 자신의 주소/세대수를 보강하는 단일-row
+enrichment(이름/좌표 기반 merge 전혀 없음).
+
+**예상 밖 핵심 발견**: 기존 seed 스크립트는 총괄표제부(다동 단지
+전용)만 조회해 대부분 not_found였다. 표제부(단일 건물용) API를
+fallback으로 추가하자 전수 1,398건 중 **1,386건(99.1%)이 registry
+매칭에 성공**했다 — 등록이 없어서가 아니라 조회 방식이 다동 단지만
+가정했던 것이 원인이었다.
+
+Deterministic Level A-D resolver(`step07-recovery-resolver.ts`) 설계:
+recordCount(주소 유일성)를 핵심 게이트로 쓰고, 이름 비교는 merge
+게이트가 아니라 이상 신호(차수 불일치)로만 사용 — 부산 전체 collision
+audit에서 동일이름+구·군 그룹 53개가 **전원 서로 다른 지번**임을
+확인해(이름만으로 merge하면 53건 오매칭) 이 설계가 왜 이름 대신
+주소를 key로 써야 하는지 실측으로 뒷받침했다.
+
+전수 결과: **RECOVERY_HIGH 1,236건(88.4%) / MEDIUM 116건(8.3%) / REVIEW
+34건(2.4%, 차수 불일치·건축년도 불일치 등 adversarial case) / FAILED
+12건(0.9%)**. 관찰된 wrong merge/ambiguous auto-merge **0건**(설계상
+구조적으로 불가능). 구덕금호(negative benchmark)는 registry 조회
+결과 주용도가 "단독주택"으로 확인돼 **정상 아파트처럼 보이게
+만들지 않고** RECOVERY_MEDIUM/NON_TARGET으로 정직하게 보고했다.
+
+registry 복구만으로는 좌표(geocodeQuality)가 바뀌지 않아 peer
+eligibility에는 무변화라는 사실을 확인한 뒤, 재지오코딩까지
+"실제로 성공하는지"를 30건 라이브 spot-check로 검증(100% 성공,
+production geocode() 코드 변경 없이 기존 로직 그대로) — 이 투영을
+적용하면 부산 PEER_FULL이 38.2%→74.6%, 구·군 격차가 8.8배→1.4배로
+좁혀진다(투영치, 실제 DB 반영은 하지 않음).
+
+`scripts/apartment-score/lib/step07-{universe,registry-probe,
+recovery-resolver}.ts`(prototype) + fixture test 15개(전부 PASS,
+false-positive 0건) + read-only 분석 스크립트 15개 신규. tsc/eslint
+0 errors. `docs/development/EJIP_SCORE_V2_STEP07_IDENTITY_RECOVERY.md`
+신규(33개 섹션, 44개 항목 최종 보고).
+
+상태: BLOCKER 없음. DB write/migration/production score 변경 전부
+없음. main 및 병렬 worktree 전부 미접촉. **IDENTITY_RECOVERY_MODEL_READY
+= YES**. **PEER_COVERAGE_ACCEPTABLE = YES(투영치 기준)**. **SCORE_V2_STEP08_READY
+= YES** — 다음 단계는 §26 write-plan(1,236건, dry-run 우선) 실제 승인 및
+재지오코딩 적용.
+
+**SCORE_V2_STEP07_CLOSE = YES.**
