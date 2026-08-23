@@ -76,6 +76,12 @@ test('주용도 != 공동주택(§9 실측: 업무시설/근린생활시설) -> 
   assert.equal(r.universeFlag, 'MIXED_USE');
 });
 
+test('주용도 != 공동주택(§12 실측: 구덕금호=단독주택, negative benchmark) -> RECOVERY_MEDIUM(HIGH 아님), universeFlag=NON_TARGET', () => {
+  const r = classifyRecovery(input({ aptName: '구덕금호', probe: probe({ mainPurpsCdNm: '단독주택' }) }));
+  assert.equal(r.level, 'RECOVERY_MEDIUM');
+  assert.equal(r.universeFlag, 'NON_TARGET');
+});
+
 test('세대수(hhldCnt) 없음(주소만 확보) -> RECOVERY_MEDIUM', () => {
   const r = classifyRecovery(input({ probe: probe({ totalHouseholds: null }) }));
   assert.equal(r.level, 'RECOVERY_MEDIUM');

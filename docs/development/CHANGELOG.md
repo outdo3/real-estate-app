@@ -7262,3 +7262,49 @@ false-positive 0건) + read-only 분석 스크립트 15개 신규. tsc/eslint
 재지오코딩 적용.
 
 **SCORE_V2_STEP07_CLOSE = YES.**
+
+## 2026-08-24
+
+### STEP 0.7-A — Safe Identity Recovery Write (실제 production DB write)
+
+STEP 0.7 §26 write-plan을 실행했다. RECOVERY_HIGH 1,236건 중 dry-run
+단계에서 발견한 anomaly 1건(`26380-19` "럭키" — registry 이름/건축년도는
+정확히 일치했으나 `mainPurpsCdNm`(주용도) 필드 자체가 결측이라 "공동주택"
+양성 확인이 안 됨, resolver의 `classifyUniverse()`가 이 케이스를
+`UNKNOWN`으로 반환하는데 `classifyRecovery()`가 MEDIUM으로 걸러내지
+못하는 구조적 공백을 발견)을 제외한 **1,235건**에 registry identity
+필드(roadAddress/jibunAddress/totalHouseholds/mgmBldrgstPk)를 실제
+write했다(updated 1,235 / failed 0 / wrong merge 0).
+
+Production `apartment_master_seed.ts:geocode()`를 그대로 재사용해(로직
+변경 없음, import 시 CLI 부작용을 막는 `require.main===module` 가드만
+추가) 1,235건 전체 재지오코딩 라이브 검증(100% 성공) 후, 안전 가드
+(region mismatch/1km 초과 이동/좌표 충돌)를 통과한 **1,191건**만 좌표를
+실제 write. 해운대구 우동 일대에서 Kakao 주소검색이 서로 다른 건물을
+같은 좌표로 반환하는 클러스터(23건)를 새로 발견해 production의 기존
+`deduplicateCoordinates()` 정책과 동일한 기준으로 write에서 제외했다.
+
+실제 post-write 결과: **PEER_FULL 38.2%→72.5%**, 구·군 격차
+**8.8배→1.38배**(STEP 0.7 투영치 74.6%/1.4x와 근접, 차이는 안전
+가드로 제외된 45건으로 정확히 설명됨). 대신해모로/협성르네상스는
+이미 정상이던 상태 그대로 유지, **구덕금호는 여전히 DISPLAY_ONLY로
+정상화되지 않음**(negative benchmark 보존). same-name collision
+53개 그룹 재검증 결과 wrong merge 0건.
+
+Snapshot(1,235행, SHA256 검증) + tested rollback script 준비(미실행).
+apply 스크립트 재실행으로 idempotency 확인 — 이 과정에서 재지오코딩
+재실행 시 Supabase pooler float round-trip의 IEEE754 마지막 자릿수
+오차(실제 데이터 차이 아님)를 발견해 epsilon 비교로 수정, 최종 재실행
+결과 updated=0(완전 idempotent) 확인. 신규 fixture 15개(node:test)
+전부 PASS. `lib/step07a-write-guards.ts` 신규(write-plan 단계 guard
+순수 함수, 테스트 대상).
+
+Score 공식/weight/API/UI/schema 전부 변경 없음, migration 없음.
+`docs/development/EJIP_SCORE_V2_STEP07A_SAFE_RECOVERY_WRITE.md` 신규.
+
+상태: BLOCKER 없음. **RECOVERY_WRITE_SUCCESS = YES**.
+**DATA_QUALITY_POST_VERIFY_PASS = YES**. **SCORE_V2_STEP08_READY = YES**
+— 남은 위험: 44건 좌표 미개선(수동 검토 필요), 163건 미회복(MEDIUM/
+REVIEW/FAILED/guard, 계속 write 후보 제외), 327건 무증거(접근 불가).
+
+**SCORE_V2_STEP07A_CLOSE = YES.**

@@ -256,9 +256,9 @@ async function fetchRegistry(sggCd: string, umdCd: string, jibun: string): Promi
   };
 }
 
-type GeoStatus = 'exact' | 'normalized' | 'rejected' | 'failed';
+export type GeoStatus = 'exact' | 'normalized' | 'rejected' | 'failed';
 
-interface GeoResult {
+export interface GeoResult {
   status: GeoStatus;
   lat: number | null;
   lng: number | null;
@@ -284,7 +284,10 @@ async function kakaoSearch(query: string): Promise<{ lat: number; lng: number; r
 }
 
 // 우선순위: 1) 건축물대장 도로명주소 2) 건축물대장 지번주소 3) "{동} {단지명}" 키워드
-async function geocode(expectedSido: string, roadAddress: string | null, jibunAddress: string | null, dong: string, name: string): Promise<GeoResult> {
+// STEP 0.7-A(§14 re-geocode source policy)가 이 함수를 그대로 import해 재사용한다 —
+// export만 추가했고 로직은 한 글자도 바꾸지 않았다(§11.2 "production geocode() 그대로,
+// 코드 변경 없음" 요구 충족).
+export async function geocode(expectedSido: string, roadAddress: string | null, jibunAddress: string | null, dong: string, name: string): Promise<GeoResult> {
   const candidates: { query: string; quality: 'exact' | 'normalized' }[] = [];
   if (roadAddress) candidates.push({ query: roadAddress, quality: 'exact' });
   if (jibunAddress) candidates.push({ query: jibunAddress, quality: 'exact' });
@@ -518,9 +521,15 @@ async function main() {
   fs.writeFileSync(path.join(resultsDir, `${lawdCd}_${label.replace(/\s+/g, '_')}.json`), JSON.stringify({ summary, results }, null, 2));
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error('FATAL:', e);
-    process.exit(1);
-  });
+// require.main===module 가드: 이 파일을 직접 CLI로 실행할 때(ts-node
+// apartment_master_seed.ts ...)는 기존과 완전히 동일하게 동작하고, 다른 스크립트가
+// geocode() 등을 재사용하려고 import만 할 때는 main()이 임의로 실행되지 않는다
+// (STEP 0.7-A §14, import 시 CLI 부작용 방지 — 기존 동작 변경 없음).
+if (require.main === module) {
+  main()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error('FATAL:', e);
+      process.exit(1);
+    });
+}
