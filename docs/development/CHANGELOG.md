@@ -8519,3 +8519,32 @@ ingestion/Childcare ingestion/13-다 scraping/Score 변경 전부 없음. main,
 
 **SCORE_V2_STEP15_CLOSE = YES.** `SCORE_V2_DATA_FOUNDATION_READY = YES`,
 `SCORE_V2_STEP2_READY = YES`.
+
+### E-JIP SCORE V2 STEP 2 — Absolute Scoring Curves & Numerical Model Design
+
+`score-v2-step2-absolute-curves` branch. LOCAL percentile을 대체할 절대
+평가 curve를 처음으로 수치 설계했다 — 부산 3,402건 실측 분포(subway
+median 397m, parking ratio median 1.106, age median 23년 등)를 근거로
+subway(4후보)/age(3후보)/scale(3후보)/parking(3후보) curve와 4개 domain
+(Transport/Complex/Education/Living) composition 후보를 만들고 41개
+벤치마크(16개 구·군 전부 + 13개 archetype)로 검증했다.
+
+핵심 성과: V1의 parking 문제(1.09→18, 1.58→95, 77pt 격차)가 새 curve에서는
+29~30pt로 완화됐고, 대신해모/협성의 subway/parking/age/scale monotonic
+dominance가 4/4 PASS, 부산 전체에서 "명백히 좋은데 낮은 점수" 모순 사례가
+5개 패턴 전부 0건이었다. **STEP0.8이 지적한 education 역전(V1: 대신해모
+22.0>협성 11.4, 실제로는 341m<545m로 협성이 더 가까움)이 새 absolute
+curve에서는 정확히 반대(협성 60.9>대신해모 37.0)로 바로잡혔다** — 이번
+STEP의 가장 중요한 실증 결과. district bias는 1.22~1.41x로 STEP0.7-A
+수준을 유지/개선(8.8x 원본 대비 대폭 개선 유지).
+
+counterexample 탐색 중 "confirmed-absent subway"와 "단순 결측"을 구분하지
+않는 설계 공백을 발견(수정은 STEP3로 이월). 3개 MODEL 후보(V2-A 투명우선/
+V2-B 매끄러움우선/V2-C 하이브리드) 비교 후 explainability와 안정성 기준으로
+**V2-A를 RECOMMENDED_FOR_SHADOW_TEST로 선정**(최종 weight는 미확정,
+STEP3 대상). 신규 테스트 18/18 PASS(+기존 28/28 회귀 없음). production
+Score/DB/API/UI 전부 변경 없음, domain/factor 최종 weight도 아직 확정하지
+않았다. `docs/development/EJIP_SCORE_V2_STEP2_ABSOLUTE_CURVES.md` 신규.
+
+**SCORE_V2_STEP2_CLOSE = YES.** `ABSOLUTE_CURVES_READY = YES`,
+`SCORE_V2_STEP3_READY = YES`.
