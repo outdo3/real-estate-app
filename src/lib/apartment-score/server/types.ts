@@ -122,6 +122,7 @@ export interface FinalScoreResult {
   // status가 'OK'면 항상 null. INTERNAL/ADMIN 전용(위 PreparingReasonCode 주석 참고) —
   // 공개 API route는 이 필드를 절대 응답에 포함하지 않는다.
   preparingReason: PreparingReasonCode | null;
+  _shadowV2?: any;
 }
 
 // ---- Raw feature row shapes (S2B DB 컬럼, read-only) ----
