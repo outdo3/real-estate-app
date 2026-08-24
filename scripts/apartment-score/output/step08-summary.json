@@ -1,0 +1,1343 @@
+{
+ "generatedAt": "2026-08-24T01:41:44.896Z",
+ "verifyMismatches": 0,
+ "verifyTotal": 18,
+ "transportDelta": {
+  "n": 2833,
+  "mean": 0.3863042285407594,
+  "median": 0.2672635135135124,
+  "p10": -1.3761911441443857,
+  "p90": 2.0494830990329405,
+  "ge20": 7,
+  "ge10": 23,
+  "ge5": 91,
+  "lt5": 2742
+ },
+ "totalDelta": {
+  "n": 2833,
+  "mean": 0.15566537239675257,
+  "median": 0,
+  "eq0": 1418,
+  "b1to4": 1350,
+  "b5to9": 48,
+  "ge10": 17,
+  "prodOkCount": 3401,
+  "shadowOkCount": 2833
+ },
+ "rankShift": {
+  "mean": 65.162019061066,
+  "median": 26,
+  "p90": 140,
+  "max": 2222
+ },
+ "benchmarkDetails": {
+  "대신해모로센트럴아파트": {
+   "aptSeq": "26140-1356",
+   "prod": {
+    "status": "OK",
+    "score": 47,
+    "coverage": 1,
+    "categories": [
+     {
+      "key": "transport",
+      "status": "SCORED",
+      "score": 62.28235294117647,
+      "baseWeight": 30,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 19,
+      "usedSubMetrics": [
+       "nearestSubwayDistanceM",
+       "subwayCount1000m",
+       "nearestBusStopDistanceM",
+       "busStopCount300m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "living",
+      "status": "SCORED",
+      "score": 35.625,
+      "baseWeight": 25,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 19,
+      "usedSubMetrics": [
+       "martCount1000m",
+       "convenienceCount500m",
+       "pharmacyCount500m",
+       "hospitalCount1000m",
+       "parkCount1000m",
+       "daycareKindergartenCount500m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "parking",
+      "status": "SCORED",
+      "score": 17.857142857142854,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 13,
+      "usedSubMetrics": [
+       "parkingPerHousehold"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "complex",
+      "status": "PARTIAL",
+      "score": 91.93181818181819,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 19,
+      "usedSubMetrics": [
+       "buildYear",
+       "totalHouseholds"
+      ],
+      "missingSubMetrics": [
+       "mainBuildingCount"
+      ]
+     },
+     {
+      "key": "schoolAccess",
+      "status": "SCORED",
+      "score": 21.999999999999993,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 19,
+      "usedSubMetrics": [
+       "nearestElementaryDistanceM",
+       "elementaryCount1000m"
+      ],
+      "missingSubMetrics": []
+     }
+    ]
+   },
+   "shadow": {
+    "status": "OK",
+    "score": 48,
+    "coverage": 1,
+    "categories": [
+     {
+      "key": "transport",
+      "status": "SCORED",
+      "score": 63.1625,
+      "baseWeight": 30,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 17,
+      "usedSubMetrics": [
+       "nearestSubwayDistanceM",
+       "subwayCount1000m",
+       "nearestBusStopDistanceM",
+       "busStopCount300m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "living",
+      "status": "SCORED",
+      "score": 36.078125,
+      "baseWeight": 25,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 17,
+      "usedSubMetrics": [
+       "martCount1000m",
+       "convenienceCount500m",
+       "pharmacyCount500m",
+       "hospitalCount1000m",
+       "parkCount1000m",
+       "daycareKindergartenCount500m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "parking",
+      "status": "SCORED",
+      "score": 17.857142857142854,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "MEDIUM",
+      "peerSampleSize": 8,
+      "usedSubMetrics": [
+       "parkingPerHousehold"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "complex",
+      "status": "PARTIAL",
+      "score": 91.93181818181819,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 17,
+      "usedSubMetrics": [
+       "buildYear",
+       "totalHouseholds"
+      ],
+      "missingSubMetrics": [
+       "mainBuildingCount"
+      ]
+     },
+     {
+      "key": "schoolAccess",
+      "status": "SCORED",
+      "score": 24.125,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 17,
+      "usedSubMetrics": [
+       "nearestElementaryDistanceM",
+       "elementaryCount1000m"
+      ],
+      "missingSubMetrics": []
+     }
+    ]
+   },
+   "quality": {
+    "aptSeq": "26140-1356",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  "협성르네상스(서구)": {
+   "aptSeq": "26140-51",
+   "prod": {
+    "status": "OK",
+    "score": 58,
+    "coverage": 1,
+    "categories": [
+     {
+      "key": "transport",
+      "status": "SCORED",
+      "score": 78.51607142857144,
+      "baseWeight": 30,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 29,
+      "usedSubMetrics": [
+       "nearestSubwayDistanceM",
+       "subwayCount1000m",
+       "nearestBusStopDistanceM",
+       "busStopCount300m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "living",
+      "status": "SCORED",
+      "score": 37.705357142857146,
+      "baseWeight": 25,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 29,
+      "usedSubMetrics": [
+       "martCount1000m",
+       "convenienceCount500m",
+       "pharmacyCount500m",
+       "hospitalCount1000m",
+       "parkCount1000m",
+       "daycareKindergartenCount500m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "parking",
+      "status": "SCORED",
+      "score": 95,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 56,
+      "usedSubMetrics": [
+       "parkingPerHousehold"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "complex",
+      "status": "SCORED",
+      "score": 60.5,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 29,
+      "usedSubMetrics": [
+       "buildYear",
+       "totalHouseholds",
+       "mainBuildingCount"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "schoolAccess",
+      "status": "SCORED",
+      "score": 11.428571428571429,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 29,
+      "usedSubMetrics": [
+       "nearestElementaryDistanceM",
+       "elementaryCount1000m"
+      ],
+      "missingSubMetrics": []
+     }
+    ]
+   },
+   "shadow": {
+    "status": "OK",
+    "score": 59,
+    "coverage": 1,
+    "categories": [
+     {
+      "key": "transport",
+      "status": "SCORED",
+      "score": 78.28142857142856,
+      "baseWeight": 30,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 22,
+      "usedSubMetrics": [
+       "nearestSubwayDistanceM",
+       "subwayCount1000m",
+       "nearestBusStopDistanceM",
+       "busStopCount300m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "living",
+      "status": "SCORED",
+      "score": 39.60714285714286,
+      "baseWeight": 25,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 22,
+      "usedSubMetrics": [
+       "martCount1000m",
+       "convenienceCount500m",
+       "pharmacyCount500m",
+       "hospitalCount1000m",
+       "parkCount1000m",
+       "daycareKindergartenCount500m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "parking",
+      "status": "SCORED",
+      "score": 95,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "MEDIUM",
+      "peerSampleSize": 5,
+      "usedSubMetrics": [
+       "parkingPerHousehold"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "complex",
+      "status": "SCORED",
+      "score": 59.102484472049696,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 24,
+      "usedSubMetrics": [
+       "buildYear",
+       "totalHouseholds",
+       "mainBuildingCount"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "schoolAccess",
+      "status": "SCORED",
+      "score": 13.57142857142857,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "HIGH",
+      "peerSampleSize": 22,
+      "usedSubMetrics": [
+       "nearestElementaryDistanceM",
+       "elementaryCount1000m"
+      ],
+      "missingSubMetrics": []
+     }
+    ]
+   },
+   "quality": {
+    "aptSeq": "26140-51",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  "구덕금호": {
+   "aptSeq": "26140-11",
+   "prod": {
+    "status": "OK",
+    "score": 54,
+    "coverage": 0.85,
+    "categories": [
+     {
+      "key": "transport",
+      "status": "SCORED",
+      "score": 54.628571428571426,
+      "baseWeight": 30,
+      "peerLevel": "LOCAL",
+      "peerTier": "MEDIUM",
+      "peerSampleSize": 8,
+      "usedSubMetrics": [
+       "nearestSubwayDistanceM",
+       "subwayCount1000m",
+       "nearestBusStopDistanceM",
+       "busStopCount300m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "living",
+      "status": "SCORED",
+      "score": 59,
+      "baseWeight": 25,
+      "peerLevel": "LOCAL",
+      "peerTier": "MEDIUM",
+      "peerSampleSize": 8,
+      "usedSubMetrics": [
+       "martCount1000m",
+       "convenienceCount500m",
+       "pharmacyCount500m",
+       "hospitalCount1000m",
+       "parkCount1000m",
+       "daycareKindergartenCount500m"
+      ],
+      "missingSubMetrics": []
+     },
+     {
+      "key": "parking",
+      "status": "NOT_SCORED",
+      "score": null,
+      "baseWeight": 15,
+      "peerLevel": "REGION_WIDE",
+      "peerTier": "HIGH",
+      "peerSampleSize": 171,
+      "usedSubMetrics": [],
+      "missingSubMetrics": [
+       "parkingPerHousehold"
+      ]
+     },
+     {
+      "key": "complex",
+      "status": "PARTIAL",
+      "score": 56.42857142857142,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "MEDIUM",
+      "peerSampleSize": 8,
+      "usedSubMetrics": [
+       "buildYear"
+      ],
+      "missingSubMetrics": [
+       "totalHouseholds",
+       "mainBuildingCount"
+      ]
+     },
+     {
+      "key": "schoolAccess",
+      "status": "SCORED",
+      "score": 41.00000000000001,
+      "baseWeight": 15,
+      "peerLevel": "LOCAL",
+      "peerTier": "MEDIUM",
+      "peerSampleSize": 8,
+      "usedSubMetrics": [
+       "nearestElementaryDistanceM",
+       "elementaryCount1000m"
+      ],
+      "missingSubMetrics": []
+     }
+    ]
+   },
+   "shadow": {
+    "status": "INSUFFICIENT_DATA",
+    "score": null,
+    "coverage": 0.15,
+    "categories": [
+     {
+      "key": "transport",
+      "status": "NOT_SCORED",
+      "score": null,
+      "baseWeight": 30,
+      "peerLevel": "REGION_WIDE",
+      "peerTier": "HIGH",
+      "peerSampleSize": 129,
+      "usedSubMetrics": [],
+      "missingSubMetrics": [
+       "nearestSubwayDistanceM",
+       "subwayCount1000m",
+       "nearestBusStopDistanceM",
+       "busStopCount300m"
+      ]
+     },
+     {
+      "key": "living",
+      "status": "NOT_SCORED",
+      "score": null,
+      "baseWeight": 25,
+      "peerLevel": "REGION_WIDE",
+      "peerTier": "HIGH",
+      "peerSampleSize": 129,
+      "usedSubMetrics": [],
+      "missingSubMetrics": [
+       "martCount1000m",
+       "convenienceCount500m",
+       "pharmacyCount500m",
+       "hospitalCount1000m",
+       "parkCount1000m",
+       "daycareKindergartenCount500m"
+      ]
+     },
+     {
+      "key": "parking",
+      "status": "NOT_SCORED",
+      "score": null,
+      "baseWeight": 15,
+      "peerLevel": "REGION_WIDE",
+      "peerTier": "HIGH",
+      "peerSampleSize": 26,
+      "usedSubMetrics": [],
+      "missingSubMetrics": [
+       "parkingPerHousehold"
+      ]
+     },
+     {
+      "key": "complex",
+      "status": "PARTIAL",
+      "score": 35.32608695652175,
+      "baseWeight": 15,
+      "peerLevel": "SIGUNGU",
+      "peerTier": "HIGH",
+      "peerSampleSize": 139,
+      "usedSubMetrics": [
+       "buildYear"
+      ],
+      "missingSubMetrics": [
+       "totalHouseholds",
+       "mainBuildingCount"
+      ]
+     },
+     {
+      "key": "schoolAccess",
+      "status": "NOT_SCORED",
+      "score": null,
+      "baseWeight": 15,
+      "peerLevel": "REGION_WIDE",
+      "peerTier": "HIGH",
+      "peerSampleSize": 129,
+      "usedSubMetrics": [],
+      "missingSubMetrics": [
+       "nearestElementaryDistanceM",
+       "elementaryCount1000m"
+      ]
+     }
+    ]
+   },
+   "quality": {
+    "aptSeq": "26140-11",
+    "identity": "IDENTITY_LOW",
+    "coord": "COORD_LOW",
+    "registryLinked": false,
+    "registryAttempted": false,
+    "marketEvidence": "WEAK",
+    "hasAddress": false,
+    "peerEligibility": "DISPLAY_ONLY",
+    "transportPeerEligible": false,
+    "livePeerEligible": false,
+    "schoolPeerEligible": false,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  }
+ },
+ "benchmarkRows": [
+  {
+   "aptSeq": "26140-1353",
+   "name": "비스타동원더비치테라스",
+   "sigungu": "서구",
+   "umdName": "암남동",
+   "prodTotal": 55,
+   "shadowTotal": 57,
+   "prodTransport": 42.107692307692304,
+   "shadowTransport": 43.127272727272725,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 23,
+   "nearestSubwayDistanceM": null
+  },
+  {
+   "aptSeq": "26350-2582",
+   "name": "협성루에나센텀",
+   "sigungu": "해운대구",
+   "umdName": "재송동",
+   "prodTotal": 75,
+   "shadowTotal": null,
+   "prodTransport": 81.12627118644068,
+   "shadowTransport": null,
+   "peerLevel": "REGION_WIDE",
+   "peerSampleSize": 238,
+   "nearestSubwayDistanceM": 106
+  },
+  {
+   "aptSeq": "26260-151",
+   "name": "에스케이쁘띠메종",
+   "sigungu": "동래구",
+   "umdName": "안락동",
+   "prodTotal": 46,
+   "shadowTotal": 45,
+   "prodTransport": 34.95232793522268,
+   "shadowTransport": 33.447159090909096,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 23,
+   "nearestSubwayDistanceM": 566
+  },
+  {
+   "aptSeq": "26500-100",
+   "name": "복음",
+   "sigungu": "수영구",
+   "umdName": "망미동",
+   "prodTotal": 42,
+   "shadowTotal": 42,
+   "prodTransport": 40.168067226890756,
+   "shadowTransport": 40.168067226890756,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 35,
+   "nearestSubwayDistanceM": 791
+  },
+  {
+   "aptSeq": "26290-261",
+   "name": "동림리라",
+   "sigungu": "남구",
+   "umdName": "우암동",
+   "prodTotal": 49,
+   "shadowTotal": 49,
+   "prodTransport": 69.7826923076923,
+   "shadowTransport": 69.7826923076923,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 14,
+   "nearestSubwayDistanceM": 677
+  },
+  {
+   "aptSeq": "26230-136",
+   "name": "엘지신개금(2-2)",
+   "sigungu": "부산진구",
+   "umdName": "개금동",
+   "prodTotal": 57,
+   "shadowTotal": 58,
+   "prodTransport": 49.97443181818182,
+   "shadowTransport": 50.002819548872175,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 43,
+   "nearestSubwayDistanceM": 382
+  },
+  {
+   "aptSeq": "26470-1160",
+   "name": "해운그린빌",
+   "sigungu": "연제구",
+   "umdName": "연산동",
+   "prodTotal": 53,
+   "shadowTotal": 53,
+   "prodTransport": 46.20000012400302,
+   "shadowTransport": 47.05886121818774,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 148,
+   "nearestSubwayDistanceM": 422
+  },
+  {
+   "aptSeq": "26440-114",
+   "name": "외진가센트럴타워",
+   "sigungu": "강서구",
+   "umdName": "대저1동",
+   "prodTotal": 55,
+   "shadowTotal": 55,
+   "prodTransport": 73.48571428571428,
+   "shadowTransport": 74.68076923076923,
+   "peerLevel": "SIGUNGU",
+   "peerSampleSize": 40,
+   "nearestSubwayDistanceM": 300
+  },
+  {
+   "aptSeq": "26710-640",
+   "name": "일광대성베르힐",
+   "sigungu": "기장군",
+   "umdName": "일광읍 삼성리",
+   "prodTotal": 52,
+   "shadowTotal": 50,
+   "prodTransport": 30.019999999999996,
+   "shadowTransport": 31.754545454545458,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 12,
+   "nearestSubwayDistanceM": null
+  },
+  {
+   "aptSeq": "26140-1290",
+   "name": "대신푸르지오2차",
+   "sigungu": "서구",
+   "umdName": "서대신동2가",
+   "prodTotal": 41,
+   "shadowTotal": 42,
+   "prodTransport": 37.029411764705884,
+   "shadowTransport": 38.62625,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 17,
+   "nearestSubwayDistanceM": 212
+  },
+  {
+   "aptSeq": "26140-1356",
+   "name": "대신해모로센트럴아파트",
+   "sigungu": "서구",
+   "umdName": "서대신동2가",
+   "prodTotal": 47,
+   "shadowTotal": 48,
+   "prodTransport": 62.28235294117647,
+   "shadowTransport": 63.1625,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 17,
+   "nearestSubwayDistanceM": 140
+  },
+  {
+   "aptSeq": "26140-1361",
+   "name": "e편한세상송도더퍼스트비치",
+   "sigungu": "서구",
+   "umdName": "암남동",
+   "prodTotal": 60,
+   "shadowTotal": 61,
+   "prodTransport": 52.59615384615384,
+   "shadowTransport": 52.57727272727273,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 23,
+   "nearestSubwayDistanceM": null
+  },
+  {
+   "aptSeq": "26350-134",
+   "name": "SKVIEW",
+   "sigungu": "해운대구",
+   "umdName": "좌동",
+   "prodTotal": 35,
+   "shadowTotal": 35,
+   "prodTransport": 29.69375,
+   "shadowTransport": 30.52837837837837,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 38,
+   "nearestSubwayDistanceM": 880
+  },
+  {
+   "aptSeq": "26350-106",
+   "name": "건영1",
+   "sigungu": "해운대구",
+   "umdName": "좌동",
+   "prodTotal": 47,
+   "shadowTotal": 47,
+   "prodTransport": 37.83875,
+   "shadowTransport": 38.4945945945946,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 38,
+   "nearestSubwayDistanceM": 653
+  },
+  {
+   "aptSeq": "26350-109",
+   "name": "경남선경",
+   "sigungu": "해운대구",
+   "umdName": "좌동",
+   "prodTotal": 36,
+   "shadowTotal": 37,
+   "prodTransport": 19.70375,
+   "shadowTransport": 20.458108108108107,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 38,
+   "nearestSubwayDistanceM": 879
+  },
+  {
+   "aptSeq": "26230-2507",
+   "name": "서면라이포레",
+   "sigungu": "부산진구",
+   "umdName": "범천동",
+   "prodTotal": 67,
+   "shadowTotal": 67,
+   "prodTransport": 75.78187474909676,
+   "shadowTransport": 75.60499999999999,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 52,
+   "nearestSubwayDistanceM": 102
+  },
+  {
+   "aptSeq": "26230-240",
+   "name": "서면롯데캐슬스카이",
+   "sigungu": "부산진구",
+   "umdName": "전포동",
+   "prodTotal": 52,
+   "shadowTotal": 52,
+   "prodTransport": 65.78546059933407,
+   "shadowTransport": 68.72956810631229,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 45,
+   "nearestSubwayDistanceM": 136
+  },
+  {
+   "aptSeq": "26290-93",
+   "name": "엘지메트로시티4-2(230~238)",
+   "sigungu": "남구",
+   "umdName": "용호동",
+   "prodTotal": 66,
+   "shadowTotal": 66,
+   "prodTransport": 58.5595744680851,
+   "shadowTransport": 59.0219512195122,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 52,
+   "nearestSubwayDistanceM": null
+  },
+  {
+   "aptSeq": "26290-94",
+   "name": "엘지메트로시티4-1(201-214)",
+   "sigungu": "남구",
+   "umdName": "용호동",
+   "prodTotal": 66,
+   "shadowTotal": 66,
+   "prodTransport": 58.5595744680851,
+   "shadowTransport": 59.0219512195122,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 52,
+   "nearestSubwayDistanceM": null
+  },
+  {
+   "aptSeq": "26290-38",
+   "name": "엘지메트로시티1",
+   "sigungu": "남구",
+   "umdName": "용호동",
+   "prodTotal": 65,
+   "shadowTotal": 66,
+   "prodTransport": 58.5595744680851,
+   "shadowTransport": 59.0219512195122,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 52,
+   "nearestSubwayDistanceM": null
+  },
+  {
+   "aptSeq": "26290-2724",
+   "name": "엘지메트로시티4-2(215~220동)",
+   "sigungu": "남구",
+   "umdName": "용호동",
+   "prodTotal": 66,
+   "shadowTotal": 66,
+   "prodTransport": 58.5595744680851,
+   "shadowTransport": 59.0219512195122,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 52,
+   "nearestSubwayDistanceM": null
+  },
+  {
+   "aptSeq": "26290-311",
+   "name": "엘지메트로시티5",
+   "sigungu": "남구",
+   "umdName": "용호동",
+   "prodTotal": 63,
+   "shadowTotal": 64,
+   "prodTransport": 50,
+   "shadowTransport": 50,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 52,
+   "nearestSubwayDistanceM": null
+  },
+  {
+   "aptSeq": "26140-15",
+   "name": "문화",
+   "sigungu": "서구",
+   "umdName": "동대신동3가",
+   "prodTotal": 55,
+   "shadowTotal": 55,
+   "prodTransport": 68.9,
+   "shadowTransport": 56.464213709677416,
+   "peerLevel": "SIGUNGU",
+   "peerSampleSize": 129,
+   "nearestSubwayDistanceM": 557
+  },
+  {
+   "aptSeq": "26140-63",
+   "name": "문화",
+   "sigungu": "서구",
+   "umdName": "토성동2가",
+   "prodTotal": 62,
+   "shadowTotal": 63,
+   "prodTransport": 65.67824238128986,
+   "shadowTransport": 66.72870463709677,
+   "peerLevel": "SIGUNGU",
+   "peerSampleSize": 129,
+   "nearestSubwayDistanceM": 209
+  },
+  {
+   "aptSeq": "26140-128",
+   "name": "충무제1",
+   "sigungu": "서구",
+   "umdName": "충무동2가",
+   "prodTotal": 35,
+   "shadowTotal": 37,
+   "prodTransport": 39.680935506732816,
+   "shadowTransport": 42.17966229838709,
+   "peerLevel": "SIGUNGU",
+   "peerSampleSize": 129,
+   "nearestSubwayDistanceM": 459
+  },
+  {
+   "aptSeq": "26140-77",
+   "name": "문화",
+   "sigungu": "서구",
+   "umdName": "남부민동",
+   "prodTotal": 44,
+   "shadowTotal": 45,
+   "prodTransport": 48.7,
+   "shadowTransport": 51.40625,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 9,
+   "nearestSubwayDistanceM": 725
+  },
+  {
+   "aptSeq": "26140-51",
+   "name": "협성르네상스",
+   "sigungu": "서구",
+   "umdName": "서대신동3가",
+   "prodTotal": 58,
+   "shadowTotal": 59,
+   "prodTransport": 78.51607142857144,
+   "shadowTransport": 78.28142857142856,
+   "peerLevel": "LOCAL",
+   "peerSampleSize": 22,
+   "nearestSubwayDistanceM": 306
+  },
+  {
+   "aptSeq": "26140-11",
+   "name": "구덕금호",
+   "sigungu": "서구",
+   "umdName": "동대신동3가",
+   "prodTotal": 54,
+   "shadowTotal": null,
+   "prodTransport": 54.628571428571426,
+   "shadowTransport": null,
+   "peerLevel": "REGION_WIDE",
+   "peerSampleSize": 129,
+   "nearestSubwayDistanceM": 615
+  }
+ ],
+ "gdkhShadow": {
+  "prod": {
+   "status": "OK",
+   "score": 54,
+   "coverage": 0.85,
+   "categories": [
+    {
+     "key": "transport",
+     "status": "SCORED",
+     "score": 54.628571428571426,
+     "baseWeight": 30,
+     "peerLevel": "LOCAL",
+     "peerTier": "MEDIUM",
+     "peerSampleSize": 8,
+     "usedSubMetrics": [
+      "nearestSubwayDistanceM",
+      "subwayCount1000m",
+      "nearestBusStopDistanceM",
+      "busStopCount300m"
+     ],
+     "missingSubMetrics": []
+    },
+    {
+     "key": "living",
+     "status": "SCORED",
+     "score": 59,
+     "baseWeight": 25,
+     "peerLevel": "LOCAL",
+     "peerTier": "MEDIUM",
+     "peerSampleSize": 8,
+     "usedSubMetrics": [
+      "martCount1000m",
+      "convenienceCount500m",
+      "pharmacyCount500m",
+      "hospitalCount1000m",
+      "parkCount1000m",
+      "daycareKindergartenCount500m"
+     ],
+     "missingSubMetrics": []
+    },
+    {
+     "key": "parking",
+     "status": "NOT_SCORED",
+     "score": null,
+     "baseWeight": 15,
+     "peerLevel": "REGION_WIDE",
+     "peerTier": "HIGH",
+     "peerSampleSize": 171,
+     "usedSubMetrics": [],
+     "missingSubMetrics": [
+      "parkingPerHousehold"
+     ]
+    },
+    {
+     "key": "complex",
+     "status": "PARTIAL",
+     "score": 56.42857142857142,
+     "baseWeight": 15,
+     "peerLevel": "LOCAL",
+     "peerTier": "MEDIUM",
+     "peerSampleSize": 8,
+     "usedSubMetrics": [
+      "buildYear"
+     ],
+     "missingSubMetrics": [
+      "totalHouseholds",
+      "mainBuildingCount"
+     ]
+    },
+    {
+     "key": "schoolAccess",
+     "status": "SCORED",
+     "score": 41.00000000000001,
+     "baseWeight": 15,
+     "peerLevel": "LOCAL",
+     "peerTier": "MEDIUM",
+     "peerSampleSize": 8,
+     "usedSubMetrics": [
+      "nearestElementaryDistanceM",
+      "elementaryCount1000m"
+     ],
+     "missingSubMetrics": []
+    }
+   ]
+  },
+  "shadow": {
+   "status": "INSUFFICIENT_DATA",
+   "score": null,
+   "coverage": 0.15,
+   "categories": [
+    {
+     "key": "transport",
+     "status": "NOT_SCORED",
+     "score": null,
+     "baseWeight": 30,
+     "peerLevel": "REGION_WIDE",
+     "peerTier": "HIGH",
+     "peerSampleSize": 129,
+     "usedSubMetrics": [],
+     "missingSubMetrics": [
+      "nearestSubwayDistanceM",
+      "subwayCount1000m",
+      "nearestBusStopDistanceM",
+      "busStopCount300m"
+     ]
+    },
+    {
+     "key": "living",
+     "status": "NOT_SCORED",
+     "score": null,
+     "baseWeight": 25,
+     "peerLevel": "REGION_WIDE",
+     "peerTier": "HIGH",
+     "peerSampleSize": 129,
+     "usedSubMetrics": [],
+     "missingSubMetrics": [
+      "martCount1000m",
+      "convenienceCount500m",
+      "pharmacyCount500m",
+      "hospitalCount1000m",
+      "parkCount1000m",
+      "daycareKindergartenCount500m"
+     ]
+    },
+    {
+     "key": "parking",
+     "status": "NOT_SCORED",
+     "score": null,
+     "baseWeight": 15,
+     "peerLevel": "REGION_WIDE",
+     "peerTier": "HIGH",
+     "peerSampleSize": 26,
+     "usedSubMetrics": [],
+     "missingSubMetrics": [
+      "parkingPerHousehold"
+     ]
+    },
+    {
+     "key": "complex",
+     "status": "PARTIAL",
+     "score": 35.32608695652175,
+     "baseWeight": 15,
+     "peerLevel": "SIGUNGU",
+     "peerTier": "HIGH",
+     "peerSampleSize": 139,
+     "usedSubMetrics": [
+      "buildYear"
+     ],
+     "missingSubMetrics": [
+      "totalHouseholds",
+      "mainBuildingCount"
+     ]
+    },
+    {
+     "key": "schoolAccess",
+     "status": "NOT_SCORED",
+     "score": null,
+     "baseWeight": 15,
+     "peerLevel": "REGION_WIDE",
+     "peerTier": "HIGH",
+     "peerSampleSize": 129,
+     "usedSubMetrics": [],
+     "missingSubMetrics": [
+      "nearestElementaryDistanceM",
+      "elementaryCount1000m"
+     ]
+    }
+   ]
+  },
+  "quality": {
+   "aptSeq": "26140-11",
+   "identity": "IDENTITY_LOW",
+   "coord": "COORD_LOW",
+   "registryLinked": false,
+   "registryAttempted": false,
+   "marketEvidence": "WEAK",
+   "hasAddress": false,
+   "peerEligibility": "DISPLAY_ONLY",
+   "transportPeerEligible": false,
+   "livePeerEligible": false,
+   "schoolPeerEligible": false,
+   "parkingPeerEligible": false,
+   "complexPeerEligible": true
+  }
+ },
+ "domainR1R2": {
+  "r1Spread": {
+   "min": 49.4172933369397,
+   "max": 52.23028816115056,
+   "ratio": 1.0569232880690398,
+   "byGu": [
+    {
+     "gu": "강서구",
+     "mean": 51.16653846153846,
+     "n": 40
+    },
+    {
+     "gu": "서구",
+     "mean": 51.65709794396941,
+     "n": 129
+    },
+    {
+     "gu": "동래구",
+     "mean": 50.005670156011114,
+     "n": 283
+    },
+    {
+     "gu": "해운대구",
+     "mean": 49.64392752308118,
+     "n": 238
+    },
+    {
+     "gu": "부산진구",
+     "mean": 49.90815631200192,
+     "n": 338
+    },
+    {
+     "gu": "연제구",
+     "mean": 49.88117979838595,
+     "n": 209
+    },
+    {
+     "gu": "중구",
+     "mean": 50.04125533934504,
+     "n": 43
+    },
+    {
+     "gu": "남구",
+     "mean": 50.130654556710894,
+     "n": 213
+    },
+    {
+     "gu": "수영구",
+     "mean": 49.89514928864599,
+     "n": 208
+    },
+    {
+     "gu": "사상구",
+     "mean": 50.22270146811775,
+     "n": 131
+    },
+    {
+     "gu": "동구",
+     "mean": 49.67038330623857,
+     "n": 74
+    },
+    {
+     "gu": "영도구",
+     "mean": 52.23028816115056,
+     "n": 117
+    },
+    {
+     "gu": "기장군",
+     "mean": 49.4172933369397,
+     "n": 116
+    },
+    {
+     "gu": "북구",
+     "mean": 49.576951910826,
+     "n": 158
+    },
+    {
+     "gu": "금정구",
+     "mean": 49.696842721791846,
+     "n": 245
+    },
+    {
+     "gu": "사하구",
+     "mean": 49.82796709993248,
+     "n": 291
+    }
+   ]
+  },
+  "r2Spread": {
+   "min": 49.32864855142436,
+   "max": 50.10546875,
+   "ratio": 1.0157478508207218,
+   "byGu": [
+    {
+     "gu": "강서구",
+     "mean": 49.999999999999986,
+     "n": 40
+    },
+    {
+     "gu": "서구",
+     "mean": 50.10546875,
+     "n": 129
+    },
+    {
+     "gu": "동래구",
+     "mean": 49.900069141358685,
+     "n": 283
+    },
+    {
+     "gu": "해운대구",
+     "mean": 49.73660389180014,
+     "n": 238
+    },
+    {
+     "gu": "부산진구",
+     "mean": 49.32864855142436,
+     "n": 338
+    },
+    {
+     "gu": "연제구",
+     "mean": 49.88822026848983,
+     "n": 209
+    },
+    {
+     "gu": "중구",
+     "mean": 50.07101328903655,
+     "n": 43
+    },
+    {
+     "gu": "남구",
+     "mean": 49.57236162256557,
+     "n": 213
+    },
+    {
+     "gu": "수영구",
+     "mean": 49.76579062175893,
+     "n": 208
+    },
+    {
+     "gu": "사상구",
+     "mean": 49.755845284843964,
+     "n": 131
+    },
+    {
+     "gu": "동구",
+     "mean": 49.88254350240651,
+     "n": 74
+    },
+    {
+     "gu": "영도구",
+     "mean": 49.70497201396737,
+     "n": 117
+    },
+    {
+     "gu": "기장군",
+     "mean": 49.57963175748035,
+     "n": 116
+    },
+    {
+     "gu": "북구",
+     "mean": 49.48961647453365,
+     "n": 158
+    },
+    {
+     "gu": "금정구",
+     "mean": 50.0191147302012,
+     "n": 245
+    },
+    {
+     "gu": "사하구",
+     "mean": 49.75546228870189,
+     "n": 291
+    }
+   ]
+  },
+  "r1Coverage": 2833,
+  "r2Coverage": 2833
+ },
+ "parkingEligibleCount": 862,
+ "parkingSampleBuckets": [
+  {
+   "label": "n<10",
+   "n": 162
+  },
+  {
+   "label": "10~19",
+   "n": 362
+  },
+  {
+   "label": "20~29",
+   "n": 510
+  },
+  {
+   "label": "30+",
+   "n": 2368
+  }
+ ],
+ "complexCorrelation": {
+  "production": 0.7721355847730843,
+  "shadow": 0.7573056348831785
+ }
+}

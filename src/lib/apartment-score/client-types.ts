@@ -40,5 +40,5 @@ export interface ApartmentScoreApiResponse {
   categories: ApartmentScoreCategory[];
   regionalStrengths: ApartmentScoreRegionalStrength[];
   market: ApartmentScoreMarketInfo | null;
-  briefing: ApartmentScoreBriefing | null;
+  briefing: ApartmentScoreBriefing | null; _shadowV2?: any;
 }

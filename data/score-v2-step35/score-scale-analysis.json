@@ -1,0 +1,19 @@
+{
+ "generatedAt": "2026-08-24T05:43:10.421Z",
+ "t1t3": {
+  "spearman": 0.9979759680518882,
+  "top100Overlap": 96,
+  "verdict": "NO_MEANINGFUL_DIFFERENCE"
+ },
+ "recommendedDistribution": {
+  "n": 2833,
+  "mean": 54.912281716611744,
+  "median": 56.147371399360566,
+  "p10": 40.94934083566868,
+  "p90": 66.98854645517935
+ },
+ "daesinInterpretation": {
+  "total": 67.80101306575729,
+  "percentile": 8.083303918108015
+ }
+}

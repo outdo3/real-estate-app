@@ -12,6 +12,9 @@ import { computeRegionalStrengths } from './regional-premium';
 import { explainAllCategories } from './explain';
 import { buildBriefing } from './briefing';
 import { classifyPreparingReason } from './preparing-reason';
+import { calculateScoreV2 } from '../../score-v2/engine';
+import { adaptToV2Input } from '../../score-v2/adapter';
+import { getApartmentEducationZone } from '../../education/attendance-zone';
 
 /**
  * S2C Score Engine 진입점(§3, §41 API가 이 함수 하나만 호출한다).
@@ -29,6 +32,7 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
       totalHouseholds: true,
       parkingCount: true,
       mainBuildingCount: true,
+      geocodeQuality: true,
     },
   });
 
@@ -59,6 +63,7 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
       totalHouseholds: true,
       parkingCount: true,
       mainBuildingCount: true,
+      geocodeQuality: true,
     },
   });
 
@@ -81,6 +86,7 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
         totalHouseholds: r.totalHouseholds,
         parkingCount: r.parkingCount,
         mainBuildingCount: r.mainBuildingCount,
+          geocodeQuality: (r as any).geocodeQuality,
       },
     ])
   );
@@ -132,6 +138,20 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
   // 로직 자체는 건드리지 않는다.
   const schoolAccessDistanceM = locationByAptSeq.get(targetMaster.aptSeq)?.nearestElementaryDistanceM ?? null;
 
+  let shadowV2Result: any = null;
+  try {
+    const eduZone = getApartmentEducationZone(targetMaster.aptSeq);
+    const attendanceZoneStatus = eduZone ? eduZone.elementary.status : 'NOT_AVAILABLE';
+    const v2Input = adaptToV2Input(
+      masterByAptSeq.get(targetMaster.aptSeq)!, 
+      locationByAptSeq.get(targetMaster.aptSeq) ?? null,
+      attendanceZoneStatus as any
+    );
+    shadowV2Result = calculateScoreV2(v2Input, 2026);
+  } catch (err) {
+    console.error('[ScoreV2 Shadow Error]', err);
+  }
+
   if (coverage < MIN_TOTAL_COVERAGE || scoredCategories.length === 0) {
     return {
       status: 'INSUFFICIENT_DATA',
@@ -165,6 +185,7 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
     market,
     briefing: buildBriefing(categories, regionalStrengths, sigunguLabel, umdName, schoolAccessDistanceM),
     preparingReason: null,
+      _shadowV2: shadowV2Result,
   };
 }
 

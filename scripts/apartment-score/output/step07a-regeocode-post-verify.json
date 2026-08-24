@@ -1,0 +1,17 @@
+{
+ "generatedAt": "2026-08-23T15:17:12.737Z",
+ "candidateCount": 1235,
+ "geocodeSuccess": 1235,
+ "written": 1191,
+ "skippedUnsafe": 44,
+ "skippedAlreadyExact": 0,
+ "failed": 0,
+ "regionMismatch": 1,
+ "duplicateSuspiciousAtDryrun": 23,
+ "over100m": 108,
+ "over300m": 73,
+ "over1km": 23,
+ "unsafeLeakedIntoDb": 0,
+ "newAmbiguousDuplicateGroupsPostWrite": 0,
+ "PASS": true
+}

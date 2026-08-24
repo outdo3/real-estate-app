@@ -1,0 +1,142 @@
+{
+ "generatedAt": "2026-08-23T15:18:14.462Z",
+ "total": 3402,
+ "byPeer": {
+  "PEER_FULL": 2467,
+  "DISPLAY_ONLY": 568,
+  "PEER_LIMITED": 366,
+  "UNRESOLVED": 1
+ },
+ "domainEligible": {
+  "transport": 2833,
+  "life": 2833,
+  "school": 2833,
+  "parking": 862,
+  "complex": 3000
+ },
+ "guRows": [
+  {
+   "gu": "중구",
+   "total": 59,
+   "fullPct": 62.71186440677966,
+   "coordHighPct": 72.88135593220339,
+   "registryLinkedPct": 62.71186440677966
+  },
+  {
+   "gu": "해운대구",
+   "total": 308,
+   "fullPct": 62.98701298701299,
+   "coordHighPct": 77.27272727272727,
+   "registryLinkedPct": 71.75324675324676
+  },
+  {
+   "gu": "동구",
+   "total": 99,
+   "fullPct": 64.64646464646465,
+   "coordHighPct": 74.74747474747475,
+   "registryLinkedPct": 67.67676767676768
+  },
+  {
+   "gu": "기장군",
+   "total": 152,
+   "fullPct": 65.78947368421052,
+   "coordHighPct": 76.3157894736842,
+   "registryLinkedPct": 67.10526315789474
+  },
+  {
+   "gu": "서구",
+   "total": 171,
+   "fullPct": 66.08187134502924,
+   "coordHighPct": 75.43859649122807,
+   "registryLinkedPct": 66.66666666666667
+  },
+  {
+   "gu": "부산진구",
+   "total": 404,
+   "fullPct": 69.8019801980198,
+   "coordHighPct": 83.66336633663366,
+   "registryLinkedPct": 71.78217821782178
+  },
+  {
+   "gu": "수영구",
+   "total": 251,
+   "fullPct": 70.5179282868526,
+   "coordHighPct": 82.86852589641434,
+   "registryLinkedPct": 72.50996015936255
+  },
+  {
+   "gu": "금정구",
+   "total": 308,
+   "fullPct": 71.75324675324676,
+   "coordHighPct": 79.54545454545455,
+   "registryLinkedPct": 73.05194805194805
+  },
+  {
+   "gu": "남구",
+   "total": 253,
+   "fullPct": 72.72727272727273,
+   "coordHighPct": 84.18972332015811,
+   "registryLinkedPct": 76.28458498023716
+  },
+  {
+   "gu": "사하구",
+   "total": 338,
+   "fullPct": 73.66863905325444,
+   "coordHighPct": 86.09467455621302,
+   "registryLinkedPct": 75.44378698224853
+  },
+  {
+   "gu": "사상구",
+   "total": 151,
+   "fullPct": 75.49668874172185,
+   "coordHighPct": 86.75496688741723,
+   "registryLinkedPct": 76.82119205298014
+  },
+  {
+   "gu": "연제구",
+   "total": 244,
+   "fullPct": 75.81967213114754,
+   "coordHighPct": 85.65573770491804,
+   "registryLinkedPct": 76.63934426229508
+  },
+  {
+   "gu": "영도구",
+   "total": 133,
+   "fullPct": 76.69172932330827,
+   "coordHighPct": 87.96992481203007,
+   "registryLinkedPct": 79.69924812030075
+  },
+  {
+   "gu": "강서구",
+   "total": 44,
+   "fullPct": 81.81818181818181,
+   "coordHighPct": 90.9090909090909,
+   "registryLinkedPct": 81.81818181818181
+  },
+  {
+   "gu": "동래구",
+   "total": 314,
+   "fullPct": 82.48407643312102,
+   "coordHighPct": 90.12738853503184,
+   "registryLinkedPct": 83.43949044585987
+  },
+  {
+   "gu": "북구",
+   "total": 173,
+   "fullPct": 86.70520231213872,
+   "coordHighPct": 91.32947976878613,
+   "registryLinkedPct": 87.28323699421965
+  }
+ ],
+ "districtFullMin": 62.71186440677966,
+ "districtFullMax": 86.70520231213872,
+ "districtFullMedian": 72.72727272727273,
+ "districtFullRatio": 1.3825964693016715,
+ "dongBuckets": {
+  "total": 146,
+  "under5": 53,
+  "under10": 70,
+  "under20": 89,
+  "atLeast20": 57
+ }
+}

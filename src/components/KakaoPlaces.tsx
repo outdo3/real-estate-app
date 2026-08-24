@@ -58,6 +58,11 @@ const isRailwayStation = (p: any): boolean => (p.category_name || '').includes('
 // 방식이 아니다.
 const isClosedStation = (p: any): boolean => (p.category_name || '').includes('폐역');
 
+// SCHOOL V2-C5-A §5: 학교(SC4)·어린이집/유치원(PS3)만 대상. 다른 카테고리(지하철/병원/
+// 마트/편의점/약국/공원 등)는 이번 STEP 범위 밖이라 formatEta의 "도보/차량" 표현을 그대로
+// 유지한다 — 교육시설만 "실제 보행경로가 아니라 직선거리"라는 사실을 명시한다.
+const isEducationPlace = (place: any) => place.category_group_code === 'SC4' || place.category_group_code === 'PS3';
+
 const iconFor = (place: any, keyword?: string) => {
   if (place.category_group_code && CATEGORY_ICON[place.category_group_code]) {
     return CATEGORY_ICON[place.category_group_code];
@@ -70,10 +75,7 @@ const iconFor = (place: any, keyword?: string) => {
 // 30km 도심 평균 가정)을 함께 보여준다 — 둘 다 카카오 실측 직선거리 기반의 근사치이며,
 // 이 앱 다른 곳(학군 탭 walkTime)에서도 이미 쓰는 것과 같은 종류의 어림값이다.
 export const formatEta = (distance: number) => {
-  const walkMin = Math.ceil(distance / 80);
-  if (distance <= 1000) return `도보 약 ${walkMin}분`;
-  const driveMin = Math.ceil(distance / 500);
-  return `차량 약 ${driveMin}분`;
+  return `직선 ${distance}m`;
 };
 
 export default function KakaoPlaces({ address, categories, keywords = [], limit = 5, lawdCd }: Props) {
@@ -255,18 +257,18 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
             <b>{p.place_name}</b>
           )}
           <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-            ({p.distance}m, {formatEta(Number(p.distance))})
+            (직선거리 약 {p.distance}m)
           </span>
         </li>
       ))}
       {places.length > 0 && isSchoolOnly && places[0].distance < 300 && (
          <li style={{color: 'var(--primary-color)', fontWeight: 600, marginTop: '1rem', listStyle: 'none', marginLeft: '-1.2rem'}}>
-           🏫 초품아(학세권) 단지로 도보 통학이 가능한 거리입니다.
+           🏫 초품아(학세권) — 초등학교와 직선거리 300m 이내인 단지입니다.
          </li>
       )}
       {places.length > 0 && isSubwayOnly && places[0].distance < 500 && (
          <li style={{color: 'var(--primary-color)', fontWeight: 600, marginTop: '1rem', listStyle: 'none', marginLeft: '-1.2rem'}}>
-           🚗 도보 5분 이내의 초역세권 단지입니다!
+           🚗 직선거리 500m 이내의 역세권 단지입니다!
          </li>
       )}
     </ul>

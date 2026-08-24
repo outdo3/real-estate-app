@@ -9,7 +9,7 @@ type Props = {
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { name } = await searchParams;
   const title = `${name || '학교 정보'} - ${siteConfig.name}`;
-  const description = name ? `${name}의 학년별 학생 수, 특목고 진학률 등 학군 정보를 확인하세요.` : '학교 학군 정보를 확인하세요.';
+  const description = name ? `${name}의 학군 정보를 확인하세요.` : '학교 학군 정보를 확인하세요.';
   return {
     title,
     description,

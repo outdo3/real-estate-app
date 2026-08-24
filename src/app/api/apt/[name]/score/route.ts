@@ -81,6 +81,7 @@ export async function GET(
       regionalStrengths: result.regionalStrengths.map((r) => ({ type: r.type, level: r.level, label: r.label })),
       market: result.market,
       briefing: result.briefing,
+      _shadowV2: (result as any)._shadowV2,
     });
   } catch (error) {
     logServerError((error as Error)?.message || 'apt score route error', '/api/apt/[name]/score', (error as Error)?.stack).catch(() => {});

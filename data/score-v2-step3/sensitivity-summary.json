@@ -1,0 +1,98 @@
+{
+ "generatedAt": "2026-08-24T05:16:26.058Z",
+ "rawSensitivity": {
+  "subway ±20m": {
+   "n": 2833,
+   "meanDelta": 0.2599226967878614,
+   "maxDelta": 0.63333333333334
+  },
+  "parking ±0.05": {
+   "n": 2833,
+   "meanDelta": 0.03801095993779806,
+   "maxDelta": 0.25
+  },
+  "age ±1y": {
+   "n": 2833,
+   "meanDelta": 0.24964252344072282,
+   "maxDelta": 0.8000000000000114
+  },
+  "households ±50": {
+   "n": 2833,
+   "meanDelta": 0.7641471017351504,
+   "maxDelta": 2.469019607843137
+  },
+  "elementary ±50m": {
+   "n": 2833,
+   "meanDelta": 1.000154198268501,
+   "maxDelta": 1.608513867856061
+  }
+ },
+ "weightSensitivity": {
+  "transport+5pp": {
+   "top100Overlap": 93,
+   "medianDelta": 0.6794961973086941
+  },
+  "transport-5pp": {
+   "top100Overlap": 92,
+   "medianDelta": 0.6794961973087084
+  },
+  "living+5pp": {
+   "top100Overlap": 95,
+   "medianDelta": 0.5525925587501135
+  },
+  "living-5pp": {
+   "top100Overlap": 95,
+   "medianDelta": 0.5525925587501135
+  },
+  "education+5pp": {
+   "top100Overlap": 93,
+   "medianDelta": 0.7380007646329503
+  },
+  "education-5pp": {
+   "top100Overlap": 91,
+   "medianDelta": 0.7388304860868118
+  },
+  "complex+5pp": {
+   "top100Overlap": 90,
+   "medianDelta": 0.8256832588552001
+  },
+  "complex-5pp": {
+   "top100Overlap": 92,
+   "medianDelta": 0.8256832588552072
+  }
+ },
+ "rankStability": {
+  "W-A_BALANCED_vs_W-B_LOCATION": {
+   "spearman": 0.9931578109320132,
+   "top50Overlap": 43
+  },
+  "W-A_BALANCED_vs_W-C_RESIDENTIAL": {
+   "spearman": 0.9769925843655072,
+   "top50Overlap": 40
+  },
+  "W-A_BALANCED_vs_W-D_DATA_QUALITY_AWARE": {
+   "spearman": 0.9963887164700156,
+   "top50Overlap": 46
+  },
+  "W-B_LOCATION_vs_W-C_RESIDENTIAL": {
+   "spearman": 0.9737369239536905,
+   "top50Overlap": 38
+  },
+  "W-B_LOCATION_vs_W-D_DATA_QUALITY_AWARE": {
+   "spearman": 0.9961017583738626,
+   "top50Overlap": 44
+  },
+  "W-C_RESIDENTIAL_vs_W-D_DATA_QUALITY_AWARE": {
+   "spearman": 0.9619372453768198,
+   "top50Overlap": 36
+  }
+ },
+ "confidenceFairness": {
+  "top100ConfDist": {
+   "HIGH": 100
+  },
+  "overallConfDist": {
+   "HIGH": 2833
+  }
+ }
+}

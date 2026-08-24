@@ -1,0 +1,41 @@
+{
+ "generatedAt": "2026-08-24T05:40:25.613Z",
+ "eraNeutralByAgeBand": {
+  "0-10": 65.23118253142928,
+  "21-30": 52.58029349811809,
+  "11-20": 67.83595755676676,
+  "31+": 21.709814815392207
+ },
+ "fairnessResults": {
+  "P-A_M3_GLOBAL_NEUTRAL": {
+   "overallGap": 1.9750789623382872,
+   "ageControlledGapMean": -1.110322368794023,
+   "matchedGap": -3.632048878665048,
+   "matchedCellCount": 34
+  },
+  "P-B_M1_BOUNDED_REDIST": {
+   "overallGap": 2.337271167305559,
+   "ageControlledGapMean": -1.068734815583845,
+   "matchedGap": -3.772623904311148,
+   "matchedCellCount": 34
+  },
+  "P-C_M2_PARTIAL_FIXED": {
+   "overallGap": 4.801298989356205,
+   "ageControlledGapMean": 1.6707194150101756,
+   "matchedGap": -1.748673907054782,
+   "matchedCellCount": 34
+  },
+  "P-D_ERA_CONDITIONED": {
+   "overallGap": 2.1901986570282688,
+   "ageControlledGapMean": -1.1782605381974243,
+   "matchedGap": -3.7255900488349774,
+   "matchedCellCount": 34
+  },
+  "P-E_SCALE_ERA_CONSERVATIVE": {
+   "overallGap": 2.5686084713190525,
+   "ageControlledGapMean": -0.7062298294119103,
+   "matchedGap": -3.207281484800529,
+   "matchedCellCount": 34
+  }
+ }
+}

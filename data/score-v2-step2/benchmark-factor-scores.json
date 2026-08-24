@@ -1,0 +1,3461 @@
+{
+ "generatedAt": "2026-08-24T04:21:22.685Z",
+ "benchmarkCount": 41,
+ "benchmarks": [
+  {
+   "aptSeq": "26110-881",
+   "name": "코모도에스테이트",
+   "sigungu": "중구",
+   "umdName": "대청동1가",
+   "raw": {
+    "subwayRaw": 327,
+    "age": 13,
+    "households": 268,
+    "parkingRatio": 0.8731343283582089,
+    "elemRaw": 133
+   },
+   "factors": {
+    "subway": 65.3,
+    "bus": 75.43813066087787,
+    "age": 69.4,
+    "scale": 64.12,
+    "parking": 40.11940298507462,
+    "elementary": 80.31792234761127
+   },
+   "domains": {
+    "transport": {
+     "score": 68.34143919826336,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 62.8959104477612,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 80.31792234761127,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 73.97592753443107,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26110-881",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26140-1353",
+   "name": "비스타동원더비치테라스",
+   "sigungu": "서구",
+   "umdName": "암남동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 3,
+    "households": 295,
+    "parkingRatio": 1.2779661016949153,
+    "elemRaw": 403
+   },
+   "factors": {
+    "subway": null,
+    "bus": 57.19542514728509,
+    "age": 92,
+    "scale": 66.55,
+    "parking": 72.67796610169492,
+    "elementary": 53.552641139096394
+   },
+   "domains": {
+    "transport": {
+     "score": 57.19542514728509,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 78.92169491525424,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 53.552641139096394,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 35.42408666806903,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-1353",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26170-41",
+   "name": "아름빌106동",
+   "sigungu": "동구",
+   "umdName": "범일동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 23,
+    "households": 16,
+    "parkingRatio": null,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": null,
+    "age": 49.6,
+    "scale": 20.6,
+    "parking": null,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "subway",
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 35.95294117647059,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ]
+    }
+   },
+   "quality": {
+    "aptSeq": "26170-41",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_LOW",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "DISPLAY_ONLY",
+    "transportPeerEligible": false,
+    "livePeerEligible": false,
+    "schoolPeerEligible": false,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26200-20",
+   "name": "샛별나동",
+   "sigungu": "영도구",
+   "umdName": "신선동2가",
+   "raw": {
+    "subwayRaw": null,
+    "age": 45,
+    "households": 30,
+    "parkingRatio": null,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": null,
+    "age": 16,
+    "scale": 25.333333333333332,
+    "parking": null,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "subway",
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 20.392156862745097,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ]
+    }
+   },
+   "quality": {
+    "aptSeq": "26200-20",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_LOW",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "DISPLAY_ONLY",
+    "transportPeerEligible": false,
+    "livePeerEligible": false,
+    "schoolPeerEligible": false,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-136",
+   "name": "엘지신개금(2-2)",
+   "sigungu": "부산진구",
+   "umdName": "개금동",
+   "raw": {
+    "subwayRaw": 382,
+    "age": 27,
+    "households": 819,
+    "parkingRatio": 1.0695970695970696,
+    "elemRaw": 161
+   },
+   "factors": {
+    "subway": 59.8,
+    "bus": 48.6047449871113,
+    "age": 42.4,
+    "scale": 85.98333333333333,
+    "parking": 55.56776556776556,
+    "elementary": 78.32058015747498
+   },
+   "domains": {
+    "transport": {
+     "score": 56.44142349613338,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 61.80849816849817,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 78.32058015747498,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 56.64940361706563,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-136",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26260-151",
+   "name": "에스케이쁘띠메종",
+   "sigungu": "동래구",
+   "umdName": "안락동",
+   "raw": {
+    "subwayRaw": 566,
+    "age": 26,
+    "households": 346,
+    "parkingRatio": 1.0260115606936415,
+    "elemRaw": 247
+   },
+   "factors": {
+    "subway": 43.38,
+    "bus": 81.05347446897488,
+    "age": 44.2,
+    "scale": 69.53,
+    "parking": 52.08092485549132,
+    "elementary": 70.93094652398267
+   },
+   "domains": {
+    "transport": {
+     "score": 54.68204234069246,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 55.514138728323694,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 70.93094652398267,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 56.729263883366855,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26260-151",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26290-261",
+   "name": "동림리라",
+   "sigungu": "남구",
+   "umdName": "우암동",
+   "raw": {
+    "subwayRaw": 677,
+    "age": 42,
+    "households": 69,
+    "parkingRatio": null,
+    "elemRaw": 596
+   },
+   "factors": {
+    "subway": 35.61,
+    "bus": 73.71386529496291,
+    "age": 18.4,
+    "scale": 36.94,
+    "parking": null,
+    "elementary": 31.779966092022615
+   },
+   "domains": {
+    "transport": {
+     "score": 47.041159588488874,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 27.12470588235294,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 31.779966092022615,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 34.342185038109776,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26290-261",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26320-137",
+   "name": "삼한힐파크",
+   "sigungu": "북구",
+   "umdName": "화명동",
+   "raw": {
+    "subwayRaw": 470,
+    "age": 23,
+    "households": 807,
+    "parkingRatio": 1.117719950433705,
+    "elemRaw": 191
+   },
+   "factors": {
+    "subway": 51,
+    "bus": 76.24819019626733,
+    "age": 49.6,
+    "scale": 85.78333333333333,
+    "parking": 59.77199504337049,
+    "elementary": 75.95769389876027
+   },
+   "domains": {
+    "transport": {
+     "score": 58.5744570588802,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 65.5991325898389,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 75.95769389876027,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 45.561841918331325,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26320-137",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26350-2582",
+   "name": "협성루에나센텀",
+   "sigungu": "해운대구",
+   "umdName": "재송동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 3,
+    "households": 152,
+    "parkingRatio": null,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": null,
+    "age": 92,
+    "scale": 51.76,
+    "parking": null,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "subway",
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 73.0635294117647,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ]
+    }
+   },
+   "quality": {
+    "aptSeq": "26350-2582",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_LOW",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "DISPLAY_ONLY",
+    "transportPeerEligible": false,
+    "livePeerEligible": false,
+    "schoolPeerEligible": false,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26380-242",
+   "name": "몰운대",
+   "sigungu": "사하구",
+   "umdName": "다대동",
+   "raw": {
+    "subwayRaw": 386,
+    "age": 30,
+    "households": 748,
+    "parkingRatio": null,
+    "elemRaw": 64
+   },
+   "factors": {
+    "subway": 59.4,
+    "bus": 87.0144319836623,
+    "age": 37,
+    "scale": 84.8,
+    "parking": null,
+    "elementary": 84.42463430920105
+   },
+   "domains": {
+    "transport": {
+     "score": 67.68432959509869,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 59.49411764705883,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 84.42463430920105,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 52.628082185308415,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26380-242",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26410-2499",
+   "name": "윤성리버티",
+   "sigungu": "금정구",
+   "umdName": "장전동",
+   "raw": {
+    "subwayRaw": 398,
+    "age": 7,
+    "households": 80,
+    "parkingRatio": null,
+    "elemRaw": 469
+   },
+   "factors": {
+    "subway": 58.2,
+    "bus": 71.44815039948881,
+    "age": 83.2,
+    "scale": 39.8,
+    "parking": null,
+    "elementary": 45.61546131152354
+   },
+   "domains": {
+    "transport": {
+     "score": 62.174445119846645,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 62.77647058823529,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 45.61546131152354,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 81.1285737428985,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26410-2499",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26440-114",
+   "name": "외진가센트럴타워",
+   "sigungu": "강서구",
+   "umdName": "대저1동",
+   "raw": {
+    "subwayRaw": 300,
+    "age": 7,
+    "households": 77,
+    "parkingRatio": null,
+    "elemRaw": 261
+   },
+   "factors": {
+    "subway": 68,
+    "bus": 69.11235198295361,
+    "age": 83.2,
+    "scale": 39.02,
+    "parking": null,
+    "elementary": 69.55358690306181
+   },
+   "domains": {
+    "transport": {
+     "score": 68.33370559488608,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 62.40941176470588,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 69.55358690306181,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 24.4605972378338,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26440-114",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26470-1160",
+   "name": "해운그린빌",
+   "sigungu": "연제구",
+   "umdName": "연산동",
+   "raw": {
+    "subwayRaw": 422,
+    "age": 14,
+    "households": 23,
+    "parkingRatio": null,
+    "elemRaw": 170
+   },
+   "factors": {
+    "subway": 55.8,
+    "bus": 27.85475812939321,
+    "age": 67.2,
+    "scale": 23,
+    "parking": null,
+    "elementary": 77.63608771712528
+   },
+   "domains": {
+    "transport": {
+     "score": 47.41642743881796,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 46.400000000000006,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 77.63608771712528,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 80.4295662640991,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26470-1160",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26500-100",
+   "name": "복음",
+   "sigungu": "수영구",
+   "umdName": "망미동",
+   "raw": {
+    "subwayRaw": 791,
+    "age": 45,
+    "households": 48,
+    "parkingRatio": null,
+    "elemRaw": 307
+   },
+   "factors": {
+    "subway": 28.54,
+    "bus": null,
+    "age": 16,
+    "scale": 31.333333333333336,
+    "parking": null,
+    "elementary": 64.72273062232915
+   },
+   "domains": {
+    "transport": {
+     "score": 28.54,
+     "coverage": 1,
+     "usedFactors": [
+      "subway"
+     ],
+     "missingFactors": [
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 23.215686274509807,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 64.72273062232915,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 41.05969945938198,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26500-100",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26530-1012",
+   "name": "사상센텀아파트",
+   "sigungu": "사상구",
+   "umdName": "괘법동",
+   "raw": {
+    "subwayRaw": 295,
+    "age": 9,
+    "households": 48,
+    "parkingRatio": null,
+    "elemRaw": 197
+   },
+   "factors": {
+    "subway": 68.63333333333333,
+    "bus": 55.752619158331434,
+    "age": 78.4,
+    "scale": 31.333333333333336,
+    "parking": null,
+    "elementary": 75.45723785717959
+   },
+   "domains": {
+    "transport": {
+     "score": 64.76911908083275,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 56.25098039215686,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 75.45723785717959,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 71.7710280915263,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26530-1012",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26710-640",
+   "name": "일광대성베르힐",
+   "sigungu": "기장군",
+   "umdName": "일광읍 삼성리",
+   "raw": {
+    "subwayRaw": null,
+    "age": 6,
+    "households": 518,
+    "parkingRatio": 1.2625482625482625,
+    "elemRaw": 532
+   },
+   "factors": {
+    "subway": null,
+    "bus": 68.09470013957728,
+    "age": 85.6,
+    "scale": 78.54,
+    "parking": 71.75289575289575,
+    "elementary": 38.38703031721756
+   },
+   "domains": {
+    "transport": {
+     "score": 68.09470013957728,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 80.69893436293437,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 38.38703031721756,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 33.333304705228684,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26710-640",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26140-1290",
+   "name": "대신푸르지오2차",
+   "sigungu": "서구",
+   "umdName": "서대신동2가",
+   "raw": {
+    "subwayRaw": 212,
+    "age": 5,
+    "households": 815,
+    "parkingRatio": 1.158282208588957,
+    "elemRaw": 711
+   },
+   "factors": {
+    "subway": 79.14666666666666,
+    "bus": 67.72403765926995,
+    "age": 88,
+    "scale": 85.91666666666667,
+    "parking": 63.828220858895705,
+    "elementary": 22.41286289670255
+   },
+   "domains": {
+    "transport": {
+     "score": 75.71987796444765,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 83.54089979550102,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 22.41286289670255,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 62.27097594919377,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-1290",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26140-1356",
+   "name": "대신해모로센트럴아파트",
+   "sigungu": "서구",
+   "umdName": "서대신동2가",
+   "raw": {
+    "subwayRaw": 140,
+    "age": 4,
+    "households": 733,
+    "parkingRatio": 1.0914051841746248,
+    "elemRaw": 545
+   },
+   "factors": {
+    "subway": 87.6,
+    "bus": 83.77661503963404,
+    "age": 90,
+    "scale": 84.55,
+    "parking": 57.31241473396998,
+    "elementary": 36.9749249899004
+   },
+   "domains": {
+    "transport": {
+     "score": 86.45298451189021,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 82.91686221009549,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 36.9749249899004,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 60.689825396851575,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-1356",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26140-1361",
+   "name": "e편한세상송도더퍼스트비치",
+   "sigungu": "서구",
+   "umdName": "암남동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 2,
+    "households": 1302,
+    "parkingRatio": 1.2672811059907834,
+    "elemRaw": 208
+   },
+   "factors": {
+    "subway": null,
+    "bus": 72.72853348498256,
+    "age": 93,
+    "scale": 90.812,
+    "parking": 72.036866359447,
+    "elementary": 74.51567661503077
+   },
+   "domains": {
+    "transport": {
+     "score": 72.72853348498256,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 88.98032995391705,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 74.51567661503077,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 37.691312750703595,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-1361",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-141",
+   "name": "개금주공2",
+   "sigungu": "부산진구",
+   "umdName": "개금동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 38,
+    "households": 2544,
+    "parkingRatio": null,
+    "elemRaw": 322
+   },
+   "factors": {
+    "subway": null,
+    "bus": 75.7774029588578,
+    "age": 23.2,
+    "scale": 94.544,
+    "parking": null,
+    "elementary": 63.05757605265255
+   },
+   "domains": {
+    "transport": {
+     "score": 75.7774029588578,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 56.77364705882353,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 63.05757605265255,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 24.515123966397592,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-141",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-108",
+   "name": "벽산1",
+   "sigungu": "부산진구",
+   "umdName": "가야동",
+   "raw": {
+    "subwayRaw": 854,
+    "age": 35,
+    "households": 936,
+    "parkingRatio": 0.6805555555555556,
+    "elemRaw": 216
+   },
+   "factors": {
+    "subway": 25.84,
+    "bus": 35.89956498459627,
+    "age": 28,
+    "scale": 87.93333333333334,
+    "parking": 26.736111111111114,
+    "elementary": 73.81145704304517
+   },
+   "domains": {
+    "transport": {
+     "score": 28.85786949537888,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 51.783750000000005,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 73.81145704304517,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 48.1234761456423,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-108",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-127",
+   "name": "개금우드빌",
+   "sigungu": "부산진구",
+   "umdName": "개금동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 32,
+    "households": 640,
+    "parkingRatio": 0.525,
+    "elemRaw": 425
+   },
+   "factors": {
+    "subway": null,
+    "bus": 69.68276909142578,
+    "age": 33.4,
+    "scale": 82.2,
+    "parking": 16.625,
+    "elementary": 50.89587217850132
+   },
+   "domains": {
+    "transport": {
+     "score": 69.68276909142578,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 50.40375,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 50.89587217850132,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 22.119104963928983,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-127",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-2507",
+   "name": "서면라이포레",
+   "sigungu": "부산진구",
+   "umdName": "범천동",
+   "raw": {
+    "subwayRaw": 102,
+    "age": 9,
+    "households": 69,
+    "parkingRatio": null,
+    "elemRaw": 313
+   },
+   "factors": {
+    "subway": 89.88,
+    "bus": 68.13205675987302,
+    "age": 78.4,
+    "scale": 36.94,
+    "parking": null,
+    "elementary": 64.06143032373961
+   },
+   "domains": {
+    "transport": {
+     "score": 83.3556170279619,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 58.88941176470588,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 64.06143032373961,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 72.73217219971464,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-2507",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-240",
+   "name": "서면롯데캐슬스카이",
+   "sigungu": "부산진구",
+   "umdName": "전포동",
+   "raw": {
+    "subwayRaw": 136,
+    "age": 22,
+    "households": 1395,
+    "parkingRatio": 0.9541218637992831,
+    "elemRaw": 266
+   },
+   "factors": {
+    "subway": 87.84,
+    "bus": 78.46185572401139,
+    "age": 51.4,
+    "scale": 91.37,
+    "parking": 46.329749103942646,
+    "elementary": 69.05061848254003
+   },
+   "domains": {
+    "transport": {
+     "score": 85.02655671720342,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 66.6274623655914,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 69.05061848254003,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 75.75597563051443,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-240",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26470-1331",
+   "name": "해운파크빌",
+   "sigungu": "연제구",
+   "umdName": "연산동",
+   "raw": {
+    "subwayRaw": 419,
+    "age": 12,
+    "households": 29,
+    "parkingRatio": null,
+    "elemRaw": 164
+   },
+   "factors": {
+    "subway": 56.1,
+    "bus": 35.90879185082532,
+    "age": 71.6,
+    "scale": 25,
+    "parking": null,
+    "elementary": 78.09473023103841
+   },
+   "domains": {
+    "transport": {
+     "score": 50.042637555247595,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 49.67058823529412,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 78.09473023103841,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 81.28794165917033,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26470-1331",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26350-271",
+   "name": "에이스빌라",
+   "sigungu": "해운대구",
+   "umdName": "중동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 35,
+    "households": null,
+    "parkingRatio": null,
+    "elemRaw": 602
+   },
+   "factors": {
+    "subway": null,
+    "bus": 70.7522304253641,
+    "age": 28,
+    "scale": null,
+    "parking": null,
+    "elementary": 31.208334092629656
+   },
+   "domains": {
+    "transport": {
+     "score": 70.7522304253641,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 28,
+     "coverage": 0.75,
+     "usedFactors": [
+      "age"
+     ],
+     "missingFactors": [
+      "scale",
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 31.208334092629656,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 43.27312225495436,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26350-271",
+    "identity": "IDENTITY_LOW",
+    "coord": "COORD_HIGH",
+    "registryLinked": false,
+    "registryAttempted": false,
+    "marketEvidence": "WEAK",
+    "hasAddress": false,
+    "peerEligibility": "PEER_LIMITED",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26350-2093",
+   "name": "더샵센텀파크1차",
+   "sigungu": "해운대구",
+   "umdName": "재송동",
+   "raw": {
+    "subwayRaw": 215,
+    "age": 21,
+    "households": 2752,
+    "parkingRatio": 1.6656976744186047,
+    "elemRaw": 277
+   },
+   "factors": {
+    "subway": 78.76666666666667,
+    "bus": 88.26987894828012,
+    "age": 53.2,
+    "scale": 94.752,
+    "parking": 88.98546511627907,
+    "elementary": 67.92428120374447
+   },
+   "domains": {
+    "transport": {
+     "score": 81.6176303511507,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 75.18861976744186,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 67.92428120374447,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 53.30586141610068,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26350-2093",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26350-2285",
+   "name": "해운대힐스테이트위브",
+   "sigungu": "해운대구",
+   "umdName": "중동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 11,
+    "households": 2369,
+    "parkingRatio": 1.6509075559307724,
+    "elemRaw": 466
+   },
+   "factors": {
+    "subway": null,
+    "bus": 57.351561719882994,
+    "age": 73.8,
+    "scale": 94.369,
+    "parking": 88.76361333896159,
+    "elementary": 45.97172100127542
+   },
+   "domains": {
+    "transport": {
+     "score": 57.351561719882994,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 84.27214200084424,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 45.97172100127542,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 51.04052888584789,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26350-2285",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-1802",
+   "name": "서면세종그랑시아",
+   "sigungu": "부산진구",
+   "umdName": "전포동",
+   "raw": {
+    "subwayRaw": 156,
+    "age": 17,
+    "households": 290,
+    "parkingRatio": 1.6,
+    "elemRaw": 291
+   },
+   "factors": {
+    "subway": 86.24,
+    "bus": 54.221637934572975,
+    "age": 61,
+    "scale": 66.1,
+    "parking": 88,
+    "elementary": 66.4529138035524
+   },
+   "domains": {
+    "transport": {
+     "score": 76.63449138037188,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 67.09,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 66.4529138035524,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 66.68195657823118,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-1802",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26350-135",
+   "name": "LH뜨란채아파트",
+   "sigungu": "해운대구",
+   "umdName": "좌동",
+   "raw": {
+    "subwayRaw": 795,
+    "age": 29,
+    "households": 928,
+    "parkingRatio": 0.5894396551724138,
+    "elemRaw": 115
+   },
+   "factors": {
+    "subway": 28.3,
+    "bus": 87.0144319836623,
+    "age": 38.8,
+    "scale": 87.8,
+    "parking": 20.8135775862069,
+    "elementary": 81.49827457737256
+   },
+   "domains": {
+    "transport": {
+     "score": 45.91432959509869,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 55.70203663793103,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 81.49827457737256,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 52.11248786035014,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26350-135",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-1905",
+   "name": "블루스카이",
+   "sigungu": "부산진구",
+   "umdName": "가야동",
+   "raw": {
+    "subwayRaw": 557,
+    "age": 15,
+    "households": 55,
+    "parkingRatio": 0.2545454545454545,
+    "elemRaw": 310
+   },
+   "factors": {
+    "subway": 44.01,
+    "bus": 44.10161365858672,
+    "age": 65,
+    "scale": 33.3,
+    "parking": 10.09090909090909,
+    "elementary": 64.39289712814579
+   },
+   "domains": {
+    "transport": {
+     "score": 44.03748409757601,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 44.083636363636366,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 64.39289712814579,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 50.53798660572207,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-1905",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26350-32",
+   "name": "명유그린",
+   "sigungu": "해운대구",
+   "umdName": "재송동",
+   "raw": {
+    "subwayRaw": 797,
+    "age": 33,
+    "households": 90,
+    "parkingRatio": null,
+    "elemRaw": 110
+   },
+   "factors": {
+    "subway": 28.18,
+    "bus": 44.65244141657828,
+    "age": 31.6,
+    "scale": 42.4,
+    "parking": null,
+    "elementary": 81.81209205533204
+   },
+   "domains": {
+    "transport": {
+     "score": 33.12173242497348,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 36.682352941176475,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 81.81209205533204,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 60.04009599950338,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26350-32",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-42",
+   "name": "대진파레스필즈",
+   "sigungu": "부산진구",
+   "umdName": "초읍동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 34,
+    "households": 160,
+    "parkingRatio": 0.825,
+    "elemRaw": 829
+   },
+   "factors": {
+    "subway": null,
+    "bus": 67.74275360939127,
+    "age": 29.8,
+    "scale": 52.8,
+    "parking": 36.75,
+    "elementary": 16.130131056266805
+   },
+   "domains": {
+    "transport": {
+     "score": 67.74275360939127,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 40.042500000000004,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 16.130131056266805,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 8.116250541355894,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-42",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-1610",
+   "name": "그린파크",
+   "sigungu": "부산진구",
+   "umdName": "초읍동",
+   "raw": {
+    "subwayRaw": null,
+    "age": 21,
+    "households": null,
+    "parkingRatio": null,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": null,
+    "age": 53.2,
+    "scale": null,
+    "parking": null,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "subway",
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 53.2,
+     "coverage": 0.75,
+     "usedFactors": [
+      "age"
+     ],
+     "missingFactors": [
+      "scale",
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ]
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-1610",
+    "identity": "IDENTITY_UNRESOLVED",
+    "coord": "COORD_LOW",
+    "registryLinked": false,
+    "registryAttempted": false,
+    "marketEvidence": "ZERO",
+    "hasAddress": false,
+    "peerEligibility": "DISPLAY_ONLY",
+    "transportPeerEligible": false,
+    "livePeerEligible": false,
+    "schoolPeerEligible": false,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": false
+   }
+  },
+  {
+   "aptSeq": "26230-264",
+   "name": "삼성비치타운",
+   "sigungu": "부산진구",
+   "umdName": "부전동",
+   "raw": {
+    "subwayRaw": 219,
+    "age": 22,
+    "households": 79,
+    "parkingRatio": null,
+    "elemRaw": 211
+   },
+   "factors": {
+    "subway": 78.26,
+    "bus": 80.44280916784214,
+    "age": 51.4,
+    "scale": 39.54,
+    "parking": null,
+    "elementary": 74.25350592788628
+   },
+   "domains": {
+    "transport": {
+     "score": 78.91484275035265,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 45.81882352941176,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 74.25350592788628,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 82.66577753022834,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-264",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26230-352",
+   "name": "한솔폴라리스",
+   "sigungu": "부산진구",
+   "umdName": "부전동",
+   "raw": {
+    "subwayRaw": 339,
+    "age": 21,
+    "households": 358,
+    "parkingRatio": null,
+    "elemRaw": 217
+   },
+   "factors": {
+    "subway": 64.1,
+    "bus": null,
+    "age": 53.2,
+    "scale": 70.19,
+    "parking": null,
+    "elementary": 73.72228495798066
+   },
+   "domains": {
+    "transport": {
+     "score": 64.1,
+     "coverage": 1,
+     "usedFactors": [
+      "subway"
+     ],
+     "missingFactors": [
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 61.195294117647066,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale"
+     ],
+     "missingFactors": [
+      "parking"
+     ]
+    },
+    "education": {
+     "score": 73.72228495798066,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 84.40168546955206,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26230-352",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26710-570",
+   "name": "명례솔터시티",
+   "sigungu": "기장군",
+   "umdName": "장안읍 명례리",
+   "raw": {
+    "subwayRaw": null,
+    "age": 10,
+    "households": null,
+    "parkingRatio": null,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": 38.10718224058668,
+    "age": 76,
+    "scale": null,
+    "parking": null,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": 38.10718224058668,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 76,
+     "coverage": 0.75,
+     "usedFactors": [
+      "age"
+     ],
+     "missingFactors": [
+      "scale",
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 4.534452165269133,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26710-570",
+    "identity": "IDENTITY_LOW",
+    "coord": "COORD_HIGH",
+    "registryLinked": false,
+    "registryAttempted": false,
+    "marketEvidence": "STRONG",
+    "hasAddress": false,
+    "peerEligibility": "PEER_LIMITED",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26710-666",
+   "name": "쌍용더플래티넘오시리아",
+   "sigungu": "기장군",
+   "umdName": "기장읍 연화리",
+   "raw": {
+    "subwayRaw": null,
+    "age": 2,
+    "households": 191,
+    "parkingRatio": 1.3717277486910995,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": 63.47533067109188,
+    "age": 93,
+    "scale": 56.83,
+    "parking": 78.30366492146598,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": 63.47533067109188,
+     "coverage": 0.5,
+     "usedFactors": [
+      "bus"
+     ],
+     "missingFactors": [
+      "subway"
+     ]
+    },
+    "complex": {
+     "score": 76.32754973821989,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 9.156468924218313,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26710-666",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "WEAK",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26140-1202",
+   "name": "일광",
+   "sigungu": "서구",
+   "umdName": "아미동2가",
+   "raw": {
+    "subwayRaw": null,
+    "age": 10,
+    "households": null,
+    "parkingRatio": null,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": null,
+    "age": 76,
+    "scale": null,
+    "parking": null,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "subway",
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 76,
+     "coverage": 0.75,
+     "usedFactors": [
+      "age"
+     ],
+     "missingFactors": [
+      "scale",
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ]
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-1202",
+    "identity": "IDENTITY_LOW",
+    "coord": "COORD_LOW",
+    "registryLinked": false,
+    "registryAttempted": false,
+    "marketEvidence": "WEAK",
+    "hasAddress": false,
+    "peerEligibility": "DISPLAY_ONLY",
+    "transportPeerEligible": false,
+    "livePeerEligible": false,
+    "schoolPeerEligible": false,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26140-51",
+   "name": "협성르네상스",
+   "sigungu": "서구",
+   "umdName": "서대신동3가",
+   "raw": {
+    "subwayRaw": 306,
+    "age": 25,
+    "households": 489,
+    "parkingRatio": 1.5848670756646217,
+    "elemRaw": 341
+   },
+   "factors": {
+    "subway": 67.4,
+    "bus": 82.9258054731664,
+    "age": 46,
+    "scale": 77.395,
+    "parking": 87.39468302658487,
+    "elementary": 60.895499174687906
+   },
+   "domains": {
+    "transport": {
+     "score": 72.05774164194992,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 64.76720245398774,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 60.895499174687906,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 58.44030280510901,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-51",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  {
+   "aptSeq": "26140-11",
+   "name": "구덕금호",
+   "sigungu": "서구",
+   "umdName": "동대신동3가",
+   "raw": {
+    "subwayRaw": null,
+    "age": 25,
+    "households": null,
+    "parkingRatio": null,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": null,
+    "age": 46,
+    "scale": null,
+    "parking": null,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "subway",
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 46,
+     "coverage": 0.75,
+     "usedFactors": [
+      "age"
+     ],
+     "missingFactors": [
+      "scale",
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ]
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-11",
+    "identity": "IDENTITY_LOW",
+    "coord": "COORD_LOW",
+    "registryLinked": false,
+    "registryAttempted": false,
+    "marketEvidence": "WEAK",
+    "hasAddress": false,
+    "peerEligibility": "DISPLAY_ONLY",
+    "transportPeerEligible": false,
+    "livePeerEligible": false,
+    "schoolPeerEligible": false,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  }
+ ],
+ "coreBenchmarks": {
+  "대신해모": {
+   "raw": {
+    "subwayRaw": 140,
+    "age": 4,
+    "households": 733,
+    "parkingRatio": 1.0914051841746248,
+    "elemRaw": 545
+   },
+   "factors": {
+    "subway": 87.6,
+    "bus": 83.77661503963404,
+    "age": 90,
+    "scale": 84.55,
+    "parking": 57.31241473396998,
+    "elementary": 36.9749249899004
+   },
+   "domains": {
+    "transport": {
+     "score": 86.45298451189021,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 82.91686221009549,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 36.9749249899004,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 60.689825396851575,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-1356",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  "협성": {
+   "raw": {
+    "subwayRaw": 306,
+    "age": 25,
+    "households": 489,
+    "parkingRatio": 1.5848670756646217,
+    "elemRaw": 341
+   },
+   "factors": {
+    "subway": 67.4,
+    "bus": 82.9258054731664,
+    "age": 46,
+    "scale": 77.395,
+    "parking": 87.39468302658487,
+    "elementary": 60.895499174687906
+   },
+   "domains": {
+    "transport": {
+     "score": 72.05774164194992,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 64.76720245398774,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 60.895499174687906,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary"
+     ],
+     "missingFactors": [
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": 58.44030280510901,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-51",
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "registryLinked": true,
+    "registryAttempted": true,
+    "marketEvidence": "STRONG",
+    "hasAddress": true,
+    "peerEligibility": "PEER_FULL",
+    "transportPeerEligible": true,
+    "livePeerEligible": true,
+    "schoolPeerEligible": true,
+    "parkingPeerEligible": true,
+    "complexPeerEligible": true
+   }
+  },
+  "구덕금호": {
+   "raw": {
+    "subwayRaw": null,
+    "age": 25,
+    "households": null,
+    "parkingRatio": null,
+    "elemRaw": null
+   },
+   "factors": {
+    "subway": null,
+    "bus": null,
+    "age": 46,
+    "scale": null,
+    "parking": null,
+    "elementary": null
+   },
+   "domains": {
+    "transport": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "subway",
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 46,
+     "coverage": 0.75,
+     "usedFactors": [
+      "age"
+     ],
+     "missingFactors": [
+      "scale",
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ]
+    }
+   },
+   "quality": {
+    "aptSeq": "26140-11",
+    "identity": "IDENTITY_LOW",
+    "coord": "COORD_LOW",
+    "registryLinked": false,
+    "registryAttempted": false,
+    "marketEvidence": "WEAK",
+    "hasAddress": false,
+    "peerEligibility": "DISPLAY_ONLY",
+    "transportPeerEligible": false,
+    "livePeerEligible": false,
+    "schoolPeerEligible": false,
+    "parkingPeerEligible": false,
+    "complexPeerEligible": true
+   }
+  }
+ },
+ "sanity": {
+  "ultraSubwayLowTransport": 0,
+  "highParkingLowParking": 0,
+  "newAgeLowAge": 0,
+  "largeScaleLowScale": 0,
+  "closeSchoolLowEducation": 0
+ },
+ "ultraLowCasesCount": 0
+}
