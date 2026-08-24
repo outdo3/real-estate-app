@@ -35,6 +35,10 @@ model User {
   posts    Post[]
   comments Comment[]
 
+  favorites      Favorite[]
+  recentViews    RecentView[]
+  userPreference UserPreference?
+
   @@map("users")
 }
 
@@ -1068,3 +1072,52 @@ model ChildcareStat {
   @@index([sourceId])
   @@map("childcare_stats")
 }
+
+// ??????????????????????????????????????????????????????????????????????????
+// AUTH/MY V1 - 사용자 계정 개인 데이터
+// ??????????????????????????????????????????????????????????????????????????
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  lawdCd    String   @map("lawd_cd")
+  dong      String
+  name      String
+  aptSeq    String?  @map("apt_seq")
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lawdCd, dong, name])
+  @@index([userId, createdAt(desc)])
+  @@map("favorites")
+}
+
+model RecentView {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  lawdCd    String   @map("lawd_cd")
+  dong      String
+  name      String
+  aptSeq    String?  @map("apt_seq")
+  address   String?
+  viewedAt  DateTime @default(now()) @map("viewed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lawdCd, dong, name])
+  @@index([userId, viewedAt(desc)])
+  @@map("recent_views")
+}
+
+model UserPreference {
+  userId    String   @id @map("user_id")
+  purposes  Json     @default("[]")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
