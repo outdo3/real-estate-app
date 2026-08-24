@@ -7014,3 +7014,97 @@ schema.prisma만(애플리케이션 코드 변경 0건). 외부 API 호출: 0건
 **SCHOOL_V2_C1_CLOSE** — BLOCKER 없음. `DB_SCHEMA_READY = YES`(7개
 core 테이블 기준). 다음 ingestion STEP(SCHOOL V2-C3A 어린이집 등)은
 자동 진행하지 않고 대기.
+
+## 2026-08-21 (21)
+
+### SCHOOL V2-C3A — 어린이집 공식 데이터 ingestion 파이프라인 구축(BLOCKER로 실 데이터 0건)
+
+**부산 어린이집 실 데이터는 아직 0건이다.** 공식 source(한국사회보장
+정보원 "전국 어린이집 정보조회", `cpmsapi021`)의 실제 서비스
+명세서(.doc)를 직접 다운로드해 endpoint·요청/응답 필드를 실측하고,
+`EducationSource`에 라이선스 확인 근거와 함께 `legalReviewStatus =
+CLEARED`로 등록했으며, ingestion 스크립트(`scripts/education/
+ingest-childcare.ts`, `register-childcare-source.ts`,
+`verify-childcare-normalization.ts`)를 실제로 구현·실행했다.
+
+**BLOCKER**: 이 API는 `apis.data.go.kr`이 아니라 별도 도메인
+(`api.childcare.go.kr`)에서 서비스되며 전용 활용신청(승인심의) 키가
+필요하다 — 기존 `DATA_GO_KR_API_KEY`로 실제 1회 호출 테스트한 결과
+`INFO-100`(인증키 유효하지 않음) 확인. 신규 키 발급은 사용자 승인
+없이 진행하지 않았다.
+
+부수 발견: 이 라이브 API의 실제 응답은 시설코드/명칭/주소/정원/
+시군구코드뿐이고(위경도·현원·교직원수·CCTV·통학차량 없음), 그
+풍부한 필드는 별도 표준데이터셋(`15013108`)의 설명이며 이번 STEP에서
+그 데이터셋의 실제 배포 경로까지는 확인하지 못했다 — SCHOOL V2-B/
+V2-C 문서에 정정 반영.
+
+DB 변경: `EducationSource` 1행 추가(실제 확인된 메타데이터, 승인
+근거 문서화). `Childcare`/`ChildcareStat`은 **0행 그대로**(가짜/추정
+데이터 생성 없음). schema.prisma 변경 없음(C1 schema로 충분,
+phone/homepage 등 2개 필드만 "source엔 있으나 컬럼 없어 IGNORED"로
+문서에 기록, 임의 migration 안 함).
+
+검증: `scripts/education/verify-childcare-normalization.ts`(공식
+명세서 실제 예제 3건 기준 정규화 로직 17개 assertion 전부 PASS),
+`tsc`/`eslint`/`next build` 전부 통과, 기존 school 라우트/UI 변경
+없음.
+
+상태: **부산 16개 구·군 coverage 미달성**(전부 BLOCKED, source/parser
+문제 아니라 인증키 문제로 확인). §39 지시("BLOCKER 없고 부산 coverage
+정상이고 idempotency 확인되면 commit/push")의 commit 조건을 충족하지
+못해 **commit·push 하지 않음**.
+
+**SCHOOL_V2_C3A_CLOSE = NO(BLOCKER)** — `CHILDCARE_DATA_READY = NO`.
+파이프라인/legal gate/schema mapping은 완결, 실 데이터 적재만
+인증키 발급 대기.
+
+## 2026-08-21 (22)
+
+### SCHOOL V2-C3A BLOCKER RESOLUTION — 어린이집 대체 source 검증(결론: 대체 source 없음, cpmsapi021 유지)
+
+cpmsapi021 인증키 없이도 목표 데이터를 확보할 수 있는 공식 대체
+source가 있는지(전국어린이집표준데이터 `15013108`, 한국사회보장
+정보원 어린이집 기본정보 파일데이터 `15083298`) 검증했다. **결과:
+대체 불가 — cpmsapi021이 여전히 유일하게 자동화 가능하고 라이선스가
+명확한 primary source다.**
+
+핵심 발견:
+
+- `15013108`/`15083298`은 실제로는 같은 원천(`info.childcare.go.kr`
+  "어린이집 기본정보" SHEET)을 가리키며, **REST API가 아니라 지역
+  선택 → 검색 → 파일저장이 필요한 수동 UI 다운로드**다(data.go.kr
+  자신이 "기타 유의사항"에 이 수동 절차를 명시) — 자동 갱신 파이프라인
+  구축이 불가능.
+- **라이선스 상충 발견**: 원 제공처(`info.childcare.go.kr`) 원문은
+  "비영리목적의 변경 및 자유이용"만 허락한다고 명시하는데, data.go.kr
+  카탈로그 기록은 "이용허락범위 제한 없음"이라고 표기 — 상업 서비스인
+  이집 기준으로 유리하게 임의 해석하지 않고 `REVIEW_REQUIRED`로
+  등록했다(CLEARED로 승격하지 않음).
+- `facilityCode`(시설코드) 존재 자체가 두 데이터셋 설명 어디에도
+  명시되지 않아 **UNKNOWN**으로 남겼다 — 이름+주소로 canonical key를
+  대체 생성하지 않았다.
+- `EducationSource`에 이 두 번째 source를 `code=
+  childcare_national_sheet`, `legalReviewStatus=REVIEW_REQUIRED`로
+  신규 등록(id=2) — 기존 cpmsapi021 row(id=1, CLEARED)는 삭제/변경
+  없음.
+- `scripts/education/ingest-childcare.ts`에 `--sigungu=<code>` CLI
+  옵션을 추가해 지역 범위를 하드코딩에서 파라미터로 분리(전국 확장
+  전제 보강) — 그 외 파이프라인 로직은 그대로 재사용(source 자체가
+  안 바뀌었으므로).
+
+`CHILDCARE_API_KEY_APPLICATION_REQUIRED = YES`로 확정 — 대체 source가
+없음이 검증됐으므로 cpmsapi021 전용 키 활용신청이 여전히 필요하다.
+**부산 어린이집 실 데이터는 이번 STEP에서도 0건 그대로다**(가짜/추정
+데이터 생성 없음). schema 변경 없음, 기존 테이블 변경 없음, UI/
+production route 변경 없음.
+
+검증: `tsc`/`eslint`(0 errors)/`next build` 전부 통과,
+`verify-childcare-normalization.ts` 17개 assertion 재실행 PASS.
+
+상태: coverage 미달성으로 §38 commit 조건 미충족 — **commit·push
+하지 않음**.
+
+**SCHOOL_V2_C3A_CLOSE = NO(BLOCKER 유지)** — `CHILDCARE_DATA_READY =
+NO`. `NATIONWIDE_ARCHITECTURE_READY = YES(조건부, 전국 일괄 loop
+자체는 미구현)`.

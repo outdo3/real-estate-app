@@ -1082,3 +1082,18 @@ NOW-LATER 재분류/migration 상세는
   `EducationDataQuality` enum 채택) 결정이 실제 구현에 그대로
   반영됨 — §24 proposed schema 초안과 실제 구현 간 세부 nullable
   판단 차이는 C1 문서 §3에 기록
+
+## 29. [2026-08-21] SCHOOL V2-C3A 정정 — 어린이집 API 실제 필드 재확인
+
+C3A(어린이집 ingestion 착수)에서 공식 서비스 명세서(.doc)를 직접
+열람한 결과, 이 문서 §3-2/§7 및 V2-B 문서에서 "검색엔진 요약 기반,
+참고 수준"으로 표기했던 풍부한 필드 목록(위도/경도/현원/보육교직원수/
+CCTV설치수/통학차량운영여부 등)이 **라이브 조회 API(`cpmsapi021`)의
+실제 응답에는 없음이 확인됐다.** 그 필드들은 `전국어린이집표준데이터`
+(공공데이터포털 `15013108`)라는 별도 데이터셋의 컬럼 설명이며, 이
+표준데이터의 실제 배포 경로("API 유형: LINK")는 아직 확인되지
+않았다 — §12(Coordinate Model)/§8(Kindergarten/Childcare
+Statistics) 설계에서 "어린이집 좌표/현원/CCTV가 API로 바로 들어올
+것"이라고 전제하지 않아야 한다. 상세는
+[SCHOOL-V2-C3A-childcare-ingestion.md](./SCHOOL-V2-C3A-childcare-ingestion.md)
+§4 참고.
