@@ -1,0 +1,56 @@
+{
+ "transportInversions": [
+  {
+   "threshold": 200,
+   "count": 236801,
+   "totalPairsChecked": 1359139
+  },
+  {
+   "threshold": 300,
+   "count": 144915,
+   "totalPairsChecked": 891110
+  },
+  {
+   "threshold": 500,
+   "count": 46155,
+   "totalPairsChecked": 314898
+  }
+ ],
+ "schoolInversions": [
+  {
+   "threshold": 200,
+   "count": 118493,
+   "totalPairsChecked": 1584566
+  },
+  {
+   "threshold": 300,
+   "count": 39572,
+   "totalPairsChecked": 837374
+  }
+ ],
+ "parkingInversions": [
+  {
+   "threshold": 0.3,
+   "count": 19358,
+   "totalPairsChecked": 178556
+  },
+  {
+   "threshold": 0.5,
+   "count": 6351,
+   "totalPairsChecked": 114120
+  }
+ ],
+ "lifeInversions": [
+  {
+   "threshold": 5,
+   "count": 922620,
+   "totalPairsChecked": 3545429
+  },
+  {
+   "threshold": 10,
+   "count": 723245,
+   "totalPairsChecked": 3047536
+  }
+ ],
+ "dominanceSampleCount": 6587
+}
