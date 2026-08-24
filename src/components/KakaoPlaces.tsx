@@ -75,10 +75,7 @@ const iconFor = (place: any, keyword?: string) => {
 // 30km 도심 평균 가정)을 함께 보여준다 — 둘 다 카카오 실측 직선거리 기반의 근사치이며,
 // 이 앱 다른 곳(학군 탭 walkTime)에서도 이미 쓰는 것과 같은 종류의 어림값이다.
 export const formatEta = (distance: number) => {
-  const walkMin = Math.ceil(distance / 80);
-  if (distance <= 1000) return `도보 약 ${walkMin}분`;
-  const driveMin = Math.ceil(distance / 500);
-  return `차량 약 ${driveMin}분`;
+  return `직선 ${distance}m`;
 };
 
 export default function KakaoPlaces({ address, categories, keywords = [], limit = 5, lawdCd }: Props) {
@@ -260,7 +257,7 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
             <b>{p.place_name}</b>
           )}
           <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '0.5rem' }}>
-            {isEducationPlace(p) ? `(직선거리 약 ${p.distance}m)` : `(${p.distance}m, ${formatEta(Number(p.distance))})`}
+            (직선거리 약 {p.distance}m)
           </span>
         </li>
       ))}
@@ -271,7 +268,7 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
       )}
       {places.length > 0 && isSubwayOnly && places[0].distance < 500 && (
          <li style={{color: 'var(--primary-color)', fontWeight: 600, marginTop: '1rem', listStyle: 'none', marginLeft: '-1.2rem'}}>
-           🚗 도보 5분 이내의 초역세권 단지입니다!
+           🚗 직선거리 500m 이내의 역세권 단지입니다!
          </li>
       )}
     </ul>
