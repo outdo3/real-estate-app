@@ -1,0 +1,301 @@
+{
+ "generatedAt": "2026-08-24T05:05:55.746Z",
+ "details": {
+  "대신해모로센트럴아파트": {
+   "d": {
+    "transport": {
+     "score": 86.45298451189021,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 82.91686221009549,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 41.14438014419191,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary",
+      "kindergarten"
+     ],
+     "missingFactors": []
+    },
+    "living": {
+     "score": 60.689825396851575,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    },
+    "factors": {
+     "subway": 87.6,
+     "bus": 83.77661503963404,
+     "age": 90,
+     "scale": 84.55,
+     "parking": 57.31241473396998,
+     "elementary": 36.9749249899004,
+     "kindergarten": 57.82220076135793,
+     "living": {
+      "mart": 47.5,
+      "convenience": 55.05742027544856,
+      "pharmacy": 63.661687119143764,
+      "hospital": 75.02871013772427,
+      "park": 35.153750129993526,
+      "daycare": 71.25
+     }
+    }
+   },
+   "eligibility": "SCORE_AVAILABLE",
+   "coverage": 1,
+   "totals": {
+    "W-A_BALANCED": 67.80101306575729,
+    "W-B_LOCATION": 70.06644328414221,
+    "W-C_RESIDENTIAL": 71.00098900971467,
+    "W-D_DATA_QUALITY_AWARE": 68.10255118733775
+   },
+   "row": {
+    "aptSeq": "26140-1356",
+    "name": "대신해모로센트럴아파트",
+    "sggCd": "26140",
+    "sigungu": "서구",
+    "umdName": "서대신동2가",
+    "subwayStatus": "VALUE",
+    "subwayRaw": 140,
+    "busDist": 60,
+    "busCount": 25,
+    "age": 4,
+    "households": 733,
+    "parkingRatio": 1.0914051841746248,
+    "elemRaw": 545,
+    "kgDist": 367.3051989635884,
+    "livingRaw": {
+     "mart": 2,
+     "convenience": 10,
+     "pharmacy": 8,
+     "hospital": 45,
+     "park": 4,
+     "daycare": 6
+    },
+    "eligible": true,
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "peerEligibility": "PEER_FULL"
+   }
+  },
+  "협성르네상스(서구)": {
+   "d": {
+    "transport": {
+     "score": 72.05774164194992,
+     "coverage": 1,
+     "usedFactors": [
+      "subway",
+      "bus"
+     ],
+     "missingFactors": []
+    },
+    "complex": {
+     "score": 64.76720245398774,
+     "coverage": 1,
+     "usedFactors": [
+      "age",
+      "scale",
+      "parking"
+     ],
+     "missingFactors": []
+    },
+    "education": {
+     "score": 60.7383821245293,
+     "coverage": 1,
+     "usedFactors": [
+      "elementary",
+      "kindergarten"
+     ],
+     "missingFactors": []
+    },
+    "living": {
+     "score": 58.44030280510901,
+     "coverage": 1,
+     "usedFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ],
+     "missingFactors": []
+    },
+    "factors": {
+     "subway": 67.4,
+     "bus": 82.9258054731664,
+     "age": 46,
+     "scale": 77.395,
+     "parking": 87.39468302658487,
+     "elementary": 60.895499174687906,
+     "kindergarten": 60.10991392389487,
+     "living": {
+      "mart": 47.5,
+      "convenience": 51.44230794777811,
+      "pharmacy": 59.00173154537805,
+      "hospital": 75.02871013772427,
+      "park": 57.29922501575526,
+      "daycare": 71.25
+     }
+    }
+   },
+   "eligibility": "SCORE_AVAILABLE",
+   "coverage": 1,
+   "totals": {
+    "W-A_BALANCED": 64.00090725639399,
+    "W-B_LOCATION": 64.56687523226502,
+    "W-C_RESIDENTIAL": 64.51869325531085,
+    "W-D_DATA_QUALITY_AWARE": 64.19664263883865
+   },
+   "row": {
+    "aptSeq": "26140-51",
+    "name": "협성르네상스",
+    "sggCd": "26140",
+    "sigungu": "서구",
+    "umdName": "서대신동3가",
+    "subwayStatus": "VALUE",
+    "subwayRaw": 306,
+    "busDist": 58,
+    "busCount": 19,
+    "age": 25,
+    "households": 489,
+    "parkingRatio": 1.5848670756646217,
+    "elemRaw": 341,
+    "kgDist": 347.7925509292159,
+    "livingRaw": {
+     "mart": 2,
+     "convenience": 9,
+     "pharmacy": 7,
+     "hospital": 45,
+     "park": 8,
+     "daycare": 6
+    },
+    "eligible": true,
+    "identity": "IDENTITY_HIGH",
+    "coord": "COORD_HIGH",
+    "peerEligibility": "PEER_FULL"
+   }
+  },
+  "구덕금호": {
+   "d": {
+    "transport": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "subway",
+      "bus"
+     ]
+    },
+    "complex": {
+     "score": 46,
+     "coverage": 0.75,
+     "usedFactors": [
+      "age"
+     ],
+     "missingFactors": [
+      "scale",
+      "parking"
+     ]
+    },
+    "education": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "elementary",
+      "kindergarten"
+     ]
+    },
+    "living": {
+     "score": null,
+     "coverage": 0,
+     "usedFactors": [],
+     "missingFactors": [
+      "convenience",
+      "mart",
+      "pharmacy",
+      "hospital"
+     ]
+    },
+    "factors": {
+     "subway": null,
+     "bus": null,
+     "age": 46,
+     "scale": null,
+     "parking": null,
+     "elementary": null,
+     "kindergarten": null,
+     "living": {
+      "mart": null,
+      "convenience": null,
+      "pharmacy": null,
+      "hospital": null,
+      "park": null,
+      "daycare": null
+     }
+    }
+   },
+   "eligibility": "NOT_ENOUGH_DATA",
+   "coverage": 0.25,
+   "totals": {
+    "W-A_BALANCED": null,
+    "W-B_LOCATION": null,
+    "W-C_RESIDENTIAL": null,
+    "W-D_DATA_QUALITY_AWARE": null
+   },
+   "row": {
+    "aptSeq": "26140-11",
+    "name": "구덕금호",
+    "sggCd": "26140",
+    "sigungu": "서구",
+    "umdName": "동대신동3가",
+    "subwayStatus": "COORD_INSUFFICIENT",
+    "subwayRaw": null,
+    "busDist": null,
+    "busCount": null,
+    "age": 25,
+    "households": null,
+    "parkingRatio": null,
+    "elemRaw": null,
+    "kgDist": null,
+    "livingRaw": {
+     "mart": null,
+     "convenience": null,
+     "pharmacy": null,
+     "hospital": null,
+     "park": null,
+     "daycare": null
+    },
+    "eligible": false,
+    "identity": "IDENTITY_LOW",
+    "coord": "COORD_LOW",
+    "peerEligibility": "DISPLAY_ONLY"
+   }
+  }
+ },
+ "explanation": [
+  "Transport: 대신해모(86.5) > 협성(72.1) — 절대거리 기준 대신해모(140m)가 협성(306m)보다 지하철에 훨씬 가까운 것이 주 원인.",
+  "Complex: age는 대신해모(4y)가 협성(25y)보다 신축이라 유리, parking은 반대로 협성(1.58)이 대신해모(1.09)보다 우위 — 두 tradeoff가 상쇄되며 complex domain은 대신해모(82.9) vs 협성(64.8).",
+  "Education: 두 단지 모두 동일 공식 통학구역(대신초등학교) 배정 — \"학교 수준\" 차이가 아니라 물리적 접근성 차이(대신해모 545m vs 협성 341m)만으로 education 도메인 차이(41.1 vs 60.7)가 발생함.",
+  "Living: 대신해모(60.7) vs 협성(58.4) — 생활편의 수준은 비슷한 편.",
+  "Total(W-A 기준): 대신해모(67.8) vs 협성(64.0) — 최종 차이는 위 도메인별 raw fact 기반 tradeoff의 가중합 결과이며, \"대신해모가 이겨야 한다\"는 규칙을 강제하지 않았다."
+ ]
+}

@@ -8548,3 +8548,33 @@ Score/DB/API/UI 전부 변경 없음, domain/factor 최종 weight도 아직 확�
 
 **SCORE_V2_STEP2_CLOSE = YES.** `ABSOLUTE_CURVES_READY = YES`,
 `SCORE_V2_STEP3_READY = YES`.
+
+### E-JIP SCORE V2 STEP 3 — Full Busan Shadow Validation + Expert Credibility Test
+
+`score-v2-step3-shadow-validation` branch. STEP2가 발견한 confirmed-absent
+subway sentinel 문제(지하철이 전혀 없어도 버스만 좋으면 transport가
+과대평가되던 반례)를 먼저 고쳤다 — 4-state(VALUE/CONFIRMED_ABSENT/MISSING/
+COORD_INSUFFICIENT)를 명확히 분리하고 CONFIRMED_ABSENT(489건)를 curve
+floor로 명시 채점했다. 이 수정 하나로 subway cohort transport 평균이
+confirmed-absent 구간에서 정확히 최하위(23.3)로 떨어져 완전 단조를
+회복했다.
+
+부산 전체 3,402건 full shadow를 계산해 4개 domain-weight 후보(W-A~D)를
+처음 비교하고, Pareto dominance(687,793쌍 전수, 위반 0건), counterexample
+8패턴(전부 0건), raw/weight sensitivity(모두 안정), 41개 벤치마크, 48쌍
+blind expert review 자료를 생성했다. 대신해모(67.8) vs 협성(64.0) 비교가
+"대신해모 승리 강제" 없이 raw fact tradeoff만으로 자동 설명됐다. district
+bias는 1.31x로 STEP0.7-A 수준(1.38x) 이하 유지. parking missing fairness는
+age-band 통제 후에도 11~15pt 격차가 남아 STEP3.5로 이월되는 유일한 미해결
+리스크로 명시했다.
+
+Expert Credibility Gate 8개 중 7개 PASS, 1개(LOCAL_EXPERT_REVIEW)는
+READY_FOR_REVIEW로 재평가(실제 인간 검수는 미실행). RECOMMENDED_EXPERT_
+REVIEW_CANDIDATE = V2-A + Sentinel Fix + M3(neutral prior) missing-data.
+신규 테스트 18/18 PASS(+기존 46/46 회귀 없음, 총 64/64). production Score/
+DB/API/UI 전부 변경 없음. **SCORE_V2_PRODUCTION_READY = NO 유지**(인간
+전문가 검수 완료 전까지). `docs/development/EJIP_SCORE_V2_STEP3_FULL_SHADOW_VALIDATION.md`
+신규.
+
+**SCORE_V2_STEP3_CLOSE = YES.** `EXPERT_REVIEW_READY = YES`,
+`SCORE_V2_PRODUCTION_READY = NO`.
