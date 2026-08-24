@@ -8436,3 +8436,86 @@ Score 공식/weight/API/UI/schema 전부 변경 없음, migration 없음.
 REVIEW/FAILED/guard, 계속 write 후보 제외), 327건 무증거(접근 불가).
 
 **SCORE_V2_STEP07A_CLOSE = YES.**
+
+## 2026-08-24 (2)
+
+### E-JIP SCORE V2 STEP 0.8 — Shadow Peer & Score Impact Validation (READ-ONLY)
+
+`score-v2-step08-shadow-peer-validation` branch. STEP0.7-A 이후에도 남은
+"대신해모 140m가 협성 306m보다 낮은 transport 점수" 문제를 production
+peer-groups/category/percentile 함수를 그대로 재사용하는 SHADOW 엔진으로
+부산 전체(3,402건) 재계산해 검증했다. quality-filter 자체의 영향은 작지만
+(transport mean delta +0.39), LOCAL(법정동) peer 경계가 실제 생활권보다
+좁게 잘려 있어 distance gap≥200m 쌍의 17.4%가 "더 가까운 쪽이 더 낮은
+점수"를 받는 구조적 문제를 정량 확인했다(school/parking/life 도메인도
+유사). SIGUNGU-only 모델은 이 inversion을 절반으로 줄인다.
+
+`CROSS_PEER_COMPARABLE = NO`, relative percentile 권장 역할 =
+`SMALL COMPONENT`, Score V1 trust = `HIDE/DEEMPHASIZE`(카테고리 percentile
+서술 한정). production Score/DB/API/UI/schema 전부 변경 없음. 신규 테스트
+8/8 PASS(+기존 20/20 회귀 없음). `docs/development/EJIP_SCORE_V2_STEP08_SHADOW_PEER_VALIDATION.md`
+신규.
+
+**SCORE_V2_STEP08_CLOSE = YES.** `SCORE_V2_STEP1_READY = YES`.
+
+### E-JIP SCORE V2 STEP 1 — Score Architecture & Factor Model (analysis/docs only)
+
+`score-v2-step1-architecture` branch. V1을 고치는 대신 "좋은 아파트란
+무엇인가"부터 재정의 — 이집점수를 "가격을 제외한, 실거주 품질에 대한
+객관적 평가"로 정의하고, ~75개 factor를 실제 schema/API/DB 근거로
+READY_NOW~NOT_AVAILABLE 분류했다(3개 병렬 read-only 조사, 추정 없음).
+LOCAL percentile을 Core 입력에서 완전히 배제(BUSAN/SIGUNGU 절대 비교로
+대체)하는 것을 핵심 architecture 결정으로 확정. 대신해모/협성 두 벤치마크가
+STEP0에서 인용된 transport/parking/school 세 가지 유명 inversion 사례의
+동일 당사자였음을 확인(하나의 법정동 경계 문제가 세 도메인에서 반복).
+5-domain Core(Transport/Living/Education/Complex/Environment) + 5개 별도
+Index(Market/Investment/Child-Friendly/Personalized-Commute/Reconstruction)
+구조를 제안. 숫자 가중치는 미확정(STEP2 대상). production 코드 변경 없음.
+`docs/development/EJIP_SCORE_V2_STEP1_ARCHITECTURE.md` 신규.
+
+**SCORE_V2_STEP1_CLOSE = YES.** `SCORE_V2_ARCHITECTURE_READY = YES`,
+`SCORE_V2_STEP2_READY = YES`(School V2 branch 병합 선행 권장).
+
+### E-JIP SCORE V2 STEP 1.5 — Data Foundation Integration (Score V2 + School V2 병합)
+
+`score-v2-data-foundation` branch(`score-v2-step1-architecture` base +
+`school-v2-final-qa` merge, main merge 없음). 두 development line이
+merge-base(`82f4914`) 이후 건드린 파일이 겹치는 곳은 `CHANGELOG.md`
+1건뿐이었고(schema/migration도 merge-base에 이미 공통 포함) 실질 코드
+충돌은 없었다 — CHANGELOG는 양쪽 내용 전부 보존해 재정렬.
+
+READ-ONLY 검증: `ApartmentMaster`(3,402) ↔ SCHOOL V2 attendance-zone
+artifact(3,402) 완전 호환(matched 3,402/missing 0/duplicate 0/identity
+mismatch 0), attendance-zone 분포(AVAILABLE 3,175/SHARED 196/
+REVIEW_REQUIRED 30/NOT_AVAILABLE 1)와 School taxonomy(305/176/159/16/8)가
+SCHOOL V2 FINAL QA와 정확히 일치함을 재확인. STEP0.7-A 좌표 재지오코딩
+(1,191건)이 attendance-zone artifact 생성(2026-08-22) **이후**(2026-08-23)
+일어나, 300m~1km 이동 + 현재 AVAILABLE 상태인 31건이 검증되지 않은 잔여
+불확실성으로 남음(artifact는 지시대로 재계산하지 않음, School V2 담당
+라인에 이월). V1 `school-access`/`school-access-sentence.ts`는 blob diff
+0(완전 불변) 확인 — 이번 merge로 legacy Score가 SCHOOL V2 데이터를
+자동으로 쓰게 되는 일 없음.
+
+대신해모/협성을 SCHOOL V2 공식 통학구역으로 재확인한 결과 **두 단지가
+정확히 같은 초등학교(대신초등학교)에 배정**됨을 발견 — V1의 341m/545m
+relative score 역전 논란이 공식 배정 기준에서는 "완전 동일"로 해소된다.
+
+STEP1 architecture 문서를 수정(architecture만, 숫자 무변경): Core를
+5-domain에서 **4-domain(Transport/Living/Education/Complex)**으로
+축소하고, Environment(현재 해변 거리 단일 factor)는
+LIMITED/DISPLAY_ONLY/FUTURE_CORE_CANDIDATE로 재분류.
+
+regression 87/87 PASS(School 6종 + Score 2종), `next build` 성공(node_modules
+symlink로 workspace-root 문제 해결), 런타임 smoke 5건 통과, 대신해모 V1
+Score API 값이 STEP0.8과 완전히 동일함을 실측 재확인(회귀 없음).
+tsc 7 errors는 전부 1회성 SHP 파이프라인 스크립트의 기존 환경
+설치 공백(`shapefile`/`proj4`/`iconv-lite` 미설치)이며 애플리케이션
+코드는 0 errors. eslint 0 errors(pre-existing warning 5개는 merge-base
+버전과 대조해 신규 아님을 확인). DB write/migration/SchoolInfo
+ingestion/Childcare ingestion/13-다 scraping/Score 변경 전부 없음. main,
+`school-v2-final-qa`, `score-v2-step1-architecture`, main의 C3A 로컬 작업
+전부 미접촉 확인.
+`docs/development/EJIP_SCORE_V2_STEP15_DATA_FOUNDATION_INTEGRATION.md` 신규.
+
+**SCORE_V2_STEP15_CLOSE = YES.** `SCORE_V2_DATA_FOUNDATION_READY = YES`,
+`SCORE_V2_STEP2_READY = YES`.

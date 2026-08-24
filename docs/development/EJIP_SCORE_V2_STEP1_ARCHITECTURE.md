@@ -1,5 +1,17 @@
 # E-JIP SCORE V2 STEP 1 — Score Architecture & Factor Model
 
+> **[STEP 1.5 CORRECTION — 2026-08-24]** 아래 §17-18(Architecture Model
+> 비교/RECOMMENDED_ARCHITECTURE)와 최종 보고 §18-22가 제안했던 "5-domain
+> Core(Transport/Living/Education/Complex/**Environment**)"는 STEP 1.5에서
+> 수정됐다. Environment는 현재 해변 거리 단일 factor뿐이라 **Core weighted
+> domain으로 바로 넣지 않는다** — `LIMITED`/`DISPLAY_ONLY`/`FUTURE_CORE_CANDIDATE`로
+> 재분류하고, **Core 기본 출시 후보는 4-domain(Transport/Living/Education/Complex)**으로
+> 확정한다. 향후 slope/park·green/noise/flood/waterfront(positive+negative)/hazards
+> 데이터가 충분해지면 Core 승격을 재검토한다. **숫자 Score 변경이 아니라
+> architecture 문서 수정**이며, 상세 근거는
+> `docs/development/EJIP_SCORE_V2_STEP15_DATA_FOUNDATION_INTEGRATION.md`
+> §16을 참고할 것. 아래 원문은 변경 이력 보존을 위해 그대로 남겨둔다.
+
 ## 목적
 
 STEP 0~0.8이 확정한 것: V1의 계산 구현은 대체로 정확하고, subway distance 같은
@@ -342,6 +354,11 @@ source freshness(`fetchedAt`/`validUntil` 이미 스키마에 존재). **formula
 
 ### 18. RECOMMENDED_ARCHITECTURE(§31)
 
+> **[STEP 1.5 CORRECTION]** 이 섹션의 "5-domain Core(+Environment)"는 STEP 1.5에서
+> "4-domain Core + Environment는 LIMITED/DISPLAY_ONLY/FUTURE_CORE_CANDIDATE"로
+> 수정됐다. 문서 상단 correction notice 및
+> `EJIP_SCORE_V2_STEP15_DATA_FOUNDATION_INTEGRATION.md` §16 참고.
+
 **Model B + Model C를 결합한다** — 즉 spec §31 예시와 동일한 구조:
 
 ```
@@ -607,9 +624,9 @@ STEP에서 수정된 코드가 없어 실행하지 않았다(CLAUDE.md §11 "가
 19. Model B = 5-domain Core(+Environment, 현재 해변 단일 factor로 얇음)
 20. Model C = Core(A or B) + Market/Investment/Child-Friendly/Personalized-Commute/Reconstruction 별도 index
 
-21. RECOMMENDED_ARCHITECTURE = **Model B + Model C 결합**(5-domain Core + 5개 별도 index, §18)
+21. RECOMMENDED_ARCHITECTURE = ~~Model B + Model C 결합(5-domain Core + 5개 별도 index)~~ → **[STEP 1.5 CORRECTED] Model A + Model C 결합(4-domain Core + 5개 별도 index, Environment는 LIMITED/DISPLAY_ONLY/FUTURE_CORE_CANDIDATE)**
 
-22. Core domains = Transport, Living, Education, Complex, Environment(LIMITED)
+22. Core domains = ~~Transport, Living, Education, Complex, Environment(LIMITED)~~ → **[STEP 1.5 CORRECTED] Transport, Living, Education, Complex**(4개). Environment는 Core 밖에서 LIMITED/DISPLAY_ONLY/FUTURE_CORE_CANDIDATE로 별도 관리
 
 23. Transport design = SUBWAY_ACCESS + BUS_ACCESS, BUSAN 절대 curve 중심, station-center 한계 명시, 환승/노선가치/업무지구접근/개인화통근 전부 Core 제외
 24. Complex design = AGE_QUALITY(밴드 curve) + SCALE(포화 curve) + PARKING(절대+동시대 context)
