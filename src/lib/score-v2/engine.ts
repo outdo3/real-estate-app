@@ -97,45 +97,28 @@ export function calculateScoreV2(
   input: ScoreV2Input,
   referenceYear = 2026
 ): ScoreV2Result {
-  // identityEligible=false → 즉시 NOT_ENOUGH_DATA
-  if (!input.identityEligible) {
-    const emptyDomain: DomainResult = {
-      score: null,
-      coverage: 0,
-      usedFactors: [],
-      missingFactors: [],
-      evidence: { reason: 'IDENTITY_NOT_ELIGIBLE' },
-    };
-    return {
-      scoreVersion: SCORE_V2_VERSION,
-      eligibility: 'NOT_ENOUGH_DATA',
-      overallScore: null,
-      domains: {
-        transport: emptyDomain,
-        living: emptyDomain,
-        education: emptyDomain,
-        complex: emptyDomain,
-      },
-      overallCoverage: 0,
-      relativeContext: null,
-      missingReasons: ['IDENTITY_NOT_ELIGIBLE'],
-    };
-  }
-
   // ---- Domain 계산 ----
-  const transportResult = transportDomain({
+  const emptyDomain: DomainResult = {
+    score: null,
+    coverage: 0,
+    usedFactors: [],
+    missingFactors: [],
+    evidence: { reason: 'IDENTITY_NOT_ELIGIBLE' },
+  };
+
+  const transportResult = input.identityEligible ? transportDomain({
     subwayStatus: input.subwayStatus,
     nearestSubwayDistanceM: input.nearestSubwayDistanceM,
     nearestBusStopDistanceM: input.nearestBusStopDistanceM,
     busStopCount300m: input.busStopCount300m,
-  });
+  }) : emptyDomain;
 
-  const livingResult = livingDomain(input.living);
+  const livingResult = input.identityEligible ? livingDomain(input.living) : emptyDomain;
 
-  const educationResult = educationDomain({
+  const educationResult = input.identityEligible ? educationDomain({
     nearestElementaryDistanceM: input.nearestElementaryDistanceM,
     attendanceZoneStatus: input.attendanceZoneStatus,
-  });
+  }) : emptyDomain;
 
   const complexResult = complexDomain(
     {
@@ -162,6 +145,7 @@ export function calculateScoreV2(
 
   // ---- Missing reasons ----
   const missingReasons: string[] = [];
+  if (!input.identityEligible) missingReasons.push('IDENTITY_NOT_ELIGIBLE');
   if (transportResult.score == null) missingReasons.push('TRANSPORT_MISSING');
   if (livingResult.score == null) missingReasons.push('LIVING_MISSING');
   if (educationResult.score == null) missingReasons.push('EDUCATION_MISSING');

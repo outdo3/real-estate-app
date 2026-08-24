@@ -16,7 +16,8 @@ import type { ScoreV2Input, SubwayDataStatus, ParkingRawStatus, AttendanceZoneSt
 
 export function adaptToV2Input(
   master: RawMasterInfo,
-  location: RawLocationFeature | null
+  location: RawLocationFeature | null,
+  attendanceZoneStatus: AttendanceZoneStatus = 'NOT_AVAILABLE'
 ): ScoreV2Input {
   // ---- 1. Identity & Eligibility ----
   // 구덕금호 케이스 등 좌표나 identity가 신뢰 불가능하여 location feature 생성이
@@ -63,7 +64,7 @@ export function adaptToV2Input(
   
   // 통학구역(배정) 데이터는 아직 공식 DB에 완전하지 않으므로 V1/V2 모두 사용 불가.
   // 증거(Evidence)용 기본값 적용.
-  const attendanceZoneStatus: AttendanceZoneStatus = 'NOT_AVAILABLE';
+
 
   // ---- 5. Living: POI counts ----
   const living = {

@@ -14,6 +14,7 @@ import { buildBriefing } from './briefing';
 import { classifyPreparingReason } from './preparing-reason';
 import { calculateScoreV2 } from '../../score-v2/engine';
 import { adaptToV2Input } from '../../score-v2/adapter';
+import { getApartmentEducationZone } from '../../education/attendance-zone';
 
 /**
  * S2C Score Engine 진입점(§3, §41 API가 이 함수 하나만 호출한다).
@@ -139,7 +140,13 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
 
   let shadowV2Result: any = null;
   try {
-    const v2Input = adaptToV2Input(masterByAptSeq.get(targetMaster.aptSeq)!, locationByAptSeq.get(targetMaster.aptSeq) ?? null);
+    const eduZone = getApartmentEducationZone(targetMaster.aptSeq);
+    const attendanceZoneStatus = eduZone ? eduZone.elementary.status : 'NOT_AVAILABLE';
+    const v2Input = adaptToV2Input(
+      masterByAptSeq.get(targetMaster.aptSeq)!, 
+      locationByAptSeq.get(targetMaster.aptSeq) ?? null,
+      attendanceZoneStatus as any
+    );
     shadowV2Result = calculateScoreV2(v2Input, 2026);
   } catch (err) {
     console.error('[ScoreV2 Shadow Error]', err);

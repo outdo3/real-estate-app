@@ -96,10 +96,10 @@ export default function ApartmentBriefingV2({ v2Result }: ApartmentBriefingV2Pro
     targets.push('차량 이용이 잦고 여유로운 주차가 필요한 분');
   }
   if (strengths.some(s => s.includes('상권'))) {
-    targets.push('도보 거리 상권을 선호하는 분');
+    targets.push('생활편의시설 접근을 중요하게 보는 분');
   }
   if (edu.elementaryScore >= 80) {
-    targets.push('초등학교 통학 거리를 고려하는 분');
+    targets.push('가까운 초등학교 접근을 중요하게 보는 분');
   }
   
   if (targets.length === 0) {
