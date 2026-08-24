@@ -30,115 +30,93 @@ export default function ApartmentBriefingV2({ v2Result }: ApartmentBriefingV2Pro
 
   // 1. 강점 (Strengths)
   const strengths: string[] = [];
-  if (transport.subwayScore >= 80) {
+  if (transport.subwayStatus === 'VALUE' && transport.nearestSubwayDistanceM != null && transport.nearestSubwayDistanceM <= 300) {
     strengths.push('지하철 접근성이 좋은 편');
-  } else if (transport.busComponentScore >= 80) {
+  } else if (transport.busStopCount300m != null && transport.busStopCount300m >= 15) {
     strengths.push('버스 접근성이 좋은 편');
   }
 
-  if (complex.scaleScore >= 85) {
+  if (complex.totalHouseholds != null && complex.totalHouseholds >= 1000) {
     strengths.push('규모가 큰 대단지');
-  } else if (complex.scaleScore >= 75) {
+  } else if (complex.totalHouseholds != null && complex.totalHouseholds >= 500) {
     strengths.push('무난한 규모의 단지');
   }
 
-  if (complex.ageScore >= 85) {
+  if (complex.ageYears != null && complex.ageYears <= 5) {
     strengths.push('준공 연차가 짧은 신축 단지');
-  } else if (complex.ageScore >= 65) {
+  } else if (complex.ageYears != null && complex.ageYears <= 10) {
     strengths.push('준신축 단지');
   }
 
-  if (complex.parkingRawStatus === 'KNOWN' && complex.parkingScore >= 75) {
-    strengths.push('주차 공간이 비교적 여유로운 편');
+  if (living.martCount1000m != null && living.martCount1000m >= 1) {
+    strengths.push('주변 상권 및 편의시설 양호');
   }
 
-  if (living.martScore >= 80 || living.hospitalScore >= 80 || living.convenienceScore >= 80) {
-    strengths.push('상권 및 편의시설 접근 양호');
-  }
-
-  if (edu.elementaryScore >= 80) {
+  if (edu.nearestElementaryDistanceM != null && edu.nearestElementaryDistanceM <= 300) {
     strengths.push('초등학교 직선거리가 가까운 편');
+  }
+
+  if (complex.parkingRawStatus === 'KNOWN' && complex.parkingRatio != null && complex.parkingRatio >= 1.2) {
+    strengths.push('주차 공간이 비교적 여유로운 편');
   }
 
   // 2. 아쉬움 (Weaknesses)
   const weaknesses: string[] = [];
-  if (transport.subwayStatus === 'CONFIRMED_ABSENT') {
-    weaknesses.push('반경 내 지하철역이 없음');
-  } else if (transport.subwayStatus === 'VALUE' && transport.subwayScore <= 40) {
-    weaknesses.push('지하철역까지 직선거리가 다소 먼 편');
+  if (transport.subwayStatus === 'CONFIRMED_ABSENT' || (transport.nearestSubwayDistanceM != null && transport.nearestSubwayDistanceM >= 1000)) {
+    weaknesses.push('지하철 이용이 다소 불편할 수 있음');
   }
-
-  if (complex.scaleScore <= 50) {
-    weaknesses.push('상대적으로 규모가 작은 단지');
-  }
-
-  if (complex.ageScore <= 40) {
+  
+  if (complex.ageYears != null && complex.ageYears >= 30) {
     weaknesses.push('연식이 30년 이상 된 단지');
   }
 
-  if (complex.parkingRawStatus === 'KNOWN' && complex.parkingScore <= 50) {
-    weaknesses.push('세대당 주차 대수가 1대 미만임');
+  if (complex.parkingRawStatus === 'KNOWN' && complex.parkingRatio != null && complex.parkingRatio <= 0.8) {
+    weaknesses.push('주차 공간이 다소 협소한 편');
   }
 
-  if (living.martScore <= 30 && living.convenienceScore <= 50) {
-    weaknesses.push('주변 상권 및 편의시설이 상대적으로 적은 편');
-  }
-
-  // 3. 이런 분께 잘 맞아요 (Target Users)
+  // 3. 타겟 사용자 (Targets)
   const targets: string[] = [];
-  if (strengths.some(s => s.includes('지하철') || s.includes('버스'))) {
-    targets.push('대중교통 접근을 중요하게 보는 분');
+  if (transport.subwayStatus === 'VALUE' && transport.nearestSubwayDistanceM != null && transport.nearestSubwayDistanceM <= 300) {
+    targets.push('대중교통 출퇴근을 하시는 분');
   }
-  if (complex.ageScore >= 85) {
-    targets.push('신축 단지를 선호하는 분');
+  if (complex.totalHouseholds != null && complex.totalHouseholds >= 1000) {
+    targets.push('대단지 인프라를 원하시는 분');
   }
-  if (complex.parkingRawStatus === 'KNOWN' && complex.parkingScore >= 75) {
-    targets.push('차량 이용이 잦고 여유로운 주차가 필요한 분');
-  }
-  if (strengths.some(s => s.includes('상권'))) {
+  if (living.martCount1000m != null && living.martCount1000m >= 1) {
     targets.push('생활편의시설 접근을 중요하게 보는 분');
   }
-  if (edu.elementaryScore >= 80) {
+  if (edu.nearestElementaryDistanceM != null && edu.nearestElementaryDistanceM <= 300) {
     targets.push('가까운 초등학교 접근을 중요하게 보는 분');
   }
-  
-  if (targets.length === 0) {
-    targets.push('전반적으로 무난한 조건을 찾는 분');
-  }
 
-  // 4. 더 확인해볼 점 (Things to check)
+  // 4. 추가 확인 필요 (Checks)
   const checks: string[] = [];
   if (complex.parkingRawStatus === 'MISSING') {
     checks.push('실제 주차 여건 확인');
   }
-  if (transport.subwayStatus === 'MISSING' || transport.subwayStatus === 'INVALID_OR_UNRESOLVED') {
-    checks.push('대중교통 노선 확인');
-  }
   if (edu.attendanceZoneStatus !== 'AVAILABLE') {
     checks.push('공식 통학구역(배정 학교) 확인');
   }
-  checks.push('최근 실거래 가격 흐름 비교');
 
-  const finalStrengths = strengths.slice(0, 3);
-  const finalWeaknesses = weaknesses.slice(0, 2);
-  const finalTargets = targets.slice(0, 3);
+  // 5. 한줄 요약
+  // Limit to 2 strengths, 1 weakness, 2 targets
+  const finalStrengths = strengths.slice(0, 2);
+  const finalWeaknesses = weaknesses.slice(0, 1);
+  const finalTargets = targets.slice(0, 2);
 
-  // 5. 한줄 판단 (One-line judgment)
   let oneLiner = '';
   if (finalStrengths.length >= 2 && finalWeaknesses.length === 0) {
     oneLiner = '전반적으로 고른 강점을 갖춘 단지입니다.';
-  } else if (finalStrengths.some(s => s.includes('교통') || s.includes('지하철')) && finalStrengths.some(s => s.includes('대단지'))) {
-    oneLiner = '대중교통 접근이 좋고 대단지의 특징을 갖춘 단지입니다.';
   } else if (finalStrengths.some(s => s.includes('신축')) && finalWeaknesses.some(s => s.includes('교통') || s.includes('지하철'))) {
-    oneLiner = '신축 단지이지만 대중교통 접근성은 확인이 필요합니다.';
+    oneLiner = '신축 단지이나 대중교통 접근성 확인이 필요합니다.';
   } else if (finalStrengths.some(s => s.includes('교통') || s.includes('지하철')) && finalWeaknesses.some(s => s.includes('연식'))) {
-    oneLiner = '대중교통 접근이 좋지만 연식이 다소 있는 단지입니다.';
+    oneLiner = '대중교통 접근성은 좋으나 연식이 다소 있는 단지입니다.';
   } else if (finalWeaknesses.length >= 3) {
-    oneLiner = '일부 아쉬운 점들이 있어 실제 방문 확인이 권장됩니다.';
+    oneLiner = '몇 가지 아쉬운 점들이 있어 실제 방문 확인을 권장합니다.';
   } else if (finalStrengths.length > 0) {
     oneLiner = `${finalStrengths[0].split(' ')[0]} 측면에서 강점이 있는 무난한 단지입니다.`;
   } else {
-    oneLiner = '실거래와 주변 환경을 종합적으로 검토해볼 만한 단지입니다.';
+    oneLiner = '주거지 및 주변 환경을 종합적으로 검토해볼 만한 단지입니다.';
   }
 
   if (v2Result.eligibility === 'NOT_ENOUGH_DATA') {
