@@ -8578,3 +8578,43 @@ DB/API/UI 전부 변경 없음. **SCORE_V2_PRODUCTION_READY = NO 유지**(인간
 
 **SCORE_V2_STEP3_CLOSE = YES.** `EXPERT_REVIEW_READY = YES`,
 `SCORE_V2_PRODUCTION_READY = NO`.
+
+### E-JIP SCORE V2 STEP 3.5 — Expert Review Prep + Parking Fairness Root-Cause & Calibration
+
+`score-v2-step35-expert-calibration` branch. STEP3의 유일한 미해결
+리스크(parking missing 11~15pt fairness gap)의 근본 원인을 찾았다 —
+age-band만 통제한 STEP3 비교와 달리 age+household+sigungu를 전부 matched
+비교하니 gap이 **-3.8pt(사실상 해소)**로 좁혀졌다. 진짜 원인은
+missing-data 처리 로직이 아니라 **household-scale confound**(parking
+결측이 소규모 단지에 압도적으로 집중 — known-rate가 세대수 100 미만
+4.5%에서 1000+ 87.2%까지 벌어지는 HIGHLY_STRUCTURED/MNAR 패턴)였다.
+
+5개 parking missing 모델(P-A~E)을 비교하는 과정에서 현재 M3의 "neutral
+prior=50"이 실제로는 전혀 중립적이지 않다는 것도 발견했다 — 31년 이상
+노후 단지의 실제 평균 parking factor score는 21.7점인데 50으로
+처리해 **28.3점을 과대평가**하고 있었다. era-conditioned neutral
+prior(P-D)로 전환해 이 부정확성을 시정하면서도, 대신해모/협성처럼
+parking known인 단지는 5개 모델 전부에서 소수점까지 무변화임을 확인했다
+(raw parking 값을 추정해 만들어내지 않는다는 원칙 준수, 테스트로 보증).
+
+T3(80/20) transport composition을 sentinel-fixed 상태로 재검증한 결과
+district bias가 T1(2.17x)보다 오히려 나쁨(2.74x)을 확인 — STEP2에서
+관찰됐던 "V2-C가 더 낫다"는 결과는 sentinel 버그의 우연한 부작용이었음이
+이제 직접 재현으로 확정됐다(T1_KEEP). Score-scale 검토에서는 점수를
+좋아 보이게 만드는 임의 rescale을 명시적으로 기각하고, raw 유지 +
+percentile 병기(S3)를 추천했다 — 대신해모 67.8점이 "부산 상위 8.1%"라는
+맥락과 함께 제시되면 오해를 구조적으로 줄인다.
+
+STEP3의 48개 blind pair를 감사해 8개 archetype·11개 구·군을 대표하는
+15개 shortlist를 선정하고(close-call 7개 포함, obvious 편중 방지),
+단지명·점수가 전혀 노출되지 않는 blind sheet와 별도 answer key를 생성했다
+(leakage 0건, 테스트 확인). UI data contract(점수 산출 근거 vs 단지브리핑
+분리)도 타입 제안으로 준비했다(production 미연결).
+
+Expert Credibility Gate 8개 중 7개 PASS 유지(일부 근거 강화), Gate 7은
+여전히 READY_FOR_REVIEW. 신규 테스트 9/9 PASS(+기존 64/64 회귀 없음,
+총 73/73). production Score/DB/API/UI 전부 변경 없음.
+**FINAL_CANDIDATE_FROZEN = NO 유지**(실제 인간 blind review 전까지).
+`docs/development/EJIP_SCORE_V2_STEP35_EXPERT_REVIEW_PREP.md` 신규.
+
+**SCORE_V2_STEP35_CLOSE = YES.** `HUMAN_EXPERT_REVIEW_READY = YES`.

@@ -1,0 +1,16 @@
+
+// STEP3.5 §25 — 향후 실제 human 응답(csv: pairId,humanAnswer[A|B|TIE],reasonDomain) 입력 시
+// 사용할 agreement 계산 helper. 이번 STEP에서는 인간 응답이 없어 호출하지 않는다.
+export interface HumanResponse { pairId: string; answer: 'A' | 'B' | 'TIE'; reasonDomain?: string }
+export function computeAgreement(humanResponses: HumanResponse[], answerKey: { pairId: string; winner: string }[]) {
+  const keyByPair = new Map(answerKey.map((k) => [k.pairId, k.winner]));
+  let agree = 0, strongDisagree = 0, tieHandled = 0;
+  for (const h of humanResponses) {
+    const v2 = keyByPair.get(h.pairId);
+    if (!v2) continue;
+    if (h.answer === 'TIE' || v2 === 'TIE(근소)') { tieHandled++; continue; }
+    if (h.answer === v2) agree++; else strongDisagree++;
+  }
+  const total = humanResponses.length;
+  return { agreementRate: agree / total, strongDisagreementCount: strongDisagree, tieHandledCount: tieHandled, total };
+}
