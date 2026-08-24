@@ -23,7 +23,6 @@ export default function ApartmentScoreCard({ result, loading }: ApartmentScoreCa
     );
   }
 
-  // STEP SCORE S3 §7
   if (!result || result.status !== 'OK' || result.score == null) {
     return (
       <div className={styles.cardCompact}>
@@ -81,6 +80,21 @@ export default function ApartmentScoreCard({ result, loading }: ApartmentScoreCa
     if (dComplex.evidence.buildYear) complexSummary.push(`${dComplex.evidence.buildYear}년 준공`);
     if (dComplex.evidence.totalHouseholds) complexSummary.push(`${dComplex.evidence.totalHouseholds}세대`);
     const complexText = complexSummary.join(' · ');
+
+    // Attendance Zone Wording mapping
+    const getAttendanceWording = (status: string | null | undefined) => {
+      switch (status) {
+        case 'AVAILABLE':
+          return '(공식 통학구역 정보가 반영되었습니다.)';
+        case 'SHARED':
+          return '(공식 통학구역은 공동학구입니다.)';
+        case 'REVIEW_REQUIRED':
+          return '(공식 통학구역 배정에 추가 확인이 필요합니다.)';
+        case 'NOT_AVAILABLE':
+        default:
+          return '(공식 통학구역 정보 확인이 필요합니다.)';
+      }
+    };
 
     return (
       <div className={styles.card}>
@@ -171,9 +185,7 @@ export default function ApartmentScoreCard({ result, loading }: ApartmentScoreCa
               <div className={styles.v2ExplanationGroupTitle}>[교육]</div>
               <ul className={styles.v2ExplanationList}>
                 <li>가까운 초등학교 직선거리 {formatDist(dEducation.evidence.nearestElementaryDistanceM as number)}</li>
-                {dEducation.evidence.attendanceZoneStatus === 'NOT_AVAILABLE' && (
-                  <li>(공식 통학구역 데이터가 아직 지원되지 않는 지역입니다.)</li>
-                )}
+                <li>{getAttendanceWording(dEducation.evidence.attendanceZoneStatus as string | null | undefined)}</li>
               </ul>
             </div>
             <div className={styles.v2ExplanationGroup}>
@@ -196,70 +208,11 @@ export default function ApartmentScoreCard({ result, loading }: ApartmentScoreCa
     );
   }
 
-  // V1 Fallback (Legacy)
-  const { score, categories, regionalStrengths } = result;
-  const visibleCategories = categories.filter((c) => c.score != null);
-  const withExplanation = categories.filter((c) => c.explanation);
-
+  // V2 absent or failed -> Safe Unavailable State
   return (
-    <div className={styles.card}>
-      <div className={styles.headerRow}>
-        <span className={styles.title}>이집점수</span>
-      </div>
-
-      <div className={styles.scoreRow}>
-        <span className={styles.scoreNumber}>{Math.round(score)}</span>
-        <span className={styles.scoreScale}>/100</span>
-        <span className={styles.scoreSubtitle}>지역 비교 기준</span>
-      </div>
-
-      <p className={styles.caption}>실거래가·생활·교통 인프라를 지역 평균과 비교한 점수입니다.</p>
-
-      {visibleCategories.length > 0 && (
-        <div className={styles.categoryRow}>
-          {categories.map((c) => (
-            <div key={c.key} className={styles.categoryChip}>
-              <span className={styles.categoryLabel}>{c.label}</span>
-              <span className={styles.categoryScore}>{c.score != null ? Math.round(c.score) : '-'}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {withExplanation.length > 0 && (
-        <>
-          <button
-            type="button"
-            className={styles.expandToggle}
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-          >
-            왜 이런 점수인가요?
-            <ChevronDown size={16} className={expanded ? styles.chevronOpen : styles.chevron} />
-          </button>
-
-          {expanded && (
-            <ul className={styles.explanationList}>
-              {withExplanation.map((c) => (
-                <li key={c.key}>
-                  <b>{c.label}</b> : {c.explanation}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-
-      {regionalStrengths.length > 0 && (
-        <div className={styles.regionalBlock}>
-          <div className={styles.regionalTitle}>※ 지역 내에서 갖는 강점</div>
-          <ul className={styles.regionalList}>
-            {regionalStrengths.map((s, i) => (
-              <li key={i}>{s.label}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+    <div className={styles.cardCompact}>
+      <span className={styles.titleSmall}>이집점수</span>
+      <span className={styles.unavailableText}>이집점수를 현재 확인할 수 없습니다.</span>
     </div>
   );
 }
