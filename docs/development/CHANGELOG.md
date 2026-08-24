@@ -7015,6 +7015,1134 @@ schema.prisma만(애플리케이션 코드 변경 0건). 외부 API 호출: 0건
 core 테이블 기준). 다음 ingestion STEP(SCHOOL V2-C3A 어린이집 등)은
 자동 진행하지 않고 대기.
 
+## 2026-08-21 (24)
+
+### SCHOOL V2-C3B — 유치원알리미 공식 API 검증(결론: 유망한 source 확인, 인증키 BLOCKER)
+
+별도 worktree(`school-v2-c3b` branch, base `82f4914`)에서 진행 —
+main의 SCHOOL V2-C3A(어린이집) 미커밋 작업물, `school-v2-c2a`
+branch(학교 master) 전부 건드리지 않았다.
+
+기존 V2-B가 유력 후보로 봤던 "교육부_통합제공 유치원 현황"
+(`15037485`, 파일데이터)을 재확인한 결과, 실제로는 어린이집 SHEET
+건과 동일하게 **시도/공시차수 드롭다운 선택 후 다운로드해야 하는
+수동 UI**임을 확인해 primary 후보에서 제외했다. 대신 같은 포털의
+**유치원알리미 OpenAPI "일반현황"(`basicInfo2`, REST/JSON)**을
+직접 확인했더니, **공식 기관코드(`kinderCode`)와 좌표
+(`lttdcdnt`/`lngtcdnt`)까지 포함한 32개 응답 필드**를 가진 진짜
+자동화 가능한 API였다 — 파일 경로보다 명백히 우월해 이쪽을
+primary로 채택했다.
+
+핵심 발견:
+
+- **공식 유치원 기관코드 존재 확인**(`kinderCode`) — V2-B에서
+  UNKNOWN으로 남았던 질문 해소, `Kindergarten.officialCode`를
+  `identityConfidence=HIGH`로 채택 가능해짐.
+- 라이선스: 어린이집 cpmsapi021과 동일한 명확한 문구("영리목적의
+  이용을 포함한 변경 및 자유이용 허락") — `EducationSource
+  (code=moe_kindergarten_basicinfo_api)`를 CLEARED로 등록(id=4,
+  기존 3건 변경 없음).
+- **심의여부: 자동승인**(어린이집은 개발/운영 모두 수동 심의) —
+  향후 키 신청 마찰이 더 낮을 것으로 예상.
+- 응답에 정원(`prmstfcnt`, 총계)과 연령별 학급수/정원/원아수는
+  있으나 **총계 원아수/학급수 필드는 없다** — 임의로 합산해
+  만들지 않고 `ageBreakdown`(정규화 JSON)에만 세부를 보존했다.
+- 교직원수/통학차량/방과후는 이 오퍼레이션 범위 밖(별도 API
+  카테고리) — NOT_AVAILABLE로 정직하게 기록.
+
+**BLOCKER**: 이 API 전용 인증키가 없다 — placeholder 키로 실제
+호출한 결과 `{"status":"DENIED","message":"유효하지 않은 키"}` 확인.
+신규 키는 사용자 승인 없이 신청하지 않았다.
+
+DB 변경: `EducationSource` 1행 추가(id=4). `Kindergarten`/
+`KindergartenStat`은 **0행 그대로**(가짜/추정 데이터 없음). schema
+변경 없음(C1 schema로 필수 요건 충족 확인). 코드 변경:
+`scripts/education/`에 신규 스크립트 3건.
+
+검증: `verify-kindergarten-normalization.ts` 17개 assertion 전부
+PASS(실 API 응답이 아닌 필드명 구조 검증용 fixture임을 스크립트에
+명시), `tsc`/`eslint`(0 errors)/`next build` 전부 통과.
+
+상태: coverage 미달성(부산 실 ingestion 0건)으로 §36 commit 조건
+미충족 — **commit·push 하지 않음**.
+
+**SCHOOL_V2_C3B_CLOSE = NO(BLOCKER)** — `KINDERGARTEN_DATA_READY =
+NO`. `NATIONWIDE_KINDERGARTEN_ARCHITECTURE_READY = YES(조건부)`.
+
+## 2026-08-21 (25)
+
+### SCHOOL V2-C3B RESUME — 부산 유치원 공식 데이터 ingestion 완료
+
+`KINDERGARTEN_API_KEY` 발급 후 유치원알리미 basicInfo2 API로 부산
+367개 유치원을 `Kindergarten`/`KindergartenStat`에 실제 ingestion
+했다.
+
+**실제 sample 호출로 명세-실물 불일치 2건을 발견·수정**: 문서화된
+요청/응답 명세 표는 식별자 필드명을 `kinderCode`(camelCase)로,
+응답 배열 위치를 암묵적 최상위로 적었으나, 실제 응답은 각각
+`kindercode`(소문자)와 `{ kinderInfo: [...] }` wrapper였다 — 명세만
+믿고 그대로 구현했다면 매 실행 0건으로 조용히 실패했을 지점을 sample
+호출이 미리 잡아냈다.
+
+결과: officialCode(`kindercode`) coverage 367/367(100%), 중복 0건.
+16개 구·군 전부 READY(각 구·군 address/establishment/coordinate/
+capacity coverage 100%). 좌표 367건 전부 부산 범위 내, coordinateType은
+의미 불명확해 UNKNOWN 유지(ENTRANCE 등 추정 안 함). 동명 유치원 6쌍
+발견 — 전부 실제 주소가 다른 별개 기관으로 확인해 자동 merge하지
+않았다. 연령별 원아수 합이 인가정원을 1명 초과하는 사례 2건 발견,
+오류로 단정하지 않고 사실만 기록.
+
+2차 실행(idempotency 재검증)에서 core/stat 중복 0건 확인 — 단
+필드 diff 없이 매번 재기록하는 한계는 학교(C2A)/어린이집(C3A)과
+동일하게 남아있다(정직하게 기록, 전국 확장 전 개선 후보).
+
+DB 변경: `Kindergarten` 367행, `KindergartenStat` 367행 신규.
+`EducationSource`는 이미 §2에서 CLEARED로 등록된 것을 그대로 사용
+(추가 변경 없음). schema 변경 0건. 기존 `/api/school*` production
+route, UI 변경 0건.
+
+검증: `verify-kindergarten-normalization.ts`를 실제 API 응답(2개
+샘플 row)으로 교체해 20개 assertion 전부 PASS, `tsc`/`eslint`
+(0 errors)/`next build` 전부 통과.
+
+상태: BLOCKER 없음, 부산 16개 구·군 coverage 100%, idempotency(중복
+방지 기준) 확인 — commit/push 진행.
+
+**SCHOOL_V2_C3B_CLOSE = YES(부산 pilot 기준)** —
+`KINDERGARTEN_DATA_READY = YES(부산)`.
+`NATIONWIDE_KINDERGARTEN_ARCHITECTURE_READY = YES`.
+## 2026-08-21 (23)
+
+### SCHOOL V2-C2A — NEIS 학교기본정보 기반 부산 School canonical master ingestion
+
+별도 worktree(`school-v2-c2a` branch, base `82f4914`)에서 진행 —
+main worktree의 SCHOOL V2-C3A(어린이집) 미커밋 작업물은 건드리지
+않았다.
+
+NEIS 학교기본정보(`schoolInfo`) API로 부산 664개교를 `School`
+테이블에 canonical master로 최초 ingestion했다. `neisSchoolCode`
+(NEIS `SD_SCHUL_CODE`)를 canonical identity로 사용했고, 학교명은
+canonical key로 쓰지 않았다(실제로 "송정초등학교"가 해운대구/강서구
+서로 다른 코드로 2건 존재함을 확인해 이 원칙의 필요성이 실측으로
+입증됨).
+
+핵심 발견: NEIS 응답에 **아직 개교하지 않은 예정 학교가
+`SD_SCHUL_CODE` 공백 상태로 섞여 있음**을 확인(부산 667건 중 3건,
+전부 "(가칭)OOO학교" 표기 + 미래 설립일) — 학교명 기반 임시 코드를
+만들지 않고 skip 처리했다. 기존 V1 audit의 "부산 667개교" 총량은
+정확히 재확인됐고(변동 없음), 그 667 안에 이런 세부가 있었음을
+새로 밝혔다.
+
+Legal gate: NEIS 이용약관 제11조("저작자 및 출처 표시 조건으로
+자유이용 허락") + 학교기본정보 데이터셋 페이지("이용 허락 범위
+제한없음", 갱신주기 매주) 두 공식 페이지가 상충 없이 일치해
+`EducationSource(code=neis_school_info)`를 CLEARED로 등록.
+
+부산 16개 구·군 전부 실데이터 확인(합계 664), 필수 필드
+(schoolCode/schoolName) coverage 100%, 선택 필드도 97~99% 수준.
+`neisSchoolCode` 중복 0건. 두 번째 실행에서도 중복 생성 0건(핵심
+idempotency 확인) — 단 필드 diff 없이 매번 재기록하는 한계는
+문서에 정직하게 남김.
+
+`SchoolStat`은 의도적으로 0행 유지(학교알리미 C2B 범위, 이번 STEP
+아님). 기존 `/api/school*` production route, UI 변경 0건. 좌표는
+전부 null(대량 geocoding 금지 지시 준수).
+
+DB 변경: `School` 664행 신규, `EducationSource` 1행 신규(id=3, 기존
+2건 변경 없음). 코드 변경: `scripts/education/`에 신규 스크립트
+3건(ingest-schools-neis.ts, register-neis-school-source.ts,
+verify-school-normalization.ts). schema 변경 0건(C1 schema로 충분).
+
+검증: `verify-school-normalization.ts` 21개 assertion 전부 PASS,
+`tsc`/`eslint`(0 errors)/`next build` 전부 통과.
+
+상태: BLOCKER 없음, 부산 coverage 정상, idempotency(중복방지 기준)
+확인 — commit/push 진행.
+
+**SCHOOL_V2_C2A_CLOSE = YES(부산 pilot 기준)** —
+`SCHOOL_MASTER_DATA_READY = YES(부산)`. `NATIONWIDE_SCHOOL_
+ARCHITECTURE_READY = YES`(office-code 파라미터화, 부산 전용 분기
+없음, 전국 실제 실행은 미실시).
+
+## 2026-08-21 (24) — SCHOOL V2-C5 거리/접근성 정확도 감사 (AUDIT ONLY)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c5`, branch
+`school-v2-c5-distance-audit`, base `da17c0a`=school-v2-c2a)에서 진행.
+main dirty worktree, C2A/C2B/C3B/score-geocode-recovery 브랜치 전부
+미접촉.
+
+핵심 발견: "학교까지 거리"가 서로 참조하지 않는 **3개 독립
+파이프라인**(Score `schoolAccess`/`/school/[id]` 인근 아파트/AI 검색
+조건검색)으로 존재하고, 셋 다 STRAIGHT_LINE_DISTANCE(Turf 또는
+Kakao 자체 distance 필드)만 계산하면서 그중 둘(`/school/[id]`,
+AI 검색)은 서로 다른 임의 보정식으로 "도보 N분"을 만들어낸다 —
+같은 700m 직선거리가 화면에 따라 "9분"과 "22분"으로 2배 이상
+차이난다.
+
+재검증 결과 부산 서구 송도동 하드코딩 폴백
+(`api/school/apartments/route.ts` `[129.0225, 35.0772]` +
+대신동/송도동/충무동 동단위 보정)이 **여전히 존재**하며, `/school`
+목록→상세 진입 경로는 lat/lng를 넘기지 않아 이 폴백이 실제로
+도달 가능한 경로임을 확인. 추가로 repo root의 `fix_coords.ts`/
+`fix_songdo_coords.ts`(2026-08-07 커밋 cb5d606)가 특정 아파트
+7곳의 좌표를 "도보 3분 거리 셋팅" 등 주석과 함께 손으로 지정해
+학교 대비 상대 거리 순위를 조작한 이력을 신규 발견(BLOCKER,
+프로덕션 반영 여부는 미확인 — 후속 STEP 확인 필요).
+
+`School`/`Kindergarten`/`Childcare` 세 모델 모두
+`latitude/longitude/coordinateSource/coordinateType`(CoordinateType
+enum: OFFICIAL_POINT/ADDRESS_GEOCODE/ENTRANCE/CENTER/UNKNOWN)을
+이미 동일 shape로 스키마에 보유 — SCHOOL V2 거리 데이터 계약을
+세 기관에 공통 재사용하는 데 마이그레이션이 불필요함을 확인. 단
+NEIS 적재 스크립트가 이 필드들을 채우지 않아 실제로는 전부
+UNKNOWN(C2A CHANGELOG "좌표는 전부 null" 기록과 일치).
+
+10개 표본(서구/해운대구/부산진구/동래구/사하구/강서구/기장군/수영구)은
+`ApartmentMaster`의 실제 exact-geocode 좌표로 Kakao SC4 카테고리
+검색(read-only, 아파트당 1회, 총 10회)을 실행해 실측 직선거리만
+기록 — 보행 분은 route API 없이 추측하지 않음.
+
+Route provider 조사: Kakao Mobility 도보 길찾기는 공식 페이지에서
+"사전 제휴 계약 필요"(제휴 전용 API)임을 1차 문서로 확인. Naver
+Directions 5/TMAP 보행자 경로는 JS 렌더링 문서라 가격/quota/caching
+정책을 1차 문서로 확인하지 못해 EXTERNAL_VERIFICATION_REQUIRED로
+명시(추측 기재 없음).
+
+코드/DB 변경 없음(schema, production route, UI 전부 미변경). 신규
+read-only 감사 스크립트 1건(`scripts/education/c5-sample-distance-audit.ts`,
+tsc/eslint 0 errors) + 신규 문서
+`docs/development/SCHOOL-V2-C5-distance-accessibility-audit.md`.
+
+상태: BLOCKER 2건 발견(서구 하드코딩 폴백, fix_coords 계열 좌표
+조작) — 이번 STEP에서는 제거하지 않고 목록만 작성(지시사항). Score
+V1 formula 변경 없음. main merge 없음.
+
+**SCHOOL_V2_C5_AUDIT_CLOSE = YES** —
+`DISTANCE_DATA_SAFE_FOR_PARENT_UX = NO(as-is)` — `/school/[id]`·AI
+검색의 "도보 N분" 표현이 직선거리 기반 추정을 실제 도보시간처럼
+보여주고 있어 C5-A(문구 교정) 전에는 그대로 노출하면 안 됨.
+
+## 2026-08-21 (25) — SCHOOL V2-C5-A misleading walking label 교정 + fix_coords 영향 확인
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c5a`, branch
+`school-v2-c5a-distance-label`, base `91a1a8d`=school-v2-c5-distance-audit)에서
+진행. main/C2A/C2B/C3B/score-geocode-recovery 전부 미접촉.
+
+C5 감사에서 확인된 8곳의 misleading "도보 N분" 노출을 전부 "직선거리
+약 Nm"로 교정(계산 로직/데이터 자체는 불변, 표현만 정직해짐):
+`/api/school/apartments`(1.45배+분당15분+flat보정 로직 삭제),
+`school-detail-client.tsx`, `ai-search.ts`
+`findNearestElementarySchool`(distance/80 삭제),
+`api/ai-search/route.ts`(Gemini 데이터요약), `ai-search-client.tsx`
+(카드 배지), `ai-search.ts`의 Gemini 가드레일 프롬프트,
+`KakaoPlaces.tsx`(학교 SC4·어린이집/유치원 PS3 항목만 — 지하철/병원/
+마트/약국/공원 등 다른 카테고리는 `/apt/[name]`(V1 잠금) 공용
+컴포넌트라 그대로 유지, `isEducationPlace()`로 항목 단위 분기).
+
+`/api/school/apartments` 하위호환: `walkTime` 필드 키는 유지하되
+값을 안전한 문구로 교체(@deprecated 표시), 신규 `distanceMeters`/
+`distanceLabel` 필드 추가 — 실제 소비자가 이 파일 하나뿐임을 grep으로
+확인 후 소비자도 신규 필드로 전환.
+
+AI 검색의 "도보 N분 이내" 자연어 조건 위험을 조사한 결과, 애초에
+분(分) 단위를 파싱하는 필드가 스키마에 없어(모든 학교 근접 표현이
+`nearElementarySchool` boolean 하나 + 고정 500m 반경으로 뭉개짐)
+"허위로 조건 만족을 주장"하는 코드 경로 자체가 없었음을 확인 —
+UNSUPPORTED_ROUTE_CONDITION 같은 신규 메커니즘은 조건 파싱 확장이라
+범위 밖으로 판단해 만들지 않고, 응답이 항상 실제 직선거리로만
+표현되도록 하는 것으로 위험을 낮췄다(한계는 문서에 기록).
+
+fix_coords.ts/fix_songdo_coords.ts 프로덕션 영향 read-only 확인
+(`scripts/education/c5a-fix-coords-impact-check.ts`): 두 스크립트가
+실제로 write한 `Transaction` 테이블이 **현재 총 0행**이고 `src/`
+어디에서도 `prisma.transaction`을 참조하지 않는 완전한 dead
+table임을 확인 — 7개 대상 단지 전부 **NO_PRODUCTION_IMPACT**로 확정
+(추정이 아니라 직접 조회로 확인). ApartmentMaster(Score가 실제로
+쓰는 테이블)엔 7곳 중 2곳만 존재하고 좌표는 하드코딩 값과 다른
+정상 지오코딩 값(2026-08-13 갱신, score-geocode-recovery로 추정) —
+fix_coords.ts가 건드린 적 없는 테이블이라 예상대로 무관함을 재확인.
+Transaction 모델엔 `updatedAt` 컬럼 자체가 없어 "언제 반영됐는지"는
+확인 불가(테이블이 비어있어 실익 없음). 로컬 DATABASE_URL이 Vercel
+프로덕션과 정확히 같은 인스턴스인지는 대시보드 접근 없이 암호학적
+확인은 못해 UNKNOWN으로 남김(정황상 SAME 가능성 높음, 단일
+DATABASE_URL만 존재).
+
+UI regression: 서구2/해운대2/동래·사하 각1(총 6개) 실제 API
+호출로 거리값 불변·문구만 교정 확인 + 브라우저로 `/school/[id]`,
+`/ai-search`(실제 Gemini 질의) 육안 확인 — caveat 문구 정상 노출,
+"도보" 텍스트 전무.
+
+신규 회귀 가드 스크립트
+`scripts/education/c5a-verify-no-walking-labels.ts`(vitest/jest 없는
+이 프로젝트 관례대로 tsx 직접실행 assertion 방식) — PASS. Score
+파이프라인(`school-access-sentence.ts`) 불변도 같은 스크립트로 재확인.
+
+서구 하드코딩 폴백(§8 지시)과 fix_coords 스크립트 자체는 이번
+STEP에서 제거하지 않고 C5-B로 이월. Score V1 formula/weight/
+ApartmentLocationFeature 전부 미변경.
+
+검증: `tsc --noEmit` 0 errors, `eslint`(수정 파일 전체) 0 errors,
+`next build` 성공.
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C5A_CLOSE = YES** —
+`PARENT_DISTANCE_LABEL_SAFE = YES` — 학교/유치원/어린이집 거리
+UI 전 구간에서 "도보 N분"이 더 이상 노출되지 않으며 실제 직선거리로만
+표현된다. `MANUAL_COORDINATE_C5B_PRIORITY = LOW`(fix_coords 관련
+production impact가 NO로 확정돼 긴급성 낮음, 그러나 좌표 provenance
+정리 자체는 여전히 C5-B에서 필요).
+
+## 2026-08-22 (26) — SCHOOL V2-C5-B 교육시설 좌표 provenance 정리 + 서구 폴백 제거
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c5b`, branch
+`school-v2-c5b-coordinate-provenance`, base `d457100`=school-v2-c5a)에서
+진행. main/C2A/C2B/C3B/score-geocode-recovery 전부 미접촉.
+
+**SchoolInfo apiType=0 좌표 실측 확정**: `LTTUD`/`LGTUD` 필드 실존
+확인(공식 개발자가이드 필드명), 부산 662건(16개 구군×초/중/고/특수)
+기준 coverage 99.7%(660/662), invalid 0건, out-of-Busan 0건. 10개
+표본을 Kakao SC4 POI와 대조한 결과 **9/9 성공 케이스가 델타 0.0m로
+완전히 동일한 좌표값** — SchoolInfo가 Kakao보다 더 정확하다는 근거는
+없으며(사실상 동일 원천으로 추정, 공식 확인은 아님), 이 소스를 쓰는
+실용적 이점은 정확도가 아니라 안정성/재사용성/coverage 완전성(부산성우학교
+사례처럼 Kakao 커버리지가 성긴 곳도 SchoolInfo는 있음)임을 명확히 기록.
+
+**School.latitude/longitude write는 이번 STEP에서 하지 않음** —
+`EducationSource` 테이블을 직접 조회(read-only)한 결과 SchoolInfo/
+학교알리미 관련 source가 단 1건도 등록돼 있지 않음을 확인(등록된
+4건: childcare_national_api=CLEARED, childcare_national_sheet=
+REVIEW_REQUIRED, neis_school_info=CLEARED,
+moe_kindergarten_basicinfo_api=CLEARED — SchoolInfo 없음). 이 프로젝트
+스스로 설계한 "legalReviewStatus=CLEARED 전엔 ingestion 자체가
+실행되지 않는 구조"를 그대로 지켜 write하지 않고 C5-B1으로 이월.
+대신 `lookupCanonicalSchoolCoordinate()`(schoolName+sigunguCode 유일
+매칭일 때만 사용, 모호하면 null) 함수를 미리 구현해둬 좌표가 채워지면
+코드 변경 없이 즉시 활성화되게 함.
+
+**Kindergarten.coordinateType 정리 완료**(실제 반영): 367건 전부
+`UNKNOWN`→`OFFICIAL_POINT`. 이미 저장된 좌표(C3B, source=
+moe_kindergarten_api)가 EducationSource 조회로 CLEARED임을 확인한
+뒤 진행 — 새 데이터 도입이 아니라 이미 승인된 데이터에 정확한 라벨을
+붙인 metadata 정리라 School과 달리 write 조건 충족으로 판단.
+Childcare는 여전히 0행(C3A 미착수)이라 확인/조치 대상 없음.
+
+**Identity crosswalk 확장**(C2B는 초등만 봤던 것을 전 급으로): 부산
+전체 662건 기준 이름 중복 5그룹, 그중 **구·군 내부에서도 중복돼
+unsafe한 게 3그룹·7건**(전부 강서구: 송정초등학교/대저중앙초등학교/
+가락중학교) — `BNHH_YN`(분교여부)으로도 구분 안 됨(셋 다 N), 동
+단위 주소로는 구분 가능해 보이나 이번 STEP에서 구현하지 않음(좌표를
+실제로 매핑하지 않기로 했으므로).
+
+**부산 서구 하드코딩 폴백 완전 제거**(`api/school/apartments/route.ts`
+`[129.0225, 35.0772]` + 대신동/송도동/충무동 보정 블록 삭제). 새 해석
+순서: lat/lng 파라미터 → canonical School 좌표(현재 항상 미확보) →
+Kakao 실시간 검색(기존 유지, 폴백 아니라 그 학교 자체를 찾는 시도) →
+그래도 없으면 **null**(다른 좌표로 대체하지 않음) → 기존에 이미 있던
+"인근 아파트 매물 없음" 안전 경로로 자연 합류. 실측 확인: 존재하지
+않는 가짜 학교명으로 호출 시 예전엔 서구 좌표로 계산됐을 것이 이제는
+정직하게 빈 결과로 처리됨.
+
+**미해결로 정직하게 기록한 위험**: `lawdCd`가 주어져도 Kakao 키워드
+검색이 그 지역으로 스코핑되지 않아, 동명이교(송정초등학교)가 `lat/lng`
+없이 조회되면 현재는 우연히 맞는 지역이 나오지만 보장된 동작이 아님 —
+regcodes 병렬 fetch 순서 재구성이 필요해 이번 STEP 범위를 넘어선다고
+판단해 구현하지 않고 위험만 명시적으로 남김(§11/§12/§19).
+
+`fix_coords.ts`/`fix_songdo_coords.ts` 삭제(git rm — history는 보존).
+C5-A에서 이미 NO_PRODUCTION_IMPACT 확정, package.json/다른 스크립트/
+문서 어디에서도 미참조 재확인 후 제거.
+
+신규 공용 가드 `scripts/education/lib/coordinate-guard.ts`
+(`validateCoordinate`: 범위/0·0/source 필수/manual·hardcode·fix_
+패턴 명시적 차단/부산 bounds, `findExcessiveDuplicateCoordinates`:
+경고만, 자동 reject 안 함) + 회귀 가드
+`c5b-05-verify-provenance-guards.ts`(9개 케이스 전부 PASS, 정적 패턴
+검사 1건은 최초 실행 시 내 설명 주석이 오탐돼 대입 코드만 보도록
+정규식 교정).
+
+거리 계산 semantics 불변(STRAIGHT_LINE_DISTANCE, "직선거리 약 Nm"),
+Score(`ApartmentLocationFeature`/`nearestElementaryDistanceM`/
+`school-access-sentence.ts` 등) 전부 미접촉, SchoolStat/대량
+SchoolInfo 통계 ingestion 없음.
+
+Regression: 서구2/해운대2/강서2/기타4(총10) 실제 API 호출 전부 정상,
+가짜 학교명으로 no-fallback 확인, 브라우저로 `/school/[id]`(lat/lng
+없이 진입) 정상 렌더 확인.
+
+검증: `tsc --noEmit` 0 errors, `eslint`(수정/신규 파일 전체) 0
+errors, `next build` 성공.
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C5B_CLOSE = YES** —
+`DISTANCE_DATA_SAFE_FOR_PARENT_UX = YES`(C5-A 유지 + 서구 폴백까지
+제거돼 지역 오매칭 위험도 낮아짐, 단 동명이교 스코핑 미해결 위험은
+남음). `OFFICIAL_SCHOOL_COORDINATE_READY = NO`(SchoolInfo 소스가
+EducationSource CLEARED 전까지는 School 좌표를 canonical로 쓸 수
+없음 — C5-B1 필요). `C5C_ROUTE_PILOT_READY = NO`(§18 준비자료만 갱신,
+provider 계약/가격 미해결 그대로).
+## 2026-08-21 (24) — SCHOOL V2-C2B RESUME: 학교알리미(SchoolInfo) OpenAPI 실제 인증/응답 검증
+
+사용자가 발급받은 `SCHOOLINFO_API_KEY`를 `.env.local`에 저장 후 재개.
+DB write/대량 ingestion/schema migration 없음, read-only 검증만
+진행(`scripts/education/c2b-verify-schoolinfo-api.ts`). apiKey 값은
+로그/문서/커밋 어디에도 남기지 않음.
+
+인증 성공, `apiType=09`(공식 개발자 가이드 `OpenAPI_Output.xlsx` 기준
+"학년별·학급별 학생수") 실호출로 wrapper(`{resultCode,resultMsg,list}`,
+NEIS와 다른 평평한 구조)와 필드(`SCHUL_NM`/`SCHUL_CODE`/학년별
+`COL_C{n}`·`COL_S{n}`·`COL_{n}`(학급수/학생수/학급당학생수, 후자는
+API가 이미 계산해 반환)/`TEACH_CNT`/`TEACH_CAL`)를 확인. 참고: 사이트
+자체 검색 UI의 내부 드롭다운 코드(`m_gongsi`)는 공식 가이드의 apiType
+번호 체계와 서로 다르다(둘 다 "09"라는 우연의 일치 없음 — UI 쪽 09는
+"자격종별 교원현황", 공식 API 쪽 09는 "학년별·학급별 학생수") —
+"실제 응답이 문서와 다르면 실제 응답 우선" 원칙에 따라 공식 가이드+실
+호출 결과를 채택.
+
+`sidoCode`/`sggCode` 실제 형식을 실측으로 확정: NEIS 3자리 교육청코드
+(`C10`)도, 사이트 내부 AJAX의 10자리 법정동코드(`2600000000`)도 아닌,
+이 프로젝트가 MOLIT 조회에 이미 쓰는 **5자리 lawdCd 그대로**
+(`sidoCode=26`, `sggCode=26140`)였다 — 새 코드표 불필요.
+
+`SCHUL_CODE`(학교알리미 자체 식별자, 예 `"S020001449"`)는 NEIS
+`SD_SCHUL_CODE`와 형식·값 모두 다름을 확인 — **코드 기반 직접 매핑
+불가**로 확정(이전 UNKNOWN 판정 정정). 안전한 crosswalk 키는
+(학교명, 시군구) 조합이며, 부산 16개 구·군 NEIS 적재 초등학교 305건
+전부가 이 키로 학교알리미 2025년 자료와 일치(100%), 학교알리미 쪽에
+12건 추가 존재(가덕도 등 소규모/분교 추정, 원인 미확정). 단
+(학교명,시군구) 조합조차 완전한 유일키가 아님을 실측으로 발견 —
+강서구 안에서 "송정초등학교"·"대저중앙초등학교"가 각각 서로 다른
+`SCHUL_CODE`로 2건씩 존재(분교/이력 중복 추정). 별도로 부산 664개
+NEIS 적재 학교 전체를 대상으로 동명이교 전수 조사(구·군 간)한 결과는
+"송정초등학교"(해운대구/강서구) 1건만 확인됨.
+
+공시년도(`pbanYr`) 유효범위 실측: 2026/2025/2024 성공, 2023은
+"최근 3년만 제공"으로 거부 — 롤링 3년 윈도우가 실제로 동작함을
+확인(기존 문서상 법령 근거와 일치). 응답에는 연도/공시차수/기준일을
+echo하는 필드가 없음 — 공식 가이드 34개 오퍼레이션 전체를 훑어
+확인(요청 시 넘긴 `pbanYr`을 저장측이 별도로 기록해야 함, 응답만으로는
+복원 불가).
+
+참고 보너스 발견(이번 STEP 범위 밖, ingestion 안 함): `apiType=0`
+(학교기본정보) 응답에 `LTTUD`/`LGTUD`(위도/경도)가 실제로 채워져 있음
+확인 — SCHOOL V2-C5 거리 감사에서 "School 자체 공식 좌표 소스 없음
+(UNKNOWN)"으로 남긴 항목의 유력 후보. C5-B에서 재검토 권고.
+
+`SchoolStat` 스키마(school-v2-c2a 시점부터 이미 존재:
+`studentCount`/`classCount`/`teacherCount`/`gradeBreakdown Json`/
+`sourceRecordId`) 재판정 결과 **수정 없이 이번에 확인한 실제 필드를
+그대로 담을 수 있음** — `sourceRecordId`에 `SCHUL_CODE` 저장,
+`gradeBreakdown`에 학년별 `COL_*` 전체 저장 가능. 마이그레이션 불필요.
+
+라이선스(§1-2, 제3유형: 출처표시+변경금지)는 이번 STEP에서 재확인하지
+않음 — SCHOOL-V2-B 기존 판정 유지.
+
+문서: `SCHOOL-V2-B-official-source-verification.md` §1-3/§1-6/§1-7
+갱신 + 신규 §1-8("실제 호출 방식") 추가(기존 조사 내용 삭제 없이
+"2026-08-21 SCHOOL V2-C2B RESUME 실측" 표기로 덧붙임). 신규 스크립트
+`scripts/education/c2b-verify-schoolinfo-api.ts`(read-only, tsc/eslint
+0 errors).
+
+상태: BLOCKER 없음. 13-다 졸업생 진로현황은 여전히 별도 LATER 유지
+(이번 STEP에서 호출하지 않음, §1-4 판정 변경 없음).
+
+**SCHOOL_V2_C2B_CLOSE = YES(apiType=09 한정 실측 기준)** —
+`SCHOOLINFO_DATA_INGESTION_READY = CONDITIONAL`: 필드 스키마·
+crosswalk 키·좌표질/schulKndCode 전체 코드표 등은 확인됐으나, (a)
+동명이교조차 완전히 해소 못하는 (학교명,시군구) 키의 잔여 모호성
+처리 로직, (b) apiType=08/22(직위별 교원현황) 등 나머지 오퍼레이션
+실측, (c) 라이선스(제3유형 변경금지가 "학급당학생수 같은 파생값
+계산·표시"에 저촉되는지) 최종 법무 판단이 남아 있어 전면 ingestion
+전 추가 확인 필요.
+
+## 2026-08-22 (27) — SCHOOL V2-LEGAL-1 SchoolInfo 라이선스/이용 게이트 확정 (AUDIT ONLY)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-legal1`, branch
+`school-v2-legal1-schoolinfo-gate`, base `e9062a9`=school-v2-c2b)에서
+진행. DB write/migration/School coordinate write/SchoolStat
+ingestion/main merge 전부 없음.
+
+**핵심 신규 발견**: 기존 V2-B/C2B 감사는 data.go.kr 카탈로그 등록
+(`15098092`, "공공누리 제3유형: 출처표시+변경금지")만 근거로 삼았는데,
+이번에 schoolinfo.go.kr 자신의 "API 제공목록" 안 **오퍼레이션별
+메타정보 페이지**(각 공시항목 클릭 시 나오는 "이용허락조건" 섹션)를
+처음으로 직접 확인했다. 3개 오퍼레이션(학교기본정보=apiType0,
+학년별·학급별학생수=apiType09, 직위별교원현황=apiType22)에서
+**동일한 문구**를 확인: "출처표시하면 영리 목적의 이용이나 변경 및
+2차적저작물의 작성을 포함한 자유 이용을 할 수 있습니다" — data.go.kr의
+"변경금지"보다 명백히 관대하다. 두 공식 출처가 서로 다른 조건을
+제시한다는 사실 자체를 그대로 기록했고, 어느 쪽이 우선인지 판단할
+근거는 찾지 못해 단일 KOGL 유형으로 확정하지 않고 `UNKNOWN`으로 남김.
+
+schoolinfo.go.kr의 "공공데이터 이용정책"(OpenAPI 하위 메뉴, 공공데이터법
+§1/§3 근거)도 별도 확인 — "영리 목적의 이용을 포함한 자유로운 활용이
+보장됩니다"로 상업적 이용은 재확인. 다만 "API 이용안내" 페이지가
+"상업적 이용이 불가능한 API를 상업적으로 활용하는 경우"를 금지행위로
+명시해, API별로 조건이 갈릴 수 있음을 공식적으로 인정 — 확인한 3개
+오퍼레이션 밖으로는 일반화하지 않음.
+
+§4에서 "원본값 그대로 표시"(A~D, 학생수/학급수/교사수/API제공
+파생값)는 SAFE로 판정(두 출처 어느 쪽 기준으로도 안전). 반면
+차트/시계열(E,F), 증감률 계산(G), **이집 자체 점수 생성(H)**은
+REVIEW_REQUIRED로 유지 — data.go.kr 제3유형과의 불일치가 해소되지
+않은 게 유일한 걸림돌이며, 특히 H(여러 원본값을 조합한 자체 점수)는
+가장 신중해야 할 영역으로 별도 강조. 좌표(I,J)도 같은 이유로
+REVIEW_REQUIRED이나, 원본 그대로 저장·표시·정렬(sort)까지는 상대적으로
+안전한 영역으로 구분.
+
+출처표시 의무는 모든 유형에서 예외 없이 필수임을 저작권정책 페이지
+공식 예시 문구로 재확인(기관명/작성연도/공공누리유형/저작물명/
+작성자/URL). 이집 UI 초안 문구를 제안했으나 화면 내 짧은 표기만으로는
+공식 예시의 전 요소를 충족 못해 별도 출처 상세페이지 병행을 권고.
+
+최근 3년 제한(교육관련기관 정보공개 특례법 시행령 제3조3항)은 API
+접근 가능 기간에 대한 규정으로 읽히지 취득 후 보관기간을 규율하는
+근거는 찾지 못함 — 그래도 `HISTORICAL_RETENTION = REVIEW_REQUIRED`로
+유지(지시사항 기본값).
+
+EducationSource 등록안(제안값만, write 없음) 및 후속 확인 권고
+(학교알리미 고객센터 서면 문의, 로그인 후 약관 원문 확인) 문서화.
+
+문서: `docs/development/SCHOOL-V2-LEGAL1-schoolinfo-usage-gate.md`
+신규(기존 V2-B/C2B/C5B 감사 결과 보존, 덮어쓰지 않음).
+
+상태: BLOCKER 없음(단, 아래 두 게이트 모두 CONDITIONAL — CLEARED
+아님).
+
+**SCHOOL_V2_LEGAL1_CLOSE = YES** —
+`SCHOOLINFO_COORDINATE_USE_GATE = CONDITIONAL`(원본 저장·가공없는
+표시·정렬은 안전 범위, 직선거리 계산·순위화는 REVIEW_REQUIRED).
+`SCHOOLINFO_STATISTICS_USE_GATE = CONDITIONAL`(원본값 그대로 표시만
+안전, 차트/증감률/자체 점수화는 REVIEW_REQUIRED — 특히 자체 점수화는
+서면 확인 전 착수 금지 권고). 두 게이트 모두 CLEARED가 아니므로
+C5-B1(School 좌표 ingestion)과 SchoolStat ingestion 모두 "무조건
+진행 가능"은 아니고, CONDITIONAL 허용 범위 내에서만 사용자/ChatGPT
+승인 후 제한적 착수를 검토할 것.
+
+## 2026-08-22 (28) — SCHOOL V2-C2B-A SchoolInfo↔NEIS identity resolver 확정 (AUDIT+DESIGN)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c2ba`, branch
+`school-v2-c2ba-identity`, base `e9062a9`=school-v2-c2b)에서 진행.
+DB write/SchoolStat ingestion/SchoolInfo coordinate write/migration/
+main merge 전부 없음. 다른 병렬 브랜치(C2A/LEGAL-1/C3B/C5B/score) 전부
+미접촉.
+
+부산 canonical School 664건 × SchoolInfo 부산 전체 671건(16개 구군×
+schulKndCode 02~07 전수 fetch, apiType=0만)에 순수함수 resolver를
+실제로 돌렸다. 이름+시군구만으로는 638 DIRECT_UNIQUE/4 AMBIGUOUS/22
+NO_MATCH였으나, **학교급(4+1 버킷 정규화) + canonical School.dongName
+기반 2차 disambiguation**을 추가하자 강서구 동명이교 4그룹(송정초x2,
+대저중앙초, 가락중학교 — 신규로 경일중학교도 발견) 중 **3그룹 전부
+HIGH로 안전하게 해소**됐다(NEIS dongName과 SchoolInfo 주소가 서로
+독립적으로 일치 — 예: 강서구 송정초등학교의 NEIS dongName이 "신호동"
+이라는 사실이 SchoolInfo 주소와 정확히 맞아떨어짐). 남은 1건
+(경일중학교)은 NEIS dongName 필드 자체가 "명지동, 경일중학교"로
+오염돼 있어(기존 NEIS ingestion 데이터 품질 이슈, 이번 STEP 범위
+밖) 자동 확정하지 않고 LOW로 정직하게 남김 — 무결성 체크(서로 다른
+canonical School이 같은 SCHUL_CODE에 HIGH 매칭된 사례) 전수 조사
+결과 WRONG_MERGE = 0건 확정.
+
+최종 TRUE_IDENTITY_COVERAGE = HIGH 633/664 = **95.3%**(학교급별:
+초등 100%, 중 96.6%, 고 89.2%, 특수 100%, 기타 11.1% — 방송통신고/
+평생학교/외국인학교 등 비표준 유형은 낮게 유지, 억지로 끌어올리지
+않음).
+
+부수 발견: SchoolInfo-only 25건(C5-B가 "분교 추정"으로 근거 없이
+남겨뒀던 것) 전수 확인 결과 **전부 `ABSCH_YN='Y'`(폐교)** — 분교가
+아니라 폐교였음을 확정. NEIS 기반 canonical School은 폐교 학교를
+애초에 활성 목록에 포함하지 않는 것으로 추정.
+
+BNHH_YN(분교여부)은 이번 8개 중복 사례 전부 'N'이라 disambiguation에
+실질적 도움은 안 됐으나(전부 동일값), resolver는 향후 실제 분교
+사례를 대비해 BNHH_YN='Y'인 유일 후보를 MEDIUM으로 처리하도록 이미
+설계함. 좌표는 canonical School이 여전히 0% 보유(C5-B의 write 보류
+결정 유지)라 보조 증거로 사용하지 못함(설계상 준비는 돼 있음).
+
+신규 재사용 가능 모듈 `scripts/education/lib/schoolinfo-identity-resolver.ts`
+(순수 함수) + fixture 테스트
+`schoolinfo-identity-resolver.test.ts`(이 프로젝트 기존 관례인
+`node:test`+`npx tsx --test` 그대로 따름, DB/네트워크 미접근,
+12/12 PASS) + `EducationIdentityMapping` future crosswalk 테이블
+설계 제안(migration 없음, 문서화만).
+
+LEGAL-1 게이트는 이번 STEP에서 변경하지 않음 —
+`SCHOOLINFO_COORDINATE_USE_GATE`/`SCHOOLINFO_STATISTICS_USE_GATE`
+둘 다 CONDITIONAL 그대로 유지(문서에도 CLEARED로 잘못 쓰지 않음).
+
+검증: `tsc --noEmit` 0 errors, `eslint`(신규 파일 전체) 0 errors,
+resolver fixture test 12/12 PASS.
+
+문서: `docs/development/SCHOOL-V2-C2BA-identity-disambiguation.md`
+신규(기존 C2B/C5B/LEGAL-1 문서 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C2BA_CLOSE = YES** —
+`IDENTITY_READY_FOR_INGESTION = CONDITIONAL`(HIGH 633건만 자동
+ingestion 후보, MEDIUM/LOW/NO_MATCH는 reconciliation queue로 분리
+권장 — identity 게이트는 CONDITIONAL이지만 legal 게이트
+(SCHOOLINFO_COORDINATE_USE_GATE/SCHOOLINFO_STATISTICS_USE_GATE)가
+여전히 CONDITIONAL이라 실제 ingestion은 두 게이트 모두 해소돼야
+착수 가능).
+
+## 2026-08-22 (29) — SCHOOL V2-C2B-B school bucket 정정 + 중/고/특수 live 검증 (AUDIT ONLY)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c2bb`, branch
+`school-v2-c2bb-type-verification`, base `b94bfe0`=school-v2-c2ba)에서
+진행. DB ingestion/SchoolStat write/coordinate write/migration/main
+merge 전부 없음. 다른 병렬 브랜치 전부 미접촉.
+
+**C2A(elementary305/middle172/high145/special16/other26)와
+C2B-A(305/176/158/16/9) 버킷 총합 불일치의 근본 원인을 두 함수를
+그대로 복사해 664건에 재실행해 정확히 재현했다**: 둘 다 substring
+매칭에 의존하는데 "각종학교(중)"/"평생학교(중)-2년6학기"류는
+문자열 안에 "중학교"가 연속으로 등장하지 않아(괄호가 끼어있음) C2A가
+전부 놓쳐 OTHER로 떨어뜨렸고(주석은 잡힌다고 적혀있었지만 실제
+코드는 그렇게 동작하지 않음 — 주석·코드 불일치 확인), C2B-A는
+`.includes('(중)')`/`.includes('(고)')`로 이 문제는 고쳤지만 대신
+괄호가 없는 "고등기술학교"(1개교, 부산국제영화고등학교)를 놓쳐
+OTHER로 떨어뜨렸다. 19개교 전수 diff를 School.id 단위로 확정.
+
+**최종 canonical taxonomy 확정**: 부산 664건에 실존하는 14개 원문
+schoolLevel 값을 전부 exact-value로 명시 매핑(같은 종류의
+substring-누락 버그 재발 방지, 신규 모듈
+`scripts/education/lib/school-type-taxonomy.ts`) — ELEMENTARY 305 /
+MIDDLE 176 / HIGH **159**(C2B-A의 158에서 고등기술학교 보정 +1) /
+SPECIAL 16 / OTHER **8**(9에서 -1). 합계 664 확인, 이 숫자를 이후
+SCHOOL V2 canonical denominator 단일 기준으로 채택.
+
+**identity 매칭 로직은 전혀 바꾸지 않고**(지시사항) 리포트 그룹핑만
+새 taxonomy로 교체해 재집계 — 전체 결과 완전히 동일(HIGH 633/LOW
+1/NO_MATCH 30, 95.3%, WRONG_MERGE 0). 학교급별: 초등 100%/중
+96.6%/고 89.3%/특수 100%/기타 0.0%.
+
+부산 중학교 5개(지역분산)·고등학교 5개(과학고 대체로 외고/공고/
+사립/공립 분산)·특수학교 2개 apiType=09 실측 — 전부 success, 초등
+표본과 동일 필드 구조(COL_S{n}/COL_C{n}/COL_SUM/TEACH_CNT) 확인.
+고등학교 apiType=0 응답에서 `HS_KND_SC_NM`(고교유형명, 예
+"특성화고등학교") 필드 신규 확인. 방송통신고/고등기술학교류 3건은
+표준 schulKndCode(02~07) 전부로 재시도해도 apiType=09 목록에 아예
+없음을 확인 — **SOURCE_NOT_APPLICABLE**로 확정(요청 파라미터 실수
+아님, 이 오퍼레이션이 다루지 않는 학교 유형). apiType=22(직위별
+교원현황) 2건 실측 결과 직위 15단계로 과도하게 세분화돼 있어 부모
+UX엔 불필요 판단, SchoolStat 최소 구조에서 제외.
+
+부모 UX 최소 SchoolStat 구조 확정(설계만): 전체학생수/학급수/
+교사수(총원)/학년별학생수/학급당학생수(API 제공값 그대로) — 기존
+C1 스키마(`studentCount`/`classCount`/`teacherCount`/
+`gradeBreakdown`/`sourceRecordId`)에 이미 정확히 맞음, 스키마 변경
+불필요.
+
+NEIS-only 30건 전수 분류 완료: **IDENTITY_UNRESOLVED 7건**
+(canonical School.sigunguCode 자체가 null — SchoolInfo 문제 아니라
+우리쪽 NEIS ingestion 주소 데이터 갭, 한국과학영재학교 등) +
+**SOURCE_NOT_APPLICABLE 23건**(방송통신/평생학교/외국인학교/
+공동실습소/각종학교 계열, §7 실측 패턴과 일치) — "원인불명" 0건.
+
+**coverage denominator 이원화 신규 확정**:
+`CANONICAL_SCHOOL_IDENTITY_COVERAGE`(HIGH/664=95.3%, identity 그
+자체) vs `SCHOOLINFO_ELIGIBLE_STAT_COVERAGE`(HIGH matched 중
+SchoolInfo 공시 대상인 canonical 664-7-23=634건 분모 기준
+**633/634=99.8%**) — 664 대비 100% 미달의 대부분이 SchoolInfo
+데이터 오류가 아니라 우리쪽 갭(7)과 공시 비대상(23)임을 명확히
+구분, "데이터 오류"로 표현하지 않음.
+
+3년 이력 재검증(초/중/고/특수 각 1건, 2026/2025/2024 성공·2023
+거부) — 학교급 무관 일관 확인.
+
+Legal gate 변경 없음 —
+`SCHOOLINFO_COORDINATE_USE_GATE`/`SCHOOLINFO_STATISTICS_USE_GATE`
+둘 다 CONDITIONAL 유지. ingestion plan은 설계만(HIGH∩공시대상 633건
+자동 후보, LOW/NO_MATCH는 reconciliation queue, idempotency는 값
+변경시만 update, 연도별 history row 보존) — 실행하지 않음.
+
+신규 테스트 `school-type-taxonomy.test.ts`(10케이스) +
+기존 `schoolinfo-identity-resolver.test.ts`(12케이스, 재사용) =
+22/22 PASS.
+
+검증: `tsc --noEmit` 0 errors, `eslint`(신규/수정 파일 전체) 0
+errors. UI/route 변경 없어(scripts/ 한정) `next build` 미실행.
+
+문서: `docs/development/SCHOOL-V2-C2BB-type-and-operation-verification.md`
+신규(기존 문서 전부 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C2BB_CLOSE = YES** —
+`STAT_PIPELINE_TECHNICALLY_READY = YES`(필드/구조/coverage/no-op
+설계까지 전부 확인 및 설계 완료, 기술적으로는 바로 구현 가능한
+상태) — 단 `SCHOOLINFO_STATISTICS_USE_GATE`/`SCHOOLINFO_COORDINATE_
+USE_GATE`가 여전히 CONDITIONAL이라 실제 ingestion 착수는 LEGAL-1의
+공식 회신을 기다려야 함.
+
+## 2026-08-22 (30) — SCHOOL V2-C6 공식 학구도(통학구역) 연동 감사 + 부산 파일럿
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c6`, branch
+`school-v2-c6-attendance-zone`, base `9ac7320`=school-v2-c2bb)에서
+진행. SchoolInfo 통계 트랙(C2B) 재개 없음, SchoolInfo legal gate
+변경 없음, migration/production write/main merge 전부 없음.
+SchoolInfo와 완전히 별개인 새 공식 source(학구도)를 다룸.
+
+**공식 source 확정**: 한국교육시설안전원(2026-01-01부로 재단법인
+한국지방교육행정연구재단에서 업무 이관, 학구도안내서비스
+schoolzone.emac.kr 운영), 초등학교통학구역(SHP)·학교학구도연계정보
+(CSV) 등 "학구도 공공데이터 7종"을 매년 3월·9월 배포. data.go.kr
+라이선스 섹션에서 **"이용허락범위 제한 없음"** 원문을 직접 확인 —
+SchoolInfo의 KOGL 제3유형(변경금지)과 달리 상업적 이용·가공 전부
+자유로운 조건. `ATTENDANCE_ZONE_LEGAL_GATE = CLEARED`(원본 파일
+기준)로 판정 — LEGAL-1의 SchoolInfo CONDITIONAL 게이트와는 완전히
+별개.
+
+**데이터 종류 실측 구분**: "학구도" 안에 최소 3가지 다른 구조가 섞여
+있음을 실제 조회로 확인 — (1) 초등학교 순수 1:1 통학구역, (2)
+초등학교 **공동통학구역**(대칭/비대칭 "일방" 두 유형 다 실측 확인,
+후자는 "큰/작은" 우선순위 필드까지 존재하나 정확한 행정적 의미는
+미확인), (3) 중/고등학교 **학교군**(여러 학교 pool, 1:1 배정 아님 —
+초중등교육법 시행령 제68조 근거).
+
+School identifier 검증: CSV의 "학교ID"는 `"B000005015"` 형식(B+9자리
+숫자)으로 NEIS `SD_SCHUL_CODE`와도 SchoolInfo `SCHUL_CODE`와도 다른
+제3의 코드 체계 — **OFFICIAL_OTHER_CODE**로 분류, 학교명 단독
+자동조인 금지, C2B-A에서 이미 검증된 identity resolver와 동일
+방법론(이름+시군구+학교급+동)을 재사용하는 것이 유일한 실용적
+경로임을 확정(코드로 구현하지는 않음, 원본 대량 데이터 미확보).
+
+**부산 파일럿(목표 10건 → 실제 7건, 원본 SHP를 프로그래밍적으로
+받지 못해 공식 라이브 조회 UI로 건별 확인, 축소 사유 정직하게
+기록)**: 서구/해운대구/강서구×2/동래구/부산진구/사하구 실제
+ApartmentMaster 7개 단지를 공식 UI로 직접 조회 — **7건 중 2건(29%)이
+이미 단일 학교가 아닌 공동학구/공동통학구역**이었다(향원에이스타운:
+동신초/대신초 2개교 선택형, 신화타워: 온천초(큰)/금성초·공덕초
+(작은) 3개교). 나머지 5건은 단일 학구였고, 그중 3건은 C5 audit의
+직선거리 최근접 결과와 동일 학교로 일치(오차 수 m 수준, 소스 차이).
+임의로 가장 가까운 학교를 배정학교로 채운 사례는 0건.
+
+공식 사이트 자체의 고지사항 원문을 그대로 확보: "단순 열람용으로
+참조하시기 바라며, '재산권 등의 법적효력'이 없음... 학교 배정 등
+학구(통학구역)에 대한 정확한 사항은 관할 교육청(교육지원청)에 반드시
+확인" — 이집 UI도 이 이상으로 확정적으로 표현할 근거가 없음을
+확인, "배정학교" 대신 "공식 통학구역 기준 학교" 표현을 채택, 중/고는
+"OO학교군(N개교 중 배정)" 형태로만.
+
+데이터 모델(`AttendanceZone`/`AttendanceZoneSchool`, N:M 관계 —
+공동학구/학교군을 자연스럽게 표현), 저장 방식(원본 파일 보존 +
+offline point-in-polygon(`@turf/turf` 재사용) + 사전계산 결과 저장,
+PostGIS 도입 없음), 갱신 파이프라인(3월/9월 배포 감지→다운로드→
+validate→diff→rematch), coverage 지표 이원화
+(`BUSAN_APARTMENT_ATTENDANCE_ZONE_COVERAGE` vs
+`ELEMENTARY_ZONE_SOURCE_COVERAGE`), SCHOOL V2-D용 data contract
+(`nearbySchools`/`attendanceZone` 분리, zoneType이 GROUP/JOINT면
+schools 배열 2개 이상 필수)까지 설계만 완료 — 전부 미구현.
+
+**한계로 정직하게 기록**: data.go.kr의 세션 기반 다운로드(POST+쿠키)
+를 이번 STEP에서 자동화하지 못해 원본 SHP/geometry(CRS, polygon
+유효성, overlap 등)를 직접 검증하지 못함 — §4/§13 상당 부분 미확인
+상태로 남김, 후속 STEP 과제로 명시.
+
+코드 변경 없음(문서만) — tsc/lint/build 실행 대상 없음.
+
+문서: `docs/development/SCHOOL-V2-C6-attendance-zone-audit.md`
+신규(기존 문서 전부 보존, 겹치는 내용 없음).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C6_AUDIT_CLOSE = YES** —
+`ATTENDANCE_ZONE_DATA_READY = CONDITIONAL`(라이선스는 CLEARED,
+identity 조인 방법론도 확정됐으나 원본 geometry 파일 미확보로 실제
+구현 착수 전 조달 방법 확정 필요). `SCHOOL_V2_D_READY_AFTER_C6 =
+CONDITIONAL`(data contract·UI 원칙은 준비됐으나 원본 데이터 확보가
+선행 조건).
+
+
+## 2026-08-22 (31) — SCHOOL V2-C6-A 부산 통학구역 실데이터 빌드(SHP/CSV 실제 파싱)
+
+별도 worktree(`D:/anti2/aaa/e-jip-school-c6a`, branch
+`school-v2-c6a-busan-zone-build`, base `dfadbf0`=school-v2-c6)에서
+진행. C6에서 SHP 다운로드를 자동화하지 못해 미검증으로 남겼던
+geometry/좌표계/부산 전수 coverage를, 사용자가 직접 다운로드한 공식
+원본 3개 파일(초등학교통학구역.zip, 중학교학교군.zip,
+학교학구도연계정보.csv, `D:\anti2\aaa\schoolzone-data\`)로 실제
+빌드했다. DB/schema 변경, production write, main merge, Score 변경
+전부 없음.
+
+**CRS 실측 확정**: `.prj` WKT가 `Korea_2000_Korea_Central_Belt_2010`
+(EPSG:5186)임을 확인, proj4 파라미터를 PRJ 원문 그대로 옮겨 WGS84로
+변환 — 변환 결과가 실제 부산 좌표 범위와 일치함을 확인(추정 아님).
+
+**부수 발견**: SHP 속성의 `SD_CD`+`SGG_CD`가 이 프로젝트의
+`School.sigunguCode`(=MOLIT lawdCd)와 완전히 동일한 5자리 포맷임을
+부산 16개 구·군 전부(16/16) 대조로 확인 — 별도 crosswalk 테이블 없이
+지역 조인 가능.
+
+**geometry quality audit**: 전국 규모(7,140+1,684건) 정밀 검사는 CPU
+비용 문제로 중단하고 부산 subset(308+24건)만 전량 실행 — 부산 초등
+305/308 valid(invalid 3건: 장림초/개포초/신덕초통학구역, 자체교차,
+repair 안 함, 매칭 아파트 25건 플래그만 남김), 부산 중학교군 24/24
+valid.
+
+**identity resolver 2단계로 확장**: C2B-A 방법론(이름+지역+학교급
+정확 매칭, fuzzy 금지)을 재사용하되, 1차(같은 lawdCd)에서 실패한
+19건 중 18건이 **공동(일방)통학구역의 opt-in 학교가 zone 관할
+구·군과 다른 구·군에 실제로 위치**하는 구조적 사실임을 실측 확인
+(예: 금성초·공덕초는 canonical sigunguCode=26410(금정구)이지만
+26260/26320/26470 소속 zone에서 opt-in 대상으로 연결됨) — 부산
+전역 재검색 2차 tier(MEDIUM)를 추가해 이름+학교급 유일 매칭만
+채택(fuzzy 아님, 지역 범위만 확장). 최종: HIGH 319, MEDIUM 18,
+LOW 0, NO_MATCH 1(신연초등학교(휴교) — 명칭 불일치, 임의 판단 안
+함).
+
+**부산 3,402개 아파트 전체 point-in-polygon 실행**: MATCHED_SINGLE
+3,191 / MATCHED_SHARED 76 / IDENTITY_UNRESOLVED 130(대부분
+MEDIUM으로 실사용 가능, 진짜 미해결 1건) / OVERLAP 0 / NO_MATCH
+4(REVIEW_REQUIRED로 남김, 임의 배정 없음) / COORDINATE_MISSING 1.
+`ZONE_GEOMETRY_MATCH_COVERAGE` 99.85%, `USABLE_SCHOOL_IDENTITY_
+COVERAGE`(HIGH+MEDIUM) 99.82%, `HIGH_CONFIDENCE_ONLY_COVERAGE`
+96.03% — 세 단계로 정직하게 분리(착시 방지).
+
+**C6 라이브 파일럿과 교차검증**: 향원에이스타운(79)→대신초/동신초,
+신화타워→온천초(큰)/공덕초·금성초(작은) 결과가 이번 STEP의 대량
+파일 기반 파이프라인 결과와 **완전히 일치** — 두 독립된 방법(라이브
+GIS UI vs 원본 파일 대량 처리)이 서로를 뒷받침.
+
+**nearest vs 공식 통학구역 비교**(School 좌표 0%라 부산 초등 305개교
+Kakao 키워드 검색으로 읽기전용 geocoding 후 비교, DB 저장 안 함):
+SAME 72.2%(2,452건), DIFFERENT 22.0%(749건), MULTIPLE_ZONE_OPTIONS
+5.8%(196건) — "가장 가까운 학교=배정학교" 가정이 5건 중 1건 이상
+틀린다는 것을 실측으로 확인.
+
+**중학교 학교군 실측**: 부산 24개 zone, 소속 학교 수 1~18개로 편차
+큼(1개교뿐인 zone 7개는 사실상 단일 배정과 동일). 10개 구·군
+아파트 샘플 lookup 전부 실행.
+
+라이브러리 3개 신설(`attendance-zone-source.ts`,
+`zone-school-identity-resolver.ts`, `attendance-zone-matcher.ts`) +
+node:test 기준 29개 신규 테스트 전부 통과(기존 119개 포함 148/148
+회귀 없음). tsc/eslint/build 전부 clean.
+
+문서: `docs/development/SCHOOL-V2-C6A-busan-attendance-zone-build.md`
+신규(기존 문서 전부 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C6A_CLOSE = YES** — `ATTENDANCE_ZONE_DATA_READY =
+CONDITIONAL`(파이프라인·coverage·identity 전부 실증됐으나 NO_MATCH
+4건 + 신연초 1건 REVIEW_REQUIRED, School 좌표 미확보가 남은 조건).
+`SCHOOL_V2_D_READY = CONDITIONAL`(§17 data contract 확정, 실제 연동은
+후속 STEP).
+
+
+## 2026-08-22
+
+### STEP — SCHOOL V2-C6-B: 통학구역 예외 해소 + V2 persistence 준비
+
+C6-A(브랜치 `school-v2-c6a-busan-zone-build`)를 base로 새 워크트리에서 작업(main
+체크아웃의 무관한 C3A 미커밋 변경과 격리). C6-A의 4가지 미해결 항목을 실측으로
+정리했다.
+
+**NO_MATCH 4건**: 전부 zone 경계 17~84m 이내, 1983~2004년 준공(신규 개발 아님).
+3건은 `geocodeQuality='normalized'`(좌표 오차 가능성), 1건(글로벌빌라트)은
+`'exact'`인데도 zone 밖(polygon gap 쪽 근거 강함) — A/B 원인을 단정하지 않고
+`REVIEW_REQUIRED`로 통일.
+
+**invalid geometry 25건**: 기존 `classifyApartmentZoneStatus()`(C6-A, 수정 안 함)가
+`geometryInvalid` 플래그를 최종 status에 전혀 반영하지 않아 25건 전부
+`MATCHED_SINGLE`(확정처럼 노출)로 나오고 있었음을 실측 확인 — 새 status 레이어에서
+`REVIEW_REQUIRED`(`INVALID_ZONE_GEOMETRY`)로 분리.
+
+**신연초등학교**: 지시문이 전제한 "canonical School 664"는 실제로 조회하니
+효림초등학교였다(전제 오류 정정). 신연초 후보(`School.id=454`, 남구, lawdCd 일치,
+유일 후보)는 실제로 있었으나 "(휴교)" 표기의 실제 의미를 이 STEP만으로 확정할
+근거가 없어 identity는 NO_MATCH 유지(억지 연결 금지). 좁은 접미사 인식 규칙을
+설계 제안만 남김(미적용).
+
+**MEDIUM 18건(129개 아파트)**: resolver 코드 자체가 "이름+학교급 부산 전역 유일
+매칭"일 때만 MEDIUM을 주도록 설계돼 있어, 이는 identity 불확실이 아니라
+"학교는 확정, 행정구역만 교차"임을 확인 — `REGION_CROSSING_BUT_IDENTITY_CONFIRMED`로
+판정, REVIEW_REQUIRED로 내려보내지 않음. 이 과정에서 **공동학구가 아닌 일반 단일
+zone에도 같은 행정구역 교차 패턴이 있다**는 C6-A에 없던 사실을 추가로 발견
+(금성초통학구역/양동초통학구역, 2개 zone).
+
+**최종 status 모델**: 기존 C6-A 코드(geometry matcher, identity resolver)는
+전혀 수정하지 않고, 그 출력을 입력받는 새 순수 함수
+`scripts/education/lib/attendance-zone-status.ts::resolveFinalAttendanceStatus()`를
+추가해 내부 기술상태와 사용자 표시상태(`AVAILABLE`/`SHARED`/`REVIEW_REQUIRED`/
+`NOT_AVAILABLE`)를 분리. "배정학교"/"오류" 표현 없음, 최근접 학교 fallback 없음.
+
+**최종 coverage**: 초등 AVAILABLE 3,175 / SHARED 196 / REVIEW_REQUIRED 30 /
+NOT_AVAILABLE 1(합계 3,402) — AVAILABLE+SHARED = 99.09%. 중학교 AVAILABLE 3,400 /
+REVIEW_REQUIRED 1 / NOT_AVAILABLE 1.
+
+**precomputed artifact**: `data/education/attendance-zone/busan-attendance-zone-
+20260320.json`(부산 3,402건 전체, geometry 미포함, 약 5.8MB, 결정론적 checksum
+포함) 신규 생성. `scripts/education/c6b-04-final-pipeline.ts`로 재생성 가능.
+
+**read-only API 헬퍼**: `src/lib/education/attendance-zone.ts::
+getApartmentEducationZone(aptSeq)` 신규(DB 접근 없음, 아직 어떤 route에서도
+import 안 됨 — SCHOOL V2-D 범위).
+
+**regression**: 향원에이스타운(대신초+동신초 SHARED), 신화타워(온천초 HIGH +
+공덕초·금성초 MEDIUM, SHARED — REVIEW_REQUIRED 아님), NO_MATCH 4건, invalid
+geometry 샘플, 중학교 학교군 샘플 전부 기대대로 통과.
+
+라이브러리 2개 신설(`attendance-zone-status.ts`, `src/lib/education/
+attendance-zone.ts`) + node:test 기준 신규 19개 테스트 전부 통과(기존 148개 포함
+167/167 회귀 없음). tsc/eslint/build 전부 clean. DB write/migration/Score
+변경/main merge 없음.
+
+문서: `docs/development/SCHOOL_V2_C6B_ATTENDANCE_ZONE_EXCEPTIONS.md` 신규(기존
+문서 전부 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_C6B_CLOSE = YES** — `ATTENDANCE_ZONE_PRODUCT_READY = YES`(status
+모델·artifact·API contract 전부 확정). `SCHOOL_V2_D_READY = YES`(read-only 헬퍼
+구현 완료, 실제 route 연동만 남음).
+
+
+## 2026-08-22
+
+### STEP — SCHOOL V2-INTEGRATION-1: 승인된 SCHOOL V2 branch 통합
+
+여러 격리 worktree에 흩어져 있던 SCHOOL V2 작업(C2A/C2B/C2B-A/C2B-B/LEGAL-1/
+C3B/C5/C5-A/C5-B/C6/C6-A/C6-B)을 SCHOOL V2-D 구현 전에 하나의 clean branch로
+통합했다. 새 기능/UI 구현/migration/production write/main merge 없음.
+
+main의 `.gitignore` 전용 커밋(`ec23919`)을 `git show --name-status`로 재확인해
+C3A 파일 혼입 0건을 재검증(push는 하지 않음), C3A 미커밋 작업은 파일시스템
+조회로만 확인하고 손대지 않았다.
+
+**ancestry 실측 재검증** 결과 보고서 전제와 다른 사실을 확인: C3B는 C2A조차
+포함하지 않고 C1에서 직접 분기했고, LEGAL-1은 C2B-A/C2B-B를 포함하지 않는
+형제 branch이며, C5 계열은 C2B 계열과 완전히 독립이었다. 실제 공통 조상
+82f4914(C1)에서 새 worktree/branch(`school-v2-integration`)를 만들고 4회
+`git merge --no-ff`로 통합(C6-B chain → LEGAL-1 → C5 chain → C3B).
+
+conflict는 3회 모두 `docs/development/CHANGELOG.md` 1개 파일에서만 발생(같은
+날짜 병렬 작업으로 인한 append 충돌), product code/schema 파일 conflict는
+0건 — 최신 우선이 아니라 실제 branch 분기 시점(ancestry)에 맞춰 항목을
+재배치해 해결했다. LEGAL-1과 C2B-A가 4050166에서 독립적으로 만든
+near-duplicate 파일(`c2b-verify-schoolinfo-api.ts`,
+`SCHOOL-V2-B-official-source-verification.md`)은 git이 동일 content로 인식해
+conflict 없이 자동 병합됨을 확인.
+
+과거 "clean 아니오(검토용 보존)" 기록이 있던 C3B worktree를 재확인한 결과
+**실제로는 clean**이었다 — 최초 확인 시 `--git-dir`를 main으로 강제 지정해
+main HEAD와 비교하는 바람에 전체 파일이 오탐으로 modified 표시된 내 실수였다.
+`git -C`(자동 감지)로 재확인해 정정.
+
+**통합에서만 드러난 실제 correctness 문제 1건 발견 및 수정**: C2A의
+`verify-school-normalization.ts`와 C3B의 `verify-kindergarten-normalization.ts`는
+각 branch 단독으로는 문제없었지만, 둘 다 top-level import/export가 없어
+TypeScript가 전역 스크립트로 취급 — 두 branch가 처음 한 프로젝트에 공존하자
+`tsc --noEmit`에서 변수 재선언 충돌 10건이 새로 발생했다. 각 파일에
+`export {};` 한 줄을 추가해 모듈 스코프로 격리(로직 변경 없음).
+
+읽기 전용 검증: School canonical taxonomy(초등305/중176/고159/특수16/기타8,
+합계664) 재확인, Kindergarten 부산 367건(officialCode 중복 0, OFFICIAL_POINT
+provenance, capacity/enrollment/classCount/ageBreakdown 전부 유지) 확인 —
+실제 ingestion 재실행 없음. attendance-zone artifact(3,402건, geometry 미포함,
+checksum 존재) 무결성 확인, `getApartmentEducationZone()` 회귀(향원에이스타운/
+신화타워/invalid geometry/NO_MATCH/COORDINATE_MISSING) 전부 기대대로 통과.
+distance wording/hardcoded fallback 전수검사 — `WRONG_REGION_FALLBACK_COUNT =
+0`, "도보 N분" 오표기 0건(유일한 매치는 지하철 역세권 표현으로 무관 확인).
+
+artifact(5.76MB)는 현재 어떤 route에서도 import되지 않아 client bundle 위험
+0건이나, SCHOOL V2-D 연동 시 서버 전용 호출을 강제할 것을 권고(코드는
+추가하지 않음). SCHOOL V2-D dependency map(`/apt/[name]` →
+`SchoolDistrictPanel` → 신규 카드 필요 지점) 조사만 완료, 코드 변경 없음.
+
+신규 테스트 없음(기존 코드 재사용/재배치만), 기존 167개 전부 통과(lib 61 +
+redevelopment 97 + education helper 9 — redevelopment "97"은 과거 문서의
+"119" 표기가 부정확했던 것으로 확인, 통합 과정에서 누락된 테스트 없음).
+tsc(수정 후 0 errors)/eslint(0 errors)/build(성공, 기존 라우트 그대로) 전부
+clean.
+
+문서: `docs/development/SCHOOL_V2_INTEGRATION1.md` 신규(기존 문서 전부 보존).
+
+상태: BLOCKER 없음. main merge 없음. 병렬 branch(C2A/C2B/C2B-A/C2B-B/C3B/C5/
+C5-A/C5-B/C6/C6-A/LEGAL-1/SCORE 전부) 커밋 해시 불변 확인 — 미접촉.
+
+**SCHOOL_V2_INTEGRATION1_CLOSE = YES** — `SCHOOL_V2_INTEGRATION_READY = YES`
+(product code + tooling + docs 전부 한 branch에 통합, test/tsc/lint/build
+전부 clean). `SCHOOL_V2_D_READY = YES`(§13 dependency map 확정, 실제 UI/route
+연동만 남음).
+
+
+## 2026-08-22
+
+### STEP — SCHOOL V2-D1: 부모 의사결정형 교육환경 UX 구현
+
+`school-v2-integration`을 base로 `school-v2-d1-parent-education-ui` 브랜치에서
+단지 상세(`/apt/[name]`)의 "학군" 탭을 실제 부모용 UI로 구현했다. 기존
+`SchoolDistrictPanel`(카카오 POI 나열)을 신규 `EducationPanel`로 대체(중복
+section 없음).
+
+신규 `GET /api/apt/[name]/education` route(기존 `/info`/`/score`/`/facilities`
+형제 route)를 만들었다 — `getApartmentEducationZone()`이 5.76MB artifact를
+읽는 무거운 호출이라 기존 route에 얹지 않기로 결정, aptSeq 해석은 `/score`
+route와 동일한 안전 매칭 원칙만 재사용(코드 공유 아님, `/score` 자체는
+미변경). Kindergarten(367건, turf 거리)과 고등학교(Kakao 키워드검색 +
+이름+lawdCd+HIGH 완전일치일 때만 canonical 설립유형 부착)를 서버에서
+직접 조회하는 신규 lib(`nearby-education.ts`)도 추가했다.
+
+초등학교는 "공식 통학구역"과 "가까운 초등학교"를 절대 합치지 않고 분리했고,
+"가까운 학교와 통학구역 학교는 다를 수 있어요" 짧은 안내를 덧붙였다(부산
+22.0% nearest≠zone 통계 자체는 UI에 노출하지 않음). 중학교는 학교군
+accordion, 어린이집은 "0곳" 대신 "준비 중" 고정 문구, 졸업생 진로/SchoolInfo
+통계는 데이터가 없어 section 자체를 만들지 않았다(§14/§15 지시대로 "준비 중"
+남발 금지).
+
+**브라우저 QA 중 발견한 문제 1건**: 아파트 좌표 자체가 없는 경우
+(COORDINATE_MISSING)에도 유치원/고등학교 요약이 "2km 이내 없음"으로 나와
+"검색했는데 없었다"처럼 읽혔다 — "확인된 부재"와 "확인 불가"를 구분하지
+않은 것. `reasonCode` 신호로 분리해 "확인 불가"/"단지 위치를 확인할 수
+없어..." 문구로 수정.
+
+`server-only` npm 패키지는 이 프로젝트의 실제 test 실행 방식(tsx --test,
+plain Node)과 충돌해(무조건 throw) 기존 테스트를 깨뜨림을 확인하고 채택하지
+않았다 — 대신 `typeof window !== 'undefined'` 최소 runtime guard를 직접
+추가. 빌드 후 `.next/static`에 artifact 문자열 0건, `.next/server`에는 정상
+포함됨을 grep으로 실측 확인(client bundle 위험 없음).
+
+향원에이스타운(SHARED)/신화타워(SHARED, MEDIUM 포함)/한진(REVIEW_REQUIRED)/
+에코델타호반써밋스마트시티(NOT_AVAILABLE)/비스타동원더비치테라스(AVAILABLE
+단일) 5개 샘플 + 중학교군/유치원/고등학교 실제 데이터 전부 브라우저(390px)·
+API로 QA 완료 — school name 정확, wrong-region 0건, 최근접 fallback을
+통학구역 대신 쓴 사례 0건, "배정학교"/허위 도보/가짜 SchoolInfo 통계/어린이집
+"0곳" 전부 0건.
+
+신규 테스트 18개(라벨/분기 로직 10 + source-content guard 8, DOM 렌더링
+프레임워크가 없어 순수 함수+소스 검사로 대체) + 기존 167개 포함 185/185
+통과. tsc/eslint 0 errors, build 성공(신규 route 정상 컴파일, 기존 라우트
+회귀 없음). 360/375/430/desktop 개별 뷰포트 스크린샷은 브라우저 자동화 도구
+불안정으로 미완료(정직하게 기록).
+
+문서: `docs/development/SCHOOL_V2_D1_PARENT_EDUCATION_UX.md` 신규(기존 문서
+전부 보존).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_D1_CLOSE = YES** — `PARENT_EDUCATION_UX_READY = YES`(초등/중학교/
+유치원/고등학교/어린이집 전부 실제 데이터 또는 정직한 준비-중 상태로 구현).
+`SCHOOL_V2_D2_READY = YES`(SchoolInfo/13-다/Childcare 데이터 확보 시 확장할
+자리와 원칙 확정).
+
+
+## 2026-08-22
+
+### STEP — SCHOOL V2-D1-QA: 부모 교육 UX 반응형 시각 검수
+
+D1에서 미완료로 남았던 360/375/430/desktop 개별 뷰포트 실측을 마무리했다.
+새 기능 개발 없음, `school-v2-d1-parent-education-ui` 브랜치 그대로 사용.
+
+5개 뷰포트(360×800/375×812/390×844/430×932/1440×900) × 5개 status 샘플
+(신화타워=SHARED+MEDIUM, 비스타동원더비치테라스=AVAILABLE, 한진=
+REVIEW_REQUIRED, 향원에이스타운=SHARED 대칭, 에코델타호반써밋스마트시티=
+NOT_AVAILABLE)을 브라우저로 실제 렌더링해 확인, 스크린샷 5장 저장해
+사용자에게 전달했다.
+
+**실제 버그 1건 발견 및 수정**: 360px에서 유치원 카드의 "직선거리 약 418m"와
+"더보기" 버튼이 줄바꿈 없이 붙어 보이는 문제 — `.expandToggle`이
+`display: inline-flex`라 앞선 인라인 텍스트와 한 줄에 머물 수 있었던 것이
+원인. `display: flex`로 변경해 항상 새 줄에서 시작하도록 수정. 그 외 발견된
+문제는 없음(overflow/clipping/bottom-nav 충돌/touch-target 전부 정상).
+
+CSS 1개 파일만 수정해 tests(185/185, 변동 없음)/tsc/eslint/build 재실행,
+전부 clean. `SCHOOL_V2_D1_PARENT_EDUCATION_UX.md`에 §26으로 결과를
+append(기존 기록 삭제 없음).
+
+상태: BLOCKER 없음. main merge 없음.
+
+**SCHOOL_V2_D1_VISUAL_QA_CLOSE = YES** — **SCHOOL_V2_D1_FINAL_CLOSE = YES**
+(기능 구현+반응형 시각 검수 전부 완료).
+
+## 2026-08-23
+
+### STEP — SCHOOL V2-C2C: 13-다(졸업생의 진로 현황) 공식 데이터 확보 경로 감사 (AUDIT ONLY)
+
+`school-v2-c2c-graduate-outcome-audit` 브랜치(base: `school-v2-d1-parent-education-ui`).
+13-다가 OpenAPI 35개 카테고리에 없다는 기존 SCHOOL V2-C2B(§10) 판단을 실 API
+제공목록 화면(학사/학생·재정/시설/설비·보건/복지 3개 탭, 총 34개 오퍼레이션)
+직접 순회로 재확인하고, 대신 사용자가 실제로 확인한 웹 공시 페이지 경로를
+처음부터 실측했다.
+
+**핵심 발견**: `Pneiss_b01_s0.do?SHL_IDF_CD={school-uuid}&GS_HANGMOK_CD=06`
+(로그인/세션/CSRF 불필요, 완전 공개)로 13-다 데이터에 직접 접근 가능함을
+경남고등학교(일반고)·부산외국어고등학교(특목고) 실 데이터로 확인, 부산컴퓨터
+과학고등학교(특성화고)는 "입력된 데이터가 없습니다"로 정상적인 NO_DATA 케이스도
+확보. 공식 "엑셀다운로드" 버튼(`POST /cm/include/ExcelPrint.do`)은 존재하나
+조사 시점 5회 연속 HTTP 503(학교·항목 무관, fetch 재현으로도 동일) — 서버측
+SERVICE_ERROR로 판단, 자동화 난이도 문제로 오판하지 않음.
+
+school identifier `SHL_IDF_CD`(schoolinfo 내부 UUID)가 기존 `School.neisSchoolCode`/
+C2B-A 리졸버 어느 것과도 연결되지 않는 새로운 identity 갭으로 확인됨 —
+자동 ingestion 전 별도 crosswalk 설계 필요.
+
+라이선스: 13-다는 OpenAPI 오퍼레이션 자체가 없어 LEGAL-1이 확인한 "오퍼레이션별
+관대한 이용조건"의 적용 대상이 아니며, 사이트 공통 저작권정책만 적용됨을 확인 →
+`GRADUATE_OUTCOME_LEGAL_GATE = REVIEW_REQUIRED`로 판정(CLEARED 아님).
+
+`scripts/education/lib/graduate-outcome-parser.ts`(타입+산술검증 함수) +
+`.test.ts`(8케이스: 정상/취업0/해외0/해외분해/NO_DATA/비율포맷/정합성위반/
+연도별중복) 신규 — 전부 실측값 기반, 가상 데이터 없음. 8/8 PASS, tsc/eslint
+신규 파일 0 errors. DB write/migration/production ingestion/UI 변경 전부 없음.
+
+`SCHOOL-V2-B-official-source-verification.md` §1-4 뒤에 이번 재조사 결과를
+append(기존 "AVAILABLE_API" 오판 기록은 삭제하지 않고 보존).
+
+상태: BLOCKER 3건(Excel 서비스 503 / identity crosswalk 부재 / 라이선스
+REVIEW_REQUIRED) — 전부 해소 전까지 production 착수 안 함. main merge 없음.
+
+**SCHOOL_V2_C2C_CLOSE = YES** — **GRADUATE_OUTCOME_DATA_READY = NO**,
+**SCHOOL_V2_D2_GRADUATE_READY = NO**(3건 블로커 해소 후 재검토).
+
+## 2026-08-23 (2)
+
+### STEP — SCHOOL V2 FINAL QA / CLOSE: 부산 전역 부모용 교육정보 출시 승인 심사
+
+`school-v2-final-qa` 브랜치(base: `school-v2-c2c-graduate-outcome-audit`,
+D1 반응형 QA 커밋 `c3e7401` 포함 확인됨). "현재 확보한 실제 데이터만으로
+SCHOOL V2를 부산 사용자에게 공개해도 안전한가?"를 최종 판정하는 RELEASE
+ACCEPTANCE QA — 새 기능 개발 없음.
+
+**핵심 결과: SCHOOL_V2_RELEASE_READY = YES, BLOCKER 0건.** canonical 부산
+데이터(School 664/Kindergarten 367/Apartment 3,402/attendance artifact
+3,402건)를 DB·artifact 실측으로 재확인, 전부 지시사항 기대치와 정확히
+일치(invalid geometry 25 / boundary-gap 4 / coordinate-missing 1 / SHARED 196
+등). 부산 16개 구·군 대표 단지 전수 + 서구 5건 심층(SHARED/REVIEW_REQUIRED
+포함) + 해운대 API 실측으로 wrong-region 0건 확인, 브라우저 실측으로 "공식
+통학구역"과 "가까운 학교" 카드가 명확히 분리 렌더링됨을 눈으로 확인(중학교
+학교군은 8개교 전체 나열, 임의 대표 선택 없음). 동명이교(송정초/대저중앙초/
+가락중/경일중) 회귀 0건, 신연초(휴교) NO_MATCH 안전 처리 확인 — 다만
+`School.isActive`가 664건 전부 true이고 canonical School 쿼리 경로 일부가
+isActive 필터를 아직 걸지 않는 구조적 한계(NEIS에 폐교 판정 필드 자체가
+없어 발생, 현재 실피해 0건)를 신규로 문서화해 V2.1 backlog에 추가했다.
+
+**실제로 발견해 수정한 버그는 2건**(카테고리 D, 오해 소지 있는 UX): `/school`,
+`/school/[id]` 페이지의 SEO `<meta description>`이 항상 "데이터 준비 중"으로만
+표시되는 특목고 진학률/학년별 학생수를 마치 확인 가능한 것처럼 광고하고
+있었다 — 해당 문구를 제거(1줄씩 2개 파일). SchoolInfo 통계(0건)/Childcare(0건)/
+13-다 진로(코드 자체에 부재)는 전부 정직하게 숨김/"준비 중" 처리돼 있어
+가짜 데이터 노출 0건, "도보 N분" 표현도 education 범위에서 0건(C5-A에서
+이미 해결된 것을 재확인) — 별도 수정 불필요.
+
+worktree에 자체 `node_modules`가 없어 최초 `next dev`/`next build`가
+Turbopack workspace-root 오류로 실패 — `npm ci`로 로컬 설치 후 정상 빌드
+확인, 프로덕션 `.next/static`을 실제로 grep해 5.76MB attendance-zone
+artifact가 클라이언트 번들에 전혀 포함되지 않음을 실측 확인(이전엔 파일
+부재로 확인 불가였던 것을 이번에 최초로 실측 검증). `npm ci` 이후 전체
+테스트 193/193 PASS, tsc/eslint 신규 오류 0건(설치 전 관찰된 shapefile류
+7건은 코드 결함이 아니라 worktree에 `node_modules`가 없던 환경 문제였음을
+확인).
+
+`docs/development/SCHOOL_V2_FINAL_QA_AND_CLOSE.md` 신규(62개 항목 최종
+보고 포함). DB write/migration/SchoolInfo ingestion/Childcare ingestion/
+13-다 scraping/Score 변경 전부 없음. main C3A 및 병렬 worktree 전부 미접촉.
+main merge 없음.
+
+**SCHOOL_V2_RELEASE_READY = YES** — **SCHOOL_V2_FINAL_CLOSE = YES**.
+
 ## 2026-08-21 (26)
 
 ### BUSAN SCORE DATA V1.1 — Geocoding Recovery + Missing Feature Backfill

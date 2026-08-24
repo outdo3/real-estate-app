@@ -15,7 +15,7 @@ import AptSpecGrid from '@/components/AptSpecGrid';
 import TradeTimelineList from '@/components/TradeTimelineList';
 import LivingEnvironmentPanel from '@/components/LivingEnvironmentPanel';
 import NeighborhoodInfoPanel from '@/components/NeighborhoodInfoPanel';
-import SchoolDistrictPanel from '@/components/SchoolDistrictPanel';
+import EducationPanel from '@/components/EducationPanel';
 import CommunityPreview from '@/components/CommunityPreview';
 import StickyPriceBar from '@/components/StickyPriceBar';
 import AdContainer from '@/components/AdContainer';
@@ -992,7 +992,7 @@ export default function ApartmentDetail() {
           )}
           {visitedInfraTabs.has('학군') && (
             <div style={{ display: infraTab === '학군' ? 'block' : 'none' }}>
-              <SchoolDistrictPanel address={primaryAddress} ready={addressReady} lawdCd={lawdCdState} />
+              <EducationPanel aptName={aptName} lawdCd={lawdCdState} dong={urlDong} ready={addressReady} />
             </div>
           )}
         </div>

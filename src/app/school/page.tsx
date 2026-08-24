@@ -13,7 +13,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     !!sido && !!sigungu && Object.prototype.hasOwnProperty.call(REGION_DATA, sido) && REGION_DATA[sido].includes(sigungu);
   const regionLabel = isValidRegion ? `${sido} ${sigungu}` : '전국';
   const title = `${regionLabel} 학군정보 - ${siteConfig.name}`;
-  const description = `${regionLabel}의 초·중·고 학교 정보, 특목고 진학률, 학원가 위치를 확인하세요.`;
+  const description = `${regionLabel}의 초·중·고 학교 정보와 위치를 확인하세요.`;
   return {
     title,
     description,

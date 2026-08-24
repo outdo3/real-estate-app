@@ -158,7 +158,8 @@ export async function POST(request: Request) {
             if (c.parkingInfo) parts.push(c.parkingInfo);
             if (c.totalHouseholds) parts.push(`${c.totalHouseholds.toLocaleString('ko-KR')}세대`);
             if (c.buildYear) parts.push(`${c.buildYear}년 준공`);
-            if (c.nearestSchool) parts.push(`${c.nearestSchool.name}까지 도보 약 ${c.nearestSchool.walkMinutes}분(${c.nearestSchool.distanceM}m)`);
+            // SCHOOL V2-C5-A: 직선거리만 갖고 있으므로 도보 시간으로 표현하지 않는다
+            if (c.nearestSchool) parts.push(`${c.nearestSchool.name}까지 직선거리 약 ${c.nearestSchool.distanceM}m`);
             return parts.join(', ');
           })
           .join(' / ');

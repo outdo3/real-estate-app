@@ -56,6 +56,14 @@ const CLASSIFY_SCHEMA = {
       description: `"신축", "새 아파트", "지어진 지 얼마 안 된" 같은 표현이 있으면 true(준공년도 ${NEW_BUILD_MIN_YEAR}년 이후 기준으로 필터링됨).`,
     },
     nearElementarySchool: {
+      // SCHOOL V2-C5-A §4: 이 boolean은 "도보 N분 이내" 같은 구체적 분단위 조건을
+      // 별도로 받지 않는다 — "초품아"든 "도보 10분 이내 학교"든 전부 이 하나의 flag로
+      // 뭉뚱그려지고, 실제 필터는 findNearestElementarySchool의 고정 500m 반경
+      // (ELEMENTARY_SCHOOL_RADIUS_M)만 적용된다. 사용자가 특정 분(分)을 말해도 그
+      // 숫자를 검증하거나 응답에서 "그 조건을 만족한다"고 되짚어 말하지 않는다 —
+      // 매칭된 단지는 항상 실제 직선거리(distanceM)로만 설명된다(walkMinutes 필드
+      // 제거됨). 분단위 조건을 정말 검증하려면 실제 보행경로 API가 필요하다
+      // (SCHOOL V2-C5-C), 이번 STEP은 그 미지원 상태를 정직하게 유지하는 것까지만 한다.
       type: 'BOOLEAN',
       description: '"초등학교 가까운", "초품아", "학교 가까운", "학군" 같은 표현이 있으면 true — 도보권 초등학교가 있는 단지만 찾는다는 뜻.',
     },
@@ -169,7 +177,6 @@ function complexNameMatches(candidateName: string, queryName: string): boolean {
 export interface NearestSchoolInfo {
   name: string;
   distanceM: number;
-  walkMinutes: number;
 }
 
 export interface ConditionSearchComplex {
@@ -185,11 +192,17 @@ export interface ConditionSearchComplex {
   nearestSchool: NearestSchoolInfo | null;
 }
 
-// 반경 500m(도보 약 7분) 이내에서 가장 가까운 초등학교를 카카오 로컬 REST API로 찾는다.
+// 반경 500m 이내에서 가장 가까운 초등학교를 카카오 로컬 REST API로 찾는다.
 // runConditionSearch가 서버(Route Handler)에서 실행되므로 window.kakao JS SDK를 쓸 수
 // 없어(KakaoPlaces.tsx와 달리) REST 카테고리 검색을 직접 호출한다 — 이 JS 키는 KA/Origin
 // 헤더 없이 REST 호출하면 401을 반환한다(api/transactions/route.ts의 geocodeApt와 동일하게
 // 실측 확인된 우회법을 그대로 재사용).
+//
+// SCHOOL V2-C5-A: Kakao가 반환하는 distance는 직선거리다(실제 보행경로 아님). 이전에는
+// 여기서 distance/80m로 "walkMinutes"를 만들어 반환했는데, 소비자 쪽(ai-search-client.tsx,
+// api/ai-search/route.ts)이 그 값을 "도보 N분"으로 그대로 노출해 실제로 갖고 있지 않은
+// 정확도를 가진 것처럼 보였다 — 그 변환을 아예 이 함수에서 제거했다. 도보/차량 소요시간이
+// 필요하면 SCHOOL V2-C5-C(정식 보행경로 provider 연동) 이후에나 정직하게 추가할 수 있다.
 const ELEMENTARY_SCHOOL_RADIUS_M = 500;
 
 async function findNearestElementarySchool(lat: number, lng: number): Promise<NearestSchoolInfo | null> {
@@ -211,7 +224,7 @@ async function findNearestElementarySchool(lat: number, lng: number): Promise<Ne
     if (!school) return null;
     const distanceM = Number(school.distance);
     if (isNaN(distanceM)) return null;
-    return { name: school.place_name, distanceM, walkMinutes: Math.max(1, Math.ceil(distanceM / 80)) };
+    return { name: school.place_name, distanceM };
   } catch (e) {
     return null;
   }
@@ -525,11 +538,15 @@ export async function generateBriefing(
   }
 ): Promise<string> {
   // 검색 의도가 "초등학교 가까운 단지"였다면, 가격/준공년도만 나열하는 기존 템플릿식
-  // 답변 대신 반드시 배정/인근 초등학교 이름과 도보 거리·시간을 문장에 포함하도록
-  // 명시적으로 지시한다 — 데이터 요약(groundedSummary)에 이미 그 정보가 들어있으므로
-  // 지어내는 게 아니라 "빠뜨리지 말라"는 가드레일이다.
+  // 답변 대신 반드시 배정/인근 초등학교 이름과 거리를 문장에 포함하도록 명시적으로
+  // 지시한다 — 데이터 요약(groundedSummary)에 이미 그 정보가 들어있으므로 지어내는 게
+  // 아니라 "빠뜨리지 말라"는 가드레일이다.
+  //
+  // SCHOOL V2-C5-A: 실제 보행경로 API가 없는 상태라 "도보 N분"을 지시하면 Gemini가
+  // 직선거리를 실제 도보시간처럼 서술하게 된다 — "직선거리"라는 사실을 명시하도록
+  // 바꿨다(데이터 요약 자체도 더 이상 walkMinutes를 담지 않는다, §4 api/ai-search/route.ts).
   const schoolGuardrail = options?.requireSchoolMention
-    ? '\n\n중요: 이 검색은 "초등학교 가까운 단지"를 찾는 질문이었다. 각 단지를 설명할 때 가격·준공년도만 나열하지 말고, 반드시 데이터 요약에 있는 초등학교 이름과 도보 거리/시간을 함께 언급해라(예: "OO초등학교까지 도보 약 3분(200m) 거리").'
+    ? '\n\n중요: 이 검색은 "초등학교 가까운 단지"를 찾는 질문이었다. 각 단지를 설명할 때 가격·준공년도만 나열하지 말고, 반드시 데이터 요약에 있는 초등학교 이름과 직선거리를 함께 언급해라(예: "OO초등학교까지 직선거리 약 200m"). "도보 N분"처럼 실제 보행경로가 아닌 값을 시간으로 표현하지 마라.'
     : '';
   const leadInGuardrail = options?.leadInSentence
     ? `\n\n중요: 답변 맨 앞 문장으로 반드시 이 문장을 그대로(토씨 하나 바꾸지 말고) 포함해라: "${options.leadInSentence}"`
