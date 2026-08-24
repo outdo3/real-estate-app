@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
+import type { FavoriteInput } from '@/lib/favorites';
 import styles from './page.module.css';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -14,8 +15,30 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: '관리자',
 };
 
+// canonical routing: 상세페이지/지도 "상세보기"/최근 본 단지와 동일한 쿼리 형태.
+function favoriteHref(f: FavoriteInput) {
+  return `/apt/${encodeURIComponent(f.name)}?lawdCd=${encodeURIComponent(f.lawdCd)}&dong=${encodeURIComponent(f.dong)}`;
+}
+
 export default function MyPage() {
   const { data: session, status } = useSession();
+  const [favorites, setFavorites] = useState<FavoriteInput[] | null>(null);
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    let cancelled = false;
+    fetch('/api/my/favorites')
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled && json.success) setFavorites(json.data);
+      })
+      .catch(() => {
+        if (!cancelled) setFavorites([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
 
   return (
     <AuthGate>
@@ -50,6 +73,31 @@ export default function MyPage() {
                   </Link>
                 </div>
               )}
+
+              <div className={styles.section}>
+                <div className={styles.sectionTitle}>관심단지</div>
+                {favorites === null ? (
+                  <div className={styles.favoritesLoading}>불러오는 중입니다...</div>
+                ) : favorites.length === 0 ? (
+                  <div className={styles.favoritesEmpty}>
+                    아직 저장한 관심단지가 없습니다.
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <Link href="/" className={styles.linkCard} style={{ marginBottom: 0 }}>
+                        단지를 둘러보세요
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  favorites.map((f) => (
+                    <Link key={`${f.lawdCd}|${f.dong}|${f.name}`} href={favoriteHref(f)} className={styles.favoriteItem}>
+                      <div>
+                        <div className={styles.favoriteName}>{f.name}</div>
+                        {f.address && <div className={styles.favoriteAddress}>{f.address}</div>}
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
 
               <div className={styles.section}>
                 <div className={styles.sectionTitle}>바로가기</div>

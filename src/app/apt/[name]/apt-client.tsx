@@ -11,6 +11,7 @@ import styles from './detail.module.css';
 import KakaoMapEmbed from '@/components/KakaoMapEmbed';
 import AreaSelector from '@/components/AreaSelector';
 import KakaoShareButton from '@/components/KakaoShareButton';
+import FavoriteButton from '@/components/FavoriteButton';
 import AptSpecGrid from '@/components/AptSpecGrid';
 import TradeTimelineList from '@/components/TradeTimelineList';
 import LivingEnvironmentPanel from '@/components/LivingEnvironmentPanel';
@@ -763,11 +764,19 @@ export default function ApartmentDetail() {
                   {heroRegionLabel && <div className={styles.heroAddress}>📍 {heroRegionLabel}</div>}
                   {heroMetaLine && <div className={styles.heroMeta}>{heroMetaLine}</div>}
                 </div>
-                <KakaoShareButton
-                  compact
-                  title={`${aptName} 실거래가·시세 - ${siteConfig.name}`}
-                  description={`${aptName}의 실거래가, 시세 변동 추이, 평형별 거래 내역을 확인하세요.`}
-                />
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <FavoriteButton
+                    lawdCd={lawdCdState}
+                    dong={urlDong}
+                    name={displayName || aptName}
+                    address={primaryAddress}
+                  />
+                  <KakaoShareButton
+                    compact
+                    title={`${aptName} 실거래가·시세 - ${siteConfig.name}`}
+                    description={`${aptName}의 실거래가, 시세 변동 추이, 평형별 거래 내역을 확인하세요.`}
+                  />
+                </div>
               </div>
 
               {/* 가격 핵심 */}
