@@ -2,6 +2,7 @@ import type { NextAuthOptions } from 'next-auth';
 import type { OAuthConfig } from 'next-auth/providers/oauth';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import KakaoProvider from 'next-auth/providers/kakao';
+import GoogleProvider from 'next-auth/providers/google';
 import { prisma } from '@/lib/prisma';
 
 interface NaverProfile {
@@ -52,6 +53,10 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.KAKAO_CLIENT_SECRET || '',
     }),
     NaverProvider(),
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    }),
   ],
   session: {
     // DB에 세션 레코드를 남기지 않는 JWT 전략을 사용한다. 역할(role) 변경은
