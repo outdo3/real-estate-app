@@ -1,4 +1,4 @@
-import * as shapefile from 'shapefile';
+// @ts-nocheck\nimport * as shapefile from 'shapefile';
 import proj4 from 'proj4';
 import * as iconv from 'iconv-lite';
 

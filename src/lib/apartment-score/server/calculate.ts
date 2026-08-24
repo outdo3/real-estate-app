@@ -31,6 +31,7 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
       totalHouseholds: true,
       parkingCount: true,
       mainBuildingCount: true,
+      geocodeQuality: true,
     },
   });
 
@@ -61,6 +62,7 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
       totalHouseholds: true,
       parkingCount: true,
       mainBuildingCount: true,
+      geocodeQuality: true,
     },
   });
 
@@ -83,6 +85,7 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
         totalHouseholds: r.totalHouseholds,
         parkingCount: r.parkingCount,
         mainBuildingCount: r.mainBuildingCount,
+          geocodeQuality: (r as any).geocodeQuality,
       },
     ])
   );

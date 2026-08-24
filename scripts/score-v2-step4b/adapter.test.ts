@@ -13,6 +13,7 @@ function mockMaster(overrides: Partial<RawMasterInfo> = {}): RawMasterInfo {
     totalHouseholds: 500,
     parkingCount: 600,
     mainBuildingCount: 5,
+    geocodeQuality: 'exact',
     ...overrides,
   };
 }

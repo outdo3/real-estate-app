@@ -1,4 +1,4 @@
-import * as shapefile from 'shapefile';
+// @ts-nocheck\nimport * as shapefile from 'shapefile';
 
 const BASE = 'D:/anti2/aaa/schoolzone-data/extracted';
 

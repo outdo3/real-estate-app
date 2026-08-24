@@ -161,6 +161,7 @@ export interface RawMasterInfo {
   totalHouseholds: number | null;
   parkingCount: number | null;
   mainBuildingCount: number | null;
+  geocodeQuality: string | null;
 }
 
 export interface ApartmentRawBundle {

@@ -21,7 +21,9 @@ export function adaptToV2Input(
   // ---- 1. Identity & Eligibility ----
   // 구덕금호 케이스 등 좌표나 identity가 신뢰 불가능하여 location feature 생성이
   // 아예 불가능했던 단지(location == null)는 identityEligible=false 로 간주한다.
-  const identityEligible = location != null && master.sggCd != null;
+  console.log('ADAPTER MASTER:', master.aptSeq, master.geocodeQuality);
+  const isCoordHigh = master.geocodeQuality === 'exact';
+  const identityEligible = location != null && master.sggCd != null && isCoordHigh;
 
   // ---- 2. Complex: Age, Scale, Parking ----
   const buildYear = master.buildYear ?? null;

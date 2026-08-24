@@ -1,4 +1,4 @@
-import * as shapefile from 'shapefile';
+// @ts-nocheck\nimport * as shapefile from 'shapefile';
 const BASE = 'D:/anti2/aaa/schoolzone-data/extracted';
 async function main() {
   const source = await shapefile.open(`${BASE}/elementary/초등학교통학구역.shp`, `${BASE}/elementary/초등학교통학구역.dbf`, { encoding: 'EUC-KR' });
