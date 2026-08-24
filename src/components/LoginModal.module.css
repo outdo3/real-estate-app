@@ -83,3 +83,9 @@
   background: #03C75A;
   color: white;
 }
+
+.googleBtn {
+  background: white;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+}

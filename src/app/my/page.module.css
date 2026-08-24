@@ -44,6 +44,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .email {
@@ -79,7 +80,20 @@
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.sectionDesc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
   margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+
+.sectionLoading {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 0.5rem 0;
 }
 
 .linkCard {
@@ -98,6 +112,120 @@
   border-color: var(--primary-color);
 }
 
+/* 단지 아이템 (관심단지 / 최근 본 단지 공통) */
+.aptItem {
+  display: block;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #f0f0f0;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.6rem;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.aptItem:hover {
+  border-color: var(--primary-color);
+}
+
+.aptName {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.aptAddress {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+/* 빈 상태 박스 */
+.emptyBox {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.emptyText {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+}
+
+.emptyLink {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  border-radius: 99px;
+  background: var(--primary-color);
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* 관심 목적 chip grid */
+.purposeGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.purposeChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1.5px solid #e2e8f0;
+  background: white;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  /* 최소 터치 타겟 44px */
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.purposeChip:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.purposeChipActive {
+  border-color: var(--primary-color);
+  background: #eff6ff;
+  color: var(--primary-color);
+}
+
+.purposeCheck {
+  font-size: 0.75rem;
+  margin-right: 0.1rem;
+}
+
+/* 저장 상태 표시 */
+.saveStatus {
+  margin-top: 0.625rem;
+  min-height: 1.25rem;
+  font-size: 0.82rem;
+}
+
+.saving {
+  color: var(--text-muted);
+}
+
+.saved {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.saveError {
+  color: #dc2626;
+}
+
+/* 로그아웃 버튼 */
 .logoutBtn {
   width: 100%;
   padding: 0.85rem;
@@ -109,3 +237,10 @@
   cursor: pointer;
   margin-top: 1.5rem;
 }
+
+/* 기존 호환성 — MY-2/MY-3에서 쓰던 클래스명 alias */
+.favoriteItem { composes: aptItem; }
+.favoriteName { composes: aptName; }
+.favoriteAddress { composes: aptAddress; }
+.favoritesLoading { composes: sectionLoading; }
+.favoritesEmpty { composes: emptyBox; }
