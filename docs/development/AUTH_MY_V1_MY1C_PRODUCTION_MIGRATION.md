@@ -81,3 +81,147 @@ PRODUCTION_DB_MIGRATION           = BLOCKED
 MY1C_STATUS                       = BLOCKED
 NEXT_STEP                         = FIX schema.prisma 1077 line encoding (CP949→UTF-8, comment-only), then retry MY-1C from step 4
 ```
+
+---
+
+# MY-1C.1 — UTF-8 SCHEMA REPAIR + MIGRATION RETRY (완료)
+
+## Encoding Blocker
+- 위 4번 항목에서 확인된 그대로: `prisma/schema.prisma` 1077번째 줄(주석 1줄)이 CP949로 저장되어 Rust schema-engine이 파일 전체를 invalid UTF-8로 거부.
+
+## UTF-8 Repair
+- Python으로 파일을 바이트 단위로 읽어, 1077번째 줄(`\n` split 기준 0-indexed 1076)만 CP949로 디코드 → UTF-8로 재인코드하여 그 줄만 교체. 나머지 바이트는 전혀 건드리지 않음.
+- 복구된 텍스트: `// AUTH/MY V1 - 사용자 계정 개인 데이터` (기존과 완전히 동일한 문구, 인코딩만 변경).
+- BOM 없음 확인(`xxd` 첫 바이트가 `67 65 6e 65...` = `gene...`, EF BB BF 아님) — 저장소 내 다른 `.prisma`/`.ts` 파일과 동일하게 UTF-8 without BOM 컨벤션 유지.
+- `git diff prisma/schema.prisma` 결과: **정확히 1줄만 변경**(`1 file changed, 1 insertion(+), 1 deletion(-)`), 그 외 whitespace/line-ending/model 순서/내용 변화 없음.
+
+## Semantic Schema Diff
+- 변경 전/후 `git diff` 확인 결과 모델/컬럼/relation/constraint 어디에도 변화 없음 — 순수 comment 인코딩 수정.
+- **SCHEMA_SEMANTIC_CHANGE = NONE**
+
+## Prisma Validate / Generate (재실행)
+- `npx prisma validate` → `The schema at prisma\schema.prisma is valid 🚀` **PASS**
+- `npx prisma generate` → `Generated Prisma Client (v5.22.0)` **PASS**
+
+## Migration Status (배포 전, 재실행)
+```
+npx prisma migrate status
+```
+```
+Datasource "db": ... at "aws-0-ap-northeast-2.pooler.supabase.com:5432"
+7 migrations found in prisma/migrations
+Following migration have not yet been applied:
+20260824154230_add_my_v1_account_data
+```
+- DB 연결 정상, failed/diverged migration 없음.
+- Pending migration = **정확히 1개**, `20260824154230_add_my_v1_account_data`만 존재. 그 외 예상 밖 pending 없음.
+
+## Production Target 재확인
+- host: `aws-0-ap-northeast-2.pooler.supabase.com` (Seoul pooler) — localhost/dev 아님. secret 값 미노출.
+
+## Migration Artifact 재확인
+- `git diff prisma/migrations/20260824154230_add_my_v1_account_data/migration.sql` → 결과 없음(변경 없음). MY-1B.1 커밋 시점과 byte 단위로 동일함을 재확인.
+
+## Pre-deploy Read-only Snapshot
+| 항목 | 값 |
+|---|---|
+| users | 0 |
+| accounts | 0 |
+| sessions | 0 |
+| favorites (to_regclass) | null (테이블 없음) |
+| recent_views (to_regclass) | null (테이블 없음) |
+| user_preferences (to_regclass) | null (테이블 없음) |
+
+## GO 조건 판정
+| 조건 | 결과 |
+|---|---|
+| A. schema UTF-8 정상 | PASS |
+| B. schema semantic change 없음 | PASS |
+| C. prisma validate PASS | PASS |
+| D. migrate status healthy | PASS |
+| E. pending migration = MY V1 1개만 | PASS |
+| F. production target confirmed | PASS |
+| G. migration artifact unchanged | PASS |
+| H. destructive SQL 없음 | PASS |
+
+→ 모든 조건 충족, deploy 진행.
+
+## Deploy 실행
+```
+npx prisma migrate deploy
+```
+```
+Applying migration `20260824154230_add_my_v1_account_data`
+The following migration(s) have been applied:
+migrations/
+  └─ 20260824154230_add_my_v1_account_data/
+    └─ migration.sql
+All migrations have been successfully applied.
+```
+**MIGRATION_DEPLOY = PASS**, 에러/경고 없음.
+
+## Post-deploy Migration Status
+```
+npx prisma migrate status
+```
+```
+Database schema is up to date!
+```
+Pending/failed 없음.
+
+## 신규 테이블 검증 (read-only, information_schema/pg_indexes 조회)
+- **favorites**: 컬럼 8개(id, user_id, lawd_cd, dong, name, apt_seq, address, created_at) — artifact와 정확히 일치. PK=id. FK: user_id → users(id), ON DELETE CASCADE, ON UPDATE CASCADE. Index: `favorites_user_id_created_at_idx`, unique `favorites_user_id_lawd_cd_dong_name_key`.
+- **recent_views**: 컬럼 8개(id, user_id, lawd_cd, dong, name, apt_seq, address, viewed_at) — 일치. PK=id. FK 동일 구조. Index: `recent_views_user_id_viewed_at_idx`, unique `recent_views_user_id_lawd_cd_dong_name_key`.
+- **user_preferences**: 컬럼 3개(user_id, purposes[jsonb], updated_at) — 일치. PK=user_id. FK 동일 구조.
+- 총 인덱스 7개(PK 3 + 일반 2 + unique 2) — migration artifact와 완전 일치.
+
+## 신규 Row Count
+- favorites = 0, recent_views = 0, user_preferences = 0 — 테스트 데이터 INSERT 없음.
+
+## 기존 Auth 데이터 Before/After 비교
+| 테이블 | Before | After | 변화 |
+|---|---|---|---|
+| users | 0 | 0 | 없음 |
+| accounts | 0 | 0 | 없음 |
+| sessions | 0 | 0 | 없음 |
+
+**EXISTING_AUTH_DATA_UNCHANGED = YES**
+
+## Build Sanity
+- `npx prisma validate` PASS / `npx prisma generate` PASS (배포 후 재실행)
+- `npm run build` (`next build`, Turbopack) → `✓ Compiled successfully in 3.1s`, 정적 페이지 30/30 생성 완료, 에러 없음. **PASS**
+
+## Production App Sanity (read-only, 실제 배포된 프로덕션 URL)
+- `https://real-estate-app-park11.vercel.app/` — 정상 로드, 홈 타이틀 "이집 - AI 부동산 검색" 정상 렌더링.
+- `https://real-estate-app-park11.vercel.app/my` — 정상 로드(500/크래시 아님), 네비게이션 및 로딩 상태 정상.
+- `https://real-estate-app-park11.vercel.app/stats` — 정상 로드, 통계 카테고리 메뉴 정상 렌더링.
+- 신규 favorites/recent_views/user_preferences를 사용하는 UI/API는 아직 미구현 상태이므로 별도 테스트 데이터 생성 없이 read-only 확인만 수행.
+
+## DB Writes Performed
+- `prisma migrate deploy` 1회 (CREATE TABLE ×3, CREATE INDEX ×4, ALTER TABLE ADD CONSTRAINT ×3) — migration artifact 내용 그대로.
+- 그 외 INSERT/UPDATE/DELETE **0건**.
+
+## Changed Files
+- `prisma/schema.prisma` (인코딩 전용, 1줄)
+- `docs/development/AUTH_MY_V1_MY1C_PRODUCTION_MIGRATION.md` (본 섹션 추가)
+
+## Blocker
+- 없음.
+
+## Next Step
+- **MY-2 (Favorites 기능 구현)**로 진행 가능. 신규 테이블은 생성되었으나 아직 어떤 API/UI도 연결되어 있지 않은 순수 스키마 상태.
+
+---
+
+## MY-1C.1 상태 요약
+
+```
+SCHEMA_UTF8                  = YES
+SCHEMA_SEMANTIC_CHANGE        = NONE
+PENDING_MIGRATIONS            = MY_V1_ONLY
+MIGRATION_DEPLOY               = PASS
+NEW_TABLES_CREATED             = YES
+EXISTING_AUTH_DATA_UNCHANGED   = YES
+MY1C_STATUS                    = PASS
+NEXT_STEP                      = MY-2 FAVORITES
+```
