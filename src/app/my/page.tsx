@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import type { FavoriteInput } from '@/lib/favorites';
+import { useRecentSync } from '@/hooks/useRecentSync';
 import styles from './page.module.css';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -16,13 +17,26 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 // canonical routing: 상세페이지/지도 "상세보기"/최근 본 단지와 동일한 쿼리 형태.
-function favoriteHref(f: FavoriteInput) {
+function favoriteHref(f: { lawdCd: string; dong: string; name: string }) {
   return `/apt/${encodeURIComponent(f.name)}?lawdCd=${encodeURIComponent(f.lawdCd)}&dong=${encodeURIComponent(f.dong)}`;
+}
+
+interface RecentViewItem {
+  id: string;
+  lawdCd: string;
+  dong: string;
+  name: string;
+  address?: string | null;
+  viewedAt: string;
 }
 
 export default function MyPage() {
   const { data: session, status } = useSession();
   const [favorites, setFavorites] = useState<FavoriteInput[] | null>(null);
+  const [recentViews, setRecentViews] = useState<RecentViewItem[] | null>(null);
+
+  // [MY-3] 로그인 직후 local recent → server sync
+  useRecentSync();
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -35,10 +49,20 @@ export default function MyPage() {
       .catch(() => {
         if (!cancelled) setFavorites([]);
       });
+    // [MY-3] 최근 본 단지 계정 목록 조회
+    fetch('/api/my/recent')
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled && json.success) setRecentViews(json.data);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentViews([]);
+      });
     return () => {
       cancelled = true;
     };
   }, [status]);
+
 
   return (
     <AuthGate>
@@ -93,6 +117,27 @@ export default function MyPage() {
                       <div>
                         <div className={styles.favoriteName}>{f.name}</div>
                         {f.address && <div className={styles.favoriteAddress}>{f.address}</div>}
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+
+              {/* [MY-3] 최근 본 단지 섹션 — 관심단지와 동일한 카드 패턴 재사용 */}
+              <div className={styles.section}>
+                <div className={styles.sectionTitle}>최근 본 단지</div>
+                {recentViews === null ? (
+                  <div className={styles.favoritesLoading}>불러오는 중입니다...</div>
+                ) : recentViews.length === 0 ? (
+                  <div className={styles.favoritesEmpty}>
+                    최근 본 단지가 없습니다.
+                  </div>
+                ) : (
+                  recentViews.map((r) => (
+                    <Link key={r.id} href={favoriteHref(r)} className={styles.favoriteItem}>
+                      <div>
+                        <div className={styles.favoriteName}>{r.name}</div>
+                        {r.address && <div className={styles.favoriteAddress}>{r.address}</div>}
                       </div>
                     </Link>
                   ))

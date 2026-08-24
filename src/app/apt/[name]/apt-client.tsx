@@ -393,13 +393,30 @@ export default function ApartmentDetail() {
     const complexId = `${lawdCdState}|${urlDong}|${resolvedName}`;
     setCurrentAptName(resolvedName);
     // [UI-C1] "최근 본 단지" 기록 — pageReady가 처음 true가 되는(단지명·지역이 확정된)
-    // 이 시점에 위 조회 로그와 함께 딱 한 번만 남긴다. DB 저장 없음(localStorage만).
+    // 이 시점에 위 조회 로그와 함께 딱 한 번만 남긴다.
+    const visitAddress = [heroRegionLabel, urlDong].filter(Boolean).join(' ');
     recordApartmentVisit({
       name: resolvedName,
-      address: [heroRegionLabel, urlDong].filter(Boolean).join(' '),
+      address: visitAddress,
       lawdCd: lawdCdState,
       dong: urlDong,
     });
+    // [MY-3] 로그인 상태면 서버 recent_views에도 upsert한다. 실패해도 상세페이지는 정상 동작.
+    fetch('/api/my/recent/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{
+          lawdCd: lawdCdState,
+          dong: urlDong,
+          name: resolvedName,
+          address: visitAddress,
+          viewedAt: Date.now(),
+        }],
+      }),
+      keepalive: true,
+    }).catch(() => {});
+
     fetch('/api/log/view', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
