@@ -22,6 +22,7 @@ import AdContainer from '@/components/AdContainer';
 import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
+import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
@@ -930,28 +931,14 @@ export default function ApartmentDetail() {
             />
           </div>
 
-          {!loading && (
+          {!loading && scoreResult?._shadowV2 ? (
+            <ApartmentBriefingV2 v2Result={scoreResult._shadowV2} />
+          ) : !loading ? (
             <div className={styles.briefCard}>
-              <div className={styles.briefTitle}>💡 단지 브리핑</div>
-              <ul className={styles.briefList}>
-                {/* STEP SCORE S3 §13/§16 — score API의 Algorithmic Briefing(강점/확인점/
-                    종합문장, AI 미사용)을 1순위로 쓰고, score 데이터가 부족할 때만 기존
-                    non-AI 규칙기반 buildAptBrief(거래추세/세대수/거래빈도)로 폴백한다.
-                    AI로 채우지 않는다(§16) — scoreResult는 score/briefing이 같은 API
-                    응답에서 나오므로 점수-브리핑 모순이 구조적으로 발생하지 않는다(§17). */}
-                {scoreResult?.status === 'OK' && scoreResult.briefing
-                  ? [...scoreResult.briefing.strengths, ...(scoreResult.briefing.caution ? [scoreResult.briefing.caution] : []), scoreResult.briefing.summary].map(
-                      (sentence, i) => <li key={i}>{sentence}</li>
-                    )
-                  : buildAptBrief({
-                      trades: filteredTrades,
-                      tradeTypeFilter,
-                      totalHouseholds: aptInfo?.['세대수'] ?? null,
-                      buildYear: trades.length > 0 && trades[0].buildYear ? parseInt(trades[0].buildYear, 10) : null,
-                    }).map((sentence, i) => <li key={i}>{sentence}</li>)}
-              </ul>
+              <div className={styles.briefTitle}>단지 브리핑</div>
+              <div className={styles.briefList} style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>데이터가 충분하지 않아 단지브리핑을 제공하기 어렵습니다.</div>
             </div>
-          )}
+          ) : null}
 
           {/* [STEP50 V1 CLEANUP] FloorPlanPanel은 항상 "평면도 이미지는 준비 중입니다"만
               보여줬다 — 이 앱에 평면도 이미지/데이터 소스 자체가 없어(FloorPlanPanel.tsx
