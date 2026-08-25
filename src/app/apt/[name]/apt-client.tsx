@@ -897,7 +897,12 @@ export default function ApartmentDetail() {
                 </div>
               </div>
 
-              {/* TIER 1: Score & Briefing */}
+              </>
+          )}
+        </div>
+      </div>
+
+      {/* TIER 1: Score & Briefing */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <ApartmentScoreCard result={scoreResult} loading={scoreLoading} />
               </div>
