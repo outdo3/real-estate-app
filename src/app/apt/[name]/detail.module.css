@@ -435,7 +435,7 @@
      가려지지 않는다. 실측(getBoundingClientRect) 결과 stickyBar+하단탭바 합산
      높이가 약 128px로 기존 80px 여백을 초과함을 확인해 추가했다. */
   .main {
-    padding-bottom: calc(60px + 5rem);
+    padding-bottom: calc(60px + 4rem);
   }
 
   .stickyBar {

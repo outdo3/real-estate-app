@@ -793,8 +793,8 @@ export default function ApartmentDetail() {
               <div className={styles.heroTop} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h1 className={styles.heroTitle} style={{ marginBottom: '0.35rem', wordBreak: 'keep-all', overflowWrap: 'break-word', lineHeight: 1.25 }}>{displayName || aptName}</h1>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.9rem', minWidth: 0 }}>
+                    <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
                       📍 {heroRegionLabel} {firstTrade?.jibun || ''}
                     </span>
                     {heroMetaLine && <span style={{ flexShrink: 0 }}>· {heroMetaLine.split('세대')[0]}세대</span>}
@@ -945,12 +945,11 @@ export default function ApartmentDetail() {
 
           <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
           
-          <div className={styles.quickButtons} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem 0', color: 'var(--text-primary)' }}>이 단지 더 알아보기</h3>
-            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '0.25rem', WebkitOverflowScrolling: 'touch' }}>
-              <Button variant="secondary" size="sm" onClick={() => openModal('대출한도')} style={{ flexShrink: 0, padding: '0.5rem 0.85rem' }}>💰 이 집 사려면 얼마 필요?</Button>
-              <Button variant="secondary" size="sm" onClick={() => openModal('지도')} style={{ flexShrink: 0, padding: '0.5rem 0.85rem' }}>🗺️ 지도</Button>
-              <Button variant="secondary" size="sm" onClick={() => openModal('로드뷰')} style={{ flexShrink: 0, padding: '0.5rem 0.85rem' }}>🚶 로드뷰</Button>
+          <div className={styles.quickButtons} style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+            <Button variant="secondary" size="sm" onClick={() => openModal('대출한도')} style={{ padding: '0.6rem', width: '100%', fontSize: '0.95rem' }}>이 집 사려면 얼마 필요할까?</Button>
+            <div style={{ display: 'flex', gap: '0.6rem', width: '100%' }}>
+              <Button variant="secondary" size="sm" onClick={() => openModal('지도')} style={{ flex: 1, padding: '0.6rem', fontSize: '0.95rem' }}>지도</Button>
+              <Button variant="secondary" size="sm" onClick={() => openModal('로드뷰')} style={{ flex: 1, padding: '0.6rem', fontSize: '0.95rem' }}>로드뷰</Button>
             </div>
           </div>
         </div>
