@@ -953,7 +953,7 @@ export default function ApartmentDetail() {
       <div className={`container ${styles.sectionBlock}`}>
         <div className={styles.panel}>
           <div style={{ marginBottom: '1.25rem' }}>
-            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
+            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} selectedAreaLabel={selectedArea === '전체' ? undefined : renderHeroAreaLabel(selectedArea, areaLabels)} />
           </div>
 
           <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
