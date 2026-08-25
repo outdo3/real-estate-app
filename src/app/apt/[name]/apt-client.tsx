@@ -27,6 +27,7 @@ import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
+import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 import { recordApartmentVisit } from '@/lib/recent-apartments';
 import { siteConfig } from '@/config/site';
@@ -224,9 +225,10 @@ export default function ApartmentDetail() {
         if (response.ok) {
           const data = await response.json();
           if (cancelled) return;
-          const fetchedTrades = data.trades || [];
+          const tradeState = resolveTradeReadState<Trade>(true, data);
+          const fetchedTrades = tradeState.trades;
           setTrades(fetchedTrades);
-          setApiError(data.apiError || null);
+          setApiError(tradeState.apiError);
           if (data.lawdCd) resolvedLawdCd = data.lawdCd;
           // URL에 dong이 없었다면(위 dongQuery가 비어 실제로는 구 전체를 뒤진 응답이다) API가
           // DB 조회/지오코딩으로 찾아낸 dong을 신뢰한다(거래가 0건이어도 유효한 값). 이후 호출
@@ -250,15 +252,20 @@ export default function ApartmentDetail() {
                 .catch(() => {});
             } else {
               infoFetchedInline = true;
-              fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong, resolvedLawdCd);
+              fetchAptInfo(fetchedTrades[0].jibun, fetchedTrades[0].dong || resolvedDong, resolvedLawdCd);
             }
           } else if (!infoFetchedInline) {
             infoFetchedInline = true;
             fetchAptInfo('', resolvedDong, resolvedLawdCd);
           }
-        } else if (!infoFetchedInline) {
-          infoFetchedInline = true;
-          fetchAptInfo('', resolvedDong, resolvedLawdCd);
+        } else {
+          const tradeState = resolveTradeReadState<Trade>(false);
+          setTrades(tradeState.trades);
+          setApiError(tradeState.apiError);
+          if (!infoFetchedInline) {
+            infoFetchedInline = true;
+            fetchAptInfo('', resolvedDong, resolvedLawdCd);
+          }
         }
 
         setLawdCdState(resolvedLawdCd);
@@ -285,6 +292,10 @@ export default function ApartmentDetail() {
         }
       } catch (error) {
         console.error('Failed to fetch trades:', error);
+        if (!cancelled) {
+          setTrades([]);
+          setApiError(TRADE_API_UNAVAILABLE_MESSAGE);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
