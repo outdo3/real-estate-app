@@ -34,6 +34,9 @@ export default function LoginModal({ open, onClose, callbackUrl }: LoginModalPro
           <span className={styles.socialIcon}>💬</span>
           카카오로 시작하기
         </button>
+        <p className={styles.kakaoNotice}>
+          카카오 2단계 인증을 사용 중인 경우 카카오톡에서 로그인 확인 메시지가 전송될 수 있습니다.
+        </p>
 
         <button
           className={`${styles.socialBtn} ${styles.naverBtn}`}

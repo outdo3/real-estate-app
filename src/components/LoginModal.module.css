@@ -89,3 +89,11 @@
   color: #3c4043;
   border: 1px solid #dadce0;
 }
+
+.kakaoNotice {
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #888);
+  margin-top: -0.25rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.3;
+}

@@ -65,6 +65,11 @@ export const authOptions: NextAuthOptions = {
     KakaoProvider({
       clientId: process.env.KAKAO_CLIENT_ID || '',
       clientSecret: process.env.KAKAO_CLIENT_SECRET || '',
+      authorization: {
+        params: {
+          lang: 'ko',
+        },
+      },
     }),
     NaverProvider(),
     GoogleProvider({
