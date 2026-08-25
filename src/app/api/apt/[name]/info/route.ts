@@ -62,13 +62,19 @@ export async function GET(
     // 항상 빈 문자열로 통일해 upsert의 where/create가 서로 어긋나지 않게 한다.
     const dongKey = dong || '';
     type Registry = { parkingCount: number | null; far: number | null; bcr: number | null; totalHouseholds: number | null; approvalDate: string | null };
+    let unitTypes: any[] | null = null;
+    
     const fetchCachedRegistry = async (): Promise<Registry | null> => {
       try {
-        // approvalDate까지 캐시돼 있어야 캐시 히트로 간주한다 — 이 컬럼이 나중에
-        // 추가됐으므로, 그 전에 캐싱된 기존 행은 approvalDate가 비어있다. 여기서 조건에
-        // 넣지 않으면 그런 행은 영영 라이브 재조회 없이 세대수/주차 등만 채운 채로
-        // 사용승인일만 계속 네이버 폴백에 의존하게 된다.
-        const cached = await prisma.apartment.findFirst({ where: { name: aptName, dong: dongKey } });
+        const cached = await prisma.apartment.findFirst({
+          where: { name: aptName, dong: dongKey },
+          include: { unitTypes: true }
+        });
+        
+        if (cached) {
+          unitTypes = cached.unitTypes;
+        }
+
         if (cached && cached.parkingCount && cached.far && cached.bcr && cached.approvalDate) {
           return {
             parkingCount: cached.parkingCount,
@@ -79,15 +85,16 @@ export async function GET(
           };
         }
 
-        // 이름(aptName)은 MOLIT 실거래 원본 표기 그대로라, 같은 물리적 건물이 실거래
-        // 데이터에서는 "엘지메트로시티1"/"엘지메트로시티3"/"…아파트"처럼 동/차수/접미사가
-        // 다른 여러 이름으로 등장할 수 있다(실측: 부산 캐시 24건 중 3건이 이런 이름 변형
-        // 중복). 건축물대장 총괄표제부 조회 자체가 이름이 아니라 지번(jibun)으로만
-        // 대상을 특정하므로, 같은 dong+jibun이면 물리적으로 같은 건물이라고 봐도
-        // 안전하다 — 이름 유사매칭(문자열 부분일치 등)이 아니라 지번 정확히 일치일 때만
-        // 재사용한다. jibun이 없으면(최초 병렬 조회 등) 이 조회는 건너뛴다.
         if (jibun) {
-          const byJibun = await prisma.apartment.findFirst({ where: { dong: dongKey, jibun } });
+          const byJibun = await prisma.apartment.findFirst({
+            where: { dong: dongKey, jibun },
+            include: { unitTypes: true }
+          });
+          
+          if (byJibun) {
+            unitTypes = byJibun.unitTypes;
+          }
+
           if (byJibun && byJibun.parkingCount && byJibun.far && byJibun.bcr && byJibun.approvalDate) {
             return {
               parkingCount: byJibun.parkingCount,
@@ -98,10 +105,9 @@ export async function GET(
             };
           }
         }
-
         return null;
       } catch (e) {
-        console.warn('Apartment DB lookup failed (DB 미설정 등 — 라이브 조회로 폴백)', e);
+        console.warn('Apartment DB lookup failed', e);
         return null;
       }
     };
@@ -118,7 +124,7 @@ export async function GET(
         if (live.mainPurpose) info['주용도'] = live.mainPurpose;
         if (live.parkingCount || live.far || live.bcr || live.totalHouseholds || live.approvalDate) {
           try {
-            await prisma.apartment.upsert({
+            const upserted = await prisma.apartment.upsert({
               where: { name_dong: { name: aptName, dong: dongKey } },
               create: {
                 name: aptName,
@@ -140,15 +146,14 @@ export async function GET(
                 ...(live.approvalDate ? { approvalDate: live.approvalDate } : {}),
               },
             });
+            // if newly created, unitTypes is empty anyway.
           } catch (e) {
-            console.warn('Apartment DB upsert failed (DB 미설정 등 — 이번 응답에는 영향 없음)', e);
+            console.warn('Apartment DB upsert failed', e);
           }
         }
       }
     }
 
-    // 지역/지번까지 정확히 스코프된 건축물대장(registry) 값을 지역 정보가 없는 네이버
-    // 스크래핑 값보다 항상 우선한다. registry가 없을 때만 네이버 값을 폴백으로 쓴다.
     if (registry?.totalHouseholds) {
       info['세대수'] = `${registry.totalHouseholds.toLocaleString('ko-KR')}세대`;
     } else if (naverHouseholds) {
@@ -168,13 +173,11 @@ export async function GET(
     if (registry?.far) info['용적률'] = formatRatio(registry.far);
     if (registry?.bcr) info['건폐율'] = formatRatio(registry.bcr);
 
-    // 추정치 제공 금지 (정확한 데이터만 사용)
-    // if (!info['총주차대수']) { ... }
-
     return NextResponse.json({
       success: true,
       aptName,
-      info: Object.keys(info).length > 0 ? info : null
+      info: Object.keys(info).length > 0 ? info : null,
+      unitTypes: unitTypes && unitTypes.length > 0 ? unitTypes : null
     });
 
   } catch (error) {

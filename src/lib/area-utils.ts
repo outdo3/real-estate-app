@@ -14,6 +14,74 @@
 // presales 테이블에만 존재하고 이 실거래 화면과는 무관). 근거가 약한 임의 추정치를
 // 계속 노출하는 대신 삭제했다.
 
+export type PyeongProvenance = 'OFFICIAL_LABEL' | 'SUPPLY_AREA_DERIVED' | 'UNKNOWN';
+
+export interface RawUnitType {
+  canonicalExclusiveArea: string; // "84.7855"
+  supplyArea: string | null;
+  representativePyeong: number | null;
+  representativePyeongSource: PyeongProvenance;
+  officialType: string | null;
+  householdCount: number | null;
+}
+
+export interface DisplayUnit {
+  canonicalExclusiveArea: string; // group key
+  displayExclusiveArea: string; // for UI "84.79"
+  representativePyeong: number | null;
+  representativePyeongSource: PyeongProvenance;
+  householdCount: number | null;
+  supplyAreaMin: string | null;
+  supplyAreaMax: string | null;
+  rawVariantCount: number;
+}
+
+export function groupToDisplayUnits(rawUnits: RawUnitType[]): DisplayUnit[] {
+  const map = new Map<string, DisplayUnit>();
+
+  for (const raw of rawUnits) {
+    const key = raw.canonicalExclusiveArea;
+    if (!map.has(key)) {
+      map.set(key, {
+        canonicalExclusiveArea: key,
+        displayExclusiveArea: parseFloat(key).toFixed(2).replace(/\.00$/, ''),
+        representativePyeong: raw.representativePyeong,
+        representativePyeongSource: raw.representativePyeongSource,
+        householdCount: raw.householdCount || 0,
+        supplyAreaMin: raw.supplyArea,
+        supplyAreaMax: raw.supplyArea,
+        rawVariantCount: 1,
+      });
+    } else {
+      const existing = map.get(key)!;
+      existing.rawVariantCount++;
+      if (raw.householdCount) {
+        existing.householdCount = (existing.householdCount || 0) + raw.householdCount;
+      }
+      
+      // Update min/max supply area
+      if (raw.supplyArea && existing.supplyAreaMin) {
+        if (parseFloat(raw.supplyArea) < parseFloat(existing.supplyAreaMin)) existing.supplyAreaMin = raw.supplyArea;
+        if (parseFloat(raw.supplyArea) > parseFloat(existing.supplyAreaMax!)) existing.supplyAreaMax = raw.supplyArea;
+      }
+
+      // Check if pyeong is the same. If not, fallback to UNKNOWN / null pyeong to avoid arbitrary choice
+      if (existing.representativePyeong !== raw.representativePyeong) {
+        existing.representativePyeong = null;
+        existing.representativePyeongSource = 'UNKNOWN';
+      }
+      
+      // If one variant is derived and another is official, downgrade to derived/unknown appropriately
+      if (existing.representativePyeongSource === 'OFFICIAL_LABEL' && raw.representativePyeongSource !== 'OFFICIAL_LABEL') {
+        existing.representativePyeongSource = 'SUPPLY_AREA_DERIVED';
+      }
+    }
+  }
+
+  // Sort by canonicalExclusiveArea
+  return Array.from(map.values()).sort((a, b) => parseFloat(a.canonicalExclusiveArea) - parseFloat(b.canonicalExclusiveArea));
+}
+
 // [B1-FIX2 배경] 기본 2자리 정책은 84㎡대는 잘 구분했지만, 59.8826㎡과 59.8839㎡처럼
 // 2자리로 반올림하면 "59.88㎡"로 똑같아지는 실사례(대신롯데캐슬 실측)가 나왔다.
 // 그렇다고 모든 면적을 무조건 3~4자리로 늘리면 이미 2자리에서 구분되는 값들까지
@@ -114,11 +182,7 @@ export function formatExclusiveArea(rawExclusiveM2: number): string {
 }
 
 // 평 환산(㎡ / 3.305785, 소수점 1자리) — 표시 전용. DB/raw 데이터에 저장하지 않는다.
-export function formatPyeong(rawExclusiveM2: number): string {
-  if (Number.isNaN(rawExclusiveM2)) return '';
-  const pyeong = Math.round((rawExclusiveM2 / M2_PER_PYEONG) * 10) / 10;
-  return `약 ${pyeong}평`;
-}
+// [AREA MODEL V2] Fake derived pyeong is completely removed.
 
 // "같은 목록에 함께 나오는 면적들" 전체를 받아, 기본 2자리 라벨이 서로 겹치는
 // 값들만 겹치지 않을 때까지(최대 MAX_AREA_PRECISION자리) 정밀도를 올려 고유한
@@ -146,10 +210,12 @@ export function resolveAreaLabel(rawExclusiveM2: number, labels?: Map<number, st
   return labels?.get(rawExclusiveM2) ?? formatExclusiveArea(rawExclusiveM2);
 }
 
-// Hero/거래타임라인 헤더에서 쓰는 "전용 84.84㎡ · 약 25.7평" 형태. labels를 넘기면
+// Hero/거래타임라인 헤더에서 쓰는 "전용 84.84㎡" 형태. labels를 넘기면
 // 같은 페이지의 chip/거래목록과 동일한(충돌 해소된) 전용면적 라벨을 그대로 쓰고,
 // 넘기지 않으면 기본 2자리로 표시한다.
+// [AREA MODEL V2] Fake pyeong is removed.
 export function getAreaDetailLabel(rawExclusiveM2: number, labels?: Map<number, string>): string {
   if (Number.isNaN(rawExclusiveM2)) return '면적 정보 없음';
-  return `전용 ${resolveAreaLabel(rawExclusiveM2, labels)} · ${formatPyeong(rawExclusiveM2)}`;
+  return `전용 ${resolveAreaLabel(rawExclusiveM2, labels)}`;
 }
+

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { resolveAreaLabel } from '@/lib/area-utils';
+import { resolveAreaLabel, type DisplayUnit } from '@/lib/area-utils';
 import Chip from '@/components/ui/Chip';
 import AreaChip, { AreaChipData } from '@/components/ui/AreaChip';
 
@@ -13,6 +13,7 @@ interface AreaSelectorProps {
   // 맵. Hero/거래목록과 동일한 라벨을 쓰기 위해 여기서 새로 계산하지 않고 그대로
   // 조회만 한다.
   areaLabels?: Map<number, string>;
+  unitMaster?: DisplayUnit[] | null;
 }
 
 // [APT DETAIL QA/IA v1] 이전에는 거래량 상위 4개만 칩 상한을 둬서 노출하고 나머지는
@@ -22,7 +23,7 @@ interface AreaSelectorProps {
 // 자체가 원인). 상한을 없애고 전체를 가로 스크롤 칩으로 노출한다 — 컨테이너는
 // 이미 overflowX:'auto'라 칩이 많아도 스크롤만 될 뿐 깨지지 않는다. 모달은 평형이
 // 많은 단지에서 빠르게 점프하는 보조 수단으로만 남긴다.
-export default function AreaSelector({ trades, selectedArea, onSelect, areaLabels }: AreaSelectorProps) {
+export default function AreaSelector({ trades, selectedArea, onSelect, areaLabels, unitMaster }: AreaSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const countByArea = new Map<string, number>();
@@ -30,23 +31,49 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
     countByArea.set(t.area, (countByArea.get(t.area) || 0) + 1);
   });
 
-  const allAreas = Array.from(countByArea.keys()).sort((a, b) => parseFloat(a) - parseFloat(b));
+  // If unitMaster is available, use it. Otherwise, fallback to trades.
+  const hasUnitMaster = Array.isArray(unitMaster) && unitMaster.length > 0;
+  
+  const allAreas = hasUnitMaster 
+    ? unitMaster.map(u => u.canonicalExclusiveArea)
+    : Array.from(countByArea.keys()).sort((a, b) => parseFloat(a) - parseFloat(b));
 
   const chipAreas = allAreas;
 
   const renderAreaLabel = (area: string) => resolveAreaLabel(parseFloat(area), areaLabels);
 
-  // [AREA MODEL V1 §19/§32] 오늘은 공급면적 데이터가 없어(SUPPLY_AREA_NOT_AVAILABLE)
-  // supplyAreaM2/pyeongLabel은 항상 null이다 — AreaChip이 이 null을 보고 "평형"
-  // 라벨을 스스로 만들지 않도록 구조적으로 강제한다.
-  const toAreaChipData = (area: string): AreaChipData => ({
-    id: area,
-    exclusiveAreaM2: parseFloat(area),
-    displayLabel: renderAreaLabel(area),
-    supplyAreaM2: null,
-    pyeongLabel: null,
-    tradeCount: countByArea.get(area) || 0,
-  });
+  const toAreaChipData = (area: string): AreaChipData => {
+    if (hasUnitMaster) {
+      const unit = unitMaster.find(u => u.canonicalExclusiveArea === area);
+      if (unit) {
+        // [AREA MODEL V2] representativePyeong collision resolution:
+        // If multiple units share the same pyeong, we show the exclusive area to distinguish them.
+        // But for AreaChip, the design usually has pyeong as primary and exclusive as secondary anyway.
+        // We will supply it to `pyeongLabel`
+        
+        let pyeongLabel = unit.representativePyeong ? `${unit.representativePyeong}평` : null;
+        let displayLabel = `전용 ${unit.displayExclusiveArea}㎡`;
+        
+        return {
+          id: area,
+          exclusiveAreaM2: parseFloat(area),
+          displayLabel,
+          supplyAreaM2: null,
+          pyeongLabel,
+          tradeCount: countByArea.get(area) || 0,
+        };
+      }
+    }
+
+    return {
+      id: area,
+      exclusiveAreaM2: parseFloat(area),
+      displayLabel: renderAreaLabel(area),
+      supplyAreaM2: null,
+      pyeongLabel: null,
+      tradeCount: countByArea.get(area) || 0,
+    };
+  };
 
   return (
     <div style={{ position: 'relative' }}>
@@ -84,19 +111,44 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
               >
                 전체
               </button>
-              {allAreas.map((area) => (
-                <button
-                  key={area}
-                  onClick={() => { onSelect(area); setIsOpen(false); }}
-                  style={{
-                    padding: '0.75rem 1rem', borderRadius: '8px', textAlign: 'left', border: '1px solid var(--border-color)', cursor: 'pointer', fontWeight: 600,
-                    backgroundColor: selectedArea === area ? 'var(--primary-color)' : 'white',
-                    color: selectedArea === area ? 'white' : 'var(--text-primary)',
-                  }}
-                >
-                  {renderAreaLabel(area)} <span style={{ fontWeight: 400, opacity: 0.7 }}>({countByArea.get(area)}건)</span>
-                </button>
-              ))}
+              {allAreas.map((area) => {
+                let mainLabel = renderAreaLabel(area);
+                let subLabel = `(${countByArea.get(area) || 0}건)`;
+                
+                if (hasUnitMaster) {
+                  const unit = unitMaster.find(u => u.canonicalExclusiveArea === area);
+                  if (unit) {
+                    mainLabel = unit.representativePyeong ? `${unit.representativePyeong}평` : `전용 ${unit.displayExclusiveArea}㎡`;
+                    subLabel = `전용 ${unit.displayExclusiveArea}㎡`;
+                    if (unit.householdCount && unit.householdCount > 0) {
+                      subLabel += ` · ${unit.householdCount}세대`;
+                    }
+                    if (unit.representativePyeong) {
+                       mainLabel = `${unit.representativePyeong}평 · 전용 ${unit.displayExclusiveArea}㎡`;
+                       subLabel = unit.householdCount && unit.householdCount > 0 ? `${unit.householdCount}세대` : '';
+                    } else {
+                       mainLabel = `전용 ${unit.displayExclusiveArea}㎡`;
+                       subLabel = unit.householdCount && unit.householdCount > 0 ? `${unit.householdCount}세대` : '';
+                    }
+                  }
+                }
+
+                return (
+                  <button
+                    key={area}
+                    onClick={() => { onSelect(area); setIsOpen(false); }}
+                    style={{
+                      padding: '0.75rem 1rem', borderRadius: '8px', textAlign: 'left', border: '1px solid var(--border-color)', cursor: 'pointer', fontWeight: 600,
+                      backgroundColor: selectedArea === area ? 'var(--primary-color)' : 'white',
+                      color: selectedArea === area ? 'white' : 'var(--text-primary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                    }}
+                  >
+                    <span>{mainLabel}</span>
+                    {subLabel && <span style={{ fontWeight: 400, opacity: 0.7, fontSize: '0.9rem' }}>{subLabel}</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

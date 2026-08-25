@@ -24,7 +24,7 @@ import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
 import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
-import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit } from '@/lib/area-utils';
+import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
@@ -84,6 +84,7 @@ export default function ApartmentDetail() {
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [ledgerType, setLedgerType] = useState<'전유부' | '표제부'>('전유부');
   const [aptInfo, setAptInfo] = useState<Record<string, string> | null>(null);
+  const [unitMaster, setUnitMaster] = useState<DisplayUnit[] | null>(null);
   const [lawdCdState, setLawdCdState] = useState('11680');
   const [regionName, setRegionName] = useState<string>('');
   const [urlDong, setUrlDong] = useState<string>('');
@@ -186,6 +187,9 @@ export default function ApartmentDetail() {
           if (cancelled) return;
           if (data.info) {
             setAptInfo(data.info);
+          }
+          if (data.unitTypes && Array.isArray(data.unitTypes)) {
+            setUnitMaster(groupToDisplayUnits(data.unitTypes));
           }
         }
       } catch (e) {
@@ -350,6 +354,17 @@ export default function ApartmentDetail() {
   const latestPrice = heroTrade ? heroTrade.priceStr : (trades.length > 0 ? '거래 없음' : '조회 중...');
   const latestPriceNum = heroTrade ? heroTrade.price : 0; // 억 단위 정수
 
+  const renderHeroAreaLabel = (area: string, labels: Map<number, string>) => {
+    if (unitMaster && unitMaster.length > 0) {
+      const unit = unitMaster.find(u => u.canonicalExclusiveArea === area);
+      if (unit) {
+        if (unit.representativePyeong) return `${unit.representativePyeong}평 · 전용 ${unit.displayExclusiveArea}㎡`;
+        return `전용 ${unit.displayExclusiveArea}㎡`;
+      }
+    }
+    return getAreaDetailLabel(parseFloat(area), labels);
+  };
+
   // AreaSelector 칩·거래목록·Hero·거래타임라인 헤더가 전부 같은 라벨을 쓰도록,
   // 이 단지의 전체 거래(trades, 필터 무관)에 등장하는 모든 전용면적을 기준으로
   // 라벨 충돌(예: 59.8826㎡ vs 59.8839㎡가 둘 다 "59.88㎡"가 되는 경우)을 한 번에
@@ -358,7 +373,7 @@ export default function ApartmentDetail() {
   // APT DETAIL QA/IA v1 §9 — ㎡|평 토글은 chip/거래표에만 적용한다(areaLabels는 항상
   // ㎡라 Hero/헤더의 "전용 X㎡ · 약 Y평" 이중표기는 그대로 둔다 — chipAreaLabels를 거기
   // 넣으면 "전용 25.4평 · 약 25.4평"처럼 평이 중복 표기되는 문제가 생긴다).
-  const chipAreaLabels = getAreaLabelsForUnit(trades.map((t) => parseFloat(t.area)), areaUnit);
+  // chipAreaLabels and the AreaUnit toggle have been removed.
 
   const firstTrade = trades.length > 0 ? trades[0] : null;
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
@@ -802,7 +817,7 @@ export default function ApartmentDetail() {
               <div className={styles.priceBlock} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={chipAreaLabels} />
+                    <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={areaLabels} unitMaster={unitMaster} />
                   </div>
                   <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '8px', padding: '2px', background: 'var(--bg-color)' }}>
                     {(['㎡', '평'] as AreaUnit[]).map((u) => (
@@ -861,7 +876,7 @@ export default function ApartmentDetail() {
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>{heroTrade.priceStr}</span>
                           <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                            {getAreaDetailLabel(parseFloat(heroTrade.area), areaLabels)}
+                            {renderHeroAreaLabel(heroTrade.area, areaLabels)}
                           </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
@@ -941,7 +956,7 @@ export default function ApartmentDetail() {
         <div className={styles.panel}>
           <div>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', margin: '0 0 1rem' }}>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{selectedArea === '전체' ? '전체 평형' : getAreaDetailLabel(parseFloat(selectedArea), areaLabels)} · 총 {filteredTrades.length}건</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{selectedArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedArea, areaLabels)} · 총 {filteredTrades.length}건</span>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
                   {['1년', '3년', '5년', '전체'].map(p => (
@@ -962,11 +977,12 @@ export default function ApartmentDetail() {
 
             <TradeTimelineList
               trades={filteredTrades}
+              unitMaster={unitMaster}
               loading={loading}
               apiError={apiError}
               visibleCount={visibleCount}
               onLoadMore={() => setVisibleCount((v) => v + 15)}
-              areaLabels={chipAreaLabels}
+              areaLabels={areaLabels}
             />
           </div>
           

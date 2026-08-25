@@ -1,5 +1,5 @@
 import React from 'react';
-import { resolveAreaLabel } from '@/lib/area-utils';
+import { resolveAreaLabel, type DisplayUnit } from '@/lib/area-utils';
 
 interface TimelineTrade {
   id: number;
@@ -13,6 +13,7 @@ interface TimelineTrade {
 
 interface TradeTimelineListProps {
   trades: TimelineTrade[];
+  unitMaster?: DisplayUnit[] | null;
   loading: boolean;
   apiError: string | null;
   visibleCount: number;
@@ -20,7 +21,7 @@ interface TradeTimelineListProps {
   areaLabels?: Map<number, string>;
 }
 
-export default function TradeTimelineList({ trades, loading, apiError, visibleCount, onLoadMore, areaLabels }: TradeTimelineListProps) {
+export default function TradeTimelineList({ trades, loading, apiError, visibleCount, onLoadMore, areaLabels, unitMaster }: TradeTimelineListProps) {
   if (loading) {
     return <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>데이터를 불러오는 중입니다...</div>;
   }
@@ -37,7 +38,17 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {visible.map((t, index) => {
-        const areaLabel = resolveAreaLabel(parseFloat(t.area), areaLabels);
+        let areaLabel = resolveAreaLabel(parseFloat(t.area), areaLabels);
+        if (unitMaster && unitMaster.length > 0) {
+          const unit = unitMaster.find(u => u.canonicalExclusiveArea === t.area);
+          if (unit) {
+            if (unit.representativePyeong) {
+              areaLabel = `${unit.representativePyeong}평`; // In trade list, we can keep it compact (e.g. 34평 or 전용 84.79㎡)
+            } else {
+              areaLabel = `전용 ${unit.displayExclusiveArea}㎡`;
+            }
+          }
+        }
         const isSale = t.tradeType.includes('매매') || t.tradeType === '실거래';
         const prevTrade = trades[index + 1];
         let diffBadge: React.ReactNode = null;
