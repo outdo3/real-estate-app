@@ -760,7 +760,7 @@ export default function ApartmentDetail() {
         </div>
       )}
 
-      {/* ══════════ 1구역: 단지 요약 및 핵심 지표 ══════════ */}
+      {/* ══════════ 1구역: TIER 1 (결론 중심) ══════════ */}
       <div className={styles.header}>
         <div className="container">
           {!pageReady ? (
@@ -774,14 +774,16 @@ export default function ApartmentDetail() {
             </div>
           ) : (
             <>
-              {/* Hero: 단지명 · 지역 · 준공/세대수 요약 + 공유 */}
-              <div className={styles.heroTop}>
+              {/* Hero: Compacted */}
+              <div className={styles.heroTop} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
                 <div>
-                  <h1 className={styles.heroTitle}>{displayName || aptName}</h1>
-                  {heroRegionLabel && <div className={styles.heroAddress}>📍 {heroRegionLabel}</div>}
-                  {heroMetaLine && <div className={styles.heroMeta}>{heroMetaLine}</div>}
+                  <h1 className={styles.heroTitle} style={{ marginBottom: '0.25rem' }}>{displayName || aptName}</h1>
+                  <div style={{ display: 'flex', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem', flexWrap: 'wrap' }}>
+                    {heroRegionLabel && <span>📍 {heroRegionLabel}</span>}
+                    {heroMetaLine && <span>· {heroMetaLine.split('세대')[0]}세대</span>}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                   <FavoriteButton
                     lawdCd={lawdCdState}
                     dong={urlDong}
@@ -796,8 +798,36 @@ export default function ApartmentDetail() {
                 </div>
               </div>
 
-              {/* 가격 핵심 */}
-              <div className={styles.priceBlock}>
+              {/* TIER 1: Area & Price Snapshot */}
+              <div className={styles.priceBlock} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={chipAreaLabels} />
+                  </div>
+                  <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '999px', padding: '2px' }}>
+                    {(['㎡', '평'] as AreaUnit[]).map((u) => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setAreaUnit(u)}
+                        aria-pressed={areaUnit === u}
+                        style={{
+                          padding: '0.3rem 0.65rem',
+                          borderRadius: '999px',
+                          border: 'none',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          background: areaUnit === u ? 'var(--primary-color)' : 'transparent',
+                          color: areaUnit === u ? 'white' : 'var(--text-secondary)',
+                        }}
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                   <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
                   <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
@@ -820,10 +850,6 @@ export default function ApartmentDetail() {
                       </div>
                     </>
                   ) : selectedArea !== '전체' ? (
-                    // 선택 평형(+현재 매매/전월세)에 거래가 없는 경우 — 다른 평형의
-                    // 거래를 대신 보여주지 않고, 사용자가 무엇을 선택했는지는 위
-                    // AreaSelector 칩 선택 상태에 그대로 남겨둔 채 이 자리에만
-                    // 명확한 empty state를 표시한다.
                     <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-muted)' }}>
                       해당 평형의 최근 거래가 없습니다.
                     </div>
@@ -839,90 +865,45 @@ export default function ApartmentDetail() {
                   <b>최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}</b>
                 </div>
               </div>
-
-              {/* 평형 선택 — 가격 확인 직후, 시세 흐름 확인 직전 */}
-              <div style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={chipAreaLabels} />
-                </div>
-                <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '999px', padding: '2px' }}>
-                  {(['㎡', '평'] as AreaUnit[]).map((u) => (
-                    <button
-                      key={u}
-                      type="button"
-                      onClick={() => setAreaUnit(u)}
-                      aria-pressed={areaUnit === u}
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '999px',
-                        border: 'none',
-                        fontSize: '0.8rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        background: areaUnit === u ? 'var(--primary-color)' : 'transparent',
-                        color: areaUnit === u ? 'white' : 'var(--text-secondary)',
-                      }}
-                    >
-                      {u}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ marginTop: '1.25rem' }}>
-                <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
-              </div>
-
-              <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
-
-              {/* 기존 단지 스펙 그리드(세대수/준공년월/용적률/건폐율/주차대수) — Hero 핵심
-                  요약과는 별개로 삭제하지 않고 그대로 유지. address는 위 Hero에서 이미
-                  보여줬으므로 중복 표시를 피하기 위해 빈 값을 넘긴다(컴포넌트 자체 수정 없음). */}
-              <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
-                <AptSpecGrid aptName={aptName} address="" aptInfo={aptInfo} buildYear={heroBuildYearRaw} />
-              </div>
             </>
           )}
         </div>
       </div>
 
-      {/* STEP SCORE S3 — Hero 직후, 실거래 타임라인 직전(§3 권장 배치). pageReady와
-          무관한 독립 카드라 이 위치에 pageReady 조건 밖으로 둔다. */}
-      {pageReady && (
-        <div className="container">
-          <ApartmentScoreCard result={scoreResult} loading={scoreLoading} />
-        </div>
-      )}
+      {/* TIER 1: Score & Briefing */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <ApartmentScoreCard result={scoreResult} loading={scoreLoading} />
+              </div>
 
-      <div className="container">
+              <div style={{ marginBottom: '1.5rem' }}>
+                {!loading && scoreResult?._shadowV2 ? (
+                  <ApartmentBriefingV2 v2Result={scoreResult._shadowV2} />
+                ) : !loading ? (
+                  <div className={styles.briefCard}>
+                    <div className={styles.briefTitle}>단지 브리핑</div>
+                    <div className={styles.briefList} style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>데이터가 충분하지 않아 단지브리핑을 제공하기 어렵습니다.</div>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* ══════════ 2구역: TIER 2 (맥락과 자금) ══════════ */}
+      <div className={`container ${styles.sectionBlock}`}>
         <div className={styles.panel}>
-          <div className={styles.quickButtons} style={{ justifyContent: 'center' }}>
-            {/* [DESIGN SYSTEM 3 §19] apt 상세는 LOCKED 구조지만, 이번 STEP의
-                공통 Button foundation 적용은 명시적으로 승인된 예외다 —
-                구조/순서/동작은 그대로, 버튼 구현만 공용 컴포넌트로 교체. */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
+          </div>
+
+          <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
+          
+          <div className={styles.quickButtons} style={{ justifyContent: 'center', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
             <Button variant="secondary" size="sm" onClick={() => openModal('지도')}>지도</Button>
             <Button variant="secondary" size="sm" onClick={() => openModal('로드뷰')}>로드뷰</Button>
             <Button variant="secondary" size="sm" onClick={() => openModal('대출한도')}>대출한도</Button>
-            {/* [STEP50 V1 CLEANUP] '단지정보'/'건축물대장' 버튼은 노출하지 않는다.
-                '단지정보' 모달은 aptInfo가 실제로 가질 수 있는 키(세대수/총주차대수/
-                용적률/건폐율, /api/apt/[name]/info/route.ts 참고)가 전부 Hero 아래
-                AptSpecGrid에 이미 상시 노출돼 있어 100% 중복이었다(코드 확인 완료).
-                '커뮤니티 시설' 버튼은 communityFacilities 실데이터 coverage가 0/31
-                (DB 직접 조회 확인)이라 항상 "정보 없음" empty state만 반복 노출했다.
-                건축물대장 버튼은 B0.5 검수에서 확인된 mgmBldrgstPk 정밀도 손상(BLOCKER)
-                때문에 그 이전부터 이미 노출하지 않고 있었다. 셋 다 관련 API/모달 case/
-                state는 삭제하지 않고 그대로 남겨둔다 — 버튼(진입점)만 제거했다. */}
           </div>
-
-          {/* [STEP50 V1 CLEANUP] 이 카드("실거주민 이야기가 궁금하다면?")는 아래 4구역
-              CommunityPreview 헤더의 "글쓰기"/"더보기" 링크와 완전히 동일한 목적·목적지의
-              CTA를 중복 노출했다(실제 커뮤니티 글 목록 등 고유 콘텐츠 없이 링크만 있는
-              배너). CommunityPreview는 실제 최근 글까지 함께 보여줘 더 자연스러운
-              위치이므로 그쪽 하나만 남기고 이 배너는 제거했다. */}
         </div>
       </div>
 
-      {/* ══════════ 2구역: 시세/실거래 타임라인 & 평면도 ══════════ */}
+      {/* ══════════ 3구역: TIER 3 (근거 데이터) ══════════ */}
       <div className={`container ${styles.sectionBlock}`}>
         <h2 className={styles.zoneTitle}>실거래 타임라인</h2>
         <div className={styles.panel}>
@@ -956,20 +937,11 @@ export default function ApartmentDetail() {
               areaLabels={chipAreaLabels}
             />
           </div>
-
-          {!loading && scoreResult?._shadowV2 ? (
-            <ApartmentBriefingV2 v2Result={scoreResult._shadowV2} />
-          ) : !loading ? (
-            <div className={styles.briefCard}>
-              <div className={styles.briefTitle}>단지 브리핑</div>
-              <div className={styles.briefList} style={{fontSize: '0.85rem', color: 'var(--text-secondary)'}}>데이터가 충분하지 않아 단지브리핑을 제공하기 어렵습니다.</div>
-            </div>
-          ) : null}
-
-          {/* [STEP50 V1 CLEANUP] FloorPlanPanel은 항상 "평면도 이미지는 준비 중입니다"만
-              보여줬다 — 이 앱에 평면도 이미지/데이터 소스 자체가 없어(FloorPlanPanel.tsx
-              주석 참고) 어떤 단지에서도 예외 없이 empty state만 노출한다. 컴포넌트 자체는
-              삭제하지 않고(향후 데이터 확보 시 복원 가능) 호출만 제거했다. */}
+          
+          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+            <h3 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>단지 상세 제원</h3>
+            <AptSpecGrid aptName={aptName} address="" aptInfo={aptInfo} buildYear={heroBuildYearRaw} />
+          </div>
         </div>
       </div>
 
