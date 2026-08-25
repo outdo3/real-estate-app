@@ -45,8 +45,22 @@ function NaverProvider(): OAuthConfig<NaverProfile> {
   };
 }
 
+const prismaAdapter = PrismaAdapter(prisma);
+
+const customAdapter = {
+  ...prismaAdapter,
+  linkAccount: async (account: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { refresh_token_expires_in, ...safeAccount } = account;
+    if (prismaAdapter.linkAccount) {
+      return prismaAdapter.linkAccount(safeAccount as any);
+    }
+    return safeAccount;
+  },
+};
+
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: customAdapter,
   providers: [
     KakaoProvider({
       clientId: process.env.KAKAO_CLIENT_ID || '',
