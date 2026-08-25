@@ -150,44 +150,45 @@ model TradeHistory {
 // 실거래가처럼 실시간 API가 있는 데이터가 아니라, 스크립트가 주기적으로 수집해
 // 미리 채워둔 값을 상세페이지가 그대로 읽어 보여준다.
 model Apartment {
-  id                  Int      @id @default(autoincrement())
+  id                  Int                 @id @default(autoincrement())
   name                String
   dong                String?
-  lawdCd              String?  @map("lawd_cd")
+  lawdCd              String?             @map("lawd_cd")
   // 이모지 태그 배열, 예: ["⛳ 골프연습장", "🏊 수영장"]. 정보가 없으면 null(빈 배열이 아님 —
   // "조사했지만 시설이 하나도 없다"와 "아직 조사 전"을 구분하기 위함).
-  communityFacilities Json?    @map("community_facilities")
+  communityFacilities Json?               @map("community_facilities")
   // 건축물대장 표제부 공공데이터 기반. null은 "아직 조회 전/실패", 0은 취급하지 않는다
   // (총주차대수 0대·용적률 0%는 실제로 있을 수 없는 값이라 항상 "미확보"로 간주 — 조회
   // 로직도 0 이하 값은 저장하지 않는다).
-  parkingCount        Int?     @map("parking_count")
-  far                 Float?   @map("far") // 용적률(%)
-  bcr                 Float?   @map("bcr") // 건폐율(%)
+  parkingCount        Int?                @map("parking_count")
+  far                 Float?              @map("far") // 용적률(%)
+  bcr                 Float?              @map("bcr") // 건폐율(%)
   // 총괄표제부 응답에 세대수도 같이 들어있어 캐싱해둔다. 네이버 스크래핑(비결정적 —
   // 매 요청 성공을 보장 못 함)에만 의존하면, parkingCount/far/bcr가 캐시 히트라 라이브
   // 조회를 건너뛴 요청에서는 세대수만 빠지는 문제가 실측으로 확인됐다.
-  totalHouseholds     Int?     @map("total_households")
+  totalHouseholds     Int?                @map("total_households")
   // 총괄표제부 useAprDay(사용승인일)를 "YYYY년"으로 캐싱. 세대수와 같은 이유(네이버
   // 스크래핑은 검색어에 지역 정보가 없어 동명의 타 지역 단지 값을 가져올 수 있음 —
   // 실측: "금호어울림"으로 검색 시 부산 서구(256세대)가 아닌 타 단지의 "1,549세대"가
   // 잡힘)로, 지번까지 정확히 지정해 조회하는 건축물대장 값을 우선한다.
-  approvalDate        String?  @map("approval_date")
+  approvalDate        String?             @map("approval_date")
   // 건축물대장 총괄표제부 조회에 필요한 지번(예: "1544"). 이 값 없이는 동 전체를
   // 뒤져야 하는데, 실측 결과 그 방식은 신뢰할 수 없는 결과(엉뚱한 건물)만 반환해서
   // jibun을 사실상 필수로 요구하게 됐다 — apt-client.tsx가 실거래 데이터에서 얻은
   // jibun으로 /api/apt/[name]/info를 호출할 때마다 여기 저장해, 다음부터는 배치
   // 스크립트도 이 값을 재사용할 수 있게 한다.
-  jibun               String?  @map("jibun")
+  jibun               String?             @map("jibun")
   // STEP SCORE S2A — ApartmentMaster.aptSeq(정식 identity, M3/M4)와 연결하는 backfill용
   // 필드. unique를 걸지 않는다: 32건 매칭 감사(SCORE-S2A 문서 §3) 결과 "대신더샵"/
   // "대신더샵아파트"처럼 이름 표기만 다른 Apartment row 2건이 같은 aptSeq로 매칭되는
   // 실제 사례가 4쌍 확인됐다 — Apartment.@@unique([name, dong])가 문자열 표기 차이를
   // 막지 못해 생긴 기존 중복이며, 이번 STEP에서 그 중복 자체를 정리하지는 않는다(범위
   // 밖). AMBIGUOUS/UNMATCHED로 분류된 row는 이 필드를 채우지 않는다(강제 연결 금지).
-  aptSeq              String?  @map("apt_seq")
+  aptSeq              String?             @map("apt_seq")
   // @default(now())를 같이 둬서, Prisma를 거치지 않고 scripts/crawl_facilities.py가
   // Supabase REST API로 직접 INSERT할 때도(이 컬럼 값을 안 보내도) DB가 자동으로 채운다.
-  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at")
+  unitTypes           ApartmentUnitType[]
 
   @@unique([name, dong])
   @@index([aptSeq])
@@ -1095,14 +1096,14 @@ model Favorite {
 }
 
 model RecentView {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  lawdCd    String   @map("lawd_cd")
-  dong      String
-  name      String
-  aptSeq    String?  @map("apt_seq")
-  address   String?
-  viewedAt  DateTime @default(now()) @map("viewed_at")
+  id       String   @id @default(cuid())
+  userId   String   @map("user_id")
+  lawdCd   String   @map("lawd_cd")
+  dong     String
+  name     String
+  aptSeq   String?  @map("apt_seq")
+  address  String?
+  viewedAt DateTime @default(now()) @map("viewed_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1121,3 +1122,46 @@ model UserPreference {
   @@map("user_preferences")
 }
 
+enum PyeongProvenance {
+  OFFICIAL_LABEL
+  SUPPLY_AREA_DERIVED
+  UNKNOWN
+}
+
+enum UnitDataSource {
+  BUILDING_REGISTRY
+  PRESALE
+  MANUAL_VERIFIED
+  OTHER
+}
+
+model ApartmentUnitType {
+  id          Int @id @default(autoincrement())
+  apartmentId Int @map("apartment_id")
+
+  // Identities
+  canonicalExclusiveArea Decimal @map("canonical_exclusive_area")
+  variantKey             String  @map("variant_key")
+
+  // Data
+  supplyArea                 Decimal?         @map("supply_area")
+  representativePyeong       Int?             @map("representative_pyeong")
+  representativePyeongSource PyeongProvenance @default(UNKNOWN) @map("representative_pyeong_source")
+  officialType               String?          @map("official_type")
+  householdCount             Int?             @map("household_count")
+
+  // Provenance
+  source         UnitDataSource @map("source")
+  sourceMatchKey String?        @map("source_match_key")
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  apartment Apartment @relation(fields: [apartmentId], references: [id], onDelete: Restrict)
+
+  @@unique([apartmentId, canonicalExclusiveArea, variantKey])
+  @@index([apartmentId, canonicalExclusiveArea])
+  @@map("apartment_unit_types")
+}
