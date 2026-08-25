@@ -11,7 +11,7 @@
  * - parking 2-state 분리.
  */
 
-import type { RawMasterInfo, RawLocationFeature } from '../../apartment-score/server/types';
+import type { RawMasterInfo, RawLocationFeature } from '../apartment-score/server/types';
 import type { ScoreV2Input, SubwayDataStatus, ParkingRawStatus, AttendanceZoneStatus } from './types';
 
 export function adaptToV2Input(

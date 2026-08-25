@@ -21,7 +21,7 @@ import styles from './FavoriteButton.module.css';
 // authenticated로 바뀌면, 저장해둔 의도가 "지금 보고 있는 단지"와 일치하고
 // 오래되지 않았을 때만 자동으로 찜을 완료한다 — 다른 단지로 이동했거나 오래
 // 방치된 의도까지 되살리지 않는다.
-export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address }: FavoriteInput) {
+export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address, compact }: FavoriteInput & { compact?: boolean }) {
   const { status } = useSession();
   const [favorited, setFavorited] = useState<boolean | null>(null);
   const [pending, setPending] = useState(false);
@@ -139,7 +139,7 @@ export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address }: 
         title={isActive ? '관심단지 해제' : '관심단지 저장'}
       >
         <Heart className={styles.icon} aria-hidden="true" fill={isActive ? 'currentColor' : 'none'} />
-        {isActive ? '관심단지' : '관심단지 저장'}
+        {!compact && (isActive ? '관심단지' : '관심단지 저장')}
       </button>
       {error && <div className={styles.errorToast}>{error}</div>}
       <LoginModal open={modalOpen} onClose={() => setModalOpen(false)} />

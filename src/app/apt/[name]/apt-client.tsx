@@ -790,16 +790,19 @@ export default function ApartmentDetail() {
           ) : (
             <>
               {/* Hero: Compacted */}
-              <div className={styles.heroTop} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
-                <div>
-                  <h1 className={styles.heroTitle} style={{ marginBottom: '0.25rem' }}>{displayName || aptName}</h1>
-                  <div style={{ display: 'flex', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem', flexWrap: 'wrap' }}>
-                    {heroRegionLabel && <span>📍 {heroRegionLabel}</span>}
-                    {heroMetaLine && <span>· {heroMetaLine.split('세대')[0]}세대</span>}
+              <div className={styles.heroTop} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h1 className={styles.heroTitle} style={{ marginBottom: '0.35rem', wordBreak: 'keep-all', overflowWrap: 'break-word', lineHeight: 1.25 }}>{displayName || aptName}</h1>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
+                      📍 {heroRegionLabel} {firstTrade?.jibun || ''}
+                    </span>
+                    {heroMetaLine && <span style={{ flexShrink: 0 }}>· {heroMetaLine.split('세대')[0]}세대</span>}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, marginTop: '0.2rem' }}>
                   <FavoriteButton
+                    compact
                     lawdCd={lawdCdState}
                     dong={urlDong}
                     name={displayName || aptName}
@@ -844,8 +847,8 @@ export default function ApartmentDetail() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
-                  <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', fontWeight: 600 }}>최근 실거래가</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 700 }}>최근 실거래가</span>
                   <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '8px', padding: '2px', border: '1px solid var(--border-color)' }}>
                     <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.4rem 0.8rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', color: tradeTypeFilter === '매매' ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '매매' ? 700 : 500, borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: tradeTypeFilter === '매매' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>매매</button>
                     <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.4rem 0.8rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', color: tradeTypeFilter === '전월세' ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '전월세' ? 700 : 500, borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>전월세</button>
@@ -874,8 +877,8 @@ export default function ApartmentDetail() {
                     return (
                       <>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>{heroTrade.priceStr}</span>
-                          <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                          <span style={{ fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.1 }}>{heroTrade.priceStr}</span>
+                          <span style={{ fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 600 }}>
                             {renderHeroAreaLabel(heroTrade.area, areaLabels)}
                           </span>
                         </div>
@@ -942,10 +945,13 @@ export default function ApartmentDetail() {
 
           <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
           
-          <div className={styles.quickButtons} style={{ justifyContent: 'center', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
-            <Button variant="secondary" size="sm" onClick={() => openModal('지도')}>지도</Button>
-            <Button variant="secondary" size="sm" onClick={() => openModal('로드뷰')}>로드뷰</Button>
-            <Button variant="secondary" size="sm" onClick={() => openModal('대출한도')}>대출한도</Button>
+          <div className={styles.quickButtons} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem 0', color: 'var(--text-primary)' }}>이 단지 더 알아보기</h3>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '0.25rem', WebkitOverflowScrolling: 'touch' }}>
+              <Button variant="secondary" size="sm" onClick={() => openModal('대출한도')} style={{ flexShrink: 0, padding: '0.5rem 0.85rem' }}>💰 이 집 사려면 얼마 필요?</Button>
+              <Button variant="secondary" size="sm" onClick={() => openModal('지도')} style={{ flexShrink: 0, padding: '0.5rem 0.85rem' }}>🗺️ 지도</Button>
+              <Button variant="secondary" size="sm" onClick={() => openModal('로드뷰')} style={{ flexShrink: 0, padding: '0.5rem 0.85rem' }}>🚶 로드뷰</Button>
+            </div>
           </div>
         </div>
       </div>

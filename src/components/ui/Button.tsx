@@ -17,6 +17,7 @@ interface ButtonBaseProps {
   'aria-label'?: string;
   children?: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
   onClick?: (e: React.MouseEvent) => void;
   type?: 'button' | 'submit';
   /** 전달하면 <button> 대신 next/link <Link>로 렌더링한다(페이지 이동용) —
@@ -58,7 +59,7 @@ export default function Button({
 
   if (href && !disabled) {
     return (
-      <Link href={href} target={target} rel={rel} className={classes} aria-label={rest['aria-label']} onClick={onClick}>
+      <Link href={href} target={target} rel={rel} className={classes} aria-label={rest['aria-label']} onClick={onClick} style={rest.style}>
         {content}
       </Link>
     );
@@ -72,6 +73,7 @@ export default function Button({
       disabled={disabled || loading}
       aria-label={rest['aria-label']}
       aria-busy={loading || undefined}
+      style={rest.style}
     >
       {content}
     </button>
