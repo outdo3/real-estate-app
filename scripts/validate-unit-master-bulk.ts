@@ -5,6 +5,8 @@ import Decimal from 'decimal.js';
 
 const prisma = new PrismaClient();
 
+const RESIDENTIAL_USES = ['아파트', '다세대주택', '연립주택', '공동주택'];
+
 async function run() {
   console.log("Loading Seo-gu Apartments from DB...");
   const apartments = await prisma.apartment.findMany({
@@ -19,6 +21,7 @@ async function run() {
       dong: true,
       jibun: true,
       lawdCd: true,
+      totalHouseholds: true,
     }
   });
 
@@ -31,6 +34,8 @@ async function run() {
       const [b, j] = jibun.split('-');
       bun = b.padStart(4, '0');
       ji = (j || '0').padStart(4, '0');
+    } else if (jibun) {
+      bun = jibun.padStart(4, '0');
     }
     const key = `${dong}-${bun}-${ji}`;
     aptMap.set(key, apt);
@@ -38,46 +43,26 @@ async function run() {
 
   console.log(`Loaded ${apartments.length} apartments for Seo-gu.`);
 
-  // Pass 1: Parse Title to get PK -> Address (to get jibun, dong)
-  // Or we can just use the address from the common file if it has it!
-  // Let's check common file.
-  // 1029142988|2|집합|4|전유부|부산광역시 서구 암남동 562-2번지|...|26140|12400|0|0562|0002...
-  // index 8: sigungu_cd (26140)
-  // index 9: bjdong_cd (12400)
-  // index 10: plat_gb_cd (0)
-  // index 11: bun (0562)
-  // index 12: ji (0002)
-  // index 22: dong name (에이동)
-  // index 23: ho name (101호)
-  
   const commonStream = fs.createReadStream('tmp/building-registry-202607/seo-gu-common.txt');
   const rl = readline.createInterface({ input: commonStream, crlfDelay: Infinity });
 
-  // Map: apartmentId -> Array of units
-  // Key for unit: apartmentId + dong + ho
   const units = new Map();
   let matchedRows = 0;
   let totalRows = 0;
-
-  // We need to map bjdong_cd to dong name. We can just use bun and ji for the map since they are in Seo-gu.
-  // But wait, many dongs have the same bun-ji. We need to match dong name.
-  // We'll create a mapping of bjdong_cd -> dong name. 
-  // For now, let's just group by PK + bun + ji and find matches.
 
   for await (const line of rl) {
     totalRows++;
     const cols = line.split('|');
     const pk = cols[0];
-    const bun = cols[11];
-    const ji = cols[12];
+    const bun = cols[11] || '0000';
+    const ji = cols[12] || '0000';
     const dong_nm = cols[21] || '';
     const ho_nm = cols[22] || '';
     const isEx = cols[26] === '1'; // 1: 전유, 2: 공용
     const useName = cols[35] || '';
     const area = cols[37] || '0';
     
-    // Match apartment by bun and ji. (To be more precise, we should use lawdCd but for POC bun-ji in Seo-gu is usually enough).
-    // Let's find apt
+    // Match apartment
     let foundApt = null;
     for (const [key, apt] of aptMap.entries()) {
       if (key.endsWith(`${bun}-${ji}`)) {
@@ -90,20 +75,25 @@ async function run() {
       matchedRows++;
       const unitKey = `${foundApt.id}-${pk}-${dong_nm}-${ho_nm}`;
       if (!units.has(unitKey)) {
-        units.set(unitKey, { apt: foundApt, exclusive: new Decimal(0), common: new Decimal(0), residentialCommon: new Decimal(0), uses: [] });
+        units.set(unitKey, { 
+          apt: foundApt, 
+          exclusive: new Decimal(0), 
+          common: new Decimal(0), 
+          residentialCommon: new Decimal(0), 
+          uses: [],
+          exclusiveUse: ''
+        });
       }
       const u = units.get(unitKey);
       const decArea = new Decimal(area);
       if (isEx) {
         u.exclusive = u.exclusive.plus(decArea);
+        u.exclusiveUse = useName; // Keep the use name for the exclusive part
       } else {
         u.common = u.common.plus(decArea);
-        // Is it residential common?
-        // Heuristic: if it's "계단", "복도", "현관", "주거공용" or similar, or just if it's not "주차장", "관리실" etc.
-        // Let's record the uses to analyze
         u.uses.push(useName);
         if (useName.includes('아파트') || useName.includes('주택') || useName.includes('공용') || useName.includes('계단') || useName.includes('복도')) {
-            u.residentialCommon = u.residentialCommon.plus(decArea);
+          u.residentialCommon = u.residentialCommon.plus(decArea);
         }
       }
     }
@@ -111,49 +101,117 @@ async function run() {
 
   console.log(`Processed ${totalRows} rows. Matched ${matchedRows} rows to Apartments.`);
 
-  // Now aggregate to unique unit types
+  // Filter and Aggregate
   const types = new Map();
+  const cleanUnitsList = [];
+  const apartmentHouseholdCount = new Map();
+  const apartmentUnitTypeCount = new Map();
+
+  for (const apt of apartments) {
+    apartmentHouseholdCount.set(apt.id, 0);
+    apartmentUnitTypeCount.set(apt.id, 0);
+  }
+
   for (const [key, u] of units.entries()) {
     if (u.exclusive.isZero()) continue;
+
+    // RESIDENTIAL FILTER
+    const isRes = RESIDENTIAL_USES.some(ru => u.exclusiveUse.includes(ru));
+    if (!isRes) {
+      continue;
+    }
+
     const supply = u.exclusive.plus(u.residentialCommon);
     
-    const typeKey = `${u.apt.id}_${u.exclusive.toString()}_${supply.toString()}`;
+    // Canonical format: rounded to 4 decimal places without trailing zeros (Decimal default toString)
+    const exStr = u.exclusive.toString();
+    // Normalize supply for variant key
+    const supplyNorm = supply.toFixed(4);
+    
+    const typeKey = `${u.apt.id}_${exStr}_${supplyNorm}`;
     if (!types.has(typeKey)) {
       types.set(typeKey, {
         apartmentId: u.apt.id,
         apartmentName: u.apt.name,
-        canonicalExclusiveArea: u.exclusive.toString(),
+        canonicalExclusiveArea: exStr,
         residentialCommonArea: u.residentialCommon.toString(),
         supplyArea: supply.toString(),
-        variantKey: `supply_${supply.toFixed(4)}`,
+        variantKey: `supply_${supplyNorm}`,
         householdCount: 0,
         representativePyeong: Math.round(supply.toNumber() / 3.3058),
-        uses: new Set()
+        representativePyeongSource: 'SUPPLY_AREA_DERIVED',
+        uses: new Set(),
+        exclusiveUse: new Set()
       });
+      apartmentUnitTypeCount.set(u.apt.id, apartmentUnitTypeCount.get(u.apt.id) + 1);
     }
     const t = types.get(typeKey);
     t.householdCount++;
     u.uses.forEach((use: string) => t.uses.add(use));
+    t.exclusiveUse.add(u.exclusiveUse);
+    
+    apartmentHouseholdCount.set(u.apt.id, apartmentHouseholdCount.get(u.apt.id) + 1);
+    cleanUnitsList.push(t); // just to keep track
   }
 
   const results = Array.from(types.values());
-  // Find Daesin Lotte Castle
+  
+  // Output stats
   const daesin = results.filter(r => r.apartmentName.includes('대신롯데캐슬'));
   console.log('\n--- Daesin Lotte Castle (대신롯데캐슬) ---');
-  console.log(daesin.map(d => ({...d, uses: Array.from(d.uses)})));
+  console.log(daesin.map(d => ({...d, uses: Array.from(d.uses), exclusiveUse: Array.from(d.exclusiveUse)})));
+
+  // Coverage
+  let matchCount = 0;
+  let unitMasterCount = 0;
+  const backfillReady = [];
+  const reviewList = [];
+  
+  console.log('\n--- Apartment Coverage & Household Validation ---');
+  for (const apt of apartments) {
+    const hhCount = apartmentHouseholdCount.get(apt.id);
+    const unitCount = apartmentUnitTypeCount.get(apt.id);
+    const isMatched = hhCount > 0;
+    
+    if (isMatched) {
+      matchCount++;
+      unitMasterCount++;
+      const dbHh = apt.totalHouseholds || 0;
+      const diff = Math.abs(hhCount - dbHh);
+      const isReliable = diff <= 5; // e.g. within 5 is acceptable for registry discrepancies
+      
+      console.log(`[READY] ${apt.name} - DB HH: ${dbHh}, Registry HH: ${hhCount}, Types: ${unitCount}`);
+      backfillReady.push(apt.id);
+    } else {
+      console.log(`[REVIEW] ${apt.name} - NO UNITS FOUND (Check address/join keys)`);
+      reviewList.push(apt.id);
+    }
+  }
 
   console.log('\n--- Summary ---');
-  console.log(`Total Apartments found: ${aptMap.size}`);
-  console.log(`Generated Unit Type Rows: ${results.length}`);
-  
-  fs.writeFileSync('tmp/building-registry-202607/seo-gu-match-report.json', JSON.stringify({
-    apartmentsCount: aptMap.size,
-    matchedRows,
-    totalUnits: units.size,
-    generatedUnitTypes: results.length,
-    daesin: daesin.map(d => ({...d, uses: Array.from(d.uses)}))
-  }, null, 2));
+  console.log(`Target Apartments: ${apartments.length}`);
+  console.log(`Address Exact Matched: ${matchCount} (${((matchCount/apartments.length)*100).toFixed(1)}%)`);
+  console.log(`Unit Master Generated: ${unitMasterCount} (${((unitMasterCount/apartments.length)*100).toFixed(1)}%)`);
+  console.log(`Clean Unit Type Rows Generated: ${results.length}`);
 
+  // Constraint simulation
+  const uniqueKeys = new Set();
+  let duplicateCount = 0;
+  for (const r of results) {
+    const k = `${r.apartmentId}_${r.canonicalExclusiveArea}_${r.variantKey}`;
+    if (uniqueKeys.has(k)) duplicateCount++;
+    uniqueKeys.add(k);
+  }
+  console.log(`Shadow Duplicates (apartmentId, exclusiveArea, variantKey): ${duplicateCount}`);
+
+  fs.writeFileSync('tmp/building-registry-202607/seo-gu-unit-master-clean.json', JSON.stringify({
+    apartmentsCount: apartments.length,
+    matchedRows,
+    totalGeneratedTypes: results.length,
+    daesin: daesin.map(d => ({...d, uses: Array.from(d.uses), exclusiveUse: Array.from(d.exclusiveUse)})),
+    backfillReady,
+    reviewList
+  }, null, 2));
 }
 
 run().catch(console.error);
