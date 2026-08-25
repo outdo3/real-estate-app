@@ -799,12 +799,12 @@ export default function ApartmentDetail() {
               </div>
 
               {/* TIER 1: Area & Price Snapshot */}
-              <div className={styles.priceBlock} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+              <div className={styles.priceBlock} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={chipAreaLabels} />
                   </div>
-                  <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '999px', padding: '2px' }}>
+                  <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '8px', padding: '2px', background: 'var(--bg-color)' }}>
                     {(['㎡', '평'] as AreaUnit[]).map((u) => (
                       <button
                         key={u}
@@ -812,14 +812,15 @@ export default function ApartmentDetail() {
                         onClick={() => setAreaUnit(u)}
                         aria-pressed={areaUnit === u}
                         style={{
-                          padding: '0.3rem 0.65rem',
-                          borderRadius: '999px',
+                          padding: '0.4rem 0.75rem',
+                          borderRadius: '6px',
                           border: 'none',
-                          fontSize: '0.8rem',
-                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                          fontWeight: areaUnit === u ? 700 : 500,
                           cursor: 'pointer',
-                          background: areaUnit === u ? 'var(--primary-color)' : 'transparent',
-                          color: areaUnit === u ? 'white' : 'var(--text-secondary)',
+                          background: areaUnit === u ? 'white' : 'transparent',
+                          color: areaUnit === u ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          boxShadow: areaUnit === u ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
                         }}
                       >
                         {u}
@@ -828,49 +829,75 @@ export default function ApartmentDetail() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>최근 실거래가</span>
-                  <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
-                    <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '매매' ? 'var(--primary-color)' : 'transparent', color: tradeTypeFilter === '매매' ? 'white' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '매매' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>매매</button>
-                    <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.3rem 0.7rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'var(--primary-color)' : 'transparent', color: tradeTypeFilter === '전월세' ? 'white' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '전월세' ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>전월세</button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', fontWeight: 600 }}>최근 실거래가</span>
+                  <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '8px', padding: '2px', border: '1px solid var(--border-color)' }}>
+                    <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.4rem 0.8rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', color: tradeTypeFilter === '매매' ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '매매' ? 700 : 500, borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: tradeTypeFilter === '매매' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>매매</button>
+                    <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.4rem 0.8rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', color: tradeTypeFilter === '전월세' ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '전월세' ? 700 : 500, borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>전월세</button>
                   </div>
                 </div>
 
-                <div style={{ marginTop: '0.3rem' }}>
-                  {heroTrade ? (
-                    <>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap' }}>
-                        <span className={styles.price}>{heroTrade.priceStr}</span>
-                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                          {getAreaDetailLabel(parseFloat(heroTrade.area), areaLabels)}
-                        </span>
-                      </div>
-                      <div style={{ marginTop: '0.15rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {heroTrade.floor}층 · {heroTrade.tradeDate}
-                      </div>
-                    </>
-                  ) : selectedArea !== '전체' ? (
-                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                      해당 평형의 최근 거래가 없습니다.
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {heroTrade ? (() => {
+                    let maxPriceCalc = 0;
+                    let minPriceCalc = 0;
+                    if (filteredTrades.length > 0) {
+                      maxPriceCalc = Math.max(...filteredTrades.map(t => t.price));
+                      minPriceCalc = Math.min(...filteredTrades.map(t => t.price));
+                    }
+                    
+                    let priceContextStr = null;
+                    if (filteredTrades.length > 1) {
+                      if (maxPriceCalc > heroTrade.price) {
+                        const diffPercent = (((maxPriceCalc - heroTrade.price) / maxPriceCalc) * 100).toFixed(1);
+                        priceContextStr = `선택 기간 최고 거래보다 ${diffPercent}% 낮아요`;
+                      } else if (maxPriceCalc === heroTrade.price) {
+                        priceContextStr = `선택 기간 내 최고가로 거래됐어요`;
+                      }
+                    }
+
+                    return (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>{heroTrade.priceStr}</span>
+                          <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                            {getAreaDetailLabel(parseFloat(heroTrade.area), areaLabels)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                            {heroTrade.tradeDate.replace(/-/g, '.')} · {heroTrade.floor}층
+                          </span>
+                          {priceContextStr && (
+                            <span style={{ fontSize: '0.85rem', color: '#3b82f6', fontWeight: 600, background: 'rgba(59, 130, 246, 0.1)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                              {priceContextStr}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div style={{ marginTop: '1.25rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '선택 기간 최고 / 최저 거래'}
+                          </div>
+                          <div style={{ fontSize: '1.05rem', color: 'var(--text-primary)', fontWeight: 700 }}>
+                            <span style={{ color: '#ef4444' }}>{filteredTrades.length > 0 ? formatKoreanPriceValue(maxPriceCalc * 10000) : '-'}</span>
+                            <span style={{ margin: '0 0.5rem', color: 'var(--text-muted)', fontWeight: 400 }}>/</span>
+                            <span style={{ color: '#3b82f6' }}>{filteredTrades.length > 0 ? formatKoreanPriceValue(minPriceCalc * 10000) : '-'}</span>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })() : selectedArea !== '전체' ? (
+                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-muted)', padding: '1rem 0' }}>
+                      선택한 조건의 최근 거래가 없습니다.
                     </div>
                   ) : (
-                    <span className={styles.price}>{latestPrice}</span>
+                    <span style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)' }}>{latestPrice}</span>
                   )}
                 </div>
-
-                <div style={{ marginTop: '0.4rem', fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '최고가 / 최저가'}:
-                  </span>{' '}
-                  <b>최고 {filteredTrades.length > 0 ? formatKoreanPrice((Math.max(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'} / 최저 {filteredTrades.length > 0 ? formatKoreanPrice((Math.min(...filteredTrades.map(t => t.price)) * 10000).toString()) : '-'}</b>
-                </div>
               </div>
-            </>
-          )}
-        </div>
-      </div>
 
-      {/* TIER 1: Score & Briefing */}
+              {/* TIER 1: Score & Briefing */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <ApartmentScoreCard result={scoreResult} loading={scoreLoading} />
               </div>
