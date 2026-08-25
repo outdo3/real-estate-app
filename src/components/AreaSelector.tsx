@@ -14,6 +14,7 @@ interface AreaSelectorProps {
   // 조회만 한다.
   areaLabels?: Map<number, string>;
   unitMaster?: DisplayUnit[] | null;
+  areaUnit?: '㎡' | '평';
 }
 
 // [APT DETAIL QA/IA v1] 이전에는 거래량 상위 4개만 칩 상한을 둬서 노출하고 나머지는
@@ -23,7 +24,7 @@ interface AreaSelectorProps {
 // 자체가 원인). 상한을 없애고 전체를 가로 스크롤 칩으로 노출한다 — 컨테이너는
 // 이미 overflowX:'auto'라 칩이 많아도 스크롤만 될 뿐 깨지지 않는다. 모달은 평형이
 // 많은 단지에서 빠르게 점프하는 보조 수단으로만 남긴다.
-export default function AreaSelector({ trades, selectedArea, onSelect, areaLabels, unitMaster }: AreaSelectorProps) {
+export default function AreaSelector({ trades, selectedArea, onSelect, areaLabels, unitMaster, areaUnit = '㎡' }: AreaSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const countByArea = new Map<string, number>();
@@ -42,18 +43,33 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
 
   const renderAreaLabel = (area: string) => resolveAreaLabel(parseFloat(area), areaLabels);
 
+  // Check collisions
+  const pyeongCount = new Map<number, number>();
+  if (hasUnitMaster) {
+    unitMaster.forEach(u => {
+      if (u.representativePyeong) {
+        pyeongCount.set(u.representativePyeong, (pyeongCount.get(u.representativePyeong) || 0) + 1);
+      }
+    });
+  }
+
   const toAreaChipData = (area: string): AreaChipData => {
     if (hasUnitMaster) {
       const unit = unitMaster.find(u => u.canonicalExclusiveArea === area);
       if (unit) {
         // [AREA MODEL V2] representativePyeong collision resolution:
         // If multiple units share the same pyeong, we show the exclusive area to distinguish them.
-        // But for AreaChip, the design usually has pyeong as primary and exclusive as secondary anyway.
-        // We will supply it to `pyeongLabel`
+        
+        const isCollision = unit.representativePyeong ? (pyeongCount.get(unit.representativePyeong) || 0) > 1 : false;
         
         let pyeongLabel = unit.representativePyeong ? `${unit.representativePyeong}평` : null;
         let displayLabel = `전용 ${unit.displayExclusiveArea}㎡`;
         
+        if (areaUnit === '평' && unit.representativePyeong) {
+          displayLabel = `${unit.representativePyeong}평`;
+          pyeongLabel = isCollision ? `전용 ${unit.displayExclusiveArea}㎡` : null;
+        }
+
         return {
           id: area,
           exclusiveAreaM2: parseFloat(area),
@@ -77,7 +93,18 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
 
   return (
     <div style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+      <div 
+        style={{ 
+          display: 'flex', 
+          gap: '0.5rem', 
+          flexWrap: 'nowrap', 
+          overflowX: 'auto', 
+          paddingBottom: '0.25rem',
+          scrollbarWidth: 'none', // Firefox
+          msOverflowStyle: 'none', // IE/Edge
+        }}
+        className="no-scrollbar"
+      >
         <Chip active={selectedArea === '전체'} onClick={() => onSelect('전체')}>전체</Chip>
         {chipAreas.map((area) => (
           <AreaChip key={area} data={toAreaChipData(area)} active={selectedArea === area} onClick={() => onSelect(area)} />
@@ -86,6 +113,17 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
           <Chip dashed onClick={() => setIsOpen(true)}>▼ 전체 평형</Chip>
         )}
       </div>
+      
+      {/* Right Edge Fade Hint for Horizontal Scroll */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        bottom: '0.25rem',
+        width: '32px',
+        background: 'linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,1) 80%)',
+        pointerEvents: 'none',
+      }} />
 
       {isOpen && (
         <div
@@ -118,17 +156,14 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
                 if (hasUnitMaster) {
                   const unit = unitMaster.find(u => u.canonicalExclusiveArea === area);
                   if (unit) {
-                    mainLabel = unit.representativePyeong ? `${unit.representativePyeong}평` : `전용 ${unit.displayExclusiveArea}㎡`;
-                    subLabel = `전용 ${unit.displayExclusiveArea}㎡`;
-                    if (unit.householdCount && unit.householdCount > 0) {
-                      subLabel += ` · ${unit.householdCount}세대`;
-                    }
-                    if (unit.representativePyeong) {
-                       mainLabel = `${unit.representativePyeong}평 · 전용 ${unit.displayExclusiveArea}㎡`;
-                       subLabel = unit.householdCount && unit.householdCount > 0 ? `${unit.householdCount}세대` : '';
+                    const households = (unit.householdCount && unit.householdCount > 0) ? ` · ${unit.householdCount}세대` : '';
+                    
+                    if (areaUnit === '평' && unit.representativePyeong) {
+                      mainLabel = `${unit.representativePyeong}평 · 전용 ${unit.displayExclusiveArea}㎡${households}`;
+                      subLabel = '';
                     } else {
-                       mainLabel = `전용 ${unit.displayExclusiveArea}㎡`;
-                       subLabel = unit.householdCount && unit.householdCount > 0 ? `${unit.householdCount}세대` : '';
+                      mainLabel = `전용 ${unit.displayExclusiveArea}㎡${households}`;
+                      subLabel = '';
                     }
                   }
                 }

@@ -820,31 +820,33 @@ export default function ApartmentDetail() {
               <div className={styles.priceBlock} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={areaLabels} unitMaster={unitMaster} />
+                    <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={areaLabels} unitMaster={unitMaster} areaUnit={areaUnit} />
                   </div>
-                  <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '8px', padding: '2px', background: 'var(--bg-color)' }}>
-                    {(['㎡', '평'] as AreaUnit[]).map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        onClick={() => setAreaUnit(u)}
-                        aria-pressed={areaUnit === u}
-                        style={{
-                          padding: '0.4rem 0.75rem',
-                          borderRadius: '6px',
-                          border: 'none',
-                          fontSize: '0.85rem',
-                          fontWeight: areaUnit === u ? 700 : 500,
-                          cursor: 'pointer',
-                          background: areaUnit === u ? 'white' : 'transparent',
-                          color: areaUnit === u ? 'var(--text-primary)' : 'var(--text-secondary)',
-                          boxShadow: areaUnit === u ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
-                        }}
-                      >
-                        {u}
-                      </button>
-                    ))}
-                  </div>
+                  {Array.isArray(unitMaster) && unitMaster.some(u => u.representativePyeong != null) && (
+                    <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '8px', padding: '2px', background: 'var(--bg-color)' }}>
+                      {(['㎡', '평'] as AreaUnit[]).map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setAreaUnit(u)}
+                          aria-pressed={areaUnit === u}
+                          style={{
+                            padding: '0.4rem 0.75rem',
+                            borderRadius: '6px',
+                            border: 'none',
+                            fontSize: '0.85rem',
+                            fontWeight: areaUnit === u ? 700 : 500,
+                            cursor: 'pointer',
+                            background: areaUnit === u ? 'white' : 'transparent',
+                            color: areaUnit === u ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            boxShadow: areaUnit === u ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
+                          }}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
