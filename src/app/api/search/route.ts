@@ -41,27 +41,40 @@ export async function GET(request: Request) {
   const keyword = q.trim();
   const normalizedKeyword = keyword.replace(/\s+/g, '');
 
-  // Search regions (distinct dongs that match the keyword)
-  // We can group by using Prisma API
-  const regionGroups = await prisma.apartmentMaster.groupBy({
-    by: ['sido', 'sigungu', 'sggCd', 'umdName'],
-    where: {
-      umdName: {
-        contains: normalizedKeyword
+  // Run Region distinct and Apartment search in parallel
+  const [regionRows, rawApartments] = await Promise.all([
+    prisma.apartmentMaster.findMany({
+      where: {
+        umdName: {
+          contains: normalizedKeyword
+        }
+      },
+      distinct: ['sido', 'sigungu', 'sggCd', 'umdName'],
+      select: { sido: true, sigungu: true, sggCd: true, umdName: true },
+      take: 5
+    }),
+    prisma.apartmentMaster.findMany({
+      where: {
+        OR: [
+          { normalizedName: { contains: normalizedKeyword } },
+          { name: { contains: normalizedKeyword } }
+        ]
+      },
+      take: 50,
+      select: {
+        id: true,
+        name: true,
+        sggCd: true,
+        umdName: true,
+        jibun: true,
+        aptSeq: true,
+        buildYear: true,
+        totalHouseholds: true,
       }
-    },
-    _count: {
-      umdName: true
-    },
-    orderBy: {
-      _count: {
-        umdName: 'desc'
-      }
-    },
-    take: 5
-  });
+    })
+  ]);
 
-  const regions: RegionSearchResult[] = regionGroups.map(r => ({
+  const regions: RegionSearchResult[] = regionRows.map(r => ({
     type: 'REGION',
     name: `${r.sido} ${r.sigungu} ${r.umdName}`.trim(),
     sido: r.sido || '',
@@ -70,29 +83,11 @@ export async function GET(request: Request) {
     lawdCd: r.sggCd || ''
   }));
 
-  // Search apartments
-  const rawApartments = await prisma.apartmentMaster.findMany({
-    where: {
-      OR: [
-        { normalizedName: { contains: normalizedKeyword } },
-        { name: { contains: normalizedKeyword } }
-      ]
-    },
-    take: 15,
-    orderBy: { totalHouseholds: 'desc' },
-    select: {
-      id: true,
-      name: true,
-      sggCd: true,
-      umdName: true,
-      jibun: true,
-      aptSeq: true,
-      buildYear: true,
-      totalHouseholds: true,
-    }
-  });
+  // Sort apartments in JS to avoid expensive DB sorts on full table scans
+  rawApartments.sort((a, b) => (b.totalHouseholds || 0) - (a.totalHouseholds || 0));
+  const topApartments = rawApartments.slice(0, 15);
 
-  const aptSeqs = rawApartments.map(a => a.aptSeq).filter(Boolean) as string[];
+  const aptSeqs = topApartments.map(a => a.aptSeq).filter(Boolean) as string[];
   const locations = await prisma.apartmentLocationFeature.findMany({
     where: {
       aptSeq: { in: aptSeqs }
@@ -106,7 +101,7 @@ export async function GET(request: Request) {
 
   const locationMap = new Map(locations.map(l => [l.aptSeq, l]));
 
-  const apartments: ApartmentSearchResult[] = rawApartments.map(a => {
+  const apartments: ApartmentSearchResult[] = topApartments.map(a => {
     const loc = a.aptSeq ? locationMap.get(a.aptSeq) : null;
     return {
       type: 'APARTMENT',

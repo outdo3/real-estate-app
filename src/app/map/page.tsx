@@ -19,7 +19,9 @@ const apiKey =
   process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
 interface AptMarker {
-  id: string;
+  id: string; // Internal unique id
+  aptSeq?: string; // Canonical identity from building hub
+  completionYear?: number;
   name: string;
   dong: string;
   price: string;
@@ -239,8 +241,10 @@ export default function FullscreenMapPage() {
           if (!byComplex.has(key)) byComplex.set(key, item);
         }
 
-        const markers: AptMarker[] = Array.from(byComplex.values()).map((item) => ({
-          id: `${item.dong}-${item.name}`,
+        const markers: AptMarker[] = Array.from(byComplex.values()).map((item: any) => ({
+          id: item.aptSeq || `${item.dong}-${item.name}`,
+          aptSeq: item.aptSeq,
+          completionYear: item.completionYear,
           name: item.name,
           dong: item.dong || '',
           price: item.price || '시세 정보 없음',
@@ -394,18 +398,22 @@ export default function FullscreenMapPage() {
   //   보장한다(CSS z-index만으로는 카카오 SDK가 각 오버레이를 별도 컨테이너로 그려서
   //   먹히지 않는다).
   const renderMarkerChip = (marker: AptMarker, selected: boolean) => {
+    const currentYear = new Date().getFullYear();
+    const isNewBuild = marker.completionYear ? (currentYear - marker.completionYear <= 5) : false;
+
     const accent = marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8';
+    
+    // Selected style (highest priority): solid dark ring, larger scale
+    // New build style: distinct background and a small badge
     const highlightRing = selected
-      ? '0 0 0 3px rgba(37, 99, 235, 0.35), 0 6px 14px rgba(0,0,0,0.22)'
+      ? '0 0 0 3px #1e293b, 0 6px 14px rgba(0,0,0,0.22)'
       : '0 2px 5px rgba(0,0,0,0.12)';
-    // [MAP-FIX] hover는 selectedMarkerId가 아닌 별도의 hoveredMarkerId만 건드린다 —
-    // PC에서 마우스가 마커를 떠나도 이미 클릭으로 고정된 선택(selectedMarkerId)은
-    // 지워지지 않는다.
+      
+    const chipBg = selected ? 'white' : (isNewBuild ? '#f0fdf4' : (marker.hasRecentPrice ? 'white' : '#f8fafc'));
+    const chipBorder = selected ? '#1e293b' : (isNewBuild ? accent : (marker.hasRecentPrice ? accent : '#cbd5e1'));
+
     const handleHoverEnter = () => setHoveredMarkerId(marker.id);
     const handleHoverLeave = () => setHoveredMarkerId((cur) => (cur === marker.id ? null : cur));
-    // 첫 클릭은 하단 요약 카드를 띄우고(마커 선택), 이미 선택된 마커를 다시 클릭하면
-    // 그때 상세페이지로 이동한다 — 요약 카드가 뜰 새도 없이 바로 이동해버리면 카드 안의
-    // 광고 구좌를 포함해 아무것도 보여줄 수 없기 때문.
     const handleClick = () => {
       if (selectedMarkerId === marker.id) {
         router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(marker.dong)}`);
@@ -414,8 +422,6 @@ export default function FullscreenMapPage() {
       }
     };
 
-    // 최근 24시간 내 이 단지 태그로 올라온 커뮤니티 글이 있으면 칩 우측 상단에 작은
-        // 빨간 점 뱃지를 띄운다 — 칩 모양 자체는 건드리지 않고 절대 위치로 얹기만 한다.
     const newPostBadge = marker.hasNewPost ? (
       <span
         style={{
@@ -427,8 +433,25 @@ export default function FullscreenMapPage() {
           background: '#ef4444',
           borderRadius: '999px',
           boxShadow: '0 0 0 2px white',
+          zIndex: 2,
         }}
       />
+    ) : null;
+
+    const newBuildBadge = isNewBuild ? (
+      <span style={{
+        position: 'absolute',
+        top: '-8px',
+        left: '-8px',
+        background: 'var(--primary-color)',
+        color: 'white',
+        fontSize: '0.6rem',
+        fontWeight: 800,
+        padding: '1px 5px',
+        borderRadius: '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+        zIndex: 2,
+      }}>신축</span>
     ) : null;
 
     if (!isDetailed) {
@@ -439,8 +462,8 @@ export default function FullscreenMapPage() {
           onMouseLeave={handleHoverLeave}
           style={{
             position: 'relative',
-            background: marker.hasRecentPrice ? '#ecfdf5' : '#f1f5f9',
-            border: `1.5px solid ${accent}`,
+            background: chipBg,
+            border: `2px solid ${chipBorder}`,
             borderRadius: '999px',
             padding: '3px 9px',
             display: 'flex',
@@ -448,13 +471,14 @@ export default function FullscreenMapPage() {
             justifyContent: 'center',
             boxShadow: highlightRing,
             cursor: 'pointer',
-            transform: selected ? 'scale(1.12)' : 'scale(1)',
-            transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+            transform: selected ? 'scale(1.15)' : 'scale(1)',
+            transition: 'transform 0.12s ease, box-shadow 0.12s ease, border 0.12s ease',
             whiteSpace: 'nowrap',
           }}
         >
           {newPostBadge}
-          <span style={{ fontSize: marker.hasRecentPrice ? '0.72rem' : '0.66rem', fontWeight: 800, color: marker.hasRecentPrice ? 'var(--primary-hover)' : '#64748b' }}>
+          {newBuildBadge}
+          <span style={{ fontSize: marker.hasRecentPrice ? '0.72rem' : '0.66rem', fontWeight: 800, color: selected ? '#1e293b' : (marker.hasRecentPrice ? 'var(--primary-hover)' : '#64748b') }}>
             {marker.price}
           </span>
         </div>
@@ -467,8 +491,8 @@ export default function FullscreenMapPage() {
         onMouseEnter={handleHoverEnter}
         onMouseLeave={handleHoverLeave}
         style={{
-          background: 'white',
-          border: `1.5px solid ${accent}`,
+          background: chipBg,
+          border: `2px solid ${chipBorder}`,
           borderRadius: '6px',
           padding: '4px 8px',
           display: 'flex',
@@ -478,10 +502,11 @@ export default function FullscreenMapPage() {
           cursor: 'pointer',
           position: 'relative',
           transform: selected ? 'scale(1.08)' : 'scale(1)',
-          transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+          transition: 'transform 0.12s ease, box-shadow 0.12s ease, border 0.12s ease',
         }}
       >
         {newPostBadge}
+        {newBuildBadge}
         {/* 작은 말풍선 꼬리 */}
         <div style={{
           position: 'absolute',
@@ -492,11 +517,11 @@ export default function FullscreenMapPage() {
           height: '0',
           borderLeft: '5px solid transparent',
           borderRight: '5px solid transparent',
-          borderTop: `6px solid ${accent}`
+          borderTop: `6px solid ${chipBorder}`
         }} />
 
-        <span style={{ fontSize: '0.66rem', color: '#666', fontWeight: 600, whiteSpace: 'nowrap' }}>{marker.name}</span>
-        <span style={{ fontSize: marker.hasRecentPrice ? '0.9rem' : '0.7rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: '0.66rem', color: selected ? '#1e293b' : '#666', fontWeight: selected ? 800 : 600, whiteSpace: 'nowrap' }}>{marker.name}</span>
+        <span style={{ fontSize: marker.hasRecentPrice ? '0.9rem' : '0.7rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: selected ? '#1e293b' : (marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8'), whiteSpace: 'nowrap' }}>
           {marker.price}
         </span>
       </div>
@@ -576,8 +601,8 @@ export default function FullscreenMapPage() {
     }
     refreshActiveLayers(latLng.lat, latLng.lng);
     
-    if (result.type === 'APARTMENT' && result.aptSeq) {
-      setSelectedMarkerId(result.aptSeq);
+    if (result.type === 'APARTMENT') {
+      setSelectedMarkerId(result.aptSeq || `${result.dong}-${result.name}`);
     } else {
       setSelectedMarkerId(null);
     }

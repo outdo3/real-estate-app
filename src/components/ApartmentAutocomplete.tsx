@@ -84,22 +84,41 @@ export default function ApartmentAutocomplete({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const cacheRef = useRef<Map<string, any[]>>(new Map());
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     if (suppressNextSearchRef.current) {
       suppressNextSearchRef.current = false;
       return;
     }
 
-    if (!keyword.trim() || keyword.trim().length < 2) {
+    const trimmed = keyword.trim();
+    if (trimmed.length < 2) {
       setResults([]);
       setShowDropdown(false);
       onQueryStateChange?.({ keyword: '', hasResults: false });
       return;
     }
 
+    if (cacheRef.current.has(trimmed)) {
+      const cached = cacheRef.current.get(trimmed)!;
+      setResults(cached);
+      setShowDropdown(cached.length > 0);
+      onQueryStateChange?.({ keyword, hasResults: cached.length > 0 });
+      return;
+    }
+
     const timer = setTimeout(async () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(keyword)}`);
+        const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, { signal: abortController.signal });
+        if (!res.ok) throw new Error('Network error');
         const data = await res.json();
         
         // Ensure we load Kakao SDK for geocoding regions on click
@@ -125,16 +144,20 @@ export default function ApartmentAutocomplete({
           combined = [...combined, ...data.apartments];
         }
         
+        if (abortController.signal.aborted) return;
+        
+        cacheRef.current.set(trimmed, combined);
         setResults(combined);
         setShowDropdown(combined.length > 0);
         onQueryStateChange?.({ keyword, hasResults: combined.length > 0 });
-      } catch (err) {
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
         console.error('Search failed', err);
         setResults([]);
         setShowDropdown(false);
         onQueryStateChange?.({ keyword, hasResults: false });
       }
-    }, 300);
+    }, 250);
 
     return () => clearTimeout(timer);
   }, [keyword]);

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchMolitData, DataType } from '@/lib/api-molit';
+import { prisma } from '@/lib/prisma';
 
 // MOLIT 실거래가 데이터는 좌표를 제공하지 않으므로, 지도 마커 표시를 위해
 // 카카오 로컬 키워드 검색으로 "법정동 + 단지명" 기준 좌표를 보강한다.
@@ -110,15 +111,42 @@ export async function GET(request: Request) {
       // 지도 마커(단지 칩) 표시를 위해 아파트 매매(apt)·분양권(silv) 데이터에 한해 좌표 보강
       if ((type === 'apt' || type === 'silv') && data.length > 0) {
         const uniqueKeys = Array.from(new Set(data.map((item: any) => `${item.dong}|${item.name}`)));
-        await Promise.all(
-          uniqueKeys.map((key) => {
-            const [dongName, aptName] = key.split('|');
-            return geocodeApt(aptName, dongName);
+        
+        // 병렬로 카카오 지오코딩 수행 및 DB(ApartmentMaster) 조회
+        // 이를 통해 검색 결과(canonical identity = aptSeq)와 실거래 마커(MOLIT 데이터 기반)를 연결한다.
+        const [_, masters] = await Promise.all([
+          Promise.all(
+            uniqueKeys.map((key) => {
+              const [dongName, aptName] = key.split('|');
+              return geocodeApt(aptName, dongName);
+            })
+          ),
+          prisma.apartmentMaster.findMany({
+            where: { sggCd: lawdCd },
+            select: { name: true, umdName: true, aptSeq: true, buildYear: true }
           })
-        );
+        ]);
+
+        // 간단한 매칭(이름 완전일치 또는 contains)
+        const masterMap = new Map();
+        for (const m of masters) {
+          const key = `${m.umdName}|${m.name}`;
+          // 첫 번째 매칭만(정확한 매칭을 위해서는 normalized name 비교 등이 필요할 수 있으나 지도 마커 연결 목적으론 일단 충분함)
+          if (!masterMap.has(key)) masterMap.set(key, m);
+        }
+
         data = data.map((item: any) => {
-          const coords = geocodeCache.get(`${item.dong}|${item.name}`);
-          return coords ? { ...item, lat: coords.lat, lng: coords.lng } : item;
+          const key = `${item.dong}|${item.name}`;
+          const coords = geocodeCache.get(key);
+          const master = masterMap.get(key);
+          
+          return {
+            ...item,
+            lat: coords ? coords.lat : null,
+            lng: coords ? coords.lng : null,
+            aptSeq: master ? master.aptSeq : null,
+            completionYear: master ? master.buildYear : null
+          };
         });
       }
 
