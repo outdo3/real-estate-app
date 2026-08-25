@@ -880,9 +880,9 @@ export default function ApartmentDetail() {
                             {tradeTypeFilter === '전월세' ? '최고 보증금 / 최저 보증금' : '선택 기간 최고 / 최저 거래'}
                           </div>
                           <div style={{ fontSize: '1.05rem', color: 'var(--text-primary)', fontWeight: 700 }}>
-                            <span style={{ color: '#ef4444' }}>{filteredTrades.length > 0 ? formatKoreanPriceValue(maxPriceCalc * 10000) : '-'}</span>
+                            <span style={{ color: '#ef4444' }}>{filteredTrades.length > 0 ? formatKoreanPrice(maxPriceCalc * 10000) : '-'}</span>
                             <span style={{ margin: '0 0.5rem', color: 'var(--text-muted)', fontWeight: 400 }}>/</span>
-                            <span style={{ color: '#3b82f6' }}>{filteredTrades.length > 0 ? formatKoreanPriceValue(minPriceCalc * 10000) : '-'}</span>
+                            <span style={{ color: '#3b82f6' }}>{filteredTrades.length > 0 ? formatKoreanPrice(minPriceCalc * 10000) : '-'}</span>
                           </div>
                         </div>
                       </>
