@@ -167,7 +167,23 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       closeRegionModal();
       return;
     }
-    reverseGeocodeAndFinalize(place.lng, place.lat, place.address);
+    
+    if (place.lawdCd) {
+      resolveRegionNameByLawdCd(place.lawdCd).then((resolved) => {
+        finalize(
+          {
+            lawdCd: place.lawdCd!,
+            dong: place.type === 'REGION' ? 'all' : (place.dong || 'all'),
+            sido: resolved?.sido || place.sido || '',
+            sigungu: resolved?.sigungu || place.sigungu || '',
+            displayRegionName: place.address || place.name,
+          },
+          { lat: place.lat, lng: place.lng }
+        );
+      });
+    } else {
+      reverseGeocodeAndFinalize(place.lng, place.lat, place.address || place.name);
+    }
   };
 
   // 드롭다운에서 고르지 않고 Enter를 눌렀을 때(정확한 지역명 등): 카카오 키워드 검색으로

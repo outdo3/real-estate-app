@@ -94,46 +94,31 @@ export default function ApartmentQuickSearch({ currentApt, onClose }: ApartmentQ
 
   const handleSelect = (result: ApartmentSearchResult) => {
     setConnectFailed(null);
-    // ApartmentAutocomplete 내부 enrichTopResults()가 세대수/준공연도를 보강할 때 쓰는 것과
-    // 동일한 좌표→법정동 역지오코딩 방식을 그대로 재사용한다 — 새 방식을 만들지 않는다.
-    const services = (window as any).kakao?.maps?.services;
-    if (!services) {
-      navigateToApt(result.name);
+    if (result.type === 'REGION') {
+      router.push(`/map?lat=${result.lat}&lng=${result.lng}`);
       return;
     }
-    const geocoder = new services.Geocoder();
-    geocoder.coord2RegionCode(result.lng, result.lat, async (regionResult: any, status: any) => {
-      const region = status === services.Status.OK ? regionResult.find((r: any) => r.region_type === 'B') : null;
-      if (!region) {
-        // 동을 못 얻은 경우 — 다른 동/지역으로 대체하지 않고 이름만으로 이동한다
-        // (기존 apt-client.tsx가 이미 처리하는 폴백 경로, 새로 만들지 않음).
-        navigateToApt(result.name);
-        return;
-      }
-      const lawdCd = region.code.substring(0, 5);
-      const dong = region.region_3depth_name;
 
-      // [UI-C1-FIX] 이동 전 가벼운 확인 — 이미 있는 실거래 API를 최소 기간(1년)으로만
-      // 호출해 이 이름+동으로 실제 연결되는 거래가 있는지 본다. 새 API를 만들지 않았다.
+    if (result.lawdCd && result.dong) {
       setVerifying(true);
-      try {
-        const res = await fetch(`/api/apt/${encodeURIComponent(result.name)}?type=apt&period=12&lawdCd=${encodeURIComponent(lawdCd)}&dong=${encodeURIComponent(dong)}`);
-        const data = await res.json();
-        const hasTrades = Array.isArray(data.trades) && data.trades.length > 0;
-        setVerifying(false);
-        if (hasTrades) {
-          navigateToApt(result.name, lawdCd, dong);
-        } else {
-          // 다른 단지로 대체하지 않는다 — 정직하게 실패를 알리고 검색을 계속하게 한다.
-          setConnectFailed(result.name);
-        }
-      } catch {
-        // 확인 자체가 실패(네트워크 등)해도 다른 단지로 보내지 않는다 — 원래 이동
-        // 시도했을 때(기존 UI-C1 동작)와 동일하게 이름 기반으로만 이동한다.
-        setVerifying(false);
-        navigateToApt(result.name, lawdCd, dong);
-      }
-    });
+      fetch(`/api/apt/${encodeURIComponent(result.name)}?type=apt&period=12&lawdCd=${encodeURIComponent(result.lawdCd)}&dong=${encodeURIComponent(result.dong)}`)
+        .then(res => res.json())
+        .then(data => {
+          const hasTrades = Array.isArray(data.trades) && data.trades.length > 0;
+          setVerifying(false);
+          if (hasTrades || data.unitTypes?.length > 0) {
+            navigateToApt(result.name, result.lawdCd!, result.dong!);
+          } else {
+            setConnectFailed(result.name);
+          }
+        })
+        .catch(() => {
+          setVerifying(false);
+          navigateToApt(result.name, result.lawdCd!, result.dong!);
+        });
+    } else {
+      navigateToApt(result.name);
+    }
   };
 
   const currentKey = currentApt ? `${currentApt.name}|${currentApt.dong}` : null;
@@ -164,7 +149,7 @@ export default function ApartmentQuickSearch({ currentApt, onClose }: ApartmentQ
 
       {connectFailed && !verifying && (
         <div style={{ marginTop: '1rem', padding: '1rem 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
-          &apos;{connectFailed}&apos;의 실거래 정보를 정확히 연결하지 못했습니다.<br />다시 검색해보세요.
+          &apos;{connectFailed}&apos;의 최근 실거래 정보를 아직 확인하지 못했습니다.
         </div>
       )}
 

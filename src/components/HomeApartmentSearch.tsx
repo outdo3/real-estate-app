@@ -30,39 +30,36 @@ export default function HomeApartmentSearch() {
 
   const handleSelect = (result: ApartmentSearchResult) => {
     setConnectFailed(null);
-    const services = (window as any).kakao?.maps?.services;
-    if (!services) {
-      navigateToApt(result.name);
+    
+    // If it's a REGION, go to map
+    if (result.type === 'REGION') {
+      router.push(`/map?lat=${result.lat}&lng=${result.lng}`);
       return;
     }
-    const geocoder = new services.Geocoder();
-    geocoder.coord2RegionCode(result.lng, result.lat, async (regionResult: any, status: any) => {
-      const region = status === services.Status.OK ? regionResult.find((r: any) => r.region_type === 'B') : null;
-      if (!region) {
-        navigateToApt(result.name);
-        return;
-      }
-      const lawdCd = region.code.substring(0, 5);
-      const dong = region.region_3depth_name;
 
+    // It's an APARTMENT
+    if (result.lawdCd && result.dong) {
       setVerifying(true);
-      try {
-        const res = await fetch(
-          `/api/apt/${encodeURIComponent(result.name)}?type=apt&period=12&lawdCd=${encodeURIComponent(lawdCd)}&dong=${encodeURIComponent(dong)}`
-        );
-        const data = await res.json();
-        const hasTrades = Array.isArray(data.trades) && data.trades.length > 0;
-        setVerifying(false);
-        if (hasTrades) {
-          navigateToApt(result.name, lawdCd, dong);
-        } else {
-          setConnectFailed(result.name);
-        }
-      } catch {
-        setVerifying(false);
-        navigateToApt(result.name, lawdCd, dong);
-      }
-    });
+      fetch(
+        `/api/apt/${encodeURIComponent(result.name)}?type=apt&period=12&lawdCd=${encodeURIComponent(result.lawdCd)}&dong=${encodeURIComponent(result.dong)}`
+      )
+        .then(res => res.json())
+        .then(data => {
+          const hasTrades = Array.isArray(data.trades) && data.trades.length > 0;
+          setVerifying(false);
+          if (hasTrades || data.unitTypes?.length > 0) { // Check if we have data or units
+            navigateToApt(result.name, result.lawdCd!, result.dong!);
+          } else {
+            setConnectFailed(result.name);
+          }
+        })
+        .catch(() => {
+          setVerifying(false);
+          navigateToApt(result.name, result.lawdCd!, result.dong!);
+        });
+    } else {
+      navigateToApt(result.name);
+    }
   };
 
   return (
@@ -85,7 +82,7 @@ export default function HomeApartmentSearch() {
       {verifying && <div className={styles.searchStatusMsg}>확인 중...</div>}
       {connectFailed && !verifying && (
         <div className={styles.searchStatusMsg}>
-          &apos;{connectFailed}&apos;의 실거래 정보를 정확히 연결하지 못했습니다. 다시 검색해보세요.
+          &apos;{connectFailed}&apos;의 최근 실거래 정보를 아직 확인하지 못했습니다.
         </div>
       )}
     </div>

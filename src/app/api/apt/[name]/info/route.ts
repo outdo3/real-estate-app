@@ -177,7 +177,7 @@ export async function GET(
       success: true,
       aptName,
       info: Object.keys(info).length > 0 ? info : null,
-      unitTypes: unitTypes && unitTypes.length > 0 ? unitTypes : null
+      unitTypes: Array.isArray(unitTypes) && unitTypes.length > 0 ? unitTypes : null
     });
 
   } catch (error) {

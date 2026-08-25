@@ -570,15 +570,17 @@ export default function FullscreenMapPage() {
     if (mapRef.current && window.kakao?.maps) {
       const anchor = new window.kakao.maps.LatLng(latLng.lat, latLng.lng);
       mapRef.current.panTo(anchor);
-      // 기존 지도 줌(레벨 6, 넓은 개요 화면)에서는 목적지가 이미 화면 안에 있는 경우가
-      // 많아서(특히 도심 밀집지역) panTo만으로는 사용자 눈에 "아무것도 안 바뀐 것"처럼
-      // 보였다 — 검색해서 고른 그 단지가 클러스터 배지 뒤에 묻혀 있지 않고 개별 칩으로
-      // 확실히 보이도록 레벨 3까지 함께 확대한다.
       if (mapRef.current.getLevel() > 3) {
         mapRef.current.setLevel(3, { anchor });
       }
     }
     refreshActiveLayers(latLng.lat, latLng.lng);
+    
+    if (result.type === 'APARTMENT' && result.aptSeq) {
+      setSelectedMarkerId(result.aptSeq);
+    } else {
+      setSelectedMarkerId(null);
+    }
   };
 
   if (!apiKey) {
