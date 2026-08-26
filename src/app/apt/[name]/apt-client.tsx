@@ -973,9 +973,9 @@ export default function ApartmentDetail() {
         <h2 className={styles.zoneTitle}>실거래 타임라인</h2>
         <div className={styles.panel}>
           <div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', margin: '0 0 1rem' }}>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{selectedArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedArea, areaLabels)} · 총 {filteredTrades.length}건</span>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <div className={styles.timelineFilters}>
+              <span className={styles.timelineSummary}>{selectedArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedArea, areaLabels)} · 총 {filteredTrades.length}건</span>
+              <div className={styles.timelineControls}>
                 <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
                   {['1년', '3년', '5년', '전체'].map(p => (
                     <button key={p} onClick={() => setPeriodFilter(p as any)} style={{ padding: '0.25rem 0.5rem', border: 'none', background: periodFilter === p ? 'white' : 'transparent', fontWeight: periodFilter === p ? 'bold' : 'normal', borderRadius: '4px', cursor: 'pointer', boxShadow: periodFilter === p ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', whiteSpace: 'nowrap' }}>{p}</button>

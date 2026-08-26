@@ -25,6 +25,9 @@
 .period[aria-pressed='true'] { background: #fff; color: #15211b; box-shadow: 0 1px 3px rgba(15, 23, 42, .14); }
 .notice { color: #697780; font-size: 0.84rem; line-height: 1.45; margin: 0 0 0.7rem; }
 .chart { height: 320px; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+/* Recharts makes its SVG Surface tabbable for its accessibility layer. Pointer focus
+   must not retain the browser's rectangular outline; keyboard focus remains explicit. */
+.chart :global(.recharts-surface:focus:not(:focus-visible)) { outline: none; }
 .chart :global(.recharts-surface:focus-visible) { outline: 2px solid rgba(7, 134, 90, .7); outline-offset: 3px; border-radius: 4px; }
 .legend { justify-content: center; flex-wrap: wrap; gap: 0.9rem; color: #4b5964; font-size: 0.82rem; margin-top: 0.15rem; }
 .legendItem, .volumeLegend { gap: 0.35rem; }
@@ -45,8 +48,11 @@
 }
 
 @media (max-width: 420px) {
-  .card { border-radius: 14px; padding: 0.9rem; }
+  .card { border: 0; border-radius: 0; margin-inline: -0.9rem; padding: 0.9rem; }
   .title { font-size: 1.02rem; }
   .period { padding-inline: 0.45rem; }
   .chart { height: 292px; }
+  .volumeLegend { justify-content: flex-start; gap: 0.5rem; white-space: nowrap; }
+  .legend { justify-content: flex-start; gap: 0.75rem; }
+  .legendItem { white-space: nowrap; }
 }
