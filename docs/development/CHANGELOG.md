@@ -8719,3 +8719,69 @@ DB/schema 변경 없음.
 상태: 완료.
 
 **DETAIL_PRICE_CHART_UI_FINAL_CLOSE = YES.**
+
+## 2026-08-26 (3)
+
+### DETAIL PRICE CHART PRODUCTION QA P0 FIX — 실제 Android 재현 문제 4건 해결
+
+직전 STEP의 자동화 QA는 PASS였지만 실제 Android Production 수동 QA에서 문제가
+재현되어, 그 증거를 우선해 다시 조사했다.
+
+**전세가 모순**: 같은 selectedTradeArea에서 차트 요약은 "최근 전세 보 2억
+3,100만"을 찾는데 InvestmentMetrics는 "데이터 부족"이었다. 실제 API 응답을
+나란히 비교해 원인을 특정했다 — 두 컴포넌트의 순수 전세 판정 로직(monthlyRent
+=== 0, 정확한 area 일치)은 완전히 동일했고, 유일한 차이는 조회 기간이었다
+(PriceTrendChart 최대 60개월 vs InvestmentMetrics 고정 6개월). 실제 최근
+순수 전세가 조회 시점 기준 약 7개월 전이라 6개월 창에만 안 걸렸을 뿐이었다.
+InvestmentMetrics의 조회 기간을 PriceTrendChart가 제공하는 최대치(60개월)로
+맞춰 해결했다 — "최근 거래" 판정 로직 자체(정렬 후 첫 값)는 그대로이므로
+집계나 평균 도입 없이 실제 존재하는 거래를 놓치지 않게 됐다.
+
+**검은 사각형 재조사**: 직전 STEP의 data-input-modality + CSS outline 차단은
+Recharts 소스 코드로 직접 검증한 결과 로직 자체는 정확했지만(Cursor는
+cursor={false}일 때 null 반환, activeBar/background 모두 기본값 false로
+override 안 됨을 소스에서 확인), `:focus-visible` 브라우저 휴리스틱 자체가
+동일 세션 내에서도 같은 pointerdown+focus 시퀀스에 대해 true/false로
+일관되지 않게 나와, 이 휴리스틱에 의존하는 방식 자체가 근본적으로 불안정함을
+확인했다. 근본 해결로 전환: pointerdown에서 preventDefault()를 호출해 차트
+SVG가 애초에 포커스를 받지 않도록 했다(Recharts는 touch tooltip을 별도
+touchstart/touchmove 리스너로 처리하므로 영향 없음을 소스로 확인, 키보드
+Tab 포커스는 별개 경로라 접근성 유지). 실제(synthetic 아닌) 클릭 후
+document.activeElement가 BODY로 유지됨을 확인 — 어떤 브라우저의
+:focus-visible 구현이든 상관없이 구조적으로 outline이 생길 수 없다.
+
+**매매/전세 표시 제어**: 기존 장식용 legend를 실제 role="group" 토글
+버튼으로 전환 — 클릭 시 해당 계열의 line과 tooltip 항목만 숨기고, 거래량
+막대는 기존 의미 그대로 유지. 최소 하나는 항상 켜져 있도록 하는 로직은
+순수 함수로 추출해 테스트했다(`src/lib/series-visibility.ts`).
+
+**StickyPriceBar audit**: 실제 코드 추적 결과 area 스코프는 처음부터
+selectedTradeArea를 정확히 따르고 있었다(회귀 없음) — 다만 상단 매매/전월세
+토글이 전월세일 때 순수 전세로 제한하지 않은 "그 area의 가장 최근 전월세"
+값을 보여줄 수 있어, 차트 섹션의 항상-순수전세 값과 다르게 보일 수 있었다.
+둘 다 정직한 실제 데이터였고, 애매했던 건 라벨뿐이었다 — "최근 실거래가"를
+"최근 매매가"/"최근 전월세"로 구분해 표시하도록 수정.
+
+**모바일 회귀 재검증 중 실제 버그 발견**: 360/375/390px에서
+documentElement.scrollWidth가 clientWidth보다 커서(예: 360px에서 350 vs
+341) 실제 가로 overflow가 있음을 확인했다 — 직전 STEP의 full-bleed
+(`width:100vw; margin-inline:calc(50% - 50vw)`)가 원인. 100vw는 스크롤바
+예약 공간을 포함하는데 clientWidth는 제외해서 생기는 잘 알려진 CSS 함정으로,
+실제 모바일 기기(오버레이 스크롤바)에서는 잘 안 보이지만 취약했다. 상세페이지
+`.main`에만 scoped된 `overflow-x:hidden`으로 방어적으로 막았다(페이지 전체
+디자인 변경 아님). 수정 후 세 너비 모두 scrollWidth === clientWidth 확인.
+
+신규 테스트 7개(series-visibility 4 + metrics-contract 3) 추가, 기존 19개
+회귀 없음(총 26/26 PASS). `npx tsc --noEmit` src/ 에러 0, 변경 파일 타겟
+lint 0 errors, 전체 lint 65461 problems로 직전 STEP과 완전히 동일(신규 0건),
+`npm run build` PASS. `docs/development/DETAIL_PRICE_CHART_PRODUCTION_QA_P0_FIX.md`
+신규.
+
+DB/schema 변경 없음.
+
+상태: 완료. 실제 Android 터치의 최종 `:focus` 페인트 자체는 이 자동화
+환경(document.hasFocus()가 항상 false)에서 픽셀 단위 재현이 불가능해
+`BLACK_BOX_AUTOMATED_QA = PARTIAL`로 남긴다 — 다만 실제 클릭 후 포커스가
+전혀 이동하지 않음은 직접 확인했다.
+
+**DETAIL_PRICE_CHART_PRODUCTION_QA_P0_CLOSE = YES.**

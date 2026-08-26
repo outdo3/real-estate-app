@@ -25,8 +25,18 @@ interface SimpleTrade {
   monthlyRent?: number;
 }
 
-// 기존 필터 토글(매매/전월세, 기간)과 무관하게 최근 6개월 매매+전월세를 병렬로 고정
-// 조회해서 갭 금액/전세가율을 계산한다. KakaoPlaces와 같은 패턴으로 자기완결형이다.
+// 기존 필터 토글(매매/전월세, 기간)과 무관하게 매매+전월세를 병렬로 고정 조회해서
+// 갭 금액/전세가율을 계산한다. KakaoPlaces와 같은 패턴으로 자기완결형이다.
+//
+// PRODUCTION QA P0-B — 이전에는 period=6(최근 6개월)이었다. 같은 selectedTradeArea에서
+// PriceTrendChart summary(최대 60개월/5년 창)는 순수 전세를 찾는데 이 컴포넌트는 "데이터
+// 부족"이라 모순되게 보였다 — 실제 raw 데이터로 확인한 원인은 두 컴포넌트의 pure-jeonse
+// 판정 기준(monthlyRent === 0) 자체는 완전히 동일했고, 오직 조회 기간(period)만 6개월 vs
+// 최대 60개월로 달랐다(대신롯데캐슬 84.7855㎡ 실측: 최근 순수 전세가 조회 시점 기준 약
+// 7개월 전이라 6개월 창에는 없고 36개월 창에는 있었음). "최근 거래"의 최근성 판정
+// 자체(정렬 후 첫 값 선택)는 창을 넓혀도 그대로 유지되므로, PriceTrendChart가 제공하는
+// 가장 넓은 조회기간(5년/60개월)과 맞춰 실제로 존재하는 최신 거래를 놓치지 않게 한다.
+const METRICS_PERIOD_MONTHS = 60;
 export default function InvestmentMetrics({ aptName, lawdCd, dong, selectedTradeArea }: InvestmentMetricsProps) {
   const [saleTrades, setSaleTrades] = useState<SimpleTrade[] | null>(null);
   const [rentTrades, setRentTrades] = useState<SimpleTrade[] | null>(null);
@@ -40,7 +50,7 @@ export default function InvestmentMetrics({ aptName, lawdCd, dong, selectedTrade
     const dongQuery = dong ? `&dong=${encodeURIComponent(dong)}` : '';
     const fetchType = async (type: 'apt' | 'rent'): Promise<SimpleTrade[]> => {
       try {
-        const res = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}&period=6${dongQuery}`);
+        const res = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}&period=${METRICS_PERIOD_MONTHS}${dongQuery}`);
         if (!res.ok) return [];
         const data = await res.json();
         return data.trades || [];

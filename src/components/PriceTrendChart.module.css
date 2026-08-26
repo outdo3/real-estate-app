@@ -26,18 +26,37 @@
 .period[aria-pressed='true'] { background: #fff; color: #15211b; box-shadow: 0 1px 3px rgba(15, 23, 42, .14); }
 .notice { color: #697780; font-size: 0.84rem; line-height: 1.45; margin: 0 0 0.7rem; }
 .chart { height: 320px; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
-.chart :global(.recharts-surface), .chart :global(.recharts-surface *) { -webkit-tap-highlight-color: transparent; }
+/* PRODUCTION QA P0 — defense-in-depth against Android's native long-press
+   callout/selection UI on the SVG (a separate OS/browser mechanism from the
+   focus-outline fix below; ruled out Recharts' own Cursor/activeBar/background
+   as the source by reading node_modules/recharts source directly — Cursor
+   returns null when cursor={false}, activeBar/background default to false and
+   are never overridden here). */
+.chart :global(.recharts-surface), .chart :global(.recharts-surface *) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 /* Recharts makes its SVG Surface tabbable for its accessibility layer, so any tap on
-   the plot (e.g. a volume bar) can move focus to the whole-card-sized <svg>. The
-   browser's own :focus-visible heuristic for a manually-tabindexed, non-native
-   element like this is not reliably "pointer = not visible" across mobile engines —
-   this alone still let a black focus rectangle through on real mobile. Track input
-   modality ourselves (see chartRef effect in PriceTrendChart.tsx) instead: only show
-   the ring when the surface was reached via Tab, never on pointerdown. */
+   the plot (e.g. a volume bar) can move focus to the whole-card-sized <svg>. Hiding
+   the ring via :focus-visible alone (previous STEP) still let a black rectangle
+   through on real Android — that heuristic is not reliable for a manually-
+   tabindexed, non-native element across mobile engines. PriceTrendChart.tsx now
+   also calls preventDefault() on pointerdown so the surface never becomes
+   document.activeElement from a tap at all; this outline rule is the fallback for
+   keyboard Tab focus only (gated by the JS-tracked input modality below), which is
+   a separate code path preventDefault() on pointerdown does not touch. */
 .chart :global(.recharts-surface) { outline: none; }
 .chart[data-input-modality='keyboard'] :global(.recharts-surface:focus) { outline: 2px solid rgba(7, 134, 90, .7); outline-offset: 3px; border-radius: 4px; }
 .legend { justify-content: center; flex-wrap: wrap; gap: 0.9rem; color: #4b5964; font-size: 0.82rem; margin-top: 0.15rem; }
-.legendItem, .volumeLegend { gap: 0.35rem; }
+/* PRODUCTION QA P0-C — legend doubles as the sale/jeonse line visibility control
+   (was decorative-only before), so each item is a real button now: min 32px
+   touch target, opacity communicates on/off state without changing layout. */
+.legendItem { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 32px; padding: 0.2rem 0.4rem; border-radius: 6px; transition: background-color .15s ease; }
+.legendItem:hover { background: #f3f6f7; }
+.legendItem[aria-pressed='false'] { color: #8b98a1; }
+.volumeLegend { gap: 0.35rem; }
 .swatch { width: 9px; height: 9px; border-radius: 50%; }
 .volumeLegend { justify-content: flex-end; gap: 0.7rem; color: #77848e; font-size: 0.72rem; margin: 0.1rem 0 -0.2rem; }
 .volumeBar { width: 8px; height: 8px; border-radius: 2px; }

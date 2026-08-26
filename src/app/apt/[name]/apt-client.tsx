@@ -1103,7 +1103,7 @@ export default function ApartmentDetail() {
         </div>
       </div>
 
-      <StickyPriceBar aptName={aptName} latestPrice={latestPrice} />
+      <StickyPriceBar aptName={aptName} latestPrice={latestPrice} tradeTypeFilter={tradeTypeFilter} />
     </div>
   );
 }

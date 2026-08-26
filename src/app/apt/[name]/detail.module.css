@@ -2,6 +2,19 @@
   background-color: var(--bg-color);
   min-height: 100vh;
   padding-bottom: 5rem;
+  /* PRODUCTION QA P0 — PriceTrendChart's mobile full-bleed card uses
+     width:100vw; margin-inline:calc(50% - 50vw) (see PriceTrendChart.module.css).
+     100vw is defined relative to the initial containing block, which in this
+     browser includes the reserved vertical-scrollbar gutter — so on any layout
+     where the scrollbar takes up its own space (classic desktop scrollbars;
+     verified live via documentElement.scrollWidth > clientWidth at 360/375px),
+     100vw ends up a few px wider than the space actually available for content,
+     pushing the page itself into unwanted horizontal scroll. Real mobile devices
+     mostly use overlay scrollbars where this never shows up, but clamping it
+     here removes the gap entirely rather than relying on that. Scoped to this
+     page only, not a site-wide overflow change.
+  */
+  overflow-x: hidden;
 }
 
 .header {
