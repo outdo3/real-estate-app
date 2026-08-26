@@ -18,9 +18,13 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const dong = searchParams.get('dong') || undefined;
 
+    // BUSAN_DATA_UX_AUTOMATED_QA_V1 §L4/식별자 감사: dong 없이 { name: aptName }만
+    // 조회하면 타 지역 동명 단지의 시설 정보를 잘못 노출할 수 있다(실측: 대신롯데캐슬
+    // 서울/부산 충돌). 이 라우트엔 lawdCd 파라미터가 없어 dong이 없으면 안전하게
+    // facilities: null(미해결 identity)로 남긴다 — 값을 지어내지도, 추측하지도 않는다.
     const record = dong
       ? await prisma.apartment.findFirst({ where: { name: aptName, dong } })
-      : await prisma.apartment.findFirst({ where: { name: aptName } });
+      : null;
 
     const facilities = Array.isArray(record?.communityFacilities)
       ? (record!.communityFacilities as unknown[]).filter((v): v is string => typeof v === 'string')

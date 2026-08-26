@@ -8969,3 +8969,77 @@ DB 쓰기: 부산 ApartmentMaster 3,402건(전부 승인 범위 내, 부산 외 
 상태: 완료.
 
 **DATA_COVERAGE_FIX_V1 = PASS.**
+
+
+## 2026-08-27
+
+### BUSAN DATA / UX AUTOMATED QA V1 — 부산 데이터 신뢰 + 핵심 journey 회귀 자동화
+
+`APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1`/`DATA_COVERAGE_FIX_V1`의 후속 STEP. 사용자가
+부산 3,402개 단지를 직접 눌러보며 오류를 찾는 방식에서 벗어나, 재사용 가능한 read-only
+QA runner를 구축해 데이터 누락/모순/API 오류/거래 신뢰도/검색·지도 identity 문제를
+자동으로 먼저 탐지하게 했다. 대량 Production 데이터 수정 STEP이 아니다 — DB 쓰기
+0건(SELECT류 Prisma 호출만).
+
+`scripts/busan-qa-logic.ts`(순수 판정 로직) + `scripts/busan-qa-logic.test.mjs`(20개
+유닛 테스트) + `scripts/run-busan-data-ux-qa.ts`(CLI 본체, `--all`/`--district`/
+`--aptSeq`/`--quick`/`--no-api`/`--json`/`--base-url` 지원)를 신규 구축했다. L1(DB
+coverage, 3,402건 전체) → L2(data consistency, 3,402건 전체) → L3(API contract, 대표
+set 39건, 로컬 dev 서버 실제 HTTP 호출) → L4(product contradiction) 4개 레이어 +
+identity/trade trust/unit master/search/map QA로 구성했다.
+
+**L1 coverage**(3,402건, `DATA_COVERAGE_FIX_V1` 산출물과 정확히 일치 재확인): 세대수
+93.5%, 주차 71.0%, 용적률 73.9%, 건폐율 74.1%.
+
+**L2 consistency**: PASS 3,400 / WARN 2(buildingCoverageRatio>100인 동원화인패밀리
+122.37%, 광안동에스케이뷰 110.7% — 법정 상한 초과지만 파싱 오류인지 실제 예외 건축물인지
+불확실해 자동 FAIL 단정 대신 사람 확인이 필요한 WARN으로만 분류) / FAIL 0.
+
+**Identity QA 중 라이브 버그 발견 및 즉시 수정(1건, 4개 라우트)**: 정적 코드 감사로
+`/api/apt/[name]`(거래)/`score`/`education`/`facilities` 4개 라우트가 `lawdCd`(또는
+`dong`)가 없을 때 `{ name: aptName }`만으로 legacy `Apartment` 캐시를 조회하는 패턴을
+발견했다. 로컬 dev 서버로 실제 재현: `GET /api/apt/대신롯데캐슬`(파라미터 없음) →
+수정 전엔 서울 강남구 대치동의 동명 단지(legacy Apartment id=14)를 잘못 집어와
+`lawdCd=11680, dong=대치동`을 반환했다(부산 서구 서대신동3가의 진짜 대상, id=11과
+충돌) — AGENTS.md "이름만으로 재식별 금지"/"다른 아파트 데이터를 fallback으로 노출
+금지" 원칙의 실제 위반 사례였고, 이 진입 경로는 라우트 자체 주석에 "지도 마커 클릭,
+커뮤니티 글 링크처럼 lawdCd/dong을 안 넘기는 경로가 실제로 있다"고 이미 문서화돼 있어
+이론적 위험이 아니었다. lawdCd(또는 dong)가 이미 있을 때만 캐시 조회를 시도하도록
+최소 범위로 수정(DB 변경 없음, 4개 파일) — 수정 후 같은 요청은 Kakao 지오코딩 폴백으로
+올바르게 부산 대상을 찾는다. 기존 lawdCd/dong이 전달되는 정상 경로는 회귀 없음을
+재확인했다. `WRONG_APARTMENT_FALLBACK`: 발견 시점 PRESENT → 이번 STEP에서 ABSENT로
+전환(근본 데이터인 legacy Apartment의 name 비유일성 자체는 스키마 밖이라 잔존, QA가
+계속 감시).
+
+**Unit Master QA**: 대신롯데캐슬(aptSeq 26140-1164)의 84.7855/84.9950,
+59.8826/59.8839 exact-area collision 규칙이 API 응답에서도 병합되지 않고 유지됨을
+재확인(PASS). 검증 중 QA 스크립트 자체의 오탐 1건을 발견해 즉시 수정했다: 대신해모로
+센트럴아파트가 같은 정확 면적(84.9442)을 서로 다른 variantKey로 정당하게 2번 갖는
+정상 설계 사례를 초기 로직이 "collision"으로 오판했다 — `(면적, variantKey)` 조합
+기준 대조로 수정.
+
+**Trade trust**: 대표 set 39건 전부 `apiError` 있는데 `trades.length===0`으로
+오분류되는 사례 0건. 매매/순수전세(반전세 제외) gap·ratio는 `gap-invest-calc.ts`의
+실제 프로덕션 함수(`buildGapCandidates`)를 재사용해 중복 구현 없이 검증했다.
+
+**Search/Map**: 대표 쿼리 5개 전부 200/중복 0. "해운대"/"서면"이 REGION 결과 0건인
+것은 버그가 아니라 `umdName`(법정동명) 매칭 설계상 정상(구/통칭 지명이라 그렇다) —
+제품 개선 후보로만 기록. `/api/search`가 실제로 지도 마커에 쓰는 identity/좌표 소스가
+`ApartmentLocationFeature`(3,401/3,402건 커버, `ApartmentMaster.latitude/longitude`와는
+별개 파이프라인)임을 확인했고, 대표 set 39건에서 두 좌표 소스 괴리(>200m) 0건.
+
+고정 회귀 fixture 4건(연산동한솔솔파크/대신롯데캐슬/연산동일동미라주더스타/대신해모로
+센트럴아파트) 전부 PASS. `docs/development/BUSAN_DATA_UX_AUTOMATED_QA_V1.md` 신규(21개
+섹션, 전체 결과/16개 구/군 breakdown/release gate 포함).
+
+유닛 테스트 20/20 PASS(`scripts/busan-qa-logic.test.mjs`). `npx tsc --noEmit` 이번
+변경 파일(신규 스크립트 2개 + 라우트 4개) 기준 에러 0(기존 무관 스크립트만 에러 —
+FAIL_EXISTING_SCRIPT_ERRORS로 구분, 이번 세션에서 손대지 않음). 변경 파일 타겟 lint 0
+errors. `npm run build` PASS(35개 라우트 정상 생성).
+
+DB 쓰기: 0건(read-only). 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**BUSAN_DATA_UX_AUTOMATED_QA_V1 = PASS. RELEASE_GATE = LIMITED(P0_DATA_TRUST=1건,
+근본 데이터 landscape 잔존 — 라이브 버그는 수정 완료).**

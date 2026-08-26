@@ -27,10 +27,16 @@ export async function GET(
     // — score identity는 실거래 목록 조회보다 오매칭 허용 폭이 좁아야 한다, §52).
     if (!lawdCd || !dong) {
       try {
-        const cached = await prisma.apartment.findFirst({
-          where: lawdCd ? { name: aptName, lawdCd } : { name: aptName },
-          select: { lawdCd: true, dong: true },
-        });
+        // BUSAN_DATA_UX_AUTOMATED_QA_V1 §L4/식별자 감사: lawdCd 없이 { name: aptName }만
+        // 조회하면 위 §41 주석의 약속("이름만으로는 절대 다른 단지의 score를 반환하지
+        // 않는다")과 달리 실제로는 타 지역 동명 단지를 집어올 수 있었다(실측: 대신롯데캐슬
+        // 서울/부산 충돌). lawdCd가 이미 있을 때만 조회해 그 약속을 코드로 강제한다.
+        const cached = lawdCd
+          ? await prisma.apartment.findFirst({
+              where: { name: aptName, lawdCd },
+              select: { lawdCd: true, dong: true },
+            })
+          : null;
         if (!lawdCd && cached?.lawdCd) lawdCd = cached.lawdCd;
         if (!dong && cached?.dong) dong = cached.dong;
       } catch {

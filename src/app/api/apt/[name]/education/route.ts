@@ -30,10 +30,15 @@ export async function GET(
 
     if (!lawdCd || !dong) {
       try {
-        const cached = await prisma.apartment.findFirst({
-          where: lawdCd ? { name: aptName, lawdCd } : { name: aptName },
-          select: { lawdCd: true, dong: true },
-        });
+        // BUSAN_DATA_UX_AUTOMATED_QA_V1 §L4/식별자 감사: lawdCd 없이 { name: aptName }만
+        // 조회하면 타 지역 동명 단지를 집어올 수 있다(실측: 대신롯데캐슬 서울/부산 충돌,
+        // route.ts/score/route.ts와 동일 근거). lawdCd가 이미 있을 때만 조회한다.
+        const cached = lawdCd
+          ? await prisma.apartment.findFirst({
+              where: { name: aptName, lawdCd },
+              select: { lawdCd: true, dong: true },
+            })
+          : null;
         if (!lawdCd && cached?.lawdCd) lawdCd = cached.lawdCd;
         if (!dong && cached?.dong) dong = cached.dong;
       } catch {

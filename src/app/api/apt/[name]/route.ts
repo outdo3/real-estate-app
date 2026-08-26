@@ -30,10 +30,18 @@ export async function GET(
 
     if (!lawdCd || !dong) {
       try {
-        const cached = await prisma.apartment.findFirst({
-          where: lawdCd ? { name: aptName, lawdCd } : { name: aptName },
-          select: { lawdCd: true, dong: true },
-        });
+        // BUSAN_DATA_UX_AUTOMATED_QA_V1 §L4/식별자 감사에서 실측 발견: lawdCd가 없을 때
+        // { name: aptName }만으로 조회하면 지역 제약이 전혀 없어, 같은 이름의 타 지역
+        // 단지(실측: "대신롯데캐슬"이 서울 강남구 대치동과 부산 서구 서대신동3가 양쪽에
+        // 존재)를 그대로 집어올 수 있다 — 지도 마커 클릭/커뮤니티 글 링크처럼 lawdCd를
+        // 안 넘기는 실제 진입 경로에서 재현됨(AGENTS.md "이름만으로 재식별 금지" 위반).
+        // lawdCd가 이미 있을 때만(=지역이 좁혀졌을 때만) 이 캐시 조회를 시도한다.
+        const cached = lawdCd
+          ? await prisma.apartment.findFirst({
+              where: { name: aptName, lawdCd },
+              select: { lawdCd: true, dong: true },
+            })
+          : null;
         if (!lawdCd && cached?.lawdCd) lawdCd = cached.lawdCd;
         if (!dong && cached?.dong) dong = cached.dong;
       } catch (e) {
