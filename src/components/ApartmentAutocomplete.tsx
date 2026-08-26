@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
+import { perfMark, perfMeasure } from '@/lib/perf-debug';
 
 export type SearchResultType = 'REGION' | 'APARTMENT';
 
@@ -46,6 +47,10 @@ export default function ApartmentAutocomplete({
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  // SEARCH_MAP_PERFORMANCE_V2_2 §9 — 요청이 100~200ms 넘게 걸리면 "검색 중..." 표시.
+  // 너무 짧게(즉시) 켜면 캐시 히트/빠른 응답에서도 깜빡여 오히려 산만하므로, 150ms
+  // 지연 타이머로 감싸 이미 응답이 온 빠른 케이스에서는 아예 보이지 않게 한다.
+  const [isSearching, setIsSearching] = useState(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +68,7 @@ export default function ApartmentAutocomplete({
         });
       }
     };
-    if (showDropdown) {
+    if (showDropdown || isSearching) {
       updateRect();
       window.addEventListener('scroll', updateRect, true);
       window.addEventListener('resize', updateRect);
@@ -72,7 +77,7 @@ export default function ApartmentAutocomplete({
         window.removeEventListener('resize', updateRect);
       };
     }
-  }, [showDropdown]);
+  }, [showDropdown, isSearching]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -92,11 +97,15 @@ export default function ApartmentAutocomplete({
       suppressNextSearchRef.current = false;
       return;
     }
+    // §5/§24 T0 — 사용자가 마지막 문자를 입력한 시점(이 effect가 매 keystroke마다 새로
+    // 실행되므로, 실제로 반영되는 건 debounce 타이머가 끝까지 살아남는 마지막 호출뿐이다).
+    perfMark('search:t0-input');
 
     const trimmed = keyword.trim();
     if (trimmed.length < 2) {
       setResults([]);
       setShowDropdown(false);
+      setIsSearching(false);
       onQueryStateChange?.({ keyword: '', hasResults: false });
       return;
     }
@@ -105,16 +114,23 @@ export default function ApartmentAutocomplete({
       const cached = cacheRef.current.get(trimmed)!;
       setResults(cached);
       setShowDropdown(cached.length > 0);
+      setIsSearching(false);
       onQueryStateChange?.({ keyword, hasResults: cached.length > 0 });
       return;
     }
 
     const timer = setTimeout(async () => {
+      perfMark('search:t2-request-start');
+      perfMeasure('search: input→request', 'search:t0-input', 'search:t2-request-start');
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
+      // 150ms 넘게 걸리는 요청만 "검색 중..."을 보여준다(§9) — abort/완료 시 반드시 clear.
+      const loadingTimer = setTimeout(() => {
+        if (!abortController.signal.aborted) setIsSearching(true);
+      }, 150);
 
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, { signal: abortController.signal });
@@ -150,12 +166,17 @@ export default function ApartmentAutocomplete({
         setResults(combined);
         setShowDropdown(combined.length > 0);
         onQueryStateChange?.({ keyword, hasResults: combined.length > 0 });
+        perfMeasure('search: request 왕복', 'search:t2-request-start');
+        perfMeasure('search: input→first result(커밋 직전)', 'search:t0-input');
       } catch (err: any) {
         if (err.name === 'AbortError') return;
         console.error('Search failed', err);
         setResults([]);
         setShowDropdown(false);
         onQueryStateChange?.({ keyword, hasResults: false });
+      } finally {
+        clearTimeout(loadingTimer);
+        if (!abortController.signal.aborted) setIsSearching(false);
       }
     }, 250);
 
@@ -242,6 +263,26 @@ export default function ApartmentAutocomplete({
           ...inputStyle,
         }}
       />
+      {!showDropdown && isSearching && dropdownRect && (
+        <div
+          style={{
+            position: 'fixed',
+            top: dropdownRect.top,
+            left: dropdownRect.left,
+            width: dropdownRect.width,
+            background: 'white',
+            border: '1px solid var(--border-color)',
+            borderRadius: '12px',
+            boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
+            padding: '0.6rem 0.9rem',
+            fontSize: '0.85rem',
+            color: 'var(--text-muted)',
+            zIndex: 99999,
+          }}
+        >
+          검색 중...
+        </div>
+      )}
       {showDropdown && dropdownRect && (
         <ul
           style={{

@@ -4,6 +4,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
+import { perfMark, perfMeasure } from '@/lib/perf-debug';
+// AptMarker/AptCluster 타입과 selected-marker fast-path 판정 로직은
+// src/lib/map-selected-marker.ts로 분리해 부작용 없이 단위 테스트한다(§26).
+import type { AptMarker, AptCluster } from '@/lib/map-selected-marker';
+import { buildPendingSelectedApt, resolveSelectedMarker, isPendingStillNeeded } from '@/lib/map-selected-marker';
 import FullPageLoader from '@/components/FullPageLoader';
 import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
@@ -18,27 +23,6 @@ const apiKey =
   process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ||
   process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
-interface AptMarker {
-  id: string; // Internal unique id
-  aptSeq?: string; // Canonical identity from building hub
-  completionYear?: number;
-  name: string;
-  dong: string;
-  price: string;
-  hasRecentPrice: boolean; // 최근 거래(가격) 유무 — 없으면 "시세 정보 없음"으로 폴백 표시
-  lat: number;
-  lng: number;
-  // 최근 24시간 이내 이 단지 태그(Post.aptName)로 작성된 커뮤니티 글이 있는지 — 있으면
-  // 마커 칩 우측 상단에 빨간 점 뱃지를 띄운다.
-  hasNewPost?: boolean;
-}
-
-interface AptCluster {
-  id: string;
-  lat: number;
-  lng: number;
-  markers: AptMarker[];
-}
 
 // 화면 픽셀 기준 이 거리 안에 있는 칩들은 한 그룹으로 묶는다. 서구 원도심처럼 오래된
 // 소규모 단지가 밀집한 지역에서는 칩이 서로 완전히 겹쳐 뒤에 깔린 단지가 실제로는
@@ -98,19 +82,30 @@ export default function FullscreenMapPage() {
   // 다른 곳을 클릭하기 전까지 유지)을 별도 state로 분리해 해결한다.
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [hoveredMarkerId, setHoveredMarkerId] = useState<string | null>(null);
+  // SEARCH_MAP_PERFORMANCE_V2_2 §13/§14 — SELECTED MARKER FIRST. 검색 결과 클릭 시점에
+  // 이미 aptSeq/좌표/이름을 갖고 있으므로, 실거래 기반 aptMarkers 전체(느린 /api/transactions
+  // months=12 + 단지별 Kakao 지오코딩 N회)가 도착할 때까지 기다리지 않고 이 임시 마커를
+  // 즉시 보여준다. aptSeq가 있을 때만 만든다(name-only identity 금지, 다른 단지 fallback
+  // 금지) — 실제 aptClusters에 같은 id의 진짜 마커가 도착하면 selectedMarker/렌더 둘 다
+  // 자동으로 진짜 데이터를 우선해 교체한다(중복 없는 reconcile, 아래 참고).
+  const [pendingSelectedApt, setPendingSelectedApt] = useState<AptMarker | null>(null);
   // 클릭으로 고정된 마커가 있으면 그것을 우선하고, 없을 때만 hover 중인 마커를 보여준다 —
   // 고정된 마커가 있는 동안에는 다른 마커를 hover해도 바텀시트가 바뀌지 않는다(§5 우선순위).
   const activeMarkerId = selectedMarkerId ?? hoveredMarkerId;
   // 바텀시트에 표시할 마커의 전체 정보 — 조기 return(로딩/에러 화면)보다 위에서
   // 계산해야 훅 호출 순서가 렌더마다 always 동일하게 유지된다(Rules of Hooks).
-  const selectedMarker = useMemo(() => {
-    if (!activeMarkerId) return null;
-    for (const cluster of aptClusters) {
-      const found = cluster.markers.find((m) => m.id === activeMarkerId);
-      if (found) return found;
-    }
-    return null;
-  }, [activeMarkerId, aptClusters]);
+  const selectedMarker = useMemo(
+    () => resolveSelectedMarker(activeMarkerId, aptClusters, pendingSelectedApt),
+    [activeMarkerId, aptClusters, pendingSelectedApt]
+  );
+
+  // 진짜 마커 데이터가 도착해 같은 id를 이미 포함하면 임시 마커는 더 이상 필요 없다 —
+  // 화면 렌더는 이미 resolveSelectedMarker 쪽을 우선하지만(위), pending 상태 자체도
+  // 정리해 다음 선택 사이클에 이전 세션의 값이 남아있지 않게 한다.
+  useEffect(() => {
+    if (isPendingStillNeeded(aptClusters, pendingSelectedApt)) return;
+    if (pendingSelectedApt) setPendingSelectedApt(null);
+  }, [aptClusters, pendingSelectedApt]);
   // 현재 화면의 마커들을 조회할 때 실제로 사용한 lawdCd. 마커 클릭 시 상세페이지로 이 값을
   // 함께 넘겨야 한다 — 안 넘기면 상세페이지가 자기 자신의 하드코딩된 기본 지역(서울 강남구)으로
   // 실거래가를 조회해 엉뚱한 지역/빈 데이터가 뜨는 버그로 이어진다.
@@ -195,27 +190,13 @@ export default function FullscreenMapPage() {
   // "기존 가격"으로라도 보여준다. 다만 12개월 안에도 거래가 전혀 없는 단지는 이 데이터
   // 소스(MOLIT 실거래) 자체에 존재 근거가 없어 마커를 만들 수 없다 — 그 경우까지 100%
   // 커버하려면 별도의 "단지 마스터 목록" 데이터가 필요한데 이 앱엔 아직 없다.
-  const fetchAptMarkers = async (lat: number, lng: number) => {
-    if (!window.kakao?.maps?.services) {
-      setIsLoadingData(false);
-      return;
-    }
-    const geocoder = new window.kakao.maps.services.Geocoder();
-
-    geocoder.coord2RegionCode(lng, lat, async (result: any, status: any) => {
-      // 사용자의 실제 GPS 좌표가 국내 행정구역으로 역지오코딩되지 않는 경우(해외, 또는
-      // 카카오가 지원하지 않는 좌표)가 실제로 있다 — 이때 그냥 return해버리면
-      // isLoadingData가 영원히 true로 남아 페이지 전체가 "지도 데이터를 불러오는
-      // 중입니다..."에 멈춘 것처럼 보이는 심각한 버그였다(발견: 실사용자 리포트로 좌표
-      // 실패 케이스를 재현). 역지오코딩이 실패하면 이 서비스의 기본 대상 지역(부산 서구)
-      // 데이터로 폴백해서 최소한 화면에 뭔가는 뜨게 한다.
-      const DEFAULT_FALLBACK_LAWD_CD = '26140'; // 부산광역시 서구
-      const region = status === window.kakao.maps.services.Status.OK
-        ? result.find((r: any) => r.region_type === 'B')
-        : null;
-      const lawdCd = region ? region.code.substring(0, 5) : DEFAULT_FALLBACK_LAWD_CD;
+  // SEARCH_MAP_PERFORMANCE_V2_2 §16 — knownLawdCd가 있으면(검색 결과가 이미 lawdCd를
+  // 갖고 있는 경우) 이 지역을 알아내기 위한 Kakao 역지오코딩 왕복 호출을 통째로
+  // 건너뛴다. 드래그/현재위치 등 좌표만 아는 기존 호출부는 knownLawdCd를 안 넘기므로
+  // 이전과 동일하게 역지오코딩을 사용한다(회귀 없음).
+  const fetchAptMarkers = async (lat: number, lng: number, knownLawdCd?: string) => {
+    const loadForLawdCd = async (lawdCd: string) => {
       setCurrentLawdCd(lawdCd);
-
       try {
         // 실거래 마커 데이터와 "최근 24시간 내 커뮤니티 글이 있는 단지" 집계는 서로
         // 무관한 조회라 Promise.all로 병렬 처리한다.
@@ -255,11 +236,41 @@ export default function FullscreenMapPage() {
         }));
 
         setAptMarkers(markers);
+        // §12 M6 — 주변 마커 전체 dataset 준비 완료(M0 클릭 흐름에서 호출된 경우에만
+        // 의미 있음 — 드래그/현재위치 등 다른 호출부에서도 공유되는 mark라 클릭 흐름이
+        // 아닐 때는 이 measure가 실패해도(시작 mark 없음) 무해하게 무시된다).
+        perfMeasure('map: click→surrounding markers ready', 'map:m0-click');
       } catch (error) {
         console.error('Failed to fetch apt markers:', error);
       } finally {
         setIsLoadingData(false);
       }
+    };
+
+    if (knownLawdCd) {
+      await loadForLawdCd(knownLawdCd);
+      return;
+    }
+
+    if (!window.kakao?.maps?.services) {
+      setIsLoadingData(false);
+      return;
+    }
+    const geocoder = new window.kakao.maps.services.Geocoder();
+
+    geocoder.coord2RegionCode(lng, lat, (result: any, status: any) => {
+      // 사용자의 실제 GPS 좌표가 국내 행정구역으로 역지오코딩되지 않는 경우(해외, 또는
+      // 카카오가 지원하지 않는 좌표)가 실제로 있다 — 이때 그냥 return해버리면
+      // isLoadingData가 영원히 true로 남아 페이지 전체가 "지도 데이터를 불러오는
+      // 중입니다..."에 멈춘 것처럼 보이는 심각한 버그였다(발견: 실사용자 리포트로 좌표
+      // 실패 케이스를 재현). 역지오코딩이 실패하면 이 서비스의 기본 대상 지역(부산 서구)
+      // 데이터로 폴백해서 최소한 화면에 뭔가는 뜨게 한다.
+      const DEFAULT_FALLBACK_LAWD_CD = '26140'; // 부산광역시 서구
+      const region = status === window.kakao.maps.services.Status.OK
+        ? result.find((r: any) => r.region_type === 'B')
+        : null;
+      const lawdCd = region ? region.code.substring(0, 5) : DEFAULT_FALLBACK_LAWD_CD;
+      loadForLawdCd(lawdCd);
     });
   };
 
@@ -295,8 +306,8 @@ export default function FullscreenMapPage() {
     );
   };
 
-  const refreshActiveLayers = (lat: number, lng: number) => {
-    if (layers.apt) fetchAptMarkers(lat, lng);
+  const refreshActiveLayers = (lat: number, lng: number, knownLawdCd?: string) => {
+    if (layers.apt) fetchAptMarkers(lat, lng, knownLawdCd);
     if (layers.school) fetchSchoolMarkers(lat, lng);
   };
 
@@ -590,6 +601,7 @@ export default function FullscreenMapPage() {
   // 이후 다른 흐름이 center state를 참조할 때 최신 위치와 어긋나는 것을 방지). 선택한 단지가
   // 있는 지역의 마커도 함께 새로 불러온다.
   const handleApartmentSelect = (result: ApartmentSearchResult) => {
+    perfMark('map:m0-click'); // §12 M0
     const latLng = { lat: result.lat, lng: result.lng };
     setCenter(latLng);
     if (mapRef.current && window.kakao?.maps) {
@@ -599,12 +611,35 @@ export default function FullscreenMapPage() {
         mapRef.current.setLevel(3, { anchor });
       }
     }
-    refreshActiveLayers(latLng.lat, latLng.lng);
-    
+    // §16 — 검색 결과가 이미 lawdCd를 알고 있으면 이를 그대로 넘겨 마커 재조회 경로가
+    // 자체 역지오코딩을 다시 하지 않게 한다(중복 요청 축소, 결과는 동일).
+    refreshActiveLayers(latLng.lat, latLng.lng, result.lawdCd || undefined);
+
     if (result.type === 'APARTMENT') {
-      setSelectedMarkerId(result.aptSeq || `${result.dong}-${result.name}`);
+      const id = result.aptSeq || `${result.dong}-${result.name}`;
+      setSelectedMarkerId(id);
+      // §14 SELECTED MARKER FAST PATH — aptSeq + 좌표가 모두 있을 때만 임시 마커를
+      // 만든다(name-only identity 금지, buildPendingSelectedApt가 강제). 가격은 아직
+      // 모르므로 "정보 없음"으로 정직하게 표시하고, 실제 aptMarkers가 도착하면 위
+      // resolveSelectedMarker/useEffect가 자동으로 대체한다.
+      const pending = buildPendingSelectedApt({
+        type: result.type,
+        name: result.name,
+        lat: latLng.lat,
+        lng: latLng.lng,
+        dong: result.dong,
+        aptSeq: result.aptSeq,
+        completionYear: result.completionYear,
+      });
+      setPendingSelectedApt(pending);
+      if (pending) {
+        // §12 M5 — 임시 fast-path 마커를 이 시점에 이미 state에 반영했다(다음 커밋에서
+        // 렌더). 실제 네트워크 응답을 기다리지 않는다는 것이 이 계측의 핵심이다.
+        perfMeasure('map: click→selected marker(fast path)', 'map:m0-click');
+      }
     } else {
       setSelectedMarkerId(null);
+      setPendingSelectedApt(null);
     }
   };
 
@@ -748,7 +783,10 @@ export default function FullscreenMapPage() {
         level={4}
         onDragEnd={handleDragEnd}
         onZoomChanged={(map) => setZoomLevel(map.getLevel())}
-        onClick={() => setSelectedMarkerId(null)}
+        onClick={() => {
+          setSelectedMarkerId(null);
+          setPendingSelectedApt(null);
+        }}
       >
         {layers.apt && aptClusters.map((cluster) => {
           if (cluster.markers.length > 1) {
@@ -811,6 +849,24 @@ export default function FullscreenMapPage() {
           );
         })}
 
+        {/* §14 SELECTED MARKER FAST PATH — 실제 aptMarkers/aptClusters에 아직 이 id가
+            없을 때만(위 useEffect가 도착 즉시 정리) 임시 마커를 그린다. 같은 renderMarkerChip을
+            재사용해 진짜 마커와 시각적으로 동일하게 보이며, 진짜 데이터 도착 시 이 블록이
+            사라지고 위 aptClusters 블록의 마커가 그 자리를 이어받아(같은 좌표) 중복 없이
+            자연스럽게 교체된다. */}
+        {layers.apt && pendingSelectedApt && (
+          <CustomOverlayMap
+            key={`pending-${pendingSelectedApt.id}`}
+            position={{ lat: pendingSelectedApt.lat, lng: pendingSelectedApt.lng }}
+            yAnchor={1}
+            zIndex={9999}
+          >
+            <div style={{ transform: 'translateY(-10px)' }}>
+              {renderMarkerChip(pendingSelectedApt, true)}
+            </div>
+          </CustomOverlayMap>
+        )}
+
         {layers.school && schoolMarkers.map((school) => (
           <CustomOverlayMap key={school.id} position={{ lat: school.lat, lng: school.lng }} yAnchor={1}>
             <div
@@ -869,7 +925,10 @@ export default function FullscreenMapPage() {
             </div>
             <button
               type="button"
-              onClick={() => setSelectedMarkerId(null)}
+              onClick={() => {
+                setSelectedMarkerId(null);
+                setPendingSelectedApt(null);
+              }}
               aria-label="닫기"
               style={{ padding: '0.4rem', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.1rem', cursor: 'pointer', flexShrink: 0 }}
             >

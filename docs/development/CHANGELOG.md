@@ -9043,3 +9043,85 @@ DB 쓰기: 0건(read-only). 스키마 변경: 없음. Migration: 없음.
 
 **BUSAN_DATA_UX_AUTOMATED_QA_V1 = PASS. RELEASE_GATE = LIMITED(P0_DATA_TRUST=1건,
 근본 데이터 landscape 잔존 — 라이브 버그는 수정 완료).**
+
+
+## 2026-08-27
+
+### SEARCH / MAP PERFORMANCE V2.2 — 검색/지도 체감 latency 개선 + BCR>100 감사
+
+사용자 실제 체감 문제(검색 결과 약 3초, 결과 클릭 후 마커 표시 추가 약 3초)의 root cause를
+증거 기반으로 찾아 안전한 범위에서 개선했다. DB/schema/migration/거래 계산/Unit Master/
+Score 변경 없음.
+
+**(A) BCR>100 quick audit**: 직전 QA에서 발견한 buildingCoverageRatio>100 2건
+(동원화인패밀리 26230-128=122.37%, 광안동에스케이뷰 26500-1384=110.7%)을 BuildingHUB
+총괄표제부(`getBrRecapTitleInfo`)로 라이브 재조회해 두 건 모두 저장값과 정확히 일치하는
+원본(`bcRat`/`vlRat`/`mgmBldrgstPk`/`hhldCnt`/`totPkngCnt`/`useAprDay`까지 전부 일치)을
+확인했다 — **분류: SOURCE_VALUE(둘 다), BCR_DATA_FIX_REQUIRED=NO**. 애플리케이션 버그가
+아니라 정부 총괄표제부 원본 자체가 100%를 넘는 건폐율을 보고하고 있다(복합단지의 대지/
+건축면적 산정 방식에 따른 정부 등록 관행으로 추정, 근본 원인 자체는 범위 밖).
+
+**(B) E2E timing 실측**: `NEXT_PUBLIC_EJIP_PERF_DEBUG` 게이트 기반 `performance.mark`
+계측(`src/lib/perf-debug.ts` 신규)을 검색(`ApartmentAutocomplete.tsx`)과 지도
+(`src/app/map/page.tsx`) 양쪽에 추가하고, 실제 Chrome 브라우저(claude-in-chrome)로
+"연산동/대신동/대신롯데캐슬/해운대" 등 실제 시나리오를 재현 계측했다.
+
+- 검색(`/api/search`): 디바운스(250ms, 변경 없음) + API 왕복 포함 INPUT_TO_FIRST_RESULT
+  실측 586.5ms(dev 서버 재시작 직후 COLD에 가까운 조건) — **이미 목표(≤1.5s) 충족**,
+  사용자가 체감했다는 "3초"와 직접 일치하지 않음을 정직하게 확인했다(가능한 설명:
+  실사용자 환경 차이, 로딩 피드백 부재로 인한 체감 왜곡, 실제 병목인 지도 단계와의 혼동).
+- 지도: **진짜 병목을 특정했다.** `selectedMarker`(바텀시트/마커 표시)가 오직
+  `aptMarkers`(=`/api/transactions?type=apt&lawdCd=...&months=12` 완료 후에만 채워짐)
+  에서만 찾아지고 있었다 — 이 API는 지역 전체 12개월 실거래를 라이브 조회한 뒤 그 안의
+  **모든 고유 단지마다 개별 Kakao 키워드 지오코딩을 호출**한다. 실측(curl): 연제구 COLD
+  5.76초, WARM(geocode 캐시 워밍업 후) 1.05초, 서구 COLD 2.09초 — "클릭 후 3초" 체감의
+  실제 원인이었다.
+
+**(C) 안전한 개선**: 검색 결과가 이미 aptSeq/좌표/이름을 갖고 있다는 사실을 활용해
+"SELECTED MARKER FIRST" 원칙을 구현했다. `src/lib/map-selected-marker.ts`(신규, 순수
+함수, 부작용 없음)에 `buildPendingSelectedApt`/`resolveSelectedMarker`/
+`isPendingStillNeeded`를 분리했다 — aptSeq와 유효 좌표가 모두 있을 때만(name-only
+identity 금지, 다른 단지 fallback 금지) 임시 마커를 만들어 **주변 마커 전체 로딩을
+기다리지 않고 즉시** 렌더하고, 실제 데이터가 도착하면 자동으로 우선순위가 넘어가
+중복 없이 교체된다(값은 "시세 정보 없음"으로 정직하게 시작, 지어내지 않음). 기존
+`renderMarkerChip()`을 그대로 재사용해 시각적으로 진짜 마커와 동일하다(visual redesign
+없음). 라이브 브라우저로 4개 대표 케이스(연산동한솔솔파크/대신롯데캐슬/연산동일동
+미라주더스타/해운대힐스테이트위브) 전부 클릭 즉시(다음 렌더 프레임 내, <100ms) 마커+
+바텀시트가 표시됨을 확인했다 — 특히 대신롯데캐슬은 서울 강남구 동명 단지와 identity
+충돌 위험이 있는 케이스인데도 정확히 부산 서구로 이동/선택됐다(WRONG_MARKER_SELECTION
+없음).
+
+추가로 `handleApartmentSelect`가 검색 결과에 이미 있는 `lawdCd`를 쓰지 않고 매번 Kakao
+역지오코딩을 다시 호출하던 중복 요청을 제거했다(`fetchAptMarkers(lat, lng, knownLawdCd?)`
+— 있으면 역지오코딩 생략, 없으면 기존 동작 유지, 드래그/현재위치 등 기존 호출부는
+영향 없음). `ApartmentAutocomplete.tsx`에는 150ms 넘게 걸리는 요청에만 "검색 중..."을
+보여주는 최소 로딩 피드백을 추가했다(캐시 히트/빠른 응답에서는 깜빡이지 않음).
+
+**결과(Before/After)**: CLICK_TO_SELECTED_MARKER 592ms~5.76s(API 완료 대기) →
+**<100ms**(동기 state 업데이트, 네트워크 무관). CLICK_TO_ALL_MARKERS(주변 마커)는
+의도적으로 변경하지 않음(§13 목표 — 거래 계산 API 자체는 범위 밖). 검색 자체 속도는
+이미 목표 충족이라 서버 로직 변경 없음.
+
+**Mobile/Desktop QA**: 360px/390px(iframe 격리 기법 — 이 환경에서 `resize_window`가
+불안정함을 재확인해 우회)와 desktop(852px) 전부 겹침/잘림/가로스크롤/오작동 없이 정상
+확인. 375px는 두 경계값이 모두 통과한 표준 반응형 레이아웃이라 별도 재검증 없이 정상
+판단.
+
+신규 유닛 테스트 12개(`src/lib/map-selected-marker.test.mjs`): aptSeq 보존, fast path가
+aptSeq+좌표 필수(둘 중 하나라도 없으면 null), 가격을 지어내지 않음, 진짜 마커 우선(임시
+마커와 dedupe), 다른 단지 오선택 방지. 기존 65개 포함 총 77/77 PASS(회귀 없음, `.test.ts`
+계열은 이 실행 환경의 네이티브 ESM 확장자 해석 한계로 이번에도 개별 실행 대상 아님 —
+이번 STEP이 만들지 않은 기존 특성). `npx tsc --noEmit` 이번 변경 파일(신규 2개 + 기존
+2개 수정) 기준 에러 0(기존 무관 스크립트만 에러). 변경 파일 타겟 lint 0 errors.
+`npm run build` PASS(35개 라우트 정상 생성).
+
+`docs/development/SEARCH_MAP_PERFORMANCE_V2_2.md` 신규(21개 섹션, BCR 감사/타이밍
+실측/before-after/mobile-desktop QA 포함).
+
+DB 쓰기: 0건. 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**SEARCH_MAP_PERFORMANCE_V2_2 = PASS. BCR_CASE_1 = SOURCE_VALUE. BCR_CASE_2 =
+SOURCE_VALUE. BCR_DATA_FIX_REQUIRED = NO. CLICK_TO_SELECTED_MARKER: 592ms~5.76s →
+<100ms. WRONG_MARKER_SELECTION = ABSENT.**
