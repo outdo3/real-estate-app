@@ -8665,3 +8665,57 @@ Hero를 직접 구동하지 않는 것은 §13에 문서화된 의도된 결과 
 canonical mapping이 생기기 전까지는 편의보다 정확성을 우선했다.
 
 **DETAIL_TRADE_AREA_STATE_SPLIT_V1_CLOSE = YES.**
+
+## 2026-08-26 (2)
+
+### DETAIL PRICE CHART UI FINAL — 터치 포커스/모바일 full-bleed/plot 폭/selector UX
+
+Production 모바일에서 남아있던 가격차트 3개 문제를 근본원인 기준으로
+고쳤다. (1) 거래량 막대 등 차트 영역 touch 시 검은 사각형 — Recharts의
+`accessibilityLayer`(기본 on)가 카드 전체 크기의 루트 `<svg>`
+(`.recharts-surface`)에 `tabIndex=0`을 부여해 어디를 눌러도 포커스가
+그 전체 영역으로 이동하는데, 수동 tabIndex를 가진 비-네이티브 엘리먼트에
+대한 `:focus-visible` 휴리스틱이 모바일 엔진마다 신뢰할 수 없다는 걸
+동일 세션에서 직접 재현(동일한 pointerdown+focus 시퀀스인데
+`:focus-visible`이 true/false로 왔다갔다 함)해 확인했다. `:focus-visible`에
+기대는 대신 pointerdown/Tab keydown으로 입력 modality를 직접 추적해
+`outline`을 결정하도록 바꿨다 — 구현 중 `useEffect(() => {...}, [])`가
+`.chart` div가 아직 마운트되지 않은 시점에 실행돼(hasData가 true가 돼야
+마운트됨) 리스너가 실제 노드에 전혀 붙지 못하는 실수를 실제 DOM
+검증(`chartDiv.dataset.inputModality`가 계속 `undefined`)으로 잡아내고
+callback ref로 교체해 재검증까지 마쳤다. (2) 모바일 차트 카드 좌우 회색
+여백 — 공용 `.container`의 16px 페이지 패딩이 원인이었고,
+`PriceTrendChart.module.css`의 `.card` 하나에만
+`width:100vw; margin-inline:calc(50% - 50vw)` full-bleed를 적용해(다른
+파일은 전혀 건드리지 않음) 해결했다. (3) plot 폭 — 처음에 `.chart`에도
+추가로 padding을 더 깎았더니 실제 스크린샷에서 Y축 라벨("4.9억"이
+".9억"으로) clipping이 나는 걸 발견해 되돌리고, full-bleed만으로 확보된
+폭(기존 대비 좌우 16px씩)을 그대로 썼다 — "코드상 고쳐짐"이 아니라 실제
+360/375/390px 스크린샷으로 clipping 여부를 검증했다.
+
+Hero 근처에 selector를 중복 배치할지는 실제 UX로 판단해 추가하지
+않기로 했다 — Unit Master 없는 단지(다수)는 이미 상단 칩이 selectedTradeArea를
+직접 구동해 자연스럽고, Unit Master 단지는 84㎡대 기본 선택이 이미
+합리적인 초기값을 주기 때문에 중복 selector가 "두 selector, 다른 의미"
+혼란만 키울 위험이 있었다(판단 근거는 문서에 기록).
+
+대신롯데캐슬(Unit Master 8종)/연산동일동미라주더스타(Unit Master 없음)
+양쪽에서 360/375/390px 및 desktop 실제 렌더 검증: 회색 여백 0, 축
+clipping 0, 가로 overflow 0(scrollWidth ≤ innerWidth 3개 너비 전부),
+period/legend 줄바꿈 0, 실제(synthetic 아닌) 클릭에도 검은 사각형 없음.
+STATE SPLIT V1의 계약(`selectedUnitMasterArea`/`selectedTradeArea` 독립,
+cross-unit fallback 없음)은 이번 STEP에서 `PriceTrendChart.tsx`/
+`PriceTrendChart.module.css` 두 파일만 건드려 전혀 손대지 않았다(재검증
+완료). 다만 이 자동화 환경은 `document.hasFocus()`가 항상 false라
+`:focus` CSS의 최종 페인트 자체는 픽셀 단위로 재현 불가능해
+`TOUCH_VISUAL_QA = MANUAL_REQUIRED`로 남긴다.
+
+기존 회귀 테스트 19/19 유지, `npx tsc --noEmit` src/ 에러 0(기존
+scripts/ 에러만 잔존), 변경 파일 타겟 lint 0 errors, `npm run build`
+PASS. `docs/development/DETAIL_PRICE_CHART_UI_FINAL.md` 신규.
+
+DB/schema 변경 없음.
+
+상태: 완료.
+
+**DETAIL_PRICE_CHART_UI_FINAL_CLOSE = YES.**

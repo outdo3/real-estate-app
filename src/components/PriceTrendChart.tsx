@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from 'recharts';
 import { buildPriceTrendPoints, filterTradesForArea, formatTrendDate, latestTrade, type PriceTrendTrade } from '@/lib/price-trend-data';
 import { buildTransactionAreaOptions } from '@/lib/trade-area-selection';
@@ -25,6 +25,40 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeAr
   const [saleRead, setSaleRead] = useState<TradeRead | null>(null);
   const [rentRead, setRentRead] = useState<TradeRead | null>(null);
   const [period, setPeriod] = useState<Period>('3년');
+
+  // Recharts' accessibilityLayer gives the root SVG (.recharts-surface, sized to
+  // the whole chart) tabIndex=0 so keyboard users can reach it — but any tap on a
+  // volume bar or the plot area also moves DOM focus there, and native
+  // :focus-visible heuristics for a manually-tabindexed, non-native element like
+  // an <svg> are not reliably "not visible" on touch across mobile engines (a
+  // plain `:focus:not(:focus-visible)` CSS rule was tried before and still
+  // surfaced a black focus rectangle on real mobile). Track input modality
+  // ourselves instead of trusting that heuristic: only a Tab keypress marks the
+  // next focus as keyboard-driven; any pointerdown (mouse/touch/pen) clears it.
+  // Keyboard users still get a visible ring; touch/mouse never do.
+  // The .chart div only mounts once hasData is true (a later render, gated deep
+  // in the loading/needsAreaSelection/hasData ternary below) — a plain
+  // useEffect(() => {...}, []) would run before that node exists and never
+  // attach anything. A callback ref fires exactly when React attaches/detaches
+  // the real node, regardless of which branch renders it.
+  const chartCleanupRef = useRef<(() => void) | null>(null);
+  const chartRefCallback = useCallback((el: HTMLDivElement | null) => {
+    chartCleanupRef.current?.();
+    chartCleanupRef.current = null;
+    if (!el) return;
+    const markPointer = () => { el.dataset.inputModality = 'pointer'; };
+    // Tab-into-the-chart fires its keydown on whatever element currently has
+    // focus (often outside .chart entirely), not on the surface itself — so this
+    // must listen on the document, not just the chart subtree, or a genuine
+    // keyboard Tab landing on the surface from outside would be missed.
+    const markKeyboard = (e: KeyboardEvent) => { if (e.key === 'Tab') el.dataset.inputModality = 'keyboard'; };
+    el.addEventListener('pointerdown', markPointer);
+    document.addEventListener('keydown', markKeyboard);
+    chartCleanupRef.current = () => {
+      el.removeEventListener('pointerdown', markPointer);
+      document.removeEventListener('keydown', markKeyboard);
+    };
+  }, []);
 
   useEffect(() => {
     if (!aptName || !lawdCd) return;
@@ -93,7 +127,7 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeAr
     {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : needsAreaSelection ? <div className={styles.empty}>평형을 선택해 시세 추이를 확인하세요.</div> : !hasData && errors.length > 0 ? <div className={styles.empty}>실거래가 데이터를 불러오지 못했습니다.</div> : !hasData ? <div className={styles.empty}>선택한 평형의 최근 거래가 없습니다.</div> : <>
       <div className={styles.volumeLegend}><span>하단 막대: 같은 날짜의 실제 거래 수</span><span className={styles.volumeLegend}><i className={styles.volumeBar} style={{ background: SALE_COLOR }} />매매</span><span className={styles.volumeLegend}><i className={styles.volumeBar} style={{ background: RENT_COLOR }} />전세</span></div>
       <div className={styles.legend}><span className={styles.legendItem}><i className={styles.swatch} style={{ background: SALE_COLOR }} />매매</span><span className={styles.legendItem}><i className={styles.swatch} style={{ background: RENT_COLOR }} />전세</span></div>
-      <div className={styles.chart}><ResponsiveContainer width="100%" height="100%"><ComposedChart data={points} margin={{ top: 8, right: 2, left: -12, bottom: 0 }}><CartesianGrid stroke="#e9eef0" strokeDasharray="3 4" vertical={false} /><XAxis dataKey="id" axisLine={false} tickLine={false} interval={tickInterval} minTickGap={28} tick={{ fill: '#687680', fontSize: 11 }} tickFormatter={(id) => formatTrendDate(points[id]?.date || '')} /><YAxis yAxisId="price" axisLine={false} tickLine={false} width={44} domain={['auto', 'auto']} tick={{ fill: '#687680', fontSize: 11 }} tickFormatter={(value) => value >= 1 ? `${value}억` : `${Math.round(value * 10000)}만`} /><YAxis yAxisId="volume" orientation="right" axisLine={false} tickLine={false} width={20} allowDecimals={false} tick={{ fill: '#87939b', fontSize: 10 }} /><Tooltip content={tooltip} cursor={false} /><Bar yAxisId="volume" dataKey="saleVolume" fill={SALE_COLOR} fillOpacity={0.2} barSize={7} radius={[3, 3, 0, 0]} /><Bar yAxisId="volume" dataKey="rentVolume" fill={RENT_COLOR} fillOpacity={0.18} barSize={7} radius={[3, 3, 0, 0]} /><Line yAxisId="price" type="linear" dataKey="salePrice" stroke={SALE_COLOR} strokeWidth={2.25} dot={{ r: 2.5, fill: SALE_COLOR, strokeWidth: 0 }} activeDot={{ r: 4.5, fill: SALE_COLOR, stroke: '#fff', strokeWidth: 2 }} connectNulls /><Line yAxisId="price" type="linear" dataKey="rentPrice" stroke={RENT_COLOR} strokeWidth={2.25} dot={{ r: 2.5, fill: RENT_COLOR, strokeWidth: 0 }} activeDot={{ r: 4.5, fill: RENT_COLOR, stroke: '#fff', strokeWidth: 2 }} connectNulls /></ComposedChart></ResponsiveContainer></div>
+      <div className={styles.chart} ref={chartRefCallback}><ResponsiveContainer width="100%" height="100%"><ComposedChart data={points} margin={{ top: 8, right: 2, left: -12, bottom: 0 }}><CartesianGrid stroke="#e9eef0" strokeDasharray="3 4" vertical={false} /><XAxis dataKey="id" axisLine={false} tickLine={false} interval={tickInterval} minTickGap={28} tick={{ fill: '#687680', fontSize: 11 }} tickFormatter={(id) => formatTrendDate(points[id]?.date || '')} /><YAxis yAxisId="price" axisLine={false} tickLine={false} width={44} domain={['auto', 'auto']} tick={{ fill: '#687680', fontSize: 11 }} tickFormatter={(value) => value >= 1 ? `${value}억` : `${Math.round(value * 10000)}만`} /><YAxis yAxisId="volume" orientation="right" axisLine={false} tickLine={false} width={20} allowDecimals={false} tick={{ fill: '#87939b', fontSize: 10 }} /><Tooltip content={tooltip} cursor={false} /><Bar yAxisId="volume" dataKey="saleVolume" fill={SALE_COLOR} fillOpacity={0.2} barSize={7} radius={[3, 3, 0, 0]} /><Bar yAxisId="volume" dataKey="rentVolume" fill={RENT_COLOR} fillOpacity={0.18} barSize={7} radius={[3, 3, 0, 0]} /><Line yAxisId="price" type="linear" dataKey="salePrice" stroke={SALE_COLOR} strokeWidth={2.25} dot={{ r: 2.5, fill: SALE_COLOR, strokeWidth: 0 }} activeDot={{ r: 4.5, fill: SALE_COLOR, stroke: '#fff', strokeWidth: 2 }} connectNulls /><Line yAxisId="price" type="linear" dataKey="rentPrice" stroke={RENT_COLOR} strokeWidth={2.25} dot={{ r: 2.5, fill: RENT_COLOR, strokeWidth: 0 }} activeDot={{ r: 4.5, fill: RENT_COLOR, stroke: '#fff', strokeWidth: 2 }} connectNulls /></ComposedChart></ResponsiveContainer></div>
       <div className={styles.summary}><div className={styles.summaryItem}><div className={styles.summaryLabel}>최근 매매</div><div className={styles.summaryValue} style={{ color: SALE_COLOR }}>{latestSale ? latestSale.priceStr : '데이터 부족'}</div>{latestSale && <div className={styles.summaryDate}>{latestSale.tradeDate.replace(/-/g, '.')} 신고</div>}</div><div className={styles.summaryItem}><div className={styles.summaryLabel}>최근 전세</div><div className={styles.summaryValue} style={{ color: RENT_COLOR }}>{latestRent ? latestRent.priceStr : '데이터 부족'}</div>{latestRent && <div className={styles.summaryDate}>{latestRent.tradeDate.replace(/-/g, '.')} 신고</div>}</div></div>
     </>}
   </section>;

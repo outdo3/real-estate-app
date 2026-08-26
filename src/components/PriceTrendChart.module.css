@@ -26,10 +26,16 @@
 .period[aria-pressed='true'] { background: #fff; color: #15211b; box-shadow: 0 1px 3px rgba(15, 23, 42, .14); }
 .notice { color: #697780; font-size: 0.84rem; line-height: 1.45; margin: 0 0 0.7rem; }
 .chart { height: 320px; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
-/* Recharts makes its SVG Surface tabbable for its accessibility layer. Pointer focus
-   must not retain the browser's rectangular outline; keyboard focus remains explicit. */
-.chart :global(.recharts-surface:focus:not(:focus-visible)) { outline: none; }
-.chart :global(.recharts-surface:focus-visible) { outline: 2px solid rgba(7, 134, 90, .7); outline-offset: 3px; border-radius: 4px; }
+.chart :global(.recharts-surface), .chart :global(.recharts-surface *) { -webkit-tap-highlight-color: transparent; }
+/* Recharts makes its SVG Surface tabbable for its accessibility layer, so any tap on
+   the plot (e.g. a volume bar) can move focus to the whole-card-sized <svg>. The
+   browser's own :focus-visible heuristic for a manually-tabindexed, non-native
+   element like this is not reliably "pointer = not visible" across mobile engines —
+   this alone still let a black focus rectangle through on real mobile. Track input
+   modality ourselves (see chartRef effect in PriceTrendChart.tsx) instead: only show
+   the ring when the surface was reached via Tab, never on pointerdown. */
+.chart :global(.recharts-surface) { outline: none; }
+.chart[data-input-modality='keyboard'] :global(.recharts-surface:focus) { outline: 2px solid rgba(7, 134, 90, .7); outline-offset: 3px; border-radius: 4px; }
 .legend { justify-content: center; flex-wrap: wrap; gap: 0.9rem; color: #4b5964; font-size: 0.82rem; margin-top: 0.15rem; }
 .legendItem, .volumeLegend { gap: 0.35rem; }
 .swatch { width: 9px; height: 9px; border-radius: 50%; }
@@ -49,7 +55,12 @@
 }
 
 @media (max-width: 420px) {
-  .card { border: 0; border-radius: 0; margin: 0; padding: 0.75rem; }
+  /* Full-bleed: this card's white background must reach the viewport edges, not
+     stop at the shared .container's 16px page gutter. calc(50% - 50vw) is
+     self-correcting for whatever the ancestor padding actually is (unlike a
+     hardcoded negative margin), because 50% here resolves against this card's
+     own containing block width, which already has that padding subtracted. */
+  .card { width: 100vw; margin-inline: calc(50% - 50vw); border: 0; border-radius: 0; padding: 0.75rem; }
   .header { align-items: flex-start; flex-direction: column; margin-bottom: 0.6rem; }
   .periods { width: 100%; }
   .period { flex: 1; min-height: 36px; padding-inline: 0.35rem; }
@@ -57,6 +68,7 @@
   .chart { height: 278px; }
   .empty { height: 88px; justify-content: flex-start; padding: .25rem 0; }
   .volumeLegend { justify-content: flex-start; gap: 0.5rem; white-space: nowrap; }
-  .legend { justify-content: flex-start; gap: 0.75rem; margin: 0.25rem 0 0.1rem; }
+  .legend { justify-content: flex-start; gap: 0.75rem; margin: 0.25rem 0 0.1rem; flex-wrap: nowrap; }
   .legendItem { white-space: nowrap; }
+  .summary { flex-wrap: nowrap; }
 }
