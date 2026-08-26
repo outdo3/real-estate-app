@@ -53,6 +53,13 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
   const latestSale = useMemo(() => latestTrade(saleTrades), [saleTrades]);
   const latestRent = useMemo(() => latestTrade(rentTrades), [rentTrades]);
   const errors = [saleRead?.error, rentRead?.error].filter((error): error is string => !!error);
+  // API trade.area is the runtime filter identity. Unit Master labels may carry a
+  // more precise canonical source value, so never use a rounded display label as
+  // the select value.
+  const selectableAreas = useMemo(() => Array.from(new Set([
+    ...(saleRead?.trades ?? []).map((trade) => trade.area),
+    ...(rentRead?.trades ?? []).map((trade) => trade.area),
+  ].filter(Boolean))).sort((a, b) => Number(a) - Number(b)), [saleRead, rentRead]);
   const hasData = points.length > 0;
   const saleThin = saleTrades.length > 0 && saleTrades.length < MIN_TREND_POINTS;
   const rentThin = rentTrades.length > 0 && rentTrades.length < MIN_TREND_POINTS;
@@ -70,9 +77,12 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
     </div>;
   };
 
-  const unitLabel = (unit: DisplayUnit) => `${unit.representativePyeong ? `${unit.representativePyeong}평 · ` : ''}전용 ${unit.displayExclusiveArea}㎡`;
+  const unitLabel = (area: string) => {
+    const unit = unitMaster?.find((item) => item.canonicalExclusiveArea === area);
+    return unit ? `${unit.representativePyeong ? `${unit.representativePyeong}평 · ` : ''}전용 ${unit.displayExclusiveArea}㎡` : `전용 ${area}㎡`;
+  };
   return <section className={styles.card} aria-label="매매 전세 시세 추이">
-    <div className={styles.header}><div><h3 className={styles.title}>매매·전세 시세 추이</h3>{onSelectArea && <select className={styles.unitSelector} aria-label="차트 평형 선택" value={selectedArea || '전체'} onChange={(event) => onSelectArea(event.target.value)}><option value="전체">평형 선택</option>{unitMaster?.map((unit) => <option key={unit.canonicalExclusiveArea} value={unit.canonicalExclusiveArea}>{unitLabel(unit)}</option>)}</select>}<p className={styles.area}>{selectedLabel} · 개별 실거래 기준</p></div><div className={styles.periods} aria-label="조회 기간">{(Object.keys(PERIODS) as Period[]).map((item) => <button key={item} type="button" className={styles.period} aria-pressed={period === item} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
+    <div className={styles.header}><div><h3 className={styles.title}>매매·전세 시세 추이</h3>{onSelectArea && <select className={styles.unitSelector} aria-label="차트 평형 선택" value={selectedArea || '전체'} onChange={(event) => onSelectArea(event.target.value)}><option value="전체">평형 선택</option>{selectableAreas.map((area) => <option key={area} value={area}>{unitLabel(area)}</option>)}</select>}<p className={styles.area}>{selectedLabel} · 개별 실거래 기준</p></div><div className={styles.periods} aria-label="조회 기간">{(Object.keys(PERIODS) as Period[]).map((item) => <button key={item} type="button" className={styles.period} aria-pressed={period === item} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
     {!loading && errors.length > 0 && <p className={styles.notice}>실거래가 데이터를 일부 불러오지 못했습니다. {errors[0]}</p>}
     {!loading && !errors.length && (saleThin || rentThin) && <p className={styles.notice}>{saleThin && rentThin ? '선택 평형은 매매·전세 거래가 모두 적어 추이를 읽기 어렵습니다.' : saleThin ? '선택 평형은 매매 거래가 적어 추이를 읽기 어렵습니다.' : '선택 평형은 전세 거래가 적어 추이를 읽기 어렵습니다.'}</p>}
     {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : needsAreaSelection ? <div className={styles.empty}>평형을 선택해 시세 추이를 확인하세요.</div> : !hasData && errors.length > 0 ? <div className={styles.empty}>실거래가 데이터를 불러오지 못했습니다.</div> : !hasData ? <div className={styles.empty}>선택한 평형의 최근 거래가 없습니다.</div> : <>
