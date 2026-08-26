@@ -44,8 +44,10 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
   }, [aptName, lawdCd, period, dong]);
 
   const loading = saleRead === null || rentRead === null;
-  const saleTrades = filterTradesForArea(saleRead?.trades ?? null, selectedArea) ?? [];
-  const rentTrades = filterTradesForArea(rentRead?.trades ?? null, selectedArea) ?? [];
+  const needsAreaSelection = !selectedArea || selectedArea === '전체';
+  // A chart line must never connect transactions from different canonical areas.
+  const saleTrades = needsAreaSelection ? [] : (filterTradesForArea(saleRead?.trades ?? null, selectedArea) ?? []);
+  const rentTrades = needsAreaSelection ? [] : (filterTradesForArea(rentRead?.trades ?? null, selectedArea) ?? []);
   const points = useMemo(() => buildPriceTrendPoints(saleTrades, rentTrades), [saleTrades, rentTrades]);
   const latestSale = useMemo(() => latestTrade(saleTrades), [saleTrades]);
   const latestRent = useMemo(() => latestTrade(rentTrades), [rentTrades]);
@@ -53,7 +55,7 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
   const hasData = points.length > 0;
   const saleThin = saleTrades.length > 0 && saleTrades.length < MIN_TREND_POINTS;
   const rentThin = rentTrades.length > 0 && rentTrades.length < MIN_TREND_POINTS;
-  const selectedLabel = selectedArea && selectedArea !== '전체' ? (selectedAreaLabel || `전용 ${selectedArea}㎡`) : '전체 평형';
+  const selectedLabel = selectedArea && selectedArea !== '전체' ? (selectedAreaLabel || `전용 ${selectedArea}㎡`) : '평형 선택 필요';
   const tickInterval = Math.max(0, Math.ceil(points.length / 5) - 1);
 
   const tooltip = ({ active, payload }: TooltipContentProps) => {
@@ -71,7 +73,7 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
     <div className={styles.header}><div><h3 className={styles.title}>매매·전세 시세 추이</h3><p className={styles.area}>{selectedLabel} · 개별 실거래 기준</p></div><div className={styles.periods} aria-label="조회 기간">{(Object.keys(PERIODS) as Period[]).map((item) => <button key={item} type="button" className={styles.period} aria-pressed={period === item} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
     {!loading && errors.length > 0 && <p className={styles.notice}>실거래가 데이터를 일부 불러오지 못했습니다. {errors[0]}</p>}
     {!loading && !errors.length && (saleThin || rentThin) && <p className={styles.notice}>{saleThin && rentThin ? '선택 평형은 매매·전세 거래가 모두 적어 추이를 읽기 어렵습니다.' : saleThin ? '선택 평형은 매매 거래가 적어 추이를 읽기 어렵습니다.' : '선택 평형은 전세 거래가 적어 추이를 읽기 어렵습니다.'}</p>}
-    {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : !hasData && errors.length > 0 ? <div className={styles.empty}>실거래가 데이터를 불러오지 못했습니다.</div> : !hasData ? <div className={styles.empty}>선택한 조건의 실거래가 없습니다.</div> : <>
+    {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : needsAreaSelection ? <div className={styles.empty}>평형을 선택하면 해당 전용면적의 시세 추이를 볼 수 있어요.</div> : !hasData && errors.length > 0 ? <div className={styles.empty}>실거래가 데이터를 불러오지 못했습니다.</div> : !hasData ? <div className={styles.empty}>선택한 평형의 최근 거래가 없습니다.</div> : <>
       <div className={styles.volumeLegend}><span>하단 막대: 같은 날짜의 실제 거래 수</span><span className={styles.volumeLegend}><i className={styles.volumeBar} style={{ background: SALE_COLOR }} />매매</span><span className={styles.volumeLegend}><i className={styles.volumeBar} style={{ background: RENT_COLOR }} />전세</span></div>
       <div className={styles.legend}><span className={styles.legendItem}><i className={styles.swatch} style={{ background: SALE_COLOR }} />매매</span><span className={styles.legendItem}><i className={styles.swatch} style={{ background: RENT_COLOR }} />전세</span></div>
       <div className={styles.chart}><ResponsiveContainer width="100%" height="100%"><ComposedChart data={points} margin={{ top: 8, right: 2, left: -12, bottom: 0 }}><CartesianGrid stroke="#e9eef0" strokeDasharray="3 4" vertical={false} /><XAxis dataKey="id" axisLine={false} tickLine={false} interval={tickInterval} minTickGap={28} tick={{ fill: '#687680', fontSize: 11 }} tickFormatter={(id) => formatTrendDate(points[id]?.date || '')} /><YAxis yAxisId="price" axisLine={false} tickLine={false} width={44} domain={['auto', 'auto']} tick={{ fill: '#687680', fontSize: 11 }} tickFormatter={(value) => value >= 1 ? `${value}억` : `${Math.round(value * 10000)}만`} /><YAxis yAxisId="volume" orientation="right" axisLine={false} tickLine={false} width={20} allowDecimals={false} tick={{ fill: '#87939b', fontSize: 10 }} /><Tooltip content={tooltip} cursor={false} /><Bar yAxisId="volume" dataKey="saleVolume" fill={SALE_COLOR} fillOpacity={0.2} barSize={7} radius={[3, 3, 0, 0]} /><Bar yAxisId="volume" dataKey="rentVolume" fill={RENT_COLOR} fillOpacity={0.18} barSize={7} radius={[3, 3, 0, 0]} /><Line yAxisId="price" type="linear" dataKey="salePrice" stroke={SALE_COLOR} strokeWidth={2.25} dot={{ r: 2.5, fill: SALE_COLOR, strokeWidth: 0 }} activeDot={{ r: 4.5, fill: SALE_COLOR, stroke: '#fff', strokeWidth: 2 }} connectNulls /><Line yAxisId="price" type="linear" dataKey="rentPrice" stroke={RENT_COLOR} strokeWidth={2.25} dot={{ r: 2.5, fill: RENT_COLOR, strokeWidth: 0 }} activeDot={{ r: 4.5, fill: RENT_COLOR, stroke: '#fff', strokeWidth: 2 }} connectNulls /></ComposedChart></ResponsiveContainer></div>
