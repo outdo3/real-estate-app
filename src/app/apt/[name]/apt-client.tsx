@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -95,6 +95,7 @@ export default function ApartmentDetail() {
   const [displayName, setDisplayName] = useState<string>('');
 
   const [selectedArea, setSelectedArea] = useState<string>('전체');
+  const hasAutoSelectedArea = useRef(false);
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
   const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
   const [saleFilter, setSaleFilter] = useState<'all' | 'sale' | 'rent'>('all');
@@ -228,6 +229,26 @@ export default function ApartmentDetail() {
           const tradeState = resolveTradeReadState<Trade>(true, data);
           const fetchedTrades = tradeState.trades;
           setTrades(fetchedTrades);
+          // Initial selection is presentation only: retain each raw trade-area key,
+          // prioritize an 84㎡-range exact type, then its most recent transaction.
+          if (!hasAutoSelectedArea.current && fetchedTrades.length > 0) {
+            const latestByArea = new Map<string, Trade>();
+            fetchedTrades.forEach((trade) => {
+              const previous = latestByArea.get(trade.area);
+              if (!previous || trade.tradeDate > previous.tradeDate) latestByArea.set(trade.area, trade);
+            });
+            const candidates = Array.from(latestByArea.values());
+            const standard = candidates.filter((trade) => {
+              const area = parseFloat(trade.area);
+              return area >= 84 && area < 85;
+            });
+            const choice = [...(standard.length > 0 ? standard : candidates)]
+              .sort((a, b) => b.tradeDate.localeCompare(a.tradeDate))[0];
+            if (choice) {
+              hasAutoSelectedArea.current = true;
+              setSelectedArea(choice.area);
+            }
+          }
           setApiError(tradeState.apiError);
           if (data.lawdCd) resolvedLawdCd = data.lawdCd;
           // URL에 dong이 없었다면(위 dongQuery가 비어 실제로는 구 전체를 뒤진 응답이다) API가

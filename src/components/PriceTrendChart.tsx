@@ -59,7 +59,7 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
   const selectableAreas = useMemo(() => Array.from(new Set([
     ...(saleRead?.trades ?? []).map((trade) => trade.area),
     ...(rentRead?.trades ?? []).map((trade) => trade.area),
-  ].filter(Boolean))).sort((a, b) => Number(a) - Number(b)), [saleRead, rentRead]);
+  ].filter(Boolean))).sort((a, b) => parseFloat(a) - parseFloat(b)), [saleRead, rentRead]);
   const hasData = points.length > 0;
   const saleThin = saleTrades.length > 0 && saleTrades.length < MIN_TREND_POINTS;
   const rentThin = rentTrades.length > 0 && rentTrades.length < MIN_TREND_POINTS;
@@ -79,7 +79,7 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
 
   const unitLabel = (area: string) => {
     const unit = unitMaster?.find((item) => item.canonicalExclusiveArea === area);
-    return unit ? `${unit.representativePyeong ? `${unit.representativePyeong}평 · ` : ''}전용 ${unit.displayExclusiveArea}㎡` : `전용 ${area}㎡`;
+    return unit ? `${unit.representativePyeong ? `${unit.representativePyeong}평 · ` : ''}전용 ${unit.displayExclusiveArea}㎡` : `전용 ${parseFloat(area).toFixed(2).replace(/\.00$/, '')}㎡`;
   };
   return <section className={styles.card} aria-label="매매 전세 시세 추이">
     <div className={styles.header}><div><h3 className={styles.title}>매매·전세 시세 추이</h3>{onSelectArea && <select className={styles.unitSelector} aria-label="차트 평형 선택" value={selectedArea || '전체'} onChange={(event) => onSelectArea(event.target.value)}><option value="전체">평형 선택</option>{selectableAreas.map((area) => <option key={area} value={area}>{unitLabel(area)}</option>)}</select>}<p className={styles.area}>{selectedLabel} · 개별 실거래 기준</p></div><div className={styles.periods} aria-label="조회 기간">{(Object.keys(PERIODS) as Period[]).map((item) => <button key={item} type="button" className={styles.period} aria-pressed={period === item} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
