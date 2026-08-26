@@ -3,11 +3,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from 'recharts';
 import { buildPriceTrendPoints, filterTradesForArea, formatTrendDate, latestTrade, type PriceTrendTrade } from '@/lib/price-trend-data';
+import { buildTransactionAreaOptions } from '@/lib/trade-area-selection';
 import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
 import styles from './PriceTrendChart.module.css';
 import type { DisplayUnit } from '@/lib/area-utils';
 
-interface PriceTrendChartProps { aptName: string; lawdCd: string; dong?: string; selectedArea?: string; selectedAreaLabel?: string; unitMaster?: DisplayUnit[] | null; onSelectArea?: (area: string) => void; }
+// DETAIL TRADE AREA STATE SPLIT V1 — selectedTradeArea/onSelectArea always carry
+// raw trade.area values (never Unit Master canonicalExclusiveArea). unitMaster is
+// used only for display enrichment (unitLabel) when a raw area happens to exact-match
+// a canonical value; it never becomes the filter/select identity itself.
+interface PriceTrendChartProps { aptName: string; lawdCd: string; dong?: string; selectedTradeArea?: string; selectedTradeAreaLabel?: string; unitMaster?: DisplayUnit[] | null; onSelectArea?: (area: string) => void; }
 type Period = '1년' | '3년' | '5년';
 type TradeRead = { trades: PriceTrendTrade[]; error: string | null };
 
@@ -16,7 +21,7 @@ const SALE_COLOR = '#07865a';
 const RENT_COLOR = '#3152d6';
 const MIN_TREND_POINTS = 2;
 
-export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, selectedAreaLabel, unitMaster, onSelectArea }: PriceTrendChartProps) {
+export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeArea, selectedTradeAreaLabel, unitMaster, onSelectArea }: PriceTrendChartProps) {
   const [saleRead, setSaleRead] = useState<TradeRead | null>(null);
   const [rentRead, setRentRead] = useState<TradeRead | null>(null);
   const [period, setPeriod] = useState<Period>('3년');
@@ -45,25 +50,25 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
   }, [aptName, lawdCd, period, dong]);
 
   const loading = saleRead === null || rentRead === null;
-  const needsAreaSelection = !selectedArea || selectedArea === '전체';
-  // A chart line must never connect transactions from different canonical areas.
-  const saleTrades = needsAreaSelection ? [] : (filterTradesForArea(saleRead?.trades ?? null, selectedArea) ?? []);
-  const rentTrades = needsAreaSelection ? [] : (filterTradesForArea(rentRead?.trades ?? null, selectedArea) ?? []);
+  const needsAreaSelection = !selectedTradeArea || selectedTradeArea === '전체';
+  // A chart line must never connect transactions from different raw trade areas.
+  const saleTrades = needsAreaSelection ? [] : (filterTradesForArea(saleRead?.trades ?? null, selectedTradeArea) ?? []);
+  const rentTrades = needsAreaSelection ? [] : (filterTradesForArea(rentRead?.trades ?? null, selectedTradeArea) ?? []);
   const points = useMemo(() => buildPriceTrendPoints(saleTrades, rentTrades), [saleTrades, rentTrades]);
   const latestSale = useMemo(() => latestTrade(saleTrades), [saleTrades]);
   const latestRent = useMemo(() => latestTrade(rentTrades), [rentTrades]);
   const errors = [saleRead?.error, rentRead?.error].filter((error): error is string => !!error);
-  // API trade.area is the runtime filter identity. Unit Master labels may carry a
-  // more precise canonical source value, so never use a rounded display label as
-  // the select value.
-  const selectableAreas = useMemo(() => Array.from(new Set([
-    ...(saleRead?.trades ?? []).map((trade) => trade.area),
-    ...(rentRead?.trades ?? []).map((trade) => trade.area),
-  ].filter(Boolean))).sort((a, b) => parseFloat(a) - parseFloat(b)), [saleRead, rentRead]);
+  // Transaction selector source: raw sale + pure-jeonse trade.area union only —
+  // never Unit Master canonicalExclusiveArea (see buildTransactionAreaOptions doc).
+  // rentRead.trades is already pure-jeonse-only (monthlyRent === 0, filtered above).
+  const selectableAreas = useMemo(
+    () => buildTransactionAreaOptions(saleRead?.trades ?? [], rentRead?.trades ?? []),
+    [saleRead, rentRead]
+  );
   const hasData = points.length > 0;
   const saleThin = saleTrades.length > 0 && saleTrades.length < MIN_TREND_POINTS;
   const rentThin = rentTrades.length > 0 && rentTrades.length < MIN_TREND_POINTS;
-  const selectedLabel = selectedArea && selectedArea !== '전체' ? (selectedAreaLabel || `전용 ${selectedArea}㎡`) : '평형 선택 필요';
+  const selectedLabel = selectedTradeArea && selectedTradeArea !== '전체' ? (selectedTradeAreaLabel || `전용 ${selectedTradeArea}㎡`) : '평형 선택 필요';
   const tickInterval = Math.max(0, Math.ceil(points.length / 5) - 1);
 
   const tooltip = ({ active, payload }: TooltipContentProps) => {
@@ -82,7 +87,7 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedArea, s
     return unit ? `${unit.representativePyeong ? `${unit.representativePyeong}평 · ` : ''}전용 ${unit.displayExclusiveArea}㎡` : `전용 ${parseFloat(area).toFixed(2).replace(/\.00$/, '')}㎡`;
   };
   return <section className={styles.card} aria-label="매매 전세 시세 추이">
-    <div className={styles.header}><div><h3 className={styles.title}>매매·전세 시세 추이</h3>{onSelectArea && <select className={styles.unitSelector} aria-label="차트 평형 선택" value={selectedArea || '전체'} onChange={(event) => onSelectArea(event.target.value)}><option value="전체">평형 선택</option>{selectableAreas.map((area) => <option key={area} value={area}>{unitLabel(area)}</option>)}</select>}<p className={styles.area}>{selectedLabel} · 개별 실거래 기준</p></div><div className={styles.periods} aria-label="조회 기간">{(Object.keys(PERIODS) as Period[]).map((item) => <button key={item} type="button" className={styles.period} aria-pressed={period === item} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
+    <div className={styles.header}><div><h3 className={styles.title}>매매·전세 시세 추이</h3>{onSelectArea && <select className={styles.unitSelector} aria-label="차트 평형 선택" value={selectedTradeArea || '전체'} onChange={(event) => onSelectArea(event.target.value)}><option value="전체">평형 선택</option>{selectableAreas.map((area) => <option key={area} value={area}>{unitLabel(area)}</option>)}</select>}<p className={styles.area}>{selectedLabel} · 개별 실거래 기준</p></div><div className={styles.periods} aria-label="조회 기간">{(Object.keys(PERIODS) as Period[]).map((item) => <button key={item} type="button" className={styles.period} aria-pressed={period === item} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
     {!loading && errors.length > 0 && <p className={styles.notice}>실거래가 데이터를 일부 불러오지 못했습니다. {errors[0]}</p>}
     {!loading && !errors.length && (saleThin || rentThin) && <p className={styles.notice}>{saleThin && rentThin ? '선택 평형은 매매·전세 거래가 모두 적어 추이를 읽기 어렵습니다.' : saleThin ? '선택 평형은 매매 거래가 적어 추이를 읽기 어렵습니다.' : '선택 평형은 전세 거래가 적어 추이를 읽기 어렵습니다.'}</p>}
     {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : needsAreaSelection ? <div className={styles.empty}>평형을 선택해 시세 추이를 확인하세요.</div> : !hasData && errors.length > 0 ? <div className={styles.empty}>실거래가 데이터를 불러오지 못했습니다.</div> : !hasData ? <div className={styles.empty}>선택한 평형의 최근 거래가 없습니다.</div> : <>

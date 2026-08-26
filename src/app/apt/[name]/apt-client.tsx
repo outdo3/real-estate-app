@@ -25,6 +25,7 @@ import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
 import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
+import { pickDefaultTradeArea } from '@/lib/trade-area-selection';
 import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
 import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
@@ -94,7 +95,22 @@ export default function ApartmentDetail() {
   // 통일한다. aptName은 API 호출 키로 계속 쓰이므로 별도 상태로 분리한다.
   const [displayName, setDisplayName] = useState<string>('');
 
-  const [selectedArea, setSelectedArea] = useState<string>('전체');
+  // DETAIL TRADE AREA STATE SPLIT V1 — these two are deliberately independent
+  // and must never be synchronized by an unverified mapping (see
+  // docs/development/DETAIL_TRADE_AREA_STATE_SPLIT_V1.md).
+  //
+  // selectedUnitMasterArea: Unit Master canonicalExclusiveArea identity only —
+  // written by AreaSelector when Unit Master data exists for this complex.
+  // Currently used only to highlight the active Unit Master chip; there is no
+  // verified link from a Unit Master type to specific raw transactions yet.
+  //
+  // selectedTradeArea: raw transaction API trade.area identity — drives every
+  // transaction-derived UI (Hero price, PriceTrendChart, recent sale/rent,
+  // jeonse ratio, gap, TradeTimeline). Written by AreaSelector only in its
+  // no-Unit-Master fallback mode (where its chip values already ARE raw trade
+  // areas), by PriceTrendChart's own selector, and by the 84㎡ default below.
+  const [selectedUnitMasterArea, setSelectedUnitMasterArea] = useState<string>('전체');
+  const [selectedTradeArea, setSelectedTradeArea] = useState<string>('전체');
   const hasAutoSelectedArea = useRef(false);
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
   const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
@@ -157,7 +173,7 @@ export default function ApartmentDetail() {
 
   useEffect(() => {
     setVisibleCount(15);
-  }, [selectedArea, tradeTypeFilter, periodFilter, saleFilter]);
+  }, [selectedTradeArea, tradeTypeFilter, periodFilter, saleFilter]);
 
   // 이전에 이 페이지에서 선택했던 면적 단위를 기억만 한다(§10) — 서버 저장/세션 없음.
   useEffect(() => {
@@ -229,24 +245,14 @@ export default function ApartmentDetail() {
           const tradeState = resolveTradeReadState<Trade>(true, data);
           const fetchedTrades = tradeState.trades;
           setTrades(fetchedTrades);
-          // Initial selection is presentation only: retain each raw trade-area key,
-          // prioritize an 84㎡-range exact type, then its most recent transaction.
+          // Default selectedTradeArea: raw trade-area identity only, never a Unit
+          // Master canonicalExclusiveArea. Prioritizes an 84㎡-range exact raw area,
+          // then its most recent transaction (see pickDefaultTradeArea contract).
           if (!hasAutoSelectedArea.current && fetchedTrades.length > 0) {
-            const latestByArea = new Map<string, Trade>();
-            fetchedTrades.forEach((trade) => {
-              const previous = latestByArea.get(trade.area);
-              if (!previous || trade.tradeDate > previous.tradeDate) latestByArea.set(trade.area, trade);
-            });
-            const candidates = Array.from(latestByArea.values());
-            const standard = candidates.filter((trade) => {
-              const area = parseFloat(trade.area);
-              return area >= 84 && area < 85;
-            });
-            const choice = [...(standard.length > 0 ? standard : candidates)]
-              .sort((a, b) => b.tradeDate.localeCompare(a.tradeDate))[0];
-            if (choice) {
+            const defaultArea = pickDefaultTradeArea(fetchedTrades);
+            if (defaultArea !== '전체') {
               hasAutoSelectedArea.current = true;
-              setSelectedArea(choice.area);
+              setSelectedTradeArea(defaultArea);
             }
           }
           setApiError(tradeState.apiError);
@@ -347,7 +353,7 @@ export default function ApartmentDetail() {
   const now = new Date();
   const filteredTrades = trades.filter(trade => {
     // 1. 평형 필터
-    if (selectedArea !== '전체' && trade.area !== selectedArea) return false;
+    if (selectedTradeArea !== '전체' && trade.area !== selectedTradeArea) return false;
 
     // 2. 거래 유형 필터
     if (tradeTypeFilter === '매매' && trade.tradeType !== '아파트 매매' && trade.tradeType !== '실거래') return false;
@@ -371,7 +377,7 @@ export default function ApartmentDetail() {
   });
 
   // B1-FIX3 — 선택 평형(+현재 매매/전월세)에 거래가 없을 때 다른 평형의 거래로
-  // 넘어가지 않는다. selectedArea === '전체'일 때는 필터 자체가 area를 걸지 않으므로
+  // 넘어가지 않는다. selectedTradeArea === '전체'일 때는 필터 자체가 area를 걸지 않으므로
   // filteredTrades[0]가 원래도 "현재 거래유형 전체 최신 거래"와 같다 — 별도 분기 없이
   // 이 한 줄로 두 정책(전체=전체 최신, 특정 평형=그 평형만)이 그대로 성립한다.
   // filteredTrades가 비면 예전처럼 trades[0](다른 평형일 수 있는 전체 최신)으로
@@ -406,6 +412,21 @@ export default function ApartmentDetail() {
   // ㎡라 Hero/헤더의 "전용 X㎡ · 약 Y평" 이중표기는 그대로 둔다 — chipAreaLabels를 거기
   // 넣으면 "전용 25.4평 · 약 25.4평"처럼 평이 중복 표기되는 문제가 생긴다).
   // chipAreaLabels and the AreaUnit toggle have been removed.
+
+  // DETAIL TRADE AREA STATE SPLIT V1 — AreaSelector sources its chips from Unit
+  // Master canonicalExclusiveArea when Unit Master data exists for this complex,
+  // and from raw trade.area otherwise (see AreaSelector.tsx's own hasUnitMaster
+  // branch). This dispatcher must mirror that exact same condition so a chip
+  // click always writes into the state whose identity domain matches the value
+  // AreaSelector actually produced — never a cross-domain (unverified) write.
+  const hasUnitMaster = Array.isArray(unitMaster) && unitMaster.length > 0;
+  const handleAreaSelectorChange = (area: string) => {
+    if (hasUnitMaster) {
+      setSelectedUnitMasterArea(area);
+    } else {
+      setSelectedTradeArea(area);
+    }
+  };
 
   const firstTrade = trades.length > 0 ? trades[0] : null;
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
@@ -852,7 +873,7 @@ export default function ApartmentDetail() {
               <div className={styles.priceBlock} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <AreaSelector trades={trades} selectedArea={selectedArea} onSelect={setSelectedArea} areaLabels={areaLabels} unitMaster={unitMaster} areaUnit={areaUnit} />
+                    <AreaSelector trades={trades} selectedArea={hasUnitMaster ? selectedUnitMasterArea : selectedTradeArea} onSelect={handleAreaSelectorChange} areaLabels={areaLabels} unitMaster={unitMaster} areaUnit={areaUnit} />
                   </div>
                   {Array.isArray(unitMaster) && unitMaster.some(u => u.representativePyeong != null) && (
                     <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '8px', padding: '2px', background: 'var(--bg-color)' }}>
@@ -939,7 +960,7 @@ export default function ApartmentDetail() {
                         </div>
                       </>
                     );
-                  })() : selectedArea !== '전체' ? (
+                  })() : selectedTradeArea !== '전체' ? (
                     <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-muted)', padding: '1rem 0' }}>
                       선택한 조건의 최근 거래가 없습니다.
                     </div>
@@ -974,10 +995,10 @@ export default function ApartmentDetail() {
       <div className={`container ${styles.sectionBlock}`}>
         <div className={`${styles.panel} ${styles.chartPanel}`}>
           <div style={{ marginBottom: '1.25rem' }}>
-            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} selectedAreaLabel={selectedArea === '전체' ? undefined : renderHeroAreaLabel(selectedArea, areaLabels)} unitMaster={unitMaster} onSelectArea={setSelectedArea} />
+            <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedTradeArea={selectedTradeArea} selectedTradeAreaLabel={selectedTradeArea === '전체' ? undefined : renderHeroAreaLabel(selectedTradeArea, areaLabels)} unitMaster={unitMaster} onSelectArea={setSelectedTradeArea} />
           </div>
 
-          <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} />
+          <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedTradeArea={selectedTradeArea} />
           
           <div className={styles.quickButtons} style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
             <Button variant="secondary" size="sm" onClick={() => openModal('대출한도')} style={{ padding: '0.6rem', width: '100%', fontSize: '0.95rem' }}>이 집 사려면 얼마 필요할까?</Button>
@@ -995,7 +1016,7 @@ export default function ApartmentDetail() {
         <div className={styles.panel}>
           <div>
             <div className={styles.timelineFilters}>
-              <span className={styles.timelineSummary}>{selectedArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedArea, areaLabels)} · 총 {filteredTrades.length}건</span>
+              <span className={styles.timelineSummary}>{selectedTradeArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedTradeArea, areaLabels)} · 총 {filteredTrades.length}건</span>
               <div className={styles.timelineControls}>
                 <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
                   {['1년', '3년', '5년', '전체'].map(p => (

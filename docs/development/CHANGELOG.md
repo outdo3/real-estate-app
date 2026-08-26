@@ -8618,3 +8618,50 @@ Expert Credibility Gate 8개 중 7개 PASS 유지(일부 근거 강화), Gate 7�
 `docs/development/EJIP_SCORE_V2_STEP35_EXPERT_REVIEW_PREP.md` 신규.
 
 **SCORE_V2_STEP35_CLOSE = YES.** `HUMAN_EXPERT_REVIEW_READY = YES`.
+
+## 2026-08-26
+
+### DETAIL TRADE AREA STATE SPLIT V1 — Unit Master ↔ Transaction area 식별자 분리
+
+상세페이지의 단일 `selectedArea` state가 Unit Master `canonicalExclusiveArea`
+identity와 transaction API의 raw `trade.area` identity를 동시에 표현하던
+문제를 발견하고 분리했다. 실제 production 데이터로 재현: `canonicalExclusiveArea`는
+단위 없는 숫자 문자열(`"84.7855"`)인 반면 raw `trade.area`는 단위가 붙는다
+(`"84.7855m²"`) — 대신롯데캐슬(Unit Master 8종, 매매 108건)에서 Unit Master
+칩을 클릭하면 문자열이 절대 일치하지 않아 Hero/차트/타임라인/투자지표가
+전부 "선택한 조건의 최근 거래가 없습니다"로 조용히 빠지는 P0 버그를
+브라우저로 직접 재현했다.
+
+`selectedUnitMasterArea`(Unit Master identity 전용, AreaSelector 칩
+active 표시에만 사용)와 `selectedTradeArea`(raw trade.area 전용, Hero/
+PriceTrendChart/InvestmentMetrics/TradeTimelineList가 전부 이걸로
+필터링)로 분리했다. `AreaSelector`의 `onSelect`는 자신의 기존
+`hasUnitMaster` 분기와 동일한 조건으로 두 state 중 하나에만 쓰도록
+dispatch해, 검증되지 않은 매핑으로 두 identity를 강제 연결하지 않는다.
+84㎡ 기본 선택 로직과 `PriceTrendChart`의 raw sale+순수전세 union
+selector 로직을 `src/lib/trade-area-selection.ts`로, `InvestmentMetrics`의
+갭/전세가율 계산을 `src/lib/investment-metrics.ts`로 순수 함수 추출해
+회귀 테스트 12개 추가(기존 3개+4개 포함 총 19/19 PASS).
+
+실거래 3개 단지(대신롯데캐슬/연산동일동미라주더스타/대신해모로센트럴아파트)로
+로컬 dev server + 실제 DB에서 직접 검증: Unit Master 칩을 눌러도 Hero
+가격이 바뀌지 않음(무강제매핑 확인), 차트 자체 selector를 바꾸면
+Hero/차트/타임라인이 함께 갱신됨(공유 state 확인), 대신해모로센트럴아파트의
+실제 매매전용(`83.8957m²`)/전세전용(`49.839m²`) 케이스에서 교차 평형
+fallback 없이 정직하게 "데이터 부족"을 표시함을 확인. 84.7855/84.995,
+59.8826/59.8839 collision은 모두 유지(병합 없음).
+
+`npx tsc --noEmit`: `src/` 에러 0(기존 `scripts/` 에러만 잔존). `npm run
+build`: PASS. `npm run lint`(전체): 신규/수정 5개 파일 모두 0건, 기존
+레포 전역 lint 부채(1640 errors/63821 warnings)와 무관.
+`docs/development/DETAIL_TRADE_AREA_STATE_SPLIT_V1.md` 신규.
+
+DB/schema 변경 없음, migration 없음.
+
+상태: 완료. 차트 UI(거래량 막대 터치 시 검은 사각형/모바일 좌우
+gutter/plot width)는 이번 STEP 범위 밖으로 다음 STEP(`DETAIL_PRICE_
+CHART_UI_FINAL`)에 이월. Unit Master 소유 단지의 상단 칩이 더 이상
+Hero를 직접 구동하지 않는 것은 §13에 문서화된 의도된 결과 — 검증된
+canonical mapping이 생기기 전까지는 편의보다 정확성을 우선했다.
+
+**DETAIL_TRADE_AREA_STATE_SPLIT_V1_CLOSE = YES.**

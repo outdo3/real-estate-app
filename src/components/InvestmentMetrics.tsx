@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { computeInvestmentMetrics } from '@/lib/investment-metrics';
 
 interface InvestmentMetricsProps {
   aptName: string;
@@ -8,10 +9,11 @@ interface InvestmentMetricsProps {
   // 같은 구/군 안에 다른 동의 동일 브랜드 단지(예: "롯데캐슬", "푸르지오")가 있으면
   // 이름만으로는 섞여 조회될 수 있어, 알고 있으면 반드시 넘겨서 정확히 그 동으로 좁힌다.
   dong?: string;
-  // 부모(apt-client.tsx)의 AreaSelector 선택값(원본 area 문자열, 기본 '전체'). PriceTrendChart와
-  // 같은 내부 key를 그대로 받아 이 지표도 같은 평형 기준으로 계산한다(B2-3). '전체'거나
-  // 넘기지 않으면 기존(B2-2 이전과 동일) 전체 평형 동작을 그대로 유지.
-  selectedArea?: string;
+  // 부모(apt-client.tsx)의 transaction 평형 선택값(원본 trade.area 문자열, 기본 '전체').
+  // DETAIL TRADE AREA STATE SPLIT V1 — Unit Master canonicalExclusiveArea가 아니라 항상
+  // raw trade.area만 받는다(PriceTrendChart와 동일한 identity). '전체'거나 넘기지 않으면
+  // 전체 평형 동작(평형 선택 필요 표시)을 유지한다.
+  selectedTradeArea?: string;
 }
 
 interface SimpleTrade {
@@ -25,7 +27,7 @@ interface SimpleTrade {
 
 // 기존 필터 토글(매매/전월세, 기간)과 무관하게 최근 6개월 매매+전월세를 병렬로 고정
 // 조회해서 갭 금액/전세가율을 계산한다. KakaoPlaces와 같은 패턴으로 자기완결형이다.
-export default function InvestmentMetrics({ aptName, lawdCd, dong, selectedArea }: InvestmentMetricsProps) {
+export default function InvestmentMetrics({ aptName, lawdCd, dong, selectedTradeArea }: InvestmentMetricsProps) {
   const [saleTrades, setSaleTrades] = useState<SimpleTrade[] | null>(null);
   const [rentTrades, setRentTrades] = useState<SimpleTrade[] | null>(null);
 
@@ -60,24 +62,14 @@ export default function InvestmentMetrics({ aptName, lawdCd, dong, selectedArea 
 
   const loading = saleTrades === null || rentTrades === null;
 
-  const isAreaFiltered = !!selectedArea && selectedArea !== '전체';
-  // Comparison metrics are meaningful only for one exact canonical area.
-  const areaSaleTrades = isAreaFiltered ? (saleTrades?.filter((t) => t.area === selectedArea) ?? null) : [];
-  const areaRentTrades = isAreaFiltered ? (rentTrades?.filter((t) => t.area === selectedArea) ?? null) : [];
-
-  const latestSale = areaSaleTrades && areaSaleTrades.length > 0
-    ? [...areaSaleTrades].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime())[0]
-    : null;
-
-  // 순수 전세(월세 없음)만 필터링 — 월세가 섞이면 보증금이 전세 보증금과 비교 불가능한 규모라
-  // 갭/전세가율 계산이 완전히 틀어진다.
-  const jeonseOnlyRent = areaRentTrades ? areaRentTrades.filter((r) => (r.monthlyRent ?? 0) === 0) : [];
-  const sortedRent = [...jeonseOnlyRent].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
-  const matchedRent = latestSale ? sortedRent.find((r) => r.area === latestSale.area) ?? null : null;
-
-  const isSameArea = !!(latestSale && matchedRent && matchedRent.area === latestSale.area);
-  const gap = isSameArea && latestSale && matchedRent ? latestSale.price - matchedRent.price : null;
-  const jeonseRate = isSameArea && latestSale && matchedRent && latestSale.price > 0 ? (matchedRent.price / latestSale.price) * 100 : null;
+  const isAreaFiltered = !!selectedTradeArea && selectedTradeArea !== '전체';
+  // Comparison metrics are meaningful only for one exact raw trade.area — never
+  // a Unit Master canonicalExclusiveArea, and never a cross-area fallback.
+  const { latestSale, matchedRent, jeonseRate, gap } = computeInvestmentMetrics(
+    saleTrades ?? [],
+    rentTrades ?? [],
+    selectedTradeArea
+  );
 
   const cardStyle: React.CSSProperties = {
     padding: '0.55rem 0.75rem',
