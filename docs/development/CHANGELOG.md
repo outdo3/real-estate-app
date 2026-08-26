@@ -8785,3 +8785,58 @@ DB/schema 변경 없음.
 전혀 이동하지 않음은 직접 확인했다.
 
 **DETAIL_PRICE_CHART_PRODUCTION_QA_P0_CLOSE = YES.**
+
+## 2026-08-26 (4)
+
+### DETAIL PRICE CHART INTERACTION P1 — tap-to-select/crosshair UX
+
+모바일에서 차트를 탭해도 즉시 반응하지 않고 좌우로 끌어야만 tooltip이
+바뀌는 문제(P1-A), 현재 보고 있는 지점을 알려주는 가이드라인 부재(P1-B)를
+해결했다. 원인은 Recharts 소스(`RechartsWrapper.js`) 직접 확인 결과
+`touchstart`는 외부 핸들러로만 전달되고, 실제 활성 지점 재계산은
+`touchmove`에서만 일어나는 구조였다 — 마우스는 연속적인 `mousemove`로
+이미 정상 동작해서 이 문제가 터치에서만 나타났다.
+
+Recharts 내부 hover/touch state에 의존하지 않고 `activeIndex`를 컴포넌트
+자체 state로 완전히 직접 관리하도록 전환했다. 각 데이터 포인트의 실제
+렌더링된 dot 좌표(cx)를 custom dot render-prop으로 캡처해(마진/축
+너비를 재계산하는 방식이 아니라 실제 렌더 결과를 그대로 사용 — 레이아웃이
+바뀌어도 어긋나지 않음) `pointerdown`/`pointermove`에서 가장 가까운
+포인트를 즉시 찾는다(`src/lib/chart-crosshair.ts`, 순수 함수로 분리해
+6개 테스트 작성). 세로 크로스헤어는 Recharts 공식 `ReferenceLine`
+컴포넌트를 그대로 사용했고(직접 좌표 계산 불필요, 항상 정확히 정렬됨),
+전세/매매 중 활성 포인트에 값이 있는 계열에 한해 얇은 가로 가이드라인도
+추가했다. Tooltip은 v3의 공식 `active`/`defaultIndex` controlled prop으로
+전환해 우리가 계산한 activeIndex를 그대로 반영한다.
+
+구현 중 실제 버그를 발견해 수정했다 — 처음에는 `activeIndex`를
+`useEffect(() => setActiveIndex(null), [points])`로 초기화했는데,
+`points`가 의존하는 `saleTrades`/`rentTrades`가 매 렌더마다 새 배열
+참조로 재계산돼(원래부터 memo 안 됨) 이 effect가 사실상 매 렌더마다
+실행되어 tap으로 설정한 activeIndex를 즉시 다시 null로 되돌리고
+있었다 — 실제 DOM 상태(정확한 dot 좌표에 synthetic pointerdown을 쏘고
+activeIndex 효과가 사라지는 것을 직접 관찰)로 원인을 특정한 뒤,
+`[selectedTradeArea, period]`(실제로 데이터가 바뀌는 시점의 원시값)로
+의존성을 바꿔 해결했다. 또한 ref를 렌더 중에 직접 mutate하던 최초
+구현이 `react-hooks/refs` lint 에러로 걸려, dot 좌표 캡처를 렌더 중에는
+일반 로컬 배열에만 쓰고 `useLayoutEffect`로 커밋 이후 ref에 반영하도록
+수정했다(React 공식 권장 패턴).
+
+P0에서 고친 검은 사각형(포인터 인터랙션 시 SVG가 포커스를 받지 않도록
+하는 preventDefault 로직)은 건드리지 않았고, 이번 STEP의 모든 실제
+클릭/드래그 테스트(데스크톱 실제 클릭, 360/375/390 모바일 iframe에서
+touch pointerType 디스패치) 후에도 `document.activeElement`가 계속
+BODY로 유지됨을 매번 재확인했다. selectedTradeArea/cross-unit fallback
+금지/매매·전세·전세가율·갭 계산 로직도 전혀 건드리지 않았고, 인터랙션
+테스트 내내 전세가율 59.7%/갭 1.6억 값이 그대로 유지됨을 확인했다.
+
+신규 테스트 6개 추가(기존 26개 회귀 없음, 총 32/32 PASS). `npx tsc
+--noEmit` src/ 에러 0, 변경 파일 타겟 lint 0 errors(0 warnings, ref
+lint 에러를 실제로 수정), `npm run build` PASS.
+`docs/development/DETAIL_PRICE_CHART_INTERACTION_P1.md` 신규.
+
+DB/schema 변경 없음.
+
+상태: 완료.
+
+**DETAIL_PRICE_CHART_INTERACTION_P1_CLOSE = YES.**
