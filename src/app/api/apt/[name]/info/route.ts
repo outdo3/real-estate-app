@@ -112,15 +112,61 @@ export async function GET(
       }
     };
 
+    // DATA_COVERAGE_FIX_V1 — legacy Apartment 캐시가 못 채운 필드를, 매번 외부
+    // BuildingHUB를 라이브로 부르기 전에 이미 backfill된 ApartmentMaster(부산)에서
+    // 먼저 채워본다(§23: PERSISTED MASTER → API → UI 우선, 페이지뷰마다 외부 API를
+    // 재호출하는 구조를 줄인다). 이름으로 찾지 않는다 — lawdCd+dong+jibun(=지번,
+    // 이미 legacy Apartment의 byJibun 조회가 신뢰하는 것과 동일한 정밀도의 identity)
+    // 로만 조회한다. 채워지지 않은 필드만 보충하고, legacy가 이미 채운 값은 덮지 않는다.
+    const fetchMasterRegistrySupplement = async (partial: Registry | null): Promise<Registry | null> => {
+      if (!dong || !jibun) return partial;
+      try {
+        const master = await prisma.apartmentMaster.findFirst({
+          where: { sggCd: lawdCd, umdName: dong, jibun },
+        });
+        if (!master) return partial;
+
+        const useAprDay = master.useApprovalDate || '';
+        const approvalDate = /^\d{8}$/.test(useAprDay) ? `${useAprDay.slice(0, 4)}년` : null;
+
+        return {
+          parkingCount: partial?.parkingCount ?? master.parkingCount ?? null,
+          far: partial?.far ?? master.floorAreaRatio ?? null,
+          bcr: partial?.bcr ?? master.buildingCoverageRatio ?? null,
+          totalHouseholds: partial?.totalHouseholds ?? master.totalHouseholds ?? null,
+          approvalDate: partial?.approvalDate ?? approvalDate,
+        };
+      } catch (e) {
+        console.warn('ApartmentMaster supplement lookup failed', e);
+        return partial;
+      }
+    };
+
     const [naverInfo, cachedRegistry] = await Promise.all([fetchNaverInfo(), fetchCachedRegistry()]);
     const naverHouseholds = naverInfo.households;
     const naverApprovalYear = naverInfo.approvalYear;
     let registry: Registry | null = cachedRegistry;
 
-    if (!registry) {
+    const isFullyPopulated = (r: Registry | null): boolean =>
+      !!r && !!r.parkingCount && !!r.far && !!r.bcr && !!r.totalHouseholds && !!r.approvalDate;
+
+    if (!isFullyPopulated(registry)) {
+      registry = await fetchMasterRegistrySupplement(registry);
+    }
+
+    if (!isFullyPopulated(registry)) {
       const live = await fetchBuildingRegistryInfo(aptName, lawdCd, dong, jibun);
       if (live) {
-        registry = live;
+        // tier1(legacy 캐시)/tier2(ApartmentMaster)가 이미 채운 필드는 덮지 않고 병합한다
+        // (live가 registry 전체를 대체하던 기존 동작은 registry가 항상 null 아니면 완전
+        // 채움이었을 때만 안전했다 — 이제 tier2로 부분 채움 상태가 생길 수 있어 병합 필요).
+        registry = {
+          parkingCount: registry?.parkingCount ?? live.parkingCount,
+          far: registry?.far ?? live.far,
+          bcr: registry?.bcr ?? live.bcr,
+          totalHouseholds: registry?.totalHouseholds ?? live.totalHouseholds,
+          approvalDate: registry?.approvalDate ?? live.approvalDate,
+        };
         if (live.mainPurpose) info['주용도'] = live.mainPurpose;
         if (live.parkingCount || live.far || live.bcr || live.totalHouseholds || live.approvalDate) {
           try {

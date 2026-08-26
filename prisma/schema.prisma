@@ -230,12 +230,28 @@ model ApartmentMaster {
   longitude      Float?
   geocodeQuality String? @map("geocode_quality") // 'exact' | 'normalized' | 'failed'
 
-  // 건물 정보 — 단지 총괄 값으로 확정 가능한 것만 저장(동 단위 값을 단지 전체처럼 저장 금지)
+  // 건물 정보 — 단지 총괄 값으로 확정 가능한 것만 저장(동 단위 값을 단지 전체처럼 저장 금지).
+  // DATA_COVERAGE_FIX_V1부터 totalHouseholds/parkingCount는 총괄표제부 확정값 또는 표제부
+  // fallback(지번 내 건물 정확히 1건일 때만, APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1 근거)
+  // 둘 중 하나에서 온다 — 어느 쪽인지는 basicSpecSource로 구분한다.
   buildYear         Int?    @map("build_year") // MOLIT 건축년도(참고용)
   useApprovalDate   String? @map("use_approval_date") // 건축물대장 useAprDay 원본("YYYYMMDD")
-  mainBuildingCount Int?    @map("main_building_count") // 건축물대장 mainBldCnt(동수)
-  totalHouseholds   Int?    @map("total_households") // 건축물대장 hhldCnt(총괄표제부 확정값만)
-  parkingCount      Int?    @map("parking_count") // 건축물대장 totPkngCnt(총괄표제부 확정값만)
+  mainBuildingCount Int?    @map("main_building_count") // 건축물대장 mainBldCnt(동수, 총괄표제부 전용 — 표제부 fallback엔 없음)
+  totalHouseholds   Int?    @map("total_households") // 건축물대장 hhldCnt
+  parkingCount      Int?    @map("parking_count") // 총괄표제부 totPkngCnt 또는 표제부 4필드(옥내외×자주기계식) 합산
+
+  // DATA_COVERAGE_FIX_V1 신규 — 기존 Apartment.far/bcr과 동일하게 Float(기존 프로젝트
+  // convention 재사용, 535.3/59.82 같은 소수 1~2자리 percent 값에 정밀도 손실 없음이
+  // Apartment 테이블에서 이미 실증됨). 0 이하/무효값은 저장하지 않는다(null = 미확보,
+  // 0을 실제 0으로 저장 금지 — 프로젝트 전역 데이터 신뢰 원칙).
+  floorAreaRatio        Float? @map("floor_area_ratio") // 용적률(%)
+  buildingCoverageRatio Float? @map("building_coverage_ratio") // 건폐율(%)
+  // parkingCount / totalHouseholds, totalHouseholds > 0일 때만 계산해 저장(추정치 아님 —
+  // 이미 저장된 두 확정값의 단순 나눗셈). 매 응답마다 다시 계산하지 않도록 backfill 시점에
+  // 함께 저장한다.
+  parkingPerHousehold Float? @map("parking_per_household")
+
+  basicSpecSource BasicSpecSource @default(UNKNOWN) @map("basic_spec_source")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -1126,6 +1142,17 @@ enum PyeongProvenance {
   OFFICIAL_LABEL
   SUPPLY_AREA_DERIVED
   UNKNOWN
+}
+
+// DATA_COVERAGE_FIX_V1 — ApartmentMaster의 용적률/건폐율/주차대수가 건축물대장의 어느
+// operation에서 왔는지 감사 가능하게 남긴다(APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1의
+// WRONG_SOURCE_SELECTION 재발 방지). 필드별로 나누지 않고 레코드 단위 하나로 두는 이유:
+// 이 값들은 항상 같은 API 응답 1건(총괄표제부 또는 표제부 fallback)에서 함께 나오므로
+// 필드마다 다른 source를 가질 수 없다 — 불필요한 schema 확대를 피한다.
+enum BasicSpecSource {
+  BUILDINGHUB_GENERAL_TITLE // 총괄표제부(getBrRecapTitleInfo) — 단지 집계 확정값
+  BUILDINGHUB_TITLE // 표제부(getBrTitleInfo) fallback — 지번 내 건물 정확히 1건일 때만
+  UNKNOWN // 아직 backfill 안 됨/출처 미상(기존 값, 이번 STEP 이전 데이터)
 }
 
 enum UnitDataSource {

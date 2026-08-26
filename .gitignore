@@ -48,6 +48,9 @@ scripts/_backfill_results/
 # MASTER M4-B 부산 전체 구축 — 구·군별 batch 원본 JSON 결과(재현 가능, 커밋 불필요)
 scripts/_m4b_results/
 
+# DATA_COVERAGE_FIX_V1 — 부산 backfill resumable checkpoint/진행 로그(재현 가능, 커밋 불필요)
+scripts/_data_coverage_fix_v1_results/
+
 # STEP R4/R4.1 재개발 ingestion — quality report/sigungu 해석 원본 JSON 결과(재현 가능, 커밋 불필요)
 scripts/redevelopment/_results/
 

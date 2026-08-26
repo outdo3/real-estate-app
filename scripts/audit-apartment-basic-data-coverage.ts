@@ -12,9 +12,15 @@
  * 단지 목록"이 아니라 "지금까지 상세페이지가 실제로 조회된 단지만 담기는 lazy cache"다
  * (src/app/api/apt/[name]/info/route.ts의 cache-aside upsert 패턴). 따라서 여기서 계산하는
  * coverage %는 "이미 캐시된 단지 중 필드가 채워진 비율"이지 "부산 전체 단지 중 채워진
- * 비율"이 아니다 — 두 개념을 섞어 보고하지 않는다. `apartment_masters`(ApartmentMaster)는
- * 부산 서구+해운대 33건 파일럿 상태로, 이 역시 부산 전체가 아니다
- * (docs/development/14-apartment-master-m4-expansion-analysis.md 재확인).
+ * 비율"이 아니다 — 두 개념을 섞어 보고하지 않는다.
+ *
+ * `apartment_masters`(ApartmentMaster)는 처음 조사 시점(14-apartment-master-m4-expansion-
+ * analysis.md, 2026-08-13)엔 서구+해운대 33건 파일럿이었지만, 이후 `7776114 feat: build
+ * Busan apartment master dataset` 커밋으로 부산 전체(3,402건)로 확장됐다 — 이 스크립트가
+ * 실제 DB를 직접 읽어 이 변화를 처음 발견했다(문서가 갱신되지 않아 낡아 있었음). 이쪽은
+ * 진짜 "부산 전체" 모집단에 가깝다. DATA_COVERAGE_FIX_V1부터 floorAreaRatio/
+ * buildingCoverageRatio/parkingPerHousehold/basicSpecSource 컬럼이 추가돼 용적률/건폐율도
+ * 이 테이블에서 커버리지를 낼 수 있다(이전엔 컬럼 자체가 없어 0/3402로만 보고했었다).
  */
 
 import * as dotenv from 'dotenv';
@@ -77,6 +83,10 @@ async function main() {
       parkingCount: true,
       latitude: true,
       longitude: true,
+      floorAreaRatio: true,
+      buildingCoverageRatio: true,
+      parkingPerHousehold: true,
+      basicSpecSource: true,
     },
   });
 
@@ -86,7 +96,7 @@ async function main() {
   console.log(`\n[스캔 범위] apartments(레거시 캐시) 테이블 전체 행: ${rows.length}건`);
   console.log(
     `[참고] apartment_masters(ApartmentMaster) 테이블 전체 행: ${masterCount}건 ` +
-      `(부산 서구+해운대 파일럿, 부산 전체 아님 — 14-apartment-master-m4-expansion-analysis.md 참고)\n`
+      `(부산 전체 M4-B 산출물, DATA_COVERAGE_FIX_V1부터 far/bcr/parkingPerHousehold/source 포함)\n`
   );
 
   const total = rows.length;
@@ -186,6 +196,9 @@ async function main() {
     { key: 'parkingCount', label: '주차대수(parkingCount)' },
     { key: 'mgmBldrgstPk', label: '건축물대장 관리번호(mgmBldrgstPk)' },
     { key: 'latitude', label: '좌표(latitude)' },
+    { key: 'floorAreaRatio', label: '용적률(floorAreaRatio)' },
+    { key: 'buildingCoverageRatio', label: '건폐율(buildingCoverageRatio)' },
+    { key: 'parkingPerHousehold', label: '세대당주차(parkingPerHousehold)' },
   ];
   for (const f of mFields) {
     const present = masterRows.filter((r) => {
@@ -194,8 +207,12 @@ async function main() {
     }).length;
     console.log(`  ${f.label.padEnd(30, ' ')}: ${present}/${mTotal} (${pct(present, mTotal)})`);
   }
-  console.log('  용적률(far)                       : 0/' + mTotal + ' — 컬럼 자체가 스키마에 없음(SOURCE_MISSING at schema level, ApartmentMaster는 far/bcr 필드를 설계 시점부터 포함하지 않음)');
-  console.log('  건폐율(bcr)                       : 0/' + mTotal + ' — 위와 동일');
+  const sourceCounts = { BUILDINGHUB_GENERAL_TITLE: 0, BUILDINGHUB_TITLE: 0, UNKNOWN: 0 } as Record<string, number>;
+  for (const r of masterRows) sourceCounts[r.basicSpecSource] = (sourceCounts[r.basicSpecSource] || 0) + 1;
+  console.log('\n[basicSpecSource 분포]');
+  for (const [src, n] of Object.entries(sourceCounts)) {
+    console.log(`  ${src.padEnd(30, ' ')}: ${n}/${mTotal} (${pct(n, mTotal)})`);
+  }
 
   // 구/군별 분포 (sggCd 기준)
   const bySgg = new Map<string, { total: number; hasParking: number; hasHousehold: number }>();

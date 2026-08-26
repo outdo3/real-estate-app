@@ -8902,3 +8902,70 @@ upsert" 동작의 성공 케이스가 하나 늘어난 것뿐, 신규 upsert 로
 상태: 완료.
 
 **APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1 = PASS.**
+
+
+## 2026-08-26 (6)
+
+### DATA COVERAGE FIX V1 — ApartmentMaster 기본 스펙 스키마 확장 + 부산 3,402건 backfill
+
+직전 감사(APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1)가 밝힌 부산 전체 규모의 용적률/
+건폐율/주차 결측 구조 문제를 사용자 승인(스키마 변경/migration/부산 3,402건 Production
+backfill) 아래 해결했다. SCHEMA DESIGN → MIGRATION → DRY-RUN → SAMPLE WRITE →
+SAMPLE VALIDATION → FULL BUSAN BACKFILL → COVERAGE RE-AUDIT → REGRESSION 순서를
+그대로 지켰다.
+
+`ApartmentMaster`에 `floorAreaRatio`/`buildingCoverageRatio`/`parkingPerHousehold`/
+`basicSpecSource`(값의 출처가 총괄표제부인지 표제부 fallback인지 감사 가능하게 기록) 4개
+컬럼을 추가하는 순수 additive 마이그레이션을 적용했다(기존 컬럼 drop/rename 없음,
+`basicSpecSource`만 안전한 기본값 `UNKNOWN`). 이미 존재하는 세대수/준공년도/동수/주차/
+mgmBldrgstPk 컬럼은 재사용했다(중복 생성 없음).
+
+`scripts/backfill-apartment-master-basic-data.ts`(신규, `--dry-run`/`--apply`/`--limit`/
+`--aptSeq`/`--sample`/`--resume` 지원) — 감사 STEP이 검증한 "총괄표제부 우선, 없으면
+표제부(지번 내 건물 정확히 1건일 때만) fallback" 계약을 부산 3,402건 전체에 적용했다.
+기존 non-null 값은 절대 덮어쓰지 않고(FILL_NULL만, 충돌 시 CONFLICT_REVIEW로 기록만
+하고 보류), 이름이 아니라 aptSeq/lawdCd+umdCd+jibun로만 조회했다.
+
+이 환경이 장시간 백그라운드 프로세스를 주기적으로 종료시켜(정확한 원인 불명) 총 8회
+실행으로 나눠 완료했다 — 매 실행이 파일 체크포인트(커밋 대상 아님, `.gitignore` 추가)에
+처리된 aptSeq를 기록해 `--resume`이 정확히 이어서 처리하도록 설계했다. 도중 반복된 강제
+종료로 orphan node 프로세스 19개가 쌓여 Supabase 커넥션 풀을 소진하는 증상을 발견해
+정리한 뒤 재개했다. 최종 PROCESSED 3,402/3,402(100%), IDEMPOTENT(체크포인트 무시하고
+재스캔한 200건 전부 UNCHANGED로 재확인) = YES.
+
+샘플 적용 단계에서 실제 데이터 신뢰 버그를 자체 발견해 즉시 수정했다: 표제부 fallback
+경로가 연도만 아는 준공일(`"2007년"`)을 `"20070101"`처럼 일 단위까지 아는 것처럼
+지어내고 있었다 — 알지 못하는 정밀도를 만들어내는 것은 이 프로젝트의 데이터 신뢰
+원칙 위반이라, 표제부 경로에서는 이 필드를 null로 유지하도록 고치고 이미 이 세션에서
+잘못 쓰인 10건을 정정했다(basicSpecSource가 이번 STEP에만 존재하는 신규 enum이라
+사전 데이터 오염 없이 정확히 식별 가능했다).
+
+Busan-wide coverage: 세대수 74.8%→93.5%(+18.7pp), 주차대수 25.7%→71.0%(+45.3pp), 용적률/
+건폐율 0%(컬럼 없었음)→약 74%(신규), 세대당주차 0%→69.3%(신규). `basicSpecSource` 분포
+(총괄표제부 29.2% / 표제부 fallback 50.6% / 둘 다 실패 20.2%)가 표제부 fallback 쪽이 더
+많은 단지를 구제했음을 정량적으로 보여줘, 직전 감사의 WRONG_SOURCE_SELECTION 진단이
+연산동한솔솔파크 한 곳만의 특이 사례가 아니라 부산 전체 규모의 구조적 문제였음을 확정했다.
+
+`/api/apt/[name]/info`에 3단계 read path를 추가했다: legacy `Apartment` 캐시(기존 유지) →
+`ApartmentMaster`(lawdCd+dong+jibun로만 조회, 이름 매칭 없음, 신규) → 라이브 BuildingHUB
+호출(기존 유지, 최후 수단). 앞 단계가 채운 필드는 뒤 단계가 덮지 않고, 앞 단계들만으로
+전부 채워지면 외부 API 호출 자체를 건너뛴다(런타임 외부 의존 축소). 라이브 dev 서버에서
+DB/API/UI 세 계층 전부 재확인(연산동한솔솔파크·대신롯데캐슬·대신해모로센트럴아파트·
+연산동일동미라주더스타 등) — 검증 중 "정보 없음"이 일시적으로 보인 것은 실거래 API
+지연으로 두 번째 `/info` 재조회가 5~6초 늦게 도착하는 기존(이번 STEP 무관) 동작 때문임을
+`apt-client.tsx`의 git diff(변경 없음)와 network 계측으로 확인해 오탐임을 밝혔다.
+
+신규 유닛 테스트 7개(`scripts/backfill-basic-data-logic.test.mjs`, 순수 함수만 분리해
+CLI 스크립트 import 시 실제 backfill이 실행되는 사고를 `require.main===module` 가드로
+차단) 포함 총 45/45 PASS(회귀 없음). `npx tsc --noEmit` 이번 변경 파일 기준 에러 0(기존
+무관 스크립트 34개 에러만 존재, FAIL_EXISTING_SCRIPT_ERRORS로 구분), 변경 파일 타겟
+lint 0 errors, `npm run build` PASS.
+`docs/development/DATA_COVERAGE_FIX_V1.md` 신규.
+
+DB 쓰기: 부산 ApartmentMaster 3,402건(전부 승인 범위 내, 부산 외 지역 0건 확인). 스키마
+변경: 4개 컬럼 추가(additive, 승인됨). Migration:
+`prisma/migrations/20260826091211_data_coverage_fix_v1_basic_specs/` 적용 완료.
+
+상태: 완료.
+
+**DATA_COVERAGE_FIX_V1 = PASS.**
