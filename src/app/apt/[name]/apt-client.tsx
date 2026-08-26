@@ -951,7 +951,7 @@ export default function ApartmentDetail() {
 
               {/* ══════════ 2구역: TIER 2 (맥락과 자금) ══════════ */}
       <div className={`container ${styles.sectionBlock}`}>
-        <div className={styles.panel}>
+        <div className={`${styles.panel} ${styles.chartPanel}`}>
           <div style={{ marginBottom: '1.25rem' }}>
             <PriceTrendChart aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedArea={selectedArea} selectedAreaLabel={selectedArea === '전체' ? undefined : renderHeroAreaLabel(selectedArea, areaLabels)} />
           </div>

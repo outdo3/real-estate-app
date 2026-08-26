@@ -122,6 +122,12 @@
   box-shadow: var(--shadow-sm);
 }
 
+.chartPanel { }
+
+@media (max-width: 420px) {
+  .chartPanel { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; }
+}
+
 .timelineFilters { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; margin: 0 0 1rem; }
 .timelineSummary { color: var(--text-secondary); font-size: .9rem; }
 .timelineControls { display: flex; gap: .5rem; flex-wrap: wrap; }

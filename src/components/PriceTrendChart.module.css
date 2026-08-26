@@ -48,11 +48,13 @@
 }
 
 @media (max-width: 420px) {
-  .card { border: 0; border-radius: 0; margin-inline: -0.9rem; padding: 0.9rem; }
+  .card { border: 0; border-radius: 0; margin: 0; padding: 0.75rem; }
+  .header { align-items: flex-start; flex-direction: column; margin-bottom: 0.6rem; }
+  .periods { width: 100%; }
+  .period { flex: 1; min-height: 36px; padding-inline: 0.35rem; }
   .title { font-size: 1.02rem; }
-  .period { padding-inline: 0.45rem; }
-  .chart { height: 292px; }
+  .chart { height: 278px; }
   .volumeLegend { justify-content: flex-start; gap: 0.5rem; white-space: nowrap; }
-  .legend { justify-content: flex-start; gap: 0.75rem; }
+  .legend { justify-content: flex-start; gap: 0.75rem; margin: 0.25rem 0 0.1rem; }
   .legendItem { white-space: nowrap; }
 }
