@@ -8840,3 +8840,65 @@ DB/schema 변경 없음.
 상태: 완료.
 
 **DETAIL_PRICE_CHART_INTERACTION_P1_CLOSE = YES.**
+
+
+## 2026-08-26 (5)
+
+### APARTMENT BASIC DATA COVERAGE AUDIT V1 — 용적률/건폐율/주차대수 결측 원인 감사 + 안전 수정
+
+연산동한솔솔파크(부산 연제구) 상세페이지에서 용적률/건폐율/주차대수가
+전부 "정보 없음"으로 표시되던 문제를 읽기 전용으로 감사했다. 외부
+경쟁 서비스가 표시하는 535%/59%를 그대로 베끼지 않는다는 하드 룰 아래,
+같은 값을 이 프로젝트가 이미 쓰는 정부 공식 API 키로 직접 재조회해
+독립적으로 재현했다(`data.go.kr` `BldRgstHubService`).
+
+원인은 SOURCE_MISSING이 아니라 **WRONG_SOURCE_SELECTION**이었다:
+`fetchBuildingRegistryInfo()`(`src/lib/apt-building-info.ts`)가 그동안
+"총괄표제부"(`getBrRecapTitleInfo`, 여러 동 단지 집계용)만 호출했는데,
+이 단지는 총괄표제부 자체가 등록돼 있지 않았다(반복 실측: 3/3회
+`totalCount=0`). 반면 같은 API의 다른 operation인 "표제부"
+(`getBrTitleInfo`, 건물 1건 단위)는 안정적으로 1건을 반환했고,
+`hhldCnt=165 / vlRat=535.3 / bcRat=59.82`가 이미 DB의 세대수·M4-B가
+저장해둔 `mgmBldrgstPk`와 정확히 일치했다 — 신규 외부 연동이 아니라
+이미 쓰던 서비스의 다른 operation을 그동안 호출하지 않고 있었을 뿐.
+
+`fetchBuildingRegistryInfo()`에 표제부 폴백을 추가했다. 안전조건으로
+"이 지번에 표제부가 정확히 1건일 때만" 값을 신뢰하도록 제한했다 —
+`14-apartment-master-m4-expansion-analysis.md` §K가 13일 전에 이미
+지적한 위험(표제부는 "동 1개" 단위 값이라 복수 동 단지에 그대로 쓰면
+동 단위 값을 단지 총괄값으로 잘못 저장하게 됨)을 그대로 존중한 설계다.
+주차대수는 표제부의 옥내/옥외×자주식/기계식 4개 필드를 합산해 구했다
+(추정이 아니라 같은 레코드의 실측 개별 수치 합).
+
+라이브 dev 서버에서 실제 HTTP 호출로 검증: 연산동한솔솔파크는
+`535.3%/59.8%/세대당 1.24대(총 204대)`로 정상 노출, 기존에 총괄표제부로
+이미 정상 동작하던 대신롯데캐슬은 수정 전후 값 동일(회귀 없음), 표제부도
+매치 안 되는 단지("시범")는 수정 후에도 정직하게 "정보 없음" 유지(값
+지어내지 않음 확인). `src/lib/apt-building-info.test.mjs` 신규 7개
+테스트 추가(0/음수 값의 "미확보" 처리, 4필드 합산, null 안전 처리 등),
+기존 31개 포함 총 38/38 PASS.
+
+부산 전체 커버리지도 실측했다 — `ApartmentMaster`(M4-B가 최근 부산
+전체로 확장, 3,402건. 13일 전 문서의 "33건" 기록은 이미 낡은 정보였고
+DB 직접 조회로 재확인해 바로잡았다)에서 주차대수 coverage는 25.7%에
+그쳤다: 이 단지 하나만의 문제가 아니라 총괄표제부 단일 의존이 부산
+전체 규모에서 구조적으로 겪는 결측 패턴이었다. 다만 `ApartmentMaster`
+스키마 자체에 `far`/`bcr` 컬럼이 없어 이 두 필드는 부산 전체 재조회
+없이는 coverage를 낼 수 없다는 스키마 차원의 한계도 함께 기록했다
+(스키마 변경 없이는 해결 불가 — 이번 STEP 범위 밖, USER_APPROVAL_REQUIRED
+로 남김). 재사용 가능한 read-only 감사 스크립트
+`scripts/audit-apartment-basic-data-coverage.ts` 신규 추가.
+
+`npx tsc --noEmit`은 이번 변경 파일 기준 에러 0(기존 무관 스크립트
+파일들의 사전 존재 에러만 있음 — FAIL_EXISTING_SCRIPT_ERRORS로 구분해
+보고), 변경 파일 타겟 lint 0 errors, `npm run build` PASS.
+`docs/development/APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1.md` 신규.
+
+DB 쓰기: 없음(스키마/마이그레이션/대량쓰기 전부 없음). 감사 스크립트는
+SELECT류만 사용. 코드 수정은 기존에도 있던 "라이브 조회 성공 시
+upsert" 동작의 성공 케이스가 하나 늘어난 것뿐, 신규 upsert 로직 추가
+아님.
+
+상태: 완료.
+
+**APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1 = PASS.**

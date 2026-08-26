@@ -7,6 +7,73 @@ export interface BuildingRegistryInfo {
   approvalDate: string | null; // 사용승인일, "YYYY년" 형태
 }
 
+// getBrTitleInfo(표제부, 건물 1건 단위) 응답에서 단일 레코드를 BuildingRegistryInfo로
+// 변환한다. 총괄표제부(getBrRecapTitleInfo) fallback 전용 — 호출부(fetchBuildingRegistryInfo)가
+// "이 지번에 표제부가 정확히 1건뿐일 때만" 호출하므로, 여기서 다루는 값은 항상 "그 단지의
+// 유일한 건물 1개"의 값이며 여러 동 중 하나만 뽑은 값이 아니다(§ 안전조건 참고).
+export function parseBrTitleInfoRecord(target: any): BuildingRegistryInfo | null {
+  if (!target) return null;
+
+  const vlRat = parseFloat(target.vlRat);
+  const bcRat = parseFloat(target.bcRat);
+  const hhldCnt = parseInt(target.hhldCnt, 10);
+  // 표제부는 총괄표제부의 totPkngCnt(단일 합계 필드)가 없다 — 대신 옥내/옥외 ×
+  // 자주식/기계식 4개 필드로 나눠서 제공한다. 이 4개는 같은 레코드의 실측 개별 수치이므로
+  // 합산은 추정이 아니라 그 건물이 보유한 주차면수 합계를 그대로 구하는 것이다.
+  const indrAuto = parseInt(target.indrAutoUtcnt, 10) || 0;
+  const oudrAuto = parseInt(target.oudrAutoUtcnt, 10) || 0;
+  const indrMech = parseInt(target.indrMechUtcnt, 10) || 0;
+  const oudrMech = parseInt(target.oudrMechUtcnt, 10) || 0;
+  const parkingSum = indrAuto + oudrAuto + indrMech + oudrMech;
+  const useAprDay: string = target.useAprDay || '';
+  const approvalYear = /^\d{8}$/.test(useAprDay) ? useAprDay.slice(0, 4) : null;
+
+  return {
+    parkingCount: parkingSum > 0 ? parkingSum : null,
+    far: !isNaN(vlRat) && vlRat > 0 ? vlRat : null,
+    bcr: !isNaN(bcRat) && bcRat > 0 ? bcRat : null,
+    totalHouseholds: !isNaN(hhldCnt) && hhldCnt > 0 ? hhldCnt : null,
+    mainPurpose: (target.etcPurps || target.mainPurpsCdNm || '').trim() || null,
+    approvalDate: approvalYear ? `${approvalYear}년` : null,
+  };
+}
+
+// 총괄표제부(getBrRecapTitleInfo)에 레코드가 없을 때만 호출하는 fallback.
+// APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1(2026-08-26) 실측 근거: 연산동한솔솔파크(부산
+// 연제구)는 총괄표제부는 반복 조회해도 totalCount=0(레코드 없음)이지만, 같은 지번의
+// 표제부(getBrTitleInfo)는 안정적으로 1건(연산동 한솔솔파크, hhldCnt=165, vlRat=535.3,
+// bcRat=59.82)을 반환한다 — 이미 이 프로젝트가 쓰고 있는 같은 BldRgstHubService의 다른
+// operation일 뿐, 신규 외부 API 연동이 아니다.
+//
+// 안전조건(반드시 유지): 표제부 조회 결과가 정확히 1건일 때만 값을 신뢰한다. 표제부는
+// "동 1개"의 값이라 복수 동으로 이뤄진 단지에 그대로 적용하면 동 단위 값을 단지 총괄
+// 값으로 잘못 저장하는 위험이 있다(docs/development/14-apartment-master-m4-expansion-analysis.md
+// §K에서 이미 지적된 위험). 이 지번에 표제부가 1건뿐이라는 것은 그 지번에 등록된 건물이
+// 하나뿐이라는 뜻이므로, 그 1건이 곧 "이 지번 전체"의 값이다 — 여러 표제부를 합산하는
+// 방식은 채택하지 않는다(부속건축물 중복/오합산 위험, 위 문서에서 이미 위험하다고 평가됨).
+async function fetchBrTitleInfoFallback(
+  cleanKey: string,
+  lawdCd: string,
+  bjdongCd: string,
+  bun: string,
+  ji: string
+): Promise<BuildingRegistryInfo | null> {
+  const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&platGbCd=0&bun=${bun}&ji=${ji}&numOfRows=5&_type=json`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  if (!res.ok) return null;
+
+  const json = await res.json();
+  const header = json?.response?.header;
+  if (header?.resultCode && header.resultCode !== '00') return null;
+
+  const items = json?.response?.body?.items?.item;
+  if (!items) return null;
+  const itemsArr = Array.isArray(items) ? items : [items];
+  if (itemsArr.length !== 1) return null; // 안전조건: 정확히 1건일 때만 신뢰
+
+  return parseBrTitleInfoRecord(itemsArr[0]);
+}
+
 // 건축물대장 "총괄표제부"(여러 동으로 이뤄진 아파트 단지 전체 집계) 공공데이터 조회.
 // /api/apt/[name]/info 라우트와 scripts/backfill_apt_details.ts가 이 함수 하나를
 // 공유한다 — 두 곳에 같은 로직을 따로 구현하면 나중에 한쪽만 고쳐서 결과가 어긋나는
@@ -74,31 +141,36 @@ export async function fetchBuildingRegistryInfo(
       return null;
     }
     const items = json?.response?.body?.items?.item;
-    if (!items) return null;
-
-    const itemsArr = Array.isArray(items) ? items : [items];
+    const itemsArr = Array.isArray(items) ? items : (items ? [items] : []);
     // 같은 지번에 총괄표제부가 여러 건 잡히는 경우(드묾) 세대수가 가장 큰 것을 대표로 쓴다.
-    const target = itemsArr.reduce((best: any, cur: any) =>
-      (cur.hhldCnt || 0) > (best.hhldCnt || 0) ? cur : best
-    );
-    if (!target) return null;
+    const target = itemsArr.length > 0
+      ? itemsArr.reduce((best: any, cur: any) => ((cur.hhldCnt || 0) > (best.hhldCnt || 0) ? cur : best))
+      : null;
 
-    const parkingCnt = parseInt(target.totPkngCnt, 10);
-    const vlRat = parseFloat(target.vlRat); // 이 오퍼레이션은 이미 퍼센트 값으로 내려온다(실측 확인).
-    const bcRat = parseFloat(target.bcRat);
-    const hhldCnt = parseInt(target.hhldCnt, 10);
-    // useAprDay는 "YYYYMMDD" 8자리 문자열(예: "20040315"). 앞 4자리만 쓴다.
-    const useAprDay: string = target.useAprDay || '';
-    const approvalYear = /^\d{8}$/.test(useAprDay) ? useAprDay.slice(0, 4) : null;
+    if (target) {
+      const parkingCnt = parseInt(target.totPkngCnt, 10);
+      const vlRat = parseFloat(target.vlRat); // 이 오퍼레이션은 이미 퍼센트 값으로 내려온다(실측 확인).
+      const bcRat = parseFloat(target.bcRat);
+      const hhldCnt = parseInt(target.hhldCnt, 10);
+      // useAprDay는 "YYYYMMDD" 8자리 문자열(예: "20040315"). 앞 4자리만 쓴다.
+      const useAprDay: string = target.useAprDay || '';
+      const approvalYear = /^\d{8}$/.test(useAprDay) ? useAprDay.slice(0, 4) : null;
 
-    return {
-      parkingCount: !isNaN(parkingCnt) && parkingCnt > 0 ? parkingCnt : null,
-      far: !isNaN(vlRat) && vlRat > 0 ? vlRat : null,
-      bcr: !isNaN(bcRat) && bcRat > 0 ? bcRat : null,
-      totalHouseholds: !isNaN(hhldCnt) && hhldCnt > 0 ? hhldCnt : null,
-      mainPurpose: (target.etcPurps || target.mainPurpsCdNm || '').trim() || null,
-      approvalDate: approvalYear ? `${approvalYear}년` : null,
-    };
+      return {
+        parkingCount: !isNaN(parkingCnt) && parkingCnt > 0 ? parkingCnt : null,
+        far: !isNaN(vlRat) && vlRat > 0 ? vlRat : null,
+        bcr: !isNaN(bcRat) && bcRat > 0 ? bcRat : null,
+        totalHouseholds: !isNaN(hhldCnt) && hhldCnt > 0 ? hhldCnt : null,
+        mainPurpose: (target.etcPurps || target.mainPurpsCdNm || '').trim() || null,
+        approvalDate: approvalYear ? `${approvalYear}년` : null,
+      };
+    }
+
+    // 총괄표제부에 레코드가 없다 — APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1에서 실측 확인된
+    // 대로, 소규모/단독 건물 단지는 애초에 총괄표제부가 등록되지 않는 경우가 흔하다(이
+    // 등록 자체가 "여러 동" 단지를 전제로 하기 때문). 표제부(getBrTitleInfo) fallback을
+    // 시도한다 — 자세한 안전조건은 fetchBrTitleInfoFallback 주석 참고.
+    return await fetchBrTitleInfoFallback(cleanKey, lawdCd, bjdongCd, bun, ji);
   } catch (e) {
     console.warn('Public API building registry failed', e);
     return null;
