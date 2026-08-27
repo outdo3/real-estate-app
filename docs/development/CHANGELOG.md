@@ -9763,3 +9763,75 @@ DECLINE_HISTORICAL_HIGH = BOUNDED_ONLY(BLOCKER, 동일 사유). FALSE_RECORD_HIG
 CANCELLED_EXCLUSION = PASS. FAKE_PYEONG = ABSENT. PERFORMANCE = PASS(fetch
 로직 무변경 — LOOKBACK_MONTHS 그대로 유지). BUILD = PASS. DB_SCHEMA_CHANGE
 = NONE. NEXT_STEP = STATISTICS_V2_1_TRANSACTION_ACTIVITY.**
+
+
+## 2026-08-28
+
+### STEP — STATISTICS V2.1-2: TRANSACTION ACTIVITY(실거래/거래량/거래집중)
+
+거래 카테고리 핵심 3개 화면을 "지금 어디서 거래가 일어나는가 → 지역
+거래가 느는가 → 어떤 단지에 거래가 몰리는가" 흐름으로 개편했다. 상세
+근거/QA는 `docs/development/STATISTICS_V2_1_TRANSACTION_ACTIVITY.md` 참고.
+
+**메뉴 감사**: `slug: 'top-traded'`("인기")가 실제로는 `/api/stats/rankings`의
+순수 거래건수(tradeCount) 랭킹이었고, 진짜 사용자 행동 기반 인기 기능은
+`slug: 'popular'`(아직 soon)로 이미 별도 예약돼 있었다 — "인기"라는 이름이
+두 곳에서 다른 뜻으로 쓰이는 overclaim이었다. `top-traded`를 "거래집중"으로
+정정(title/subtitle/색상 popular→brand)하고, 전용 `/api/stats/concentration`
++ `ConcentrationView`(신규)로 교체했다 — day-precise 기간(7일/30일/3개월)
++ 직전 동일기간 대비 증감을 aptSeq 기준으로 집계한다(cancelled 제외,
+`regional-feed.ts`의 기존 identity/취소 규칙 재사용).
+
+**실거래 feed 버그 수정**: 감사 중 `annotateTrades`가 조회 lookback 안에서
+"처음 관측된 거래"(비교할 과거가 없는 거래)까지 무조건 신고가로 표시하던
+실제 버그를 발견했다(price-ranking.ts의 "이전 최고가가 실존해야 신고가"
+원칙과 불일치했음) — 이전 최고가가 실제로 존재하고 그것을 넘어선 경우만
+신고가로 인정하도록 수정. 또한 feed의 실제 lookback 범위(preset/SIDO_ALL
+여부에 따라 12~24개월로 가변적)와 무관하게 무제한 "신고가" 단어를 쓰고
+있던 것을, 실제 fetch 범위로부터 정직한 라벨을 계산하는
+`windowCoverageLabel()`로 교체했다(예: 기본 조회는 "1년최고가", 12개월
+preset은 "2년최고가", SIDO_ALL 7일 조회는 "7일최고가" — 하드코딩 없이
+항상 실제 범위와 일치).
+
+**신규 기능**: feed row에 세대수/입주연도(기존 `Apartment.totalHouseholds`/
+`approvalDate` 컬럼 배치 조회, 새 스키마 없음)와 mini price trend(같은
+그룹 최근 최대 5건 sparkline, 표본 3건 미만이면 숨김, annotateTrades의
+부산물이라 추가 DB/API 호출 없음) 추가. 거래량(`/api/stats/dashboard`)에
+`volumeSummaryByPeriod`(7일/30일/3개월, 매매/전세/월세별 현재기간 vs
+직전기간 건수·증감·%) 추가 — 이미 fetch된 12개월 데이터 위의 순수
+배열 연산만 추가해 새 MonthTask/DB 호출 0건.
+
+**추가로 발견/수정한 버그**: QA 실측 중 서울 전체(SIDO_ALL) 거래량이
+`{success:false}`로 완전히 죽는 것을 발견했다 — `gap-invest-calc.ts`의
+`normalizeAptName`이 문자열이 아닌 `name`(서울 규모 데이터에서 드물게
+발생) 앞에서 `.replace is not a function`으로 크래시했다(기존 코드,
+이번 STEP이 새로 만든 코드 아님, 지역 전체가 죽는 실패 모드). 방어
+코드 한 줄로 수정 — 정상 입력 동작은 무변경.
+
+**검증**: `regional-feed.test.mjs` 19→33개(신규 14개: 버그 수정 후
+동작, windowCoverageLabel, previousPeriodRange, toFeedTrade,
+buildConcentrationRanking, mini trend 표본 규칙), `statistics-pyeong-resolver.test.mjs`
+11→13개(신규 `resolveApartmentContextBatch`). 기존 `.test.mjs` 전체
+154/154 PASS(회귀 없음). 신규 QA 스크립트
+`scripts/run-statistics-v2-1-transaction-activity-qa.ts`(feed/volume/
+concentration 산술 정합성, SIDO_ALL, dong 필터, popularity overclaim
+정적 가드, fake-pyeong 가드) 작성 후 실행 — findings 0건, RELEASE GATE
+READY(부산/서울 전체 포함). `npx tsc --noEmit` 변경 파일 기준 신규 에러
+0(기존 scripts/* 에러는 FAIL_EXISTING_SCRIPT_ERRORS). Lint 에러 0.
+`npm run build` PASS(`/api/stats/concentration` 신규 라우트 포함).
+
+DB 쓰기: 없음. 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**STATISTICS_V2_1_TRANSACTION_ACTIVITY = PASS. REAL_TRANSACTION_FEED = PASS.
+VOLUME = PASS. TRADE_CONCENTRATION = PASS. THIRD_MENU_LABEL = 거래집중.
+POPULARITY_CLAIM = HONEST. DATE_GROUPING = PASS. MINI_TREND = PASS.
+VOLUME_COMPARISON = PASS(7일/30일/3개월만, 6개월/12개월은 정확성 이유로
+미지원). SIDO_ALL = PASS. YEARLY_SIDO_ALL = UNSUPPORTED(구조적, 정직하게
+안내 유지). PYEONG = TRUSTED. FAKE_PYEONG = ABSENT. UNSAFE_RECORD_HIGH_CLAIM
+= ABSENT(버그 수정 완료). PARTIAL_FAILURE = DISTINGUISHED. API_ERROR_NO_DATA
+= DISTINGUISHED. PERFORMANCE = PASS(신규 코드 0 추가 fetch — 거래량
+SIDO_ALL cold는 기존부터의 한계로 별도 STEP 대상). MOBILE = PASS. DESKTOP
+= PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP =
+STATISTICS_V2_1_RISK_GAP 또는 STATISTICS_PERFORMANCE(ChatGPT PM 판단).**

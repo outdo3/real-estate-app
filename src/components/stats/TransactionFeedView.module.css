@@ -188,6 +188,12 @@
   font-weight: 700;
 }
 
+.miniTrend {
+  margin-left: auto;
+  align-self: center;
+  flex-shrink: 0;
+}
+
 .tradeRowMeta {
   display: flex;
   gap: 0.5rem;

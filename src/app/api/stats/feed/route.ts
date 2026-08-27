@@ -14,9 +14,14 @@ import {
   dedupeTrades,
   filterVerifiedTrades,
   areaBandLabel,
+  windowCoverageLabel,
+  identityKey,
+  toFeedTrade,
   type FeedTrade,
   type PeriodPreset,
 } from '@/lib/regional-feed';
+import { prisma } from '@/lib/prisma';
+import { resolveApartmentContextBatch, type PyeongLookupKey as ContextLookupKey } from '@/lib/statistics-pyeong-resolver';
 
 // STATISTICS V2 — REGIONAL TRANSACTION FEED §8/§9/§32. 기존 rankings/dashboard와
 // 동일하게 "달 단위 배치 fetch + 전역 스로틀"만 쓴다(거래 row 개수만큼 MOLIT을
@@ -40,23 +45,6 @@ function subtractMonths(dateStr: string, months: number): string {
   const date = new Date(Date.UTC(y, m - 1, d));
   date.setUTCMonth(date.getUTCMonth() - months);
   return date.toISOString().slice(0, 10);
-}
-
-function toFeedTrade(item: any, dealType: 'sale' | 'jeonse' | 'wolse', lawdCd: string): FeedTrade | null {
-  if (!item || item.typeLabel === '에러' || !(item.dealAmount > 0)) return null;
-  return {
-    uid: item.id,
-    aptSeq: item.aptSeq ?? null,
-    name: item.name,
-    dong: item.dong || '',
-    lawdCd,
-    dealType,
-    dealAmount: item.dealAmount,
-    excluUseArea: item.excluUseArea ?? null,
-    floorRaw: item.floorRaw ?? null,
-    dealDate: item.dealDate,
-    dealCanceled: !!item.dealCanceled,
-  };
 }
 
 export async function GET(request: Request) {
@@ -214,6 +202,11 @@ export async function GET(request: Request) {
       if (band) areaBandCounts[band] = (areaBandCounts[band] || 0) + 1;
     }
 
+    // §11/§20 — 실제 조회 범위(fetchRange)로부터 정직한 커버리지 라벨을 계산한다
+    // (SIDO_ALL은 표시 기간뿐이라 짧고, 단일 구는 +12개월 lookback이 붙어 더
+    // 넓다 — "신고가"라는 무제한 단어를 절대 단독으로 쓰지 않는다).
+    const recordHighCoverageLabel = windowCoverageLabel(fetchRange.from, fetchRange.to);
+
     const lookbackVerified = filterVerifiedTrades(allTrades.filter((t) => isDateInRange(t.dealDate, fetchRange)));
     const interpretation = buildMarketInterpretation({
       periodLabel: presetLabel(preset),
@@ -223,13 +216,30 @@ export async function GET(request: Request) {
       lookbackDays: daysBetween(fetchRange.from, fetchRange.to),
       dongCounts,
       areaBandCounts,
+      recordHighCoverageLabel,
     });
 
     // 정렬(최신순) 후 페이지네이션 — 한 번에 수천 건 반환하지 않는다(§31).
     const sorted = [...periodTrades].sort((a, b) => (b.dealDate === a.dealDate ? b.dealAmount - a.dealAmount : b.dealDate.localeCompare(a.dealDate)));
     const page = sorted.slice(offset, offset + limit);
+
+    // §8/§18 — 페이지에 보이는 거래들의 단지 identity만 모아 세대수/입주연도를
+    // batch 조회한다(페이지당 최대 limit건이지만 단지 identity 기준 dedup 후
+    // 쿼리 1쌍 고정 — 거래 row 개수만큼 DB를 조회하지 않는다, N+1 금지).
+    const contextKeysMap = new Map<string, ContextLookupKey>();
+    for (const t of page) {
+      const k: ContextLookupKey = { name: t.name, dong: t.dong, aptSeq: t.aptSeq, rawAreaM2: 0 };
+      contextKeysMap.set(identityKey(t), k);
+    }
+    const contextMap = await resolveApartmentContextBatch(prisma, Array.from(contextKeysMap.values()));
+
     const enriched = page.map((t) => {
       const a = annotations.get(t.uid);
+      const ctx = contextMap.get(`${t.aptSeq || ''}|${t.name}|${t.dong}|0`) ?? null;
+      // mini trend(§9) — 같은 그룹(identity+area+dealType) 최근 검증 거래가
+      // 3건 이상일 때만 노출한다. 취소 거래 자신은 애초에 annotations에 없어
+      // recentTrend가 undefined가 되므로 자동으로 숨겨진다.
+      const trend = !t.dealCanceled && a && a.recentTrend.length >= 3 ? a.recentTrend : null;
       return {
         ...t,
         priceLabel: formatKoreanPrice(String(t.dealAmount)),
@@ -237,6 +247,9 @@ export async function GET(request: Request) {
         previousTrade: t.dealCanceled ? null : a?.previousTrade ?? null,
         changeAmount: t.dealCanceled ? null : a?.changeAmount ?? null,
         changePct: t.dealCanceled ? null : a?.changePct ?? null,
+        recentTrend: trend,
+        totalHouseholds: ctx?.totalHouseholds ?? null,
+        approvalDate: ctx?.approvalDate ?? null,
       };
     });
     const groups = groupTradesByDate(enriched as any);
@@ -257,6 +270,7 @@ export async function GET(request: Request) {
       // "역대 신고가"가 아니라 "표시 기간 내 신고가"에 가깝다 — §18 정의 왜곡
       // 방지, 절대 12개월 기준인 것처럼 오해시키지 않는다).
       recordHighWindow: { from: fetchRange.from, to: fetchRange.to },
+      recordHighCoverageLabel,
       // §35/36 — 부분 실패(일부 구만 실패)와 전체 실패(apiError)를 구분해 알린다.
       // sido-all이 아니면 항상 false/빈 배열(단일 구 조회는 부분 실패 개념이 없음).
       partial,

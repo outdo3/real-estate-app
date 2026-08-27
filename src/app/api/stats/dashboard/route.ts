@@ -6,6 +6,8 @@ import { getSigunguListForSido } from '@/lib/region-utils';
 import { buildGapCandidates, normalizeAptName } from '@/lib/gap-invest-calc';
 import { prisma } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
+import { resolvePriceRankingPeriod, type PriceRankingPeriodPreset } from '@/lib/price-ranking';
+import { previousPeriodRange } from '@/lib/regional-feed';
 
 // FIX_STATISTICS_DATA_TRUST — item.info === "면적m² • 층 • YYYY-MM-DD"에서
 // raw 전용면적(㎡)만 파싱한다. 예전에는 `Math.round(areaNum / 3.3058)`로 가짜
@@ -95,6 +97,43 @@ export async function GET(request: Request) {
       const allRentTrades = rentMonthly.flat().filter(isValidTrade);
       const recentAptTrades = aptMonthly.slice(-3).flat().filter(isValidTrade);
       const recentRentTrades = rentMonthly.slice(-3).flat().filter(isValidTrade);
+
+      // ── STATISTICS V2.1-2 §13~§18 — 거래량 기간별 이전 기간 대비 비교 ──
+      // "거래량이 많다"가 아니라 "이전 기간보다 얼마나 변했는지"가 핵심이다.
+      // 이미 받아둔 12개월치 trades 안에서만 계산한다(새 fetch 없음, §34
+      // 성능 원칙). 7일/30일/3개월만 지원한다 — 6개월/12개월까지 "직전 동일
+      // 기간"을 계산하려면 최대 24개월 lookback이 필요한데, 그러면 이미 받아둔
+      // 12개월 fetch 범위 경계에 걸쳐(특히 6개월 preset) 실제로는 존재하지만
+      // 아직 fetch 안 된 거래가 "0건"처럼 보이는 부정확한 비교가 생길 수 있어
+      // (§18 정확한 데이터 claim 우선), 안전하게 전체 기간 안에 여유가 있는
+      // preset만 제공한다. 장기 흐름(6개월~12개월)은 기존 월별 차트가 그대로
+      // 담당한다(§16, 이번 STEP에서 차트 재설계는 범위 밖).
+      const VOLUME_COMPARISON_PRESETS: PriceRankingPeriodPreset[] = ['7d', '30d', '3m'];
+      const verifiedApt = allAptTrades.filter((t: any) => !t.dealCanceled);
+      const verifiedRentAll = allRentTrades.filter((t: any) => !t.dealCanceled);
+      const verifiedJeonse = verifiedRentAll.filter((t: any) => !t.monthlyRent || t.monthlyRent === 0);
+      const verifiedWolse = verifiedRentAll.filter((t: any) => t.monthlyRent && t.monthlyRent > 0);
+      const countInRange = (trades: any[], range: { from: string; to: string }) =>
+        trades.filter((t: any) => t.dealDate >= range.from && t.dealDate <= range.to).length;
+      const buildComparison = (trades: any[], current: { from: string; to: string }, previous: { from: string; to: string }) => {
+        const currentCount = countInRange(trades, current);
+        const previousCount = countInRange(trades, previous);
+        const changeCount = currentCount - previousCount;
+        const changePct = previousCount > 0 ? Math.round((changeCount / previousCount) * 1000) / 10 : null;
+        return { currentCount, previousCount, changeCount, changePct };
+      };
+      const volumeSummaryByPeriod: Record<string, any> = {};
+      for (const preset of VOLUME_COMPARISON_PRESETS) {
+        const current = resolvePriceRankingPeriod(preset, now);
+        const previous = previousPeriodRange(current);
+        volumeSummaryByPeriod[preset] = {
+          period: current,
+          previousPeriod: previous,
+          sale: buildComparison(verifiedApt, current, previous),
+          jeonse: buildComparison(verifiedJeonse, current, previous),
+          wolse: buildComparison(verifiedWolse, current, previous),
+        };
+      }
 
       // ── 2) 월별 그래프 데이터: 거래유형(매매/전세/월세)별 거래량(막대) + 가격지수(꺾은선,
       // 최초 유효월=100 기준). 세 유형 모두 한 번에 계산해둬서 클라이언트가 칩을 눌러
@@ -316,6 +355,7 @@ export async function GET(request: Request) {
         },
         chartData,
         chartDataByType,
+        volumeSummaryByPeriod,
         hotIssues,
         gapInvest,
         topPrices,

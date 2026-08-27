@@ -118,6 +118,24 @@ export function isDateInRange(dateStr: string, range: PeriodRange): boolean {
   return dateStr >= range.from && dateStr <= range.to;
 }
 
+function daySpanInclusive(range: PeriodRange): number {
+  const from = new Date(`${range.from}T00:00:00Z`).getTime();
+  const to = new Date(`${range.to}T00:00:00Z`).getTime();
+  return Math.max(1, Math.round((to - from) / 86400000) + 1);
+}
+
+/** STATISTICS V2.1-2 §18/§32 — 거래량/거래집중 화면의 "이전 기간 대비" 비교용.
+ * range와 정확히 같은 길이(일수)의, range 바로 직전(끊기지 않고 이어지는)
+ * 기간을 만든다. 예: range가 8/1~8/30(30일)이면 이전 기간은 7/2~7/31. */
+export function previousPeriodRange(range: PeriodRange): PeriodRange {
+  const days = daySpanInclusive(range);
+  const to = new Date(`${range.from}T00:00:00Z`);
+  to.setUTCDate(to.getUTCDate() - 1);
+  const from = new Date(to);
+  from.setUTCDate(from.getUTCDate() - (days - 1));
+  return { from: toDateStr(from), to: toDateStr(to) };
+}
+
 export interface FeedTrade {
   /** 안정적인 원본 식별용(같은 거래 중복 방지) — 실제 API가 id를 안 주면
    * 호출부에서 조합해 채운다. */
@@ -185,6 +203,9 @@ export interface TradeAnnotation {
   previousTrade: { dealAmount: number; dealDate: string } | null;
   changeAmount: number | null; // +상승, -하락(만원)
   changePct: number | null;
+  /** 같은 그룹의 최근 거래(자기 자신 포함, 시간순) 최대 5건 — mini trend 용.
+   * sample이 부족하면(3건 미만) 호출부가 차트를 숨긴다(§9). */
+  recentTrend: { dealAmount: number; dealDate: string }[];
 }
 
 /**
@@ -192,12 +213,16 @@ export interface TradeAnnotation {
  * 거래에 신고가 여부/직전거래 대비 변화를 부여한다. 반드시 동일
  * (identity+area+dealType) 그룹 안에서만 비교하며, 그룹의 "직전"은 같은
  * 그룹에서 자기보다 이전 날짜의 검증된(비취소) 거래 중 가장 최근 것이다.
- * 신고가는 "이 거래 시점까지" 그룹 내 최고가인지로 판정한다(미래 거래를
- * 끌어와 판단하지 않는다 — 그렇지 않으면 나중에 더 높은 거래가 나올 때마다
- * 과거 표시가 바뀌는 오류가 생긴다).
  *
- * 취소된 거래 자신은 이 함수가 annotate하지 않는다(호출부가 취소 거래는 이
- * 함수에 넣지 않거나, 넣더라도 무시해도 되도록 verified만 기준으로 계산).
+ * [BUG FIX — STATISTICS V2.1-2 §11/§20 감사] 신고가는 "이 거래 이전에 검증된
+ * 거래가 최소 1건 있고, 그 이전 최고가를 실제로(strictly) 넘어섰을 때"만
+ * 인정한다. 이전 버전은 runningMax를 -Infinity로 시작해 조회 lookback 안에서
+ * 처음 관측된 거래(비교할 과거가 아예 없는 거래)까지 무조건 "신고가"로
+ * 표시했다 — price-ranking.ts의 buildHistory/buildRecordHighRows가 이미
+ * 채택한 "이전 최고가가 없으면 신고가 아님" 원칙(그 파일 §11 주석)과
+ * 모순되는 실제 버그였다. 두 화면(feed의 배지, 가격통계의 2년최고가 랭킹)이
+ * 같은 정의를 쓰도록 여기서 고친다 — 미래 거래를 끌어와 판단하지 않는 원칙은
+ * 그대로 유지(나중에 더 높은 거래가 나와도 과거 표시가 바뀌지 않음).
  */
 export function annotateTrades(allTrades: FeedTrade[]): Map<string, TradeAnnotation> {
   const verified = filterVerifiedTrades(allTrades);
@@ -212,23 +237,43 @@ export function annotateTrades(allTrades: FeedTrade[]): Map<string, TradeAnnotat
   for (const list of byGroup.values()) {
     // 날짜 오름차순 정렬(동일 날짜는 원본 순서 유지) — 시간순으로 "지금까지의 최고가"를 누적 계산.
     const sorted = [...list].sort((a, b) => a.dealDate.localeCompare(b.dealDate));
-    let runningMax = -Infinity;
+    let runningMax: number | null = null; // null = 이전 검증 거래 없음(첫 관측)
     let previous: { dealAmount: number; dealDate: string } | null = null;
+    const trendSoFar: { dealAmount: number; dealDate: string }[] = [];
     for (const t of sorted) {
-      const isRecordHigh = t.dealAmount >= runningMax;
+      const isRecordHigh = runningMax !== null && t.dealAmount > runningMax;
       const changeAmount = previous ? t.dealAmount - previous.dealAmount : null;
       const changePct = previous && previous.dealAmount > 0 ? Math.round((changeAmount! / previous.dealAmount) * 1000) / 10 : null;
+      trendSoFar.push({ dealAmount: t.dealAmount, dealDate: t.dealDate });
       result.set(t.uid, {
         isRecordHigh,
         previousTrade: previous,
         changeAmount,
         changePct,
+        recentTrend: trendSoFar.slice(-5),
       });
-      if (t.dealAmount > runningMax) runningMax = t.dealAmount;
+      if (runningMax === null || t.dealAmount > runningMax) runningMax = t.dealAmount;
       previous = { dealAmount: t.dealAmount, dealDate: t.dealDate };
     }
   }
   return result;
+}
+
+/** feed의 신고가 lookback은 조회 period 길이에 따라 실제로 늘었다 줄었다 한다
+ * (§34 성능 제약으로 SIDO_ALL은 표시 기간 내로만 좁힘, 단일 구는 12개월 추가
+ * lookback). "신고가"라는 무제한 단어나 price-ranking.ts의 고정 "2년"을
+ * 그대로 갖다 쓰면 실제 조회 범위와 문구가 어긋나는 경우가 생긴다(§11/§20).
+ * 대신 이 함수가 실제 fetch 범위(from~to)를 날짜 수 기준으로 계산해 정직한
+ * 라벨을 만든다 — 60일 이하는 "N일", 그 이상은 개월/년 단위로 반올림(12개월
+ * 배수면 "N년"). 실제 커버리지보다 화면 문구가 더 넓게 주장하지 않는다. */
+export function windowCoverageLabel(fromStr: string, toStr: string): string {
+  const from = new Date(`${fromStr}T00:00:00Z`).getTime();
+  const to = new Date(`${toStr}T00:00:00Z`).getTime();
+  const days = Math.max(1, Math.round((to - from) / 86400000) + 1);
+  if (days <= 60) return `${days}일`;
+  const months = Math.max(1, Math.round(days / 30));
+  if (months % 12 === 0) return `${months / 12}년`;
+  return `${months}개월`;
 }
 
 export interface RegionSummary {
@@ -283,6 +328,9 @@ export interface MarketInterpretationInput {
   /** 10㎡ 단위 면적대별 거래건수(취소 제외) — 라벨은 "80~90"처럼 순수 구간, 특정
    * 평형을 단정하지 않는다. */
   areaBandCounts: Record<string, number>;
+  /** windowCoverageLabel() 결과 — 신고가 문장에 실제 조회 범위를 명시하기 위함
+   * (§11/§20, "신고가"라는 무제한 단어를 단독으로 쓰지 않는다). */
+  recordHighCoverageLabel: string;
 }
 
 const MIN_SAMPLE_FOR_INSIGHT = 3;
@@ -290,7 +338,7 @@ const MIN_SAMPLE_FOR_INSIGHT = 3;
 /** deterministic 시장 해석 문장 생성 — LLM 없음, 사실 기반, 단정적 표현 금지
  * (§17). 표본이 너무 적으면 문장을 만들지 않는다(과잉해석 방지). */
 export function buildMarketInterpretation(input: MarketInterpretationInput): string[] {
-  const { summary, lookbackVerifiedCount, lookbackDays, periodDays, dongCounts, areaBandCounts } = input;
+  const { summary, lookbackVerifiedCount, lookbackDays, periodDays, dongCounts, areaBandCounts, recordHighCoverageLabel } = input;
   const lines: string[] = [];
 
   if (summary.verifiedCount < MIN_SAMPLE_FOR_INSIGHT) return lines;
@@ -307,10 +355,10 @@ export function buildMarketInterpretation(input: MarketInterpretationInput): str
     }
   }
 
-  // 2) 신고가 비중.
+  // 2) 신고가 비중. "신고가"라는 무제한 단어 대신 실제 조회 범위를 밝힌다(§11/§20).
   if (summary.recordHighCount > 0) {
     const pct = Math.round((summary.recordHighCount / summary.verifiedCount) * 100);
-    lines.push(`${input.periodLabel} 신고가 거래가 ${summary.recordHighCount}건 확인됩니다(전체의 ${pct}%).`);
+    lines.push(`${input.periodLabel} 최근 ${recordHighCoverageLabel} 최고가 거래가 ${summary.recordHighCount}건 확인됩니다(전체의 ${pct}%).`);
   }
 
   // 3) 특정 동 거래 집중.
@@ -343,4 +391,82 @@ export function areaBandLabel(excluUseArea: number | null): string | null {
   if (excluUseArea == null || !Number.isFinite(excluUseArea)) return null;
   const bandStart = Math.floor(excluUseArea / 10) * 10;
   return `${bandStart}~${bandStart + 10}`;
+}
+
+/** MOLIT raw item(fetchMolitData가 이미 파싱한 것) 하나를 FeedTrade로 변환.
+ * feed(/api/stats/feed)와 거래집중(/api/stats/concentration) 둘 다 완전히
+ * 동일한 변환 규칙을 써야 같은 거래가 두 화면에서 다르게 집계되지 않는다 —
+ * 애초에 한 곳에만 구현한다(§3 공통 시스템 원칙). */
+export function toFeedTrade(item: any, dealType: 'sale' | 'jeonse' | 'wolse', lawdCd: string): FeedTrade | null {
+  if (!item || item.typeLabel === '에러' || !(item.dealAmount > 0)) return null;
+  return {
+    uid: item.id,
+    aptSeq: item.aptSeq ?? null,
+    name: item.name,
+    dong: item.dong || '',
+    lawdCd,
+    dealType,
+    dealAmount: item.dealAmount,
+    excluUseArea: item.excluUseArea ?? null,
+    floorRaw: item.floorRaw ?? null,
+    dealDate: item.dealDate,
+    dealCanceled: !!item.dealCanceled,
+  };
+}
+
+export interface ConcentrationEntry {
+  identityKey: string;
+  aptSeq: string | null;
+  name: string;
+  dong: string;
+  lawdCd: string;
+  currentCount: number;
+  previousCount: number;
+  deltaCount: number;
+  latestDealAmount: number;
+  latestDealDate: string;
+  latestExcluUseArea: number | null;
+}
+
+// STATISTICS V2.1-2 §19/§20/§23 — "거래집중"의 정의: 기간 내 같은 단지
+// (identityKey, 면적 무관 — 단지 전체 거래건수) 정상(비취소) 거래 건수. 이름만
+// 으로 다른 단지를 섞지 않는다(identityKey가 이미 aptSeq 우선/name+dong 폴백
+// 원칙을 강제). 절대 "인기"/"선호"를 뜻하지 않는다 — 대단지·분양 시점 등 다른
+// 이유로도 거래건수가 많을 수 있다(§23 캐치 문구는 호출부 UI가 책임진다).
+export function buildConcentrationRanking(currentTrades: FeedTrade[], previousTrades: FeedTrade[]): ConcentrationEntry[] {
+  const currentVerified = filterVerifiedTrades(currentTrades);
+  const previousVerified = filterVerifiedTrades(previousTrades);
+
+  const byIdentity = new Map<string, FeedTrade[]>();
+  for (const t of currentVerified) {
+    const key = identityKey(t);
+    if (!byIdentity.has(key)) byIdentity.set(key, []);
+    byIdentity.get(key)!.push(t);
+  }
+  const prevCounts = new Map<string, number>();
+  for (const t of previousVerified) {
+    const key = identityKey(t);
+    prevCounts.set(key, (prevCounts.get(key) || 0) + 1);
+  }
+
+  const rows: ConcentrationEntry[] = [];
+  for (const [key, trades] of byIdentity) {
+    const sorted = [...trades].sort((a, b) => b.dealDate.localeCompare(a.dealDate));
+    const latest = sorted[0];
+    const previousCount = prevCounts.get(key) || 0;
+    rows.push({
+      identityKey: key,
+      aptSeq: latest.aptSeq,
+      name: latest.name,
+      dong: latest.dong,
+      lawdCd: latest.lawdCd,
+      currentCount: trades.length,
+      previousCount,
+      deltaCount: trades.length - previousCount,
+      latestDealAmount: latest.dealAmount,
+      latestDealDate: latest.dealDate,
+      latestExcluUseArea: latest.excluUseArea,
+    });
+  }
+  return rows;
 }

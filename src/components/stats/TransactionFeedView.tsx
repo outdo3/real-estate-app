@@ -55,6 +55,9 @@ interface FeedTradeRow {
   previousTrade: { dealAmount: number; dealDate: string } | null;
   changeAmount: number | null;
   changePct: number | null;
+  recentTrend: { dealAmount: number; dealDate: string }[] | null;
+  totalHouseholds: number | null;
+  approvalDate: string | null;
 }
 
 interface FeedResponse {
@@ -80,6 +83,7 @@ interface FeedResponse {
   partial: boolean;
   failedDistricts: string[];
   recordHighWindow: { from: string; to: string };
+  recordHighCoverageLabel: string;
 }
 
 const DEAL_TYPE_LABEL: Record<string, string> = { sale: '매매', jeonse: '전세', wolse: '월세' };
@@ -88,6 +92,41 @@ const DEAL_TYPE_VARIANT: Record<string, 'status' | 'neutral' | 'beta'> = { sale:
 function formatDateHeader(dateStr: string): string {
   const [, m, d] = dateStr.split('-');
   return `${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
+}
+
+// approvalDate는 "YYYY년"(캐싱 원본 표기, apartments.approval_date 코멘트 참고)
+// 형태로 저장돼 있다 — 여기서는 그대로 "N년차"만 계산한다(가공/추정 없음).
+function ageLabel(approvalDate: string | null): string | null {
+  if (!approvalDate) return null;
+  const year = parseInt(approvalDate, 10);
+  if (!Number.isFinite(year) || year < 1900) return null;
+  const age = new Date().getFullYear() - year;
+  return age >= 0 ? `${age}년차` : null;
+}
+
+// mini price trend(§9) — 실제 거래만, 미래 leakage 없음(서버가 이미 시간순
+// 검증된 최근 5건까지만 내려줌). 장식용 SVG라 aria-hidden, 방향/수치는 이미
+// 위 텍스트(changeAmount/changePct, ▲▼ 배지)로 전달되므로 색상만으로 의미를
+// 전달하지 않는다(§42).
+function MiniTrend({ points }: { points: { dealAmount: number; dealDate: string }[] }) {
+  const w = 56;
+  const h = 20;
+  const amounts = points.map((p) => p.dealAmount);
+  const min = Math.min(...amounts);
+  const max = Math.max(...amounts);
+  const range = max - min || 1;
+  const step = points.length > 1 ? w / (points.length - 1) : 0;
+  const coords = points.map((p, i) => {
+    const x = i * step;
+    const y = h - ((p.dealAmount - min) / range) * (h - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const rising = amounts[amounts.length - 1] >= amounts[0];
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className={styles.miniTrend}>
+      <polyline points={coords.join(' ')} fill="none" stroke={rising ? 'var(--up-color)' : 'var(--down-color)'} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -204,7 +243,7 @@ export default function TransactionFeedView({
             <div className={styles.summaryTitle}>{displayRegionName} · {data.period.label}</div>
             <div className={styles.summaryGrid}>
               <div className={styles.summaryItem}><span className={styles.summaryValue}>{data.summary.verifiedCount}</span><span className={styles.summaryLabel}>실거래</span></div>
-              <div className={styles.summaryItem}><span className={styles.summaryValue}>{data.summary.recordHighCount}</span><span className={styles.summaryLabel}>신고가</span></div>
+              <div className={styles.summaryItem}><span className={styles.summaryValue}>{data.summary.recordHighCount}</span><span className={styles.summaryLabel}>{data.recordHighCoverageLabel}최고가</span></div>
               <div className={styles.summaryItem}><span className={styles.summaryValue} style={{ color: 'var(--up-color)' }}>{data.summary.riseCount}</span><span className={styles.summaryLabel}>상승거래</span></div>
               <div className={styles.summaryItem}><span className={styles.summaryValue} style={{ color: 'var(--down-color)' }}>{data.summary.fallCount}</span><span className={styles.summaryLabel}>하락거래</span></div>
               {data.summary.cancelledCount > 0 && (
@@ -212,7 +251,7 @@ export default function TransactionFeedView({
               )}
             </div>
             <div className={styles.recordHighWindowNote}>
-              신고가/직전거래 비교 기준: {data.recordHighWindow.from}~{data.recordHighWindow.to}
+              {data.recordHighCoverageLabel}최고가/직전거래 비교 기준: {data.recordHighWindow.from}~{data.recordHighWindow.to}
               {data.region.sidoAll ? '(시도 전체 보기는 표시 기간 내 비교만 지원돼요)' : ''}
             </div>
           </div>
@@ -238,7 +277,10 @@ export default function TransactionFeedView({
                   <div className={styles.tradeRowTop}>
                     <span className={styles.tradeName}>{t.name}</span>
                     <Badge variant={DEAL_TYPE_VARIANT[t.dealType]}>{DEAL_TYPE_LABEL[t.dealType]}</Badge>
-                    {t.isRecordHigh && <Badge variant="positive">신고가</Badge>}
+                    {/* [STATISTICS V2.1-2 §11/§20] "신고가"(무제한 주장) 대신 실제
+                        조회 범위를 밝힌 bounded label만 쓴다 — record-high 화면과
+                        동일 원칙. */}
+                    {t.isRecordHigh && <Badge variant="positive">{data.recordHighCoverageLabel}최고</Badge>}
                     {t.dealCanceled && <Badge variant="warning">취소</Badge>}
                   </div>
                   <div className={styles.tradeRowMid}>
@@ -248,9 +290,12 @@ export default function TransactionFeedView({
                         {t.changeAmount > 0 ? '+' : ''}{(t.changeAmount / 10000).toFixed(t.changeAmount % 10000 === 0 ? 0 : 1)}억 ({formatPercentChange(t.changePct)})
                       </span>
                     )}
+                    {t.recentTrend && t.recentTrend.length >= 3 && <MiniTrend points={t.recentTrend} />}
                   </div>
                   <div className={styles.tradeRowMeta}>
                     <span>{t.dong}</span>
+                    {ageLabel(t.approvalDate) && <span>{ageLabel(t.approvalDate)}</span>}
+                    {t.totalHouseholds != null && <span>{t.totalHouseholds.toLocaleString('ko-KR')}세대</span>}
                     {t.excluUseArea != null && <span>{t.excluUseArea.toFixed(2)}㎡</span>}
                     {t.floorRaw != null && <span>{t.floorRaw}층</span>}
                     <span>{t.dealDate}</span>

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { matchTrustworthyPyeong, resolvePyeongFromApartments, pyeongLookupKeyId } from './statistics-pyeong-resolver.ts';
+import { matchTrustworthyPyeong, resolvePyeongFromApartments, resolveApartmentContextFromApartments, pyeongLookupKeyId } from './statistics-pyeong-resolver.ts';
 
 function unitType(canonicalExclusiveArea, representativePyeong, source = 'OFFICIAL_LABEL') {
   return { canonicalExclusiveArea, representativePyeong, representativePyeongSource: source };
@@ -83,4 +83,23 @@ test('resolvePyeongFromApartments: 해당하는 Apartment row 자체가 없으�
   const keys = [{ name: '없는단지', dong: 'Z동', aptSeq: null, rawAreaM2: 84.7855 }];
   const result = resolvePyeongFromApartments(keys, []);
   assert.equal(result.size, 0);
+});
+
+test('resolveApartmentContextFromApartments: pyeong과 동일한 identity 규칙(aptSeq 단일매칭/name+dong 폴백)으로 세대수/입주연도를 채운다', () => {
+  const keys = [{ name: 'X아파트', dong: 'Y동', aptSeq: 'AS1', rawAreaM2: 0 }];
+  const apartments = [{ aptSeq: 'AS1', name: 'X아파트', dong: 'Y동', totalHouseholds: 500, approvalDate: '2011년' }];
+  const result = resolveApartmentContextFromApartments(keys, apartments);
+  const ctx = result.get(pyeongLookupKeyId(keys[0]));
+  assert.equal(ctx.totalHouseholds, 500);
+  assert.equal(ctx.approvalDate, '2011년');
+});
+
+test('resolveApartmentContextFromApartments: name+dong 동명이단지면(다른 단지 fallback 금지) 매칭하지 않는다', () => {
+  const keys = [{ name: 'X아파트', dong: 'Y동', aptSeq: null, rawAreaM2: 0 }];
+  const apartments = [
+    { aptSeq: null, name: 'X아파트', dong: 'Y동', totalHouseholds: 500, approvalDate: '2011년' },
+    { aptSeq: 'AS2', name: 'X아파트', dong: 'Y동', totalHouseholds: 900, approvalDate: '2015년' },
+  ];
+  const result = resolveApartmentContextFromApartments(keys, apartments);
+  assert.equal(result.has(pyeongLookupKeyId(keys[0])), false);
 });

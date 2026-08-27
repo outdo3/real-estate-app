@@ -53,7 +53,13 @@ export interface GapCandidate {
 }
 
 export const normalizeAptName = (name: string): string => {
-  if (!name) return '';
+  // STATISTICS V2.1-2 §16/§25 감사 중 실측: 서울 전체(SIDO_ALL) 규모로 12개월치
+  // 전월세 거래를 fetch하면 드물게 name이 문자열이 아닌(예: 숫자) MOLIT 원본
+  // row가 섞여 있어 `.replace`가 없는 값 호출로 dashboard 전체가 크래시했다
+  // (거래량 화면이 "일부 실패"가 아니라 지역 전체 500처럼 죽는 훨씬 나쁜
+  // 실패 모드). 방어적으로 문자열이 아니면 빈 문자열로 취급한다 — 정상
+  // 문자열 입력의 동작은 전혀 바뀌지 않는다.
+  if (!name || typeof name !== 'string') return '';
   return name.replace(/\s+/g, '').replace(/아파트$/, '');
 };
 

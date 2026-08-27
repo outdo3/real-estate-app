@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  TrendingDown, Award, TrendingUp, Activity, Scale, LayoutGrid, Coins, ShoppingCart,
+  TrendingDown, Award, TrendingUp, Activity, Scale, LayoutGrid, Coins, Target,
   Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye, Rows3,
 } from 'lucide-react';
 
@@ -55,7 +55,13 @@ export const STATS_MENU: StatsMenuItem[] = [
   { slug: 'rising', icon: '📈', Icon: TrendingUp, title: '상승', subtitle: '가격변동 상위 단지', status: 'live', category: '가격', colorToken: 'up' },
   { slug: 'jeonse-risk', icon: '⚠️', Icon: AlertTriangle, title: '역전세', subtitle: '전세가 하락 위험 단지', status: 'live', category: '가격', colorToken: 'warn' },
   { slug: 'volume', icon: '📊', Icon: Activity, title: '거래량', subtitle: '매매·전월세 거래량', status: 'live', category: '거래', colorToken: 'brand' },
-  { slug: 'top-traded', icon: '🛒', Icon: ShoppingCart, title: '인기', subtitle: '거래량 집중 인기 단지', status: 'live', category: '거래', colorToken: 'popular' },
+  // STATISTICS V2.1-2 §2/§23 — 감사 결과 이 화면은 실제 사용자 행동(조회/검색/
+  // 관심등록 등) 기반 popularity가 아니라 순수 거래건수 랭킹이었다("인기"라는
+  // 이름과 보라색은 실제로 없는 신호를 있는 것처럼 보이게 하는 overclaim). 진짜
+  // "인기" 기능은 아래 slug='popular'(soon)로 이미 별도 예약돼 있으므로, 이
+  // 화면은 실제로 측정한 것 그대로 "거래집중"으로 정정한다. 색상도 popular
+  // 보라색 대신 거래 카테고리의 기본 브랜드 그린으로 맞춘다.
+  { slug: 'top-traded', icon: '📌', Icon: Target, title: '거래집중', subtitle: '최근 거래가 몰린 단지', status: 'live', category: '거래', colorToken: 'brand' },
   { slug: 'gap-invest', icon: '💰', Icon: Coins, title: '갭투자', subtitle: '매매-전세 갭 적은 단지', status: 'live', category: '거래' },
   {
     slug: 'supply',

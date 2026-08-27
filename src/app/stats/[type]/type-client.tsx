@@ -23,6 +23,7 @@ import { useRegion } from '@/contexts/RegionContext';
 import { getStatsMenuItem } from '../statsMenu';
 import TransactionFeedView from '@/components/stats/TransactionFeedView';
 import PriceRankingView from '@/components/stats/PriceRankingView';
+import ConcentrationView from '@/components/stats/ConcentrationView';
 import styles from '../page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -66,21 +67,13 @@ interface RankingConfig {
 
 // STATISTICS V2.1-1 — decline/record-high/rising은 PriceRankingView(별도
 // 컴포넌트, same-aptSeq+same-raw-area 히스토리 기반 정밀 계산)로 이전했다.
-// jeonse-risk/top-traded는 이번 STEP 범위 밖이라 기존 RANKING_CONFIGS/
-// RankingListView 경로를 그대로 유지한다(회귀 방지, 중복 재구현 없음).
+// STATISTICS V2.1-2 — top-traded("인기", 월 단위 tradeCount 랭킹)는 실제로는
+// 사용자 행동 popularity가 아니라 순수 거래건수였다는 감사 결과에 따라
+// ConcentrationView(day-precise 기간 + 직전 기간 대비 증감, 전용
+// /api/stats/concentration)로 교체했다(§2/§19/§23) — 아래 dispatcher 참고.
+// jeonse-risk는 이번 STEP 범위 밖이라 기존 RANKING_CONFIGS/RankingListView
+// 경로를 그대로 유지한다(회귀 방지, 중복 재구현 없음).
 const RANKING_CONFIGS: Record<string, RankingConfig> = {
-  'top-traded': {
-    apiType: 'apt',
-    filter: () => true,
-    sort: (a, b) => b.tradeCount - a.tradeCount,
-    value: (c) => `${c.tradeCount}건`,
-    direction: () => null,
-    meta: (c) => `최근 ${c.latestPrice}`,
-    emptyText: '표시할 데이터가 없습니다.',
-    note: '최근 12개월 매매 거래 건수 기준입니다.',
-    criterionPhrase: '최근 거래가 많은',
-    valueColor: 'var(--popular-color)',
-  },
   'jeonse-risk': {
     apiType: 'rent',
     filter: (c) => c.pctChange !== null && c.pctChange <= -3,
@@ -189,6 +182,64 @@ const DEAL_TYPE_OPTIONS: { key: DealType; label: string; indexLabel: string }[] 
   { key: 'wolse', label: '월세', indexLabel: '월세가격지수' },
 ];
 
+// STATISTICS V2.1-2 §13~§18 — "거래량이 많다"가 아니라 "이전 기간보다 얼마나
+// 변했는지"를 보여주는 요약 preset. dashboard route가 이미 계산해준
+// volumeSummaryByPeriod[preset]만 읽는다(새 fetch 없음).
+const VOLUME_COMPARISON_OPTIONS: { key: string; label: string }[] = [
+  { key: '7d', label: '최근 7일' },
+  { key: '30d', label: '최근 30일' },
+  { key: '3m', label: '최근 3개월' },
+];
+
+function VolumeSummaryStrip({ data, dealType, displayRegionName }: { data: any; dealType: DealType; displayRegionName: string }) {
+  const router = useRouter();
+  const [preset, setPreset] = useState('30d');
+  const byPeriod = data?.volumeSummaryByPeriod?.[preset];
+  const metric = byPeriod?.[dealType];
+  if (!byPeriod || !metric) return null;
+  const dealTypeMeta = DEAL_TYPE_OPTIONS.find((o) => o.key === dealType)!;
+  const changeColor = metric.changeCount > 0 ? 'var(--up-color)' : metric.changeCount < 0 ? 'var(--down-color)' : 'var(--text-secondary)';
+  return (
+    <div className={styles.panel} style={{ marginBottom: '0.75rem' }}>
+      <div className={styles.dealTypeChipRow}>
+        {VOLUME_COMPARISON_OPTIONS.map((p) => (
+          <FilterChip key={p.key} active={preset === p.key} onClick={() => setPreset(p.key)}>
+            {p.label}
+          </FilterChip>
+        ))}
+      </div>
+      <div className={styles.panelBody} style={{ paddingTop: 0 }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
+          {displayRegionName} · {dealTypeMeta.label}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metric.currentCount.toLocaleString('ko-KR')}건</span>
+          {metric.previousCount > 0 ? (
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: changeColor }}>
+              이전 {metric.previousCount.toLocaleString('ko-KR')}건 대비 {metric.changeCount > 0 ? '▲' : metric.changeCount < 0 ? '▼' : ''}
+              {Math.abs(metric.changeCount).toLocaleString('ko-KR')}건{metric.changePct != null ? ` (${metric.changePct > 0 ? '+' : ''}${metric.changePct}%)` : ''}
+            </span>
+          ) : (
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>이전 동일 기간에는 거래가 없었어요.</span>
+          )}
+        </div>
+        <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+          이전 동일 기간: {byPeriod.previousPeriod.from}~{byPeriod.previousPeriod.to}
+        </div>
+        {/* [§26] 거래량 -> 거래집중 cross-link. 기간/거래유형을 쿼리스트링으로
+            유지해서 넘어간다(공통 필터 최대 유지). */}
+        <button
+          className={styles.viewToggleBtn}
+          style={{ marginTop: '0.6rem' }}
+          onClick={() => router.push(`/stats/top-traded?period=${preset}&dealType=${dealType}`)}
+        >
+          이 기간 거래가 많은 단지 보기
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function VolumeView({ lawdCd, sidoCode, displayRegionName }: { lawdCd: string | null; sidoCode: string; displayRegionName: string }) {
   const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
   const [dealType, setDealType] = useState<DealType>('sale');
@@ -244,6 +295,8 @@ function VolumeView({ lawdCd, sidoCode, displayRegionName }: { lawdCd: string | 
           </FilterChip>
         ))}
       </div>
+
+      <VolumeSummaryStrip data={data} dealType={dealType} displayRegionName={displayRegionName} />
 
       {chartView === 'graph' ? (
         <div className={styles.panelBody} style={{ height: '400px' }}>
@@ -615,6 +668,8 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
           <TransactionFeedView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'decline' || slug === 'record-high' || slug === 'rising' ? (
           <PriceRankingView mode={slug} lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
+        ) : slug === 'top-traded' ? (
+          <ConcentrationView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug in RANKING_CONFIGS ? (
           <RankingListView slug={slug} lawdCd={region.lawdCd} sidoCode={region.sidoCode} regionLabel={region.displayRegionName} />
         ) : slug === 'volume' ? (
