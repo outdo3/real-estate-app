@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   TrendingDown, Award, TrendingUp, Activity, Scale, LayoutGrid, Coins, ShoppingCart,
-  Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye,
+  Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye, Rows3,
 } from 'lucide-react';
 
 // 시장 통계 탭의 16개 메뉴 정의. status: 'live'는 실거래가 API로 실제 계산해서 보여주는
@@ -29,6 +29,11 @@ export interface StatsMenuItem {
 }
 
 export const STATS_MENU: StatsMenuItem[] = [
+  // STATISTICS V2 — REGIONAL TRANSACTION FEED §6/§8: 지역별 실거래를 날짜별로
+  // 보여주는 신규 feed. 다른 랭킹류(하락/최고가 등)와 달리 "단지 순위"가 아니라
+  // "지역 안에서 실제로 무슨 거래가 있었나"를 먼저 보여주는 진입점이라 거래
+  // 카테고리 맨 앞에 둔다.
+  { slug: 'feed', icon: '🧾', Icon: Rows3, title: '실거래', subtitle: '지역별 실거래 피드', status: 'live', category: '거래' },
   { slug: 'decline', icon: '📉', Icon: TrendingDown, title: '최근하락', subtitle: '하락거래 단지 모음', status: 'live', category: '가격' },
   { slug: 'record-high', icon: '🏆', Icon: Award, title: '최고가', subtitle: '최근 신고가 단지', status: 'live', category: '가격' },
   { slug: 'rising', icon: '📈', Icon: TrendingUp, title: '최고상승', subtitle: '가격변동 상위 단지', status: 'live', category: '가격' },

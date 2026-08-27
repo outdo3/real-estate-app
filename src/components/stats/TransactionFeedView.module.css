@@ -1,0 +1,193 @@
+.wrap {
+  padding-bottom: 1rem;
+}
+
+.periodRow {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.75rem 0 0.5rem;
+  -webkit-overflow-scrolling: touch;
+}
+.periodRow::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chipActive {
+  background: var(--brand-color, #16a34a);
+  border-color: var(--brand-color, #16a34a);
+  color: #fff;
+}
+
+.dealTypeRow {
+  display: flex;
+  gap: 0.4rem;
+  padding-bottom: 0.75rem;
+}
+
+.dealChip {
+  flex: 1;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.dealChipActive {
+  background: var(--bg-secondary, #f1f5f9);
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.summaryCard {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  background: var(--card-bg);
+  margin-bottom: 0.75rem;
+}
+
+.summaryTitle {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.7rem;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 0.5rem;
+}
+
+.summaryItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.summaryValue {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.summaryLabel {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.insightCard {
+  border-radius: 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 0.8rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.insightLine {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #166534;
+  line-height: 1.6;
+}
+.insightLine + .insightLine {
+  margin-top: 0.3rem;
+}
+
+.freshnessNote {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.dateGroup {
+  margin-bottom: 0.9rem;
+}
+
+.dateHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  padding: 0.4rem 0.1rem;
+}
+
+.tradeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--card-bg);
+  margin-bottom: 0.5rem;
+}
+
+.tradeRowTop {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tradeName {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tradeRowMid {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.tradePrice {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.tradeChange {
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.tradeRowMeta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.loadMoreBtn {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+}

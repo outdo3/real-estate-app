@@ -9443,3 +9443,72 @@ DB 쓰기: `School.sidoCode` 7행(null → '26', 기존과 동일 값/동일 출
 P0_IDENTITY = 0. P0_INVALID_STAT = 0. P1_REGION_GAP = 7. NO_SOURCE = 34(재분류,
 기존 31은 부분집합). SCHOOL_QA = PASS. IDEMPOTENCY = PASS. RELEASE_GATE = READY.
 DB_SCHEMA_CHANGE = NONE. NEXT_STEP = STATISTICS_V2.**
+
+## 2026-08-27
+
+### STEP — STATISTICS V2: 지역별 실거래 피드(REGIONAL TRANSACTION FEED) 신규 구축
+
+이집 통계 영역에 "지역 시장을 이해하고 후보 단지까지 좁히는" 핵심 신규 기능인
+지역별 실거래 피드를 추가했다. 기존 16개 통계 메뉴(하락/최고가/상승/거래량/
+갭투자/비교 등)는 전부 KEEP — 파괴하거나 재작성하지 않았다.
+
+**신규 순수 함수 모듈** `src/lib/regional-feed.ts`: 8개 기간 preset(오늘/
+어제/최근7일/이번주/지난주/최근30일/최근12개월/기간지정)을 순수 함수로 구현,
+달 경계·연도 경계를 정확히 처리하는 `monthsForRange()`로 MOLIT 월 단위 배치
+fetch 대상을 계산한다(N+1 방지). `annotateTrades()`가 동일 (canonical
+identity+raw 전용면적+거래유형) 그룹 안에서 시간순 누적 최고가(신고가)와 직전
+검증 거래 대비 변화(상승/하락)를 계산하며, 취소거래는 완전히 제외한다(미래
+거래가 과거 판정에 영향을 주지 않도록 시간순 처리 — 실제 흔한 버그 패턴을
+사전에 테스트로 차단). `buildMarketInterpretation()`은 거래량/신고가 비중/동
+집중/면적대 집중/상승·하락 비교 5종 문장을 표본 3건 미만이면 아예 생성하지
+않는 방식으로 과잉해석을 방지한다 — LLM 미사용, "확정"/"적기"/"급등" 같은
+단정적 표현 금지를 테스트로 고정했다.
+
+**신규 API** `GET /api/stats/feed`: 표시 기간보다 최대 12개월 넓은 lookback을
+기존 `fetchMonthsThrottled`(전역 공유 세마포어, 동시 3개+200ms 페이싱)로 한
+번에 배치 fetch한다 — 새 동시성 풀을 만들지 않고 기존 rankings/dashboard와
+동일한 것을 재사용해 실제 동시 요청 수가 배로 늘어나는 위험을 피했다. 대표
+평형(pyeong)은 계산하지 않고 raw 전용면적만 반환한다 — 기존 rankings/
+dashboard/transactions 라우트가 이미 갖고 있던 `exclusiveArea/3.3058` 가짜
+평형 계산(감사로 발견, REMAINING GAP으로 별도 문서화)을 이번 신규 코드에서는
+반복하지 않았다. 지역코드는 기존 전국 법정동코드 프록시를 그대로 재사용해
+서울 강남구(`lawdCd=11680`) 등 신규 데이터 없이 즉시 동작함을 실측 확인했다
+(부산 전용 아키텍처가 아님).
+
+**신규 UI** `TransactionFeedView`(`/stats/feed`, 기존 `[type]` 라우트 구조에
+`feed` slug로 통합 — 새 라우트 트리 대신 기존 dispatch에 자연스럽게 편입):
+기간 chip(가로 스크롤) → 거래유형 토글 → 지역 요약 카드(실거래/신고가/상승/
+하락/취소, 5개 이하) → deterministic 시장 해석 → 신고 시차 고지 → 날짜별
+그룹 거래 목록(당근 스타일, 단지명·거래유형·신고가/취소 badge·가격·변동률·
+동/면적/층/계약일) → 더보기 페이지네이션(최대 200건/페이지, 수천 건 한번에
+렌더 안 함). 실거래 row 클릭 시 기존 canonical apt 상세 페이지로 이동(lawdCd+
+dong 동명이 단지 방지, school-detail-client.tsx의 기존 패턴 재사용).
+
+Home 퀵메뉴·통계 랜딩 메뉴에 "실거래" 항목 추가(Home 대개편 없음, 기존 6개
+항목 순서 그대로 유지 + 1개 추가).
+
+라이브 검증: 부산 서구/연제구/해운대구/서울 강남구 4개 지역 전부 실제 MOLIT
+데이터로 정상 동작(각 1,955~13,774건 12개월 검증 실거래), 대신롯데캐슬/
+한솔솔파크/일동미라주더스타 3개 fixture 단지 실거래 확인. 신규
+`scripts/run-statistics-v2-qa.ts`(read-only, 라이브 API 응답 검증 — 이
+기능이 persisted DB 테이블 없이 전부 MOLIT 라이브 조회라 DB 쿼리 대신 API
+응답 정합성 검사 방식 채택) 실행 결과 P0 findings 0건, RELEASE GATE READY.
+
+신규 유닛 테스트 26개(`regional-feed.test.mjs`) 전부 PASS. 기존 포함 총
+161/161(`.test.mjs`) + 361/361(`.test.ts`) PASS(회귀 없음). `npx tsc --noEmit`
+변경 파일 기준 에러 0(무관 사전 존재 스크립트 오류 20건은 이전 STEP들과 동일
+`FAIL_EXISTING_SCRIPT_ERRORS`). Lint 에러 0. `npm run build` PASS(전체 라우트
+정상 컴파일, `/api/stats/feed` 포함).
+
+`docs/development/STATISTICS_V2.md` 신규(30개 섹션).
+
+DB 쓰기: 없음. 스키마 변경: 없음. Migration: 없음(전부 기존 라이브 MOLIT fetch
+경로 재사용).
+
+상태: 완료.
+
+**STATISTICS_V2 = PASS. REGIONAL_TRANSACTION_FEED = PASS. RECORD_HIGH = PASS.
+RISE_FALL = PASS. VOLUME = PASS. DETERMINISTIC_INSIGHT = PASS. WRONG_APARTMENT
+= ABSENT. CANCELLED_TRADE_POLICY = PASS. API_ERROR_NO_DATA = DISTINGUISHED.
+BUSAN_SEOGU = PASS. SEOUL_GANGNAM = PASS. MOBILE = PASS. DESKTOP = PASS. BUILD
+= PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP = FIX_STATISTICS_DATA_TRUST.**

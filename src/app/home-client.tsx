@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Map as MapIcon, Sparkles, BarChart3, Building2, TrendingDown, Award, TrendingUp, Activity, Scale, Coins } from 'lucide-react';
+import { Map as MapIcon, Sparkles, BarChart3, Building2, TrendingDown, Award, TrendingUp, Activity, Scale, Coins, Rows3 } from 'lucide-react';
 import Header from '@/components/Header';
 import AdContainer from '@/components/AdContainer';
 import HomeApartmentSearch from '@/components/HomeApartmentSearch';
@@ -11,6 +11,9 @@ import { getRecentApartments, RecentApartment } from '@/lib/recent-apartments';
 import styles from './home-client.module.css';
 
 const QUICK_MENU = [
+  // STATISTICS V2 — REGIONAL TRANSACTION FEED §42/§43: 신규 핵심 기능이라
+  // quick menu 맨 앞에 추가한다(Home 대개편 아님, 기존 항목/순서는 그대로 유지).
+  { Icon: Rows3, label: '실거래', href: '/stats/feed' },
   { Icon: TrendingDown, label: '최근하락', href: '/stats/decline' },
   { Icon: Award, label: '최고가', href: '/stats/record-high' },
   { Icon: TrendingUp, label: '최고상승', href: '/stats/rising' },

@@ -21,6 +21,7 @@ import { formatPercentChange } from '@/lib/stats-format';
 import { buildRankingInsight } from '@/lib/stats-insight';
 import { useRegion } from '@/contexts/RegionContext';
 import { getStatsMenuItem } from '../statsMenu';
+import TransactionFeedView from '@/components/stats/TransactionFeedView';
 import styles from '../page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -575,6 +576,8 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
 
         {item.status === 'soon' ? (
           <ComingSoonCard title={item.title} reason={item.soonReason} />
+        ) : slug === 'feed' ? (
+          <TransactionFeedView lawdCd={region.lawdCd} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug in RANKING_CONFIGS ? (
           <RankingListView slug={slug} lawdCd={region.lawdCd} regionLabel={region.displayRegionName} />
         ) : slug === 'volume' ? (
