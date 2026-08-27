@@ -122,6 +122,39 @@
   color: var(--text-primary);
 }
 
+/* APT_DETAIL_MOBILE_UX_REGRESSION_HOTFIX §22 — 학교명 text만이 아니라 row 전체를
+   터치 타겟으로 넓힌다. 클릭 가능/불가능 두 경우 모두 같은 여백을 써서 시각적으로
+   레이아웃이 흔들리지 않게 한다. */
+.schoolRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 40px;
+  margin: -0.3rem -0.4rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.schoolRow:hover,
+a.schoolRow:active {
+  background: var(--bg-color);
+}
+
+a.schoolRow:focus-visible {
+  outline: 2px solid var(--ejip-green-deep);
+  outline-offset: 2px;
+}
+
+.schoolRowChevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
 .legalNotice {
   display: flex;
   align-items: center;

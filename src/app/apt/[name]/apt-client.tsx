@@ -18,7 +18,7 @@ import LivingEnvironmentPanel from '@/components/LivingEnvironmentPanel';
 import NeighborhoodInfoPanel from '@/components/NeighborhoodInfoPanel';
 import EducationPanel from '@/components/EducationPanel';
 import CommunityPreview from '@/components/CommunityPreview';
-import StickyPriceBar from '@/components/StickyPriceBar';
+import StickyActionBar from '@/components/StickyActionBar';
 import AdContainer from '@/components/AdContainer';
 import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
@@ -1103,7 +1103,15 @@ export default function ApartmentDetail() {
         </div>
       </div>
 
-      <StickyPriceBar aptName={aptName} latestPrice={latestPrice} tradeTypeFilter={tradeTypeFilter} />
+      <StickyActionBar
+        aptName={aptName}
+        lawdCd={lawdCdState}
+        dong={urlDong}
+        name={displayName || aptName}
+        address={primaryAddress}
+        shareTitle={`${aptName} 실거래가·시세 - ${siteConfig.name}`}
+        shareDescription={`${aptName}의 실거래가, 시세 변동 추이, 평형별 거래 내역을 확인하세요.`}
+      />
     </div>
   );
 }

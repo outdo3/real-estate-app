@@ -21,6 +21,22 @@ import styles from './FavoriteButton.module.css';
 // authenticated로 바뀌면, 저장해둔 의도가 "지금 보고 있는 단지"와 일치하고
 // 오래되지 않았을 때만 자동으로 찜을 완료한다 — 다른 단지로 이동했거나 오래
 // 방치된 의도까지 되살리지 않는다.
+// APT_DETAIL_MOBILE_UX_REGRESSION_HOTFIX §12 — 같은 페이지에 이 버튼이 두 번(Hero
+// 상단 + 하단 3-action row) 마운트될 수 있다. 각 인스턴스가 독립된 useState라 한쪽에서
+// 토글해도 다른 쪽은 자동으로 갱신되지 않는 문제가 있었다 — 새 favorite API/상태 저장소를
+// 만들지 않고, 같은 탭 안의 다른 인스턴스에게만 "방금 이 식별자의 상태가 바뀌었다"는
+// 사실을 알리는 최소한의 브라우저 네이티브 이벤트만 추가한다(서버 호출/판정 로직은 전혀
+// 바뀌지 않음).
+const FAVORITE_CHANGED_EVENT = 'ejip:favorite-changed';
+type FavoriteChangedDetail = FavoriteInput & { favorited: boolean };
+
+function broadcastFavoriteChanged(identity: FavoriteInput, favorited: boolean) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent<FavoriteChangedDetail>(FAVORITE_CHANGED_EVENT, { detail: { ...identity, favorited } })
+  );
+}
+
 export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address, compact }: FavoriteInput & { compact?: boolean }) {
   const { status } = useSession();
   const [favorited, setFavorited] = useState<boolean | null>(null);
@@ -73,7 +89,10 @@ export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address, co
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(identity),
             }).then((r) => r.json());
-            if (!cancelled && created.success) setFavorited(true);
+            if (!cancelled && created.success) {
+              setFavorited(true);
+              broadcastFavoriteChanged(identity, true);
+            }
           }
         } else if (matched) {
           // 이미 찜된 상태로 돌아온 경우에도 남아있는 의도는 정리한다.
@@ -91,6 +110,20 @@ export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address, co
     };
   }, [status, lawdCd, dong, name]);
 
+  // 같은 탭의 다른 FavoriteButton 인스턴스(예: Hero 상단)가 이 단지의 상태를 바꾸면
+  // 즉시 반영한다 — 식별자(lawdCd/dong/name)가 정확히 일치할 때만.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<FavoriteChangedDetail>).detail;
+      if (!detail) return;
+      if (detail.lawdCd === lawdCd && detail.dong === dong && detail.name === name) {
+        setFavorited(detail.favorited);
+      }
+    };
+    window.addEventListener(FAVORITE_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(FAVORITE_CHANGED_EVENT, handler);
+  }, [lawdCd, dong, name]);
+
   const handleClick = async () => {
     if (pending) return;
 
@@ -103,6 +136,7 @@ export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address, co
     const wasFavorited = !!favorited;
     setPending(true);
     setFavorited(!wasFavorited);
+    broadcastFavoriteChanged(identity, !wasFavorited);
 
     try {
       const res = wasFavorited
@@ -119,6 +153,7 @@ export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address, co
       if (!json.success) throw new Error(json.error || 'failed');
     } catch {
       setFavorited(wasFavorited);
+      broadcastFavoriteChanged(identity, wasFavorited);
       showError('관심단지를 저장하지 못했습니다.');
     } finally {
       setPending(false);

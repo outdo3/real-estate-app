@@ -102,6 +102,14 @@ interface NearbyKakaoSchool {
   name: string;
   distanceM: number;
   establishmentType: string | null;
+  // APT_DETAIL_MOBILE_UX_REGRESSION_HOTFIX §18~22 — 학교명 클릭 시 상세페이지로
+  // 이동하려면 이 POI 고유의 좌표/id가 필요하다. Kakao 응답에는 이미 x/y/id가 있었지만
+  // 지금까지 응답에서 버려지고 있었다(진짜 root cause) — 새로 지오코딩하지 않고 이미
+  // 받은 값을 그대로 통과시킨다. 없으면(과거 캐시 등) null — 그 경우 클릭 불가로
+  // 정직하게 처리한다(다른 학교로 오연결 금지).
+  kakaoId: string | null;
+  lat: number | null;
+  lng: number | null;
 }
 
 // 학교 canonical 좌표는 여전히 0%(C5-B 이후 변동 없음)라 "가장 가까운 초/고등학교"
@@ -126,7 +134,14 @@ async function fetchNearbySchoolsByKeyword(keyword: '초등학교' | '고등학�
     return docs
       .filter((d) => d.category_group_code === 'SC4' && d.place_name.endsWith(keyword))
       .slice(0, 3)
-      .map((d) => ({ name: d.place_name, distanceM: Number(d.distance), establishmentType: null }));
+      .map((d) => ({
+        name: d.place_name,
+        distanceM: Number(d.distance),
+        establishmentType: null,
+        kakaoId: d.id ?? null,
+        lat: d.y ? parseFloat(d.y) : null,
+        lng: d.x ? parseFloat(d.x) : null,
+      }));
   } catch {
     return [];
   }

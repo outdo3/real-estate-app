@@ -9193,3 +9193,62 @@ KAKAO_REQUESTS_AFTER = 0. WRONG_APARTMENT = ABSENT. DUPLICATE_MARKERS = ABSENT.
 STALE_BOUNDS_PROTECTION = PASS(단위 테스트). MOBILE = PARTIAL(375px 라이브 확인,
 360/390은 CSS 미변경 근거로 재검증 생략). DESKTOP = PASS. BUILD = PASS.
 DB_SCHEMA_CHANGE = NONE. INDEX_CHANGE = NOT_NEEDED.**
+
+
+## 2026-08-27
+
+### STEP — APT DETAIL MOBILE UX REGRESSION HOTFIX
+
+아파트 상세페이지에서 최근 작업 중 사라지거나 약해진 핵심 UX 3가지를 조사·복구했다.
+
+**1) ㎡↔평 토글 — 조사 결과 회귀 아님.** git blame으로 관련 커밋 전체를 추적하고
+대신롯데캐슬(Unit Master 보유)/연산동한솔솔파크(Unit Master 없음) 양쪽에서 라이브로
+클릭까지 재현한 결과, `AREA_SELECTOR_V2_1_TOGGLE_HOTFIX`가 정한 조건
+(신뢰 가능한 `representativePyeong`이 하나라도 있어야 노출)이 그대로 정확히 동작하고
+있었다. "버튼이 사라졌다"는 체감은 Unit Master 데이터가 Busan 3,402건 중 11건에만
+있다는 데이터 커버리지 한계였다 — `exclusiveArea/3.3058` fallback을 추가하는 것은
+금지사항이라 시도하지 않았고, 코드도 변경하지 않았다.
+
+**2) 하단 "최근 매매가" sticky — 실제 회귀 확인, 교체.** `StickyPriceBar`의 글쓰기
+버튼이 `6d6dbcb`(커밋 메시지: "repair apartment detail mobile regressions")에서
+아무 설명 없이 삭제되어 있었다(git diff로 확인). 상단에서 이미 가격을 충분히 보여주므로
+페이지 끝의 가격 반복을 없애고, `StickyPriceBar`를 완전히 제거해
+`StickyActionBar`(관심단지/공유/글쓰기 3-action row, 신규)로 교체했다. 기존
+`FavoriteButton`/`KakaoShareButton`/`/community/write?aptName=` 계약을 그대로
+재사용(새 business logic 없음) — 다만 같은 페이지에 두 번 마운트되는 `FavoriteButton`이
+서로 상태를 공유하지 않던 문제를 발견해, 같은 탭 안에서만 도는 최소한의
+`CustomEvent`(`ejip:favorite-changed`) 브로드캐스트를 `FavoriteButton.tsx`에 추가했다
+(서버 API/판정 로직 변경 없음).
+
+**3) 학군 학교명 클릭 — 실제 회귀 확인, 복구.** `/api/apt/[name]/education`의
+`fetchNearbySchoolsByKeyword()`가 Kakao 응답의 좌표(`x`/`y`)와 `id`를 이미 받아놓고도
+클라이언트 응답 직전에 버리고 있었다(`MAP_SURROUNDING_MARKER_PERFORMANCE_V1`에서
+발견한 것과 같은 종류의 "이미 받은 데이터를 응답 직전에 버리는" 패턴). 이 값들을 그대로
+통과시키고(새 지오코딩/외부 API 호출 증가 없음), `src/lib/school-link.ts`(신규, 순수
+함수)의 `buildSchoolHref()`가 좌표가 있을 때만 기존 `/school/[id]` 계약
+(`KakaoPlaces.tsx`/`map/page.tsx`와 동일, name+lat+lng+lawdCd 쿼리스트링 — 실제로
+읽어보니 `[id]` 세그먼트 자체는 페이지 코드가 쓰지 않는 계약이었다)으로 링크를
+만들었다. 좌표가 없는 항목(공식 통학구역 NEIS 데이터 등)은 의도적으로 클릭 불가로
+남겼다 — 이름만으로 재검색해 동명이교로 잘못 연결하는 fallback은 만들지 않았다(§21
+scope 제한과 일치, 통학구역 school id 기반 상세는 SCHOOLINFO/SCHOOL V2 몫).
+
+라이브 브라우저(claude-in-chrome) 검증: 서구(대신롯데캐슬)/연제구(연산동한솔솔파크)/
+해운대구(해운대두산위브더제니스) 3개 대표 단지 전부에서 학교 클릭 → 올바른
+`/school/[kakaoId]?name=&lat=&lng=&lawdCd=` 이동 → 뒤로가기 시 원래 단지 상세로 복귀
+확인. 새 단위 테스트(`school-link.test.mjs` 6개)가 구현 중 실제 이중 인코딩 버그를
+잡아 즉시 수정했다(화면 동작에는 영향 없었으나 정확성 수정, 문서 §19 참고). 기존 89개
+포함 총 95/95 PASS. `npx tsc --noEmit`/lint 변경 파일 기준 에러 0. `npm run build` PASS.
+
+`docs/development/APT_DETAIL_MOBILE_UX_REGRESSION_HOTFIX.md` 신규(20개 섹션).
+
+DB 쓰기: 0건. 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**APT_DETAIL_MOBILE_UX_REGRESSION_HOTFIX = PASS. AREA_TOGGLE = RESTORED(코드 변경
+없음, 이미 정상). PYEONG_SOURCE = UNIT_MASTER. FAKE_PYEONG_FALLBACK = ABSENT.
+UNIT_COLLISION = PASS. TRADE_AREA_REGRESSION = ABSENT. BOTTOM_RECENT_PRICE = REMOVED.
+BOTTOM_ACTIONS = FAVORITE_SHARE_WRITE. FAVORITE = PASS. SHARE = PASS. WRITE = PASS.
+SCHOOL_CLICK = RESTORED. SCHOOL_IDENTITY = CANONICAL(좌표 있는 항목만, 없는 항목은
+의도적으로 비클릭). WRONG_SCHOOL_FALLBACK = ABSENT. MOBILE = PASS(360/375 라이브).
+DESKTOP = PASS. BUILD = PASS.**

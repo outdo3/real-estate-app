@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { School, GraduationCap, Baby, Info, ChevronDown } from 'lucide-react';
+import Link from 'next/link';
+import { School, GraduationCap, Baby, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import Badge from './ui/Badge';
 import Empty from './ui/Empty';
 import ErrorState from './ui/ErrorState';
@@ -16,6 +17,7 @@ import {
   highSchoolSummaryValue,
   type AttendanceStatus,
 } from '@/lib/education/education-ui-labels';
+import { buildSchoolHref } from '@/lib/school-link';
 import styles from './EducationPanel.module.css';
 
 // SCHOOL V2-D1 — 단지 상세 "교육환경" section. 기존 SchoolDistrictPanel(카카오
@@ -53,6 +55,12 @@ interface NearbyKakaoSchool {
   name: string;
   distanceM: number;
   establishmentType: string | null;
+  // APT_DETAIL_MOBILE_UX_REGRESSION_HOTFIX §18~22 — 이 POI 고유의 canonical 좌표/id.
+  // null이면(과거 캐시 응답 등) 클릭 불가로 정직하게 처리한다(이름만으로 다른 학교로
+  // 재검색해 이동하지 않는다 — 동명이교 오선택 금지 원칙).
+  kakaoId: string | null;
+  lat: number | null;
+  lng: number | null;
 }
 
 interface NearbyKindergarten {
@@ -164,8 +172,7 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
             <ul className={styles.plainList}>
               {nearbyElementary.map((s) => (
                 <li key={s.name}>
-                  <b>{s.name}</b>
-                  <span className={styles.distanceText}>직선거리 약 {s.distanceM}m</span>
+                  <SchoolRow school={s} href={buildSchoolHref(s, lawdCd)} />
                 </li>
               ))}
             </ul>
@@ -259,9 +266,7 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
           <ul className={styles.plainList}>
             {nearbyHigh.map((s) => (
               <li key={s.name}>
-                <b>{s.name}</b>
-                {s.establishmentType && <span className={styles.mutedInline}> · {s.establishmentType}</span>}
-                <span className={styles.distanceText}>직선거리 약 {s.distanceM}m</span>
+                <SchoolRow school={s} href={buildSchoolHref(s, lawdCd)} />
               </li>
             ))}
           </ul>
@@ -281,6 +286,32 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
         {zone && <span>통학구역: {zone.sourceName} · 기준일 {zone.sourceDate.replaceAll('-', '.')}</span>}
       </div>
     </div>
+  );
+}
+
+// APT_DETAIL_MOBILE_UX_REGRESSION_HOTFIX §18/§22 — 좌표가 있으면(href 존재) 학교 row
+// 전체를 클릭 가능한 링크로, 없으면 기존과 동일한 정적 텍스트로 렌더한다. 두 경우
+// 모두 같은 마크업 구조를 써서 클릭 가능 여부와 무관하게 레이아웃이 동일하다.
+function SchoolRow({ school, href }: { school: NearbyKakaoSchool; href: string | null }) {
+  const content = (
+    <>
+      <span>
+        <b>{school.name}</b>
+        {school.establishmentType && <span className={styles.mutedInline}> · {school.establishmentType}</span>}
+        <span className={styles.distanceText}>직선거리 약 {school.distanceM}m</span>
+      </span>
+      {href && <ChevronRight className={styles.schoolRowChevron} aria-hidden="true" />}
+    </>
+  );
+
+  if (!href) {
+    return <div className={styles.schoolRow}>{content}</div>;
+  }
+
+  return (
+    <Link href={href} className={styles.schoolRow} aria-label={`${school.name} 학교 정보 보기`}>
+      {content}
+    </Link>
   );
 }
 

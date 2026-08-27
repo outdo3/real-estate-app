@@ -493,22 +493,61 @@
   }
 }
 
-.stickyBarPrice {
+/* APT_DETAIL_MOBILE_UX_REGRESSION_HOTFIX — 이전 StickyPriceBar(가격만 반복 노출,
+   글쓰기 버튼은 6d6dbcb에서 의도 설명 없이 유실됨)를 관심단지/공유/글쓰기 3-action
+   row로 교체한다. 상단에서 이미 가격 정보를 충분히 제공하므로 하단은 "행동"에
+   집중한다(§10~11). 3칸을 동일 너비로 나눠 각 버튼을 중앙 정렬한다 — 버튼 자체의
+   pill 스타일은 기존 FavoriteButton/KakaoShareButton을 그대로 재사용(새 스타일 X). */
+.stickyActionRow {
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
 }
 
-.stickyBarWriteBtn {
-  flex-shrink: 0;
-  padding: 0.65rem 1.2rem;
+.stickyActionItem {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.stickyWriteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0.55rem 0.95rem;
+  background: white;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color, #e2e2e2);
   border-radius: 999px;
-  background: var(--primary-color);
-  color: white;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   text-decoration: none;
   white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+}
+
+.stickyWriteBtn:hover {
+  border-color: var(--ejip-green);
+  color: var(--ejip-green-deep);
+}
+
+.stickyWriteBtn:active {
+  transform: scale(0.97);
+}
+
+.stickyWriteBtn:focus-visible {
+  outline: 2px solid var(--ejip-green-deep);
+  outline-offset: 2px;
+}
+
+.stickyWriteIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 /* 단지정보/실거래가/시세차트가 시간차를 두고 따로따로 뜨지 않도록, 셋 다 준비될 때까지
