@@ -13,6 +13,11 @@ export interface RankingRowData {
   metricLabel: string;
   /** 색상 방향 판단용 — 양수면 up-color, 음수면 down-color, null/0이면 중립. */
   metricDirection?: number | null;
+  /** [STATISTICS_COLOR_SYSTEM_V1] 신고가/인기단지처럼 값 자체에 부호가 없어
+   * metricDirection으로 색을 정할 수 없는 화면을 위한 명시적 오버라이드
+   * (CSS var 문자열, 예: 'var(--up-color)'). 지정되면 metricDirection보다
+   * 우선한다. */
+  valueColor?: string;
   /** 2차 맥락(예: "25평 · 최근 7억 3,500만"). */
   contextLabel?: string;
   tradeCount: number;
@@ -31,7 +36,7 @@ const TOP_RANK_CLASS = [styles.rankTop1, styles.rankTop2, styles.rankTop3];
 // 이집점수는 여기서 다루지 않는다(§28 — 30건 개별 API 호출은 §42 중복
 // fetch 금지 원칙과 충돌, 배치 조회 API가 생기면 다음 STEP에서 추가).
 export default function RankingRow({ data, onClick }: RankingRowProps) {
-  const { rank, name, region, metricLabel, metricDirection, contextLabel, tradeCount } = data;
+  const { rank, name, region, metricLabel, metricDirection, valueColor, contextLabel, tradeCount } = data;
   const rankClass = rank <= 3 ? TOP_RANK_CLASS[rank - 1] : '';
   const lowSample = isLowSample(tradeCount);
 
@@ -49,7 +54,7 @@ export default function RankingRow({ data, onClick }: RankingRowProps) {
         <div className={styles.meta}>{[region, contextLabel].filter(Boolean).join(' · ')}</div>
       </div>
       <div className={styles.valueCol}>
-        <div className={styles.value} style={{ color: directionColor(metricDirection) }}>{metricLabel}</div>
+        <div className={styles.value} style={{ color: valueColor || directionColor(metricDirection) }}>{metricLabel}</div>
         <div className={[styles.sub, lowSample ? styles.lowSample : ''].filter(Boolean).join(' ')}>
           {lowSample ? `표본 적음 · ${formatTradeCount(tradeCount)}` : formatTradeCount(tradeCount)}
         </div>

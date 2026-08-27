@@ -9,8 +9,18 @@ import RegionSelectModal from '@/components/RegionSelectModal';
 import SectionHeader from '@/components/ui/SectionHeader';
 import { useRegion, RegionState } from '@/contexts/RegionContext';
 import { resolveLawdCdByNames } from '@/lib/region-utils';
-import { STATS_MENU, STATS_CATEGORIES } from './statsMenu';
+import { STATS_MENU, STATS_CATEGORIES, type StatsColorToken } from './statsMenu';
 import styles from './page.module.css';
+
+// [STATISTICS_COLOR_SYSTEM_V1] colorToken -> CSS 모듈 클래스 매핑. 지정되지
+// 않은 항목(이번 STEP 적용 대상 밖)은 기존과 동일한 브랜드 그린 기본값을 쓴다.
+const MENU_ICON_CLASS: Record<StatsColorToken, string> = {
+  up: 'menuIconUp',
+  down: 'menuIconDown',
+  warn: 'menuIconWarn',
+  brand: 'menuIconBrand',
+  popular: 'menuIconPopular',
+};
 
 // ?sido=...&sigungu=...로 진입한 경우(사이트맵/공유 링크) 최초 1회만 URL의 지역으로
 // RegionContext를 초기화한다. useSearchParams()는 정적 렌더링 페이지에서 Suspense 경계
@@ -69,7 +79,9 @@ export default function StatsPage() {
               {STATS_MENU.filter((item) => item.category === category).map((item) => (
                 <Link key={item.slug} href={`/stats/${item.slug}`} className={styles.menuCard}>
                   {item.status === 'soon' && <span className={styles.menuSoonBadge}>준비중</span>}
-                  <span className={styles.menuIcon}><item.Icon size={26} strokeWidth={1.8} aria-hidden="true" /></span>
+                  <span className={[styles.menuIcon, styles[MENU_ICON_CLASS[item.colorToken || 'brand']]].join(' ')}>
+                    <item.Icon size={20} strokeWidth={1.8} aria-hidden="true" />
+                  </span>
                   <span className={styles.menuTitle}>{item.title}</span>
                   <span className={styles.menuSubtitle}>{item.subtitle}</span>
                 </Link>

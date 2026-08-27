@@ -17,6 +17,14 @@ import {
 // 화면마다 다른 아이콘으로 보이지 않게 했다.
 export type StatsCategory = '가격' | '거래' | '수요·공급' | '지역' | '비교·분석';
 
+// [STATISTICS_COLOR_SYSTEM_V1] 카드 아이콘 배경/강조색의 의미 카테고리.
+// 상승·신고가=up(빨강), 하락=down(파랑), 위험/주의=warn(주황), 일반 거래·
+// 정보=brand(브랜드 그린), 인기/관심=popular(보라). slug/로직 키는 바꾸지
+// 않고 표시 색상만 이 필드로 분리한다 — 지정하지 않은 항목(수요·공급/지역/
+// 비교·분석 카테고리 등)은 기존과 동일하게 브랜드 그린 기본값을 쓴다(이번
+// STEP 적용 대상 7개 카드만 명시적으로 지정).
+export type StatsColorToken = 'up' | 'down' | 'warn' | 'brand' | 'popular';
+
 export interface StatsMenuItem {
   slug: string;
   icon: string;
@@ -26,6 +34,7 @@ export interface StatsMenuItem {
   status: 'live' | 'soon';
   soonReason?: string;
   category: StatsCategory;
+  colorToken?: StatsColorToken;
 }
 
 export const STATS_MENU: StatsMenuItem[] = [
@@ -33,13 +42,13 @@ export const STATS_MENU: StatsMenuItem[] = [
   // 보여주는 신규 feed. 다른 랭킹류(하락/최고가 등)와 달리 "단지 순위"가 아니라
   // "지역 안에서 실제로 무슨 거래가 있었나"를 먼저 보여주는 진입점이라 거래
   // 카테고리 맨 앞에 둔다.
-  { slug: 'feed', icon: '🧾', Icon: Rows3, title: '실거래', subtitle: '지역별 실거래 피드', status: 'live', category: '거래' },
-  { slug: 'decline', icon: '📉', Icon: TrendingDown, title: '최근하락', subtitle: '하락거래 단지 모음', status: 'live', category: '가격' },
-  { slug: 'record-high', icon: '🏆', Icon: Award, title: '최고가', subtitle: '최근 신고가 단지', status: 'live', category: '가격' },
-  { slug: 'rising', icon: '📈', Icon: TrendingUp, title: '최고상승', subtitle: '가격변동 상위 단지', status: 'live', category: '가격' },
-  { slug: 'jeonse-risk', icon: '⚠️', Icon: AlertTriangle, title: '역전세', subtitle: '전세가 하락 위험 단지', status: 'live', category: '가격' },
-  { slug: 'volume', icon: '📊', Icon: Activity, title: '거래량', subtitle: '매매·전월세 거래량', status: 'live', category: '거래' },
-  { slug: 'top-traded', icon: '🛒', Icon: ShoppingCart, title: '많이산단지', subtitle: '거래량 집중 인기 단지', status: 'live', category: '거래' },
+  { slug: 'feed', icon: '🧾', Icon: Rows3, title: '실거래', subtitle: '지역별 실거래 피드', status: 'live', category: '거래', colorToken: 'brand' },
+  { slug: 'decline', icon: '📉', Icon: TrendingDown, title: '하락', subtitle: '하락거래 단지 모음', status: 'live', category: '가격', colorToken: 'down' },
+  { slug: 'record-high', icon: '🏆', Icon: Award, title: '최고가', subtitle: '최근 신고가 단지', status: 'live', category: '가격', colorToken: 'up' },
+  { slug: 'rising', icon: '📈', Icon: TrendingUp, title: '상승', subtitle: '가격변동 상위 단지', status: 'live', category: '가격', colorToken: 'up' },
+  { slug: 'jeonse-risk', icon: '⚠️', Icon: AlertTriangle, title: '역전세', subtitle: '전세가 하락 위험 단지', status: 'live', category: '가격', colorToken: 'warn' },
+  { slug: 'volume', icon: '📊', Icon: Activity, title: '거래량', subtitle: '매매·전월세 거래량', status: 'live', category: '거래', colorToken: 'brand' },
+  { slug: 'top-traded', icon: '🛒', Icon: ShoppingCart, title: '인기', subtitle: '거래량 집중 인기 단지', status: 'live', category: '거래', colorToken: 'popular' },
   { slug: 'gap-invest', icon: '💰', Icon: Coins, title: '갭투자', subtitle: '매매-전세 갭 적은 단지', status: 'live', category: '거래' },
   {
     slug: 'supply',

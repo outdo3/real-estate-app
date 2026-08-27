@@ -14,9 +14,9 @@ const QUICK_MENU = [
   // STATISTICS V2 — REGIONAL TRANSACTION FEED §42/§43: 신규 핵심 기능이라
   // quick menu 맨 앞에 추가한다(Home 대개편 아님, 기존 항목/순서는 그대로 유지).
   { Icon: Rows3, label: '실거래', href: '/stats/feed' },
-  { Icon: TrendingDown, label: '최근하락', href: '/stats/decline' },
+  { Icon: TrendingDown, label: '하락', href: '/stats/decline' },
   { Icon: Award, label: '최고가', href: '/stats/record-high' },
-  { Icon: TrendingUp, label: '최고상승', href: '/stats/rising' },
+  { Icon: TrendingUp, label: '상승', href: '/stats/rising' },
   { Icon: Activity, label: '거래량', href: '/stats/volume' },
   { Icon: Scale, label: '단지비교', href: '/stats/compare' },
   { Icon: Coins, label: '갭투자', href: '/stats/gap-invest' },

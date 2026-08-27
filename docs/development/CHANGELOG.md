@@ -9579,3 +9579,53 @@ COMMON_REGION_SELECTOR = PASS. REGION_STATE_PRESERVATION = PASS(SPA 내
 이동 기준). PARTIAL_FAILURE = DISTINGUISHED. API_ERROR_NO_DATA =
 DISTINGUISHED. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
 DB_SCHEMA_CHANGE = NONE. NEXT_STEP = STATISTICS_V2_1_DETAIL_METRICS.**
+
+## 2026-08-27
+
+### STEP — STATISTICS_COLOR_SYSTEM_V1: 통계 화면 의미 기반 컬러 시스템
+
+통계 메인 화면과 가격/거래 섹션 카드 7개(하락/최고가/상승/역전세, 실거래/
+거래량/인기)에 의미 기반 컬러 시스템을 적용했다 — 상승·신고가=빨강,
+하락=파랑, 위험=주황, 일반 거래=초록, 인기=보라. 데이터 로직/API 계약/DB는
+전혀 건드리지 않았다(순수 UI 색상 정리).
+
+**토큰**: 기존 DS2 `--up-color`(빨강)/`--down-color`(파랑)/`--warning-color`
+(주황) primary 값은 그대로 재사용(다른 화면까지 색이 바뀌는 unrelated
+recolor 방지)하고, `--up-soft`/`--up-border`/`--down-soft`/`--down-border`/
+`--warn-soft`/`--warn-border`(연한 배경용, 신규)와 `--popular-color`/
+`--popular-soft`/`--popular-border`(인기/관심 전용 보라, 신규),
+`--brand-soft`/`--brand-border`(신규)를 globals.css에 추가했다.
+
+**카드 UI**: `statsMenu.ts`에 `colorToken` 필드 추가(대상 7개 항목만 지정,
+나머지 9개는 기존 브랜드 그린 기본값 유지). `.menuIcon`을 28px 사각형에서
+40px 원형(soft 배경 + primary 아이콘 색)으로 교체 — 카드 배경은 흰색,
+보더는 기존 연회색 그대로 유지(카드 전체를 진한 색으로 칠하지 않음).
+
+**메뉴명 단축**: 최근하락→하락, 최고상승→상승, 많이산단지→인기(로직
+slug는 변경 없음, 라벨 텍스트만 수정). Home 퀵메뉴 라벨도 동일하게 맞췄다.
+
+**리스트 화면**: `RankingRow`에 `valueColor` 오버라이드 prop 추가 —
+최고가(신고가, 부호 없는 지표)는 빨강, 인기(거래건수, 부호 없는 지표)는
+보라로 고정 표시. 하락/상승/역전세는 기존 부호 기반 색(파랑/빨강)을 그대로
+유지(이미 규칙에 부합, 변경 불필요). 역전세 화면에는 "주의·하락 위험 신호"
+주황 배지를 추가해 카테고리 의미(위험)와 개별 값의 부호 의미(하락=파랑)를
+분리했다. 거래량 차트의 거래량 막대는 중립 회색에서 브랜드 그린으로
+변경(가격지수 선 그래프는 기존 계약 유지, 차트 전체 재설계는 범위 밖).
+
+실거래 피드(TransactionFeedView)는 이미 상승=빨강/하락=파랑/신고가=빨강
+배지/초록 인사이트 카드로 구현돼 있어 이번 STEP에서 추가 변경이 필요 없었다
+(사전 확인 후 무변경).
+
+모바일 360/375/390 + 데스크톱 확인 — 카드/그리드 레이아웃 회귀 없음, 카드
+클릭→리스트, 리스트 행 클릭→단지 상세 이동 정상. `npx tsc --noEmit`/lint
+에러 0. 기존 테스트 172/172(`.test.mjs`) PASS(회귀 없음, 로직 미변경).
+`npm run build` PASS.
+
+DB 쓰기: 없음. 스키마 변경: 없음. 데이터 로직 변경: 없음.
+
+상태: 완료.
+
+**STATISTICS_COLOR_SYSTEM_V1 = PASS. MENU_LABEL_SHORTENING = PASS.
+SEMANTIC_COLOR_MAPPING = PASS. CARD_UI_COLOR_SYSTEM = PASS. LIST_COLOR_SYSTEM
+= PASS. CHART_COLOR_ALIGNMENT = PARTIAL(거래량 막대만 적용, 가격지수 선
+그래프는 기존 계약 유지). MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.**

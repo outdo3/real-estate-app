@@ -33,6 +33,29 @@
   --warning-color: #f59e0b;
   --info-color: #3b82f6;
   --error-color: #ef4444;
+
+  /* [STATISTICS_COLOR_SYSTEM_V1] 통계 카드/리스트가 재사용하는 의미색 soft/
+     border 변형. primary(--up-color/--down-color/--warning-color)는 기존
+     값을 그대로 재사용한다 — 이미 앱 전역에서 상승=빨강/하락=파랑 관행으로
+     쓰이고 있어 새 값으로 바꾸면 이번 STEP 범위 밖의 화면까지 색이 바뀐다
+     (unrelated recolor 금지 원칙). soft/border는 "화이트 카드 + 연한 배경
+     아이콘" 구조 전용으로 새로 추가한다. */
+  --up-soft: #fee2e2;
+  --up-border: #fca5a5;
+  --down-soft: #dbeafe;
+  --down-border: #93c5fd;
+  --warn-soft: #fef3c7;
+  --warn-border: #fcd34d;
+
+  /* "인기/관심"(많이 본 단지 등) 전용 보라 계열 — 기존 토큰에 없던 신규 의미색. */
+  --popular-color: #8b5cf6;
+  --popular-soft: #ede9fe;
+  --popular-border: #c4b5fd;
+
+  /* 브랜드 그린의 soft/border 변형 — 실거래/거래량처럼 "일반 거래·정보"
+     의미로 브랜드 그린을 그대로 쓰는 카드의 아이콘 배경용. */
+  --brand-soft: #dcfce7;
+  --brand-border: #86efac;
   /* "표면(surface)" semantic alias — 기존 --card-bg/--bg-color 값을 바꾸지
      않고 이름만 의미 중심으로 추가 제공(실사용은 --card-bg/--bg-color 그대로
      둬도 무방, 신규 컴포넌트는 --surface* 사용 권장). */

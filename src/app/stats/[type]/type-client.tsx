@@ -57,6 +57,10 @@ interface RankingConfig {
   /** [§27/§44] "이 화면을 보고 어떤 결정을 할 수 있는가"의 근거가 되는 순위
       기준 구(조사 없이) — buildRankingInsight()가 그대로 조립해 쓴다. */
   criterionPhrase: string;
+  /** [STATISTICS_COLOR_SYSTEM_V1] direction이 null(값 자체에 부호가 없는
+   * 화면 — 신고가/인기단지)일 때 값 텍스트에 쓸 고정 의미색. 지정하지 않으면
+   * 기존처럼 direction 부호를 따른다(하락/상승/역전세는 그대로 유지). */
+  valueColor?: string;
 }
 
 const RANKING_CONFIGS: Record<string, RankingConfig> = {
@@ -81,6 +85,7 @@ const RANKING_CONFIGS: Record<string, RankingConfig> = {
     emptyText: '표시할 데이터가 없습니다.',
     note: '최근 12개월 내 단지별 최고 거래가 기준입니다(전체 역사상 최고가가 아닙니다).',
     criterionPhrase: '최근 신고가를 기록한',
+    valueColor: 'var(--up-color)',
   },
   rising: {
     apiType: 'apt',
@@ -103,6 +108,7 @@ const RANKING_CONFIGS: Record<string, RankingConfig> = {
     emptyText: '표시할 데이터가 없습니다.',
     note: '최근 12개월 매매 거래 건수 기준입니다.',
     criterionPhrase: '최근 거래가 많은',
+    valueColor: 'var(--popular-color)',
   },
   'jeonse-risk': {
     apiType: 'rent',
@@ -165,6 +171,16 @@ function RankingListView({ slug, lawdCd, sidoCode, regionLabel }: { slug: string
 
   return (
     <div className={styles.panel}>
+      {/* [STATISTICS_COLOR_SYSTEM_V1] 역전세 = 위험/주의 의미색(주황). 개별
+          거래 하락률 값 자체는 여전히 기존 규칙대로 파란색(하락)을 유지하고
+          (metricDirection 부호 기반, 변경 없음), 화면 전체가 "위험 신호"라는
+          것만 이 배지로 구분한다 — 계산 로직/색 규칙 충돌 없이 카테고리
+          의미와 값 부호 의미를 분리했다. */}
+      {slug === 'jeonse-risk' && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.6rem', borderRadius: '999px', background: 'var(--warn-soft)', color: 'var(--warning-color)', fontSize: '0.72rem', fontWeight: 700, marginBottom: '0.6rem' }}>
+          주의 · 하락 위험 신호
+        </div>
+      )}
       <div className={styles.panelHeader}>
         {/* [§40 visual hierarchy] 판단 문장(insight)을 방법론 설명(note)보다
             우선 노출 — "숫자 나열"이 아니라 "판단"이 1순위가 되도록. */}
@@ -184,6 +200,7 @@ function RankingListView({ slug, lawdCd, sidoCode, regionLabel }: { slug: string
                 contextLabel: config.meta(c),
                 metricLabel: config.value(c),
                 metricDirection: config.direction(c),
+                valueColor: config.valueColor,
                 tradeCount: c.tradeCount,
               }}
             />
@@ -267,7 +284,11 @@ function VolumeView({ lawdCd, sidoCode, displayRegionName }: { lawdCd: string | 
               <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" domain={['auto', 'auto']} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} labelStyle={{ fontWeight: 700, color: '#1e293b', marginBottom: '8px' }} />
               <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '13px' }} />
-              <Bar yAxisId="left" dataKey="volume" name={`거래량(건) · ${dealTypeMeta.label}`} barSize={16} fill="#cbd5e1" radius={[4, 4, 0, 0]} />
+              {/* [STATISTICS_COLOR_SYSTEM_V1] 거래량 = 초록 계열(매핑표) — 기존
+                  중립 회색(#cbd5e1)에서 브랜드 그린으로 변경. 가격지수(Line,
+                  아래)는 매매/전세/월세 전환 시 색이 바뀌던 기존 계약을 그대로
+                  유지한다(차트 재설계는 이번 STEP 범위 밖, 후순위). */}
+              <Bar yAxisId="left" dataKey="volume" name={`거래량(건) · ${dealTypeMeta.label}`} barSize={16} fill="var(--primary-color)" fillOpacity={0.55} radius={[4, 4, 0, 0]} />
               <Line yAxisId="right" type="monotone" dataKey="priceIndex" name={dealTypeMeta.indexLabel} stroke="#3b82f6" strokeWidth={3} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
             </ComposedChart>
           </ResponsiveContainer>
