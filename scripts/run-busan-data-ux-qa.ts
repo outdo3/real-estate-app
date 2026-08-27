@@ -914,6 +914,117 @@ async function runMapQa(repSet: RepApartment[]) {
   return { checked: repSet.length, missingLocationFeature, divergent };
 }
 
+// MAP_SURROUNDING_MARKER_PERFORMANCE_V1 §30 — /api/transactions(주변 마커 좌표 소스)를
+// 대표 회귀 fixture가 속한 구/군 단위로 실제 호출해 latency/identity를 재검증한다.
+// L1(coordinates)이 이미 ApartmentMaster 3,402건 전체의 좌표 coverage를 측정하므로 여기서는
+// "실제 마커 API 응답"에 한해 latency + 정확히 그 fixture의 aptSeq/좌표가 중복 없이
+// 나오는지만 본다(과도한 scope 확장 방지 — 구/군당 1회 호출로 제한).
+async function runMapMarkerQa(repSet: RepApartment[]) {
+  const districtSet = Array.from(new Set(KNOWN_REGRESSIONS.map((f) => f.sggCd)));
+  const samples: Array<{ sggCd: string; ms: number; ok: boolean; tradeCount: number; markerCount: number }> = [];
+  let duplicateAptSeq = 0;
+  let missingFixture = 0;
+  let wrongIdentity = 0;
+
+  for (const sggCd of districtSet) {
+    const url = `${OPT.baseUrl}/api/transactions?type=apt&lawdCd=${sggCd}&months=12`;
+    const res = await fetchJson(url, 30000);
+    perfSamples.push({ label: `map-transactions:${sggCd}`, ms: res.ms, ok: res.ok });
+
+    if (!res.ok || !Array.isArray(res.json)) {
+      samples.push({ sggCd, ms: res.ms, ok: res.ok, tradeCount: 0, markerCount: 0 });
+      addFinding({
+        severity: 'P0_BROKEN_FLOW',
+        category: 'MAP_API_CONTRACT',
+        field: '/api/transactions(주변 마커)',
+        expected: 'HTTP 200 + array',
+        actual: `sggCd=${sggCd} status=${res.status}`,
+        reproducible: true,
+        recommendedNextStep: '라우트/MOLIT API 상태 재확인',
+      });
+      continue;
+    }
+
+    // /api/transactions는 "거래(trade) 목록"이라 같은 단지가 12개월치 여러 건으로 반복되는
+    // 것 자체는 정상이다(다건 매매) — src/app/map/page.tsx의 실제 마커 소비 로직과 동일하게
+    // (dong, name) 기준으로 먼저 단지 단위 마커로 축약한 다음에야 "중복 aptSeq"를 판정해야
+    // 한다. 그렇지 않으면 인기 단지의 정상적인 다건 거래를 전부 "중복"으로 오판한다.
+    const byComplex = new Map<string, any>();
+    for (const item of res.json) {
+      const key = `${item.dong}|${item.name}`;
+      if (!byComplex.has(key)) byComplex.set(key, item);
+    }
+    samples.push({ sggCd, ms: res.ms, ok: res.ok, tradeCount: res.json.length, markerCount: byComplex.size });
+    const seqToComplexes = new Map<string, Set<string>>();
+    for (const [complexKey, item] of byComplex) {
+      if (!item.aptSeq) continue;
+      const set = seqToComplexes.get(item.aptSeq) || new Set<string>();
+      set.add(complexKey);
+      seqToComplexes.set(item.aptSeq, set);
+    }
+    // 진짜 버그는 "서로 다른 단지(dong+name)가 같은 aptSeq를 공유"하는 경우뿐이다.
+    const dupHere = Array.from(seqToComplexes.entries()).filter(([, set]) => set.size > 1);
+    if (dupHere.length > 0) {
+      duplicateAptSeq += dupHere.length;
+      addFinding({
+        severity: 'P0_DATA_TRUST',
+        category: 'MAP_DUPLICATE_APTSEQ',
+        field: '/api/transactions[].aptSeq (단지 단위 축약 후)',
+        expected: '서로 다른 단지가 같은 aptSeq를 공유하지 않음',
+        actual: `sggCd=${sggCd}에서 ${dupHere.length}개 aptSeq가 서로 다른 단지에 중복 매핑됨: ${dupHere.slice(0, 3).map(([seq, set]) => `${seq}=[${Array.from(set).join(', ')}]`).join('; ')}`,
+        reproducible: true,
+        recommendedNextStep: 'ApartmentMaster 매칭 로직(dong+name 완전일치/aptNamesMatch) 재확인',
+      });
+    }
+
+    for (const fx of KNOWN_REGRESSIONS.filter((f) => f.sggCd === sggCd)) {
+      const found = Array.from(byComplex.values()).find((item: any) => item.aptSeq === fx.aptSeq);
+      const repRow = repSet.find((r) => r.aptSeq === fx.aptSeq);
+      if (!found) {
+        // 이 fixture가 최근 12개월 내 실거래가 아예 없으면(무거래) 마커 API 응답 자체에
+        // 나타나지 않는 것이 정상이다 — MOLIT 거래 유무는 이 QA의 판정 대상이 아니므로
+        // FAIL로 분류하지 않고 건수만 참고 기록한다.
+        missingFixture++;
+        continue;
+      }
+      if (found.aptSeq && (!found.lat || !found.lng)) {
+        wrongIdentity++;
+        addFinding({
+          severity: 'P0_DATA_TRUST',
+          category: 'MAP_COORDINATE_MISSING',
+          apartment: fx.name,
+          aptSeq: fx.aptSeq,
+          field: '/api/transactions[].lat/lng',
+          expected: 'aptSeq 매칭 시 좌표도 함께 존재(ApartmentMaster 100% coverage)',
+          actual: 'aptSeq는 있으나 lat/lng 없음',
+          reproducible: true,
+          recommendedNextStep: 'ApartmentMaster.latitude/longitude 결측 여부 확인',
+        });
+        continue;
+      }
+      if (repRow && repRow.latitude != null && repRow.longitude != null && found.lat && found.lng) {
+        const distM = haversineMeters(repRow.latitude, repRow.longitude, found.lat, found.lng);
+        if (distM > 50) {
+          wrongIdentity++;
+          addFinding({
+            severity: 'P0_DATA_TRUST',
+            category: 'MAP_WRONG_IDENTITY',
+            apartment: fx.name,
+            aptSeq: fx.aptSeq,
+            field: '/api/transactions[].lat/lng vs ApartmentMaster.latitude/longitude',
+            expected: '동일 aptSeq는 동일 좌표(오차 <50m)',
+            actual: `거리 차이 ${distM.toFixed(0)}m`,
+            reproducible: true,
+            recommendedNextStep: '마커 좌표 소스 재확인(다른 단지 좌표 혼입 가능성)',
+          });
+        }
+      }
+    }
+  }
+
+  return { samples, duplicateAptSeq, missingFixture, wrongIdentity };
+}
+
 // ────────────────────────────────────────────────────────────────────────
 // MAIN
 // ────────────────────────────────────────────────────────────────────────
@@ -999,6 +1110,13 @@ async function main() {
     console.log('\n[MAP QA] (search apartments[] 좌표 vs ApartmentMaster 좌표 교차검증)');
     mapQa = await runMapQa(repSet);
     console.log(`  checked=${mapQa.checked}, ApartmentLocationFeature 결측=${mapQa.missingLocationFeature}, 좌표 괴리(>200m)=${mapQa.divergent}`);
+
+    console.log('\n[MAP MARKER QA] (/api/transactions 주변 마커 API — MAP_SURROUNDING_MARKER_PERFORMANCE_V1)');
+    const mapMarkerQa = await runMapMarkerQa(repSet);
+    for (const s of mapMarkerQa.samples) {
+      console.log(`  sggCd=${s.sggCd}: ${s.ms}ms, trades=${s.tradeCount}, unique markers=${s.markerCount}, ok=${s.ok}`);
+    }
+    console.log(`  duplicateAptSeq=${mapMarkerQa.duplicateAptSeq}, missingFixture(무거래 가능)=${mapMarkerQa.missingFixture}, wrongIdentity=${mapMarkerQa.wrongIdentity}`);
   } else {
     console.log('\n[L3/L4/SEARCH/MAP QA] --no-api 옵션으로 생략됨 (MANUAL_REQUIRED/SOURCE_LIMITATION)');
     addFinding({

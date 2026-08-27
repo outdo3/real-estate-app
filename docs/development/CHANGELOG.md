@@ -9125,3 +9125,71 @@ DB 쓰기: 0건. 스키마 변경: 없음. Migration: 없음.
 **SEARCH_MAP_PERFORMANCE_V2_2 = PASS. BCR_CASE_1 = SOURCE_VALUE. BCR_CASE_2 =
 SOURCE_VALUE. BCR_DATA_FIX_REQUIRED = NO. CLICK_TO_SELECTED_MARKER: 592ms~5.76s →
 <100ms. WRONG_MARKER_SELECTION = ABSENT.**
+
+
+## 2026-08-27
+
+### STEP — MAP SURROUNDING MARKER PERFORMANCE V1
+
+`SEARCH_MAP_PERFORMANCE_V2_2`가 "다음 STEP 후보"로 남긴 실제 병목을 제거했다:
+`/api/transactions?type=apt&lawdCd=...&months=12`가 지도 주변 마커 좌표를 만들 때
+MOLIT 응답의 **고유 단지(dong+name)마다 개별 Kakao 키워드 지오코딩을 호출**하고
+있었다(N+1 외부 API, 실측 지연 592ms~5.76s). `ApartmentMaster`가 이미 같은 조회에서
+`aptSeq` 매칭에 쓰던 행에 검증된 좌표(Kakao geocoding 결과를 사전 저장, 부산 coverage
+100%)를 갖고 있었으므로, 이를 그대로 재사용하도록 바꿔 **외부 API 호출을 0회**로
+줄였다.
+
+**변경 내용**:
+
+- `src/app/api/transactions/route.ts`: `geocodeApt`/`geocodeCache`(Kakao 키워드
+  지오코딩) 완전 제거. `prisma.apartmentMaster.findMany` select에 `latitude`/
+  `longitude` 추가, 매칭/좌표 결합 로직을 `src/lib/map-marker-coords.ts`(신규, 순수
+  함수)로 분리 — 1순위 dong+name 완전일치, 2순위 같은 dong 안에서만
+  `aptNamesMatch`(기존 `/api/apt/[name]/route.ts`가 쓰던 안전한 표기-차이 매처
+  재사용, 다른 dong으로 확장 안 함)로 보강. 매칭 실패 시 aptSeq/좌표 모두 null(다른
+  단지 fallback 없음).
+- `src/lib/map-marker-fetch-guard.ts`(신규, 순수 함수): `isStaleMarkerResponse`/
+  `isMarkerCacheFresh`. `src/app/map/page.tsx`의 `fetchAptMarkers`에 요청 순번 기반
+  stale-response 방지(빠른 연속 드래그 시 먼저 보낸 요청이 나중 요청을 덮어쓰지
+  않음)와 같은 `lawdCd` 60초 exact-key 캐시를 추가했다(selected marker fast path는
+  변경 없음, 그대로 <100ms 유지).
+- `scripts/run-busan-data-ux-qa.ts`: `runMapMarkerQa()` 신규 — 4개 회귀 fixture가
+  속한 구/군의 `/api/transactions` 응답을 실제 호출해 latency/중복aptSeq/wrong-identity
+  재검증(첫 구현에서 "다건 거래를 중복으로 오판"하는 QA 자체 버그를 발견·수정함,
+  문서 §19-1에 정직하게 기록).
+
+**실측(before/after)**: 격리 측정한 Kakao N+1 자체 비용 — 연산동(207개 단지) 2,367ms,
+대신동(138개 단지) 1,643ms, 해운대구(277개 단지) 3,062ms, 전부 0으로 제거. 전체
+`/api/transactions` cold worst-case: 연산동 5.58s→1.92s, 해운대 5.33s→2.01s(남은 시간은
+MOLIT 정부 API 자체의 라이브 조회 latency, 이번 STEP 범위 밖). **부수 효과로 marker
+좌표 coverage가 개선됐다** — Kakao가 못 찾던 오래된/소규모 단지 좌표(연산동 19건)를
+ApartmentMaster는 이미 갖고 있어 연산동 188/207→206/207, 대신동/해운대 100%로 상승.
+
+라이브 브라우저(claude-in-chrome) 검증: 연산동한솔솔파크 클릭 → 즉시 fast path 마커 →
+약 2초 후 실제 가격("3억 3,000만")으로 자연스럽게 교체, 이 흐름에서 발생한 네트워크
+요청은 `/api/transactions` + `/api/community/recent-activity`뿐(Kakao geocoding
+0건). 대신롯데캐슬(서울 강남구 동명 단지 충돌 위험 fixture) 정확히 부산 서구로
+표시(WRONG_APARTMENT 없음). 드래그는 여전히 지역 확정용 역지오코딩 1회를 쓴다(기존
+동작, 단지별 N+1과는 별개 범주 — 회귀 아님).
+
+신규 유닛 테스트 12개(`map-marker-coords.test.mjs` 7개, `map-marker-fetch-guard.test.mjs`
+5개): dong 다르면 이름이 같아도 혼동 안 함, 차수 다르면 매칭 안 함, 매칭 실패 시 다른
+단지로 fallback 안 함, 좌표 없는 master는 좌표만 null(aptSeq는 보존), stale 응답/캐시
+판정. 기존 포함 총 89/89 PASS(회귀 없음). `npx tsc --noEmit`/lint 변경 파일 기준 에러
+0(기존 무관 스크립트 에러만 존재, `FAIL_EXISTING_SCRIPT_ERRORS`). `npm run build` PASS.
+`ApartmentMaster.sggCd`에 기존 인덱스가 이미 있어 신규 DB 쿼리도 cold ≤484ms/warm
+21~36ms로 충분히 빠름 — 인덱스 추가 불필요.
+
+`docs/development/MAP_SURROUNDING_MARKER_PERFORMANCE_V1.md` 신규(22개 섹션).
+
+DB 쓰기: 0건. 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**MAP_SURROUNDING_MARKER_PERFORMANCE_V1 = PASS. CANONICAL_MARKER_SOURCE =
+ApartmentMaster.latitude/longitude. NORMAL_PATH_KAKAO_GEOCODING = 0.
+KAKAO_REQUESTS_BEFORE = 단지 수만큼(연산동 207/대신동 138/해운대 277).
+KAKAO_REQUESTS_AFTER = 0. WRONG_APARTMENT = ABSENT. DUPLICATE_MARKERS = ABSENT.
+STALE_BOUNDS_PROTECTION = PASS(단위 테스트). MOBILE = PARTIAL(375px 라이브 확인,
+360/390은 CSS 미변경 근거로 재검증 생략). DESKTOP = PASS. BUILD = PASS.
+DB_SCHEMA_CHANGE = NONE. INDEX_CHANGE = NOT_NEEDED.**

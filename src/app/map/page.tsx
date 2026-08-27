@@ -9,6 +9,7 @@ import { perfMark, perfMeasure } from '@/lib/perf-debug';
 // src/lib/map-selected-marker.ts로 분리해 부작용 없이 단위 테스트한다(§26).
 import type { AptMarker, AptCluster } from '@/lib/map-selected-marker';
 import { buildPendingSelectedApt, resolveSelectedMarker, isPendingStillNeeded } from '@/lib/map-selected-marker';
+import { isStaleMarkerResponse, isMarkerCacheFresh } from '@/lib/map-marker-fetch-guard';
 import FullPageLoader from '@/components/FullPageLoader';
 import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
@@ -110,6 +111,17 @@ export default function FullscreenMapPage() {
   // 함께 넘겨야 한다 — 안 넘기면 상세페이지가 자기 자신의 하드코딩된 기본 지역(서울 강남구)으로
   // 실거래가를 조회해 엉뚱한 지역/빈 데이터가 뜨는 버그로 이어진다.
   const [currentLawdCd, setCurrentLawdCd] = useState('26140');
+  // MAP_SURROUNDING_MARKER_PERFORMANCE_V1 §14/§15 — 빠르게 연속으로 지역이 바뀌면(드래그
+  // 두 번 연속 등) 먼저 보낸 요청의 응답이 나중에 보낸 요청보다 늦게 도착해 화면을 잘못된
+  // 지역 마커로 덮어쓸 수 있다. 매 fetchAptMarkers 호출마다 증가하는 순번을 발급해, 응답이
+  // 돌아왔을 때 자신이 여전히 "가장 최근 요청"인 경우에만 state에 반영한다(AbortController
+  // 대신 단순 순번 비교 — 이미 Promise.all로 두 fetch를 묶고 있어 개별 abort보다 간단하고
+  // 충분히 안전함). 같은 lawdCd로 짧은 시간 안에 재진입하면(예: 드래그로 벗어났다 복귀)
+  // 네트워크 재요청 없이 즉시 반영하는 exact-key 캐시도 함께 둔다(ApartmentAutocomplete의
+  // cacheRef와 동일 관례). 실거래 데이터라 무기한 캐시는 위험해 TTL을 짧게 둔다.
+  const requestSeqRef = useRef(0);
+  const markerCacheRef = useRef<Map<string, { markers: AptMarker[]; ts: number }>>(new Map());
+  const MARKER_CACHE_TTL_MS = 60_000;
   const isDetailed = zoomLevel <= DETAIL_ZOOM_LEVEL;
   const chipLayout = isDetailed ? CHIP_LAYOUT.detailed : CHIP_LAYOUT.compact;
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -197,6 +209,18 @@ export default function FullscreenMapPage() {
   const fetchAptMarkers = async (lat: number, lng: number, knownLawdCd?: string) => {
     const loadForLawdCd = async (lawdCd: string) => {
       setCurrentLawdCd(lawdCd);
+      const mySeq = ++requestSeqRef.current;
+
+      // exact-key 캐시 히트 — 같은 lawdCd로 짧은 시간 안에 재진입하면 네트워크 요청 없이
+      // 즉시 반영한다(예: 드래그로 벗어났다 다시 돌아오는 경우).
+      const cached = markerCacheRef.current.get(lawdCd);
+      if (cached && isMarkerCacheFresh(cached.ts, Date.now(), MARKER_CACHE_TTL_MS)) {
+        setAptMarkers(cached.markers);
+        setIsLoadingData(false);
+        perfMeasure('map: click→surrounding markers ready', 'map:m0-click');
+        return;
+      }
+
       try {
         // 실거래 마커 데이터와 "최근 24시간 내 커뮤니티 글이 있는 단지" 집계는 서로
         // 무관한 조회라 Promise.all로 병렬 처리한다.
@@ -206,6 +230,9 @@ export default function FullscreenMapPage() {
         ]);
         const data = await res.json();
         if (!Array.isArray(data)) return;
+        // §14 STALE BOUNDS REQUEST PROTECTION — 이 요청을 보낸 뒤 더 최신 요청이 발급됐으면
+        // (사용자가 그 사이 다른 지역으로 다시 이동) 이 응답으로 화면을 덮어쓰지 않는다.
+        if (isStaleMarkerResponse(mySeq, requestSeqRef.current)) return;
 
         let recentActivity: Record<string, number> = {};
         if (activityRes && activityRes.ok) {
@@ -235,6 +262,7 @@ export default function FullscreenMapPage() {
           hasNewPost: (recentActivity[item.name] || 0) > 0,
         }));
 
+        markerCacheRef.current.set(lawdCd, { markers, ts: Date.now() });
         setAptMarkers(markers);
         // §12 M6 — 주변 마커 전체 dataset 준비 완료(M0 클릭 흐름에서 호출된 경우에만
         // 의미 있음 — 드래그/현재위치 등 다른 호출부에서도 공유되는 mark라 클릭 흐름이
@@ -243,7 +271,7 @@ export default function FullscreenMapPage() {
       } catch (error) {
         console.error('Failed to fetch apt markers:', error);
       } finally {
-        setIsLoadingData(false);
+        if (!isStaleMarkerResponse(mySeq, requestSeqRef.current)) setIsLoadingData(false);
       }
     };
 

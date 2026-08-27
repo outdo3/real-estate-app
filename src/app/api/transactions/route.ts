@@ -1,53 +1,8 @@
 import { NextResponse } from 'next/server';
 import { fetchMolitData, DataType } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
-
-// MOLIT 실거래가 데이터는 좌표를 제공하지 않으므로, 지도 마커 표시를 위해
-// 카카오 로컬 키워드 검색으로 "법정동 + 단지명" 기준 좌표를 보강한다.
-// 서버 인스턴스가 살아있는 동안 재사용되는 캐시로 동일 단지 중복 조회를 방지.
-const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
-
-async function geocodeApt(name: string, dong: string): Promise<{ lat: number; lng: number } | null> {
-  const key = `${dong}|${name}`;
-  if (geocodeCache.has(key)) return geocodeCache.get(key)!;
-
-  const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
-  if (!kakaoKey || !name) {
-    geocodeCache.set(key, null);
-    return null;
-  }
-
-  try {
-    const query = `${dong} ${name}`.trim();
-    const url = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(query)}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `KakaoAK ${kakaoKey}`,
-        KA: 'sdk/1.0 os/javascript origin/http%3A%2F%2Flocalhost%3A3000',
-        Origin: 'http://localhost:3000',
-      },
-    });
-
-    if (!res.ok) {
-      geocodeCache.set(key, null);
-      return null;
-    }
-
-    const data = await res.json();
-    const doc = data.documents?.[0];
-    if (!doc) {
-      geocodeCache.set(key, null);
-      return null;
-    }
-
-    const coords = { lat: parseFloat(doc.y), lng: parseFloat(doc.x) };
-    geocodeCache.set(key, coords);
-    return coords;
-  } catch (err) {
-    geocodeCache.set(key, null);
-    return null;
-  }
-}
+import { buildMasterCoordIndex, resolveApartmentCoords, type MasterCoordRow } from '@/lib/map-marker-coords';
+import { aptNamesMatch } from '@/lib/apt-name-match';
 
 export async function GET(request: Request) {
   try {
@@ -82,11 +37,11 @@ export async function GET(request: Request) {
       const months = monthsParam
         ? getMonths(0, Math.max(1, parseInt(monthsParam, 10) || 3))
         : getMonths(loadMore * 3, 3);
-      
+
       // 공공데이터 API 병렬 호출 (속도 개선)
       const promises = months.map(dealYmd => fetchMolitData({ lawdCd, dealYmd, type }));
       const results = await Promise.all(promises);
-      
+
       let data = results.flat();
 
       if (dong && dong !== 'all') {
@@ -108,45 +63,29 @@ export async function GET(request: Request) {
 
       data.sort((a: any, b: any) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
 
-      // 지도 마커(단지 칩) 표시를 위해 아파트 매매(apt)·분양권(silv) 데이터에 한해 좌표 보강
+      // 지도 마커(단지 칩) 표시를 위해 아파트 매매(apt)·분양권(silv) 데이터에 한해 좌표 보강.
+      // MAP_SURROUNDING_MARKER_PERFORMANCE_V1: 이전에는 단지별로 Kakao 키워드 지오코딩을
+      // N회 호출해 좌표를 얻었다(N+1 외부 API, 실측 지연 592ms~5.76s). ApartmentMaster가
+      // 이미 이 지역 단지 전체의 검증된 좌표(Kakao geocoding 결과를 사전에 저장한 canonical
+      // source, Busan coverage 100%)를 갖고 있으므로 외부 API 호출 없이 단일 DB 쿼리로
+      // 대체한다.
       if ((type === 'apt' || type === 'silv') && data.length > 0) {
-        const uniqueKeys = Array.from(new Set(data.map((item: any) => `${item.dong}|${item.name}`)));
-        
-        // 병렬로 카카오 지오코딩 수행 및 DB(ApartmentMaster) 조회
-        // 이를 통해 검색 결과(canonical identity = aptSeq)와 실거래 마커(MOLIT 데이터 기반)를 연결한다.
-        const [_, masters] = await Promise.all([
-          Promise.all(
-            uniqueKeys.map((key) => {
-              const [dongName, aptName] = key.split('|');
-              return geocodeApt(aptName, dongName);
-            })
-          ),
-          prisma.apartmentMaster.findMany({
-            where: { sggCd: lawdCd },
-            select: { name: true, umdName: true, aptSeq: true, buildYear: true }
-          })
-        ]);
+        const masters: MasterCoordRow[] = await prisma.apartmentMaster.findMany({
+          where: { sggCd: lawdCd },
+          select: { name: true, umdName: true, aptSeq: true, buildYear: true, latitude: true, longitude: true }
+        });
 
-        // 간단한 매칭(이름 완전일치 또는 contains)
-        const masterMap = new Map();
-        for (const m of masters) {
-          const key = `${m.umdName}|${m.name}`;
-          // 첫 번째 매칭만(정확한 매칭을 위해서는 normalized name 비교 등이 필요할 수 있으나 지도 마커 연결 목적으론 일단 충분함)
-          if (!masterMap.has(key)) masterMap.set(key, m);
-        }
+        // 실측(연산동 26470, 207개 단지): dong+name 완전일치만으로 206건이 이미 매칭됐지만
+        // Kakao 지오코딩은 그중 19건에서 실패했었다(오래된/소규모 단지, 지번 병기 표기 등) —
+        // ApartmentMaster는 그 19건 전부 유효 좌표를 갖고 있어 이 교체만으로 marker coverage가
+        // 오히려 개선된다. 매칭/좌표 결합 규칙 자체는 src/lib/map-marker-coords.ts(순수 함수,
+        // 단위 테스트 있음)에 있다.
+        const masterIndex = buildMasterCoordIndex(masters);
+        const fuzzyCache = new Map<string, MasterCoordRow | null>();
 
         data = data.map((item: any) => {
-          const key = `${item.dong}|${item.name}`;
-          const coords = geocodeCache.get(key);
-          const master = masterMap.get(key);
-          
-          return {
-            ...item,
-            lat: coords ? coords.lat : null,
-            lng: coords ? coords.lng : null,
-            aptSeq: master ? master.aptSeq : null,
-            completionYear: master ? master.buildYear : null
-          };
+          const resolved = resolveApartmentCoords(masterIndex, item.dong, item.name, aptNamesMatch, fuzzyCache);
+          return { ...item, ...resolved };
         });
       }
 
