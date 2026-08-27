@@ -9,6 +9,7 @@
 // 기존 테스트를 깨뜨린다 — 그래서 패키지 대신 동일 효과의 최소 runtime guard만 둔다.
 import { readFileSync } from 'fs';
 import path from 'path';
+import { findZoneRelatedApartments, type ZoneRelatedApartment, type SchoolIdentityForLookup } from './school-apartment-relations';
 
 if (typeof window !== 'undefined') {
   throw new Error('src/lib/education/attendance-zone.ts는 서버 전용입니다 — client component에서 import하지 마세요.');
@@ -113,4 +114,14 @@ export function getApartmentEducationZone(aptSeq: string): SchoolAccessZoneInfo 
 
 export function getAttendanceZoneDatasetMeta() {
   return loadArtifact().meta;
+}
+
+export type { ZoneRelatedApartment } from './school-apartment-relations';
+
+// SCHOOLINFO / SCHOOL V2.1 §17~18 — "학교 → 관련 아파트" 방향 조회. artifact를
+// 한 번만 로드/캐시하고, 실제 매칭 판정은 순수 함수(findZoneRelatedApartments)에
+// 위임한다 — canonical NEIS code가 있으면 코드로만 매칭해 동명이교를 섞지 않는다.
+export function getApartmentsForSchool(identity: SchoolIdentityForLookup): ZoneRelatedApartment[] {
+  const { artifact } = loadIndex();
+  return findZoneRelatedApartments(artifact.apartments, identity);
 }

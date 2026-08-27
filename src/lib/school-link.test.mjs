@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildSchoolHref } from './school-link.ts';
+import { buildSchoolHref, buildCanonicalSchoolHref } from './school-link.ts';
+
+test('buildCanonicalSchoolHref: 좌표 없이 neisSchoolCode만으로 링크를 만든다(핵심 PASS 조건)', () => {
+  const href = buildCanonicalSchoolHref('7171046');
+  assert.equal(href, '/school/7171046');
+});
+
+test('buildCanonicalSchoolHref: lawdCd/currentAptSeq가 있으면 쿼리로 포함한다', () => {
+  const href = buildCanonicalSchoolHref('7171056', { lawdCd: '26140', currentAptSeq: '26140-1164' });
+  assert.equal(href, '/school/7171056?lawdCd=26140&aptSeq=26140-1164');
+});
 
 test('buildSchoolHref: 좌표가 있으면 canonical id/name/lat/lng/lawdCd를 쿼리로 담은 링크를 만든다', () => {
   const href = buildSchoolHref({ name: '구덕초등학교', kakaoId: '8658997', lat: 35.1204, lng: 129.0125 }, '26140');

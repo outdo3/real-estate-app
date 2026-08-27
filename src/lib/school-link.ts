@@ -19,3 +19,16 @@ export function buildSchoolHref(school: SchoolLinkInput, lawdCd: string): string
   if (lawdCd) params.set('lawdCd', lawdCd);
   return `/school/${encodeURIComponent(id)}?${params.toString()}`;
 }
+
+// SCHOOLINFO / SCHOOL V2.1 §4/§7 — 공식 NEIS school code가 있는 학교는 좌표 없이도
+// 상세페이지가 열려야 한다(핵심 PASS 조건). 이 링크는 좌표를 전혀 요구하지 않는다 —
+// [id] 자리에 canonical neisSchoolCode를 그대로 써서 /api/school/[id] route가 School
+// 테이블에서 직접 조회하게 한다. currentAptSeq가 있으면(아파트 상세에서 진입) 학교
+// 상세페이지가 "현재 보고 있는 단지" 비교 컨텍스트를 유지할 수 있도록 함께 싣는다.
+export function buildCanonicalSchoolHref(neisSchoolCode: string, opts?: { lawdCd?: string; currentAptSeq?: string }): string {
+  const params = new URLSearchParams();
+  if (opts?.lawdCd) params.set('lawdCd', opts.lawdCd);
+  if (opts?.currentAptSeq) params.set('aptSeq', opts.currentAptSeq);
+  const qs = params.toString();
+  return `/school/${encodeURIComponent(neisSchoolCode)}${qs ? `?${qs}` : ''}`;
+}

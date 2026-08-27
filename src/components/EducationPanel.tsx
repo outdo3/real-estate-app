@@ -17,7 +17,7 @@ import {
   highSchoolSummaryValue,
   type AttendanceStatus,
 } from '@/lib/education/education-ui-labels';
-import { buildSchoolHref } from '@/lib/school-link';
+import { buildSchoolHref, buildCanonicalSchoolHref } from '@/lib/school-link';
 import styles from './EducationPanel.module.css';
 
 // SCHOOL V2-D1 — 단지 상세 "교육환경" section. 기존 SchoolDistrictPanel(카카오
@@ -75,6 +75,7 @@ interface NearbyKindergarten {
 
 interface EducationApiResponse {
   status: 'OK' | 'NOT_FOUND' | 'AMBIGUOUS' | 'INSUFFICIENT_DATA';
+  aptSeq: string | null;
   elementaryAttendanceZone: ElementaryZone | null;
   middleSchoolGroup: MiddleGroup | null;
   nearbyElementarySchools: NearbyKakaoSchool[];
@@ -137,6 +138,7 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
 
   const zone = data.elementaryAttendanceZone;
   const middle = data.middleSchoolGroup;
+  const currentAptSeq = data.aptSeq;
   const kindergartens = data.kindergartens || [];
   const nearbyElementary = data.nearbyElementarySchools || [];
   const nearbyHigh = data.nearbyHighSchools || [];
@@ -160,7 +162,7 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
 
         <div className={styles.card}>
           <div className={styles.cardLabel}>공식 통학구역</div>
-          {zone ? <ElementaryZoneBody zone={zone} /> : <p className={styles.mutedText}>{ZONE_LABEL.NOT_AVAILABLE}</p>}
+          {zone ? <ElementaryZoneBody zone={zone} lawdCd={lawdCd} currentAptSeq={currentAptSeq} /> : <p className={styles.mutedText}>{ZONE_LABEL.NOT_AVAILABLE}</p>}
           <p className={styles.legalNotice}>
             <Info size={13} aria-hidden="true" /> 실제 배정은 관할 교육지원청 기준을 확인하세요.
           </p>
@@ -191,7 +193,11 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
         <div className={styles.card}>
           {middle && middle.status === 'AVAILABLE' && middle.groupName ? (
             middleGroupIsSingleSchool(middle) ? (
-              <p className={styles.plainText}>{middle.schools[0]?.schoolName ?? middle.groupName}</p>
+              middle.schools[0] ? (
+                <EduSchoolLink school={middle.schools[0]} lawdCd={lawdCd} currentAptSeq={currentAptSeq} />
+              ) : (
+                <p className={styles.plainText}>{middle.groupName}</p>
+              )
             ) : (
               <>
                 <p className={styles.plainText}>
@@ -205,7 +211,9 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
                 {showMiddleList && (
                   <ul className={styles.plainList}>
                     {middle.schools.map((s) => (
-                      <li key={s.schoolName}>{s.schoolName}</li>
+                      <li key={s.schoolName}>
+                        <EduSchoolLink school={s} lawdCd={lawdCd} currentAptSeq={currentAptSeq} />
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -315,6 +323,23 @@ function SchoolRow({ school, href }: { school: NearbyKakaoSchool; href: string |
   );
 }
 
+// SCHOOLINFO / SCHOOL V2.1 §4/§7 — 공식 통학구역/학교군 학교는 neisSchoolCode가
+// 있으면(identityConfidence가 NO_MATCH가 아니면) 좌표 없이도 클릭 가능하다(핵심 PASS
+// 조건). 코드가 없으면 여전히 정적 텍스트로 남긴다 — 이름만으로 재검색해 다른 학교로
+// 연결하지 않는다.
+function EduSchoolLink({ school, lawdCd, currentAptSeq }: { school: EduSchoolRef; lawdCd: string; currentAptSeq: string | null }) {
+  if (!school.neisSchoolCode || school.identityConfidence === 'NO_MATCH') {
+    return <b>{school.schoolName}</b>;
+  }
+  const href = buildCanonicalSchoolHref(school.neisSchoolCode, { lawdCd, currentAptSeq: currentAptSeq || undefined });
+  return (
+    <Link href={href} className={styles.schoolRow} aria-label={`${school.schoolName} 학교 정보 보기`}>
+      <b>{school.schoolName}</b>
+      <ChevronRight className={styles.schoolRowChevron} aria-hidden="true" />
+    </Link>
+  );
+}
+
 function SummaryChip({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className={styles.summaryChip}>
@@ -327,7 +352,7 @@ function SummaryChip({ icon, label, value }: { icon: React.ReactNode; label: str
   );
 }
 
-function ElementaryZoneBody({ zone }: { zone: ElementaryZone }) {
+function ElementaryZoneBody({ zone, lawdCd, currentAptSeq }: { zone: ElementaryZone; lawdCd: string; currentAptSeq: string | null }) {
   if (!shouldRenderZoneSchoolList(zone.status)) {
     return <p className={styles.mutedText}>{ZONE_LABEL[zone.status]}</p>;
   }
@@ -337,7 +362,7 @@ function ElementaryZoneBody({ zone }: { zone: ElementaryZone }) {
       <Badge variant="beta">{ZONE_LABEL[zone.status]}</Badge>
       <ul className={styles.plainList}>
         {zone.schools.map((s) => (
-          <li key={s.schoolName}><b>{s.schoolName}</b></li>
+          <li key={s.schoolName}><EduSchoolLink school={s} lawdCd={lawdCd} currentAptSeq={currentAptSeq} /></li>
         ))}
       </ul>
     </>

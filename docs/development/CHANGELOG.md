@@ -9252,3 +9252,76 @@ BOTTOM_ACTIONS = FAVORITE_SHARE_WRITE. FAVORITE = PASS. SHARE = PASS. WRITE = PA
 SCHOOL_CLICK = RESTORED. SCHOOL_IDENTITY = CANONICAL(좌표 있는 항목만, 없는 항목은
 의도적으로 비클릭). WRONG_SCHOOL_FALLBACK = ABSENT. MOBILE = PASS(360/375 라이브).
 DESKTOP = PASS. BUILD = PASS.**
+
+
+## 2026-08-27
+
+### STEP — SCHOOLINFO / SCHOOL V2.1: DECISION-FIRST SCHOOL DETAIL EXPERIENCE
+
+학교 상세페이지를 "정보 나열"에서 "이 학교를 기준으로 어떤 아파트를 봐야 하는가"로
+이어지는 의사결정형 페이지로 재구성했다. 직전 STEP이 좌표 기반(Kakao POI)으로만
+학교 클릭을 복구했던 것을, 이번엔 canonical NEIS 학교 식별자 기반으로 확장해
+**좌표가 없는 공식 통학구역/학교군 학교도 상세페이지가 열리게** 했다(핵심 PASS
+조건).
+
+**SchoolInfo(학교알리미) 정책 확정**: 사용자가 확보한 공식 회신(원본 유지 조건으로
+상업적 활용/재구성/비교/분석 가능, 이집 산출물은 RAW와 분리 표시, 위경도 임의 변경
+금지, 필수 출처 "학교알리미")을 `docs/development/SCHOOLINFO_SCHOOL_V2_1.md`에
+문서화하고, `EducationSource`(`schoolinfo_openapi`)를 `CLEARED`로 1회 등록했다
+(`scripts/education/register-schoolinfo-source.ts`). 학생수/학급수/교원수 등
+실제 SchoolStat 통계는 아직 0건이라(별도 대규모 ingestion 필요, 이번 STEP 범위
+밖) UI에 정직하게 "연동 준비 중"으로 남겼다 — 없는 값을 지어내지 않았다.
+
+**Canonical identity + route**: `/api/school/[id]/route.ts`(신규)가 `[id]`를
+`School.neisSchoolCode`로 먼저 조회하고(좌표 불필요), 실패하면 기존 Kakao 링크의
+`name`+`lawdCd`로 School 테이블에서 정확히 1건만 매칭될 때 canonical로 승격한다
+(2건 이상 모호하면 승격하지 않음 — 동명이교 안전). 기존 `/school/{kakaoId}?name=&lat=&lng=&lawdCd=`
+링크는 그대로 하위호환 동작한다. `EducationPanel.tsx`의 공식 통학구역/학교군
+학교명도 이제 `neisSchoolCode`만으로(좌표 없이) 클릭 가능하다(`EduSchoolLink`).
+
+**관련 아파트 decision layer**: `src/lib/education/school-apartment-relations.ts`
+(신규, 순수 함수)가 기존 attendance-zone artifact(3,402건)를 "학교→아파트"
+방향으로 역색인해 공식 통학구역(ATTENDANCE_ZONE)/학교군(MIDDLE_GROUP) 관계를
+canonical NEIS 코드 우선으로 찾고, 거리 기반(NEARBY)은 기존 `nearby-apartments.ts`
+(presale 기능이 이미 쓰던 canonical ApartmentMaster 함수)를 재사용한다. 세 relation을
+항상 배지로 구분해 "배정 아파트"로 뭉뚱그리지 않는다. 가격은 기존 검증된
+`fetchMolitData` 파이프라인만 쓰고(새 가격 소스 없음), distinct lawdCd당 1회만
+호출해 N+1을 피한다(ApartmentMaster 조회도 1회 배치). "이집의 해석"
+(`school-decision-insight.ts`, 신규 순수 함수)은 최단거리/최고가·최저가
+차액/최신축/현재 단지 순위를 실제 비교값에서만 deterministic하게 생성한다 — AI
+호출 없음, "명문학교" 류 가치판단 없음.
+
+**현재 단지 컨텍스트**: 아파트 상세→학교 진입 시 `aptSeq` 쿼리(DB 변경 없이 쿼리
+파라미터만 사용)로 "현재 보고 있는 단지"를 학교 페이지까지 이어간다 — 관련 목록
+상한(12건)에 밀려 잘리지 않도록 항상 1순위로 pin(구현 중 발견해 즉시 수정한 버그,
+§ 아래 참고).
+
+라이브 브라우저 검증(claude-in-chrome): 대신초등학교(canonical, 좌표 없음,
+아파트 상세에서 진입) → 헤더/현재 단지 콜아웃/관련 아파트(대신롯데캐슬 1순위,
+공식 통학구역 배지)/이집의 해석/CTA/출처 전부 정상 렌더 → "상세보기" 클릭 시
+canonical aptSeq 경로로 정확히 대신롯데캐슬 복귀 확인. 해원초등학교(레거시 Kakao
+링크, name+lawdCd로 canonical 승격) → 해운대두산위브더제니스 직선거리 188m/1,788세대/
+13억 1,000만 정상. 경남중학교(MIDDLE_GROUP) 관계 분리 확인. 존재하지 않는 학교
+fallback(name/좌표 없는 가상 학원)도 KAKAO_ONLY로 안전하게 처리(header null,
+crash 없음). 360px/375px 모바일, 852px 데스크톱 전부 가로 스크롤/클리핑 없음.
+
+신규 유닛 테스트 21개(`school-apartment-relations` 6, `school-trade-price` 4,
+`school-decision-insight` 7, `school-link` +2, 기존 12 유지): 동명이교 코드 우선
+매칭, relation 분리, 해제거래 배제, 가격/거리 데이터 부족 시 비교 생성 안 함(추정
+없음) 등. 기존 포함 총 114/114(`.test.mjs`) + 361/361(`.test.ts`) 전부 PASS(회귀
+없음). `npx tsc --noEmit`/lint 변경 파일 기준 에러 0. `npm run build` PASS.
+
+`docs/development/SCHOOLINFO_SCHOOL_V2_1.md` 신규(24개 섹션).
+
+DB 쓰기: `EducationSource` governance 등록 1행(schoolinfo_openapi, upsert, 실제
+통계 데이터 아님). 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**SCHOOLINFO_SCHOOL_V2_1 = PASS. CANONICAL_SCHOOL_IDENTITY = School.neisSchoolCode.
+COORDINATES_REQUIRED_FOR_ROUTE = NO. NEIS_NO_COORD_CLICK = PASS. MIDDLE_GROUP_CLICK
+= PASS. KAKAO_ONLY_SCHOOL = PASS. NAME_ONLY_FALLBACK = ABSENT. WRONG_SCHOOL =
+ABSENT. SCHOOLINFO_SOURCE_LABEL = PASS. RAW_DERIVED_SEPARATION = PASS.
+RELATED_APARTMENTS = PASS. CURRENT_APARTMENT_CONTEXT = PASS. APARTMENT_COMPARISON
+= PASS. EJIP_DECISION_INTERPRETATION = PASS. MOBILE = PASS. DESKTOP = PASS. BUILD
+= PASS. DB_SCHEMA_CHANGE = NONE.**

@@ -29,76 +29,6 @@
   margin: 0 0 0.75rem;
 }
 
-.tableWrapper {
-  border: 1px dashed var(--border-color);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.gradeTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.gradeTable th {
-  background: #f8fafc;
-  color: var(--text-secondary);
-  font-weight: 700;
-  padding: 0.6rem 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.gradeTable td {
-  padding: 0.55rem 0.75rem;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.gradeTable tr:last-child td {
-  border-bottom: none;
-}
-
-.gradeCell {
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.dataPending {
-  color: var(--text-muted);
-}
-
-.specialGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.75rem;
-}
-
-.specialCard {
-  padding: 1.1rem 0.9rem;
-  border-radius: 10px;
-  border: 1px dashed var(--border-color);
-  background: #f8fafc;
-  text-align: center;
-}
-
-.specialIcon {
-  font-size: 1.4rem;
-  margin-bottom: 0.4rem;
-}
-
-.specialLabel {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 0.35rem;
-}
-
-.specialValue {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
 .aptList {
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -146,18 +76,6 @@
   margin-top: 0.2rem;
 }
 
-.aptSectionHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.aptSectionHeader .sectionTitle {
-  margin: 0;
-}
-
 /* SCHOOL V2-C5-A: 직선거리 caveat — 작고 튀지 않게 */
 .aptDistanceCaveat {
   font-size: 0.75rem;
@@ -165,39 +83,11 @@
   margin: -0.25rem 0 0.75rem;
 }
 
-.aptSortTabs {
-  display: flex;
-  gap: 0.375rem;
-  flex-shrink: 0;
-}
-
-.aptSortChip {
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  background: white;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.aptSortChipActive {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
-  color: white;
-}
-
-.aptRowBtns {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
 .aptRowBtn {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
   padding: 0.4rem 0.65rem;
   border-radius: 999px;
   border: 1px solid var(--border-color);
@@ -214,4 +104,141 @@
 .aptRowBtn:hover {
   border-color: var(--primary-color);
   color: var(--primary-color);
+}
+
+/* SCHOOLINFO / SCHOOL V2.1 — SECTION 1 학교 헤더 */
+.headerCard {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+}
+
+.headerTopRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.headerBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.headerAddress {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.mutedText {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0.5rem 0 0;
+}
+
+/* 현재 보고 있는 단지 컨텍스트 콜아웃(§10) */
+.currentAptCallout {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: #f0fdf4;
+  border: 1px solid var(--ejip-green, #13a367);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.currentAptLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--ejip-green-deep, #0a7a4f);
+}
+
+.currentAptName {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.currentAptMeta {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* 관련 아파트 카드 — 현재 단지 강조 */
+.aptRowCurrent {
+  background: #f0fdf4;
+}
+
+.aptRowBadgeLine {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.3rem;
+  flex-wrap: wrap;
+}
+
+/* SECTION 7 — 이집의 해석 */
+.insightCard {
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.insightText {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* CTA row(§29) */
+.ctaRow {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+}
+
+.ctaPrimary,
+.ctaSecondary {
+  flex: 1;
+  padding: 0.75rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: center;
+  border: none;
+}
+
+.ctaPrimary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.ctaSecondary {
+  background: white;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.72rem;
+  color: var(--text-muted);
 }

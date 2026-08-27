@@ -1,204 +1,291 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useRef, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+import { MapPin, ChevronRight } from 'lucide-react';
 import Header from '@/components/Header';
+import Badge from '@/components/ui/Badge';
+import Empty from '@/components/ui/Empty';
+import ErrorState from '@/components/ui/ErrorState';
+import InlineLoading from '@/components/ui/InlineLoading';
+import KakaoShareButton from '@/components/KakaoShareButton';
+import { siteConfig } from '@/config/site';
 import styles from './school-detail.module.css';
 
-type SchoolLevel = '초' | '중' | '고' | null;
+// SCHOOLINFO / SCHOOL V2.1 — "학교 정보 나열"이 아니라 "이 학교를 기준으로 어떤
+// 아파트를 봐야 하는가"까지 이어지는 의사결정형 페이지(§0). 기존 /api/school/apartments
+// (Kakao POI 기반, aptSeq 없음)를 대체하고 /api/school/[id](canonical school identity +
+// ApartmentMaster 기반 관련 아파트)만 사용한다.
 
-// MapViewer.tsx의 classifySchoolLevel과 동일한 방식 — 실제 학교명 문자열을 파싱만
-// 할 뿐 지어낸 값이 아니다.
-const classifySchoolLevel = (name: string): SchoolLevel => {
+interface SchoolHeader {
+  schoolName: string;
+  schoolLevel: string | null;
+  establishmentType: string | null;
+  genderType: string | null;
+  address: string | null;
+  roadAddress: string | null;
+  sigunguCode: string | null;
+  dongName: string | null;
+  isActive: boolean;
+}
+
+type ApartmentRelation = 'ATTENDANCE_ZONE' | 'MIDDLE_GROUP' | 'NEARBY';
+
+interface RelatedApartmentCard {
+  aptSeq: string;
+  name: string;
+  dong: string | null;
+  lawdCd: string | null;
+  relation: ApartmentRelation;
+  distanceKm: number | null;
+  totalHouseholds: number | null;
+  buildYear: number | null;
+  hasRecentPrice: boolean;
+  price: string | null;
+  dealAmount: number | null;
+  isCurrent: boolean;
+}
+
+interface SchoolDetailResponse {
+  status: 'OK' | 'NOT_FOUND' | 'ERROR';
+  identity: { type: 'CANONICAL' | 'KAKAO_ONLY'; schoolId: number | null; neisSchoolCode: string | null; name: string };
+  header: SchoolHeader | null;
+  location: { latitude: number; longitude: number; source: 'OFFICIAL_POINT' | 'KAKAO_EXTERNAL' } | null;
+  relatedApartments: RelatedApartmentCard[];
+  currentApartment: RelatedApartmentCard | null;
+  decisionInsights: { text: string }[];
+  source: { schoolInfoLabel: string; derivedLabel: string };
+}
+
+const RELATION_LABEL: Record<ApartmentRelation, string> = {
+  ATTENDANCE_ZONE: '공식 통학구역',
+  MIDDLE_GROUP: '학교군 관련',
+  NEARBY: '학교 주변 아파트',
+};
+
+const RELATION_BADGE_VARIANT: Record<ApartmentRelation, 'status' | 'neutral' | 'beta'> = {
+  ATTENDANCE_ZONE: 'status',
+  MIDDLE_GROUP: 'beta',
+  NEARBY: 'neutral',
+};
+
+function classifyLevel(schoolLevel: string | null, name: string): '초' | '중' | '고' | null {
+  if (schoolLevel?.includes('초등')) return '초';
+  if (schoolLevel?.includes('고등')) return '고';
+  if (schoolLevel?.includes('중')) return '중';
   if (name.includes('초등학교')) return '초';
   if (name.includes('고등학교')) return '고';
   if (name.includes('중학교')) return '중';
   return null;
-};
-
-const GRADE_ROWS_ELEM = ['1학년', '2학년', '3학년', '4학년', '5학년', '6학년'];
-const SPECIAL_HIGH_ROWS = [
-  { label: '과학고 진학', icon: '🔬' },
-  { label: '외고·국제고 진학', icon: '🌐' },
-  { label: '자사고 진학', icon: '🏫' },
-];
-
-interface NearbyApartment {
-  id: number;
-  name: string;
-  price: string;
-  // SCHOOL V2-C5-A: 직선거리 문구("직선거리 약 Nm") — 실제 보행경로가 아니므로
-  // "도보 N분"으로 표시하지 않는다. distanceMeters/distanceLabel이 항상 채워지지만,
-  // API 응답 shape 변경에 방어적으로 대응하기 위해 optional로 둔다.
-  distanceMeters?: number | null;
-  distanceLabel?: string;
-  /** @deprecated distanceLabel을 대신 쓸 것 */
-  walkTime: string;
-  distance: number;
-  buildYear: number | null;
 }
 
-type AptSort = 'distance' | 'newest';
+function distanceLabel(km: number | null): string | null {
+  if (km == null) return null;
+  return km < 1 ? `직선거리 약 ${Math.round(km * 1000)}m` : `직선거리 약 ${km.toFixed(1)}km`;
+}
 
 export default function SchoolDetailClient() {
   const router = useRouter();
-  const [schoolName, setSchoolName] = useState<string>('');
-  const [level, setLevel] = useState<SchoolLevel>(null);
-  const [apartments, setApartments] = useState<NearbyApartment[] | null>(null);
-  const [aptLoading, setAptLoading] = useState(true);
-  const [aptSort, setAptSort] = useState<AptSort>('newest');
-  const [lawdCdState, setLawdCdState] = useState('');
+  const params = useParams<{ id: string }>();
+  const [data, setData] = useState<SchoolDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [networkError, setNetworkError] = useState(false);
+  const relatedSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const name = params.get('name') || '';
-    const lat = params.get('lat') || '';
-    const lng = params.get('lng') || '';
-    const lawdCd = params.get('lawdCd') || '';
-    setSchoolName(name);
-    setLevel(classifySchoolLevel(name));
-    setLawdCdState(lawdCd);
+    const search = new URLSearchParams(window.location.search);
+    const qs = search.toString();
+    const url = `/api/school/${encodeURIComponent(params.id)}${qs ? `?${qs}` : ''}`;
 
-    if (!name) {
-      setAptLoading(false);
-      return;
-    }
-    const url = `/api/school/apartments?schoolName=${encodeURIComponent(name)}${lat ? `&lat=${lat}` : ''}${lng ? `&lng=${lng}` : ''}${lawdCd ? `&lawdCd=${lawdCd}` : ''}`;
+    let cancelled = false;
+    setLoading(true);
+    setNetworkError(false);
+
     fetch(url)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data)) {
-          setApartments(data.data.filter((a: NearbyApartment) => a.id !== -1));
-        }
+      .then((res) => {
+        if (!res.ok && res.status !== 404) throw new Error('network');
+        return res.json();
       })
-      .catch(() => setApartments(null))
-      .finally(() => setAptLoading(false));
-  }, []);
+      .then((json: SchoolDetailResponse) => {
+        if (cancelled) return;
+        setData(json);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setNetworkError(true);
+        setLoading(false);
+      });
 
-  const sortedApartments = apartments
-    ? [...apartments].sort((a, b) =>
-        aptSort === 'newest' ? (b.buildYear || 0) - (a.buildYear || 0) : a.distance - b.distance
-      )
-    : null;
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id]);
+
+  if (loading) {
+    return (
+      <div className={styles.main}>
+        <Header hideLogo pageTitle="학교 정보" pageTitleLarge pageTitleAlign="left" />
+        <div className="container">
+          <InlineLoading message="학교 정보를 확인하고 있어요..." />
+        </div>
+      </div>
+    );
+  }
+
+  if (networkError) {
+    return (
+      <div className={styles.main}>
+        <Header hideLogo pageTitle="학교 정보" pageTitleLarge pageTitleAlign="left" />
+        <div className="container">
+          <ErrorState variant="section" message="학교 정보를 불러오지 못했어요." />
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || data.status !== 'OK') {
+    return (
+      <div className={styles.main}>
+        <Header hideLogo pageTitle="학교 정보" pageTitleLarge pageTitleAlign="left" />
+        <div className="container">
+          <Empty variant="noData" title="학교 정보를 확인할 수 없어요." description="인근 학교 목록에서 다시 진입해주세요." showMascot={false} />
+        </div>
+      </div>
+    );
+  }
+
+  const { identity, header, relatedApartments, currentApartment, decisionInsights, source } = data;
+  const schoolName = header?.schoolName || identity.name;
+  const level = classifyLevel(header?.schoolLevel ?? null, schoolName);
+  const regionLabel = [header?.roadAddress || header?.address].filter(Boolean).join(' ');
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
 
   return (
     <div className={styles.main}>
-      <Header hideLogo pageTitle={schoolName || '학교 정보'} pageTitleLarge pageTitleAlign="left" />
+      <Header hideLogo pageTitle={schoolName} pageTitleLarge pageTitleAlign="left" />
 
       <div className="container">
-        {level === '초' && (
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>📈 학년별 학생 수 추이</h2>
-            <div className={styles.tableWrapper}>
-              <table className={styles.gradeTable}>
-                <thead>
-                  <tr>
-                    <th>학년</th>
-                    <th>학생 수</th>
-                    <th>학급당 인원</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {GRADE_ROWS_ELEM.map((grade) => (
-                    <tr key={grade}>
-                      <td className={styles.gradeCell}>{grade}</td>
-                      <td className={styles.dataPending}>데이터 준비 중</td>
-                      <td className={styles.dataPending}>데이터 준비 중</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* SECTION 1 — 학교 헤더 */}
+        <div className={styles.headerCard}>
+          <div className={styles.headerTopRow}>
+            <div className={styles.headerBadges}>
+              {level && <Badge variant="neutral">{level}등학교</Badge>}
+              {header?.establishmentType && <Badge variant="neutral">{header.establishmentType}</Badge>}
+              {header?.genderType && <Badge variant="neutral">{header.genderType}</Badge>}
+              {!header && <Badge variant="warning">학교알리미 미확인</Badge>}
             </div>
-          </section>
-        )}
+            <KakaoShareButton compact title={`${schoolName} - ${siteConfig.name}`} description={`${schoolName}와 관련된 아파트, 거리, 가격 비교를 확인하세요.`} />
+          </div>
+          {regionLabel && (
+            <p className={styles.headerAddress}>
+              <MapPin size={14} aria-hidden="true" /> {regionLabel}
+            </p>
+          )}
+          {!header && <p className={styles.mutedText}>학교알리미 공식 정보와 아직 연결되지 않은 학교입니다. 표시된 정보는 카카오 지도 기준입니다.</p>}
+        </div>
 
-        {(level === '중' || level === '고') && (
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>🎓 특목고·자사고 진학률</h2>
-            <div className={styles.specialGrid}>
-              {SPECIAL_HIGH_ROWS.map((row) => (
-                <div key={row.label} className={styles.specialCard}>
-                  <div className={styles.specialIcon}>{row.icon}</div>
-                  <div className={styles.specialLabel}>{row.label}</div>
-                  <div className={styles.specialValue}>데이터 준비 중</div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {!level && (
-          <div className={styles.introCard}>
-            <p className={styles.introText}>학교 종류를 확인하지 못했습니다. 인근 학교 목록에서 다시 진입해주세요.</p>
+        {/* 현재 보고 있던 단지 컨텍스트(§10) */}
+        {currentApartment && (
+          <div className={styles.currentAptCallout}>
+            <span className={styles.currentAptLabel}>현재 보고 있는 단지</span>
+            <span className={styles.currentAptName}>{currentApartment.name}</span>
+            <span className={styles.currentAptMeta}>
+              {distanceLabel(currentApartment.distanceKm) || '거리 정보 없음'}
+              {currentApartment.hasRecentPrice ? ` · ${currentApartment.price}` : ' · 최근 실거래 정보 없음'}
+            </span>
           </div>
         )}
 
+        {/* SECTION 2 — 한눈에 보는 학교(학교알리미 통계 연동 전) */}
         <section className={styles.section}>
-          <div className={styles.aptSectionHeader}>
-            <h2 className={styles.sectionTitle}>📌 인근 아파트 단지</h2>
-            <div className={styles.aptSortTabs}>
-              <button
-                type="button"
-                className={`${styles.aptSortChip} ${aptSort === 'newest' ? styles.aptSortChipActive : ''}`}
-                onClick={() => setAptSort('newest')}
-              >
-                신축순
-              </button>
-              <button
-                type="button"
-                className={`${styles.aptSortChip} ${aptSort === 'distance' ? styles.aptSortChipActive : ''}`}
-                onClick={() => setAptSort('distance')}
-              >
-                거리순
-              </button>
-            </div>
+          <h2 className={styles.sectionTitle}>한눈에 보는 학교</h2>
+          <div className={styles.introCard}>
+            <p className={styles.introText}>
+              학생수·학급수·교원수 등 학교알리미 공식 통계는 아직 연동 준비 중이에요. 연동 전까지는 관련 아파트 비교에 집중해서 보여드릴게요.
+            </p>
           </div>
-          <p className={styles.aptDistanceCaveat}>직선거리 기준이며, 실제 통학 경로는 다를 수 있어요.</p>
-          {aptLoading ? (
-            <div className={styles.dataPending} style={{ padding: '1rem 0' }}>
-              불러오는 중...
-            </div>
-          ) : !sortedApartments || sortedApartments.length === 0 ? (
+        </section>
+
+        {/* SECTION 6 — 이 학교와 연결된 아파트(핵심) */}
+        <section className={styles.section} ref={relatedSectionRef}>
+          <h2 className={styles.sectionTitle}>이 학교와 연결된 아파트</h2>
+          <p className={styles.aptDistanceCaveat}>직선거리는 이집 계산값이며, 실제 통학 경로·배정과 다를 수 있어요.</p>
+
+          {relatedApartments.length === 0 ? (
             <div className={styles.introCard}>
-              <p className={styles.introText}>반경 1.5km 이내 아파트 정보를 찾지 못했습니다.</p>
+              <p className={styles.introText}>이 학교와 연결된 아파트 정보를 찾지 못했어요.</p>
             </div>
           ) : (
             <div className={styles.aptList}>
-              {sortedApartments.map((apt) => (
-                <div key={apt.id} className={styles.aptRow}>
-                  <div className={styles.aptRowInfo}>
-                    <div className={styles.aptRowName}>
-                      {apt.name} {apt.buildYear && <span className={styles.aptRowYear}>{apt.buildYear}년</span>}
-                    </div>
-                    <div className={styles.aptRowMeta}>
-                      {apt.distanceLabel ?? apt.walkTime} · {apt.price}
-                    </div>
-                  </div>
-                  <div className={styles.aptRowBtns}>
-                    <button
-                      type="button"
-                      className={styles.aptRowBtn}
-                      onClick={() => router.push(`/apt/${encodeURIComponent(apt.name)}${lawdCdState ? `?lawdCd=${lawdCdState}` : ''}`)}
-                    >
-                      실거래
-                    </button>
-                    {/* 학교/동네 전체가 아니라 이 단지명 자체로 정확히 검색되도록 단지명만
-                        파라미터로 넘긴다(Deep Linking). */}
-                    <a
-                      href={`https://m.land.naver.com/search/result/${encodeURIComponent(apt.name)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.aptRowBtn}
-                    >
-                      매물
-                    </a>
-                  </div>
-                </div>
+              {relatedApartments.map((apt) => (
+                <RelatedApartmentRow key={apt.aptSeq} apt={apt} router={router} />
               ))}
             </div>
           )}
         </section>
+
+        {/* SECTION 7 — 이집의 해석(deterministic, 실제 비교값만) */}
+        {decisionInsights.length > 0 && (
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>이집의 해석</h2>
+            <div className={styles.insightCard}>
+              {decisionInsights.map((insight, i) => (
+                <p key={i} className={styles.insightText}>
+                  {insight.text}
+                </p>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* CTA(§29) */}
+        <div className={styles.ctaRow}>
+          {relatedApartments.length > 0 && (
+            <button type="button" className={styles.ctaSecondary} onClick={() => relatedSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}>
+              관련 아파트 보기
+            </button>
+          )}
+          {currentApartment && (
+            <button type="button" className={styles.ctaPrimary} onClick={() => router.back()}>
+              현재 단지로 돌아가기
+            </button>
+          )}
+        </div>
+
+        {/* 출처(§8/§15/§16) */}
+        <div className={styles.provenance}>
+          <span>{source.schoolInfoLabel}</span>
+          <span>가격·거리·비교: {source.derivedLabel}</span>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function RelatedApartmentRow({ apt, router }: { apt: RelatedApartmentCard; router: ReturnType<typeof useRouter> }) {
+  const href = `/apt/${encodeURIComponent(apt.name)}${apt.lawdCd ? `?lawdCd=${apt.lawdCd}${apt.dong ? `&dong=${encodeURIComponent(apt.dong)}` : ''}` : ''}`;
+  return (
+    <div className={`${styles.aptRow} ${apt.isCurrent ? styles.aptRowCurrent : ''}`}>
+      <div className={styles.aptRowInfo}>
+        <div className={styles.aptRowBadgeLine}>
+          <Badge variant={RELATION_BADGE_VARIANT[apt.relation]}>{RELATION_LABEL[apt.relation]}</Badge>
+          {apt.isCurrent && <Badge variant="positive">현재 보는 단지</Badge>}
+        </div>
+        <div className={styles.aptRowName}>
+          {apt.name} {apt.buildYear && <span className={styles.aptRowYear}>{apt.buildYear}년</span>}
+        </div>
+        <div className={styles.aptRowMeta}>
+          {[distanceLabel(apt.distanceKm), apt.totalHouseholds ? `${apt.totalHouseholds.toLocaleString('ko-KR')}세대` : null, apt.hasRecentPrice ? apt.price : '최근 실거래 정보 없음']
+            .filter(Boolean)
+            .join(' · ')}
+        </div>
+      </div>
+      <button type="button" className={styles.aptRowBtn} onClick={() => router.push(href)} aria-label={`${apt.name} 상세보기`}>
+        상세보기
+        <ChevronRight size={14} aria-hidden="true" />
+      </button>
     </div>
   );
 }

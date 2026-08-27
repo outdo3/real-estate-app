@@ -3,6 +3,7 @@ import { fetchMolitData, DataType } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
 import { buildMasterCoordIndex, resolveApartmentCoords, type MasterCoordRow } from '@/lib/map-marker-coords';
 import { aptNamesMatch } from '@/lib/apt-name-match';
+import { recentMonths } from '@/lib/molit-months';
 
 export async function GET(request: Request) {
   try {
@@ -19,24 +20,11 @@ export async function GET(request: Request) {
 
     // 1. type과 lawdCd가 있으면 국토부 API 실시간 호출
     if (type && lawdCd) {
-      const getMonths = (startOffset: number, count: number) => {
-        const res = [];
-        for (let i = 0; i < count; i++) {
-          const date = new Date();
-          // Current month is 0-indexed, so we subtract startOffset + i
-          date.setMonth(date.getMonth() - (startOffset + i));
-          const y = date.getFullYear();
-          const m = String(date.getMonth() + 1).padStart(2, '0');
-          res.push(`${y}${m}`);
-        }
-        return res;
-      };
-
       // loadMore=0 -> offset=0 (last 3 months)
       // loadMore=1 -> offset=3 (previous 3 months)
       const months = monthsParam
-        ? getMonths(0, Math.max(1, parseInt(monthsParam, 10) || 3))
-        : getMonths(loadMore * 3, 3);
+        ? recentMonths(Math.max(1, parseInt(monthsParam, 10) || 3), 0)
+        : recentMonths(3, loadMore * 3);
 
       // 공공데이터 API 병렬 호출 (속도 개선)
       const promises = months.map(dealYmd => fetchMolitData({ lawdCd, dealYmd, type }));
