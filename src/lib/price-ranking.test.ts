@@ -8,6 +8,8 @@ import {
   buildRecordHighInterpretation,
   buildRisingInterpretation,
   resolvePriceRankingPeriod,
+  historicalCoverageLabel,
+  HISTORICAL_LOOKBACK_MONTHS,
   type FeedTrade,
 } from './price-ranking';
 
@@ -281,7 +283,50 @@ test('buildDeclineInterpretation: 구간별 문구, 투자 권유형 표현 없�
 
 test('buildRecordHighInterpretation: 표본 충분 여부로 문구 분기', () => {
   assert.ok(buildRecordHighInterpretation({ trailing12moSampleCount: 5 }).includes('최근 12개월'));
-  assert.ok(buildRecordHighInterpretation({ trailing12moSampleCount: 1 }).includes('이전 최고가'));
+  assert.ok(buildRecordHighInterpretation({ trailing12moSampleCount: 1 }).includes('최고가'));
+});
+
+// ── FIX_PRICE_RANKINGS_V2_1_1A — historical coverage 정직성 ──
+// 감사 결과: MOLIT 실거래 API는 지역+월 단위로만 조회되어(단지/면적 필터
+// 없음) "역대 진짜 최고가"를 무제한으로 보장할 수 없다(시도 전체 집계에서
+// fetch 규모가 그대로 폭증). 따라서 이 STEP은 계산 로직(§8~§16, 이미
+// 위에서 검증됨)이 아니라 "그 계산이 실제로는 HISTORICAL_LOOKBACK_MONTHS로
+// 제한된 범위 안에서의 최고가일 뿐"이라는 사실을 문구가 항상 정직하게
+// 밝히는지를 검증한다.
+
+test('historicalCoverageLabel: 24개월은 "2년", 12의 배수가 아니면 개월 단위', () => {
+  assert.equal(historicalCoverageLabel(24), '2년');
+  assert.equal(historicalCoverageLabel(12), '1년');
+  assert.equal(historicalCoverageLabel(18), '18개월');
+  assert.equal(HISTORICAL_LOOKBACK_MONTHS, 24);
+  assert.equal(historicalCoverageLabel(), '2년'); // 기본값 = HISTORICAL_LOOKBACK_MONTHS
+});
+
+test('CASE A(false record-high 시나리오): 조회 범위 밖에 더 높은 실거래가 있어도 계산은 주어진 데이터로만 이뤄지므로, 문구가 반드시 범위를 명시해야 한다', () => {
+  // 2021년 12억 거래는 24개월 lookback 밖이라 allTrades에 애초에 포함되지
+  // 않는다(fetch 자체가 안 됨) — 이 테스트는 "그 상태에서도 계산이 거짓
+  // 무제한 주장을 하지 않는지"를 검증한다(실제 12억 거래를 안 보이게 만드는
+  // 것이 이 STEP의 목표가 아니라 — 그건 스키마 변경 없이는 불가능 — 문구가
+  // 정직한 범위로 스스로를 한정하는 것이 목표).
+  const trades = [
+    trade({ uid: 'window-high', dealDate: '2025-01-01', dealAmount: 90000 }), // 조회 범위 안 최고가(9억)
+    trade({ uid: 'current', dealDate: '2026-08-20', dealAmount: 100000 }), // 10억, 조회 범위 안에서는 신고가
+  ];
+  const rows = buildRecordHighRows(trades, PERIOD);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].priorHighAmount, 90000);
+  const text = buildRecordHighInterpretation(rows[0], historicalCoverageLabel());
+  // "역대"/"진짜"처럼 무제한을 뜻하는 표현이 없어야 하고, 조회 범위(coverageLabel)가 문구에 명시돼야 한다.
+  assert.equal(text.includes('역대'), false);
+  assert.equal(text.includes('진짜'), false);
+  assert.ok(text.includes('2년'));
+});
+
+test('buildDeclineInterpretation/buildRecordHighInterpretation: coverageLabel을 넘기면 문구에 그대로 반영되고, 무제한 표현("과거 최고가"/"이전 최고가"만 단독으로) 대신 범위가 명시된다', () => {
+  const decline = buildDeclineInterpretation({ declinePct: -30 }, '3년');
+  assert.ok(decline.includes('3년'));
+  const recordHigh = buildRecordHighInterpretation({ trailing12moSampleCount: 1 }, '3년');
+  assert.ok(recordHigh.includes('3년'));
 });
 
 test('buildRisingInterpretation: 표본 부족 시 "상승세" 같은 과장 표현 없이 단순 사실만', () => {

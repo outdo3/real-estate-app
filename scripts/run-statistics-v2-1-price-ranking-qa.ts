@@ -105,6 +105,28 @@ async function main() {
         }
       }
 
+      // E0. FIX_PRICE_RANKINGS_V2_1_1A — decline/record-high는 "역대 최고가"를
+      // 무제한으로 보장할 수 없으므로(감사 결과), 응답과 문구가 항상 조회
+      // 가능 범위(historicalHighCoverageLabel)를 명시해야 하고, "역대"/"진짜"
+      // 처럼 무제한을 뜻하는 표현이 남아있으면 안 된다. rising은 직전거래
+      // 비교라 해당 없음(coverageLabel이 null이어야 함).
+      if (mode === 'decline' || mode === 'record-high') {
+        if (!data.historicalHighCoverageLabel) {
+          push({ severity: 'P0_INVALID_STAT', region: d.label, mode, detail: 'historicalHighCoverageLabel 누락 — 데이터 커버리지 범위가 응답에 명시되지 않음' });
+        }
+        for (const r of rows) {
+          if (r.interpretation && (r.interpretation.includes('역대') || r.interpretation.includes('진짜'))) {
+            push({ severity: 'P0_INVALID_STAT', region: d.label, mode, detail: `무제한 표현("역대"/"진짜") 잔존: ${r.name} - ${r.interpretation}` });
+          }
+          if (r.interpretation && !r.interpretation.includes(data.historicalHighCoverageLabel || '__none__') && !r.interpretation.includes('최근 12개월')) {
+            push({ severity: 'P1_DATA_GAP', region: d.label, mode, detail: `interpretation에 coverageLabel 미포함: ${r.name} - ${r.interpretation}` });
+          }
+        }
+      }
+      if (mode === 'rising' && data.historicalHighCoverageLabel != null) {
+        push({ severity: 'P1_DATA_GAP', region: d.label, mode, detail: 'rising 모드인데 historicalHighCoverageLabel이 null이 아님(직전거래 비교라 해당 없어야 함)' });
+      }
+
       // E. fake pyeong 정적 가드 — pyung이 null이거나, 있으면 exclusiveArea/3.3058 반올림과 다를 수 있음(실제 Unit Master 값인지는 별도 확인).
       for (const r of rows) {
         if (r.pyung != null && r.excluUseArea != null) {

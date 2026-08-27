@@ -19,6 +19,23 @@ import { identityKey, areaKey, groupKey, dedupeTrades, filterVerifiedTrades, typ
 export type { FeedTrade };
 export { identityKey, areaKey, groupKey, dedupeTrades, filterVerifiedTrades };
 
+// FIX_PRICE_RANKINGS_V2_1_1A — 감사 결과: MOLIT 실거래 API는 지역(lawdCd)+월
+// 단위로만 조회 가능하고 단지/면적 단위 필터를 지원하지 않는다. 따라서 신고가
+// 판정에 필요한 "역대 최고가"의 조회 범위(historical window)를 이 트레일링
+// 개월 수보다 늘리려면 이미 거의 모든 구가 후보를 가진 시도 전체 집계(STEP 9
+// QA 실측: 부산 12~14/16개 구, 서울 17~20/25개 구)에서 fetch 호출 수가 그대로
+// 비례해 커진다 — "후보 identity만 좁혀서 조회"가 지역 단위로는 사실상 불가능
+// (거의 모든 구가 후보를 가짐). 영구 저장된 실거래 이력 DB(스키마/마이그레이션
+// 필요 — 이번 STEP 범위 밖)가 없는 한, 이 앱은 "역대 진짜 최고가"를 안전하게
+// 보장할 수 없다. 따라서 이 트레일링 윈도우를 "역대 최고가"의 정직한 커버리지
+// 상한으로 명시하고, 모든 신고가/하락 관련 문구는 이 라벨을 통해 범위를 밝힌다.
+export const HISTORICAL_LOOKBACK_MONTHS = 24;
+
+export function historicalCoverageLabel(months: number = HISTORICAL_LOOKBACK_MONTHS): string {
+  if (months > 0 && months % 12 === 0) return `${months / 12}년`;
+  return `${months}개월`;
+}
+
 interface HistoryPoint {
   trade: FeedTrade;
   /** 이 거래 이전(시간순 strictly earlier) 검증된 거래 중 최고가. 없으면 null
@@ -276,18 +293,23 @@ export function buildRisingRows(allTrades: FeedTrade[], period: PeriodRange): Ri
 // ── deterministic interpretation(§10/§13/§17) — LLM 없음, 산술적으로 검증
 // 가능한 사실만. "저평가"/"매수기회"/"반등 가능" 같은 투자 권유형 표현 금지. ──
 
-export function buildDeclineInterpretation(row: Pick<DeclineRow, 'declinePct'>): string {
+// FIX_PRICE_RANKINGS_V2_1_1A — "과거 최고가"/"이전 최고가"라는 무제한 표현은
+// 실제로는 HISTORICAL_LOOKBACK_MONTHS로 제한된 조회 범위 안에서의 최고가일
+// 뿐이다(§6 DATA CLAIM과 DATA COVERAGE 일치 원칙). coverageLabel을 항상
+// 문구에 포함시켜, 그 범위 밖에 더 높은 실거래가 존재할 수 있다는 사실을
+// 화면 문구 자체가 정직하게 반영하도록 강제한다.
+export function buildDeclineInterpretation(row: Pick<DeclineRow, 'declinePct'>, coverageLabel: string = historicalCoverageLabel()): string {
   const pct = Math.abs(row.declinePct);
-  if (pct >= 40) return '과거 최고가와 차이가 크게 벌어졌어요.';
-  if (pct >= 20) return '과거 최고가보다 가격이 내려와 있어요.';
-  return '과거 최고가 대비 소폭 낮은 가격이에요.';
+  if (pct >= 40) return `최근 ${coverageLabel} 최고가와 차이가 크게 벌어졌어요.`;
+  if (pct >= 20) return `최근 ${coverageLabel} 최고가보다 가격이 내려와 있어요.`;
+  return `최근 ${coverageLabel} 최고가 대비 소폭 낮은 가격이에요.`;
 }
 
-export function buildRecordHighInterpretation(row: Pick<RecordHighRow, 'trailing12moSampleCount'>): string {
+export function buildRecordHighInterpretation(row: Pick<RecordHighRow, 'trailing12moSampleCount'>, coverageLabel: string = historicalCoverageLabel()): string {
   if (row.trailing12moSampleCount >= RISING_SUFFICIENT_SAMPLE) {
     return '최근 12개월 동일 면적 거래 중 최고가예요.';
   }
-  return '이 면적의 이전 최고가를 넘어섰어요.';
+  return `최근 ${coverageLabel} 내 이 면적 최고가를 넘어섰어요.`;
 }
 
 export function buildRisingInterpretation(row: Pick<RisingRow, 'hasSufficientSample'>): string {

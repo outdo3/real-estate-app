@@ -9694,3 +9694,72 @@ RISING = PASS. SAME_AREA_IDENTITY = PASS. FAKE_PYEONG = ABSENT. PYEONG_SOURCE
 DETERMINISTIC. PARTIAL_FAILURE = DISTINGUISHED. API_ERROR_NO_DATA =
 DISTINGUISHED. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE
 = NONE. NEXT_STEP = STATISTICS_V2_1_TRANSACTION_ACTIVITY.**
+
+## 2026-08-27
+
+### STEP — FIX PRICE RANKINGS V2.1-1A: TRUE RECORD HIGH (historical coverage honesty hotfix)
+
+직전 STEP(STATISTICS V2.1-1)의 PM 검수에서 두 가지 문제가 지적됐다: (1)
+신고가 판정의 historical window가 트레일링 24개월로 제한돼 있는데 화면이
+이를 무제한 "역대 최고가"처럼 표현해 false-positive 신고가 오해를 유발할
+수 있는 DATA TRUST 문제, (2) 메뉴 라벨 "최고가"가 향후 "절대가격 순위"
+기능을 위해 예약된 의미(§8)와 혼동되는 문제. 범위를 넓히지 않는 focused
+hotfix로 진행했다.
+
+**감사 결과(Option A vs B)**: MOLIT 실거래 API(`RTMSDataSvcAptTradeDev`)는
+지역(`LAWD_CD`)+월(`DEAL_YMD`) 단위로만 조회 가능하고 단지/면적 필터가
+없다 — "후보 identity만 좁혀 조회"는 지역 단위보다 세밀하게는 불가능하다.
+게다가 트레일링 24개월만으로도 이미 시도 전체 대부분의 구가
+decline/record-high/rising 후보를 갖고 있어(부산 12~14/16, 서울 17~20/25 —
+직전 STEP QA 실측) lookback을 늘리면 fetch 호출 수가 구 개수만큼 그대로
+비례해 커진다(이미 부산 전체 24개월 cold 58.8초). 영구 실거래 이력 DB도
+없다(`TradeHistory` 모델은 aptSeq/raw area가 없는 미사용 레거시 모델).
+결론: 진짜 무제한 전체 역사 판정(Option A)은 스키마 변경(TRUE GATE, 이번
+STEP 범위 밖) 없이는 안전하게 구현할 수 없다 — Option B(bounded + 정직한
+라벨)를 선택하고 BLOCKER로 보고한다.
+
+**수정**: `HISTORICAL_LOOKBACK_MONTHS = 24`(기존 값 그대로 유지 — fetch
+로직/성능 전혀 변경 없음)를 `src/lib/price-ranking.ts`의 단일 source로
+승격하고 `historicalCoverageLabel()`("2년")을 만들어 다음 전 지점에
+일관되게 반영했다: 메뉴(`statsMenu.ts`) title `최고가`→`2년최고가`,
+subtitle 갱신, 홈 quick menu(`home-client.tsx`) 동일 반영; 화면
+(`PriceRankingView.tsx`) evidence 줄("최근 2년 최고가 OO 대비"), summary,
+empty-state, "신고가" Badge→"2년최고가" Badge, 정렬 옵션 라벨; API
+(`/api/stats/price-rankings`) 응답에 `historicalHighCoverageLabel` 필드
+추가(rising은 `null`); interpretation(`price-ranking.ts`)의
+decline/record-high 문구 전부 "과거 최고가"/"이전 최고가"(무제한 표현)
+대신 "최근 2년 최고가" 형태로 범위 명시. decline도 record-high와 동일한
+`priorHigh` 메커니즘을 공유하므로 §9 지시대로 동일하게 갱신(계산 로직은
+무변경, 문구만 정직해짐).
+
+**검증**: 신규 테스트 3개 추가(`historicalCoverageLabel` 동작, false
+record-high 시나리오에서 "역대"/"진짜" 부재 확인, coverageLabel 파라미터
+전달) — 기존 27개는 계산 로직 무변경이라 그대로 통과, 합계 30/30 PASS.
+전체 회귀 172/172(`.test.mjs`) + 391/391(`.test.ts`, 신규 3개 포함) PASS.
+QA 스크립트에 새 체크(E0: coverageLabel 필드 존재 + "역대"/"진짜" 정적
+가드 + rising의 null 확인) 추가 후 재실행 — P0/P1 findings 0건, RELEASE
+GATE READY(4개 구 × 3모드 + 부산/서울 전체 × 3모드 전부 통과). 브라우저로
+`/stats/record-high`·`/stats/decline` 실제 렌더 확인(360/375/390 + 852px
+데스크톱) — 헤더 "2년최고가", 배지 "2년최고가", evidence/summary/
+interpretation 전부 "최근 2년" 범위 명시, "신고가"/"역대"/"진짜" 잔존
+없음. `npx tsc --noEmit` 변경 파일 기준 신규 에러 0(기존 스크립트 20건은
+STEP 9 이전부터 존재하던 것과 동일 — FAIL_EXISTING_SCRIPT_ERRORS). Lint
+에러 0. `npm run build` PASS(전 라우트 컴파일 성공).
+
+`docs/development/STATISTICS_V2_1_PRICE_RANKINGS.md`에 §19(감사·결정
+근거) 신규 추가, §5/§9/§10/§12/§17 갱신.
+
+DB 쓰기: 없음. 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료(단, TRUE_RECORD_HIGH는 BOUNDED_ONLY로 BLOCKER 보고 — 진짜
+무제한 신고가는 별도 승인 STEP 필요).
+
+**FIX_PRICE_RANKINGS_V2_1_1A = PASS. TRUE_RECORD_HIGH = BOUNDED_ONLY(BLOCKER).
+DECLINE_HISTORICAL_HIGH = BOUNDED_ONLY(BLOCKER, 동일 사유). FALSE_RECORD_HIGH
+= POSSIBLE(데이터 자체의 24개월 경계 밖 사례는 여전히 이론상 가능 — 다만
+화면이 이를 무제한이라고 더 이상 주장하지 않음). MENU_LABEL = OTHER
+(2년최고가 — "신고가"는 무제한을 뜻해 쓰지 않음). HISTORICAL_COVERAGE =
+트레일링 24개월(2년). SAME_AREA = PASS. FUTURE_LEAKAGE = ABSENT.
+CANCELLED_EXCLUSION = PASS. FAKE_PYEONG = ABSENT. PERFORMANCE = PASS(fetch
+로직 무변경 — LOOKBACK_MONTHS 그대로 유지). BUILD = PASS. DB_SCHEMA_CHANGE
+= NONE. NEXT_STEP = STATISTICS_V2_1_TRANSACTION_ACTIVITY.**

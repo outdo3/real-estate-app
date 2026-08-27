@@ -24,6 +24,14 @@ const MODE_META: Record<PriceRankingMode, { icon: typeof TrendingDown; color: st
   rising: { icon: TrendingUp, color: 'var(--up-color)', soft: 'var(--up-soft)', question: '최근 가격이 많이 오른 단지는?' },
 };
 
+// FIX_PRICE_RANKINGS_V2_1_1A — MOLIT 실거래 API가 단지/면적 단위 필터 없이
+// 지역+월 단위로만 조회되는 구조라(감사 결과), "역대 최고가"를 무제한으로
+// 보장할 수 없다(라이브 재조회 규모가 시도 전체 집계에서 그대로 폭증). 라벨은
+// API의 historicalHighCoverageLabel을 그대로 표시에 사용하되, 응답이 없는
+// 과도기(구버전 캐시 등)를 대비해 API의 lookbackMonths 상수와 동일한 기본값을
+// fallback으로 둔다.
+const DEFAULT_COVERAGE_LABEL = '2년';
+
 const PERIOD_OPTIONS = [
   { value: '7d', label: '7일' },
   { value: '30d', label: '30일' },
@@ -40,8 +48,8 @@ const SORT_OPTIONS: Record<PriceRankingMode, { value: string; label: string }[]>
   ],
   'record-high': [
     { value: 'recent', label: '최근순' },
-    { value: 'deltaAmount', label: '신고가 상승액순' },
-    { value: 'deltaRate', label: '신고가 상승률순' },
+    { value: 'deltaAmount', label: '2년최고가 상승액순' },
+    { value: 'deltaRate', label: '2년최고가 상승률순' },
     { value: 'price', label: '거래가격순' },
   ],
   rising: [
@@ -87,6 +95,7 @@ interface PriceRankingResponse {
   mode: PriceRankingMode;
   region: { lawdCd: string | null; sidoCode: string | null; dong: string; sidoAll: boolean };
   period: { preset: string; from: string; to: string };
+  historicalHighCoverageLabel: string | null;
   sort: string;
   rows: PriceRankingRow[];
   pagination: { offset: number; limit: number; total: number; hasMore: boolean };
@@ -151,6 +160,12 @@ export default function PriceRankingView({
 
   const meta = MODE_META[mode];
   const Icon = meta.icon;
+  const coverageLabel = data?.historicalHighCoverageLabel || DEFAULT_COVERAGE_LABEL;
+  // FIX_PRICE_RANKINGS_V2_1_1A §7/§8 — 메뉴 "최고가"는 향후 절대가격 순위
+  // 기능을 위해 남겨두고, 이 화면(같은 단지·같은 면적의 조회 가능 범위 내
+  // 최고가 경신)은 무제한을 뜻하는 "신고가" 대신 정직하게 범위를 밝힌
+  // 라벨을 쓴다.
+  const recordHighLabel = `${coverageLabel}최고가`;
 
   // §6 — 면적 필터는 표시용 10㎡ 구간 버킷일 뿐, 그룹핑/비교 identity는 항상
   // raw 전용면적 그대로 유지된다(areaBandLabel은 regional-feed.ts의 순수
@@ -226,7 +241,7 @@ export default function PriceRankingView({
             mode === 'decline'
               ? `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 하락 거래가 없어요.`
               : mode === 'record-high'
-                ? `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 신고가 거래가 없어요.`
+                ? `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 ${recordHighLabel} 거래가 없어요.`
                 : `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 상승 거래가 없어요.`
           }
           description="기간을 넓히거나 지역을 변경해보세요."
@@ -235,7 +250,7 @@ export default function PriceRankingView({
         <>
           <div className={styles.summary}>
             {displayRegionName} · {PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안{' '}
-            {mode === 'decline' ? '하락' : mode === 'record-high' ? '신고가' : '상승'} 거래 {data?.pagination.total ?? filteredRows.length}건
+            {mode === 'decline' ? '하락' : mode === 'record-high' ? recordHighLabel : '상승'} 거래 {data?.pagination.total ?? filteredRows.length}건
           </div>
 
           <ul className={styles.list}>
@@ -275,10 +290,13 @@ export default function PriceRankingView({
                   )}
                 </div>
 
-                {/* §18 evidence display — 비교 기준을 항상 명시 */}
+                {/* §18 evidence display — 비교 기준을 항상 명시. decline/
+                    record-high는 무제한 "역대"가 아니라 조회 가능 범위
+                    (coverageLabel)로 명시적으로 범위를 밝힌다(FIX_PRICE_
+                    RANKINGS_V2_1_1A §6 DATA CLAIM=DATA COVERAGE 원칙). */}
                 <div className={styles.evidence}>
-                  {mode === 'decline' && `과거 최고가 ${r.priorHighDate} 대비`}
-                  {mode === 'record-high' && `이전 최고가 ${r.priorHighDate} 대비`}
+                  {mode === 'decline' && `최근 ${coverageLabel} 최고가 ${r.priorHighDate} 대비`}
+                  {mode === 'record-high' && `최근 ${coverageLabel} 최고가 ${r.priorHighDate} 대비`}
                   {mode === 'rising' && `직전 거래 ${r.previousDate} 대비`}
                   {' · '}
                   {r.currentDate}
@@ -288,7 +306,7 @@ export default function PriceRankingView({
                 <p className={styles.interpretation}>{r.interpretation}</p>
 
                 {mode === 'record-high' && (
-                  <Badge variant="positive" className={styles.recordHighBadge}>신고가</Badge>
+                  <Badge variant="positive" className={styles.recordHighBadge}>{recordHighLabel}</Badge>
                 )}
               </li>
             ))}

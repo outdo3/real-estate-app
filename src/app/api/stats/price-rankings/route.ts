@@ -14,6 +14,8 @@ import {
   buildRecordHighInterpretation,
   buildRisingInterpretation,
   resolvePriceRankingPeriod,
+  historicalCoverageLabel,
+  HISTORICAL_LOOKBACK_MONTHS,
   type FeedTrade,
   type PriceRankingPeriodPreset,
 } from '@/lib/price-ranking';
@@ -25,7 +27,11 @@ import {
 // 재fetch가 필요 없다(§28/§31 성능 요구사항).
 export const dynamic = 'force-dynamic';
 
-const LOOKBACK_MONTHS = 24; // §12 "historical high window" — 전체 역사가 아닌 24개월로 명시적 제한(문서화)
+// FIX_PRICE_RANKINGS_V2_1_1A — 이 상수는 price-ranking.ts의
+// HISTORICAL_LOOKBACK_MONTHS와 동일한 값을 가리켜야 한다("역대 최고가"
+// 문구가 실제 fetch 범위와 항상 일치해야 하므로 단일 source로 통합했다).
+// 로컬 상수를 따로 두지 않고 그 값을 그대로 재사용한다.
+const LOOKBACK_MONTHS = HISTORICAL_LOOKBACK_MONTHS;
 const VALID_PRESETS: PriceRankingPeriodPreset[] = ['7d', '30d', '3m', '6m', '12m'];
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
@@ -173,10 +179,19 @@ export async function GET(request: Request) {
       lookupKeys.set(pyeongLookupKeyId(key), key);
     }
     const pyeongMap = await resolveTrustworthyPyeongBatch(prisma, Array.from(lookupKeys.values()));
+    // FIX_PRICE_RANKINGS_V2_1_1A §6 — "역대 최고가"를 조회 가능 범위(트레일링
+    // LOOKBACK_MONTHS)로 명시적으로 제한한 라벨. decline/record-high 문구에
+    // 항상 이 라벨을 넣어 실제 fetch 범위를 벗어난 "진짜 역대 최고가"라고
+    // 오해할 수 없게 한다(rising은 직전거래 비교라 해당 없음).
+    const coverageLabel = historicalCoverageLabel(LOOKBACK_MONTHS);
     const withPyeong: any[] = rows.map((r) => {
       const pyung = r.excluUseArea != null ? pyeongMap.get(pyeongLookupKeyId({ name: r.name, dong: r.dong, aptSeq: r.aptSeq, rawAreaM2: r.excluUseArea })) ?? null : null;
       const interpretation =
-        mode === 'decline' ? buildDeclineInterpretation(r as any) : mode === 'record-high' ? buildRecordHighInterpretation(r as any) : buildRisingInterpretation(r as any);
+        mode === 'decline'
+          ? buildDeclineInterpretation(r as any, coverageLabel)
+          : mode === 'record-high'
+            ? buildRecordHighInterpretation(r as any, coverageLabel)
+            : buildRisingInterpretation(r as any);
       const sigunguName = isSidoAll ? sigunguNameByLawdCd.get(r.lawdCd) || null : null;
       return { ...r, pyung, interpretation, sigunguName };
     });
@@ -211,6 +226,10 @@ export async function GET(request: Request) {
       region: { lawdCd, sidoCode: isSidoAll ? sidoCodeParam : lawdCd ? lawdCd.substring(0, 2) : null, dong, sidoAll: isSidoAll },
       period: { preset, from: period.from, to: period.to },
       lookbackMonths: LOOKBACK_MONTHS,
+      // FIX_PRICE_RANKINGS_V2_1_1A — 클라이언트가 "역대 최고가"류 문구를 직접
+      // 만드는 곳(예: PriceRankingView의 evidence 줄)에서도 동일한 정직한
+      // 범위 라벨을 재사용할 수 있게 API가 그대로 내려준다(하드코딩 방지).
+      historicalHighCoverageLabel: mode === 'rising' ? null : coverageLabel,
       sort: sortKey,
       rows: page,
       pagination: { offset, limit, total, hasMore: offset + limit < total },

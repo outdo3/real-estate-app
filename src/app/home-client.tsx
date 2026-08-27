@@ -15,7 +15,7 @@ const QUICK_MENU = [
   // quick menu 맨 앞에 추가한다(Home 대개편 아님, 기존 항목/순서는 그대로 유지).
   { Icon: Rows3, label: '실거래', href: '/stats/feed' },
   { Icon: TrendingDown, label: '하락', href: '/stats/decline' },
-  { Icon: Award, label: '최고가', href: '/stats/record-high' },
+  { Icon: Award, label: '2년최고가', href: '/stats/record-high' },
   { Icon: TrendingUp, label: '상승', href: '/stats/rising' },
   { Icon: Activity, label: '거래량', href: '/stats/volume' },
   { Icon: Scale, label: '단지비교', href: '/stats/compare' },
@@ -85,7 +85,7 @@ export default function Home() {
             <Link href="/stats" className={styles.bigCard}>
               <BarChart3 className={styles.bigCardIcon} strokeWidth={1.8} />
               <span className={styles.bigCardTitle}>시장통계 (인기)</span>
-              <span className={styles.bigCardSubtitle}>최고가·거래량·갭투자</span>
+              <span className={styles.bigCardSubtitle}>2년최고가·거래량·갭투자</span>
             </Link>
             <Link href="/redevelopment" className={styles.bigCard}>
               <Building2 className={styles.bigCardIcon} strokeWidth={1.8} />

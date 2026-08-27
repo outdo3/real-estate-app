@@ -44,7 +44,14 @@ export const STATS_MENU: StatsMenuItem[] = [
   // 카테고리 맨 앞에 둔다.
   { slug: 'feed', icon: '🧾', Icon: Rows3, title: '실거래', subtitle: '지역별 실거래 피드', status: 'live', category: '거래', colorToken: 'brand' },
   { slug: 'decline', icon: '📉', Icon: TrendingDown, title: '하락', subtitle: '하락거래 단지 모음', status: 'live', category: '가격', colorToken: 'down' },
-  { slug: 'record-high', icon: '🏆', Icon: Award, title: '최고가', subtitle: '최근 신고가 단지', status: 'live', category: '가격', colorToken: 'up' },
+  // FIX_PRICE_RANKINGS_V2_1_1A §6/§7/§8 — 감사 결과 MOLIT 실거래 API가
+  // 단지/면적 단위 필터 없이 지역+월 단위로만 조회되어, "역대 진짜 최고가"를
+  // 무제한으로 보장할 수 없다(시도 전체 집계에서 fetch 규모가 그대로
+  // 폭증하고, 영구 이력 DB는 스키마 변경이 필요해 이번 STEP 범위 밖). 이 화면은
+  // 트레일링 24개월(2년) 안에서의 최고가 경신만 판정하므로 무제한을 뜻하는
+  // "신고가" 대신 정직하게 범위를 밝힌 "2년최고가"를 쓴다. "최고가"는 향후
+  // 별도 기능(예: 84㎡ 절대가격 순위, §8)을 위해 예약해둔다.
+  { slug: 'record-high', icon: '🏆', Icon: Award, title: '2년최고가', subtitle: '최근 2년 내 최고가 경신 단지', status: 'live', category: '가격', colorToken: 'up' },
   { slug: 'rising', icon: '📈', Icon: TrendingUp, title: '상승', subtitle: '가격변동 상위 단지', status: 'live', category: '가격', colorToken: 'up' },
   { slug: 'jeonse-risk', icon: '⚠️', Icon: AlertTriangle, title: '역전세', subtitle: '전세가 하락 위험 단지', status: 'live', category: '가격', colorToken: 'warn' },
   { slug: 'volume', icon: '📊', Icon: Activity, title: '거래량', subtitle: '매매·전월세 거래량', status: 'live', category: '거래', colorToken: 'brand' },
