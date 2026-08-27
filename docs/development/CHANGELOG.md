@@ -9386,3 +9386,60 @@ SCHOOLSTAT_AFTER = 630. STUDENT_COVERAGE = TEACHER_COVERAGE = CLASS_COVERAGE =
 INVALID_STAT = 0. REVIEW = 0. NO_SOURCE = 31. IDEMPOTENCY = PASS.
 SCHOOL_DETAIL_METRICS = PASS. SOURCE_ATTRIBUTION = PASS. MOBILE = PASS. DESKTOP
 = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE. RELEASE_GATE = READY.**
+
+## 2026-08-27
+
+### STEP — SCHOOL DATA GAP FIX: orphan School 정리 + 자동 QA, 학교 데이터 작업 종료
+
+`SCHOOL DATA BACKFILL V1`에서 남겨둔 두 가지 미해결 항목(구/군 코드 없는 orphan
+School 7건, NO_SOURCE 31건)을 정리하고, 향후 회귀를 상시 검사할 reusable QA
+스크립트를 만들어 학교 데이터 작업을 닫았다.
+
+**Orphan 7건**: `neisSchoolCode`(canonical identity)로 NEIS `schoolInfo` API를
+직접 재조회(이름 검색 아님, exact code lookup)해 확인한 결과 7건 전부
+`ATPT_OFCDC_SC_CODE=C10`(부산광역시교육청)·`LCTN_SC_NM=부산광역시`는 있었지만
+`ORG_RDNMA`(도로명주소) 자체가 NEIS 원본에 없었다. `sidoCode='26'`은 이 7개
+row가 애초에 "부산 664개" 테이블에 들어온 근거(C10 필터, 다른 657개 row와 동일
+출처·동일 값)를 그대로 반영해 안전하게 채웠고(`scripts/education/fix-orphan-school-sido-v1.ts`,
+신규, `--apply`), `sigunguCode`/주소/좌표는 공식 소스 자체가 없어 이름 추정 없이
+UNRESOLVED로 명확히 남겼다. idempotency 확인(2차 실행 `updated=0`).
+
+**NO_SOURCE 재분류**: 기존 "31"은 identity-매칭 실패만 집계한 부분집합이었음을
+발견 — SchoolStat 부재 전체 기준(664-630=34)으로 재확인하니 30건은 schoolinfo
+구조적 미지원 학교급(외국인학교/평생학교/각종학교/방송통신/공동실습소/고등기술학교),
+4건(괘법초등학교/봉삼초등학교/신선초등학교/한국과학영재학교)은 identity·학교급은
+정상인데 해당 학교의 2026년 개별 공시 자체가 없는 별도 원인이었다. 둘 다 이번
+STEP에서 억지로 채우지 않고 원인별로 분리 문서화만 했다.
+
+**신규 `scripts/run-school-data-qa.ts`**: read-only 자동 QA. identity(중복/누락
+canonical code), region(구/군 누락), stats(불가능한 값/연도 누락/중복),
+coordinates(범위 밖/NaN/provenance 불일치), source(EducationSource
+CLEARED 여부) 5개 축을 DB 직접 쿼리로 검사하고, `--quick` 미지정 시 지정 7개
+fixture(기존 5개+orphan 해결 1개+NO_SOURCE 1개)의 `/api/school/[id]`를 실제
+호출해 canonical 라우팅·관련 아파트 계약까지 확인한다(dev 서버 없으면
+SKIPPED_NO_SERVER로 안전 처리). Severity를 P0_WRONG_SCHOOL/P0_IDENTITY/
+P0_INVALID_STAT/P1_REGION_GAP/P1_STAT_COVERAGE/P1_COORDINATE_GAP/
+SOURCE_LIMITATION으로 분류해 release gate(P0>0 → BLOCKED)를 계산한다.
+
+실행 결과: P0 전부 0, P1_REGION_GAP=7, P1_STAT_COVERAGE=4, P1_COORDINATE_GAP=31,
+SOURCE_LIMITATION=30, stat coverage 94.9% → **RELEASE GATE = READY**. 지정 7개
+fixture 전부 `PASS`(한국과학영재학교=orphan 해결 후에도 canonical 정상,
+괘법초등학교=NO_SOURCE 상태에서도 canonical 정상 — 두 엣지 케이스 모두 UI
+placeholder/실데이터 분기가 깨지지 않음 확인).
+
+기존 `.test.mjs` 135/135 + `.test.ts` 361/361 전부 PASS(회귀 없음, 이번 STEP은
+스크립트만 추가해 신규 유닛 테스트는 없음). `npx tsc --noEmit`/lint 신규 파일
+기준 에러 0. `npm run build` PASS.
+
+`docs/development/SCHOOL_DATA_GAP_FIX.md` 신규(14개 섹션).
+
+DB 쓰기: `School.sidoCode` 7행(null → '26', 기존과 동일 값/동일 출처). 스키마
+변경: 없음. Migration: 없음.
+
+상태: 완료. **학교 데이터 작업 종료, 다음은 STATISTICS V2.**
+
+**SCHOOL_DATA_GAP_FIX = PASS. ORPHAN_BEFORE = 7. ORPHAN_AFTER = 7(sidoCode만
+해결, sigunguCode는 SOURCE_LIMITATION으로 의도적 유지). P0_WRONG_SCHOOL = 0.
+P0_IDENTITY = 0. P0_INVALID_STAT = 0. P1_REGION_GAP = 7. NO_SOURCE = 34(재분류,
+기존 31은 부분집합). SCHOOL_QA = PASS. IDEMPOTENCY = PASS. RELEASE_GATE = READY.
+DB_SCHEMA_CHANGE = NONE. NEXT_STEP = STATISTICS_V2.**
