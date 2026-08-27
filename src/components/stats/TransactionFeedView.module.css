@@ -52,6 +52,22 @@
   color: var(--text-primary);
 }
 
+.partialBanner {
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.recordHighWindowNote {
+  margin-top: 0.6rem;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
 .summaryCard {
   border: 1px solid var(--border-color);
   border-radius: 12px;

@@ -24,6 +24,7 @@ function trade(overrides) {
     aptSeq: null,
     name: '테스트단지',
     dong: '서대신동',
+    lawdCd: '26140',
     dealType: 'sale',
     dealAmount: 50000,
     excluUseArea: 84.7855,

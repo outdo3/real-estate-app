@@ -18,12 +18,16 @@
 // 서로 다른 단지가 우연히 같은 전용면적 거래를 갖는 경우(이번 표본엔 0건이었지만
 // 구조적으로 배제되지 않음) 여전히 오염될 수 있었기 때문이다. aptSeq가 없는
 // 거래(이번 실측 4개구 전체에서 0건, 그러나 전국 다른 지역/시기에 없을 가능성을
-// 배제할 수 없어 방어적으로 처리)만 (dong, 정규화된 이름) 조합으로 폴백한다 —
-// lawdCd는 호출부(dashboard/route.ts)가 이미 지역별로 완전히 분리해서 fetch하므로
-// (§3 참고) 이 함수 내부에서 별도로 다룰 필요가 없다.
+// 배제할 수 없어 방어적으로 처리)만 (lawdCd, dong, 정규화된 이름) 조합으로
+// 폴백한다. STATISTICS REGION FILTER V2 이전에는 "호출부가 이미 지역별로
+// 완전히 분리해서 fetch"했기 때문에 lawdCd를 여기서 다룰 필요가 없었지만,
+// 이제 호출부(dashboard/route.ts)가 시도 전체 집계 시 여러 구의 거래를 섞어서
+// 넘길 수 있어 fallback key에도 lawdCd를 포함해 다른 구의 동명 케이스까지
+// 안전하게 구분한다.
 export interface GapTrade {
   name: string;
   dong?: string;
+  lawdCd?: string;
   dealAmount: number;
   excluUseArea: number | null;
   dealDate: string; // 'YYYY-MM-DD'
@@ -39,6 +43,13 @@ export interface GapCandidate {
   latestSale: { date: string; amount: number; tradeCount: number };
   latestJeonse: { date: string; amount: number; tradeCount: number };
   gap: number;
+  // FIX_STATISTICS_DATA_TRUST — 신뢰 가능한 Unit Master 평형 조회(aptSeq 우선
+  // identity)를 위해 추가. 기존 소비처는 이 필드를 몰라도 그대로 동작한다(추가
+  // 전용 필드, 기존 필드는 전혀 바뀌지 않음).
+  aptSeq: string | null;
+  // STATISTICS REGION FILTER V2 — 시도 전체 집계에서 단지 상세로 이동할 때
+  // 어느 구 소속인지 반드시 필요(다른 구 단지로 잘못 연결 방지).
+  lawdCd: string | null;
 }
 
 export const normalizeAptName = (name: string): string => {
@@ -52,7 +63,7 @@ export const normalizeAptName = (name: string): string => {
 // 있다는 걸 알고 쓰는 약한 폴백이라는 점을 주석으로 명시해 둔다.
 function complexIdentityKey(t: GapTrade): string {
   if (t.aptSeq) return `seq:${t.aptSeq}`;
-  return `fallback:${t.dong || ''}::${normalizeAptName(t.name)}`;
+  return `fallback:${t.lawdCd || ''}::${t.dong || ''}::${normalizeAptName(t.name)}`;
 }
 
 // (단지 identity :: 정확한 excluUseArea) 조합을 key로 묶는다. AREA MODEL V1
@@ -98,6 +109,8 @@ export function buildGapCandidates(aptTrades: GapTrade[], pureJeonseTrades: GapT
       latestSale: { date: latestApt.dealDate, amount: latestApt.dealAmount, tradeCount: apts.length },
       latestJeonse: { date: latestRent.dealDate, amount: latestRent.dealAmount, tradeCount: rents.length },
       gap: latestApt.dealAmount - latestRent.dealAmount,
+      aptSeq: latestApt.aptSeq ?? null,
+      lawdCd: latestApt.lawdCd ?? null,
     });
   });
   return candidates;

@@ -152,6 +152,84 @@ async function main() {
     if (wrongDong.length > 0) push({ severity: 'P0_WRONG_REGION', region: '부산 서구 암남동', detail: `dong 필터 적용에도 다른 동 거래 ${wrongDong.length}건 포함` });
   }
 
+  // J. STATISTICS REGION FILTER V2 — SIDO_ALL(부산/서울 전체) 검증.
+  if (!OPT.quick) {
+    for (const sido of [{ code: '26', label: '부산 전체' }, { code: '11', label: '서울 전체' }]) {
+      const data = await fetchFeed(OPT.base, { sidoCode: sido.code, period: '7d', limit: '200' });
+      if (data.status !== 'OK') {
+        push({ severity: 'P0_WRONG_REGION', region: sido.label, detail: `sido-all 응답 status=${data.status}` });
+        continue;
+      }
+      if (data.region?.sidoAll !== true) push({ severity: 'P0_WRONG_REGION', region: sido.label, detail: 'region.sidoAll이 true가 아님' });
+      const allTrades = (data.groups || []).flatMap((g: any) => g.trades as any[]);
+      // 시도 전체 집계에서는 거래마다 lawdCd가 채워져 있어야 canonical 단지
+      // 링크가 가능하다(§25 요구사항) — 누락되면 잘못된/빈 링크로 이어질 위험.
+      const missingLawdCd = allTrades.filter((t: any) => !t.lawdCd);
+      if (missingLawdCd.length > 0) push({ severity: 'P0_WRONG_REGION', region: sido.label, detail: `${missingLawdCd.length}건 거래에 lawdCd 누락(canonical 링크 위험)` });
+      // 시도 전체 aggregation에 여러 구가 실제로 섞여 있는지(단일 구만 응답하는
+      // 위장 지원이 아닌지) 확인.
+      const distinctLawdCds = new Set(allTrades.map((t: any) => t.lawdCd));
+      if (allTrades.length > 20 && distinctLawdCds.size < 2) {
+        push({ severity: 'P0_WRONG_REGION', region: sido.label, detail: `거래가 ${allTrades.length}건인데 서로 다른 구가 ${distinctLawdCds.size}개뿐 — 실제 시도 전체 집계가 아닐 가능성` });
+      }
+      if (data.partial) push({ severity: 'P1_DATA_GAP', region: sido.label, detail: `일부 지역 조회 실패(partial=true): ${JSON.stringify(data.failedDistricts)}` });
+      console.log(`[${sido.label}] verifiedCount=${data.summary.verifiedCount} distinctDistricts=${distinctLawdCds.size} partial=${data.partial}`);
+    }
+  }
+
+  // K. FAKE PYEONG STATIC GUARD — statistics/실거래 관련 live route 소스에
+  // `exclusiveArea/3.3058` 같은 가짜 대표평형 계산이 다시 들어오지 않았는지
+  // 정적으로 점검한다. 무관한 정상 sqm 변환(예: 카카오 지도 반경 계산)까지
+  // 오탐하지 않도록 검사 대상을 실제 statistics 라우트 파일로 좁힌다.
+  const guardFiles = [
+    'src/app/api/stats/rankings/route.ts',
+    'src/app/api/stats/dashboard/route.ts',
+    'src/app/api/transactions/route.ts',
+    'src/lib/regional-feed.ts',
+  ];
+  for (const rel of guardFiles) {
+    try {
+      const content = fs.readFileSync(path.resolve(__dirname, '..', rel), 'utf8');
+      // 주석 안의 설명("예전에는 /3.3058를 썼다")까지 오탐하지 않도록, 그 줄에서
+      // `//` 이전(실제 코드 부분)만 검사 대상으로 삼는다.
+      const offendingLines = content.split('\n').filter((line) => {
+        const codePart = line.split('//')[0];
+        return /\/\s*3\.3058/.test(codePart);
+      });
+      if (offendingLines.length > 0) {
+        push({ severity: 'P0_INVALID_STAT', region: '(static guard)', detail: `${rel}에 /3.3058 fake-pyeong 계산이 남아있음(${offendingLines.length}줄)` });
+      }
+    } catch {
+      push({ severity: 'P1_DATA_GAP', region: '(static guard)', detail: `${rel} 파일을 읽지 못함(경로 확인 필요)` });
+    }
+  }
+
+  // L. UNIT MASTER COLLISION — 대신롯데캐슬의 84.7855㎡/84.9950㎡가 서로 다른
+  // raw area로 유지되면서도(병합 없음) 각각 신뢰 가능한 평형을 얻는지 확인.
+  if (!OPT.quick) {
+    try {
+      const res = await fetch(`${OPT.base}/api/transactions?type=apt&lawdCd=26140&months=12`, { signal: AbortSignal.timeout(30000) });
+      const items = res.ok ? await res.json() : [];
+      const target = (Array.isArray(items) ? items : []).filter((i: any) => i.name && i.name.includes('대신롯데캐슬'));
+      const areas = new Set(target.map((i: any) => i.areaNum));
+      if (areas.size >= 2) {
+        push({ severity: 'INFO', region: '대신롯데캐슬', detail: `raw area ${areas.size}종 확인, 병합되지 않고 유지됨: ${Array.from(areas).join(', ')}` });
+      }
+      for (const i of target) {
+        if (i.pyung != null && i.areaNum != null) {
+          const fakePyung = Math.round(i.areaNum / 3.3058);
+          // 실제 신뢰 가능한 평형이 fake 계산과 다르면(이번 실측: 26 vs 34) 이는
+          // Unit Master를 실제로 쓰고 있다는 강한 증거 — 우연히 같아도 실패로 보지 않는다.
+          if (i.pyung !== fakePyung) {
+            push({ severity: 'INFO', region: '대신롯데캐슬', detail: `${i.areaNum}㎡ → 신뢰 평형 ${i.pyung}평(가짜 계산이었다면 ${fakePyung}평) — Unit Master 사용 확인` });
+          }
+        }
+      }
+    } catch (e) {
+      push({ severity: 'P1_DATA_GAP', region: '대신롯데캐슬', detail: `Unit Master collision 확인 실패: ${e}` });
+    }
+  }
+
   const counts: Record<string, number> = {};
   for (const f of findings) counts[f.severity] = (counts[f.severity] || 0) + 1;
   const p0 = (counts.P0_WRONG_SCHOOL || 0) + (counts.P0_WRONG_REGION || 0) + (counts.P0_INVALID_STAT || 0);

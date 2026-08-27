@@ -125,6 +125,9 @@ export interface FeedTrade {
   aptSeq: string | null;
   name: string;
   dong: string;
+  /** 이 거래가 조회된 시/군/구(5자리). 시도 전체 집계에서는 구별로 다르므로
+   * 단지 상세 canonical 이동(lawdCd+dong)에 반드시 필요하다. */
+  lawdCd: string;
   dealType: 'sale' | 'jeonse' | 'wolse';
   dealAmount: number; // 만원
   excluUseArea: number | null; // ㎡, raw(원본) — pyeong 변환 금지

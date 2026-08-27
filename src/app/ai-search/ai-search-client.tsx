@@ -103,7 +103,11 @@ export default function AiSearchClient() {
   const { region } = useRegion();
 
   const initialQ = searchParams.get('q') || '';
-  const initialLawdCd = searchParams.get('lawdCd') || region.lawdCd;
+  // STATISTICS REGION FILTER V2 — region.lawdCd는 "시도 전체" 선택 시 null일 수
+  // 있다. AI 검색은 특정 시군구 단위로만 동작하는 기능이라(이번 STEP 범위 밖)
+  // sido-only일 때는 안전하게 빈 문자열로 폴백한다(기존 lawdCd 필수 동작 유지,
+  // 크래시 방지).
+  const initialLawdCd = searchParams.get('lawdCd') || region.lawdCd || '';
 
   const [inputValue, setInputValue] = useState(initialQ);
   const [loading, setLoading] = useState(false);
@@ -113,7 +117,7 @@ export default function AiSearchClient() {
   useEffect(() => {
     const q = searchParams.get('q');
     if (!q) return;
-    const lawdCd = searchParams.get('lawdCd') || region.lawdCd;
+    const lawdCd = searchParams.get('lawdCd') || region.lawdCd || '';
     setInputValue(q);
     setLoading(true);
     setError(null);
@@ -159,7 +163,7 @@ export default function AiSearchClient() {
   const runSearch = (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) return;
-    router.push(`/ai-search?q=${encodeURIComponent(trimmed)}&lawdCd=${region.lawdCd}`);
+    router.push(`/ai-search?q=${encodeURIComponent(trimmed)}&lawdCd=${region.lawdCd || ''}`);
   };
 
   return (

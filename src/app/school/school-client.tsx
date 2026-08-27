@@ -27,6 +27,7 @@ function RegionUrlSync({ setRegion }: { setRegion: (region: RegionState) => void
       if (!lawdCd) return;
       setRegion({
         lawdCd,
+        sidoCode: lawdCd.substring(0, 2),
         dong: 'all',
         sido,
         sigungu,

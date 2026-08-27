@@ -82,6 +82,23 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       .finally(() => setRegionLoading(false));
   };
 
+  // STATISTICS REGION FILTER V2 — "부산광역시 전체"처럼 시군구를 특정하지 않는
+  // 선택. 기존 dong 단계의 "OO구 전체" 버튼과 동일한 패턴을 시도 단계 바로
+  // 다음(시군구 그리드 최상단)에 추가한다 — 시도 선택 자체를 바꾸지 않고
+  // 그리드에 옵션만 하나 늘리는 최소 변경.
+  const selectSidoAll = () => {
+    if (!selectedSido) return;
+    const sidoCode = selectedSido.code.substring(0, 2);
+    finalize({
+      lawdCd: null,
+      sidoCode,
+      dong: 'all',
+      sido: selectedSido.name,
+      sigungu: '',
+      displayRegionName: `${selectedSido.name} 전체`,
+    });
+  };
+
   const selectSigungu = (sigungu: RegionOption) => {
     setSelectedSigungu(sigungu);
     setRegionLoading(true);
@@ -108,9 +125,11 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     const lawdCd = selectedSigungu.code.substring(0, 5);
     const sigunguShortName = selectedSigungu.name.split(' ').slice(1).join(' ');
 
+    const sidoCode = lawdCd.substring(0, 2);
     if (!dong) {
       finalize({
         lawdCd,
+        sidoCode,
         dong: 'all',
         sido: selectedSido.name,
         sigungu: sigunguShortName,
@@ -122,6 +141,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     const dongShortName = dong.name.split(' ').pop() || 'all';
     finalize({
       lawdCd,
+      sidoCode,
       dong: dongShortName,
       sido: selectedSido.name,
       sigungu: sigunguShortName,
@@ -148,6 +168,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
         finalize(
           {
             lawdCd,
+            sidoCode: lawdCd.substring(0, 2),
             dong: 'all',
             sido: resolved?.sido || region.address_name,
             sigungu: resolved?.sigungu || '',
@@ -173,6 +194,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
         finalize(
           {
             lawdCd: place.lawdCd!,
+            sidoCode: place.lawdCd!.substring(0, 2),
             dong: place.type === 'REGION' ? 'all' : (place.dong || 'all'),
             sido: resolved?.sido || place.sido || '',
             sigungu: resolved?.sigungu || place.sigungu || '',
@@ -261,12 +283,18 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
                   </button>
                 ))}
 
-              {modalStep === 'sigungu' &&
-                modalSigungus.map((sigungu) => (
-                  <button key={sigungu.code} className={styles.gridBtn} onClick={() => selectSigungu(sigungu)}>
-                    {sigungu.name.split(' ').slice(1).join(' ')}
+              {modalStep === 'sigungu' && (
+                <>
+                  <button className={styles.gridBtn} onClick={selectSidoAll}>
+                    {selectedSido?.name} 전체
                   </button>
-                ))}
+                  {modalSigungus.map((sigungu) => (
+                    <button key={sigungu.code} className={styles.gridBtn} onClick={() => selectSigungu(sigungu)}>
+                      {sigungu.name.split(' ').slice(1).join(' ')}
+                    </button>
+                  ))}
+                </>
+              )}
 
               {modalStep === 'dong' && (
                 <>

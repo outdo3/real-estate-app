@@ -32,6 +32,7 @@ const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUB
 interface RankingComplex {
   name: string;
   dong: string;
+  lawdCd: string | null;
   pyung: number | null;
   tradeCount: number;
   latestPrice: string;
@@ -130,11 +131,12 @@ function ComingSoonCard({ title, reason }: { title: string; reason?: string }) {
   );
 }
 
-function RankingListView({ slug, lawdCd, regionLabel }: { slug: string; lawdCd: string; regionLabel: string }) {
+function RankingListView({ slug, lawdCd, sidoCode, regionLabel }: { slug: string; lawdCd: string | null; sidoCode: string; regionLabel: string }) {
   const router = useRouter();
   const config = RANKING_CONFIGS[slug];
+  const query = lawdCd ? `lawdCd=${lawdCd}` : `sidoCode=${sidoCode}`;
   const { data: apiResponse, isLoading } = useSWR(
-    lawdCd ? `/api/stats/rankings?lawdCd=${lawdCd}&type=${config.apiType}&months=12` : null,
+    `/api/stats/rankings?${query}&type=${config.apiType}&months=12`,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
@@ -175,7 +177,7 @@ function RankingListView({ slug, lawdCd, regionLabel }: { slug: string; lawdCd: 
           {list.map((c, i) => (
             <RankingRow
               key={`${c.dong}-${c.name}`}
-              onClick={() => router.push(`/apt/${encodeURIComponent(c.name)}?lawdCd=${lawdCd}&dong=${encodeURIComponent(c.dong)}`)}
+              onClick={() => router.push(`/apt/${encodeURIComponent(c.name)}?lawdCd=${c.lawdCd || lawdCd || ''}&dong=${encodeURIComponent(c.dong)}`)}
               data={{
                 rank: i + 1,
                 name: c.name,
@@ -199,14 +201,20 @@ const DEAL_TYPE_OPTIONS: { key: DealType; label: string; indexLabel: string }[] 
   { key: 'wolse', label: '월세', indexLabel: '월세가격지수' },
 ];
 
-function VolumeView({ lawdCd, displayRegionName }: { lawdCd: string; displayRegionName: string }) {
+function VolumeView({ lawdCd, sidoCode, displayRegionName }: { lawdCd: string | null; sidoCode: string; displayRegionName: string }) {
   const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
   const [dealType, setDealType] = useState<DealType>('sale');
+  const dashboardQuery = lawdCd ? `lawdCd=${lawdCd}` : `sidoCode=${sidoCode}`;
   const { data: apiResponse, isLoading } = useSWR(
-    lawdCd ? `/api/stats/dashboard?lawdCd=${lawdCd}` : null,
+    `/api/stats/dashboard?${dashboardQuery}`,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
+  // STATISTICS REGION FILTER V2 §19/§20/§26 — 연도별(2014~현재) 표는 구 하나도
+  // 월 130+회 조회라 이미 무겁다. 시도 전체로 이를 그대로 곱하면(구 수 배)
+  // 현재 MOLIT 스로틀 구조로는 안전하게 완주하기 어렵다 — 억지로 부분 결과를
+  // "부산 전체"인 것처럼 보여주지 않고 정직하게 미지원 처리한다(§26 완전 집계
+  // 또는 honest unsupported).
   const { data: yearlyResponse } = useSWR(
     lawdCd && chartView === 'table' ? `/api/stats/yearly?lawdCd=${lawdCd}` : null,
     fetcher,
@@ -229,7 +237,13 @@ function VolumeView({ lawdCd, displayRegionName }: { lawdCd: string; displayRegi
           <button className={`${styles.viewToggleBtn} ${chartView === 'graph' ? styles.viewToggleActive : ''}`} onClick={() => setChartView('graph')} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
             <BarChart3 size={14} aria-hidden="true" />그래프
           </button>
-          <button className={`${styles.viewToggleBtn} ${chartView === 'table' ? styles.viewToggleActive : ''}`} onClick={() => setChartView('table')} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          <button
+            className={`${styles.viewToggleBtn} ${chartView === 'table' ? styles.viewToggleActive : ''}`}
+            onClick={() => lawdCd && setChartView('table')}
+            disabled={!lawdCd}
+            title={!lawdCd ? '연도별 표는 시/군/구를 선택하면 볼 수 있어요' : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', opacity: lawdCd ? 1 : 0.5 }}
+          >
             <Table2 size={14} aria-hidden="true" />표
           </button>
         </div>
@@ -303,10 +317,11 @@ function VolumeView({ lawdCd, displayRegionName }: { lawdCd: string; displayRegi
   );
 }
 
-function GapInvestView({ lawdCd }: { lawdCd: string }) {
+function GapInvestView({ lawdCd, sidoCode }: { lawdCd: string | null; sidoCode: string }) {
   const router = useRouter();
+  const query = lawdCd ? `lawdCd=${lawdCd}` : `sidoCode=${sidoCode}`;
   const { data: apiResponse, isLoading } = useSWR(
-    lawdCd ? `/api/stats/dashboard?lawdCd=${lawdCd}` : null,
+    `/api/stats/dashboard?${query}`,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
   );
@@ -331,7 +346,7 @@ function GapInvestView({ lawdCd }: { lawdCd: string }) {
           {list.map((item: any) => (
             <RankingRow
               key={item.rank}
-              onClick={() => router.push(`/apt/${encodeURIComponent(item.name)}?lawdCd=${lawdCd}&dong=${encodeURIComponent(item.dong || '')}`)}
+              onClick={() => router.push(`/apt/${encodeURIComponent(item.name)}?lawdCd=${item.lawdCd || lawdCd || ''}&dong=${encodeURIComponent(item.dong || '')}`)}
               data={{
                 rank: item.rank,
                 name: item.name,
@@ -350,7 +365,7 @@ function GapInvestView({ lawdCd }: { lawdCd: string }) {
 
 const COMPARE_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
-function CompareView({ lawdCd, maxComplexes }: { lawdCd: string; maxComplexes: number }) {
+function CompareView({ lawdCd, maxComplexes }: { lawdCd: string | null; maxComplexes: number }) {
   const [selected, setSelected] = useState<{ name: string }[]>([]);
   const [series, setSeries] = useState<Record<string, { date: string; price: number }[]>>({});
   const [loading, setLoading] = useState(false);
@@ -370,6 +385,7 @@ function CompareView({ lawdCd, maxComplexes }: { lawdCd: string; maxComplexes: n
   };
 
   useEffect(() => {
+    if (!lawdCd) return;
     const missing = selected.filter((s) => !(s.name in series));
     if (missing.length === 0) return;
     setLoading(true);
@@ -393,6 +409,20 @@ function CompareView({ lawdCd, maxComplexes }: { lawdCd: string; maxComplexes: n
       setLoading(false);
     });
   }, [selected, lawdCd, series]);
+
+  // STATISTICS REGION FILTER V2 §26 — 단지 비교는 특정 시/군/구 스코프의 단지
+  // 자동완성 검색이 전제라, "시도 전체"에서는 어느 구의 단지를 검색해야 할지
+  // 안전하게 정할 수 없다. 모든 hook을 호출한 뒤(Rules of Hooks 준수) 정직하게
+  // "구를 선택해주세요"로 안내한다(가짜 부분 지원 금지).
+  if (!lawdCd) {
+    return (
+      <div className={styles.panel}>
+        <div className={styles.panelBody}>
+          <Empty variant="notReady" title="단지 비교는 시/군/구를 선택하면 이용할 수 있어요." description="현재 시도 전체가 선택돼 있어요. 상단 지역 선택에서 구/군을 골라주세요." />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.panel}>
@@ -444,7 +474,7 @@ function CompareView({ lawdCd, maxComplexes }: { lawdCd: string; maxComplexes: n
 // 5분위(quintile) 색상 — 낮은 평당가(파랑)에서 높은 평당가(빨강)로
 const QUINTILE_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444'];
 
-function PriceMapView({ lawdCd }: { lawdCd: string }) {
+function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
   const [isMapReady, setIsMapReady] = useState(false);
   const [markers, setMarkers] = useState<{ id: string; name: string; lat: number; lng: number; pricePerPyung: number; tier: number }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -509,6 +539,19 @@ function PriceMapView({ lawdCd }: { lawdCd: string }) {
       })
       .catch(() => setLoading(false));
   }, [lawdCd]);
+
+  // STATISTICS REGION FILTER V2 §26 — 지도 렌더링/분위 계산이 시/군/구 하나를
+  // 전제로 설계돼 있어(카카오 지도 center/zoom도 구 단위), 시도 전체에서 "일부
+  // 데이터만 보이는" 지도를 정직하지 않게 보여주지 않는다.
+  if (!lawdCd) {
+    return (
+      <div className={styles.panel}>
+        <div className={styles.panelBody}>
+          <Empty variant="notReady" title="분위지도는 시/군/구를 선택하면 이용할 수 있어요." description="현재 시도 전체가 선택돼 있어요. 상단 지역 선택에서 구/군을 골라주세요." />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.panel}>
@@ -577,13 +620,13 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
         {item.status === 'soon' ? (
           <ComingSoonCard title={item.title} reason={item.soonReason} />
         ) : slug === 'feed' ? (
-          <TransactionFeedView lawdCd={region.lawdCd} dong={region.dong} displayRegionName={region.displayRegionName} />
+          <TransactionFeedView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug in RANKING_CONFIGS ? (
-          <RankingListView slug={slug} lawdCd={region.lawdCd} regionLabel={region.displayRegionName} />
+          <RankingListView slug={slug} lawdCd={region.lawdCd} sidoCode={region.sidoCode} regionLabel={region.displayRegionName} />
         ) : slug === 'volume' ? (
-          <VolumeView lawdCd={region.lawdCd} displayRegionName={region.displayRegionName} />
+          <VolumeView lawdCd={region.lawdCd} sidoCode={region.sidoCode} displayRegionName={region.displayRegionName} />
         ) : slug === 'gap-invest' ? (
-          <GapInvestView lawdCd={region.lawdCd} />
+          <GapInvestView lawdCd={region.lawdCd} sidoCode={region.sidoCode} />
         ) : slug === 'compare' ? (
           <CompareView lawdCd={region.lawdCd} maxComplexes={2} />
         ) : slug === 'multi-compare' ? (

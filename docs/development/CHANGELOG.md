@@ -9512,3 +9512,70 @@ RISE_FALL = PASS. VOLUME = PASS. DETERMINISTIC_INSIGHT = PASS. WRONG_APARTMENT
 = ABSENT. CANCELLED_TRADE_POLICY = PASS. API_ERROR_NO_DATA = DISTINGUISHED.
 BUSAN_SEOGU = PASS. SEOUL_GANGNAM = PASS. MOBILE = PASS. DESKTOP = PASS. BUILD
 = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP = FIX_STATISTICS_DATA_TRUST.**
+
+## 2026-08-27
+
+### STEP — STATISTICS DATA TRUST + REGION FILTER V2: 가짜 평형 제거, 시도 전체 조회 지원
+
+직전 STATISTICS V2 완료 보고에서 확인된 두 문제를 고쳤다: (A)
+rankings/dashboard/transactions 3개 live route에 남아 있던
+`exclusiveArea/3.3058` 가짜 대표평형 계산, (B) 통계 지역 선택이 시군구 선택을
+강제해 "부산광역시 전체"/"서울특별시 전체" 조회가 불가능했던 문제(사용자가
+실거래 화면에서 직접 확인).
+
+**가짜 평형 제거**: 신규 `src/lib/statistics-pyeong-resolver.ts`(순수 함수 +
+batch Prisma 조회, 쿼리 2회 고정 — N+1 없음)가 Unit Master(`ApartmentUnitType.
+representativePyeong`)를 aptSeq 우선·정확한 raw 전용면적 일치로만 조회한다.
+84.7855㎡와 84.9950㎡ 같은 근접 raw area를 병합하지 않는 collision-safe
+매칭을 11개 단위 테스트로 고정했다. 실측 확인: 대신롯데캐슬 84.7855㎡의
+실제 신뢰 평형은 34평인데 기존 가짜 계산(`84.7855/3.3058`)은 26평으로
+잘못 표시하고 있었다 — 한국 아파트 평형이 전용면적이 아닌 공급면적 기준
+관행이라는 것이 원인. rankings의 추세(pctChange) 계산은 평형 대신 raw ㎡
+단가 비율로 전환했다(비율 계산이라 수치는 수학적으로 동일, 반올림 오차만
+제거). dashboard의 평당가 랭킹(topPrices)은 Unit Master가 없는 거래를
+가짜 값으로 채우지 않고 집계에서 제외한다(표본이 줄 수 있음을 감수).
+
+**시도 전체 지역 필터**: `RegionState`에 `sidoCode`(항상 채워짐)를 추가하고
+`lawdCd`를 nullable로 확장(`null` = 시도 전체) — 영향받는 9개 소비 파일
+(ai-search/school/stats 등) 전부 안전하게 갱신했다. `RegionSelectModal`의
+시군구 그리드 최상단에 "{시도} 전체" 버튼을 추가했다(기존 "동 전체" 버튼과
+동일한 패턴, 새 selector 컴포넌트 만들지 않음). 부산 16개/서울 25개 구를
+하드코딩하지 않고 기존 전국 법정동코드 프록시를 동적으로 재사용했다
+(`region-utils.ts`에 `resolveSidoCode`/`getSigunguListForSido` 신규).
+
+`/api/stats/feed`(실거래 피드)·`/api/stats/rankings`(하락/최고가/상승/
+많이산단지/역전세)·`/api/stats/dashboard`(거래량/갭투자) 3개 API 전부
+`sidoCode`만으로 시도 전체 집계를 지원하도록 확장했다 — 기존 공유 MOLIT
+스로틀(`fetchMonthsThrottled`, 동시 3개+200ms 페이싱)을 그대로 재사용해
+새 동시성 풀을 만들지 않았고, `fetchMonthsThrottledWithStatus`(신규 추가,
+기존 함수는 하위호환 유지)로 부분 실패(일부 구 조회 실패)와 전체 실패를
+구분해 정직하게 알린다. 시도 전체 집계 시 단지 identity를 이름만으로 묶던
+기존 방식(다른 구의 동명 단지가 섞일 위험)을 aptSeq 우선·(구,동,이름) 폴백
+방식으로 강화했다(gap-invest-calc.ts가 이미 확립한 원칙과 통일). 단지
+비교(2종)·분위지도·거래량 연도별 표는 구 단위 설계 전제가 강해 시도 전체를
+정직하게 미지원 처리한다(가짜 부분 지원 없음).
+
+실측 성능: 부산 전체 rankings cold 30.6s/warm 0.76s, 부산 전체 dashboard
+cold 62.6s/warm 0.27s, 부산 전체 실거래 피드 cold 4.5s(짧은 기간이라 이미
+빠름). 서울 강남구 등 전국 어디든 신규 데이터 없이 동작(국가 확장 아키텍처
+유지).
+
+기존 `scripts/run-statistics-v2-qa.ts` 확장(SIDO_ALL 부산/서울 검증,
+fake-pyeong 정적 가드, Unit Master collision 확인) — P0 findings 0건,
+RELEASE GATE READY. 신규 유닛 테스트 11개 전부 PASS. 기존 포함 총
+172/172(`.test.mjs`) + 361/361(`.test.ts`) PASS(회귀 없음). `npx tsc
+--noEmit` 변경 파일 기준 에러 0. Lint 에러 0. `npm run build` PASS.
+
+`docs/development/STATISTICS_DATA_TRUST_REGION_FILTER_V2.md` 신규(19개 섹션).
+
+DB 쓰기: 없음. 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**STATISTICS_DATA_TRUST_REGION_FILTER_V2 = PASS. FAKE_PYEONG = ABSENT.
+PYEONG_SOURCE = UNIT_MASTER. UNIT_COLLISION = PASS. SIDO_ALL = PASS.
+BUSAN_ALL = PASS. SEOUL_ALL = PASS. SIGUNGU_ALL = PASS. DONG_DRILLDOWN = PASS.
+COMMON_REGION_SELECTOR = PASS. REGION_STATE_PRESERVATION = PASS(SPA 내
+이동 기준). PARTIAL_FAILURE = DISTINGUISHED. API_ERROR_NO_DATA =
+DISTINGUISHED. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
+DB_SCHEMA_CHANGE = NONE. NEXT_STEP = STATISTICS_V2_1_DETAIL_METRICS.**

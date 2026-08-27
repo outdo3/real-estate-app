@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { buildMasterCoordIndex, resolveApartmentCoords, type MasterCoordRow } from '@/lib/map-marker-coords';
 import { aptNamesMatch } from '@/lib/apt-name-match';
 import { recentMonths } from '@/lib/molit-months';
+import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 
 export async function GET(request: Request) {
   try {
@@ -36,18 +37,36 @@ export async function GET(request: Request) {
         data = data.filter((item: any) => item.dong === dong);
       }
 
-      // 정렬/표시용 필드 보강: info 문자열("면적 • 층 • 계약일")에서 평형·층·계약일자를
+      // 정렬/표시용 필드 보강: info 문자열("면적 • 층 • 계약일")에서 층·계약일자를
       // 파싱한다 (api/apt/[name]/route.ts와 동일한 규칙). 여러 달치 데이터를 합친 뒤이므로
       // 단순 배열 순서로는 최신순이 보장되지 않아, 실제 계약일자 기준으로 명시적으로 정렬한다.
+      // FIX_STATISTICS_DATA_TRUST — 예전에는 `areaNum / 3.3058`로 "평형"을 만들어
+      // 그대로 내려줬다(가짜 평형, AGENTS.md Unit Master 보호 원칙 위반). 이제
+      // raw ㎡만 파싱하고, pyung은 아래에서 Unit Master를 batch 조회해서만 채운다
+      // (없으면 null — raw ㎡만 표시).
       data = data.map((item: any) => {
         const infoParts = (item.info || '').split('•');
         const area = infoParts[0]?.trim() || '';
         const floor = parseInt(infoParts[1]?.trim() || '0', 10) || 0;
         const tradeDate = infoParts[infoParts.length - 1]?.trim() || '';
-        const areaNum = parseFloat(area);
-        const pyung = areaNum ? Math.round(areaNum / 3.3058) : null;
-        return { ...item, area, floor, tradeDate, pyung };
+        const areaNum = parseFloat(area) || null;
+        return { ...item, area, floor, tradeDate, areaNum };
       });
+
+      {
+        const lookupKeys = new Map<string, PyeongLookupKey>();
+        for (const item of data as any[]) {
+          if (item.areaNum == null) continue;
+          const key: PyeongLookupKey = { name: item.name, dong: item.dong || '', aptSeq: item.aptSeq ?? null, rawAreaM2: item.areaNum };
+          lookupKeys.set(pyeongLookupKeyId(key), key);
+        }
+        const pyeongMap = await resolveTrustworthyPyeongBatch(prisma, Array.from(lookupKeys.values()));
+        data = data.map((item: any) => {
+          if (item.areaNum == null) return { ...item, pyung: null };
+          const key: PyeongLookupKey = { name: item.name, dong: item.dong || '', aptSeq: item.aptSeq ?? null, rawAreaM2: item.areaNum };
+          return { ...item, pyung: pyeongMap.get(pyeongLookupKeyId(key)) ?? null };
+        });
+      }
 
       data.sort((a: any, b: any) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
 

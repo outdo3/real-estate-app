@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { Calendar } from 'lucide-react';
@@ -43,6 +43,7 @@ interface FeedTradeRow {
   aptSeq: string | null;
   name: string;
   dong: string;
+  lawdCd: string;
   dealType: 'sale' | 'jeonse' | 'wolse';
   dealAmount: number;
   excluUseArea: number | null;
@@ -59,7 +60,7 @@ interface FeedTradeRow {
 interface FeedResponse {
   status: 'OK' | 'ERROR';
   message?: string;
-  region: { lawdCd: string; dong: string };
+  region: { lawdCd: string | null; sidoCode: string | null; dong: string; sidoAll: boolean };
   period: { preset: string; from: string; to: string; label: string };
   summary: {
     totalCount: number;
@@ -76,6 +77,9 @@ interface FeedResponse {
   groups: { date: string; trades: FeedTradeRow[] }[];
   pagination: { offset: number; limit: number; total: number; hasMore: boolean };
   apiError: boolean;
+  partial: boolean;
+  failedDistricts: string[];
+  recordHighWindow: { from: string; to: string };
 }
 
 const DEAL_TYPE_LABEL: Record<string, string> = { sale: '매매', jeonse: '전세', wolse: '월세' };
@@ -88,14 +92,34 @@ function formatDateHeader(dateStr: string): string {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function TransactionFeedView({ lawdCd, dong, displayRegionName }: { lawdCd: string; dong: string; displayRegionName: string }) {
+export default function TransactionFeedView({
+  lawdCd,
+  sidoCode,
+  dong,
+  displayRegionName,
+}: {
+  lawdCd: string | null;
+  sidoCode: string;
+  dong: string;
+  displayRegionName: string;
+}) {
   const router = useRouter();
   const [preset, setPreset] = useState('7d');
   const [dealType, setDealType] = useState('');
   const [offset, setOffset] = useState(0);
   const [allTrades, setAllTrades] = useState<FeedTradeRow[]>([]);
 
-  const params = new URLSearchParams({ lawdCd, dong, period: preset, offset: String(offset), limit: '50' });
+  // STATISTICS REGION FILTER V2 §15 — 지역이 바뀌면(예: 서구 -> 부산 전체) 이전
+  // 지역의 누적 목록/페이지 위치를 그대로 들고 있으면 안 된다. period/dealType은
+  // 사용자가 이미 고른 값을 그대로 유지한다(§15 "가능한 한 유지").
+  useEffect(() => {
+    setOffset(0);
+    setAllTrades([]);
+  }, [lawdCd, sidoCode, dong]);
+
+  const params = lawdCd
+    ? new URLSearchParams({ lawdCd, dong, period: preset, offset: String(offset), limit: '50' })
+    : new URLSearchParams({ sidoCode, period: preset, offset: String(offset), limit: '50' });
   if (dealType) params.set('dealType', dealType);
 
   const { data, isLoading, error } = useSWR<FeedResponse>(`/api/stats/feed?${params.toString()}`, fetcher, {
@@ -120,8 +144,13 @@ export default function TransactionFeedView({ lawdCd, dong, displayRegionName }:
     setAllTrades([]);
   };
 
+  // STATISTICS REGION FILTER V2 — 시도 전체 집계에서는 거래마다 소속 구가 다를
+  // 수 있어(예: 부산 전체 보기 중 서구 거래와 해운대구 거래가 섞여 있음),
+  // region 레벨의 lawdCd(시도 전체일 때는 null)가 아니라 그 거래 자신의
+  // lawdCd(t.lawdCd, API가 채워 보냄)로 canonical 이동해야 다른 구 단지로
+  // 잘못 연결되지 않는다.
   const goToApt = (t: FeedTradeRow) => {
-    const qs = new URLSearchParams({ lawdCd });
+    const qs = new URLSearchParams({ lawdCd: t.lawdCd });
     if (t.dong) qs.set('dong', t.dong);
     router.push(`/apt/${encodeURIComponent(t.name)}?${qs.toString()}`);
   };
@@ -165,6 +194,12 @@ export default function TransactionFeedView({ lawdCd, dong, displayRegionName }:
         <Empty variant="noData" title={`${displayRegionName}, ${PERIOD_OPTIONS.find((p) => p.preset === preset)?.label || ''} 기간 내 실거래가 없어요.`} description="다른 기간을 선택해보세요." showMascot={false} />
       ) : (
         <>
+          {data.partial && (
+            <div className={styles.partialBanner}>
+              일부 지역({data.failedDistricts.length}곳) 데이터 조회가 지연되고 있어요. 나머지 지역 실거래만 우선 표시합니다.
+            </div>
+          )}
+
           <div className={styles.summaryCard}>
             <div className={styles.summaryTitle}>{displayRegionName} · {data.period.label}</div>
             <div className={styles.summaryGrid}>
@@ -175,6 +210,10 @@ export default function TransactionFeedView({ lawdCd, dong, displayRegionName }:
               {data.summary.cancelledCount > 0 && (
                 <div className={styles.summaryItem}><span className={styles.summaryValue}>{data.summary.cancelledCount}</span><span className={styles.summaryLabel}>취소</span></div>
               )}
+            </div>
+            <div className={styles.recordHighWindowNote}>
+              신고가/직전거래 비교 기준: {data.recordHighWindow.from}~{data.recordHighWindow.to}
+              {data.region.sidoAll ? '(시도 전체 보기는 표시 기간 내 비교만 지원돼요)' : ''}
             </div>
           </div>
 

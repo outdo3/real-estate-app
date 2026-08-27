@@ -4,15 +4,23 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { REGION_DATA } from '@/lib/regions';
 
 export interface RegionState {
-  /** 국토부 실거래가 API용 5자리 지역코드 (법정동코드 앞 5자리) */
-  lawdCd: string;
-  /** 선택된 읍면동 짧은 이름, 미선택(구/군 전체)이면 'all' */
+  /**
+   * 국토부 실거래가 API용 5자리 지역코드(법정동코드 앞 5자리). STATISTICS
+   * REGION FILTER V2 — "시도 전체"(예: 부산광역시 전체) 선택 시에는 특정
+   * 시군구가 없으므로 null이다. lawdCd가 null인 상태를 지원하지 않는 화면은
+   * 이 값을 name-only로 대체 추정하지 말고 "구를 선택해주세요" 같은 정직한
+   * 미지원 상태를 보여줘야 한다(가짜 부분 지원 금지).
+   */
+  lawdCd: string | null;
+  /** 2자리 시/도 코드(예: 부산 "26", 서울 "11") — lawdCd 유무와 무관하게 항상 채워짐. */
+  sidoCode: string;
+  /** 선택된 읍면동 짧은 이름, 미선택(구/군 전체)이면 'all'. lawdCd가 null이면 항상 'all'. */
   dong: string;
   /** 시/도 전체 이름 (예: "부산광역시") */
   sido: string;
-  /** 시/군/구 이름 (예: "서구") */
+  /** 시/군/구 이름 (예: "서구"). "시도 전체" 선택 시 빈 문자열. */
   sigungu: string;
-  /** 화면에 표시할 전체 지역명 (예: "부산광역시 서구" 또는 "암남동") */
+  /** 화면에 표시할 전체 지역명 (예: "부산광역시 서구", "부산광역시 전체", "암남동") */
   displayRegionName: string;
 }
 
@@ -23,6 +31,7 @@ export interface RegionState {
 // GPS 실패 시의 폴백으로 삼는다.
 const FALLBACK_REGION: RegionState = {
   lawdCd: '26140',
+  sidoCode: '26',
   dong: 'all',
   sido: '부산광역시',
   sigungu: '서구',
@@ -88,8 +97,10 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
           if (cancelled || userSelectedRef.current) return;
           if (bRegion?.code && bRegion.region_1depth_name && bRegion.region_2depth_name) {
             const sido = normalizeSido(bRegion.region_1depth_name);
+            const gpsLawdCd = String(bRegion.code).substring(0, 5);
             setRegion({
-              lawdCd: String(bRegion.code).substring(0, 5),
+              lawdCd: gpsLawdCd,
+              sidoCode: gpsLawdCd.substring(0, 2),
               dong: 'all',
               sido,
               sigungu: bRegion.region_2depth_name,

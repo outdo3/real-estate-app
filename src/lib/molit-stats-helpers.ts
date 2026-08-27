@@ -45,18 +45,23 @@ export const isValidTrade = (item: any) => item && item.typeLabel !== '에러' &
 // typeLabel:'에러' 플레이스홀더를 반환하므로, 이를 "그 달 실거래 0건"과 구분하지 못하면
 // 스로틀링으로 인한 실패가 마치 진짜 0건인 것처럼 표에 표시된다. 실패 시 짧은 대기 후
 // 1회 재시도한다.
-async function fetchMonthWithRetry(lawdCd: string, dealYmd: string, type: 'apt' | 'rent'): Promise<any[]> {
+// STATISTICS REGION FILTER V2 §35/36 — "시도 전체" 집계처럼 여러 lawdCd를 한 번에
+// 조회할 때는 그중 일부만 실패해도(예: 16개 구 중 1개 실패) 전체를 "거래 0건"으로
+// 보여주면 안 된다. 재시도까지 실패했는지(failed=true) 여부를 유지해서 반환하고,
+// 기존 `fetchMonthsThrottled`(아래)는 이 정보를 버리고 items만 돌려주는 하위호환
+// 래퍼로 남긴다 — 기존 rankings/dashboard/yearly/feed 호출부는 전혀 바뀌지 않는다.
+async function fetchMonthWithRetry(lawdCd: string, dealYmd: string, type: 'apt' | 'rent'): Promise<{ items: any[]; failed: boolean }> {
   for (let attempt = 0; attempt <= 1; attempt++) {
     try {
       const result = await fetchMolitData({ type, lawdCd, dealYmd });
       const failed = result.length === 1 && result[0]?.typeLabel === '에러';
-      if (!failed) return result;
+      if (!failed) return { items: result, failed: false };
     } catch (e) {
       // fetchMolitData가 예외적으로 throw하는 경우에도 재시도 대상으로 취급
     }
     if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
   }
-  return [];
+  return { items: [], failed: true };
 }
 
 export interface MonthTask {
@@ -89,7 +94,7 @@ function releaseMolitSlot(): void {
   if (next) next();
 }
 
-async function fetchMonthGated(lawdCd: string, dealYmd: string, type: 'apt' | 'rent'): Promise<any[]> {
+async function fetchMonthGated(lawdCd: string, dealYmd: string, type: 'apt' | 'rent'): Promise<{ items: any[]; failed: boolean }> {
   await acquireMolitSlot();
   try {
     const result = await fetchMonthWithRetry(lawdCd, dealYmd, type);
@@ -107,12 +112,27 @@ async function fetchMonthGated(lawdCd: string, dealYmd: string, type: 'apt' | 'r
 // GLOBAL_MOLIT_CONCURRENCY를 넘지 않도록 보장한다. 호출별로 워커 풀을 새로 만들면
 // 두 라우트가 동시에 실행될 때 실제 동시 요청 수가 배로 늘어나 초당 제한에 걸리므로,
 // 반드시 모듈 레벨에서 공유해야 한다.
-export async function fetchMonthsThrottled(tasks: MonthTask[]): Promise<Record<string, any[]>> {
-  const results: Record<string, any[]> = {};
+export interface MonthTaskResult {
+  items: any[];
+  failed: boolean;
+}
+
+// 신규 — 시도 전체처럼 여러 lawdCd를 aggregation할 때 부분 실패를 정직하게
+// 구분해야 하는 호출부용(§35/36). 기존 fetchMonthsThrottled와 동일한 공유
+// 세마포어를 그대로 쓴다(별도 동시성 풀 없음).
+export async function fetchMonthsThrottledWithStatus(tasks: MonthTask[]): Promise<Record<string, MonthTaskResult>> {
+  const results: Record<string, MonthTaskResult> = {};
   await Promise.all(
     tasks.map(async (task) => {
       results[task.key] = await fetchMonthGated(task.lawdCd, task.dealYmd, task.type);
     })
   );
+  return results;
+}
+
+export async function fetchMonthsThrottled(tasks: MonthTask[]): Promise<Record<string, any[]>> {
+  const full = await fetchMonthsThrottledWithStatus(tasks);
+  const results: Record<string, any[]> = {};
+  for (const key in full) results[key] = full[key].items;
   return results;
 }
