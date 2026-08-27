@@ -1,0 +1,203 @@
+/* STATISTICS V2.1-2A — 아파트 상세페이지 PriceTrendChart.module.css의
+   카드/모바일 full-bleed/포커스 안전장치 패턴을 그대로 재사용한다(같은
+   버그를 다시 풀지 않는다는 원칙). 다른 stats 화면이 공유하는
+   page.module.css의 .panel/.panelBody는 건드리지 않고 이 카드만 독립
+   스타일을 쓴다. */
+
+.card {
+  background: #fff;
+  border: 1px solid #e4e8ec;
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.viewToggle {
+  display: flex;
+  flex-shrink: 0;
+  background: #f3f6f7;
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.viewToggleBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #5f6b76;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  min-height: 32px;
+}
+.viewToggleBtn[aria-pressed='true'] {
+  background: #fff;
+  color: #15211b;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .14);
+}
+.viewToggleBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chipRow {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.6rem;
+  -webkit-overflow-scrolling: touch;
+}
+.chipRow::-webkit-scrollbar { display: none; }
+
+.summary {
+  border-top: 1px solid #edf0f2;
+  border-bottom: 1px solid #edf0f2;
+  padding: 0.75rem 0;
+  margin-bottom: 0.6rem;
+}
+.summaryLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+.summaryRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.summaryValue {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.summaryChange {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.summaryEmpty {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.summaryPeriodNote {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  margin-top: 0.4rem;
+}
+
+.crossLinkBtn {
+  width: 100%;
+  padding: 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: #fff;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  min-height: 40px;
+}
+.crossLinkBtn:hover { background: #f8fafc; }
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  color: #4b5964;
+  font-size: 0.78rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+.legendItem { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legendBar { width: 9px; height: 9px; border-radius: 2px; background: var(--primary-color); opacity: 0.6; display: inline-block; }
+.legendLine { width: 12px; height: 2px; border-radius: 2px; background: #3152d6; display: inline-block; }
+
+.chart {
+  height: 280px;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+/* PriceTrendChart.module.css와 동일한 방어 — Android 롱프레스 콜아웃 차단. */
+.chart :global(.recharts-surface),
+.chart :global(.recharts-surface *) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Recharts accessibilityLayer가 svg에 tabIndex=0을 줘서 탭만으로도 포커스가
+   이동해 검은 포커스 사각형이 뜨는 문제 — PriceTrendChart.tsx에서 이미
+   preventDefault(pointerdown)로 해결한 패턴을 그대로 재사용한다(같은 버그
+   재발 방지). 이 outline:none은 키보드 포커스가 아닌 경우의 fallback이고,
+   실제 키보드 포커스는 아래 규칙으로 별도 표시한다. */
+.chart :global(.recharts-surface) { outline: none; }
+.chart[data-input-modality='keyboard'] :global(.recharts-surface:focus) {
+  outline: 2px solid rgba(7, 134, 90, .7);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.tooltip {
+  background: #fff;
+  border: 1px solid #dfe6e9;
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .12);
+  padding: 0.6rem 0.75rem;
+}
+.tooltipDate { color: #56636d; font-size: 0.74rem; margin-bottom: 0.3rem; font-weight: 700; }
+.tooltipRow { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: #33414b; }
+.tooltipRow + .tooltipRow { margin-top: 0.2rem; }
+.tooltipSwatchBar { width: 8px; height: 8px; border-radius: 2px; background: var(--primary-color); display: inline-block; }
+.tooltipSwatchLine { width: 8px; height: 8px; border-radius: 50%; background: #3152d6; display: inline-block; }
+
+.footnote {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin: 0.6rem 0 0;
+  line-height: 1.5;
+}
+.guideNote {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin: 0.4rem 0 0;
+  line-height: 1.55;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .card { padding: 1.25rem 1.35rem; }
+  .chart { height: 340px; }
+}
+
+@media (max-width: 420px) {
+  /* PriceTrendChart.module.css와 동일한 full-bleed 기법 — calc(50% - 50vw)는
+     조상 padding이 얼마든 self-correcting(하드코딩 음수 마진과 다름). */
+  .card { width: 100vw; margin-inline: calc(50% - 50vw); border: 0; border-radius: 0; padding: 0.85rem; }
+  .header { margin-bottom: 0.6rem; }
+  .title { font-size: 1rem; }
+  .chart { height: 250px; }
+}

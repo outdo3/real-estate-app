@@ -4,9 +4,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import {
-  ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { BarChart3, Table2, Lightbulb, MapPin, ChevronDown } from 'lucide-react';
+import { MapPin, ChevronDown } from 'lucide-react';
 import Header from '@/components/Header';
 import RegionSelectModal from '@/components/RegionSelectModal';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
@@ -24,6 +24,7 @@ import { getStatsMenuItem } from '../statsMenu';
 import TransactionFeedView from '@/components/stats/TransactionFeedView';
 import PriceRankingView from '@/components/stats/PriceRankingView';
 import ConcentrationView from '@/components/stats/ConcentrationView';
+import VolumeChartCard from '@/components/stats/VolumeChartCard';
 import styles from '../page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -170,193 +171,6 @@ function RankingListView({ slug, lawdCd, sidoCode, regionLabel }: { slug: string
             />
           ))}
         </RankingList>
-      )}
-    </div>
-  );
-}
-
-type DealType = 'sale' | 'jeonse' | 'wolse';
-const DEAL_TYPE_OPTIONS: { key: DealType; label: string; indexLabel: string }[] = [
-  { key: 'sale', label: '매매', indexLabel: '매매가격지수' },
-  { key: 'jeonse', label: '전세', indexLabel: '전세가격지수' },
-  { key: 'wolse', label: '월세', indexLabel: '월세가격지수' },
-];
-
-// STATISTICS V2.1-2 §13~§18 — "거래량이 많다"가 아니라 "이전 기간보다 얼마나
-// 변했는지"를 보여주는 요약 preset. dashboard route가 이미 계산해준
-// volumeSummaryByPeriod[preset]만 읽는다(새 fetch 없음).
-const VOLUME_COMPARISON_OPTIONS: { key: string; label: string }[] = [
-  { key: '7d', label: '최근 7일' },
-  { key: '30d', label: '최근 30일' },
-  { key: '3m', label: '최근 3개월' },
-];
-
-function VolumeSummaryStrip({ data, dealType, displayRegionName }: { data: any; dealType: DealType; displayRegionName: string }) {
-  const router = useRouter();
-  const [preset, setPreset] = useState('30d');
-  const byPeriod = data?.volumeSummaryByPeriod?.[preset];
-  const metric = byPeriod?.[dealType];
-  if (!byPeriod || !metric) return null;
-  const dealTypeMeta = DEAL_TYPE_OPTIONS.find((o) => o.key === dealType)!;
-  const changeColor = metric.changeCount > 0 ? 'var(--up-color)' : metric.changeCount < 0 ? 'var(--down-color)' : 'var(--text-secondary)';
-  return (
-    <div className={styles.panel} style={{ marginBottom: '0.75rem' }}>
-      <div className={styles.dealTypeChipRow}>
-        {VOLUME_COMPARISON_OPTIONS.map((p) => (
-          <FilterChip key={p.key} active={preset === p.key} onClick={() => setPreset(p.key)}>
-            {p.label}
-          </FilterChip>
-        ))}
-      </div>
-      <div className={styles.panelBody} style={{ paddingTop: 0 }}>
-        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
-          {displayRegionName} · {dealTypeMeta.label}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>{metric.currentCount.toLocaleString('ko-KR')}건</span>
-          {metric.previousCount > 0 ? (
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: changeColor }}>
-              이전 {metric.previousCount.toLocaleString('ko-KR')}건 대비 {metric.changeCount > 0 ? '▲' : metric.changeCount < 0 ? '▼' : ''}
-              {Math.abs(metric.changeCount).toLocaleString('ko-KR')}건{metric.changePct != null ? ` (${metric.changePct > 0 ? '+' : ''}${metric.changePct}%)` : ''}
-            </span>
-          ) : (
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>이전 동일 기간에는 거래가 없었어요.</span>
-          )}
-        </div>
-        <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
-          이전 동일 기간: {byPeriod.previousPeriod.from}~{byPeriod.previousPeriod.to}
-        </div>
-        {/* [§26] 거래량 -> 거래집중 cross-link. 기간/거래유형을 쿼리스트링으로
-            유지해서 넘어간다(공통 필터 최대 유지). */}
-        <button
-          className={styles.viewToggleBtn}
-          style={{ marginTop: '0.6rem' }}
-          onClick={() => router.push(`/stats/top-traded?period=${preset}&dealType=${dealType}`)}
-        >
-          이 기간 거래가 많은 단지 보기
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function VolumeView({ lawdCd, sidoCode, displayRegionName }: { lawdCd: string | null; sidoCode: string; displayRegionName: string }) {
-  const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
-  const [dealType, setDealType] = useState<DealType>('sale');
-  const dashboardQuery = lawdCd ? `lawdCd=${lawdCd}` : `sidoCode=${sidoCode}`;
-  const { data: apiResponse, isLoading } = useSWR(
-    `/api/stats/dashboard?${dashboardQuery}`,
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
-  );
-  // STATISTICS REGION FILTER V2 §19/§20/§26 — 연도별(2014~현재) 표는 구 하나도
-  // 월 130+회 조회라 이미 무겁다. 시도 전체로 이를 그대로 곱하면(구 수 배)
-  // 현재 MOLIT 스로틀 구조로는 안전하게 완주하기 어렵다 — 억지로 부분 결과를
-  // "부산 전체"인 것처럼 보여주지 않고 정직하게 미지원 처리한다(§26 완전 집계
-  // 또는 honest unsupported).
-  const { data: yearlyResponse } = useSWR(
-    lawdCd && chartView === 'table' ? `/api/stats/yearly?lawdCd=${lawdCd}` : null,
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 30 * 60 * 1000 }
-  );
-  const data = apiResponse?.success ? apiResponse.data : null;
-  const chartData = data?.chartDataByType?.[dealType] || data?.chartData || [];
-  const yearlyTableByType = yearlyResponse?.success ? yearlyResponse.data.yearlyTableByType : null;
-  const yearlyTable = yearlyTableByType?.[dealType] || (yearlyResponse?.success ? yearlyResponse.data.yearlyTable : null);
-  const dealTypeMeta = DEAL_TYPE_OPTIONS.find((o) => o.key === dealType)!;
-
-  if (isLoading) return <InlineLoading message="분석 중입니다..." />;
-  if (!data) return <ErrorState variant="section" message="거래량 데이터를 불러오지 못했습니다." />;
-
-  return (
-    <div className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <SectionHeader title="거래량·시세 추이" />
-        <div className={styles.viewToggle}>
-          <button className={`${styles.viewToggleBtn} ${chartView === 'graph' ? styles.viewToggleActive : ''}`} onClick={() => setChartView('graph')} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            <BarChart3 size={14} aria-hidden="true" />그래프
-          </button>
-          <button
-            className={`${styles.viewToggleBtn} ${chartView === 'table' ? styles.viewToggleActive : ''}`}
-            onClick={() => lawdCd && setChartView('table')}
-            disabled={!lawdCd}
-            title={!lawdCd ? '연도별 표는 시/군/구를 선택하면 볼 수 있어요' : undefined}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', opacity: lawdCd ? 1 : 0.5 }}
-          >
-            <Table2 size={14} aria-hidden="true" />표
-          </button>
-        </div>
-      </div>
-
-      <div className={styles.dealTypeChipRow}>
-        {DEAL_TYPE_OPTIONS.map((opt) => (
-          <FilterChip key={opt.key} active={dealType === opt.key} onClick={() => setDealType(opt.key)}>
-            {opt.label}
-          </FilterChip>
-        ))}
-      </div>
-
-      <VolumeSummaryStrip data={data} dealType={dealType} displayRegionName={displayRegionName} />
-
-      {chartView === 'graph' ? (
-        <div className={styles.panelBody} style={{ height: '400px' }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
-              <CartesianGrid stroke="#f5f5f5" vertical={false} />
-              <XAxis dataKey="month" scale="band" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
-              <YAxis yAxisId="left" orientation="left" stroke="#94a3b8" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis yAxisId="right" orientation="right" stroke="#3b82f6" domain={['auto', 'auto']} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} labelStyle={{ fontWeight: 700, color: '#1e293b', marginBottom: '8px' }} />
-              <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '13px' }} />
-              {/* [STATISTICS_COLOR_SYSTEM_V1] 거래량 = 초록 계열(매핑표) — 기존
-                  중립 회색(#cbd5e1)에서 브랜드 그린으로 변경. 가격지수(Line,
-                  아래)는 매매/전세/월세 전환 시 색이 바뀌던 기존 계약을 그대로
-                  유지한다(차트 재설계는 이번 STEP 범위 밖, 후순위). */}
-              <Bar yAxisId="left" dataKey="volume" name={`거래량(건) · ${dealTypeMeta.label}`} barSize={16} fill="var(--primary-color)" fillOpacity={0.55} radius={[4, 4, 0, 0]} />
-              <Line yAxisId="right" type="monotone" dataKey="priceIndex" name={dealTypeMeta.indexLabel} stroke="#3b82f6" strokeWidth={3} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 6 }} connectNulls />
-            </ComposedChart>
-          </ResponsiveContainer>
-          <div className={styles.tipBox}>
-            <span><Lightbulb size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} /><strong>분석 팁:</strong> 최근 12개월 실거래 기준, {displayRegionName}의 {dealTypeMeta.label} 거래량과 가격지수(최초 유효월=100 기준) 추이입니다.</span>
-          </div>
-          <div className={styles.marketGuideCard}>
-            <span>
-              <Lightbulb size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} /><strong>시장 지표 가이드</strong>: 전세지수 상승 &amp; 매매지수 하락은 실거주 수요 대비 매매 심리가 위축된 상태입니다. 전세가율이 높아짐에 따라 매매가 하방 지지선이 형성되며, 추후 매수 전환 수요 유입 가능성을 나타냅니다.
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className={styles.panelBody}>
-          <div className={styles.tableWrapper}>
-            <table className={styles.yearlyTable}>
-              <colgroup>
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '23%' }} />
-                <col style={{ width: '23%' }} />
-                <col style={{ width: '23%' }} />
-                <col style={{ width: '13%' }} />
-              </colgroup>
-              <thead><tr><th>거래년월</th><th>최고가</th><th>최저가</th><th>평균가</th><th>건수</th></tr></thead>
-              <tbody>
-                {!yearlyTable ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={`skeleton-${i}`}><td colSpan={5}><div className={styles.skeletonBar} /></td></tr>
-                  ))
-                ) : (
-                  [...yearlyTable].reverse().map((row: any) => (
-                    <tr key={row.year}>
-                      <td className={styles.yearlyTableYear}>{row.year}년</td>
-                      <td>{row.maxPrice || '-'}</td>
-                      <td>{row.minPrice || '-'}</td>
-                      <td>{row.avgPrice || '-'}</td>
-                      <td>{row.count.toLocaleString('ko-KR')}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
       )}
     </div>
   );
@@ -673,7 +487,7 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
         ) : slug in RANKING_CONFIGS ? (
           <RankingListView slug={slug} lawdCd={region.lawdCd} sidoCode={region.sidoCode} regionLabel={region.displayRegionName} />
         ) : slug === 'volume' ? (
-          <VolumeView lawdCd={region.lawdCd} sidoCode={region.sidoCode} displayRegionName={region.displayRegionName} />
+          <VolumeChartCard lawdCd={region.lawdCd} sidoCode={region.sidoCode} displayRegionName={region.displayRegionName} />
         ) : slug === 'gap-invest' ? (
           <GapInvestView lawdCd={region.lawdCd} sidoCode={region.sidoCode} />
         ) : slug === 'compare' ? (

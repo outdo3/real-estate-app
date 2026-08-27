@@ -9835,3 +9835,51 @@ VOLUME_COMPARISON = PASS(7일/30일/3개월만, 6개월/12개월은 정확성 �
 SIDO_ALL cold는 기존부터의 한계로 별도 STEP 대상). MOBILE = PASS. DESKTOP
 = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP =
 STATISTICS_V2_1_RISK_GAP 또는 STATISTICS_PERFORMANCE(ChatGPT PM 판단).**
+
+
+## 2026-08-28
+
+### STEP — STATISTICS V2.1-2A: TRANSACTION VOLUME CHART UI POLISH
+
+거래량 화면 차트를 아파트 상세페이지 `PriceTrendChart`가 이미 검증한 UX
+(모바일 full-bleed 카드, tap 즉시 선택 + drag-scrub crosshair, 검은 focus
+box 버그 없음)에 맞춰 재정비했다. 데이터 계산 로직/API 계약/기간·지역
+필터 계약은 전혀 바꾸지 않았다 — 표현(시각/인터랙션)만 개선. 상세 근거는
+`docs/development/STATISTICS_V2_1_2A_VOLUME_CHART_UI_POLISH.md` 참고.
+
+**구현**: 신규 `src/components/stats/VolumeChartCard.tsx`(+ 전용 CSS
+모듈)로 `type-client.tsx`의 `VolumeView`/`VolumeSummaryStrip`을 대체했다 —
+다른 stats 화면 전부가 공유하는 `page.module.css`의 `.panel`/`.panelBody`를
+직접 고치면 다른 화면(랭킹/갭투자/비교/분위지도)까지 영향받기 때문에
+독립 컴포넌트로 분리. `PriceTrendChart.tsx`가 이미 실측 검증한
+interaction 패턴(activeIndex state, pointerdown/pointermove 콜백 ref +
+`chart-crosshair.ts`의 `findNearestIndex` 재사용, 커스텀 dot render-prop,
+`preventDefault(pointerdown)`로 검은 focus box 방지, 커스텀 tooltip,
+`width:100vw; margin-inline:calc(50% - 50vw)` 모바일 full-bleed)를 그대로
+이식했다 — 같은 버그를 다시 풀지 않는다는 원칙. "표"(연도별) 뷰는 기존
+`.tableWrapper`/`.yearlyTable*` 클래스를 그대로 재사용해 로직/마크업을
+전혀 건드리지 않았다. `page.module.css`의 `.main`에 `overflow-x: hidden`을
+추가했다(상세페이지 `detail.module.css`와 동일한 이유 — full-bleed 카드의
+100vw가 스크롤바 폭까지 포함해 페이지가 미세하게 가로 스크롤되는 것을
+막는 이 페이지 전용 scoped 안전장치).
+
+**검증**: 브라우저 실측(부산 서구)으로 매매/전세/월세 전환, 기간 비교
+칩(7일/30일/3개월), 그래프/표 토글, 거래집중 cross-link(쿼리스트링 유지
+회귀 없음) 전부 정상 확인. Tap 즉시 선택 + drag-scrub이 실제 API 데이터와
+정확히 일치하는 tooltip을 보여줬고(예: 26.03=117건/98.8), 검은 focus box
+없음. 모바일 360px(iframe으로 실제 viewport 강제)에서 카드가 정확히
+viewport 가장자리까지 꽉 차는 full-bleed로 렌더, `scrollWidth ===
+clientWidth`(overflow 0) 확인. `npx tsc --noEmit` 변경 파일 기준 신규
+에러 0(기존 scripts/* 에러는 FAIL_EXISTING_SCRIPT_ERRORS). Lint 에러 0.
+`npm run build` PASS. 기존 `.test.mjs` 154/154 PASS(데이터 로직 무변경이라
+테스트 갱신 불필요).
+
+DB 쓰기: 없음. 스키마 변경: 없음. API 응답 shape 변경: 없음.
+
+상태: 완료.
+
+**TRANSACTION_VOLUME_CHART_UI_POLISH = PASS. CHART_UI = PASS. INTERACTION =
+PASS. TOOLTIP = PASS. CROSSHAIR = PASS. FULL_WIDTH_MOBILE = PASS.
+DETAIL_CHART_ALIGNMENT = PASS. DATA_LOGIC_CHANGE = NONE. API_CONTRACT_CHANGE
+= NONE. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS. NEXT_STEP = ChatGPT PM
+판단 대기.**

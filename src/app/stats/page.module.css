@@ -2,6 +2,13 @@
   min-height: 100vh;
   background-color: var(--background-color);
   padding-bottom: calc(7rem + env(safe-area-inset-bottom)); /* 하단 고정 탭바에 콘텐츠가 가리지 않도록 확보 (90px 이상) */
+  /* STATISTICS V2.1-2A — VolumeChartCard의 모바일 full-bleed 카드가
+     width:100vw; margin-inline:calc(50% - 50vw)를 쓴다(apt/[name]/
+     detail.module.css의 동일 패턴과 같은 이유). 일부 데스크톱 브라우저는
+     100vw가 세로 스크롤바 폭까지 포함해 페이지 자체가 미세하게 가로
+     스크롤되는 경우가 있어(실측: documentElement.scrollWidth > clientWidth),
+     이 페이지에서만 안전하게 막는다 — 사이트 전역 overflow 변경 아님. */
+  overflow-x: hidden;
 }
 
 .header {
