@@ -22,6 +22,7 @@ import { buildRankingInsight } from '@/lib/stats-insight';
 import { useRegion } from '@/contexts/RegionContext';
 import { getStatsMenuItem } from '../statsMenu';
 import TransactionFeedView from '@/components/stats/TransactionFeedView';
+import PriceRankingView from '@/components/stats/PriceRankingView';
 import styles from '../page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -63,41 +64,11 @@ interface RankingConfig {
   valueColor?: string;
 }
 
+// STATISTICS V2.1-1 — decline/record-high/rising은 PriceRankingView(별도
+// 컴포넌트, same-aptSeq+same-raw-area 히스토리 기반 정밀 계산)로 이전했다.
+// jeonse-risk/top-traded는 이번 STEP 범위 밖이라 기존 RANKING_CONFIGS/
+// RankingListView 경로를 그대로 유지한다(회귀 방지, 중복 재구현 없음).
 const RANKING_CONFIGS: Record<string, RankingConfig> = {
-  decline: {
-    apiType: 'apt',
-    filter: (c) => c.pctChange !== null && c.pctChange <= -3,
-    sort: (a, b) => (a.pctChange ?? 0) - (b.pctChange ?? 0),
-    value: (c) => formatPercentChange(c.pctChange),
-    direction: (c) => c.pctChange,
-    meta: (c) => `${c.pyung ? `${c.pyung}평 · ` : ''}최근 ${c.latestPrice}`,
-    emptyText: '최근 12개월 내 뚜렷한 하락 거래가 없습니다.',
-    note: '최근 거래 평균과 과거 거래 평균을 비교한 하락폭입니다(최근 12개월).',
-    criterionPhrase: '하락폭이 큰',
-  },
-  'record-high': {
-    apiType: 'apt',
-    filter: () => true,
-    sort: (a, b) => b.maxDealAmount - a.maxDealAmount,
-    value: (c) => c.maxPrice,
-    direction: () => null,
-    meta: (c) => `${c.maxDate} 거래`,
-    emptyText: '표시할 데이터가 없습니다.',
-    note: '최근 12개월 내 단지별 최고 거래가 기준입니다(전체 역사상 최고가가 아닙니다).',
-    criterionPhrase: '최근 신고가를 기록한',
-    valueColor: 'var(--up-color)',
-  },
-  rising: {
-    apiType: 'apt',
-    filter: (c) => c.pctChange !== null && c.pctChange >= 3,
-    sort: (a, b) => (b.pctChange ?? 0) - (a.pctChange ?? 0),
-    value: (c) => formatPercentChange(c.pctChange),
-    direction: (c) => c.pctChange,
-    meta: (c) => `${c.pyung ? `${c.pyung}평 · ` : ''}최근 ${c.latestPrice}`,
-    emptyText: '최근 12개월 내 뚜렷한 상승 거래가 없습니다.',
-    note: '최근 거래 평균과 과거 거래 평균을 비교한 상승폭입니다(최근 12개월).',
-    criterionPhrase: '상승폭이 큰',
-  },
   'top-traded': {
     apiType: 'apt',
     filter: () => true,
@@ -642,6 +613,8 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
           <ComingSoonCard title={item.title} reason={item.soonReason} />
         ) : slug === 'feed' ? (
           <TransactionFeedView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
+        ) : slug === 'decline' || slug === 'record-high' || slug === 'rising' ? (
+          <PriceRankingView mode={slug} lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug in RANKING_CONFIGS ? (
           <RankingListView slug={slug} lawdCd={region.lawdCd} sidoCode={region.sidoCode} regionLabel={region.displayRegionName} />
         ) : slug === 'volume' ? (

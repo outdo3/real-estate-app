@@ -9629,3 +9629,68 @@ DB 쓰기: 없음. 스키마 변경: 없음. 데이터 로직 변경: 없음.
 SEMANTIC_COLOR_MAPPING = PASS. CARD_UI_COLOR_SYSTEM = PASS. LIST_COLOR_SYSTEM
 = PASS. CHART_COLOR_ALIGNMENT = PARTIAL(거래량 막대만 적용, 가격지수 선
 그래프는 기존 계약 유지). MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.**
+
+## 2026-08-27
+
+### STEP — STATISTICS V2.1-1: 하락/신고가/상승 의사결정형 통계로 개편
+
+통계 가격 카테고리 핵심 3개 화면(하락/신고가/상승)을 "단순 숫자 나열"에서
+"데이터 → 해석 → 비교 → 탐색 → 행동"으로 이어지는 의사결정형 통계로
+개편했다. 아실 UX를 참고했지만 그대로 복제하지 않고, 감사 과정에서 기존
+계산 로직의 실제 결함을 발견해 고쳤다.
+
+**감사에서 발견한 문제**: 기존 `/api/stats/rankings`는 하락/상승을 "최근
+N건 평균 vs 오래된 N건 평균"(단지 전체, **면적 무관**)으로 계산하고
+있었다 — 같은 단지의 서로 다른 전용면적 거래가 섞일 수 있는 데이터 신뢰
+결함이었다. 또한 하락과 상승을 같은 계산식으로 다뤄, "역대 최고가 대비
+하락"과 "직전 거래 대비 상승"이라는 서로 다른 사용자 질문에 부정확하게
+답하고 있었다.
+
+**새 계산 엔진** `src/lib/price-ranking.ts`(신규, 순수 함수): (동일
+aptSeq+동일 raw 전용면적) 그룹의 시간순 히스토리를 기준으로 — 하락은 기간
+내 최근 정상 거래 vs 그 이전 역대 최고가, 신고가는 각 거래가 그 이전 역대
+최고가를 실제로 넘어섰는지(이전 최고가 없는 첫 거래는 신고가 아님), 상승은
+기간 내 최근 정상 거래 vs 시간순 바로 직전 거래(역대 최고가 아님) — 세
+가지를 명확히 구분했다. 취소거래 완전 제외, 미래 거래가 과거 판정에
+영향을 주지 않음, 84.7855㎡/84.9950㎡ 같은 raw area collision 방지를 전부
+27개 단위 테스트로 고정했다.
+
+**신규 API** `GET /api/stats/price-rankings`: 트레일링 24개월(historical
+high window, §12 문서화)을 기간/정렬/모드 무관하게 한 번만 fetch·캐싱해,
+사용자가 기간 필터를 바꿔도 재fetch 없이 재계산만 한다. 기존
+`FIX_STATISTICS_DATA_TRUST`의 Unit Master pyeong resolver를 그대로
+재사용(가짜 평형 없음), `REGION FILTER V2`의 시도 전체 aggregation/부분
+실패 계약을 그대로 재사용(새 인프라 없음). 시도 전체 결과에는 구+동을
+함께 표시(`sigunguName`, 동 이름만으로 여러 구에 걸쳐 모호한 문제 해결).
+
+**신규 공용 UI** `PriceRankingView`(하락/신고가/상승 3화면 공유, 중복
+구현 없음): 질문형 subtitle, 기간/정렬/면적 필터, summary, row(순위·
+단지명·지역+면적+평형·현재가·변동금액/율·비교기준일 evidence·
+deterministic 해석) 구조. jeonse-risk/top-traded는 범위 밖이라 기존
+경로 그대로 유지(회귀 없음). ▲/▼ 기호+색상+텍스트 병행 표시(색맹 접근성).
+LLM 미사용 — "저평가"/"매수기회" 같은 투자 권유형 표현 없음(테스트로 고정).
+
+라이브 검증: 부산 서구/연제구/해운대구, 서울 강남구, 부산 전체(distinct
+구 12~14개), 서울 전체(distinct 구 17~20개) 3개 모드 전부 정상. 대신롯데캐슬
+raw area 4종(84.7855/84.9950/59.8826/59.8839) 병합 없이 유지 확인. 모바일
+360/375/390 + 데스크톱 확인, row 클릭→canonical 단지 상세 이동(lawdCd+dong)
+정상. 성능: 부산 전체 cold 58.8초/warm 2.7초 — 직전 STEP의 dashboard
+sido-all(62.6초)과 동일 규모, 악화 없음.
+
+신규 `scripts/run-statistics-v2-1-price-ranking-qa.ts`(read-only 라이브
+API 검증) 실행 결과 P0 findings 0건, RELEASE GATE READY. 기존
+172/172(`.test.mjs`) + 388/388(`.test.ts`, 신규 27개 포함) PASS(회귀 없음).
+`npx tsc --noEmit` 변경 파일 기준 에러 0. Lint 에러 0. `npm run build` PASS.
+
+`docs/development/STATISTICS_V2_1_PRICE_RANKINGS.md` 신규(18개 섹션).
+
+DB 쓰기: 없음. 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**STATISTICS_V2_1_PRICE_RANKINGS = PASS. DECLINE = PASS. RECORD_HIGH = PASS.
+RISING = PASS. SAME_AREA_IDENTITY = PASS. FAKE_PYEONG = ABSENT. PYEONG_SOURCE
+= UNIT_MASTER. REGION_ALL = PASS. FILTERS = PASS. INTERPRETATION =
+DETERMINISTIC. PARTIAL_FAILURE = DISTINGUISHED. API_ERROR_NO_DATA =
+DISTINGUISHED. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE
+= NONE. NEXT_STEP = STATISTICS_V2_1_TRANSACTION_ACTIVITY.**
