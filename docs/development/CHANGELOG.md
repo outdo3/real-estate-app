@@ -9325,3 +9325,64 @@ ABSENT. SCHOOLINFO_SOURCE_LABEL = PASS. RAW_DERIVED_SEPARATION = PASS.
 RELATED_APARTMENTS = PASS. CURRENT_APARTMENT_CONTEXT = PASS. APARTMENT_COMPARISON
 = PASS. EJIP_DECISION_INTERPRETATION = PASS. MOBILE = PASS. DESKTOP = PASS. BUILD
 = PASS. DB_SCHEMA_CHANGE = NONE.**
+
+## 2026-08-27
+
+### STEP — SCHOOL DATA BACKFILL V1: 부산 664개 학교 학교알리미/NEIS 검증 데이터 backfill
+
+`SCHOOLINFO_SCHOOL_V2_1`이 canonical 학교 상세 페이지 구조는 완성했지만, 실제
+학생수/학급수/교원수/공식 좌표는 0건이라 UI가 "연동 준비 중"으로만 표시되고
+있었다. 이번 STEP은 부산 School 664개 전체에 대해 학교알리미(SchoolInfo)
+OpenAPI 공시통계와 공식 좌표를 검증된 identity 매칭으로만 backfill했다.
+
+**Identity crosswalk**: 학교알리미 자체 `SCHUL_CODE`는 NEIS `SD_SCHUL_CODE`와
+직접 매핑되지 않음을 실측 확인 — 이름+구/군으로 후보를 좁히고, 동명이교(강서구
+송정초등학교/대저중앙초등학교, 경일중학교 등)는 `School.dongName`(NEIS 출처)이
+학교알리미 주소에 포함되는지로만 안전하게 확정한다(`src/lib/education/schoolinfo-match.ts`,
+신규). 첫 번째 결과 사용 없음, 모호하면 REVIEW.
+
+**발견한 버그 2건**: (1) 이력/개편 레코드(`ABSCH_YN='Y'`)는 주소 필드 자체가
+없어 매칭 로직이 크래시 — `ABSCH_YN` 사전 필터 + 방어적 null 처리로 수정.
+(2) 중/고교는 학년이 3개뿐이라 학교알리미 응답에 4~8학년 필드 자체가 없는데,
+Prisma Json 컬럼은 배열 원소로 `undefined`를 허용하지 않아 다수 SchoolStat
+쓰기가 조용히 실패 — `normalizeGradeSlot`(신규 순수 함수)으로 `undefined`만
+`null`로 정규화해 해결(원본 0과 슬롯 없음을 혼동하지 않음).
+
+**Backfill 실행**: `scripts/education/backfill-school-data-v1.ts`(신규,
+--dry-run/--apply/--district/--school-code/--resume/--json)가 구/군×학교급
+배치로 128회 이내 API 호출만으로 664개 전체를 처리(N+1 없음). 부산 bounding box
+검증(`isValidBusanCoordinate`)과 상식 검증(`validateSchoolStat` — 음수/학생
+있는데 학급 0 등은 REVIEW)을 통과한 행만 write. 최종: School 공식 좌표
+633/664(95.3%, 이전 0%), SchoolStat 630/664(94.9%, 이전 0건), REVIEW 0건,
+WRONG_SCHOOL 0건. idempotency 확인(2차 dry-run → UNCHANGED 633/REVIEW 0, 2차
+apply → 쓰기 0건).
+
+**UI unlock**: `/api/school/[id]/route.ts`에 최신 연도 `SchoolStat` 1건을
+raw(학생수/학급수/교원수)+derived(학급당 학생수, 교원 1인당 학생수 — 런타임
+계산, DB 미저장, 0 나눗셈 방지)로 분리해 반환하도록 추가. `school-detail-client.tsx`의
+"한눈에 보는 학교" 섹션이 실데이터가 있는 학교만 5개 카드로 자동 전환되고
+(`출처: 학교알리미 OpenAPI(공시정보)` vs `이집 계산값` 시각적 구분, "2026년
+기준" 연도 표시), 데이터가 없는 학교(예: 괘법초등학교 — 통계 자체가 학교알리미에
+없는 정직한 NO_SOURCE)는 기존 안내 문구를 그대로 유지한다.
+
+지정 5개 학교(구덕/대신/과정/해원초등학교, 경남중학교) + district 대표 1곳
+API/UI 라이브 검증 전부 PASS(curl 응답 값 수기 검산 일치, claude-in-chrome
+데스크톱 960px + 모바일 390px iframe-isolation 렌더 확인, 관련 아파트/가격/거리
+회귀 없음). 신규 유닛 테스트 13개(`schoolinfo-match` 7, `schoolinfo-stat-validate`
+14 중 신규 분 포함) 추가, 전체 `.test.mjs` 135/135 + `.test.ts` 361/361 PASS.
+`npx tsc --noEmit` 변경 파일 기준 에러 0(무관 사전 존재 스크립트 오류만 별도
+존재). Lint 에러 0(`prefer-const` 1건 자체 수정). `npm run build` PASS.
+
+`docs/development/SCHOOL_DATA_BACKFILL_V1.md` 신규(25개 섹션).
+
+DB 쓰기: `SchoolStat` insert 312행, `School.latitude/longitude`(신규 확보분만),
+`School.sigunguCode`(orphan 일부만). 스키마 변경: 없음. Migration: 없음.
+
+상태: 완료.
+
+**SCHOOL_DATA_BACKFILL_V1 = PASS. BUSAN_SCHOOLS = 664. SCHOOLSTAT_BEFORE = 0.
+SCHOOLSTAT_AFTER = 630. STUDENT_COVERAGE = TEACHER_COVERAGE = CLASS_COVERAGE =
+94.9%(630/664). OFFICIAL_COORDINATE_COVERAGE = 95.3%(633/664). WRONG_SCHOOL = 0.
+INVALID_STAT = 0. REVIEW = 0. NO_SOURCE = 31. IDEMPOTENCY = PASS.
+SCHOOL_DETAIL_METRICS = PASS. SOURCE_ATTRIBUTION = PASS. MOBILE = PASS. DESKTOP
+= PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE. RELEASE_GATE = READY.**

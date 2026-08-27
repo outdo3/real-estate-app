@@ -47,6 +47,19 @@ interface RelatedApartmentCard {
   isCurrent: boolean;
 }
 
+interface SchoolStatBlock {
+  referenceYear: number;
+  disclosureYear: number | null;
+  studentCount: number | null;
+  classCount: number | null;
+  teacherCount: number | null;
+  sourceName: string;
+  derived: {
+    studentsPerClass: number | null;
+    studentsPerTeacher: number | null;
+  };
+}
+
 interface SchoolDetailResponse {
   status: 'OK' | 'NOT_FOUND' | 'ERROR';
   identity: { type: 'CANONICAL' | 'KAKAO_ONLY'; schoolId: number | null; neisSchoolCode: string | null; name: string };
@@ -55,6 +68,7 @@ interface SchoolDetailResponse {
   relatedApartments: RelatedApartmentCard[];
   currentApartment: RelatedApartmentCard | null;
   decisionInsights: { text: string }[];
+  stat: SchoolStatBlock | null;
   source: { schoolInfoLabel: string; derivedLabel: string };
 }
 
@@ -156,7 +170,7 @@ export default function SchoolDetailClient() {
     );
   }
 
-  const { identity, header, relatedApartments, currentApartment, decisionInsights, source } = data;
+  const { identity, header, relatedApartments, currentApartment, decisionInsights, stat, source } = data;
   const schoolName = header?.schoolName || identity.name;
   const level = classifyLevel(header?.schoolLevel ?? null, schoolName);
   const regionLabel = [header?.roadAddress || header?.address].filter(Boolean).join(' ');
@@ -198,14 +212,28 @@ export default function SchoolDetailClient() {
           </div>
         )}
 
-        {/* SECTION 2 — 한눈에 보는 학교(학교알리미 통계 연동 전) */}
+        {/* SECTION 2 — 한눈에 보는 학교 (SCHOOL DATA BACKFILL V1 §28: 실데이터가 있을
+            때만 카드로 표시, 없으면 기존 안내 문구를 그대로 유지한다) */}
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>한눈에 보는 학교</h2>
-          <div className={styles.introCard}>
-            <p className={styles.introText}>
-              학생수·학급수·교원수 등 학교알리미 공식 통계는 아직 연동 준비 중이에요. 연동 전까지는 관련 아파트 비교에 집중해서 보여드릴게요.
-            </p>
-          </div>
+          {stat ? (
+            <>
+              <p className={styles.statYearLabel}>{stat.referenceYear}년 기준</p>
+              <div className={styles.statGrid}>
+                <StatCard label="학생수" value={stat.studentCount} unit="명" sourceTag={`출처: ${stat.sourceName}`} />
+                <StatCard label="교원수" value={stat.teacherCount} unit="명" sourceTag={`출처: ${stat.sourceName}`} />
+                <StatCard label="학급수" value={stat.classCount} unit="개" sourceTag={`출처: ${stat.sourceName}`} />
+                <StatCard label="학급당 학생수" value={stat.derived.studentsPerClass} unit="명" sourceTag={source.derivedLabel} derived />
+                <StatCard label="교원 1인당 학생수" value={stat.derived.studentsPerTeacher} unit="명" sourceTag={source.derivedLabel} derived />
+              </div>
+            </>
+          ) : (
+            <div className={styles.introCard}>
+              <p className={styles.introText}>
+                학생수·학급수·교원수 등 학교알리미 공식 통계는 아직 연동 준비 중이에요. 연동 전까지는 관련 아파트 비교에 집중해서 보여드릴게요.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* SECTION 6 — 이 학교와 연결된 아파트(핵심) */}
@@ -260,6 +288,28 @@ export default function SchoolDetailClient() {
           <span>가격·거리·비교: {source.derivedLabel}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  unit,
+  sourceTag,
+  derived = false,
+}: {
+  label: string;
+  value: number | null;
+  unit: string;
+  sourceTag: string;
+  derived?: boolean;
+}) {
+  return (
+    <div className={styles.statCard}>
+      <span className={styles.statLabel}>{label}</span>
+      <span className={styles.statValue}>{value != null ? `${value.toLocaleString()}${unit}` : '정보 없음'}</span>
+      <span className={derived ? styles.statTagDerived : styles.statTagRaw}>{sourceTag}</span>
     </div>
   );
 }

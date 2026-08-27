@@ -7,6 +7,7 @@ import { fetchMolitData } from '@/lib/api-molit';
 import { recentMonths } from '@/lib/molit-months';
 import { attachLatestPrice, type TradeCandidate } from '@/lib/school-trade-price';
 import { buildDecisionInsights, type ComparableApartment } from '@/lib/school-decision-insight';
+import { studentsPerClass, studentsPerTeacher } from '@/lib/education/schoolinfo-stat-validate';
 
 // SCHOOLINFO / SCHOOL V2.1 §3~7 — canonical school identity(우선순위: NEIS
 // neisSchoolCode) 기반 학교 상세 API. [id]가 실제 School.neisSchoolCode와 일치하면
@@ -17,6 +18,19 @@ const MAX_RELATED = 12;
 const MAX_NEARBY_CANDIDATES = 8;
 
 export const dynamic = 'force-dynamic';
+
+interface SchoolStatBlock {
+  referenceYear: number;
+  disclosureYear: number | null;
+  studentCount: number | null;
+  classCount: number | null;
+  teacherCount: number | null;
+  sourceName: string;
+  derived: {
+    studentsPerClass: number | null;
+    studentsPerTeacher: number | null;
+  };
+}
 
 interface RelatedApartmentCard {
   aptSeq: string;
@@ -60,6 +74,35 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     if (!schoolName) {
       return NextResponse.json({ status: 'NOT_FOUND' }, { status: 404 });
+    }
+
+    // SCHOOL DATA BACKFILL V1 §28 — SchoolStat가 실제로 채워진 학교만 통계 카드를
+    // 노출한다(§0 원칙: 데이터 없으면 임의 생성 금지). referenceYear가 가장 최신인
+    // 1건만 표시하고(§10 연도 혼재 시 대표연도로 덮어쓰지 않는다는 지시는 "여러
+    // 연도를 섞어 하나로 합치지 않는다"는 뜻 — 단일 학교 상세에서는 최신 1건만
+    // 보여주는 것이 UI 단순성과 상충하지 않는다), raw(학교알리미 원본)와
+    // derived(이집 계산값)를 명확히 분리해 내려준다.
+    let statBlock: SchoolStatBlock | null = null;
+    if (canonicalSchool) {
+      const latestStat = await prisma.schoolStat.findFirst({
+        where: { schoolId: canonicalSchool.id },
+        orderBy: { referenceYear: 'desc' },
+        include: { source: { select: { displayName: true } } },
+      });
+      if (latestStat) {
+        statBlock = {
+          referenceYear: latestStat.referenceYear,
+          disclosureYear: latestStat.disclosureYear,
+          studentCount: latestStat.studentCount,
+          classCount: latestStat.classCount,
+          teacherCount: latestStat.teacherCount,
+          sourceName: latestStat.source.displayName,
+          derived: {
+            studentsPerClass: studentsPerClass(latestStat.studentCount, latestStat.classCount),
+            studentsPerTeacher: studentsPerTeacher(latestStat.studentCount, latestStat.teacherCount),
+          },
+        };
+      }
     }
 
     // 위치(location)는 identity가 아니라 속성이다(§5) — 공식 좌표가 있으면 그것만
@@ -119,6 +162,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           cards: [],
           currentApartment: null,
           insights: [],
+          statBlock,
         })
       );
     }
@@ -221,7 +265,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const insights = buildDecisionInsights(comparableList);
 
     return NextResponse.json(
-      buildResponse({ isCanonical, canonicalSchool, schoolName, location, cards, currentApartment, insights })
+      buildResponse({ isCanonical, canonicalSchool, schoolName, location, cards, currentApartment, insights, statBlock })
     );
   } catch (error) {
     console.error('Failed to load school detail:', error);
@@ -237,8 +281,9 @@ function buildResponse(args: {
   cards: RelatedApartmentCard[];
   currentApartment: RelatedApartmentCard | null;
   insights: { text: string }[];
+  statBlock: SchoolStatBlock | null;
 }) {
-  const { isCanonical, canonicalSchool, schoolName, location, cards, currentApartment, insights } = args;
+  const { isCanonical, canonicalSchool, schoolName, location, cards, currentApartment, insights, statBlock } = args;
   return {
     status: 'OK',
     identity: {
@@ -264,6 +309,7 @@ function buildResponse(args: {
     relatedApartments: cards,
     currentApartment,
     decisionInsights: insights,
+    stat: statBlock,
     source: {
       schoolInfoLabel: '출처: NEIS',
       derivedLabel: '이집 계산값',
