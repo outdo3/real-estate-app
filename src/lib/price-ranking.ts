@@ -318,3 +318,69 @@ export function buildRisingInterpretation(row: Pick<RisingRow, 'hasSufficientSam
   }
   return '직전 거래보다 올랐어요.';
 }
+
+// STATISTICS V2.1-3 — JEONSE RISK. rising과 구조는 동일(그룹별 "기간 내 가장
+// 최근" 정상 거래를 시간순 "바로 직전" 거래와 비교, 역대 최고가 아님)이지만
+// 방향이 반대(하락만 인정)이고 대상이 항상 jeonse dealType이다. allTrades는
+// 호출부가 이미 순수 전세(monthlyRent=0)만 dealType='jeonse'로 넘긴 것이어야
+// 한다 — buildHistory의 groupKey가 dealType을 포함하므로 wolse가 섞여 들어와도
+// 자동으로 별도 그룹이 되어 오염되지는 않지만, 명확성을 위해 호출부 책임으로
+// 명시한다.
+export interface JeonseRiskRow {
+  groupKey: string;
+  aptSeq: string | null;
+  name: string;
+  dong: string;
+  lawdCd: string;
+  excluUseArea: number | null;
+  floorRaw: string | number | null;
+  currentAmount: number;
+  currentDate: string;
+  previousAmount: number;
+  previousDate: string;
+  declineAmount: number; // 음수
+  declinePct: number; // 음수
+  trailing12moSampleCount: number;
+}
+
+export function buildJeonseRiskRows(allTrades: FeedTrade[], period: PeriodRange): JeonseRiskRow[] {
+  const history = buildHistory(allTrades);
+  const rows: JeonseRiskRow[] = [];
+  for (const [key, points] of history) {
+    const inPeriod = points.filter((p) => inRange(p.trade.dealDate, period));
+    if (inPeriod.length === 0) continue;
+    const latest = inPeriod.reduce((max, p) => (p.trade.dealDate > max.trade.dealDate ? p : max));
+    if (!latest.immediatePrior) continue;
+    if (latest.trade.dealAmount >= latest.immediatePrior.amount) continue; // 하락이 아니면 위험 row 아님
+    const declineAmount = latest.trade.dealAmount - latest.immediatePrior.amount;
+    rows.push({
+      groupKey: key,
+      aptSeq: latest.trade.aptSeq,
+      name: latest.trade.name,
+      dong: latest.trade.dong,
+      lawdCd: latest.trade.lawdCd,
+      excluUseArea: latest.trade.excluUseArea,
+      floorRaw: latest.trade.floorRaw,
+      currentAmount: latest.trade.dealAmount,
+      currentDate: latest.trade.dealDate,
+      previousAmount: latest.immediatePrior.amount,
+      previousDate: latest.immediatePrior.date,
+      declineAmount,
+      declinePct: latest.immediatePrior.amount > 0 ? Math.round((declineAmount / latest.immediatePrior.amount) * 1000) / 10 : 0,
+      trailing12moSampleCount: latest.trailing12moSampleCount,
+    });
+  }
+  return rows;
+}
+
+// §19 — 금지 표현("역전세 확정", "보증금 미반환", "위험한 집주인", "보증금
+// 사고 위험") 절대 사용 안 함. 근거 데이터(직전 거래 대비 하락)만 서술하고,
+// 하락폭이 클 때만 "확인이 필요하다"는 중립적 권유로 그친다 — 위험을 확정하지
+// 않는다.
+export function buildJeonseRiskInterpretation(row: Pick<JeonseRiskRow, 'declinePct'>): string {
+  const pct = Math.abs(row.declinePct);
+  if (pct >= 15) {
+    return '직전 전세 거래보다 가격이 많이 내려왔어요. 전세가격 하락으로 보증금 반환 부담이 커질 수 있어 확인이 필요해요.';
+  }
+  return '직전 전세 거래보다 가격이 내려왔어요.';
+}

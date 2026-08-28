@@ -67,9 +67,17 @@ export const normalizeAptName = (name: string): string => {
 // 같은 이름·같은 동이라도 실제로 다른 단지면 값이 다르다는 것을 실측으로 확인),
 // 없을 때만 (동, 정규화된 이름)으로 폴백한다 — 동 단위로는 못 잡는 충돌이
 // 있다는 걸 알고 쓰는 약한 폴백이라는 점을 주석으로 명시해 둔다.
-function complexIdentityKey(t: GapTrade): string {
+export function complexIdentityKey(t: GapTrade): string {
   if (t.aptSeq) return `seq:${t.aptSeq}`;
   return `fallback:${t.lawdCd || ''}::${t.dong || ''}::${normalizeAptName(t.name)}`;
+}
+
+// STATISTICS V2.1-3 — 단지 랭킹은 identity + 정확한 전용면적 조합으로 묶는다
+// (같은 단지라도 면적이 다르면 별도 row — AREA MODEL V1 원칙). GapTradeEvent
+// 기준으로 route에서 그대로 재사용한다.
+export function gapEventGroupKey(e: GapTradeEvent): string {
+  const identity = e.aptSeq ? `seq:${e.aptSeq}` : `fallback:${e.lawdCd || ''}::${e.dong || ''}::${normalizeAptName(e.name)}`;
+  return `${identity}::${e.exclusiveAreaM2}`;
 }
 
 // (단지 identity :: 정확한 excluUseArea) 조합을 key로 묶는다. AREA MODEL V1
@@ -92,13 +100,33 @@ function indexByComplexAndArea(trades: GapTrade[]): Map<string, GapTrade[]> {
   return byKey;
 }
 
+// STATISTICS V2.1-3 §5 — 매매와 전세의 계약 시점이 너무 멀면(예: 매매는 이번
+// 달, 전세는 10개월 전) "갭"처럼 보여주는 것 자체가 오해를 만든다. 두 거래
+// 시점의 절대 일수 차이가 이 값 이하일 때만 pairing을 허용한다. 90일은 이
+// 통계가 이미 쓰는 "최근 3개월" 관례(dashboard의 recentAptTrades/§10 기본
+// period)와 맞춰 정했다 — 근거 없는 임의 값이 아니라 기존 화면이 이미 "최근
+// 3개월"을 갭투자 후보 기간으로 써 온 관례를 그대로 명문화한 것.
+export const DEFAULT_GAP_MAX_DAY_GAP = 90;
+
+function daysBetweenDates(a: string, b: string): number {
+  const da = new Date(`${a}T00:00:00Z`).getTime();
+  const db = new Date(`${b}T00:00:00Z`).getTime();
+  if (!Number.isFinite(da) || !Number.isFinite(db)) return Infinity;
+  return Math.round(Math.abs(db - da) / 86400000);
+}
+
 // 매매 거래 목록과 "순수 전세만" 걸러진 전세 거래 목록을 받아, (단지, 정확한
 // 전용면적)이 양쪽 모두에 존재하는 조합만 후보로 만든다. 한쪽만 있으면(매매만/
 // 전세만) 후보 자체를 만들지 않는다(§11 — 억지로 갭을 만들지 않음). 호출부가
 // 전세 목록을 이미 순수 전세로 필터링해서 넘겨야 한다(반전세/월세 제외는 이
 // 함수의 책임이 아니라 호출부 책임 — dashboard/route.ts가 기존에 쓰던
-// monthlyRent 필터링 관례를 그대로 따른다).
-export function buildGapCandidates(aptTrades: GapTrade[], pureJeonseTrades: GapTrade[]): GapCandidate[] {
+// monthlyRent 필터링 관례를 그대로 따른다). maxDayGap(기본 90일)을 넘는
+// 매매·전세 시차는 pair로 인정하지 않는다(§5 temporal match 안전장치).
+export function buildGapCandidates(
+  aptTrades: GapTrade[],
+  pureJeonseTrades: GapTrade[],
+  maxDayGap: number = DEFAULT_GAP_MAX_DAY_GAP
+): GapCandidate[] {
   const aptByKey = indexByComplexAndArea(aptTrades);
   const rentByKey = indexByComplexAndArea(pureJeonseTrades);
 
@@ -108,6 +136,7 @@ export function buildGapCandidates(aptTrades: GapTrade[], pureJeonseTrades: GapT
     if (!rents || rents.length === 0) return;
     const latestApt = apts[0];
     const latestRent = rents[0];
+    if (daysBetweenDates(latestApt.dealDate, latestRent.dealDate) > maxDayGap) return;
     candidates.push({
       name: latestApt.name,
       dong: latestApt.dong || '',
@@ -120,4 +149,75 @@ export function buildGapCandidates(aptTrades: GapTrade[], pureJeonseTrades: GapT
     });
   });
   return candidates;
+}
+
+// STATISTICS V2.1-3 §7/§8/§30 — 지역/단지 랭킹·월별 추이는 "단지당 대표 1건"
+// (buildGapCandidates)이 아니라 "그 기간에 갭투자 형태 거래가 실제로 몇 건
+// 있었는가"를 세어야 한다. 매매 거래 하나하나에 대해 같은 (단지 identity +
+// 정확한 전용면적) 순수 전세 거래 중 시점이 가장 가까운 것을 찾아 매칭한다 —
+// maxDayGap(기본 90일) 밖이면 매칭하지 않는다(§5). 같은 단지에서 여러 건의
+// 매매가 각각 독립적인 이벤트가 될 수 있다(buildGapCandidates와 목적이 다름 —
+// 대표 후보 1건이 아니라 "건수 집계"가 목적).
+export interface GapTradeEvent {
+  name: string;
+  dong: string;
+  lawdCd: string | null;
+  aptSeq: string | null;
+  exclusiveAreaM2: number;
+  saleDate: string;
+  saleAmount: number;
+  jeonseDate: string;
+  jeonseAmount: number;
+  dayGap: number;
+  gap: number;
+}
+
+export function buildGapTradeEvents(
+  saleTrades: GapTrade[],
+  pureJeonseTrades: GapTrade[],
+  maxDayGap: number = DEFAULT_GAP_MAX_DAY_GAP
+): GapTradeEvent[] {
+  const jeonseByKey = indexByComplexAndArea(pureJeonseTrades);
+  const events: GapTradeEvent[] = [];
+  for (const sale of saleTrades) {
+    if (sale.dealCanceled) continue;
+    if (sale.excluUseArea == null) continue;
+    const key = `${complexIdentityKey(sale)}::${sale.excluUseArea}`;
+    const candidates = jeonseByKey.get(key);
+    if (!candidates || candidates.length === 0) continue;
+    let nearest: GapTrade | null = null;
+    let nearestDiff = Infinity;
+    for (const j of candidates) {
+      const diff = daysBetweenDates(sale.dealDate, j.dealDate);
+      if (diff < nearestDiff) {
+        nearestDiff = diff;
+        nearest = j;
+      }
+    }
+    if (!nearest || nearestDiff > maxDayGap) continue;
+    events.push({
+      name: sale.name,
+      dong: sale.dong || '',
+      lawdCd: sale.lawdCd ?? null,
+      aptSeq: sale.aptSeq ?? null,
+      exclusiveAreaM2: sale.excluUseArea,
+      saleDate: sale.dealDate,
+      saleAmount: sale.dealAmount,
+      jeonseDate: nearest.dealDate,
+      jeonseAmount: nearest.dealAmount,
+      dayGap: nearestDiff,
+      gap: sale.dealAmount - nearest.dealAmount,
+    });
+  }
+  return events;
+}
+
+// STATISTICS V2.1-3 §14 — 평균은 outlier(초고가/초저가 한 건) 영향이 크므로
+// 지역/단지 요약에는 중앙값을 우선한다. 정렬된 배열 기준 표준 중앙값(짝수
+// 개수면 가운데 두 값의 평균).
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }

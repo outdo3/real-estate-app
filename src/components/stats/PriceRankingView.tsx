@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
-import { TrendingDown, TrendingUp, Award } from 'lucide-react';
+import { TrendingDown, TrendingUp, Award, AlertTriangle } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Empty from '@/components/ui/Empty';
 import ErrorState from '@/components/ui/ErrorState';
@@ -16,12 +16,16 @@ import styles from './PriceRankingView.module.css';
 // 거래)을 항상 함께 보여주고(§18 evidence display), deterministic
 // interpretation(§17, API가 이미 계산해 내려줌)을 붙인다. LLM 호출 없음.
 
-export type PriceRankingMode = 'decline' | 'record-high' | 'rising';
+export type PriceRankingMode = 'decline' | 'record-high' | 'rising' | 'jeonse-risk';
 
+// STATISTICS V2.1-3 §25 — 전세위험은 warning-orange 계열을 쓰고, red로 과도한
+// 공포를 조성하지 않는다(down-color는 파랑, error/red 계열이 아님에 주의 —
+// 기존 --warning-color 토큰을 그대로 재사용).
 const MODE_META: Record<PriceRankingMode, { icon: typeof TrendingDown; color: string; soft: string; question: string }> = {
   decline: { icon: TrendingDown, color: 'var(--down-color)', soft: 'var(--down-soft)', question: '요즘 가격이 많이 내려온 단지는?' },
   'record-high': { icon: Award, color: 'var(--up-color)', soft: 'var(--up-soft)', question: '최근 최고가를 새로 쓴 단지는?' },
   rising: { icon: TrendingUp, color: 'var(--up-color)', soft: 'var(--up-soft)', question: '최근 가격이 많이 오른 단지는?' },
+  'jeonse-risk': { icon: AlertTriangle, color: 'var(--warning-color)', soft: 'var(--warn-soft)', question: '최근 전세가격이 이전보다 낮아진 단지는?' },
 };
 
 // FIX_PRICE_RANKINGS_V2_1_1A — MOLIT 실거래 API가 단지/면적 단위 필터 없이
@@ -55,6 +59,11 @@ const SORT_OPTIONS: Record<PriceRankingMode, { value: string; label: string }[]>
   rising: [
     { value: 'riseRate', label: '상승률순' },
     { value: 'riseAmount', label: '상승금액순' },
+    { value: 'recent', label: '최근거래순' },
+  ],
+  'jeonse-risk': [
+    { value: 'declineRate', label: '하락률순' },
+    { value: 'declineAmount', label: '하락금액순' },
     { value: 'recent', label: '최근거래순' },
   ],
 };
@@ -242,7 +251,9 @@ export default function PriceRankingView({
               ? `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 하락 거래가 없어요.`
               : mode === 'record-high'
                 ? `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 ${recordHighLabel} 거래가 없어요.`
-                : `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 상승 거래가 없어요.`
+                : mode === 'jeonse-risk'
+                  ? `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 조건에 맞는 전세가 하락 거래가 없어요.`
+                  : `${PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안 이 지역에서 상승 거래가 없어요.`
           }
           description="기간을 넓히거나 지역을 변경해보세요."
         />
@@ -250,8 +261,16 @@ export default function PriceRankingView({
         <>
           <div className={styles.summary}>
             {displayRegionName} · {PERIOD_OPTIONS.find((p) => p.value === period)?.label} 동안{' '}
-            {mode === 'decline' ? '하락' : mode === 'record-high' ? recordHighLabel : '상승'} 거래 {data?.pagination.total ?? filteredRows.length}건
+            {mode === 'decline' ? '하락' : mode === 'record-high' ? recordHighLabel : mode === 'jeonse-risk' ? '전세가 하락' : '상승'} 거래 {data?.pagination.total ?? filteredRows.length}건
           </div>
+
+          {/* §19 — 이 데이터만으로 임대인의 보증금 반환 능력을 판단할 수 없다는
+              고지를 항상 함께 보여준다(위험을 확정하지 않는다는 원칙의 UI 반영). */}
+          {mode === 'jeonse-risk' && (
+            <div className={styles.jeonseRiskDisclaimer}>
+              실제 임대인의 보증금 반환 능력은 이 데이터만으로 판단할 수 없습니다.
+            </div>
+          )}
 
           <ul className={styles.list}>
             {filteredRows.map((r, i) => (
@@ -288,6 +307,11 @@ export default function PriceRankingView({
                       ▲ {formatWon(r.riseAmount).replace('+', '')} · {formatPct(r.risePct!)}
                     </span>
                   )}
+                  {mode === 'jeonse-risk' && r.declineAmount != null && (
+                    <span className={styles.delta} style={{ color: 'var(--warning-color)' }}>
+                      ▼ {formatWon(r.declineAmount).replace('-', '')} · {formatPct(r.declinePct!)}
+                    </span>
+                  )}
                 </div>
 
                 {/* §18 evidence display — 비교 기준을 항상 명시. decline/
@@ -298,6 +322,7 @@ export default function PriceRankingView({
                   {mode === 'decline' && `최근 ${coverageLabel} 최고가 ${r.priorHighDate} 대비`}
                   {mode === 'record-high' && `최근 ${coverageLabel} 최고가 ${r.priorHighDate} 대비`}
                   {mode === 'rising' && `직전 거래 ${r.previousDate} 대비`}
+                  {mode === 'jeonse-risk' && `직전 전세 거래 ${r.previousDate} 대비`}
                   {' · '}
                   {r.currentDate}
                   {r.floorRaw != null && ` · ${r.floorRaw}층`}

@@ -53,7 +53,11 @@ export const STATS_MENU: StatsMenuItem[] = [
   // 별도 기능(예: 84㎡ 절대가격 순위, §8)을 위해 예약해둔다.
   { slug: 'record-high', icon: '🏆', Icon: Award, title: '2년최고가', subtitle: '최근 2년 내 최고가 경신 단지', status: 'live', category: '가격', colorToken: 'up' },
   { slug: 'rising', icon: '📈', Icon: TrendingUp, title: '상승', subtitle: '가격변동 상위 단지', status: 'live', category: '가격', colorToken: 'up' },
-  { slug: 'jeonse-risk', icon: '⚠️', Icon: AlertTriangle, title: '역전세', subtitle: '전세가 하락 위험 단지', status: 'live', category: '가격', colorToken: 'warn' },
+  // STATISTICS V2.1-3 §2/§15/§19 — "역전세"는 보증금 미반환처럼 확정된
+  // 사실을 뜻하는 것으로 오독될 수 있다. 이 화면이 실제로 보여주는 것은
+  // "직전 전세 거래보다 가격이 낮아진 단지"일 뿐 역전세(보증금 반환 불능)
+  // 여부를 판정하지 않으므로, 메뉴명 자체를 정직한 "전세위험"으로 바꾼다.
+  { slug: 'jeonse-risk', icon: '⚠️', Icon: AlertTriangle, title: '전세위험', subtitle: '최근 전세가격이 이전보다 낮아진 단지를 확인해보세요.', status: 'live', category: '가격', colorToken: 'warn' },
   { slug: 'volume', icon: '📊', Icon: Activity, title: '거래량', subtitle: '매매·전월세 거래량', status: 'live', category: '거래', colorToken: 'brand' },
   // STATISTICS V2.1-2 §2/§23 — 감사 결과 이 화면은 실제 사용자 행동(조회/검색/
   // 관심등록 등) 기반 popularity가 아니라 순수 거래건수 랭킹이었다("인기"라는
@@ -62,7 +66,7 @@ export const STATS_MENU: StatsMenuItem[] = [
   // 화면은 실제로 측정한 것 그대로 "거래집중"으로 정정한다. 색상도 popular
   // 보라색 대신 거래 카테고리의 기본 브랜드 그린으로 맞춘다.
   { slug: 'top-traded', icon: '📌', Icon: Target, title: '거래집중', subtitle: '최근 거래가 몰린 단지', status: 'live', category: '거래', colorToken: 'brand' },
-  { slug: 'gap-invest', icon: '💰', Icon: Coins, title: '갭투자', subtitle: '매매-전세 갭 적은 단지', status: 'live', category: '거래' },
+  { slug: 'gap-invest', icon: '💰', Icon: Coins, title: '갭투자', subtitle: '최근 갭투자 형태의 거래가 많은 지역과 단지를 확인해보세요.', status: 'live', category: '거래', colorToken: 'brand' },
   {
     slug: 'supply',
     icon: '🏗️',

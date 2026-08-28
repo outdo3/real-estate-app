@@ -10,9 +10,11 @@ import {
   buildDeclineRows,
   buildRecordHighRows,
   buildRisingRows,
+  buildJeonseRiskRows,
   buildDeclineInterpretation,
   buildRecordHighInterpretation,
   buildRisingInterpretation,
+  buildJeonseRiskInterpretation,
   resolvePriceRankingPeriod,
   historicalCoverageLabel,
   HISTORICAL_LOOKBACK_MONTHS,
@@ -46,15 +48,21 @@ function monthsForLookback(now: Date): string[] {
   return months.reverse();
 }
 
-function toFeedTrade(item: any, lawdCd: string): FeedTrade | null {
+// STATISTICS V2.1-3 — jeonse-risk 모드는 apt가 아니라 rent(전월세) 원본을
+// 쓴다. rent 원본은 순수 전세/반전세·월세가 섞여 오므로(monthlyRent 유무로
+// 구분, dashboard/feed/concentration 라우트가 이미 쓰는 관례) 여기서도 동일
+// 규칙으로 순수 전세만 남기고 wolse는 아예 만들지 않는다(§16 same dealType
+// jeonse only).
+function toFeedTrade(item: any, lawdCd: string, dealType: 'sale' | 'jeonse'): FeedTrade | null {
   if (!item || item.typeLabel === '에러' || !(item.dealAmount > 0)) return null;
+  if (dealType === 'jeonse' && item.monthlyRent > 0) return null; // 반전세/월세 제외
   return {
     uid: item.id,
     aptSeq: item.aptSeq ?? null,
     name: item.name,
     dong: item.dong || '',
     lawdCd,
-    dealType: 'sale',
+    dealType,
     dealAmount: item.dealAmount,
     excluUseArea: item.excluUseArea ?? null,
     floorRaw: item.floorRaw ?? null,
@@ -66,10 +74,14 @@ function toFeedTrade(item: any, lawdCd: string): FeedTrade | null {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const modeParam = searchParams.get('mode');
-  const mode = modeParam === 'decline' || modeParam === 'record-high' || modeParam === 'rising' ? modeParam : null;
+  const mode = modeParam === 'decline' || modeParam === 'record-high' || modeParam === 'rising' || modeParam === 'jeonse-risk' ? modeParam : null;
   if (!mode) {
-    return NextResponse.json({ status: 'ERROR', message: 'mode 파라미터가 필요합니다(decline|record-high|rising).' }, { status: 400 });
+    return NextResponse.json({ status: 'ERROR', message: 'mode 파라미터가 필요합니다(decline|record-high|rising|jeonse-risk).' }, { status: 400 });
   }
+  // STATISTICS V2.1-3 §16 — jeonse-risk는 rent(전월세) API를 쓴다. 다른 3개
+  // 모드는 기존과 동일하게 apt(매매)만 쓴다.
+  const apiType: 'apt' | 'rent' = mode === 'jeonse-risk' ? 'rent' : 'apt';
+  const feedDealType: 'sale' | 'jeonse' = mode === 'jeonse-risk' ? 'jeonse' : 'sale';
 
   const lawdCdParam = searchParams.get('lawdCd');
   const sidoCodeParam = searchParams.get('sidoCode');
@@ -112,11 +124,14 @@ export async function GET(request: Request) {
         const shortName = d.name.split(' ').slice(1).join(' ');
         sigunguNameByLawdCd.set(d.code.substring(0, 5), shortName);
       }
-      const cacheKey = `stats-price-rankings-sido:${sidoCodeParam}:${months[0]}-${months[months.length - 1]}`;
+      // PERF §21 — apiType(apt/rent)이 다르면 완전히 다른 원본 데이터이므로
+      // 캐시 키에 반드시 포함한다(포함하지 않으면 decline/rising 캐시가
+      // jeonse-risk에 매매 데이터를 잘못 서빙할 위험).
+      const cacheKey = `stats-price-rankings-sido:${apiType}:${sidoCodeParam}:${months[0]}-${months[months.length - 1]}`;
       const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
         const tasks: MonthTask[] = [];
         for (const dLawdCd of lawdCds) {
-          for (const m of months) tasks.push({ key: `${dLawdCd}|${m}`, lawdCd: dLawdCd, dealYmd: m, type: 'apt' });
+          for (const m of months) tasks.push({ key: `${dLawdCd}|${m}`, lawdCd: dLawdCd, dealYmd: m, type: apiType });
         }
         const results = await fetchMonthsThrottledWithStatus(tasks);
         const failedSet = new Set<string>();
@@ -130,28 +145,28 @@ export async function GET(request: Request) {
       for (const dLawdCd of cached.lawdCds) {
         for (const m of months) {
           for (const raw of cached.results[`${dLawdCd}|${m}`]?.items || []) {
-            const t = toFeedTrade(raw, dLawdCd);
+            const t = toFeedTrade(raw, dLawdCd, feedDealType);
             if (t) allTrades.push(t);
           }
         }
       }
       if (cached.failedLawdCds.length === cached.lawdCds.length && cached.lawdCds.length > 0) apiError = true;
     } else {
-      const cacheKey = `stats-price-rankings:${lawdCd}:${months[0]}-${months[months.length - 1]}`;
+      const cacheKey = `stats-price-rankings:${apiType}:${lawdCd}:${months[0]}-${months[months.length - 1]}`;
       const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
-        const tasks: MonthTask[] = months.map((m) => ({ key: m, lawdCd: lawdCd!, dealYmd: m, type: 'apt' }));
+        const tasks: MonthTask[] = months.map((m) => ({ key: m, lawdCd: lawdCd!, dealYmd: m, type: apiType }));
         return fetchMonthsThrottledWithStatus(tasks);
       });
       for (const m of months) {
         for (const raw of rawByMonth[m]?.items || []) {
-          const t = toFeedTrade(raw, lawdCd!);
+          const t = toFeedTrade(raw, lawdCd!, feedDealType);
           if (t) allTrades.push(t);
         }
       }
       // §39 API 실패 vs 거래 없음 구분 — 진단성 probe(추가 호출 1회, N+1 아님).
       if (allTrades.length === 0) {
         try {
-          const probe = await fetchMolitData({ type: 'apt', lawdCd: lawdCd!, dealYmd: months[months.length - 1] });
+          const probe = await fetchMolitData({ type: apiType, lawdCd: lawdCd!, dealYmd: months[months.length - 1] });
           apiError = probe.length === 1 && probe[0]?.typeLabel === '에러';
         } catch {
           apiError = true;
@@ -168,6 +183,7 @@ export async function GET(request: Request) {
     let rows: Array<Record<string, any>>;
     if (mode === 'decline') rows = buildDeclineRows(allTrades, period);
     else if (mode === 'record-high') rows = buildRecordHighRows(allTrades, period);
+    else if (mode === 'jeonse-risk') rows = buildJeonseRiskRows(allTrades, period);
     else rows = buildRisingRows(allTrades, period);
 
     // §7 정렬 — 기존 API가 지원 가능한 필드 범위에서만 구현(새 데이터 소스 없음).
@@ -191,7 +207,7 @@ export async function GET(request: Request) {
       riseRate: (a, b) => b.risePct - a.risePct,
       riseAmount: (a, b) => b.riseAmount - a.riseAmount,
     };
-    const defaultSort: Record<string, string> = { decline: 'declineRate', 'record-high': 'recent', rising: 'riseRate' };
+    const defaultSort: Record<string, string> = { decline: 'declineRate', 'record-high': 'recent', rising: 'riseRate', 'jeonse-risk': 'declineRate' };
     const sortKey = sortFns[sortParam] ? sortParam : defaultSort[mode];
     rows.sort(sortFns[sortKey]);
 
@@ -220,7 +236,9 @@ export async function GET(request: Request) {
           ? buildDeclineInterpretation(r as any, coverageLabel)
           : mode === 'record-high'
             ? buildRecordHighInterpretation(r as any, coverageLabel)
-            : buildRisingInterpretation(r as any);
+            : mode === 'jeonse-risk'
+              ? buildJeonseRiskInterpretation(r as any)
+              : buildRisingInterpretation(r as any);
       const sigunguName = isSidoAll ? sigunguNameByLawdCd.get(r.lawdCd) || null : null;
       return { ...r, pyung, interpretation, sigunguName };
     });
@@ -239,7 +257,7 @@ export async function GET(request: Request) {
       // FIX_PRICE_RANKINGS_V2_1_1A — 클라이언트가 "역대 최고가"류 문구를 직접
       // 만드는 곳(예: PriceRankingView의 evidence 줄)에서도 동일한 정직한
       // 범위 라벨을 재사용할 수 있게 API가 그대로 내려준다(하드코딩 방지).
-      historicalHighCoverageLabel: mode === 'rising' ? null : coverageLabel,
+      historicalHighCoverageLabel: mode === 'rising' || mode === 'jeonse-risk' ? null : coverageLabel,
       sort: sortKey,
       rows: page,
       pagination: { offset, limit, total, hasMore: offset + limit < total },

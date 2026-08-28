@@ -9957,3 +9957,74 @@ ABSENT. PARTIAL_FAILURE = DISTINGUISHED. MOBILE = PASS. DESKTOP = PASS.
 BUILD = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP = DB_CACHE_GATE(영구 캐시
 테이블 — TRUE GATE, 승인 필요) 또는 STATISTICS_PERFORMANCE_V2(price-rankings
 계산 결과 캐싱).**
+
+### STEP — STATISTICS V2.1-3: GAP INVESTMENT + JEONSE RISK
+
+가격/전세 리스크 영역의 갭투자·전세위험 두 기능을 "지역 랭킹 → 단지 랭킹"
+구조의 이집형 의사결정 통계로 개편했다. 아실 "갭 투자 증가지역"을
+참고하되 canonical identity(aptSeq+exact area)/claim transparency/
+deterministic interpretation을 추가했다. 상세 근거는
+`docs/development/STATISTICS_V2_1_RISK_GAP.md` 참고.
+
+**감사 결과**: 기존 "역전세"(`/api/stats/rankings` 기반)는 "최근 3-sample
+평균 vs 가장 오래된 3-sample 평균"이라는 장기 추세 비교였고, `isValidTrade`
+가 `dealCanceled`를 확인하지 않아 **취소 거래가 집계에 섞이는 실제
+버그**가 있었다. 기존 갭투자(dashboard "TOP5" 위젯)는 단지당 대표 1건만
+보여줄 뿐 지역 랭킹 개념이 없었고, 매매·전세 계약 시점 간 시차를 검증하지
+않아 먼 시점의 전세가를 붙일 위험이 있었다.
+
+**구현**: (1) `gap-invest-calc.ts`에 90일 temporal window 가드(기존
+`buildGapCandidates`에 옵션 추가, 기본값 활성 — 21개 기존 테스트 전부
+그대로 통과) + 신규 `buildGapTradeEvents`(매매 거래 단위로 근접 전세를
+매칭해 지역/단지/월별 집계가 가능한 이벤트 목록 생성). (2) `price-ranking
+.ts`에 `buildJeonseRiskRows`(rising과 동일한 "직전 정상 거래 비교" 구조를
+재사용, 방향만 하락으로 반전) + `buildJeonseRiskInterpretation`(안전한
+wording만). (3) 신규 `/api/stats/gap-invest` 라우트(SIDO_ALL 시군구 랭킹
+/ 구 선택 시 동 랭킹 / 단지 랭킹 + 월별 추이 + 이전 기간 비교, dashboard와
+동일한 12개월 fetch shape 재사용). (4) `/api/stats/price-rankings`에
+`mode=jeonse-risk` 추가(rent 타입 fetch, apiType을 캐시 키에 포함해
+apt/rent 캐시 오염 방지). (5) `statsMenu.ts`: "역전세"→"전세위험"(slug는
+`jeonse-risk` 유지, URL 하위호환). (6) `type-client.tsx`: 이제 쓰이지
+않는 구식 `RankingListView`/`RANKING_CONFIGS`(취소거래 버그를 포함한 옛
+역전세 로직) 제거, 신규 `GapInvestView.tsx` 컴포넌트 연결.
+
+**데이터 신뢰**: aptSeq 우선 identity, raw exact area(84.7855㎡ vs
+84.9950㎡ 절대 병합 안 함), cancelled 거래 양쪽(매매·전세) 제외, 미래
+거래 leakage 없음(buildHistory의 시간순 구조가 구조적으로 보장) 전부
+단위 테스트로 확인. "갭투자 거래"가 아니라 "갭투자 형태 거래"(bounded
+wording)만 사용 — 실제 계약 당사자·보증금 승계 여부는 확정할 수 없음을
+문구로 명시. 전세위험은 "역전세 확정"/"보증금 미반환" 등 금지 문구를
+정적 가드로 차단하고, "실제 임대인의 보증금 반환 능력은 이 데이터만으로
+판단할 수 없습니다" 고지를 화면에 항상 노출한다.
+
+**성능**: 신규 N+1 없음(row별 fetch/Unit Master 조회 전부 batch, 기존
+STATISTICS_PERFORMANCE_V1의 GLOBAL_MOLIT_CONCURRENCY=6+in-flight dedupe
+재사용). 실측: 갭투자 부산 전체 cold 44s/서울 전체 132s, 전세위험 부산
+전체 cold 53s/서울 전체 cold 150s·warm 16.2s. 서울 케이스가 기존
+decline/rising(53s/4.1s)보다 느린 것은 정직하게 보고한다 — 원인은 동일
+아키텍처의 알려진 한계(외부 API 지연 + cache-hit에도 남는 CPU 재계산
+비용, rent 데이터 밀도가 더 높아 악화)이며 이번 STEP은 correctness가
+목적이라 별도 최적화는 시도하지 않았다.
+
+**검증**: `price-ranking.test.ts` 30개 전부 PASS(회귀 없음).
+`verify-statistics-v2-1-gap-invest.ts` 21개 전부 PASS(90일 window 추가
+후에도 기존 pairing 로직 회귀 없음). 신규
+`scripts/run-statistics-v2-1-risk-gap-qa.ts`: 단위 테스트 17개 + 라이브
+API 검사(부산/서울 전체, 부산 2개 구) + 회귀 스모크 6종 전부 PASS.
+`npx tsc --noEmit`/lint 변경 파일 신규 에러 0. `npm run build` PASS.
+모바일 390px(iframe 격리 기법)/데스크톱 스모크 확인 — overflow 0, 콘솔
+에러 없음, 경고 아이콘+텍스트 병기(색상 단독 의존 없음).
+
+DB 쓰기: 없음. 스키마 변경: 없음.
+
+상태: 완료.
+
+**STATISTICS_V2_1_RISK_GAP = PASS. GAP = PASS. GAP_CLAIM = HONEST.
+SALE_JEONSE_MATCH = PASS. GAP_REGION_DRILLDOWN = PASS(동 단위는 API
+레벨만 검증). JEONSE_RISK = PASS. JEONSE_RISK_CLAIM = HONEST.
+UNSAFE_REVERSE_JEONSE_CLAIM = ABSENT. SAME_AREA = PASS. CANCELLED_EXCLUSION
+= PASS. FAKE_PYEONG = ABSENT. PYEONG = TRUSTED. SIDO_ALL = PASS.
+PARTIAL_FAILURE = DISTINGUISHED. API_ERROR_NO_DATA = DISTINGUISHED.
+PERFORMANCE = PARTIAL(신규 N+1 없음, SIDO_ALL 서울 cold/warm은 기존 한계
+그대로 — 정직하게 보고). MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
+DB_SCHEMA_CHANGE = NONE. NEXT_STEP = ChatGPT PM 판단 대기.**
