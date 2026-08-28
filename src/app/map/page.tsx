@@ -10,10 +10,18 @@ import { perfMark, perfMeasure } from '@/lib/perf-debug';
 import type { AptMarker, AptCluster } from '@/lib/map-selected-marker';
 import { buildPendingSelectedApt, resolveSelectedMarker, isPendingStillNeeded } from '@/lib/map-selected-marker';
 import { isStaleMarkerResponse, isMarkerCacheFresh } from '@/lib/map-marker-fetch-guard';
+import { formatMarkerPriceAreaLine, formatMarkerAreaLabel } from '@/lib/map-marker-format';
+import {
+  buildMapShareParams,
+  parseMapStateFromSearchParams,
+  matchRestoreIdentity,
+  type RestoreIdentity,
+} from '@/lib/map-marker-share';
 import FullPageLoader from '@/components/FullPageLoader';
 import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
 import ShareAction from '@/components/ShareAction';
+import mapMarkerStyles from './map-marker.module.css';
 
 // [DESIGN SYSTEM 3 §9] 지도 페이지는 전체화면 커스텀 UI라 Header를 아예
 // 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸 막기 위함) 하단탭바만
@@ -35,9 +43,14 @@ const apiKey =
 // 클러스터링 반경/격자 간격도 현재 확대 단계에 맞는 값을 써야 실제 렌더 크기와
 // 어긋나지 않는다.
 const DETAIL_ZOOM_LEVEL = 4; // 카카오맵 레벨(숫자가 작을수록 확대) 기준: 이 값 이하로 확대해야 단지명+실거래가 상세 카드로 전환됨
+// MAP MARKER UX V2 §12/§13 — 칩에 면적 정보가 추가되면서 내용 길이 자체는 기존
+// "3억 8,700만"류 롱폼 가격과 비슷하거나 오히려 짧아진다(compact 포맷 "3.87억"
+// 덕분) — 그래서 폭은 소폭만(60→64, 92→96) 늘리고 대신 padding을 줄여 실제
+// 밀도를 높인다. clusterRadius도 늘어난 칩 폭에 맞춰 살짝(+2) 키워 인접
+// 클러스터끼리 시각적으로 겹치지 않게 한다.
 const CHIP_LAYOUT = {
-  compact: { width: 60, height: 26, gap: 4, clusterRadius: 38 },
-  detailed: { width: 92, height: 42, gap: 6, clusterRadius: 52 },
+  compact: { width: 64, height: 26, gap: 4, clusterRadius: 40 },
+  detailed: { width: 96, height: 44, gap: 6, clusterRadius: 54 },
 };
 
 interface SchoolMarker {
@@ -73,22 +86,14 @@ const classifySchoolLevel = (name: string): SchoolMarker['level'] | null => {
 // 하는데, 이 파일 자체가 별도 서버 래퍼 없는 단일 'use client' 페이지라 이번 STEP에서
 // 그 구조를 새로 만들지 않는다(§12: map architecture 큰 변경 금지). useState의 lazy
 // initializer 안에서만 값을 읽으므로 최초 마운트 이후의 인터랙션(드래그/줌/검색)에는
-// 전혀 영향이 없다 — 공유 링크로 들어왔을 때만 시작 위치가 달라진다. selectedMarkerId
-// 복원은 aptClusters 로딩 이후에나 가능한 pending-marker 재조정 로직과 얽혀 있어 이번
-// STEP 범위에서는 하지 않는다(known limitation, 문서화).
+// 전혀 영향이 없다 — 공유 링크로 들어왔을 때만 시작 위치가 달라진다.
+// MAP MARKER UX V2 §21~24 — selectedMarkerId 복원(known limitation이었던 부분)을 이번
+// STEP에서 완성한다. 실제 파싱/매칭 로직은 src/lib/map-marker-share.ts의 순수 함수로
+// 분리해 단위 테스트한다 — 이 함수는 window.location.search를 읽어 그 함수에 넘기기만
+// 한다.
 function readInitialMapStateFromUrl() {
   if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
-  const lat = parseFloat(params.get('lat') || '');
-  const lng = parseFloat(params.get('lng') || '');
-  const zoom = parseInt(params.get('zoom') || '', 10);
-  const lawdCd = params.get('lawdCd');
-  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
-  return {
-    center: { lat, lng },
-    zoomLevel: Number.isFinite(zoom) && zoom > 0 ? zoom : 4,
-    lawdCd: lawdCd || '26140',
-  };
+  return parseMapStateFromSearchParams(new URLSearchParams(window.location.search));
 }
 
 export default function FullscreenMapPage() {
@@ -133,6 +138,28 @@ export default function FullscreenMapPage() {
     if (isPendingStillNeeded(aptClusters, pendingSelectedApt)) return;
     if (pendingSelectedApt) setPendingSelectedApt(null);
   }, [aptClusters, pendingSelectedApt]);
+  // MAP MARKER UX V2 §21~24 — 공유 링크에 aptSeq(또는 dong+name) identity가 실려
+  // 있으면(readInitialMapStateFromUrl) 최초 마운트 이후 실제 aptMarkers가 도착할
+  // 때까지 이 identity를 보관해둔다. pendingSelectedApt(fast-path 임시 마커)와
+  // 달리 좌표를 모르는 상태이므로 가짜 마커를 만들지 않고, 실제 fetch 결과 안에서
+  // "정확히 일치하는" 마커를 찾았을 때만 선택한다 — 못 찾으면 조용히 포기한다(§24
+  // wrong-apartment fallback 금지).
+  const [pendingRestoreIdentity, setPendingRestoreIdentity] = useState<RestoreIdentity | null>(
+    () => readInitialMapStateFromUrl()?.restoreIdentity ?? null
+  );
+  // §18 SELECTED ANIMATION — 선택 직후 짧은 1회 emphasis만 트리거하기 위한 상태.
+  // selectedMarkerId가 바뀔 때만 잠깐(260ms) 켜졌다 스스로 꺼진다 — 매 리렌더마다
+  // 반복 재생되지 않도록 renderMarkerChip이 아니라 이 top-level effect 하나로만
+  // 제어한다(마커별 hook 없이 안전하게 "방금 선택됨"을 판정).
+  const [justSelectedId, setJustSelectedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selectedMarkerId) return;
+    setJustSelectedId(selectedMarkerId);
+    const t = setTimeout(() => {
+      setJustSelectedId((cur) => (cur === selectedMarkerId ? null : cur));
+    }, 260);
+    return () => clearTimeout(t);
+  }, [selectedMarkerId]);
   // 현재 화면의 마커들을 조회할 때 실제로 사용한 lawdCd. 마커 클릭 시 상세페이지로 이 값을
   // 함께 넘겨야 한다 — 안 넘기면 상세페이지가 자기 자신의 하드코딩된 기본 지역(서울 강남구)으로
   // 실거래가를 조회해 엉뚱한 지역/빈 데이터가 뜨는 버그로 이어진다.
@@ -155,6 +182,14 @@ export default function FullscreenMapPage() {
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
   const [center, setCenter] = useState(() => readInitialMapStateFromUrl()?.center ?? { lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
+  // MAP MARKER UX V2 §21~24 — 공유 링크(lat/lng가 URL에 있음)로 들어왔을 때만 그
+  // lawdCd를 기억해둔다. 최초 마커 로드가 이 값을 모르면(일반 진입) 기존과 동일하게
+  // center 좌표를 역지오코딩해 lawdCd를 알아낸다 — 그런데 공유 링크로 들어왔을 때도
+  // 이 knownLawdCd를 안 넘기면, 역지오코딩 결과가 원래 공유했던 lawdCd와 정확히
+  // 일치하지 않을 수 있어(행정구역 경계 근처 좌표 등) 공유된 아파트가 그 결과에
+  // 아예 없는 지역으로 잘못 조회될 수 있다 — selected identity 복원(matchRestoreIdentity)
+  // 이 애초에 매칭될 기회조차 갖지 못하는 문제로 이어진다.
+  const initialShareLawdCdRef = useRef(readInitialMapStateFromUrl()?.lawdCd ?? null);
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
     apt: true,
     officetel: false,
@@ -164,6 +199,17 @@ export default function FullscreenMapPage() {
     school: false,
   });
   const mapRef = useRef<any>(null);
+
+  // MAP MARKER UX V2 §21~24 — pendingRestoreIdentity(위에서 URL로부터 초기화)를
+  // 실제 aptMarkers fetch가 끝난 뒤 한 번만 시도해서 매칭한다. isLoadingData가
+  // false로 바뀐 시점(=fetchAptMarkers의 finally가 실행된 시점)에만 검사해야
+  // 최초 마운트 시 아직 비어있는 aptMarkers([])를 "못 찾음"으로 오판하지 않는다.
+  useEffect(() => {
+    if (!pendingRestoreIdentity || isLoadingData) return;
+    const match = matchRestoreIdentity(pendingRestoreIdentity, aptMarkers);
+    if (match) setSelectedMarkerId(match.id);
+    setPendingRestoreIdentity(null);
+  }, [pendingRestoreIdentity, isLoadingData, aptMarkers]);
 
   useEffect(() => {
     if (!apiKey) return;
@@ -268,13 +314,22 @@ export default function FullscreenMapPage() {
 
         // 단지별(name+dong) 최신 거래 1건만 남긴다 — 같은 단지의 여러 거래가 마커로
         // 중복 표시되는 것을 막는다. data는 이미 route.ts에서 계약일 최신순 정렬됨.
+        // MAP MARKER UX V2 §7/§29 — 해제(취소)된 거래는 대표 거래 후보에서 제외한다.
+        // route.ts는 dealCanceled를 필터링하지 않고 그대로 내려주므로(다른 소비자들은
+        // 각자 필터링), 이 페이지가 "최신 거래"를 고를 때 취소 건을 건너뛰지 않으면
+        // 취소된 가격이 마커에 뜨는 문제가 있었다 — 취소 건은 건너뛰어 그 다음(취소
+        // 아닌) 최신 거래가 자연스럽게 대표가 되게 한다.
         const byComplex = new Map<string, any>();
         for (const item of data) {
           if (!item.lat || !item.lng) continue;
+          if (item.dealCanceled) continue;
           const key = `${item.dong}|${item.name}`;
           if (!byComplex.has(key)) byComplex.set(key, item);
         }
 
+        // §4/§8 — pyeong(trustworthy Unit Master만, route.ts가 이미 검증)과
+        // excluUseArea(raw ㎡)/dealAmount(만원)는 대표 거래로 고른 같은 item에서
+        // 그대로 꺼낸다 — 가격과 면적이 항상 같은 거래 identity를 공유하도록 보장.
         const markers: AptMarker[] = Array.from(byComplex.values()).map((item: any) => ({
           id: item.aptSeq || `${item.dong}-${item.name}`,
           aptSeq: item.aptSeq,
@@ -283,6 +338,9 @@ export default function FullscreenMapPage() {
           dong: item.dong || '',
           price: item.price || '시세 정보 없음',
           hasRecentPrice: !!item.price,
+          dealAmount: typeof item.dealAmount === 'number' && item.dealAmount > 0 ? item.dealAmount : null,
+          pyeong: typeof item.pyung === 'number' ? item.pyung : null,
+          areaM2: typeof item.excluUseArea === 'number' ? item.excluUseArea : null,
           lat: item.lat,
           lng: item.lng,
           hasNewPost: (recentActivity[item.name] || 0) > 0,
@@ -409,11 +467,14 @@ export default function FullscreenMapPage() {
     setAptClusters(result);
   };
 
-  // 최초 지도 준비 완료 + center 확정 시 최초 1회 로드
+  // 최초 지도 준비 완료 + center 확정 시 최초 1회 로드. 공유 링크로 들어왔으면
+  // (initialShareLawdCdRef) 그 lawdCd를 그대로 써서 역지오코딩 왕복과 그로 인한
+  // lawdCd 불일치 위험을 건너뛴다 — 일반 진입은 기존과 동일하게 undefined를 넘겨
+  // 역지오코딩 경로를 그대로 탄다(회귀 없음).
   useEffect(() => {
     if (!isMapReady) return;
     setIsLoadingData(true);
-    refreshActiveLayers(center.lat, center.lng);
+    refreshActiveLayers(center.lat, center.lng, initialShareLawdCdRef.current ?? undefined);
   }, [isMapReady]);
 
   // react-kakao-maps-sdk의 <Map ref={mapRef}>는 실제 kakao.maps.Map 인스턴스를 자기 내부
@@ -465,17 +526,31 @@ export default function FullscreenMapPage() {
   const renderMarkerChip = (marker: AptMarker, selected: boolean) => {
     const currentYear = new Date().getFullYear();
     const isNewBuild = marker.completionYear ? (currentYear - marker.completionYear <= 5) : false;
+    const justSelected = justSelectedId === marker.id;
 
     const accent = marker.hasRecentPrice ? 'var(--primary-color)' : '#94a3b8';
-    
-    // Selected style (highest priority): solid dark ring, larger scale
-    // New build style: distinct background and a small badge
+
+    // MAP MARKER UX V2 §15~17 — 검은 강조(#1e293b) 링/보더를 제거하고 이집 Green
+    // fill(선택) + 연한 green halo로 교체한다. non-selected 스타일은 기존과 동일
+    // (회귀 없음).
     const highlightRing = selected
-      ? '0 0 0 3px #1e293b, 0 6px 14px rgba(0,0,0,0.22)'
+      ? '0 0 0 6px rgba(19, 163, 103, 0.18), 0 6px 14px rgba(0,0,0,0.18)'
       : '0 2px 5px rgba(0,0,0,0.12)';
-      
-    const chipBg = selected ? 'white' : (isNewBuild ? '#f0fdf4' : (marker.hasRecentPrice ? 'white' : '#f8fafc'));
-    const chipBorder = selected ? '#1e293b' : (isNewBuild ? accent : (marker.hasRecentPrice ? accent : '#cbd5e1'));
+
+    const chipBg = selected ? 'var(--ejip-green)' : (isNewBuild ? '#f0fdf4' : (marker.hasRecentPrice ? 'white' : '#f8fafc'));
+    const chipBorder = selected ? 'var(--ejip-green-deep)' : (isNewBuild ? accent : (marker.hasRecentPrice ? accent : '#cbd5e1'));
+    // 기존 compact/detailed 텍스트 색상 매핑을 그대로 유지하고(회귀 없음), 선택 시에만
+    // 검은색(#1e293b) 대신 white로 바꾼다(§15~17).
+    const compactPriceText = selected ? 'white' : (marker.hasRecentPrice ? 'var(--primary-hover)' : '#64748b');
+    const detailedNameText = selected ? 'white' : '#666';
+    const detailedPriceText = selected ? 'white' : (marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8');
+
+    // §5/§9 CORE MARKER INFORMATION CONTRACT — 가격 옆에 그 가격이 어느 면적
+    // 기준인지(평/㎡) 항상 함께 보여준다. price/area는 fetchAptMarkers에서 항상
+    // 같은 거래(item) 하나에서 함께 꺼낸 값이라 identity가 어긋나지 않는다(§8).
+    const priceAreaLine = marker.hasRecentPrice
+      ? (formatMarkerPriceAreaLine(marker.dealAmount, marker.pyeong, marker.areaM2) || marker.price)
+      : marker.price;
 
     const handleHoverEnter = () => setHoveredMarkerId(marker.id);
     const handleHoverLeave = () => setHoveredMarkerId((cur) => (cur === marker.id ? null : cur));
@@ -486,6 +561,19 @@ export default function FullscreenMapPage() {
         setSelectedMarkerId(marker.id);
       }
     };
+    // §36 ACCESSIBILITY — 마커 칩은 기존에 키보드로 전혀 접근할 수 없었다(plain
+    // div, tabIndex 없음). Enter/Space로 동일한 클릭 동작을 쓸 수 있게 하고,
+    // 선택 상태를 색상뿐 아니라 aria-pressed로도 전달한다.
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleClick();
+      }
+    };
+    const ariaLabel = marker.hasRecentPrice
+      ? `${marker.name}, ${priceAreaLine}${selected ? ', 선택됨' : ''}`
+      : `${marker.name}, 최근 실거래 정보 없음${selected ? ', 선택됨' : ''}`;
+    const popClassName = justSelected ? (isDetailed ? mapMarkerStyles.markerPopDetailed : mapMarkerStyles.markerPopCompact) : '';
 
     const newPostBadge = marker.hasNewPost ? (
       <span
@@ -525,26 +613,32 @@ export default function FullscreenMapPage() {
           onClick={handleClick}
           onMouseEnter={handleHoverEnter}
           onMouseLeave={handleHoverLeave}
+          role="button"
+          tabIndex={0}
+          aria-pressed={selected}
+          aria-label={ariaLabel}
+          onKeyDown={handleKeyDown}
+          className={`${mapMarkerStyles.markerChip} ${popClassName}`}
           style={{
             position: 'relative',
             background: chipBg,
             border: `2px solid ${chipBorder}`,
             borderRadius: '999px',
-            padding: '3px 9px',
+            padding: '2.5px 8px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             boxShadow: highlightRing,
             cursor: 'pointer',
-            transform: selected ? 'scale(1.15)' : 'scale(1)',
-            transition: 'transform 0.12s ease, box-shadow 0.12s ease, border 0.12s ease',
+            transform: selected ? 'scale(1.1)' : 'scale(1)',
+            transition: 'transform 0.12s ease, box-shadow 0.12s ease, border 0.12s ease, background 0.12s ease',
             whiteSpace: 'nowrap',
           }}
         >
           {newPostBadge}
           {newBuildBadge}
-          <span style={{ fontSize: marker.hasRecentPrice ? '0.72rem' : '0.66rem', fontWeight: 800, color: selected ? '#1e293b' : (marker.hasRecentPrice ? 'var(--primary-hover)' : '#64748b') }}>
-            {marker.price}
+          <span style={{ fontSize: marker.hasRecentPrice ? '0.68rem' : '0.64rem', fontWeight: 800, color: compactPriceText }}>
+            {priceAreaLine}
           </span>
         </div>
       );
@@ -555,11 +649,17 @@ export default function FullscreenMapPage() {
         onClick={handleClick}
         onMouseEnter={handleHoverEnter}
         onMouseLeave={handleHoverLeave}
+        role="button"
+        tabIndex={0}
+        aria-pressed={selected}
+        aria-label={ariaLabel}
+        onKeyDown={handleKeyDown}
+        className={`${mapMarkerStyles.markerChip} ${popClassName}`}
         style={{
           background: chipBg,
           border: `2px solid ${chipBorder}`,
           borderRadius: '6px',
-          padding: '4px 8px',
+          padding: '3px 7px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -567,7 +667,7 @@ export default function FullscreenMapPage() {
           cursor: 'pointer',
           position: 'relative',
           transform: selected ? 'scale(1.08)' : 'scale(1)',
-          transition: 'transform 0.12s ease, box-shadow 0.12s ease, border 0.12s ease',
+          transition: 'transform 0.12s ease, box-shadow 0.12s ease, border 0.12s ease, background 0.12s ease',
         }}
       >
         {newPostBadge}
@@ -585,16 +685,22 @@ export default function FullscreenMapPage() {
           borderTop: `6px solid ${chipBorder}`
         }} />
 
-        <span style={{ fontSize: '0.66rem', color: selected ? '#1e293b' : '#666', fontWeight: selected ? 800 : 600, whiteSpace: 'nowrap' }}>{marker.name}</span>
-        <span style={{ fontSize: marker.hasRecentPrice ? '0.9rem' : '0.7rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: selected ? '#1e293b' : (marker.hasRecentPrice ? 'var(--text-primary)' : '#94a3b8'), whiteSpace: 'nowrap' }}>
-          {marker.price}
+        <span style={{ fontSize: '0.64rem', color: detailedNameText, fontWeight: selected ? 800 : 600, whiteSpace: 'nowrap' }}>{marker.name}</span>
+        <span style={{ fontSize: marker.hasRecentPrice ? '0.84rem' : '0.7rem', fontWeight: marker.hasRecentPrice ? 800 : 600, color: detailedPriceText, whiteSpace: 'nowrap' }}>
+          {priceAreaLine}
         </span>
       </div>
     );
   };
 
-  // 컴포넌트 첫 마운트 시, 사용자 위치 가져오기
+  // 컴포넌트 첫 마운트 시, 사용자 위치 가져오기.
+  // MAP MARKER UX V2 §9-b/§23 — 공유 링크로 들어왔으면(initialShareLawdCdRef) URL의
+  // center를 그대로 유지해야 한다. 이 효과가 무조건 실행되면 GPS/IP 기반 위치로 그
+  // center를 곧바로 덮어써버려(발견: 실측 — 공유 링크 center가 GPS/IP 위치와 다른
+  // 지역이면 마운트 직후 조용히 원래 위치로 되돌아가는 회귀), "선택된 단지가 있는
+  // 지역"이 아니라 사용자의 현재 물리적 위치로 지도가 튀는 문제가 있었다.
   useEffect(() => {
+    if (initialShareLawdCdRef.current) return;
     const fallbackToIp = async () => {
       try {
         const res = await fetch('https://ipinfo.io/json');
@@ -791,14 +897,12 @@ export default function FullscreenMapPage() {
         </button>
         <ShareAction
           variant="icon"
-          title="아파트 지도 | 이집"
+          title={selectedMarker ? `${selectedMarker.name} 위치 | 이집` : '아파트 지도 | 이집'}
           text="실거래가 기반 아파트 위치를 이집 지도에서 확인하세요."
-          params={{
-            lat: String(center.lat),
-            lng: String(center.lng),
-            zoom: String(zoomLevel),
-            lawdCd: currentLawdCd,
-          }}
+          // MAP MARKER UX V2 §21~24 — 선택된 단지가 있으면 aptSeq(없으면 dong+name)
+          // identity를 함께 실어 보내 공유받은 사람이 같은 단지가 선택된 상태로 지도를
+          // 연다(buildMapShareParams가 우선순위/name-only 금지를 강제).
+          params={buildMapShareParams(center, zoomLevel, currentLawdCd, selectedMarker)}
         />
       </div>
 
@@ -851,6 +955,7 @@ export default function FullscreenMapPage() {
         onClick={() => {
           setSelectedMarkerId(null);
           setPendingSelectedApt(null);
+          setPendingRestoreIdentity(null);
         }}
       >
         {layers.apt && aptClusters.map((cluster) => {
@@ -985,14 +1090,24 @@ export default function FullscreenMapPage() {
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{selectedMarker.dong}</div>
               <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--primary-hover)', marginTop: '4px' }}>
-                {selectedMarker.hasRecentPrice ? selectedMarker.price : '최근 실거래 정보 없음'}
+                {selectedMarker.hasRecentPrice
+                  ? (formatMarkerPriceAreaLine(selectedMarker.dealAmount, selectedMarker.pyeong, selectedMarker.areaM2) || selectedMarker.price)
+                  : '최근 실거래 정보 없음'}
               </div>
+              {/* §25 AREA LABEL COLLISION — 마커/칩에는 대표 평형만 보이므로, 카드에서는
+                  같은 거래의 raw ㎡도 함께 확인할 수 있게 한다. */}
+              {selectedMarker.hasRecentPrice && selectedMarker.pyeong != null && selectedMarker.areaM2 != null && (
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  전용 {selectedMarker.areaM2}㎡
+                </div>
+              )}
             </div>
             <button
               type="button"
               onClick={() => {
                 setSelectedMarkerId(null);
                 setPendingSelectedApt(null);
+                setPendingRestoreIdentity(null);
               }}
               aria-label="닫기"
               style={{ padding: '0.4rem', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.1rem', cursor: 'pointer', flexShrink: 0 }}

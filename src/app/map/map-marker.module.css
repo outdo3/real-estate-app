@@ -1,0 +1,55 @@
+/* MAP MARKER UX V2 §18/§36 — 선택 직후 1회성 pop 애니메이션과 키보드 focus 링.
+   지도 마커는 CustomOverlayMap 안에 인라인 style로 그려지므로(별도 CSS 모듈이
+   기존에 없었음) 이 파일은 인라인으로 표현할 수 없는 두 가지(키프레임 애니메이션,
+   :focus-visible 의사클래스)만 담당한다 — 나머지 색상/크기는 그대로 인라인 유지. */
+
+/* compact/detailed 칩의 steady-state selected scale(1.1 / 1.08)과 애니메이션의
+   마지막 프레임이 어긋나면 애니메이션 종료 시 순간적으로 크기가 튀어 보이므로,
+   CSS 커스텀 프로퍼티 대신 tier별로 별도 키프레임을 둔다. */
+@keyframes ejipMarkerPopCompact {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.16);
+  }
+  100% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes ejipMarkerPopDetailed {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1.08);
+  }
+}
+
+.markerPopCompact {
+  animation: ejipMarkerPopCompact 0.24s ease-out;
+}
+
+.markerPopDetailed {
+  animation: ejipMarkerPopDetailed 0.24s ease-out;
+}
+
+/* 마우스로 선택했을 때의 scale은 인라인 style(transform)로 이미 표현되므로,
+   포인터 selected 상태와 키보드 focus 상태를 색상뿐 아니라 별도 링으로도
+   구분한다(§36 — 색상만으로 상태 전달 금지, pointer selected와 keyboard focus
+   구분). */
+.markerChip:focus-visible {
+  outline: 2px solid var(--ejip-green-deep);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .markerPopCompact,
+  .markerPopDetailed {
+    animation: none;
+  }
+}

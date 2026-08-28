@@ -10318,3 +10318,65 @@ STATISTICS_SHARE = PASS. APARTMENT_SHARE = PASS. MAP_SHARE = PARTIAL
 PASS. URL_STATE_PRESERVATION = PARTIAL(통계 지역만, 지도 center/zoom/
 lawdCd만). MOBILE = PASS. DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE
 = NONE. NEXT_STEP = MAP_MARKER_UX_V2 / ChatGPT PM 판단 대기.**
+
+## 2026-08-28
+
+### STEP — MAP MARKER UX V2
+
+지도 가격 마커에 면적/평형을 붙이고, 검은 selected 강조를 이집 Green으로
+교체하고, GLOBAL SHARE SYSTEM V1이 미완으로 남긴 selected marker 공유/복원을
+완성했다. 상세 근거는 `docs/development/MAP_MARKER_UX_V2.md` 참고.
+
+**배경**: 사용자가 호갱노노/아실/네이버부동산과 비교해 "이집 지도는 가격만
+보이고 몇 평 가격인지 알 수 없다"고 지적. 감사 결과 `/api/transactions`는
+이미 trustworthy pyeong(Unit Master 기반)·raw ㎡·거래유형·날짜를 응답에
+포함하고 있었는데, `map/page.tsx`의 `fetchAptMarkers`가 이를 버리고
+가격만 `AptMarker`에 담고 있었다 — 새 API/새 DB 조인 없이 필드 3개
+(dealAmount/pyeong/areaM2)만 통과시켜 해결했다.
+
+**마커 정보**: `src/lib/map-marker-format.ts`(신규)의 `formatCompactPriceManwon`
+이 1억 이상을 "3.87억"류로 압축하고, `formatMarkerAreaLabel`은 trustworthy
+pyeong이 있으면 "34평", 없으면 raw ㎡("84㎡")만 보여준다(exclusiveArea/3.3058
+계산 없음, 정적 가드로 재도입 방지). 압축 포맷 덕분에 새 "면적+가격" 텍스트가
+기존 "3억 8,700만"류 롱폼 가격 하나보다 짧거나 비슷해, 칩 폭을 소폭(60→64,
+92→96px)만 키우면서도 정보량은 늘었다. 감사 중 지도만 취소(dealCanceled)
+거래를 걸러내지 않고 있던 것도 함께 고쳤다(다른 모든 `/api/transactions`
+소비자는 이미 필터링 중이었음).
+
+**Selected marker**: `#1e293b`(검정) 링/보더를 제거하고 이집 Green fill +
+연한 halo(`rgba(19,163,103,0.18)`)로 교체, scale 8~10%로 축소(기존 15%).
+마커 칩에 `role="button"`/`tabIndex`/`aria-pressed`/키보드 핸들러를 추가해
+기존에 전혀 없던 키보드 접근성도 함께 확보했다.
+
+**Share 복원 완성**: `src/lib/map-marker-share.ts`(신규)가 selected 마커의
+`aptSeq`(우선) 또는 `dong`+`name`(name-only 금지)을 공유 URL에 싣고, 실제
+fetch된 마커 배열 안에서 정확히 일치할 때만 복원한다(wrong-apartment
+fallback 없음). 구현 중 GLOBAL SHARE SYSTEM V1에 잠재해 있던 선행 버그 2건을
+발견해 함께 고쳤다 — (1) 최초 마운트 시 마커 fetch가 URL의 lawdCd를 전혀
+안 쓰고 항상 좌표를 재역지오코딩해 공유했던 지역과 다른 지역이 조회될 수
+있었음, (2) "첫 마운트 시 GPS 위치 가져오기" effect가 무조건 실행돼 공유
+링크로 복원한 center를 마운트 직후 조용히 덮어썼음. 둘 다 공유 링크로 들어온
+경우에만 우회하도록 가드를 추가해 회귀 없이 고쳤다.
+
+**검증**: 신규 `scripts/run-map-marker-ux-v2-qa.ts` 29개 체크(포맷터/공유
+파라미터/복원 매칭 단위 테스트 + 정적 가드 5종 + 라이브 회귀) 전부 PASS.
+브라우저로 대신롯데캐슬 검색→선택→공유→새 진입 복원까지 전 구간 확인,
+부산 서구/연제구/해운대구 3개 구에서 마커 밀도 실측(고유 단지 138/206/277건
+중 zoom=4 뷰포트에 45/37/31건 렌더, 겹침 없이 판독 가능) — 서울 강남구는
+`ApartmentMaster` 좌표 커버리지가 없어(기존 제약) 비교 대상에서 정직하게
+제외.
+
+DB 쓰기: 없음. 스키마 변경: 없음. 신규 API/외부 fetch: 없음(기존 배치
+fetch의 응답 필드만 추가로 사용). 학교 마커/레이어 토글/드래그/줌 등
+미변경 기능: 회귀 없음.
+
+상태: 완료.
+
+**MAP_MARKER_UX_V2 = PASS. PRICE_AREA_CONTEXT = PASS. TRUSTED_PYEONG =
+PASS. FAKE_PYEONG = ABSENT. COMPACT_PRICE = PASS. MARKER_DENSITY =
+IMPROVED. BLACK_SELECTED_OUTLINE = REMOVED. SELECTED_MARKER_UX = PASS.
+SEARCH_SELECTION = PASS. SHARED_SELECTED_STATE = PASS.
+WRONG_APARTMENT_RESTORE = ABSENT. N_PLUS_ONE = ABSENT. MOBILE = PASS
+(정확한 360/375/390 뷰포트 재현은 도구 제약으로 완전히 독립 보장 못함,
+문서 §15/§20 참고). DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE.
+NEXT_STEP = 84SQM_RANKING / FIX_MAP_MARKER_UX.**

@@ -10,6 +10,14 @@ export interface AptMarker {
   dong: string;
   price: string;
   hasRecentPrice: boolean; // 최근 거래(가격) 유무 — 없으면 "시세 정보 없음"으로 폴백 표시
+  // MAP MARKER UX V2 §4/§8 — 마커가 대표하는 거래의 만원 단위 가격/면적. 항상
+  // 같은 거래(item) 하나에서 함께 꺼내야 price/area identity가 어긋나지 않는다.
+  // dealAmount는 compact 가격 포맷(map-marker-format.ts)의 입력, pyeong은
+  // trustworthy Unit Master 값만(없으면 null, 절대 exclusiveArea/3.3058로 계산
+  // 하지 않음), areaM2는 pyeong이 없을 때의 raw ㎡ 폴백.
+  dealAmount: number | null;
+  pyeong: number | null;
+  areaM2: number | null;
   lat: number;
   lng: number;
   hasNewPost?: boolean;
@@ -47,6 +55,9 @@ export function buildPendingSelectedApt(result: ApartmentSelectResultForMarker):
     dong: result.dong || '',
     price: '시세 정보 없음',
     hasRecentPrice: false,
+    dealAmount: null,
+    pyeong: null,
+    areaM2: null,
     lat: result.lat,
     lng: result.lng,
     hasNewPost: false,
