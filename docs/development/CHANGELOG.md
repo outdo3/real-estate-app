@@ -10261,3 +10261,60 @@ DB persisted 캐시가 identity 우선순위를 그대로 따름). 대신롯데�
 PASS(8건 보존, 34평 collision 포함, 평 모드 실브라우저 확인). 
 DETAIL_REGRESSION = PASS. FAKE_PYEONG = ABSENT. BUILD = PASS.
 DB_SCHEMA_CHANGE = NONE. NEXT_STEP = ChatGPT PM 판단 대기.**
+
+## 2026-08-28
+
+### STEP — GLOBAL SHARE SYSTEM V1
+
+이집 전역에 공통 공유 시스템을 만들었다. 상세 근거는
+`docs/development/GLOBAL_SHARE_SYSTEM_V1.md` 참고.
+
+**배경**: 아파트 상세/학교 상세에는 카카오 공유가 있었지만 지도/통계
+17개 subtype/분양/재개발/AI검색에는 공유 기능이 아예 없었고, 페이지마다
+따로 만들면 유지보수가 갈라진다.
+
+**구조**: `src/lib/share/shareUtils.ts`(SDK 로더/URL 조합/클립보드/
+네이티브 공유 순수 함수) → `src/hooks/useSharePage.ts`(우선순위: 네이티브
+공유 → 카카오 카드(브랜드 공용 이미지 재사용) → 클립보드) →
+`src/components/ShareAction.tsx`(compact/icon variant). 기존
+`KakaoShareButton`(아파트 상세 Hero/StickyActionBar/학교 상세)은 겉모습/
+props/카카오 우선 순서를 전혀 바꾸지 않고 내부 로직만 `shareUtils.ts`로
+옮겨 재사용했다 — 회귀 없는 리팩터링.
+
+**적용 범위**: 지도(아이콘 버튼, 상단 컨트롤 바), 통계 17개 subtype 중
+`status: 'live'` 10개(`shareContext.ts`의 공통 헬퍼 하나로 전부 커버,
+'soon' placeholder는 제외), 분양 상세, 재개발 상세, 커뮤니티 게시글
+상세, AI 검색 결과(결과 있을 때만). Home/통계 landing/학교·재개발 목록/
+`/my`/admin/로그인/글쓰기 화면은 진입점·개인·관리자 화면이라 의도적으로
+제외했다(문서 §4).
+
+**URL 상태 보존**: 아파트 상세/AI검색은 이미 지역이 URL에 있어 그대로
+공유된다. 통계는 지역이 client-only RegionContext에만 있어(감사 결과)
+공유 시 `sido/sidoCode/sigungu/dong/lawdCd`를 쿼리스트링에 실어 보내고,
+`stats/[type]/page.tsx`를 Suspense로 감싼 뒤 `type-client.tsx`가
+`useSearchParams()`로 최초 진입 시 한 번 복원한다. 지도는 별도 서버
+래퍼가 없는 단일 client 페이지라 `KakaoShareButton`이 이미 쓰던 관례
+(`window.location.search` 직접 읽기)로 `center/zoomLevel/lawdCd`를
+lazy initializer에서 복원한다 — 둘 다 브라우저로 실제 지역 전환/지도
+재중심 확인 완료. 지도 `selectedMarkerId`는 pending-marker 재조정
+로직과 얽혀 있어 이번 범위에서 제외(known limitation, 다음 STEP인 MAP
+MARKER UX V2와 충돌 방지).
+
+**QA**: lint 1차 실행에서 `useSharePage.ts`가 렌더 중 ref를 읽는
+`react-hooks/refs` 오류를 냈고, `useEffect`로 옮겨 수정(재검사 0
+errors). 브라우저로 아파트 상세/지도/통계 5개 subtype/분양 상세/재개발
+상세/AI검색 결과를 직접 클릭해 콘솔 오류 없이 동작(클립보드 폴백은
+Kakao SDK를 임시 비활성화해 별도로 강제 검증) 확인. 커뮤니티는 시드
+게시글 부재+AuthGate로 실클릭까지는 확인 못 함(문서 §17/§18에 기록).
+
+DB 쓰기: 없음. 스키마 변경: 없음. 기존 카카오 공유 3개 호출부: 회귀
+없음. 새 서버 fetch: 없음(전부 client-side).
+
+상태: 완료.
+
+**GLOBAL_SHARE_SYSTEM_V1 = PASS. PUBLIC_PAGE_COVERAGE = COMPLETE.
+STATISTICS_SHARE = PASS. APARTMENT_SHARE = PASS. MAP_SHARE = PARTIAL
+(selectedMarkerId 미복원). NATIVE_SHARE = PASS. CLIPBOARD_FALLBACK =
+PASS. URL_STATE_PRESERVATION = PARTIAL(통계 지역만, 지도 center/zoom/
+lawdCd만). MOBILE = PASS. DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE
+= NONE. NEXT_STEP = MAP_MARKER_UX_V2 / ChatGPT PM 판단 대기.**

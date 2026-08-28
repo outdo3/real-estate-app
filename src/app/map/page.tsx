@@ -13,6 +13,7 @@ import { isStaleMarkerResponse, isMarkerCacheFresh } from '@/lib/map-marker-fetc
 import FullPageLoader from '@/components/FullPageLoader';
 import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
+import ShareAction from '@/components/ShareAction';
 
 // [DESIGN SYSTEM 3 §9] 지도 페이지는 전체화면 커스텀 UI라 Header를 아예
 // 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸 막기 위함) 하단탭바만
@@ -66,6 +67,30 @@ const classifySchoolLevel = (name: string): SchoolMarker['level'] | null => {
   return null;
 };
 
+// GLOBAL SHARE SYSTEM V1 §12/§27 — 지도 center/zoom/lawdCd는 client-only state라 URL에
+// 없다(감사 결과). 이 페이지는 useSearchParams() 훅 대신 KakaoShareButton과 동일한 관례로
+// window.location.search를 직접 읽는다 — useSearchParams()는 페이지를 Suspense로 감싸야
+// 하는데, 이 파일 자체가 별도 서버 래퍼 없는 단일 'use client' 페이지라 이번 STEP에서
+// 그 구조를 새로 만들지 않는다(§12: map architecture 큰 변경 금지). useState의 lazy
+// initializer 안에서만 값을 읽으므로 최초 마운트 이후의 인터랙션(드래그/줌/검색)에는
+// 전혀 영향이 없다 — 공유 링크로 들어왔을 때만 시작 위치가 달라진다. selectedMarkerId
+// 복원은 aptClusters 로딩 이후에나 가능한 pending-marker 재조정 로직과 얽혀 있어 이번
+// STEP 범위에서는 하지 않는다(known limitation, 문서화).
+function readInitialMapStateFromUrl() {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const lat = parseFloat(params.get('lat') || '');
+  const lng = parseFloat(params.get('lng') || '');
+  const zoom = parseInt(params.get('zoom') || '', 10);
+  const lawdCd = params.get('lawdCd');
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+  return {
+    center: { lat, lng },
+    zoomLevel: Number.isFinite(zoom) && zoom > 0 ? zoom : 4,
+    lawdCd: lawdCd || '26140',
+  };
+}
+
 export default function FullscreenMapPage() {
   const router = useRouter();
 
@@ -75,7 +100,8 @@ export default function FullscreenMapPage() {
   // 초기 진입 시 마커가 너무 빽빽하게 겹쳐 보이는 문제(레벨 6은 화면 안에 너무 넓은
   // 지역이 들어와 단지 밀집 지역에서 칩이 서로 겹침) — 레벨 4로 1~2단계 더 확대해
   // 시작하면 DETAIL_ZOOM_LEVEL(4) 기준 상세 카드 모드로 시작해 칩 간격이 넉넉해진다.
-  const [zoomLevel, setZoomLevel] = useState(4);
+  // 공유 링크로 lat/lng/zoom이 왔으면(readInitialMapStateFromUrl) 그 값을 우선한다.
+  const [zoomLevel, setZoomLevel] = useState(() => readInitialMapStateFromUrl()?.zoomLevel ?? 4);
   // [MAP-FIX] 이전에는 hover와 click이 같은 selectedMarkerId 하나를 공유해서, PC에서
   // 마커에 마우스를 올리면 바텀시트가 뜨지만 마우스를 마커 밖(바텀시트 쪽)으로 옮기는
   // 순간 onMouseLeave가 곧바로 selectedMarkerId를 지워버려 "상세보기"를 누르기 전에
@@ -110,7 +136,7 @@ export default function FullscreenMapPage() {
   // 현재 화면의 마커들을 조회할 때 실제로 사용한 lawdCd. 마커 클릭 시 상세페이지로 이 값을
   // 함께 넘겨야 한다 — 안 넘기면 상세페이지가 자기 자신의 하드코딩된 기본 지역(서울 강남구)으로
   // 실거래가를 조회해 엉뚱한 지역/빈 데이터가 뜨는 버그로 이어진다.
-  const [currentLawdCd, setCurrentLawdCd] = useState('26140');
+  const [currentLawdCd, setCurrentLawdCd] = useState(() => readInitialMapStateFromUrl()?.lawdCd ?? '26140');
   // MAP_SURROUNDING_MARKER_PERFORMANCE_V1 §14/§15 — 빠르게 연속으로 지역이 바뀌면(드래그
   // 두 번 연속 등) 먼저 보낸 요청의 응답이 나중에 보낸 요청보다 늦게 도착해 화면을 잘못된
   // 지역 마커로 덮어쓸 수 있다. 매 fetchAptMarkers 호출마다 증가하는 순번을 발급해, 응답이
@@ -128,7 +154,7 @@ export default function FullscreenMapPage() {
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
-  const [center, setCenter] = useState({ lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
+  const [center, setCenter] = useState(() => readInitialMapStateFromUrl()?.center ?? { lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
     apt: true,
     officetel: false,
@@ -763,6 +789,17 @@ export default function FullscreenMapPage() {
         >
           📍 내 위치
         </button>
+        <ShareAction
+          variant="icon"
+          title="아파트 지도 | 이집"
+          text="실거래가 기반 아파트 위치를 이집 지도에서 확인하세요."
+          params={{
+            lat: String(center.lat),
+            lng: String(center.lng),
+            zoom: String(zoomLevel),
+            lawdCd: currentLawdCd,
+          }}
+        />
       </div>
 
       {/* 우측 세로 카테고리 플로팅 바: 예전에는 상단을 가로로 가리던 걸 오른쪽 세로 알약

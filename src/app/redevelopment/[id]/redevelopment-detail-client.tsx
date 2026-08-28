@@ -4,6 +4,7 @@ import React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import Header from '@/components/Header';
+import ShareAction from '@/components/ShareAction';
 import {
   BUSINESS_TYPE_LABELS,
   STAGE_LABELS,
@@ -93,8 +94,12 @@ export default function RedevelopmentDetailClient() {
         ) : (
           <>
             <div className={styles.heroCard}>
-              <div className={styles.heroTitleRow}>
+              <div className={styles.heroTitleRow} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
                 <h1 className={styles.heroTitle}>{detail.canonicalName}</h1>
+                <ShareAction
+                  title={`${detail.canonicalName} | 이집`}
+                  text={`${sidoShortLabel(detail.sido)} ${detail.sigungu} 재개발·재건축 정보`}
+                />
               </div>
               <div className={styles.badgeRow}>
                 <span className={`${styles.badge} ${styles.badgeType}`}>

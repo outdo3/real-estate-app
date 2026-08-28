@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
@@ -11,8 +12,10 @@ import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/Apart
 import SectionHeader from '@/components/ui/SectionHeader';
 import Empty from '@/components/ui/Empty';
 import InlineLoading from '@/components/ui/InlineLoading';
+import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
 import { getStatsMenuItem } from '../statsMenu';
+import { buildStatsShareContext } from './shareContext';
 import TransactionFeedView from '@/components/stats/TransactionFeedView';
 import PriceRankingView from '@/components/stats/PriceRankingView';
 import ConcentrationView from '@/components/stats/ConcentrationView';
@@ -274,9 +277,30 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
 }
 
 export default function StatsTypeClient({ slug }: { slug: string }) {
-  const { region, openRegionModal } = useRegion();
+  const { region, setRegion, openRegionModal } = useRegion();
+  const searchParams = useSearchParams();
   const item = getStatsMenuItem(slug);
+
+  // GLOBAL SHARE SYSTEM V1 §6/§27 — 통계 지역 필터는 RegionContext(client-only state)에만
+  // 있고 URL에는 없다(감사 결과). 공유 링크(buildStatsShareContext가 만든 ?sido=&sigungu=
+  // 등)로 들어온 경우 최초 진입 시 한 번 RegionContext에 반영해, 받은 사람이 보낸 사람과
+  // 같은 지역을 보게 한다. RegionContext 자체의 GPS/기본값 로직은 건드리지 않는다 — 이
+  // 화면에 도착했을 때만 URL 값이 있으면 우선 적용한다.
+  useEffect(() => {
+    const sido = searchParams.get('sido');
+    const sidoCode = searchParams.get('sidoCode');
+    if (!sido || !sidoCode) return;
+    const sigungu = searchParams.get('sigungu') || '';
+    const dong = searchParams.get('dong') || 'all';
+    const lawdCd = searchParams.get('lawdCd');
+    const displayRegionName =
+      dong !== 'all' ? dong : sigungu ? `${sido} ${sigungu} 동 전체` : `${sido} 전체`;
+    setRegion({ lawdCd: lawdCd || null, sidoCode, dong, sido, sigungu, displayRegionName });
+  }, []);
+
   if (!item) return null;
+
+  const shareContext = buildStatsShareContext(item, region);
 
   return (
     <div className={styles.main}>
@@ -290,6 +314,9 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
             <span>{region.displayRegionName}</span>
             <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
           </button>
+          {item.status === 'live' && (
+            <ShareAction title={shareContext.title} text={shareContext.text} params={shareContext.params} />
+          )}
         </div>
 
         {item.status === 'soon' ? (

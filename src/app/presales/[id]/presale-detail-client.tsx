@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Header from '@/components/Header';
+import ShareAction from '@/components/ShareAction';
 import NearbyMarketSection, { type NearbyMarketApiResponse } from './nearby-market-section';
 import PresaleNearbyMap from './presale-nearby-map';
 import styles from './page.module.css';
@@ -178,7 +179,13 @@ export default function PresaleDetailClient() {
           <>
             {/* A. 상단 핵심 요약 */}
             <section className={styles.summarySection}>
-              <h1 className={styles.title}>{presale.houseName}</h1>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
+                <h1 className={styles.title}>{presale.houseName}</h1>
+                <ShareAction
+                  title={`${presale.houseName} 분양정보 | 이집`}
+                  text={presale.subscriptionAreaName ? `${presale.subscriptionAreaName} 분양가·일정 정보` : '분양가·일정 정보'}
+                />
+              </div>
               <div className={styles.metaRow}>
                 <span className={`${styles.badge} ${STATUS_BADGE_CLASS[presale.status]}`}>{STATUS_LABEL[presale.status]}</span>
                 <span className={styles.region}>{presale.subscriptionAreaName || '지역 정보 없음'}</span>

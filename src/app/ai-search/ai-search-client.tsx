@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Header from '@/components/Header';
 import FullPageLoader from '@/components/FullPageLoader';
+import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
 import styles from './ai-search-client.module.css';
 
@@ -204,10 +205,17 @@ export default function AiSearchClient() {
         {!loading && !error && result && (
           <div className={styles.resultArea}>
             <div className={styles.briefingBox}>
-              <span className={styles.briefingLabel}>
-                <img src="/brand/mascot/ejipy-analyze.webp" alt="" className={styles.briefingIcon} />
-                AI 브리핑
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <span className={styles.briefingLabel}>
+                  <img src="/brand/mascot/ejipy-analyze.webp" alt="" className={styles.briefingIcon} />
+                  AI 브리핑
+                </span>
+                <ShareAction
+                  variant="icon"
+                  title={`${searchParams.get('q') || initialQ} AI 검색 결과 | 이집`}
+                  text={result.briefing}
+                />
+              </div>
               <p className={styles.briefingText}>{result.briefing}</p>
             </div>
 

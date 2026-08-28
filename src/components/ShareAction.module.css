@@ -1,0 +1,95 @@
+/* GLOBAL SHARE SYSTEM V1 — KakaoShareButton.module.css의 compact 알약 버튼 스타일을
+   그대로 재사용해 이집 전역에서 공유 버튼이 동일한 시각언어를 갖게 한다. */
+.compactBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0.55rem 0.95rem;
+  background: var(--ejip-green);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, transform 0.05s ease;
+}
+
+.compactBtn:hover {
+  background: var(--ejip-green-deep);
+}
+
+.compactBtn:active {
+  transform: scale(0.97);
+}
+
+.compactBtn:focus-visible {
+  outline: 2px solid var(--ejip-green-deep);
+  outline-offset: 2px;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* icon variant — 지도처럼 기존 플로팅 컨트롤 바(흰 알약 버튼) 옆에 자연스럽게 붙는 자리용.
+   공유는 보조 액션이라(§17) 브랜드 그린을 강조색이 아니라 hover/focus 상태에만 쓴다. */
+.iconWrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.iconBtn:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.iconBtn:active {
+  transform: scale(0.96);
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid var(--ejip-green-deep);
+  outline-offset: 2px;
+}
+
+.iconBtn .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.toast {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  background: rgba(30, 41, 59, 0.92);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}

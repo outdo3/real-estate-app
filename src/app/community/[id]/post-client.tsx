@@ -7,6 +7,7 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
+import ShareAction from '@/components/ShareAction';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -112,6 +113,11 @@ export default function PostDetailPage() {
                     </div>
                   </div>
                   <div className={styles.postActions}>
+                    <ShareAction
+                      variant="icon"
+                      title={`${post.title} | 이집`}
+                      text={post.aptName ? `${post.aptName} 관련 이집 커뮤니티 게시글` : '이집 커뮤니티 게시글'}
+                    />
                     {isAdmin && (
                       <button className={styles.actionBtn} onClick={handleTogglePin}>
                         {post.pinned ? '고정 해제' : '상단 고정'}
