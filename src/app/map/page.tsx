@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
@@ -17,6 +17,12 @@ import {
   matchRestoreIdentity,
   type RestoreIdentity,
 } from '@/lib/map-marker-share';
+import {
+  computeSafeZoneNudge,
+  computeNudgedCenterPoint,
+  type SafeZoneRect,
+  type Nudge,
+} from '@/lib/map-control-safe-zone';
 import FullPageLoader from '@/components/FullPageLoader';
 import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
@@ -199,6 +205,34 @@ export default function FullscreenMapPage() {
     school: false,
   });
   const mapRef = useRef<any>(null);
+
+  // MAP UI POLISH V1 §7~10 — 검색+공유 상단 바(top)와 우측 세로 레이어 토글(right)을
+  // "control safe zone"으로 측정해둔다. 실제 DOM rect 기반(하드코딩 없음), mount와
+  // 창 크기 변경 시에만 다시 재는다(§30 — scroll/mousemove마다 재는 layout thrash
+  // 금지). 두 요소 다 지도 컨테이너(mapViewportRef)와 같은 뷰포트 전체 영역 안에
+  // absolute로 배치돼 있어, viewport-relative rect에서 컨테이너 원점만 빼면 바로
+  // projection의 container-point 좌표계와 일치한다.
+  const mapViewportRef = useRef<HTMLDivElement | null>(null);
+  const topControlRowRef = useRef<HTMLDivElement | null>(null);
+  const rightControlRef = useRef<HTMLDivElement | null>(null);
+  const [safeZoneRects, setSafeZoneRects] = useState<{ top: SafeZoneRect | null; right: SafeZoneRect | null }>({ top: null, right: null });
+  const [clusterNudges, setClusterNudges] = useState<Map<string, Nudge>>(new Map());
+
+  useEffect(() => {
+    const measure = () => {
+      const origin = mapViewportRef.current?.getBoundingClientRect();
+      if (!origin) return;
+      const toRelative = (el: HTMLDivElement | null): SafeZoneRect | null => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left - origin.left, top: r.top - origin.top, right: r.right - origin.left, bottom: r.bottom - origin.top };
+      };
+      setSafeZoneRects({ top: toRelative(topControlRowRef.current), right: toRelative(rightControlRef.current) });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isLoadingData, isMapReady]);
 
   // MAP MARKER UX V2 §21~24 — pendingRestoreIdentity(위에서 URL로부터 초기화)를
   // 실제 aptMarkers fetch가 끝난 뒤 한 번만 시도해서 매칭한다. isLoadingData가
@@ -442,6 +476,13 @@ export default function FullscreenMapPage() {
 
     const used = new Array(points.length).fill(false);
     const result: AptCluster[] = [];
+    // MAP UI POLISH V1 §7/§8 — 클러스터별로 이미 계산해둔 화면 픽셀 평균 위치(avgX/avgY)
+    // 를 그대로 재사용해 top/right control safe-zone과 겹치는지 판정하고, 겹치면
+    // 최소한만 밀어내는 오프셋을 함께 계산해둔다(clustering 반경/그룹핑 로직 자체는
+    // 전혀 바뀌지 않음 — §17 "clustering algorithm 광범위 rewrite 금지"). 이 오프셋은
+    // 렌더링 시 CSS 위치에만 더해지고 marker의 실제 lat/lng/식별자는 그대로다(§9 —
+    // 데이터를 지우거나 바꾸지 않음).
+    const nudges = new Map<string, Nudge>();
 
     points.forEach((p, i) => {
       if (used[i]) return;
@@ -456,16 +497,48 @@ export default function FullscreenMapPage() {
       });
       const avgLat = group.reduce((s, g) => s + g.marker.lat, 0) / group.length;
       const avgLng = group.reduce((s, g) => s + g.marker.lng, 0) / group.length;
+      const avgX = group.reduce((s, g) => s + g.x, 0) / group.length;
+      const avgY = group.reduce((s, g) => s + g.y, 0) / group.length;
+      const clusterId = group.map((g) => g.marker.id).join(',');
       result.push({
-        id: group.map((g) => g.marker.id).join(','),
+        id: clusterId,
         lat: avgLat,
         lng: avgLng,
         markers: group.map((g) => g.marker),
       });
+      nudges.set(
+        clusterId,
+        computeSafeZoneNudge({ x: avgX, y: avgY }, chipLayout.width / 2, chipLayout.height / 2, safeZoneRects.top, safeZoneRects.right)
+      );
     });
 
     setAptClusters(result);
+    setClusterNudges(nudges);
   };
+
+  // §14 SELECTED MARKER FAST PATH 전용 — pendingSelectedApt는 aptClusters에 속하지
+  // 않아 위에서 미리 계산한 clusterNudges에 없다. mapRef.current를 읽으므로(ref) 렌더
+  // 중에는 절대 호출하지 않고(react-hooks/refs), pendingSelectedApt가 바뀔 때만 아래
+  // effect 안에서 한 번 계산해 state(pendingNudge)에 저장한다 — 렌더는 그 state만 읽는다.
+  const getNudgeForLatLng = useCallback(
+    (lat: number, lng: number): Nudge => {
+      const map = mapRef.current;
+      if (!map || !window.kakao?.maps) return { dx: 0, dy: 0 };
+      const projection = map.getProjection();
+      if (!projection) return { dx: 0, dy: 0 };
+      const p = projection.containerPointFromCoords(new window.kakao.maps.LatLng(lat, lng));
+      return computeSafeZoneNudge({ x: p.x, y: p.y }, chipLayout.width / 2, chipLayout.height / 2, safeZoneRects.top, safeZoneRects.right);
+    },
+    [chipLayout.width, chipLayout.height, safeZoneRects]
+  );
+  const [pendingNudge, setPendingNudge] = useState<Nudge>({ dx: 0, dy: 0 });
+  useEffect(() => {
+    if (!pendingSelectedApt) {
+      setPendingNudge({ dx: 0, dy: 0 });
+      return;
+    }
+    setPendingNudge(getNudgeForLatLng(pendingSelectedApt.lat, pendingSelectedApt.lng));
+  }, [pendingSelectedApt, getNudgeForLatLng]);
 
   // 최초 지도 준비 완료 + center 확정 시 최초 1회 로드. 공유 링크로 들어왔으면
   // (initialShareLawdCdRef) 그 lawdCd를 그대로 써서 역지오코딩 왕복과 그로 인한
@@ -513,7 +586,7 @@ export default function FullscreenMapPage() {
     return () => {
       window.kakao.maps.event.removeListener(map, 'idle', handleIdle);
     };
-  }, [mapInstanceReady, aptMarkers, zoomLevel]);
+  }, [mapInstanceReady, aptMarkers, zoomLevel, safeZoneRects]);
 
   // 개별 마커 칩 하나를 그린다. 단독 마커든, 겹친 그룹을 격자로 벌린 것 중 하나든 이
   // 함수 하나로 렌더링해서 두 경우의 모양이 항상 같게 유지한다.
@@ -766,10 +839,36 @@ export default function FullscreenMapPage() {
     setCenter(latLng);
     if (mapRef.current && window.kakao?.maps) {
       const anchor = new window.kakao.maps.LatLng(latLng.lat, latLng.lng);
-      mapRef.current.panTo(anchor);
-      if (mapRef.current.getLevel() > 3) {
-        mapRef.current.setLevel(3, { anchor });
+      const map = mapRef.current;
+      map.panTo(anchor);
+      if (map.getLevel() > 3) {
+        map.setLevel(3, { anchor });
       }
+      // MAP UI POLISH V1 §11/§12 — 검색으로 선택한 단지를 정중앙에 놓으면(panTo) 그
+      // 지점이 상단/우측 control safe-zone과 겹칠 수 있다(좁은 뷰포트, 클러스터 격자
+      // 오프셋 등). pan/zoom 애니메이션이 끝난 뒤 실제 투영 좌표를 기준으로 딱 한 번만
+      // 확인해 필요한 경우에만 최소한으로 center를 보정한다 — panBy의 부호를 추측하지
+      // 않고 coordsFromContainerPoint의 역변환 성질만 이용한다(computeNudgedCenterPoint,
+      // 정확도 보장). 과도한 이동 방지: 겹친 만큼만 보정하고, 겹치지 않으면 아무것도
+      // 하지 않는다.
+      setTimeout(() => {
+        const projection = map.getProjection?.();
+        if (!projection) return;
+        const point = projection.containerPointFromCoords(anchor);
+        const nudge = computeSafeZoneNudge(
+          { x: point.x, y: point.y },
+          chipLayout.width / 2,
+          chipLayout.height / 2,
+          safeZoneRects.top,
+          safeZoneRects.right
+        );
+        if (nudge.dx === 0 && nudge.dy === 0) return;
+        const correctedPoint = computeNudgedCenterPoint(point, nudge);
+        const correctedLatLng = projection.coordsFromContainerPoint(
+          new window.kakao.maps.Point(correctedPoint.x, correctedPoint.y)
+        );
+        map.panTo(correctedLatLng);
+      }, 350);
     }
     // §16 — 검색 결과가 이미 lawdCd를 알고 있으면 이를 그대로 넘겨 마커 재조회 경로가
     // 자체 역지오코딩을 다시 하지 않게 한다(중복 요청 축소, 결과는 동일).
@@ -851,64 +950,78 @@ export default function FullscreenMapPage() {
   const activeComingSoon = COMING_SOON_LAYERS.filter((key) => layers[key]);
 
   return (
-    <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-      {/* 상단 컨트롤: 검색창 + 내 위치만 한 줄로(하단탭바에 홈 버튼이 항상 있어 "메인으로"
-          버튼은 제거) — 검색창이 훨씬 넓게 쓰인다. */}
+    <div ref={mapViewportRef} style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+      {/* MAP UI POLISH V1 §5 — 검색바(+내 위치)는 흰 알약 하나로 묶고, 공유 버튼은 그
+          옆에 완전히 독립된 원형 버튼으로 분리한다("검색바 내부에 넣지 않음"). 이 바깥
+          row 전체(topControlRowRef)를 top safe-zone 측정 기준으로 쓴다 — 검색 결과
+          드롭다운(ApartmentAutocomplete 내부)은 이 row 안의 상대 위치에서 자연스럽게
+          그 위에 뜨므로 순서/zIndex 변경 없이 그대로 유지된다. */}
       <div
+        ref={topControlRowRef}
         style={{
           position: 'absolute', top: '16px', left: '16px', right: '16px', zIndex: 10,
-          display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem',
-          background: 'rgba(255, 255, 255, 0.95)', borderRadius: '99px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          display: 'flex', alignItems: 'center', gap: '0.5rem',
         }}
       >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <ApartmentAutocomplete onSelect={handleApartmentSelect} placeholder="🔍 아파트, 오피스텔 단지명 검색..." />
-        </div>
-        <button
-          onClick={async () => {
-            if (navigator.geolocation) {
-              navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                  const latLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                  setCenter(latLng);
-                  refreshActiveLayers(latLng.lat, latLng.lng);
-                },
-                async (err) => {
-                  try {
-                    const res = await fetch('https://ipinfo.io/json');
-                    const data = await res.json();
-                    if (data.loc) {
-                      const parts = data.loc.split(',');
-                      const latLng = { lat: parseFloat(parts[0]), lng: parseFloat(parts[1]) };
-                      setCenter(latLng);
-                      refreshActiveLayers(latLng.lat, latLng.lng);
-                    }
-                  } catch (e) {}
-                },
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
-              );
-            }
+        <div
+          style={{
+            flex: 1, minWidth: 0,
+            display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem',
+            background: 'rgba(255, 255, 255, 0.95)', borderRadius: '99px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           }}
-          style={{ flexShrink: 0, padding: '0.6rem 1rem', background: 'white', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '99px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, whiteSpace: 'nowrap', transition: 'background 0.2s' }}
-          onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
-          onMouseOut={(e) => e.currentTarget.style.background = 'white'}
         >
-          📍 내 위치
-        </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <ApartmentAutocomplete onSelect={handleApartmentSelect} placeholder="🔍 아파트, 오피스텔 단지명 검색..." />
+          </div>
+          <button
+            onClick={async () => {
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    const latLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    setCenter(latLng);
+                    refreshActiveLayers(latLng.lat, latLng.lng);
+                  },
+                  async (err) => {
+                    try {
+                      const res = await fetch('https://ipinfo.io/json');
+                      const data = await res.json();
+                      if (data.loc) {
+                        const parts = data.loc.split(',');
+                        const latLng = { lat: parseFloat(parts[0]), lng: parseFloat(parts[1]) };
+                        setCenter(latLng);
+                        refreshActiveLayers(latLng.lat, latLng.lng);
+                      }
+                    } catch (e) {}
+                  },
+                  { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 }
+                );
+              }
+            }}
+            style={{ flexShrink: 0, padding: '0.6rem 1rem', background: 'white', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '99px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, whiteSpace: 'nowrap', transition: 'background 0.2s' }}
+            onMouseOver={(e) => e.currentTarget.style.background = '#f5f5f5'}
+            onMouseOut={(e) => e.currentTarget.style.background = 'white'}
+          >
+            📍 내 위치
+          </button>
+        </div>
         <ShareAction
           variant="icon"
+          tone="brand"
           title={selectedMarker ? `${selectedMarker.name} 위치 | 이집` : '아파트 지도 | 이집'}
           text="실거래가 기반 아파트 위치를 이집 지도에서 확인하세요."
           // MAP MARKER UX V2 §21~24 — 선택된 단지가 있으면 aptSeq(없으면 dong+name)
           // identity를 함께 실어 보내 공유받은 사람이 같은 단지가 선택된 상태로 지도를
-          // 연다(buildMapShareParams가 우선순위/name-only 금지를 강제).
+          // 연다(buildMapShareParams가 우선순위/name-only 금지를 강제). URL contract는
+          // 이번 STEP에서 전혀 바뀌지 않았다(§15/§21).
           params={buildMapShareParams(center, zoomLevel, currentLawdCd, selectedMarker)}
         />
       </div>
 
       {/* 우측 세로 카테고리 플로팅 바: 예전에는 상단을 가로로 가리던 걸 오른쪽 세로 알약
-          칩으로 옮겨서 검색창/지도 상단이 안 가려지게 한다. */}
-      <div style={{ position: 'absolute', right: '12px', top: '64px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          칩으로 옮겨서 검색창/지도 상단이 안 가려지게 한다. rightControlRef는 이 영역을
+          right safe-zone으로 측정하는 기준이다(§7/§10). */}
+      <div ref={rightControlRef} style={{ position: 'absolute', right: '12px', top: '64px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {LAYER_ORDER.map((key) => (
           <button
             key={key}
@@ -969,6 +1082,9 @@ export default function FullscreenMapPage() {
             const cols = Math.ceil(Math.sqrt(cluster.markers.length));
             const rows = Math.ceil(cluster.markers.length / cols);
             const clusterSelected = cluster.markers.some((m) => m.id === activeMarkerId);
+            // MAP UI POLISH V1 §7/§8 — control safe-zone과 겹치면 클러스터 전체를
+            // 화면상에서만 밀어낸다(lat/lng는 그대로, 클릭/식별자 영향 없음).
+            const nudge = clusterNudges.get(cluster.id) ?? { dx: 0, dy: 0 };
             return (
               <CustomOverlayMap
                 key={cluster.id}
@@ -980,8 +1096,8 @@ export default function FullscreenMapPage() {
                   {cluster.markers.map((marker, i) => {
                     const col = i % cols;
                     const row = Math.floor(i / cols);
-                    const offsetX = (col - (cols - 1) / 2) * (chipLayout.width + chipLayout.gap);
-                    const offsetY = (row - (rows - 1) / 2) * (chipLayout.height + chipLayout.gap);
+                    const offsetX = (col - (cols - 1) / 2) * (chipLayout.width + chipLayout.gap) + nudge.dx;
+                    const offsetY = (row - (rows - 1) / 2) * (chipLayout.height + chipLayout.gap) + nudge.dy;
                     const selected = marker.id === activeMarkerId;
                     return (
                       <div
@@ -1005,6 +1121,7 @@ export default function FullscreenMapPage() {
 
           const marker = cluster.markers[0];
           const selected = marker.id === activeMarkerId;
+          const nudge = clusterNudges.get(cluster.id) ?? { dx: 0, dy: 0 };
           return (
             <CustomOverlayMap
               key={marker.id}
@@ -1012,7 +1129,7 @@ export default function FullscreenMapPage() {
               yAnchor={1} // 오버레이의 기준점 (1이면 마커 하단이 뾰족한 부분이 됨)
               zIndex={selected ? 9999 : 1}
             >
-              <div style={{ transform: 'translateY(-10px)' }}>
+              <div style={{ transform: `translate(${nudge.dx}px, ${nudge.dy - 10}px)` }}>
                 {renderMarkerChip(marker, selected)}
               </div>
             </CustomOverlayMap>
@@ -1031,7 +1148,7 @@ export default function FullscreenMapPage() {
             yAnchor={1}
             zIndex={9999}
           >
-            <div style={{ transform: 'translateY(-10px)' }}>
+            <div style={{ transform: `translate(${pendingNudge.dx}px, ${pendingNudge.dy - 10}px)` }}>
               {renderMarkerChip(pendingSelectedApt, true)}
             </div>
           </CustomOverlayMap>

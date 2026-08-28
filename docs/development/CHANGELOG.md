@@ -10380,3 +10380,55 @@ WRONG_APARTMENT_RESTORE = ABSENT. N_PLUS_ONE = ABSENT. MOBILE = PASS
 (정확한 360/375/390 뷰포트 재현은 도구 제약으로 완전히 독립 보장 못함,
 문서 §15/§20 참고). DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE.
 NEXT_STEP = 84SQM_RANKING / FIX_MAP_MARKER_UX.**
+
+## 2026-08-28
+
+### STEP — MAP UI POLISH V1
+
+지도 공유 버튼을 사용자가 확정한 최종 방향(검색바와 분리된 독립 이집
+Green 원형 + 흰 Share 아이콘, 텍스트 없음)으로 확정하고, 그 아래로 단지
+마커가 겹쳐 보이던 문제를 해결했다. 상세 근거는
+`docs/development/MAP_UI_POLISH_V1.md` 참고.
+
+**공유 버튼**: `ShareAction`에 `tone?: 'neutral'|'brand'` prop을
+추가(`variant="icon"` 전용, 기본값 `'neutral'`은 기존 흰 배경 스타일을
+그대로 유지해 커뮤니티/AI검색 등 다른 icon-variant 호출부는 전혀 바뀌지
+않음). 지도에서만 `tone="brand"`를 켜 이집 Green 원형 + 흰 아이콘으로
+렌더, 검색바 알약 "밖"으로 완전히 분리했다 — 검색 input의 실제 가용
+폭은 수학적으로 이전과 동일(이전엔 알약 안에서, 지금은 알약 밖에서
+같은 44px+8px을 가져감).
+
+**Control safe zone**: `src/lib/map-control-safe-zone.ts`(신규, 순수
+함수) — 클러스터링 반경/그룹핑 로직은 전혀 바꾸지 않고(마커 데이터도
+그대로), 이미 계산돼 있는 화면 픽셀 좌표 기준으로 상단(검색+공유)/
+우측(레이어 토글) control rect와 겹치는 칩만 최소한으로 화면상에서
+밀어내는 방식을 택했다(STEP이 제시한 우선순위 후보 중 "A. 클러스터링
+계산에 컨트롤 패딩 반영"). control rect는 mount/resize 시에만
+`getBoundingClientRect()`로 실측(하드코딩 없음, scroll/mousemove마다
+재계산하지 않음). 검색으로 선택한 마커가 safe-zone과 겹치면 pan
+애니메이션 종료 후 한 번만 center를 최소 보정한다(`panBy` 부호 추측
+없이 `coordsFromContainerPoint`의 역변환 성질만 이용).
+
+**검증**: zoom=6 고밀도 뷰포트에서 렌더된 36개 칩 중 실제로 top
+safe-zone과 겹쳤던 2개가 각각 63.6px/38.6px 아래로 밀려난 것을 DOM
+transform 값으로 직접 측정해 확인 — nudge 없이는 검색바 아래로
+가려졌을 마커들이다. 나머지 34개는 겹치지 않아 이동 없음(최소 개입
+확인). 순수 함수(top/right/corner/겹침없음/zone없음, 5개 분기)는 임시
+스크립트로 직접 실행해 기댓값과 일치함을 확인 후 저장소에서 삭제했다.
+lint 1차 실행에서 MAP MARKER UX V2 때와 같은 유형의 `react-hooks/refs`
+오류(렌더 중 `mapRef.current` 읽기)를 재발견해 `useCallback`+`useEffect`
++state로 옮겨 수정.
+
+DB 쓰기: 없음. 스키마 변경: 없음. 공유 URL contract(lat/lng/zoom/lawdCd/
+aptSeq 또는 dong+name): 불변. MAP MARKER UX V2(가격+면적, compact price,
+trusted pyeong, selected green fill/halo/keyboard focus): 회귀 없음.
+
+상태: 완료.
+
+**MAP_UI_POLISH_V1 = PASS. SHARE_BUTTON = GREEN_CIRCLE. WHITE_SHARE_ICON
+= PASS. SEARCH_SHARE_LAYOUT = PASS. CONTROL_SAFE_ZONE = PASS.
+MARKER_CONTROL_OVERLAP = ABSENT. SELECTED_MARKER_VISIBLE = PASS.
+MAP_MARKER_UX_V2_REGRESSION = PASS. SHARE_REGRESSION = PASS. MOBILE =
+PASS(정확한 360/375/390 뷰포트 재현은 도구 제약으로 DOM 실측으로 보완,
+문서 §8/§13 참고). DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE.
+NEXT_STEP = 84SQM_RANKING / FIX_MAP_UI_POLISH.**

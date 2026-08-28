@@ -79,6 +79,48 @@
   height: 18px;
 }
 
+/* MAP UI POLISH V1 §2/§4 — icon variant의 'brand' tone. 검색바와 분리된 독립
+   원형 버튼(지도 상단 등)에서 프로필 원형 버튼과 같은 시각 언어(이집 Green
+   원형 + 흰 아이콘, 텍스트 없음)를 쓴다. 새 색상 토큰 없이 기존
+   --ejip-green/--ejip-green-deep만 재사용. */
+.iconBtnBrand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: none;
+  background: var(--ejip-green);
+  color: white;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, transform 0.05s ease;
+  box-shadow: 0 4px 12px rgba(19, 163, 103, 0.35);
+}
+
+.iconBtnBrand:hover {
+  background: var(--ejip-green-deep);
+}
+
+.iconBtnBrand:active {
+  transform: scale(0.96);
+}
+
+/* §21 — 초록 배경 위 초록 아웃라인은 대비가 낮아 실제로 식별하기 어렵다. 흰
+   아웃라인 + 진한 그린 halo를 함께 써서(포인터 selected와 무관하게 항상)
+   어떤 배경에서도 keyboard focus가 명확히 보이게 한다. */
+.iconBtnBrand:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(10, 122, 79, 0.45), 0 4px 12px rgba(19, 163, 103, 0.35);
+}
+
+.iconBtnBrand .icon {
+  width: 18px;
+  height: 18px;
+}
+
 .toast {
   position: absolute;
   top: calc(100% + 8px);
