@@ -4,7 +4,7 @@ import {
   Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye, Rows3,
 } from 'lucide-react';
 
-// 시장 통계 탭의 16개 메뉴 정의. status: 'live'는 실거래가 API로 실제 계산해서 보여주는
+// 시장 통계 탭의 17개 메뉴 정의. status: 'live'는 실거래가 API로 실제 계산해서 보여주는
 // 메뉴, 'soon'은 이 앱에 아직 연동된 데이터 소스가 없어(입주예정물량/인구통계/외지인
 // 매수비율/고도데이터/사용자 조회 로그 등) 임의의 추정치를 지어내는 대신 "데이터 집계 중"
 // 안내로 정직하게 비워두는 메뉴다. status는 이후 실제 데이터 소스가 생기면 'live'로
@@ -127,7 +127,11 @@ export const STATS_MENU: StatsMenuItem[] = [
     title: '인기단지',
     subtitle: '이집 유저 인기 조회 단지',
     status: 'soon',
-    soonReason: '단지별 조회수를 아직 집계하고 있지 않습니다.',
+    // STATISTICS_PLACEHOLDER_AUDIT_V1 §21 — PageView 로깅(/api/log/view)은 이미 live라 이전
+    // 문구("아직 집계하고 있지 않습니다")는 더 이상 정확하지 않다. 실측(2026-08-28): 1,937건/
+    // 17일, 단지 연결 469건 — bot/QA 트래픽 필터가 없고 표본이 아직 작아 신뢰 가능한 랭킹으로
+    // 쓰기엔 이르다는 것이 이유다.
+    soonReason: '방문 기록은 쌓이고 있지만, 신뢰할 수 있는 순위를 보여드리기엔 아직 데이터가 충분하지 않습니다.',
     category: '비교·분석',
   },
 ];

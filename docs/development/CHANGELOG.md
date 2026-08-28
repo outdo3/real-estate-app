@@ -10028,3 +10028,51 @@ PARTIAL_FAILURE = DISTINGUISHED. API_ERROR_NO_DATA = DISTINGUISHED.
 PERFORMANCE = PARTIAL(신규 N+1 없음, SIDO_ALL 서울 cold/warm은 기존 한계
 그대로 — 정직하게 보고). MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
 DB_SCHEMA_CHANGE = NONE. NEXT_STEP = ChatGPT PM 판단 대기.**
+
+### STEP — STATISTICS PLACEHOLDER AUDIT V1
+
+"준비중"으로 남은 6개 통계 메뉴(공급물량/인구변화/외지인비율/경사·고도/
+대단지/인기단지)를 실제 repo/DB 기준으로 전수 감사한 기획+데이터+코드
+감사 STEP이다. 구현이 아니라 우선순위 결정이 목적이며, 실제 코드 변경은
+statsMenu.ts의 사소한 라벨/코멘트 정정 2건뿐이다. 상세 근거는
+`docs/development/STATISTICS_PLACEHOLDER_AUDIT_V1.md` 참고.
+
+**핵심 발견**: (1) "공급물량"은 이미 청약홈(Applyhome) 공식 API로
+`Presale` 테이블에 1,046건이 있고 입주예정월(`moveInExpectedYm`)·
+총세대수 커버리지가 100%다 — placeholder라기보다 "UI/집계 route가 아직
+없는" 상태에 가깝다(단, 2026-08-12 1회성 backfill 이후 재동기화 안 됨).
+(2) "대단지"도 `ApartmentMaster`에 부산 3,402건(세대수 93.5%, 주차/
+입주연도 대부분 확보)이 이미 있다 — 단, 서울/전국은 0건이고 "평형 수"는
+별개 테이블(`Apartment`, 63건 중 11건만)이라 사실상 채울 수 없다(§32
+no fake readiness 원칙상 V1에서 제외 권장). (3) "인기단지"는
+`soonReason`이 "아직 집계하고 있지 않습니다"라고 돼 있었지만, 실제로는
+`PageView` 테이블에 이미 실시간으로 쌓이고 있었다(1,937건/17일) — 다만
+bot/QA 트래픽 필터가 없고 표본이 작아 신뢰 가능한 랭킹으로 쓰기엔 이르다.
+(4) "인구변화"/"외지인비율"은 관련 코드가 전혀 없어(grep 0건) 정직하게
+NEEDS_EXTERNAL_DATA로 분류했다 — 외지인비율은 개별 거래 단위 매칭이
+데이터 구조상 원천적으로 불가능함도 확인했다. (5) "경사/고도"는
+코드/코멘트 확인 결과 문자 그대로 지형 고도·경사도를 뜻하며(가격
+상승/층수 아님), 가치·데이터 둘 다 최하위라 후순위 보류를 권장한다.
+
+**우선순위 재산정**(5기준 25점 만점 실측): 공급 21점 > 대단지 20점 >
+인구·인기단지 12점(동점) > 외지인비율 11점 > 경사/고도 8점. 제시된
+가설 순서(대단지>공급>...)와 달리 공급이 근소 우위로 나왔다 —
+결과를 강제하지 않고 실제 감사대로 재정렬했다. 권장 Bundle A =
+대단지+공급(TRUE GATE 없음, 기존 데이터 재사용, 다음 구현 STEP 후보),
+Bundle B = 인구변화+전입전출(TRUE GATE #4 새 외부 API 필요, 이번 STEP
+연동 안 함 — 다음 단계는 구현이 아니라 공식 데이터 소스 확정+승인 요청).
+
+**Cleanup**(§34 허용 범위 내 최소 수정): `statsMenu.ts` 코멘트 "16개
+메뉴" → "17개"(stale, gap-invest 추가 이후 갱신 안 됐던 것), `popular`
+항목 `soonReason`을 실제 DB 상태에 맞게 정정.
+
+DB 쓰기: 없음(read-only 쿼리로 감사, 스키마/데이터 변경 없음). 코드 변경:
+statsMenu.ts 코멘트/문구 2곳만.
+
+상태: 완료.
+
+**STATISTICS_PLACEHOLDER_AUDIT_V1 = PASS. SUPPLY = READY_WITH_SMALL_FIX.
+POPULATION = NEEDS_EXTERNAL_DATA. LARGE_COMPLEX = READY_NOW(부산 한정).
+FOREIGN_BUYER = NEEDS_EXTERNAL_DATA. ELEVATION = KEEP(보류, 후순위).
+POPULAR = ANALYTICS_REQUIRED(인프라 존재, 데이터 미성숙). NEXT_IMPLEMENTATION
+_BUNDLE = 대단지+공급(Bundle A). NEXT_STEP = ChatGPT PM 판단 대기.**
