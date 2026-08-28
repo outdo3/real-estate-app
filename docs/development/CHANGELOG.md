@@ -10485,3 +10485,70 @@ REGION_FILTER = PASS. SHARE = PASS. DETAIL_NAVIGATION = PASS.
 N_PLUS_ONE = ABSENT. PERFORMANCE = PASS. MOBILE = PASS. DESKTOP = PASS.
 BUILD = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP = PRICE_MAP_V2 /
 지도에서 보기 좌표 enrichment.**
+
+## 2026-08-29
+
+### STEP — REGION_PRICE_CHANGE_MAP_V2: 지역 변동지도
+
+작업: docs/development/REGION_PRICE_CHANGE_MAP_V2.md 참고(전체 설계/
+구현/QA 기록). 통계에 "변동지도"(slug=`change-map`) 신규 메뉴 추가 —
+대한민국→시도→시군구→읍면동→단지 5-level drill-down으로 지역별 아파트
+가격 변동률(%상승/하락)을 median 기반으로 보여준다. 기존
+slug='price-map'(분위지도, 절대 평당가 5분위 지도)과는 다른
+기능이라 그 slug/route를 재사용하지 않고 완전히 분리된 신규
+component/API로 구현했다.
+
+**변동률 정의**: "지역 내 모든 거래를 단순 평균"하는 방식은 명시적으로
+배제했다 — composition bias(거래 mix 변화가 가격 변화로 오인되는
+문제) 위험 때문. 대신 같은 단지+같은 raw 전용면적(exact area) 거래를
+현재 window 대표가 vs 그 직전 동일 길이 window 대표가로 pair를 만들고,
+지역 단위에서는 그 pair들의 %변화율 median으로 집계했다.
+COMPOSITION_BIAS_GUARD/OUTLIER_GUARD 둘 다 합성 데이터 단위 테스트로
+직접 증명(면적 mix가 완전히 역전돼도 median이 실제 가격 변화(0%)만
+정확히 반영, 극단값 1건 주입에도 median 거의 불변).
+
+**표본/보합 threshold**: 부산 4개 구 실측(1~12개월, window-vs-window
+pairing)으로 결정 — 시군구 단위는 항상 충분(16~562쌍)했지만 동
+단위는 5쌍 미만인 곳이 실제로 다수 확인돼 `MIN_SAMPLE_PAIRS=5`
+채택(미만이면 medianPct/direction/intensity 전부 null). 보합
+threshold(±0.5%)도 실측 median 분포 기반.
+
+**핵심 재사용**: `previousPeriodRange`/`monthsForRange`(regional-feed.ts),
+`identityKey`/`groupKey`/`filterVerifiedTrades`(동일 파일), 기존
+sido-all fetch/cache 인프라(`fetchMonthsThrottledWithStatus`/
+`getOrSetCache`), Kakao Geocoder 스크립트 로딩 패턴(`/map`·
+PriceMapView와 동일), `ShareAction`(bespoke 공유 로직 없음). 새로
+추가한 것은 `getSidoList()`(region-utils.ts, 전국 시도 목록) 하나뿐.
+
+**성능 실측 발견 및 수정**: 전국 17개 시도를 클라이언트에서 한 번에
+병렬 요청하면 서버 MOLIT 세마포어(전역 6슬롯)를 17개 시도가 나눠
+쓰게 돼 경기도 등 큰 시도가 다른 시도까지 전부 느리게 만듦을
+실측(94s~97s)으로 발견 — 클라이언트 동시 진행 개수를 3개로 제한하는
+워커 큐로 수정. 최종 콜드 실측: 부산(16구) 13.9s, 서울(25구) 30.9s,
+경기(44+구, 단독) 62s, 서구 1개 구 2.4s. 전국 완전 로드는 최대 약
+1분 걸릴 수 있어 정직하게 PARTIAL로 보고한다(시군구/동/단지 레벨은
+전부 실용적 속도).
+
+**QA**: 신규 단위 테스트 22개(composition-bias/outlier/sample-threshold/
+neutral/complex 대표면적 선택 포함, 전부 pass, 기존 price-ranking.ts
+46개와 합쳐 총 68개 전부 pass) + `scripts/run-price-map-v2-qa.ts`(신규,
+RELEASE GATE: READY, P0/P1 0건) + 라이브 boundary QA(부산 서구/
+해운대구/연제구/동래구 실제 존재 확인) + 모바일 360/375/390 iframe
+QA + 기존 통계(하락/2년최고가/상승/84㎡ 순위)·`/stats` 메뉴·`/map`
+회귀 스모크.
+
+DB 쓰기: 없음. 스키마 변경: 없음. 기존 84sqm/decline/record-high/
+rising/jeonse-risk 등 기존 통계 기능 동작 불변.
+
+상태: 완료.
+
+**REGION_PRICE_CHANGE_MAP_V2 = PASS. CHANGE_RATE_DEFINITION = PASS.
+COMPOSITION_BIAS_GUARD = PASS. EXACT_AREA_PAIRING = PASS.
+MEDIAN_AGGREGATION = PASS. SAMPLE_THRESHOLD = PASS. NATIONWIDE =
+PARTIAL(콜드 최대 ~1분, 동시성 제한으로 점진 표시). SIDO = PASS.
+SIGUNGU = PASS. DONG = PASS. COMPLEX = PARTIAL(지도 버블 없음, 목록만).
+MAP_VISUALIZATION = PASS(시도/시군구/동, Kakao Geocoder 기반 버블).
+DRILL_DOWN = PASS. SHARE = PASS. URL_STATE = PASS. N_PLUS_ONE = ABSENT.
+PERFORMANCE = PARTIAL. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
+DB_SCHEMA_CHANGE = NONE. NEXT_STEP = TRADE_HISTORY_DATA_V1 /
+FIX_REGION_PRICE_CHANGE_MAP(단지 레벨 지도 버블).**

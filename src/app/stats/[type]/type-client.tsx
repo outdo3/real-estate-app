@@ -19,6 +19,7 @@ import { buildStatsShareContext, statsRegionShareLabel } from './shareContext';
 import TransactionFeedView from '@/components/stats/TransactionFeedView';
 import PriceRankingView from '@/components/stats/PriceRankingView';
 import Area84RankingView from '@/components/stats/Area84RankingView';
+import RegionChangeMapView from '@/components/stats/RegionChangeMapView';
 import ConcentrationView from '@/components/stats/ConcentrationView';
 import VolumeChartCard from '@/components/stats/VolumeChartCard';
 import GapInvestView from '@/components/stats/GapInvestView';
@@ -309,16 +310,22 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
           (STATS_MENU.icon은 landing 그리드의 Lucide 매핑 키로만 남음, §35). */}
       <Header pageTitle={item.title} />
       <div className="container">
-        <div className={styles.headerTop}>
-          <button className={styles.regionTrigger} onClick={openRegionModal}>
-            <MapPin size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} />
-            <span>{region.displayRegionName}</span>
-            <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
-          </button>
-          {item.status === 'live' && (
-            <ShareAction title={shareContext.title} text={shareContext.text} params={shareContext.params} />
-          )}
-        </div>
+        {/* REGION_PRICE_CHANGE_MAP_V2 — 이 화면은 전역 RegionContext가 표현할 수
+            없는 대한민국 전체/단지 레벨까지 다루는 자체 drill-down 상태(URL
+            기반)를 쓰고, breadcrumb+공유 버튼을 직접 렌더링한다(§22/§23) —
+            공통 지역 트리거/공유 바는 중복이라 생략한다. */}
+        {slug !== 'change-map' && (
+          <div className={styles.headerTop}>
+            <button className={styles.regionTrigger} onClick={openRegionModal}>
+              <MapPin size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} />
+              <span>{region.displayRegionName}</span>
+              <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
+            </button>
+            {item.status === 'live' && (
+              <ShareAction title={shareContext.title} text={shareContext.text} params={shareContext.params} />
+            )}
+          </div>
+        )}
 
         {item.status === 'soon' ? (
           <ComingSoonCard title={item.title} reason={item.soonReason} />
@@ -334,6 +341,8 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
             displayRegionName={region.displayRegionName}
             regionQuestionLabel={`${statsRegionShareLabel(region)}에서 84㎡가 비싼 단지는?`}
           />
+        ) : slug === 'change-map' ? (
+          <RegionChangeMapView />
         ) : slug === 'top-traded' ? (
           <ConcentrationView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'volume' ? (

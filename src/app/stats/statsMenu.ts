@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   TrendingDown, Award, TrendingUp, Activity, Scale, LayoutGrid, Coins, Target,
-  Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye, Rows3, Home,
+  Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye, Rows3, Home, TrendingUpDown,
 } from 'lucide-react';
 
 // 시장 통계 탭의 17개 메뉴 정의. status: 'live'는 실제 데이터 소스로 계산해서 보여주는
@@ -62,6 +62,12 @@ export const STATS_MENU: StatsMenuItem[] = [
   // "직전 전세 거래보다 가격이 낮아진 단지"일 뿐 역전세(보증금 반환 불능)
   // 여부를 판정하지 않으므로, 메뉴명 자체를 정직한 "전세위험"으로 바꾼다.
   { slug: 'jeonse-risk', icon: '⚠️', Icon: AlertTriangle, title: '전세위험', subtitle: '최근 전세가격이 이전보다 낮아진 단지를 확인해보세요.', status: 'live', category: '가격', colorToken: 'warn' },
+  // REGION_PRICE_CHANGE_MAP_V2 — "지역 변동지도". 다른 가격 카테고리 항목은 단지
+  // 순위형인 반면 이 메뉴는 대한민국→시도→시군구→읍면동→단지 drill-down이라
+  // 성격이 달라 별도 페이지(RegionChangeMapView, slug='change-map')로 분리했다.
+  // 기존 slug='price-map'(분위지도, 절대 평당가 5분위 지도)과는 다른 기능이라
+  // 그 slug/라우트를 재사용하지 않는다.
+  { slug: 'change-map', icon: '🗺️', Icon: TrendingUpDown, title: '변동지도', subtitle: '지역별 아파트 가격 변동률을 지도로 확인해보세요.', status: 'live', category: '가격', colorToken: 'brand' },
   { slug: 'volume', icon: '📊', Icon: Activity, title: '거래량', subtitle: '매매·전월세 거래량', status: 'live', category: '거래', colorToken: 'brand' },
   // STATISTICS V2.1-2 §2/§23 — 감사 결과 이 화면은 실제 사용자 행동(조회/검색/
   // 관심등록 등) 기반 popularity가 아니라 순수 거래건수 랭킹이었다("인기"라는

@@ -7,6 +7,24 @@ export const REGCODE_PROXY = 'https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/
 // 최신·전국 대상으로 동적 조회한다(신규 데이터 없음, 신규 API 없음).
 const sidoCodeCache = new Map<string, string | null>();
 const sigunguListCache = new Map<string, { code: string; name: string }[]>();
+let sidoListCache: { code: string; name: string }[] | null = null;
+
+// REGION_PRICE_CHANGE_MAP_V2 §11 — "대한민국 전체" 첫 화면(시도 17개 타일)에
+// 필요한 전국 시도 목록. RegionSelectModal.selectSido가 이미 쓰는 것과 동일한
+// 프록시/패턴이라 항상 최신·전국 대상이다(새 데이터 소스 없음).
+export async function getSidoList(): Promise<{ code: string; name: string }[]> {
+  if (sidoListCache) return sidoListCache;
+  try {
+    const res = await fetch(`${REGCODE_PROXY}?regcode_pattern=*00000000`);
+    const data = await res.json();
+    const list = ((data.regcodes || []) as { code: string; name: string }[]).map((r) => ({ code: r.code.substring(0, 2), name: r.name }));
+    sidoListCache = list;
+    return list;
+  } catch (e) {
+    console.error('[region-utils] 시도 목록 조회 실패', e);
+    return [];
+  }
+}
 
 export async function resolveSidoCode(sido: string): Promise<string | null> {
   if (sidoCodeCache.has(sido)) return sidoCodeCache.get(sido)!;
