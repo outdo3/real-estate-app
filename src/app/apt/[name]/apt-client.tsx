@@ -875,32 +875,44 @@ export default function ApartmentDetail() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <AreaSelector trades={trades} selectedArea={hasUnitMaster ? selectedUnitMasterArea : selectedTradeArea} onSelect={handleAreaSelectorChange} areaLabels={areaLabels} unitMaster={unitMaster} areaUnit={areaUnit} />
                   </div>
-                  {Array.isArray(unitMaster) && unitMaster.some(u => u.representativePyeong != null) && (
-                    <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '8px', padding: '2px', background: 'var(--bg-color)' }}>
-                      {(['㎡', '평'] as AreaUnit[]).map((u) => (
-                        <button
-                          key={u}
-                          type="button"
-                          onClick={() => setAreaUnit(u)}
-                          aria-pressed={areaUnit === u}
-                          style={{
-                            padding: '0.4rem 0.75rem',
-                            borderRadius: '6px',
-                            border: 'none',
-                            fontSize: '0.85rem',
-                            fontWeight: areaUnit === u ? 700 : 500,
-                            cursor: 'pointer',
-                            background: areaUnit === u ? 'white' : 'transparent',
-                            color: areaUnit === u ? 'var(--text-primary)' : 'var(--text-secondary)',
-                            boxShadow: areaUnit === u ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
-                          }}
-                        >
-                          {u}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {/* APT DETAIL CONSISTENCY HOTFIX V1 §5 — ㎡/평 toggle은 Unit Master
+                      coverage와 무관하게 모든 단지에서 항상 노출한다(구조는 동일, 데이터
+                      값만 단지마다 다름). 평 모드에서 특정/전체 area에 trustworthy
+                      pyeong이 없으면 AreaSelector가 raw ㎡ + "평형 정보 없음"으로
+                      정직하게 표시하므로 여기서 숨길 필요가 없다. */}
+                  <div style={{ display: 'flex', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '8px', padding: '2px', background: 'var(--bg-color)' }}>
+                    {(['㎡', '평'] as AreaUnit[]).map((u) => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setAreaUnit(u)}
+                        aria-pressed={areaUnit === u}
+                        style={{
+                          padding: '0.4rem 0.75rem',
+                          borderRadius: '6px',
+                          border: 'none',
+                          fontSize: '0.85rem',
+                          fontWeight: areaUnit === u ? 700 : 500,
+                          cursor: 'pointer',
+                          background: areaUnit === u ? 'white' : 'transparent',
+                          color: areaUnit === u ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          boxShadow: areaUnit === u ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
+                        }}
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                {/* §14 — "왜 평으로 안 바뀌지?" 혼란 방지용 짧은 inline 안내(modal 아님).
+                    평 모드에서 이 단지에 trustworthy pyeong이 하나도 없을 때만 보여준다 —
+                    일부만 없는 partial 케이스는 칩 캡션("평형 정보 없음")으로 이미 충분히
+                    안내되므로 페이지 전체에 중복 문구를 띄우지 않는다. */}
+                {areaUnit === '평' && !(Array.isArray(unitMaster) && unitMaster.some(u => u.representativePyeong != null)) && (
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '-0.9rem 0 1.25rem' }}>
+                    확인된 평형 정보가 없는 면적은 ㎡로 표시됩니다.
+                  </p>
+                )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 700 }}>최근 실거래가</span>

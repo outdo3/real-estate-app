@@ -10131,3 +10131,74 @@ ApartmentMaster/MOLIT만 재사용).
 UNIT_TYPE_COUNT = HIDDEN. N_PLUS_ONE = ABSENT. MOBILE = PASS. DESKTOP
 = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP = ChatGPT PM
 판단 대기.**
+
+## 2026-08-28
+
+### STEP — APT DETAIL CONSISTENCY HOTFIX V1
+
+아파트 상세 페이지에서 단지별로 UI 구조 자체가 달라 보이던 불일치를
+제거했다. 상세 근거는
+`docs/development/APT_DETAIL_CONSISTENCY_HOTFIX_V1.md` 참고.
+
+**토글**: ㎡/평 토글이 `unitMaster.some(representativePyeong != null)`
+게이트로 가려져 있어 Unit Master 커버리지가 낮은 단지는 토글 자체가
+사라졌다(사용자 보고 픽스처 B). 게이트를 제거해 모든 단지에서 항상
+노출하도록 고쳤다 — 데이터 유무는 토글 안쪽 칩 캡션에서만 표현한다.
+평 모드에서 trustworthy pyeong이 없는 area는 여전히 `exclusiveArea /
+3.3058` 같은 fake 계산을 하지 않고 raw ㎡ + "평형 정보 없음"을
+정직하게 보여준다. 칩 결정 로직을 `src/lib/area-utils.ts`의 순수 함수
+`resolveAreaChipDisplay()`로 분리해 단위 테스트 가능하게 만들었다.
+
+**Sticky Action Bar**: 찜 버튼 텍스트가 찜 여부에 따라 "관심단지"/
+"관심단지 저장"으로 길이가 달라져 모바일 하단 3-action bar가 겹쳐
+보였다(사용자 보고 두 픽스처가 실제로는 단지 문제가 아니라 세션별 찜
+상태 문제였음을 확인). 가시 텍스트를 "관심단지"로 고정하고 상태는
+아이콘 fill로만 표현하도록 바꿨다. `.stickyActionRow`도 `flex`에서
+`grid-template-columns: repeat(3, minmax(0, 1fr))`로 바꿔 텍스트 길이와
+무관하게 3버튼이 항상 동일 폭을 갖게 구조적으로 강제했다.
+
+**부수 발견/복구**: `AreaChip`의 충돌 해소 보조 라벨(같은 평형으로
+수렴하는 서로 다른 전용면적을 구분해 보여주는 캡션)이 `AreaSelector`가
+`supplyAreaM2`를 항상 `null`로 고정해서 넘기는 바람에 전 단지에서
+구조적으로 죽어 있었다 — 이번 리팩터로 함께 복구했다.
+
+**Unit Master 커버리지 실측(부산)**: `ApartmentMaster`(canonical)
+3,402건 대비, legacy Unit Master에서 trustworthy pyeong을 가진 단지는
+11건(약 0.32%)뿐이다. 이번 픽스 이후에도 대다수 단지는 평 모드에서
+"평형 정보 없음"을 보게 되는데, 이는 버그가 아니라 현재 데이터 상태를
+정직하게 반영한 결과다 — 후속 STEP으로 Unit Master 백필을 강하게
+권고한다.
+
+**범위 밖 발견(수정하지 않음)**: QA 중 대신롯데캐슬 픽스처가 원래
+보고("14평/25평 노출")와 다르게 보이는 것을 추적해, `/api/apt/[name]
+/info` 라우트의 `fetchCachedRegistry()`가 `name+dong`으로 정확한 row
+(unit type 8건, collision 케이스 포함)를 찾고도, `approvalDate`가
+비어 있으면 `name` 없이 `dong+jibun`만으로 재조회해 같은 주소의 이름
+변형 중복 row("대신롯데캐슬" vs "대신롯데캐슬아파트")를 잘못 집어
+`unitTypes`를 8건→0건으로 덮어쓰는 사전 존재 버그를 발견했다.
+`git diff`로 베이스라인에 이미 있던 버그임을 확인했고(이번 커밋에
+포함된 파일 아님), AGENTS.md가 이번 STEP에서 금지한 "apartment basic
+data" 영역이라 수정하지 않고 문서에만 기록했다. 이번 STEP의
+"평형 정보 없음" 폴백은 이 버그가 있는 상태에서도 정직하게 동작한다.
+
+**검증**: 신규 `scripts/run-apt-detail-consistency-qa.ts` — A파트
+단위 테스트 7개(resolveAreaChipDisplay CASE A/B/C/D) + 정적 가드 7개
+(3.3058 재도입 금지, 토글 항상 노출, "관심단지 저장" 재도입 금지,
+3-column grid 유지) 전부 PASS. B파트 라이브 페이지 3픽스처 + 회귀
+스모크(/map, /stats, /school) 전부 PASS. 모바일 360/375/390px
+iframe-isolation으로 가로 스크롤 없음, sticky 3버튼 완전 동일폭 확인.
+`npx tsc --noEmit`/lint 신규 에러 0. `npm run build` PASS.
+
+DB 쓰기: 없음. 스키마 변경: 없음. 새 외부 API: 없음.
+
+상태: 완료.
+
+**APT_DETAIL_CONSISTENCY_HOTFIX_V1 = PASS. PYEONG_TOGGLE_ALL_DETAILS =
+PASS. TRUSTED_PYEONG_ONLY = PASS. PYEONG_UNAVAILABLE_UX = PASS.
+FAKE_PYEONG = ABSENT. AREA_COLLISION = PASS(복구됨). STICKY_ACTION_LABELS
+= PASS. FAVORITE_STATE = ICON_ONLY. AUTH_STATE = PASS(로그인 모달 정상).
+TOP_BOTTOM_SYNC = PASS(기존 이벤트 유지, 미변경). MOBILE_360 = PASS.
+MOBILE_375 = PASS. MOBILE_390 = PASS. DESKTOP = PASS. OVERFLOW = NONE.
+BUILD = PASS. DB_SCHEMA_CHANGE = NONE. UNIT_MASTER_COVERAGE_V2 =
+RECOMMENDED. INFO_ROUTE_IDENTITY_BUG = FOUND_NOT_FIXED(out of scope).
+NEXT_STEP = ChatGPT PM 판단 대기.**

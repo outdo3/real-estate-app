@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { resolveAreaLabel, type DisplayUnit } from '@/lib/area-utils';
+import { resolveAreaLabel, resolveAreaChipDisplay, type DisplayUnit } from '@/lib/area-utils';
 import Chip from '@/components/ui/Chip';
 import AreaChip, { AreaChipData } from '@/components/ui/AreaChip';
 
@@ -53,40 +53,28 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
     });
   }
 
+  // APT DETAIL CONSISTENCY HOTFIX V1 §7~§9 — toggle는 항상 노출되므로(부모가 더 이상
+  // 숨기지 않음) resolveAreaChipDisplay(area-utils.ts, 단위 테스트됨)가 모든 area에
+  // 대해 평 모드에서 "정직한 결과"를 내도록 위임한다 — 절대 exclusiveArea/3.3058
+  // 같은 계산을 여기서 하지 않는다(§4 데이터 신뢰 원칙 그대로).
   const toAreaChipData = (area: string): AreaChipData => {
-    if (hasUnitMaster) {
-      const unit = unitMaster.find(u => u.canonicalExclusiveArea === area);
-      if (unit) {
-        // [AREA MODEL V2] representativePyeong collision resolution:
-        // If multiple units share the same pyeong, we show the exclusive area to distinguish them.
-        
-        const isCollision = unit.representativePyeong ? (pyeongCount.get(unit.representativePyeong) || 0) > 1 : false;
-        
-        let pyeongLabel = unit.representativePyeong ? `${unit.representativePyeong}평` : null;
-        let displayLabel = `전용 ${unit.displayExclusiveArea}㎡`;
-        
-        if (areaUnit === '평' && unit.representativePyeong) {
-          displayLabel = `${unit.representativePyeong}평`;
-          pyeongLabel = isCollision ? `전용 ${unit.displayExclusiveArea}㎡` : null;
-        }
+    const parsedArea = parseFloat(area);
+    const unit = hasUnitMaster ? unitMaster.find(u => u.canonicalExclusiveArea === area) ?? null : null;
+    // [AREA MODEL V2] representativePyeong collision resolution: if multiple units
+    // share the same pyeong, we show the exclusive area to distinguish them.
+    const isCollision = unit?.representativePyeong ? (pyeongCount.get(unit.representativePyeong) || 0) > 1 : false;
 
-        return {
-          id: area,
-          exclusiveAreaM2: parseFloat(area),
-          displayLabel,
-          supplyAreaM2: null,
-          pyeongLabel,
-          tradeCount: countByArea.get(area) || 0,
-        };
-      }
-    }
+    const { displayLabel, pyeongLabel } = resolveAreaChipDisplay(unit, areaUnit, isCollision, renderAreaLabel(area));
 
     return {
       id: area,
-      exclusiveAreaM2: parseFloat(area),
-      displayLabel: renderAreaLabel(area),
-      supplyAreaM2: null,
-      pyeongLabel: null,
+      exclusiveAreaM2: parsedArea,
+      displayLabel,
+      // supplyAreaM2는 "이 chip이 검증된 데이터를 근거로 한다"는 게이트로 쓰인다
+      // (AreaChip.tsx의 shouldShowPyeongLabel) — pyeongLabel이 있을 때만 non-null로
+      // 채워 보조 캡션(충돌 해소/평형없음 안내)이 정상 렌더되게 한다.
+      supplyAreaM2: pyeongLabel != null ? parsedArea : null,
+      pyeongLabel,
       tradeCount: countByArea.get(area) || 0,
     };
   };
@@ -161,6 +149,11 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
                     if (areaUnit === '평' && unit.representativePyeong) {
                       mainLabel = `${unit.representativePyeong}평 · 전용 ${unit.displayExclusiveArea}㎡${households}`;
                       subLabel = '';
+                    } else if (areaUnit === '평') {
+                      // §9 partial coverage — 이 area만 trustworthy pyeong이 없는 경우도
+                      // 정직하게 안내(fake 계산 없이 raw ㎡ 유지).
+                      mainLabel = `전용 ${unit.displayExclusiveArea}㎡${households}`;
+                      subLabel = '평형 정보 없음';
                     } else {
                       mainLabel = `전용 ${unit.displayExclusiveArea}㎡${households}`;
                       subLabel = '';

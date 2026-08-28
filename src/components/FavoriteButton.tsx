@@ -174,7 +174,11 @@ export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address, co
         title={isActive ? '관심단지 해제' : '관심단지 저장'}
       >
         <Heart className={styles.icon} aria-hidden="true" fill={isActive ? 'currentColor' : 'none'} />
-        {!compact && (isActive ? '관심단지' : '관심단지 저장')}
+        {/* APT DETAIL CONSISTENCY HOTFIX V1 §16 — 등록 상태는 아이콘 fill(위)로만
+            표현한다. 문구 길이로 상태를 표현하면(예: "관심단지"/"관심단지 저장")
+            찜 여부에 따라 버튼 폭이 달라져 StickyActionBar의 3-action 레이아웃이
+            깨진다 — 텍스트는 상태와 무관하게 항상 "관심단지"로 고정한다. */}
+        {!compact && '관심단지'}
       </button>
       {error && <div className={styles.errorToast}>{error}</div>}
       <LoginModal open={modalOpen} onClose={() => setModalOpen(false)} />

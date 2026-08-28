@@ -219,3 +219,52 @@ export function getAreaDetailLabel(rawExclusiveM2: number, labels?: Map<number, 
   return `전용 ${resolveAreaLabel(rawExclusiveM2, labels)}`;
 }
 
+// APT DETAIL CONSISTENCY HOTFIX V1 §6~§9/§31/§40 — AreaSelector.tsx의 chip
+// 라벨 결정 로직을 순수 함수로 분리했다. ㎡/평 toggle이 이제 모든 단지에서
+// 항상 노출되므로(§5), 이 함수가 CASE A(pyeong 있음)/B(없음)/C(partial)/
+// D(collision) 네 경우 모두 fake 계산 없이 정직한 결과를 내는지 컴포넌트
+// 렌더링 없이 단위 테스트할 수 있어야 한다.
+export interface AreaChipDisplayUnit {
+  displayExclusiveArea: string;
+  representativePyeong: number | null;
+}
+
+export interface AreaChipDisplayResult {
+  displayLabel: string;
+  pyeongLabel: string | null;
+}
+
+export const PYEONG_UNAVAILABLE_LABEL = '평형 정보 없음';
+
+/**
+ * unit이 null이면(이 area가 Unit Master에 전혀 없음) fallbackLabel(보통
+ * renderAreaLabel로 만든 raw ㎡ 표기)을 그대로 쓴다 — trades만으로는 pyeong을
+ * 계산하지 않는다(exclusiveArea/3.3058 금지, §4).
+ */
+export function resolveAreaChipDisplay(
+  unit: AreaChipDisplayUnit | null,
+  areaUnit: AreaUnit,
+  isCollision: boolean,
+  fallbackLabel: string
+): AreaChipDisplayResult {
+  if (!unit) {
+    return {
+      displayLabel: fallbackLabel,
+      pyeongLabel: areaUnit === '평' ? PYEONG_UNAVAILABLE_LABEL : null,
+    };
+  }
+
+  const displayLabel = `전용 ${unit.displayExclusiveArea}㎡`;
+  if (areaUnit !== '평') {
+    return { displayLabel, pyeongLabel: null };
+  }
+  if (unit.representativePyeong) {
+    return {
+      displayLabel: `${unit.representativePyeong}평`,
+      pyeongLabel: isCollision ? `전용 ${unit.displayExclusiveArea}㎡` : null,
+    };
+  }
+  // CASE C — partial: Unit Master row는 있지만 이 area만 trustworthy pyeong이 없음.
+  return { displayLabel, pyeongLabel: PYEONG_UNAVAILABLE_LABEL };
+}
+

@@ -27,7 +27,7 @@ export default function StickyActionBar({ aptName, lawdCd, dong, name, address, 
           <FavoriteButton lawdCd={lawdCd} dong={dong} name={name} address={address} />
         </div>
         <div className={styles.stickyActionItem}>
-          <KakaoShareButton compact title={shareTitle} description={shareDescription} />
+          <KakaoShareButton compact label="공유" title={shareTitle} description={shareDescription} />
         </div>
         <div className={styles.stickyActionItem}>
           <Link href={`/community/write?aptName=${encodeURIComponent(aptName)}`} className={styles.stickyWriteBtn}>

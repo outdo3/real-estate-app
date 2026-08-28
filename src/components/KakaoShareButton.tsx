@@ -11,6 +11,10 @@ interface KakaoShareButtonProps {
    *  작고 중립적인 아이콘+텍스트 버튼으로 렌더한다. 공유 로직(navigator.share →
    *  카카오 SDK → 클립보드 폴백)은 완전히 동일하고 겉모습만 다르다. */
   compact?: boolean;
+  /** APT DETAIL CONSISTENCY HOTFIX V1 §19 — compact 버튼의 기본(idle) 상태 라벨.
+   *  기본값 '공유하기'는 Hero/학교상세 등 기존 호출부 동작을 그대로 유지하고,
+   *  StickyActionBar만 짧은 '공유'를 넘겨 3-action bar 폭을 좁게 유지한다. */
+  label?: string;
 }
 
 declare global {
@@ -69,7 +73,7 @@ function ensureInitialized(): boolean {
 
 // 카카오 디벨로퍼스 콘솔에서 "카카오톡 공유" 제품이 활성화돼 있지 않으면 Kakao.Share 호출이
 // 실패할 수 있다 — 이 경우 URL을 클립보드에 복사하는 것으로 폴백해 완전히 막히지 않게 한다.
-export default function KakaoShareButton({ title, description, compact }: KakaoShareButtonProps) {
+export default function KakaoShareButton({ title, description, compact, label = '공유하기' }: KakaoShareButtonProps) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const sdkReadyRef = useRef(false);
 
@@ -180,7 +184,7 @@ export default function KakaoShareButton({ title, description, compact }: KakaoS
         ) : (
           <>
             <Share2 className={styles.icon} aria-hidden="true" />
-            공유하기
+            {label}
           </>
         )}
       </button>

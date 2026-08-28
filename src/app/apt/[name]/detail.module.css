@@ -498,18 +498,39 @@
    row로 교체한다. 상단에서 이미 가격 정보를 충분히 제공하므로 하단은 "행동"에
    집중한다(§10~11). 3칸을 동일 너비로 나눠 각 버튼을 중앙 정렬한다 — 버튼 자체의
    pill 스타일은 기존 FavoriteButton/KakaoShareButton을 그대로 재사용(새 스타일 X). */
+/* APT DETAIL CONSISTENCY HOTFIX V1 §21 — flex:1 세 칸은 이론상 동일 폭이지만,
+   자식 버튼이 white-space:nowrap 텍스트를 가지면 flex-shrink만으로는 버튼
+   폭이 실제로 줄어들지 않아(콘텐츠가 폭보다 넓으면 이웃 칸을 침범) 겹침이
+   생겼다(§2 "동대신역비스타동원아파트" 실측 사례 — 관심등록 전 상태에서
+   "관심단지 저장"이 옆 칸을 침범). grid의 minmax(0, 1fr)는 트랙 자체를 콘텐츠
+   크기와 무관하게 강제로 clamp해 flex보다 안전하다.*/
 .stickyActionRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
   gap: 0.5rem;
   width: 100%;
 }
 
 .stickyActionItem {
-  flex: 1;
+  min-width: 0;
   display: flex;
   justify-content: center;
-  min-width: 0;
+}
+
+/* 위 grid clamp와 별개로, 텍스트가 예상보다 길어지는 경우(예: 공유 상태 메시지
+   "공유 실패")에도 버튼 자체가 옆 칸으로 삐져나가지 않도록 이중 안전장치를
+   둔다 — 버튼 컴포넌트(FavoriteButton/KakaoShareButton) 공용 스타일은 다른
+   화면(Hero 등)에서도 쓰이므로 건드리지 않고, sticky bar 안에서만 지역
+   선택자로 덮어쓴다. */
+.stickyActionItem > * {
+  max-width: 100%;
+}
+.stickyActionItem button,
+.stickyActionItem a {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stickyWriteBtn {
