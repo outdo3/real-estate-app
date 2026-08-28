@@ -170,33 +170,14 @@ export async function GET(request: Request) {
     else if (mode === 'record-high') rows = buildRecordHighRows(allTrades, period);
     else rows = buildRisingRows(allTrades, period);
 
-    // FIX_STATISTICS_DATA_TRUST 원칙 재사용 — Unit Master 신뢰 가능한 평형만
-    // batch 조회(쿼리 2회 고정, N+1 없음). 없으면 null(raw ㎡만 표시).
-    const lookupKeys = new Map<string, PyeongLookupKey>();
-    for (const r of rows) {
-      if (r.excluUseArea == null) continue;
-      const key: PyeongLookupKey = { name: r.name, dong: r.dong, aptSeq: r.aptSeq, rawAreaM2: r.excluUseArea };
-      lookupKeys.set(pyeongLookupKeyId(key), key);
-    }
-    const pyeongMap = await resolveTrustworthyPyeongBatch(prisma, Array.from(lookupKeys.values()));
-    // FIX_PRICE_RANKINGS_V2_1_1A §6 — "역대 최고가"를 조회 가능 범위(트레일링
-    // LOOKBACK_MONTHS)로 명시적으로 제한한 라벨. decline/record-high 문구에
-    // 항상 이 라벨을 넣어 실제 fetch 범위를 벗어난 "진짜 역대 최고가"라고
-    // 오해할 수 없게 한다(rising은 직전거래 비교라 해당 없음).
-    const coverageLabel = historicalCoverageLabel(LOOKBACK_MONTHS);
-    const withPyeong: any[] = rows.map((r) => {
-      const pyung = r.excluUseArea != null ? pyeongMap.get(pyeongLookupKeyId({ name: r.name, dong: r.dong, aptSeq: r.aptSeq, rawAreaM2: r.excluUseArea })) ?? null : null;
-      const interpretation =
-        mode === 'decline'
-          ? buildDeclineInterpretation(r as any, coverageLabel)
-          : mode === 'record-high'
-            ? buildRecordHighInterpretation(r as any, coverageLabel)
-            : buildRisingInterpretation(r as any);
-      const sigunguName = isSidoAll ? sigunguNameByLawdCd.get(r.lawdCd) || null : null;
-      return { ...r, pyung, interpretation, sigunguName };
-    });
-
     // §7 정렬 — 기존 API가 지원 가능한 필드 범위에서만 구현(새 데이터 소스 없음).
+    // PERF — 정렬 키(declinePct/riseAmount 등)는 pyung/interpretation과 무관하게
+    // rows 자체에 이미 있으므로, Unit Master 조회보다 먼저 정렬+페이지네이션부터
+    // 끝낸다. 이전에는 sido-all의 모든 후보 단지(수백~수천 개)를 대상으로 매번
+    // Unit Master batch 조회를 했는데, 실제로 응답에 노출되는 건 페이지당
+    // limit(기본 30, 최대 100)건뿐이었다 — pyeongLookupKeys/interpretation을
+    // page로 좁히면 결과는 완전히 동일하면서 DB batch 조회 크기만 줄어든다
+    // (§21/§27, 정렬 순서·값 자체는 바뀌지 않음).
     const sortFns: Record<string, (a: any, b: any) => number> = {
       // 하락
       declineRate: (a, b) => a.declinePct - b.declinePct, // 더 큰 하락(더 음수)이 먼저
@@ -212,10 +193,39 @@ export async function GET(request: Request) {
     };
     const defaultSort: Record<string, string> = { decline: 'declineRate', 'record-high': 'recent', rising: 'riseRate' };
     const sortKey = sortFns[sortParam] ? sortParam : defaultSort[mode];
-    withPyeong.sort(sortFns[sortKey]);
+    rows.sort(sortFns[sortKey]);
 
-    const total = withPyeong.length;
-    const page = withPyeong.slice(offset, offset + limit).map((r) => ({
+    const total = rows.length;
+    const pageRows = rows.slice(offset, offset + limit);
+
+    // FIX_STATISTICS_DATA_TRUST 원칙 재사용 — Unit Master 신뢰 가능한 평형만
+    // batch 조회(쿼리 2회 고정, N+1 없음). 없으면 null(raw ㎡만 표시). 이제
+    // 페이지에 실제로 노출되는 건만 조회한다(위 PERF 코멘트).
+    const lookupKeys = new Map<string, PyeongLookupKey>();
+    for (const r of pageRows) {
+      if (r.excluUseArea == null) continue;
+      const key: PyeongLookupKey = { name: r.name, dong: r.dong, aptSeq: r.aptSeq, rawAreaM2: r.excluUseArea };
+      lookupKeys.set(pyeongLookupKeyId(key), key);
+    }
+    const pyeongMap = await resolveTrustworthyPyeongBatch(prisma, Array.from(lookupKeys.values()));
+    // FIX_PRICE_RANKINGS_V2_1_1A §6 — "역대 최고가"를 조회 가능 범위(트레일링
+    // LOOKBACK_MONTHS)로 명시적으로 제한한 라벨. decline/record-high 문구에
+    // 항상 이 라벨을 넣어 실제 fetch 범위를 벗어난 "진짜 역대 최고가"라고
+    // 오해할 수 없게 한다(rising은 직전거래 비교라 해당 없음).
+    const coverageLabel = historicalCoverageLabel(LOOKBACK_MONTHS);
+    const withPyeong: any[] = pageRows.map((r) => {
+      const pyung = r.excluUseArea != null ? pyeongMap.get(pyeongLookupKeyId({ name: r.name, dong: r.dong, aptSeq: r.aptSeq, rawAreaM2: r.excluUseArea })) ?? null : null;
+      const interpretation =
+        mode === 'decline'
+          ? buildDeclineInterpretation(r as any, coverageLabel)
+          : mode === 'record-high'
+            ? buildRecordHighInterpretation(r as any, coverageLabel)
+            : buildRisingInterpretation(r as any);
+      const sigunguName = isSidoAll ? sigunguNameByLawdCd.get(r.lawdCd) || null : null;
+      return { ...r, pyung, interpretation, sigunguName };
+    });
+
+    const page = withPyeong.map((r) => ({
       ...r,
       priceLabel: r.currentAmount != null ? formatKoreanPrice(String(r.currentAmount)) : null,
     }));

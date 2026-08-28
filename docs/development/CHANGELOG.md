@@ -9883,3 +9883,77 @@ PASS. TOOLTIP = PASS. CROSSHAIR = PASS. FULL_WIDTH_MOBILE = PASS.
 DETAIL_CHART_ALIGNMENT = PASS. DATA_LOGIC_CHANGE = NONE. API_CONTRACT_CHANGE
 = NONE. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS. NEXT_STEP = ChatGPT PM
 판단 대기.**
+
+### STEP — STATISTICS PERFORMANCE V1
+
+통계 기능/정의/UI를 전혀 바꾸지 않고 cold 성능만 개선했다(§32 목표: 부산/
+서울 거래량·거래집중 cold 단축, feed 회귀 없음, warm ≤2s 유지). 상세 근거는
+`docs/development/STATISTICS_PERFORMANCE_V1.md` 참고.
+
+**감사 결과**: 병목은 (1) 모든 stats 라우트가 공유하는 전역 MOLIT 동시성
+세마포어(`GLOBAL_MOLIT_CONCURRENCY=3`, molit-stats-helpers.ts), (2)
+`getOrSetCache`(server-cache.ts)에 in-flight dedupe가 없어 동시 cold 요청이
+겹치면 fetch storm이 배가될 수 있는 구조, (3) `price-rankings` 라우트가
+정렬/페이지네이션 전에 **전체 후보**(sido-all에서 수백~천 건)를 Unit Master
+batch 조회에 넣고 있던 것(실측: 부산 decline 모드 후보 959건, 응답 노출은
+30건뿐) — warm(cache-hit)에서도 2.4~5.9초가 걸린 원인이었다.
+
+**구현**: (a) `getOrSetCache`에 key별 in-flight `Promise` 공유 추가(TTL/키
+의미 불변, 성공·실패 모두 `finally`에서 정리 — 메모리 누수 없음). (b)
+`GLOBAL_MOLIT_CONCURRENCY`를 3→6으로 상향(권장 범위 4~8 안, 부산/서울
+SIDO_ALL cold 반복 실행으로 `partial`/`failedDistricts` 증가 없음을 확인 후
+확정). (c) `price-rankings/route.ts`: 정렬(sortFns)과 페이지네이션을 먼저
+끝내고 Unit Master batch 조회/interpretation/sigunguName은 페이지에 실제
+노출되는 행에만 수행하도록 순서 변경(정렬 키는 pyung과 무관하게 이미 row에
+있어 최종 응답 값·순서는 완전히 동일 — §21 Unit Master 원칙 유지, 배치
+크기만 축소).
+
+**측정**(dev 서버 프로세스 재시작 + `.next/cache` 삭제로 진짜 cold 확보,
+`scripts/run-statistics-performance-qa.ts` 신규 작성):
+
+| 케이스 | cold before | cold after |
+|---|---|---|
+| 거래량 부산 SIDO_ALL | 47.3s | 30.3s |
+| 거래량 서울 SIDO_ALL | 103.1s | 79.5s |
+| 거래집중 부산 SIDO_ALL | 4.9s | 3.6s |
+| 거래집중 서울 SIDO_ALL | 7.3s | 5.9s |
+| price-rankings 부산 SIDO_ALL | 38.4s | 28.6s |
+| price-rankings 서울 SIDO_ALL | 72.6s | 53.1s |
+| price-rankings 부산 warm | 2.4~2.8s | **1.8~1.9s**(목표 ≤2s 달성) |
+| feed(단일 구) 부산/서울 | 회귀 없음(오히려 소폭 개선) |
+
+**검증**: `npx tsc --noEmit` 변경 파일 기준 신규 에러 0(기존 scripts/*
+에러는 FAIL_EXISTING_SCRIPT_ERRORS, 무관). Lint 에러 0. `npm run build`
+PASS. 브라우저로 `/stats/decline`, `/stats/volume` 390px·1440px 스모크
+확인(콘솔 에러 없음, 데이터 정상 렌더, 가로 스크롤/겹침 없음). 모든
+before/after 케이스에서 `partial=false`, `failedDistricts=0`(부분 실패
+계약 유지). price-rankings 응답을 decline/record-high/rising 3개 모드 +
+정렬 옵션 전부 curl로 재확인해 pyung/interpretation/sigunguName 값이
+리팩터 전과 동일함을 확인.
+
+**Known Limits**: price-rankings 서울 warm은 여전히 목표(≤2s) 초과(4.1~
+4.2s) — bounded 배치 크기 축소 이후에도 남은 원인은 매 요청마다 캐시된
+raw 거래 전체(서울 24개월×25구, 수만 건)를 다시 그룹화/정렬하는 순수 JS
+비용이다. 계산된 rows 자체를 캐싱하려면 mode/period/sort까지 포함한 별도
+캐시 키 체계가 필요해 이번 STEP 범위 밖으로 판단해 보류(다음 STEP 후보).
+거래량 부산/서울 cold도 목표(각각 ≤12s/≤8s, ≤20s/≤15s)에는 못 미쳤다 —
+남은 시간의 대부분은 MOLIT 외부 API 자체의 네트워크 지연이며, 영구 저장
+캐시(DB_CACHE_GATE, TRUE GATE 대상) 없이는 이 아키텍처 안에서 더 줄이기
+어렵다.
+
+DB 쓰기: 없음. 스키마 변경: 없음. API 응답 shape 변경: 없음(price-rankings
+필드/정렬 순서/값 전부 동일, 구현 순서만 변경).
+
+상태: 완료.
+
+**STATISTICS_PERFORMANCE_V1 = PASS(부분 목표 미달, 정직하게 보고).
+VOLUME_BUSAN_COLD = 47.3s -> 30.3s. VOLUME_SEOUL_COLD = 103.1s -> 79.5s.
+CONCENTRATION_BUSAN_COLD = 4.9s -> 3.6s. CONCENTRATION_SEOUL_COLD = 7.3s ->
+5.9s. FEED_BUSAN = 회귀 없음. FEED_SEOUL = 회귀 없음. PRICE_RANKINGS_BUSAN
+= 38.4s -> 28.6s. PRICE_RANKINGS_SEOUL = 72.6s -> 53.1s. INFLIGHT_DEDUPE =
+PASS(코드 추가, 순차 실측 시나리오라 직접 재현 측정은 안 함). CONCURRENCY
+= PASS(3->6, throttling 없음 확인). DATA_TRUST = PASS. FAKE_PYEONG =
+ABSENT. PARTIAL_FAILURE = DISTINGUISHED. MOBILE = PASS. DESKTOP = PASS.
+BUILD = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP = DB_CACHE_GATE(영구 캐시
+테이블 — TRUE GATE, 승인 필요) 또는 STATISTICS_PERFORMANCE_V2(price-rankings
+계산 결과 캐싱).**

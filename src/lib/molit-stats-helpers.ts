@@ -71,7 +71,14 @@ export interface MonthTask {
   type: 'apt' | 'rent';
 }
 
-const GLOBAL_MOLIT_CONCURRENCY = 3;
+// STATISTICS PERFORMANCE V1 §8/§31/§32 — 기존 3은 과거 "초당 서비스 요청제한
+// 횟수 초과" 에러를 겪은 뒤 보수적으로 굳힌 값이었다. 권장 범위(4~8) 안에서
+// 6으로 올리고 부산/서울 SIDO_ALL cold 반복 실행으로 partial/failedDistricts
+// 증가 여부를 실측 검증했다(docs/development/STATISTICS_PERFORMANCE_V1.md
+// §Concurrency 참고). 각 슬롯은 여전히 fetchMonthGated에서 최소 200ms를 쥔
+// 채로 유지되므로 순간 최대 요청 수는 6개로 유지된다. 이후 배포 환경에서
+// 스로틀링(failedDistricts 증가)이 관측되면 이 값만 낮추면 된다.
+const GLOBAL_MOLIT_CONCURRENCY = 6;
 let activeMolitRequests = 0;
 const molitWaitQueue: Array<() => void> = [];
 
