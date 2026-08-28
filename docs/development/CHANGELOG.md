@@ -10432,3 +10432,56 @@ MAP_MARKER_UX_V2_REGRESSION = PASS. SHARE_REGRESSION = PASS. MOBILE =
 PASS(정확한 360/375/390 뷰포트 재현은 도구 제약으로 DOM 실측으로 보완,
 문서 §8/§13 참고). DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE.
 NEXT_STEP = 84SQM_RANKING / FIX_MAP_UI_POLISH.**
+
+## 2026-08-29
+
+### STEP — 84SQM_RANKING_V1: 84㎡ 국민평형 순위
+
+작업: docs/development/84SQM_RANKING_V1.md 참고(전체 설계/구현/QA
+기록). 통계에 "84㎡ 순위"(slug=`area84`) 신규 메뉴 추가 — 전용 84㎡
+계열(84.0~85.0㎡ 미만, 실측 데이터 분포 기반 확정) 실거래 가격을
+단지별 대표 거래 1건 기준으로 랭킹한다. "34평 순위"가 아니라 "전용
+84㎡ 계열 순위"임을 문구/문서 전체에서 명확히 했다.
+
+**핵심 재사용**: 기존 `/api/stats/price-rankings`
+route(decline/record-high/rising/jeonse-risk)에 `mode=area84`를
+additive로 추가 — fetch/cache/region(시도전체 포함)/pagination 인프라를
+그대로 재사용했다. `price-ranking.ts`에 `buildArea84RankingRows()` 등
+새 순수 함수만 추가(기존 4개 함수는 전혀 변경하지 않음, 기존 30개
+단위 테스트 그대로 통과). 세대수/준공연도는 feed/gap-invest가 이미
+쓰는 `resolveApartmentContextBatch`를 그대로 재사용(새 쿼리 경로
+추가 없음). Share는 기존 `buildStatsShareContext`/`ShareAction`을
+그대로 재사용(bespoke 컴포넌트 없음).
+
+**Area band**: 부산 4개 구 12개월 매매 12,620건 raw 전용면적 분포
+실측 결과, 83.9㎡대는 0건, 84.0~84.9999㎡ 구간에 4,980건이 밀집,
+85.0㎡은 12건뿐이고 85.1~85.8㎡은 0건 — 데이터가 직접 뒷받침하는
+경계(84 이상 85 미만)를 그대로 채택했다(추정 없음).
+
+**Identity 보호**: band는 후보를 넓히는 용도일 뿐 identity가
+아니다. 대표 거래 선택 후에는 exact raw area를 그대로 보존하고,
+직전거래/2년최고가 비교는 반드시 같은 exact area 그룹 안에서만
+계산한다 — 대신롯데캐슬(84.7855㎡/84.9950㎡) 실제 케이스로 비병합을
+확인했다.
+
+**QA**: 신규 단위 테스트 16개(총 46개 전부 pass) +
+`scripts/run-84sqm-ranking-qa.ts`(신규, 부산 4개 구+서울 강남구+부산
+전체 라이브 검증, RELEASE GATE: READY, P0/P1 0건) + 라이브
+크로스체크(1위 row 가격/면적/층/거래일/직전거래/2년최고가 대비율을
+`/api/transactions` 원본과 대조해 전부 일치 확인) + 모바일
+360/375/390 iframe QA + 데스크톱 확인 + 기존 통계(하락 등)/`/map`
+회귀 스모크.
+
+DB 쓰기: 없음. 스키마 변경: 없음. 기존 decline/record-high/rising/
+jeonse-risk 4개 모드 동작 불변(preset 목록 additive 확장만, 기본값
+그대로).
+
+상태: 완료.
+
+**84SQM_RANKING_V1 = PASS. AREA_BAND = [84, 85) exclusive.
+RAW_AREA_IDENTITY = PASS. TRUSTED_PYEONG = PASS. FAKE_PYEONG = ABSENT.
+CANCELLED_TRADES = EXCLUDED. FUTURE_TRADES = EXCLUDED. RANKING = PASS.
+REGION_FILTER = PASS. SHARE = PASS. DETAIL_NAVIGATION = PASS.
+N_PLUS_ONE = ABSENT. PERFORMANCE = PASS. MOBILE = PASS. DESKTOP = PASS.
+BUILD = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP = PRICE_MAP_V2 /
+지도에서 보기 좌표 enrichment.**

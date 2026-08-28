@@ -4,17 +4,20 @@ import { getOrSetCache } from '@/lib/server-cache';
 import { resolveLawdCd, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { prisma } from '@/lib/prisma';
-import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
+import { resolveTrustworthyPyeongBatch, resolveApartmentContextBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import {
   dedupeTrades,
   buildDeclineRows,
   buildRecordHighRows,
   buildRisingRows,
   buildJeonseRiskRows,
+  buildArea84RankingRows,
   buildDeclineInterpretation,
   buildRecordHighInterpretation,
   buildRisingInterpretation,
   buildJeonseRiskInterpretation,
+  buildArea84Interpretation,
+  buildArea84RegionDistributionInterpretation,
   resolvePriceRankingPeriod,
   historicalCoverageLabel,
   HISTORICAL_LOOKBACK_MONTHS,
@@ -34,7 +37,9 @@ export const dynamic = 'force-dynamic';
 // 문구가 실제 fetch 범위와 항상 일치해야 하므로 단일 source로 통합했다).
 // 로컬 상수를 따로 두지 않고 그 값을 그대로 재사용한다.
 const LOOKBACK_MONTHS = HISTORICAL_LOOKBACK_MONTHS;
-const VALID_PRESETS: PriceRankingPeriodPreset[] = ['7d', '30d', '3m', '6m', '12m'];
+// 84SQM_RANKING_V1 §10 — '1m'/'24m'은 area84 전용으로 추가된 preset(price-ranking.ts
+// 참고). 기존 4개 모드는 여전히 '7d'~'12m'만 실제로 노출/사용한다(additive).
+const VALID_PRESETS: PriceRankingPeriodPreset[] = ['1m', '7d', '30d', '3m', '6m', '12m', '24m'];
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 
@@ -74,9 +79,12 @@ function toFeedTrade(item: any, lawdCd: string, dealType: 'sale' | 'jeonse'): Fe
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const modeParam = searchParams.get('mode');
-  const mode = modeParam === 'decline' || modeParam === 'record-high' || modeParam === 'rising' || modeParam === 'jeonse-risk' ? modeParam : null;
+  const mode =
+    modeParam === 'decline' || modeParam === 'record-high' || modeParam === 'rising' || modeParam === 'jeonse-risk' || modeParam === 'area84'
+      ? modeParam
+      : null;
   if (!mode) {
-    return NextResponse.json({ status: 'ERROR', message: 'mode 파라미터가 필요합니다(decline|record-high|rising|jeonse-risk).' }, { status: 400 });
+    return NextResponse.json({ status: 'ERROR', message: 'mode 파라미터가 필요합니다(decline|record-high|rising|jeonse-risk|area84).' }, { status: 400 });
   }
   // STATISTICS V2.1-3 §16 — jeonse-risk는 rent(전월세) API를 쓴다. 다른 3개
   // 모드는 기존과 동일하게 apt(매매)만 쓴다.
@@ -88,7 +96,9 @@ export async function GET(request: Request) {
   const sido = searchParams.get('sido') || '부산광역시';
   const gungu = searchParams.get('gungu') || '서구';
   const dong = searchParams.get('dong') || 'all';
-  const presetParam = searchParams.get('period') || '30d';
+  // 84SQM_RANKING_V1 §10 — area84 기본 기간은 12개월(다른 3개 모드는 기존과
+  // 동일하게 30일 기본을 유지, 동작 변경 없음).
+  const presetParam = searchParams.get('period') || (mode === 'area84' ? '12m' : '30d');
   const preset: PriceRankingPeriodPreset = (VALID_PRESETS as string[]).includes(presetParam) ? (presetParam as PriceRankingPeriodPreset) : '30d';
   const areaFilter = searchParams.get('area'); // exact raw area string, optional
   const sortParam = searchParams.get('sort') || '';
@@ -184,6 +194,7 @@ export async function GET(request: Request) {
     if (mode === 'decline') rows = buildDeclineRows(allTrades, period);
     else if (mode === 'record-high') rows = buildRecordHighRows(allTrades, period);
     else if (mode === 'jeonse-risk') rows = buildJeonseRiskRows(allTrades, period);
+    else if (mode === 'area84') rows = buildArea84RankingRows(allTrades, period);
     else rows = buildRisingRows(allTrades, period);
 
     // §7 정렬 — 기존 API가 지원 가능한 필드 범위에서만 구현(새 데이터 소스 없음).
@@ -206,8 +217,15 @@ export async function GET(request: Request) {
       // 상승
       riseRate: (a, b) => b.risePct - a.risePct,
       riseAmount: (a, b) => b.riseAmount - a.riseAmount,
+      // 84㎡ 순위 — §12 기본: 대표 거래가 DESC. recent는 위 record-high 정렬과 동일 키 재사용.
     };
-    const defaultSort: Record<string, string> = { decline: 'declineRate', 'record-high': 'recent', rising: 'riseRate', 'jeonse-risk': 'declineRate' };
+    const defaultSort: Record<string, string> = {
+      decline: 'declineRate',
+      'record-high': 'recent',
+      rising: 'riseRate',
+      'jeonse-risk': 'declineRate',
+      area84: 'price',
+    };
     const sortKey = sortFns[sortParam] ? sortParam : defaultSort[mode];
     rows.sort(sortFns[sortKey]);
 
@@ -224,6 +242,17 @@ export async function GET(request: Request) {
       lookupKeys.set(pyeongLookupKeyId(key), key);
     }
     const pyeongMap = await resolveTrustworthyPyeongBatch(prisma, Array.from(lookupKeys.values()));
+    // 84SQM_RANKING_V1 §17/§32 — 세대수/준공연도는 area84 모드에서만 필요하다.
+    // 다른 3개 모드는 기존과 동일하게 이 batch 쿼리를 타지 않는다(쿼리 수 불변).
+    // resolveApartmentContextBatch는 feed/gap-invest/concentration이 이미 쓰는
+    // 동일 batch 헬퍼(고정 2쿼리, N+1 없음) 재사용 — 새로 만들지 않는다.
+    const contextMap =
+      mode === 'area84'
+        ? await resolveApartmentContextBatch(
+            prisma,
+            pageRows.map((r) => ({ aptSeq: r.aptSeq, name: r.name, dong: r.dong }))
+          )
+        : new Map();
     // FIX_PRICE_RANKINGS_V2_1_1A §6 — "역대 최고가"를 조회 가능 범위(트레일링
     // LOOKBACK_MONTHS)로 명시적으로 제한한 라벨. decline/record-high 문구에
     // 항상 이 라벨을 넣어 실제 fetch 범위를 벗어난 "진짜 역대 최고가"라고
@@ -238,8 +267,14 @@ export async function GET(request: Request) {
             ? buildRecordHighInterpretation(r as any, coverageLabel)
             : mode === 'jeonse-risk'
               ? buildJeonseRiskInterpretation(r as any)
-              : buildRisingInterpretation(r as any);
+              : mode === 'area84'
+                ? buildArea84Interpretation(r as any, coverageLabel)
+                : buildRisingInterpretation(r as any);
       const sigunguName = isSidoAll ? sigunguNameByLawdCd.get(r.lawdCd) || null : null;
+      if (mode === 'area84') {
+        const ctx = contextMap.get(`${r.aptSeq || ''}|${r.name}|${r.dong}|0`) ?? null;
+        return { ...r, pyung, interpretation, sigunguName, totalHouseholds: ctx?.totalHouseholds ?? null, approvalDate: ctx?.approvalDate ?? null };
+      }
       return { ...r, pyung, interpretation, sigunguName };
     });
 
@@ -248,12 +283,31 @@ export async function GET(request: Request) {
       priceLabel: r.currentAmount != null ? formatKoreanPrice(String(r.currentAmount)) : null,
     }));
 
+    // 84SQM_RANKING_V1 §28 REGION SUMMARY — 페이지네이션 이전 전체 rows 기준으로
+    // 계산(표시되는 페이지 30건만 보고 중앙값을 왜곡하지 않기 위함). §27 구 분포
+    // 문구는 항상 가격 내림차순 top 10을 기준으로 계산한다(사용자가 다른 정렬을
+    // 선택해도 "상위권이 어디 몰려있나"라는 질문의 의미가 바뀌지 않도록).
+    let area84Summary: { totalCount: number; topAmount: number | null; medianAmount: number | null } | null = null;
+    let area84RegionInterpretation: string | null = null;
+    if (mode === 'area84') {
+      const amounts = (rows as any[]).map((r) => r.currentAmount).sort((a, b) => a - b);
+      const medianAmount = amounts.length > 0 ? amounts[Math.floor((amounts.length - 1) / 2)] : null;
+      area84Summary = { totalCount: rows.length, topAmount: amounts.length > 0 ? amounts[amounts.length - 1] : null, medianAmount };
+      if (isSidoAll) {
+        const byPrice = [...(rows as any[])].sort((a, b) => b.currentAmount - a.currentAmount).slice(0, 10);
+        area84RegionInterpretation = buildArea84RegionDistributionInterpretation(byPrice, sigunguNameByLawdCd, sido.replace(/(특별자치시|특별자치도|광역시|특별시|자치도|도)$/, '') || sido);
+      }
+    }
+
     return NextResponse.json({
       status: 'OK',
       mode,
       region: { lawdCd, sidoCode: isSidoAll ? sidoCodeParam : lawdCd ? lawdCd.substring(0, 2) : null, dong, sidoAll: isSidoAll },
       period: { preset, from: period.from, to: period.to },
       lookbackMonths: LOOKBACK_MONTHS,
+      areaBand: mode === 'area84' ? { min: 84, max: 85 } : null,
+      summary: area84Summary,
+      regionInterpretation: area84RegionInterpretation,
       // FIX_PRICE_RANKINGS_V2_1_1A — 클라이언트가 "역대 최고가"류 문구를 직접
       // 만드는 곳(예: PriceRankingView의 evidence 줄)에서도 동일한 정직한
       // 범위 라벨을 재사용할 수 있게 API가 그대로 내려준다(하드코딩 방지).

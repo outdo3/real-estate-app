@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   TrendingDown, Award, TrendingUp, Activity, Scale, LayoutGrid, Coins, Target,
-  Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye, Rows3,
+  Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye, Rows3, Home,
 } from 'lucide-react';
 
 // 시장 통계 탭의 17개 메뉴 정의. status: 'live'는 실제 데이터 소스로 계산해서 보여주는
@@ -53,6 +53,10 @@ export const STATS_MENU: StatsMenuItem[] = [
   // 별도 기능(예: 84㎡ 절대가격 순위, §8)을 위해 예약해둔다.
   { slug: 'record-high', icon: '🏆', Icon: Award, title: '2년최고가', subtitle: '최근 2년 내 최고가 경신 단지', status: 'live', category: '가격', colorToken: 'up' },
   { slug: 'rising', icon: '📈', Icon: TrendingUp, title: '상승', subtitle: '가격변동 상위 단지', status: 'live', category: '가격', colorToken: 'up' },
+  // 84SQM_RANKING_V1 — "국민평형"으로 불리는 전용 84㎡ 계열 실거래 가격 순위.
+  // record-high 코멘트(§7/§8)가 예약해둔 자리를 채운다. 하락/상승처럼 방향성
+  // 지표가 아니라 절대가격 랭킹이라 colorToken은 up/down이 아닌 brand로 둔다.
+  { slug: 'area84', icon: '🏠', Icon: Home, title: '84㎡ 순위', subtitle: '전용 84㎡ 계열 실거래 가격 순위', status: 'live', category: '가격', colorToken: 'brand' },
   // STATISTICS V2.1-3 §2/§15/§19 — "역전세"는 보증금 미반환처럼 확정된
   // 사실을 뜻하는 것으로 오독될 수 있다. 이 화면이 실제로 보여주는 것은
   // "직전 전세 거래보다 가격이 낮아진 단지"일 뿐 역전세(보증금 반환 불능)

@@ -15,9 +15,10 @@ import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
 import { getStatsMenuItem } from '../statsMenu';
-import { buildStatsShareContext } from './shareContext';
+import { buildStatsShareContext, statsRegionShareLabel } from './shareContext';
 import TransactionFeedView from '@/components/stats/TransactionFeedView';
 import PriceRankingView from '@/components/stats/PriceRankingView';
+import Area84RankingView from '@/components/stats/Area84RankingView';
 import ConcentrationView from '@/components/stats/ConcentrationView';
 import VolumeChartCard from '@/components/stats/VolumeChartCard';
 import GapInvestView from '@/components/stats/GapInvestView';
@@ -325,6 +326,14 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
           <TransactionFeedView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'decline' || slug === 'record-high' || slug === 'rising' || slug === 'jeonse-risk' ? (
           <PriceRankingView mode={slug} lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
+        ) : slug === 'area84' ? (
+          <Area84RankingView
+            lawdCd={region.lawdCd}
+            sidoCode={region.sidoCode}
+            dong={region.dong}
+            displayRegionName={region.displayRegionName}
+            regionQuestionLabel={`${statsRegionShareLabel(region)}에서 84㎡가 비싼 단지는?`}
+          />
         ) : slug === 'top-traded' ? (
           <ConcentrationView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'volume' ? (

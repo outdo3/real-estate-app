@@ -10,6 +10,11 @@ import {
   resolvePriceRankingPeriod,
   historicalCoverageLabel,
   HISTORICAL_LOOKBACK_MONTHS,
+  isInArea84Band,
+  buildArea84RankingRows,
+  buildArea84Interpretation,
+  buildArea84RegionDistributionInterpretation,
+  DEFAULT_AREA84_BAND,
   type FeedTrade,
 } from './price-ranking';
 
@@ -335,4 +340,169 @@ test('buildRisingInterpretation: 표본 부족 시 "상승세" 같은 과장 표
   assert.equal(weak.includes('상승세'), false);
   assert.ok(weak.includes('직전 거래보다'));
   assert.ok(strong.includes('이어지고'));
+});
+
+// ── 84SQM_RANKING_V1 — AREA84 ──
+
+test('isInArea84Band: 경계값 — 83.99 제외, 84.00 포함, 84.9999 포함, 85.00 제외, 85.01 제외', () => {
+  assert.equal(isInArea84Band(83.99), false);
+  assert.equal(isInArea84Band(83.5), false);
+  assert.equal(isInArea84Band(84), true);
+  assert.equal(isInArea84Band(84.0001), true);
+  assert.equal(isInArea84Band(84.7855), true);
+  assert.equal(isInArea84Band(84.9999), true);
+  assert.equal(isInArea84Band(85), false);
+  assert.equal(isInArea84Band(85.01), false);
+  assert.equal(isInArea84Band(82.6), false);
+  assert.equal(isInArea84Band(86.1), false);
+  assert.equal(isInArea84Band(null), false);
+});
+
+test('buildArea84RankingRows: band 밖 거래는 후보에서 제외된다', () => {
+  const trades = [
+    trade({ uid: 'in-band', dealDate: '2026-08-10', dealAmount: 50000, excluUseArea: 84.5 }),
+    trade({ uid: 'below-band', dealDate: '2026-08-11', dealAmount: 99000, excluUseArea: 83.9, aptSeq: 'AS2', name: '다른단지' }),
+    trade({ uid: 'above-band', dealDate: '2026-08-12', dealAmount: 99000, excluUseArea: 85.1, aptSeq: 'AS3', name: '또다른단지' }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].excluUseArea, 84.5);
+});
+
+test('buildArea84RankingRows: 취소거래/미래거래/기간 밖 거래는 대표 거래 후보가 아니다', () => {
+  const trades = [
+    trade({ uid: 'cancelled', dealDate: '2026-08-15', dealAmount: 99000, dealCanceled: true }),
+    trade({ uid: 'future', dealDate: '2026-09-15', dealAmount: 99000 }),
+    trade({ uid: 'out-of-period', dealDate: '2026-01-01', dealAmount: 99000 }),
+    trade({ uid: 'valid', dealDate: '2026-08-05', dealAmount: 45000 }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].currentAmount, 45000);
+});
+
+test('buildArea84RankingRows: 단지당 대표 거래 1건만 — 기간 내 가장 최근 거래를 고른다', () => {
+  const trades = [
+    trade({ uid: 'older', dealDate: '2026-08-01', dealAmount: 40000 }),
+    trade({ uid: 'newer', dealDate: '2026-08-20', dealAmount: 47000 }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].currentAmount, 47000);
+  assert.equal(rows[0].currentDate, '2026-08-20');
+});
+
+test('buildArea84RankingRows: 같은 날짜 동점이면 금액 DESC로 결정론적 tie-break', () => {
+  const trades = [
+    trade({ uid: 'low', dealDate: '2026-08-20', dealAmount: 40000, floorRaw: 3 }),
+    trade({ uid: 'high', dealDate: '2026-08-20', dealAmount: 47000, floorRaw: 15 }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].currentAmount, 47000);
+  assert.equal(rows[0].floorRaw, 15);
+});
+
+test('buildArea84RankingRows: band 안에서도 exact raw area는 병합하지 않고 대표 거래의 값만 보존한다(대신롯데캐슬 84.7855 vs 84.9950)', () => {
+  const trades = [
+    trade({ uid: 'a', dealDate: '2026-08-10', dealAmount: 40000, excluUseArea: 84.7855, aptSeq: 'AS-LOTTE', name: '대신롯데캐슬' }),
+    trade({ uid: 'b', dealDate: '2026-08-05', dealAmount: 41000, excluUseArea: 84.995, aptSeq: 'AS-LOTTE', name: '대신롯데캐슬' }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  // 같은 단지(identity)이므로 대표 거래는 1건만 — 더 최근인 84.7855가 선택되고, 그 exact area가 그대로 보존된다.
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].excluUseArea, 84.7855);
+});
+
+test('buildArea84RankingRows: 서로 다른 단지는 각각 별도 row(단지당 1건 원칙)', () => {
+  const trades = [
+    trade({ uid: 'a', dealDate: '2026-08-10', dealAmount: 60000, aptSeq: 'AS-A', name: 'A단지' }),
+    trade({ uid: 'b', dealDate: '2026-08-11', dealAmount: 50000, aptSeq: 'AS-B', name: 'B단지' }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows.length, 2);
+  const names = rows.map((r) => r.name).sort();
+  assert.deepEqual(names, ['A단지', 'B단지']);
+});
+
+test('buildArea84RankingRows: previousAmount/previousDate는 같은 exact area의 직전 거래만 사용한다', () => {
+  const trades = [
+    trade({ uid: 'prev', dealDate: '2026-06-01', dealAmount: 42000, excluUseArea: 84.5 }),
+    trade({ uid: 'other-area-prev', dealDate: '2026-07-01', dealAmount: 999000, excluUseArea: 84.1 }),
+    trade({ uid: 'current', dealDate: '2026-08-10', dealAmount: 47000, excluUseArea: 84.5 }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].previousAmount, 42000); // 다른 면적(84.1)의 999000이 아니라 같은 84.5의 직전 거래
+  assert.equal(rows[0].changeAmount, 5000);
+});
+
+test('buildArea84RankingRows: 직전 거래가 없으면 previousAmount/changeAmount는 null(숨김)', () => {
+  const trades = [trade({ uid: 'only', dealDate: '2026-08-10', dealAmount: 47000 })];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows[0].previousAmount, null);
+  assert.equal(rows[0].changeAmount, null);
+  assert.equal(rows[0].changePct, null);
+});
+
+test('buildArea84RankingRows: 트레일링 24개월 내 최고가면 isRecent2yHigh=true', () => {
+  const trades = [
+    trade({ uid: 'lower-past', dealDate: '2025-01-01', dealAmount: 30000 }),
+    trade({ uid: 'current', dealDate: '2026-08-10', dealAmount: 47000 }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows[0].isRecent2yHigh, true);
+  assert.equal(rows[0].recent2yHighAmount, 47000);
+  assert.equal(rows[0].recent2yHighDeltaPct, null);
+});
+
+test('buildArea84RankingRows: 과거에 더 높은 거래가 있으면 isRecent2yHigh=false, 대비율 계산', () => {
+  const trades = [
+    trade({ uid: 'higher-past', dealDate: '2025-06-01', dealAmount: 60000 }),
+    trade({ uid: 'current', dealDate: '2026-08-10', dealAmount: 48000 }),
+  ];
+  const rows = buildArea84RankingRows(trades, PERIOD);
+  assert.equal(rows[0].isRecent2yHigh, false);
+  assert.equal(rows[0].recent2yHighAmount, 60000);
+  assert.equal(rows[0].recent2yHighDeltaPct, Math.round(((48000 - 60000) / 60000) * 1000) / 10);
+});
+
+test('buildArea84Interpretation: 최고가/대비율 문구 분기, "역대"/"신고가" 표현 없음', () => {
+  const high = buildArea84Interpretation({ isRecent2yHigh: true, recent2yHighDeltaPct: null }, '2년');
+  assert.ok(high.includes('2년'));
+  assert.equal(high.includes('역대'), false);
+  assert.equal(high.includes('신고가'), false);
+  const below = buildArea84Interpretation({ isRecent2yHigh: false, recent2yHighDeltaPct: -8 }, '2년');
+  assert.ok(below.includes('-8%'));
+});
+
+test('buildArea84RegionDistributionInterpretation: 표본 5건 미만이면 null', () => {
+  const rows = [{ lawdCd: '26140' }, { lawdCd: '26140' }];
+  const map = new Map([['26140', '서구']]);
+  assert.equal(buildArea84RegionDistributionInterpretation(rows, map, '부산'), null);
+});
+
+test('buildArea84RegionDistributionInterpretation: 특정 구가 30% 이상 몰려있을 때만 문구 생성', () => {
+  const rows = [
+    { lawdCd: '26350' }, { lawdCd: '26350' }, { lawdCd: '26350' },
+    { lawdCd: '26140' }, { lawdCd: '26470' },
+  ];
+  const map = new Map([['26350', '해운대구'], ['26140', '서구'], ['26470', '연제구']]);
+  const text = buildArea84RegionDistributionInterpretation(rows, map, '부산');
+  assert.ok(text && text.includes('해운대구'));
+});
+
+test('buildArea84RegionDistributionInterpretation: 고르게 분산돼 있으면 null(과장 금지)', () => {
+  const rows = [
+    { lawdCd: '26350' }, { lawdCd: '26140' }, { lawdCd: '26470' }, { lawdCd: '26230' }, { lawdCd: '26260' },
+  ];
+  const map = new Map([
+    ['26350', '해운대구'], ['26140', '서구'], ['26470', '연제구'], ['26230', '남구'], ['26260', '동래구'],
+  ]);
+  assert.equal(buildArea84RegionDistributionInterpretation(rows, map, '부산'), null);
+});
+
+test('DEFAULT_AREA84_BAND: 84 이상 85 미만(exclusive)', () => {
+  assert.equal(DEFAULT_AREA84_BAND.min, 84);
+  assert.equal(DEFAULT_AREA84_BAND.max, 85);
 });

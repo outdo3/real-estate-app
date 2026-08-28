@@ -105,7 +105,10 @@ function inRange(dateStr: string, range: PeriodRange): boolean {
 // regional-feed.ts의 preset(오늘/어제/이번주 등, 실거래 feed 전용)과는 다른
 // 목적이라 별도로 둔다 — "최근 N일/개월" 형태만 필요하고 요일 단위(이번주/
 // 지난주) 개념은 이 3개 화면에는 맞지 않는다(§5 최소 preset 지시).
-export type PriceRankingPeriodPreset = '7d' | '30d' | '3m' | '6m' | '12m';
+// 84SQM_RANKING_V1 §10 — 84㎡ 순위는 기존 3개 화면(하락/신고가/상승)이 안 쓰던
+// '1m'(최근 1개월)/'24m'(최근 24개월, HISTORICAL_LOOKBACK_MONTHS와 동일 상한) 두
+// preset을 추가로 쓴다. 기존 5개 preset 값/동작은 전혀 바뀌지 않는다(additive).
+export type PriceRankingPeriodPreset = '1m' | '7d' | '30d' | '3m' | '6m' | '12m' | '24m';
 
 export function resolvePriceRankingPeriod(preset: PriceRankingPeriodPreset, now: Date): PeriodRange {
   const to = now.toISOString().slice(0, 10);
@@ -117,6 +120,9 @@ export function resolvePriceRankingPeriod(preset: PriceRankingPeriodPreset, now:
     case '30d':
       from.setDate(now.getDate() - 29);
       break;
+    case '1m':
+      from.setMonth(now.getMonth() - 1);
+      break;
     case '3m':
       from.setMonth(now.getMonth() - 3);
       break;
@@ -125,6 +131,9 @@ export function resolvePriceRankingPeriod(preset: PriceRankingPeriodPreset, now:
       break;
     case '12m':
       from.setMonth(now.getMonth() - 12);
+      break;
+    case '24m':
+      from.setMonth(now.getMonth() - 24);
       break;
   }
   return { from: from.toISOString().slice(0, 10), to };
@@ -383,4 +392,161 @@ export function buildJeonseRiskInterpretation(row: Pick<JeonseRiskRow, 'declineP
     return '직전 전세 거래보다 가격이 많이 내려왔어요. 전세가격 하락으로 보증금 반환 부담이 커질 수 있어 확인이 필요해요.';
   }
   return '직전 전세 거래보다 가격이 내려왔어요.';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 84SQM_RANKING_V1 — 84㎡ 국민평형 순위. docs/development/84SQM_RANKING_V1.md
+// §5 AREA BAND AUDIT 참고: 실측(2026-08-29, 부산 서구/연제구/해운대구/동래구
+// 12개월 매매 12,620건 raw excluUseArea 분포) 결과 83.9x대는 0건, 84.0~84.9999
+// 구간에 4,980건이 밀집돼 있으며 85.0은 12건뿐이고 85.1~85.8은 0건이다(85.9/86.1은
+// 명백히 다른 면적군). "84㎡ 국민평형" 실거래 군집은 정확히 이 경계와 일치해
+// 추정 없이 그대로 채택한다. §7/§8 — inclusion은 이 raw band로만 판정하고, 각
+// 거래의 exact raw area(예: 84.7855 vs 84.9950)는 절대 병합하지 않는다 — band는
+// "후보를 넓게 모으는" 용도일 뿐 identity가 아니다.
+export const AREA84_BAND_MIN = 84;
+export const AREA84_BAND_MAX = 85; // exclusive
+
+export interface Area84Band {
+  min: number;
+  max: number;
+}
+
+export const DEFAULT_AREA84_BAND: Area84Band = { min: AREA84_BAND_MIN, max: AREA84_BAND_MAX };
+
+export function isInArea84Band(area: number | null, band: Area84Band = DEFAULT_AREA84_BAND): boolean {
+  return area != null && area >= band.min && area < band.max;
+}
+
+export interface Area84RankingRow {
+  /** identity-only 키(aptSeq 우선, 없으면 name+dong) — "단지별 대표 거래 1건"의
+   * 단위. §8 — band 내에서는 서로 다른 raw area 후보도 같은 단지로 취급해 대표
+   * 거래를 고르지만, 선택된 이후에는 그 거래의 exact raw area만 쓴다. */
+  complexKey: string;
+  /** 대표 거래의 identity+exact area+dealType 키 — §19 직전거래 비교에 쓰인다. */
+  groupKey: string;
+  aptSeq: string | null;
+  name: string;
+  dong: string;
+  lawdCd: string;
+  excluUseArea: number;
+  floorRaw: string | number | null;
+  currentAmount: number;
+  currentDate: string;
+  /** §19 — 같은 aptSeq + exact raw area 기준 "바로 직전" 거래만. 다른 면적과는
+   * 절대 비교하지 않는다. 없으면 null(숨김). */
+  previousAmount: number | null;
+  previousDate: string | null;
+  changeAmount: number | null;
+  changePct: number | null;
+  /** §20 — 같은 exact area 그룹의 트레일링 24개월(현재 거래 포함) 최고가. */
+  recent2yHighAmount: number;
+  isRecent2yHigh: boolean;
+  /** 2년 최고가 대비 현재가 변동률(%). isRecent2yHigh가 true면 의미 없어 null. */
+  recent2yHighDeltaPct: number | null;
+  trailing12moSampleCount: number;
+}
+
+// §12 대표 거래 tie-break: dealDate DESC → dealAmount DESC → excluUseArea DESC →
+// floor DESC → uid 오름차순(최종 결정론적 tiebreak, 입력 순서에 의존하지 않음).
+function compareArea84Candidates(a: FeedTrade, b: FeedTrade): number {
+  if (a.dealDate !== b.dealDate) return a.dealDate < b.dealDate ? 1 : -1;
+  if (a.dealAmount !== b.dealAmount) return b.dealAmount - a.dealAmount;
+  const areaA = a.excluUseArea ?? 0;
+  const areaB = b.excluUseArea ?? 0;
+  if (areaA !== areaB) return areaB - areaA;
+  const floorA = typeof a.floorRaw === 'number' ? a.floorRaw : parseInt(String(a.floorRaw ?? ''), 10) || 0;
+  const floorB = typeof b.floorRaw === 'number' ? b.floorRaw : parseInt(String(b.floorRaw ?? ''), 10) || 0;
+  if (floorA !== floorB) return floorB - floorA;
+  return a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0;
+}
+
+/** §9/§11/§12/§13/§14 — 기간 내 band에 속하는 검증된(취소 제외) 거래만 후보로
+ * 삼아, 단지(identity)별 대표 거래 1건을 뽑아 가격 내림차순으로 정렬 가능한
+ * row를 만든다. 미래 거래는 period.to(오늘)를 넘지 않는 한 자연히 제외된다
+ * (다른 3개 모드와 동일한 §13 관례 — 별도 필터를 추가하지 않는다). */
+export function buildArea84RankingRows(allTrades: FeedTrade[], period: PeriodRange, band: Area84Band = DEFAULT_AREA84_BAND): Area84RankingRow[] {
+  const history = buildHistory(allTrades);
+  const verified = filterVerifiedTrades(allTrades);
+
+  const candidatesByComplex = new Map<string, FeedTrade[]>();
+  for (const t of verified) {
+    if (!isInArea84Band(t.excluUseArea, band)) continue;
+    if (!inRange(t.dealDate, period)) continue;
+    const key = identityKey(t);
+    if (!candidatesByComplex.has(key)) candidatesByComplex.set(key, []);
+    candidatesByComplex.get(key)!.push(t);
+  }
+
+  const rows: Area84RankingRow[] = [];
+  for (const [complexKey, candidates] of candidatesByComplex) {
+    const rep = [...candidates].sort(compareArea84Candidates)[0];
+    const repGroupKey = groupKey(rep);
+    const points = history.get(repGroupKey) || [];
+    const point = points.find((p) => p.trade.uid === rep.uid);
+    const priorHigh = point?.priorHigh ?? null;
+    const immediatePrior = point?.immediatePrior ?? null;
+
+    const recent2yHighAmount = priorHigh && priorHigh.amount > rep.dealAmount ? priorHigh.amount : rep.dealAmount;
+    const isRecent2yHigh = recent2yHighAmount === rep.dealAmount;
+
+    rows.push({
+      complexKey,
+      groupKey: repGroupKey,
+      aptSeq: rep.aptSeq,
+      name: rep.name,
+      dong: rep.dong,
+      lawdCd: rep.lawdCd,
+      excluUseArea: rep.excluUseArea as number,
+      floorRaw: rep.floorRaw,
+      currentAmount: rep.dealAmount,
+      currentDate: rep.dealDate,
+      previousAmount: immediatePrior?.amount ?? null,
+      previousDate: immediatePrior?.date ?? null,
+      changeAmount: immediatePrior ? rep.dealAmount - immediatePrior.amount : null,
+      changePct: immediatePrior && immediatePrior.amount > 0 ? Math.round(((rep.dealAmount - immediatePrior.amount) / immediatePrior.amount) * 1000) / 10 : null,
+      recent2yHighAmount,
+      isRecent2yHigh,
+      recent2yHighDeltaPct: isRecent2yHigh ? null : Math.round(((rep.dealAmount - recent2yHighAmount) / recent2yHighAmount) * 1000) / 10,
+      trailing12moSampleCount: point?.trailing12moSampleCount ?? 1,
+    });
+  }
+  return rows;
+}
+
+// §35 — "역대"/"신고가" 등 무제한 표현 금지, 항상 트레일링 coverageLabel로 범위를
+// 밝힌다(다른 3개 모드와 동일 원칙, historicalCoverageLabel 재사용).
+export function buildArea84Interpretation(
+  row: Pick<Area84RankingRow, 'isRecent2yHigh' | 'recent2yHighDeltaPct'>,
+  coverageLabel: string = historicalCoverageLabel()
+): string {
+  if (row.isRecent2yHigh) return `최근 ${coverageLabel} 이 면적 거래 중 최고가예요.`;
+  if (row.recent2yHighDeltaPct != null) return `최근 ${coverageLabel} 최고가 대비 ${formatSignedPct(row.recent2yHighDeltaPct)}예요.`;
+  return '최근 84㎡ 거래 기준 순위예요.';
+}
+
+function formatSignedPct(pct: number): string {
+  return pct > 0 ? `+${pct}%` : `${pct}%`;
+}
+
+// §27 REGION SUMMARY INTERPRETATION — 시도 전체 조회에서만 의미가 있다(특정
+// 구를 이미 선택했으면 "어느 구에 몰려있는지"는 질문 자체가 성립하지 않음).
+// 실제로 계산된 top row들의 구 분포에서만 문장을 만든다(과장/추정 금지) — 표본이
+// 너무 적거나(5건 미만) 분포가 뚜렷하지 않으면(1위 구가 30% 미만) null(문구 숨김).
+export function buildArea84RegionDistributionInterpretation(
+  topRows: Array<Pick<Area84RankingRow, 'lawdCd'>>,
+  sigunguNameByLawdCd: Map<string, string>,
+  regionLabel: string
+): string | null {
+  if (topRows.length < 5) return null;
+  const counts = new Map<string, number>();
+  for (const r of topRows) {
+    const name = sigunguNameByLawdCd.get(r.lawdCd);
+    if (!name) return null;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) return null;
+  const [topGu, topCount] = sorted[0];
+  if (topCount < 2 || topCount / topRows.length < 0.3) return null;
+  return `현재 ${regionLabel} 84㎡ 거래 중 상위권은 ${topGu}에 많이 분포해 있어요.`;
 }
