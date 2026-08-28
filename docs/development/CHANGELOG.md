@@ -10202,3 +10202,62 @@ MOBILE_375 = PASS. MOBILE_390 = PASS. DESKTOP = PASS. OVERFLOW = NONE.
 BUILD = PASS. DB_SCHEMA_CHANGE = NONE. UNIT_MASTER_COVERAGE_V2 =
 RECOMMENDED. INFO_ROUTE_IDENTITY_BUG = FOUND_NOT_FIXED(out of scope).
 NEXT_STEP = ChatGPT PM 판단 대기.**
+
+## 2026-08-28
+
+### STEP — APT INFO IDENTITY HOTFIX V1
+
+직전 STEP에서 발견만 하고 넘어간 `/api/apt/[name]/info`의 identity
+버그를 고쳤다. 상세 근거는
+`docs/development/APT_INFO_IDENTITY_HOTFIX_V1.md` 참고.
+
+**버그**: `fetchCachedRegistry()`가 registry 메타데이터(approvalDate 등)가
+비어 있으면 name 제약이 전혀 없는 `dong+jibun`만으로 재조회했고, 그
+결과의 `unitTypes`를 조건 없이 대입했다. 같은 주소에 이름 표기가 다른
+row("대신롯데캐슬" 8건 vs "대신롯데캐슬아파트" 0건)가 있으면 이미 정확한
+identity(name+dong exact)로 찾은 8건이 0건으로 덮어써졌다.
+
+**수정**: registry 메타데이터(건물 단위 사실, 이름 무관하게 안전)와
+unitTypes(아파트 identity별로 다를 수 있는 데이터)의 역할을 분리했다.
+`unitTypes`는 이제 (1) 이미 non-empty 결과가 있으면 절대 덮지 않고,
+(2) fallback row가 기존 검증된 `normalizeAptName()`(공백 제거 + "아파트"
+접미사 제거, `apt-name-match.ts` 재사용)으로 정규화했을 때 완전히 같은
+이름일 때만 채택한다. 이 판단을 순수 함수
+`shouldAdoptFallbackUnitTypes()`로 분리해 단위 테스트했다. registry
+메타데이터 fallback 자체는 의도적으로 그대로 뒀다 — 건축물대장 조회가
+애초에 아파트명이 아니라 주소로 이뤄지는 사실이라 이름 다른 row에서
+가져와도 안전하다.
+
+**aptSeq 우선 사용 검토**: 이 라우트 요청에는 aptSeq가 없고, 실측상
+이 fixture 자체가 aptSeq만으로 구분되지 않는 사례("대신롯데캐슬"/
+"대신롯데캐슬아파트"가 이미 같은 aptSeq 공유)라 정규화 이름 일치를
+identity proof로 채택했다. 부산 전체 dong+jibun 중복 6쌍을 전수
+조사했지만 전부 같은 패턴(같은 aptSeq, 표기만 다름)이었다 — "진짜 다른
+아파트가 같은 주소" 사례는 DB에 없어 그 케이스는 synthetic 단위
+테스트로만 검증했다.
+
+**검증**: 신규 `scripts/run-apt-info-identity-qa.ts` — A파트 9개(strong
+결과 보호, 0건 fallback 거부, synthetic 다른-아파트 거부, aptSeq 없이도
+안전한 거부/채택, fake-pyeong 부재 재확인, 과거 버그 패턴 재도입 정적
+가드, response contract 불변) 전부 PASS. B파트 라이브: 대신롯데캐슬
+exact 조회 unitTypes 8건(34평 collision 포함) 확인 + 회귀 스모크(동대신역
+비스타동원아파트/연산동한솔솔파크/`/map`/`/stats`/`/school`) 전부 PASS.
+브라우저로 `/apt/대신롯데캐슬` 평 모드 전환 시 14평/25평(collision
+캡션)/34평(collision 캡션)이 실제로 노출되는 것까지 직접 확인 —
+직전 STEP에서 문서화만 했던 사용자 원래 기대치와 일치.
+
+DB 쓰기: 없음. 스키마 변경: 없음. Response contract(필드명/구조): 불변.
+UI: 미변경. 쿼리 개수: 변경 없음(byJibun 호출 여부/횟수는 그대로, 결과
+채택 조건만 바뀜).
+
+상태: 완료.
+
+**APT_INFO_IDENTITY_HOTFIX_V1 = PASS. STRONG_RESULT_PROTECTION = PASS.
+ZERO_ROW_OVERWRITE = ABSENT. WRONG_APARTMENT_FALLBACK = ABSENT.
+APTSEQ_PRIORITY = N/A(요청 컨텍스트에 aptSeq 없음, 문서 §8 근거).
+NAMELESS_ADDRESS_FALLBACK = RESTRICTED(메타데이터는 유지, unitTypes만
+정규화 이름 proof 필수). CACHE_IDENTITY = PASS(별도 캐시 레이어 없음,
+DB persisted 캐시가 identity 우선순위를 그대로 따름). 대신롯데캐슬 =
+PASS(8건 보존, 34평 collision 포함, 평 모드 실브라우저 확인). 
+DETAIL_REGRESSION = PASS. FAKE_PYEONG = ABSENT. BUILD = PASS.
+DB_SCHEMA_CHANGE = NONE. NEXT_STEP = ChatGPT PM 판단 대기.**

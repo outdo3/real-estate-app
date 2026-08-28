@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { fetchBuildingRegistryInfo, formatRatio, formatParking } from '@/lib/apt-building-info';
+import { shouldAdoptFallbackUnitTypes } from '@/lib/apt-name-match';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,11 +67,15 @@ export async function GET(
     
     const fetchCachedRegistry = async (): Promise<Registry | null> => {
       try {
+        // APT INFO IDENTITY HOTFIX V1 §IDENTITY_PRINCIPLE — 이 name+dong exact 조회가
+        // 이 라우트에서 얻을 수 있는 가장 강한 identity다(요청 컨텍스트에 aptSeq가 없고,
+        // 있었더라도 실측상 같은 건물의 표기 변형 row들이 같은 aptSeq를 공유하는 사례가
+        // 확인돼 aptSeq만으로는 이 특정 케이스를 구분하지 못한다 — 문서 §7 참고).
         const cached = await prisma.apartment.findFirst({
           where: { name: aptName, dong: dongKey },
           include: { unitTypes: true }
         });
-        
+
         if (cached) {
           unitTypes = cached.unitTypes;
         }
@@ -86,12 +91,31 @@ export async function GET(
         }
 
         if (jibun) {
+          // 이 조회는 name 제약이 전혀 없는 "dong+jibun만" 매칭이라(§NAMELESS_ADDRESS_
+          // FALLBACK), 같은 주소의 다른 이름 표기 row를 얼마든지 집을 수 있다. 건축물대장
+          // registry 필드(parkingCount/far/bcr/approvalDate/totalHouseholds)는 특정
+          // 아파트명이 아니라 그 주소(동+지번)의 물리적 건물에 귀속된 사실이고
+          // fetchBuildingRegistryInfo 자체도 아파트명이 아니라 lawdCd+dong+jibun으로
+          // 조회하므로, 이 필드들을 이 fallback에서 보충하는 것은 안전하다(변경 없음).
           const byJibun = await prisma.apartment.findFirst({
             where: { dong: dongKey, jibun },
             include: { unitTypes: true }
           });
-          
-          if (byJibun) {
+
+          // unitTypes(Unit Master)는 반대로 아파트 identity별로 실제 값이 다를 수 있는
+          // 데이터다(실측: 서대신동3가 762의 "대신롯데캐슬"=8건 vs "대신롯데캐슬아파트"
+          // =0건 — 같은 건물, 다른 이름 표기 row인데 Unit Master 적재 상태가 다르다).
+          // 채택 여부 판단(STRONGER_RESULT PROTECTION + IDENTITY PROOF)은
+          // shouldAdoptFallbackUnitTypes()에 위임한다(apt-name-match.ts, 단위 테스트됨).
+          if (
+            byJibun &&
+            shouldAdoptFallbackUnitTypes({
+              currentUnitTypesCount: unitTypes?.length ?? 0,
+              fallbackName: byJibun.name,
+              requestedAptName: aptName,
+              fallbackUnitTypesCount: byJibun.unitTypes.length,
+            })
+          ) {
             unitTypes = byJibun.unitTypes;
           }
 

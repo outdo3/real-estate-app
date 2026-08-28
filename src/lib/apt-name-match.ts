@@ -90,3 +90,25 @@ export function aptNamesMatch(nameA: string, nameB: string): boolean {
   // 시도한다 — 차수가 없는 기존 매칭 사례(예: "명륜아이파크1단지")를 그대로 보존.
   return normA.includes(normB) || normB.includes(normA);
 }
+
+// APT INFO IDENTITY HOTFIX V1 — /api/apt/[name]/info의 dong+jibun-only(이름 제약이
+// 전혀 없는) fallback 조회 결과에서 unitTypes(Unit Master)를 채택해도 되는지 판단하는
+// 순수 함수. unitTypes는 건물이 아니라 특정 아파트 identity에 속한 데이터라(실측:
+// 같은 주소의 "대신롯데캐슬"=8건 vs "대신롯데캐슬아파트"=0건), 두 안전장치를 모두
+// 통과해야만 채택한다:
+//   1) STRONGER_RESULT PROTECTION — 이미 exact(name+dong) 조회로 unitTypes를
+//      찾았다면(1건 이상) 절대 이 fallback으로 덮지 않는다.
+//   2) IDENTITY PROOF — fallback row가 정규화 후에도 다른 이름이면(다른 아파트일
+//      위험) 채택하지 않는다. aptNamesMatch()의 느슨한 부분포함 규칙이 아니라 더
+//      엄격한 normalizeAptName() 완전 일치만 인정한다(오매칭 위험을 최소화).
+export function shouldAdoptFallbackUnitTypes(params: {
+  currentUnitTypesCount: number;
+  fallbackName: string;
+  requestedAptName: string;
+  fallbackUnitTypesCount: number;
+}): boolean {
+  const { currentUnitTypesCount, fallbackName, requestedAptName, fallbackUnitTypesCount } = params;
+  if (currentUnitTypesCount > 0) return false;
+  if (fallbackUnitTypesCount === 0) return false;
+  return normalizeAptName(fallbackName) === normalizeAptName(requestedAptName);
+}
