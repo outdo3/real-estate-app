@@ -18,6 +18,8 @@ import PriceRankingView from '@/components/stats/PriceRankingView';
 import ConcentrationView from '@/components/stats/ConcentrationView';
 import VolumeChartCard from '@/components/stats/VolumeChartCard';
 import GapInvestView from '@/components/stats/GapInvestView';
+import SupplyView from '@/components/stats/SupplyView';
+import LargeComplexView from '@/components/stats/LargeComplexView';
 import styles from '../page.module.css';
 
 const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
@@ -302,6 +304,10 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
           <VolumeChartCard lawdCd={region.lawdCd} sidoCode={region.sidoCode} displayRegionName={region.displayRegionName} />
         ) : slug === 'gap-invest' ? (
           <GapInvestView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
+        ) : slug === 'supply' ? (
+          <SupplyView />
+        ) : slug === 'large-complex' ? (
+          <LargeComplexView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'compare' ? (
           <CompareView lawdCd={region.lawdCd} maxComplexes={2} />
         ) : slug === 'multi-compare' ? (

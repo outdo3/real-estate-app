@@ -10076,3 +10076,58 @@ POPULATION = NEEDS_EXTERNAL_DATA. LARGE_COMPLEX = READY_NOW(부산 한정).
 FOREIGN_BUYER = NEEDS_EXTERNAL_DATA. ELEVATION = KEEP(보류, 후순위).
 POPULAR = ANALYTICS_REQUIRED(인프라 존재, 데이터 미성숙). NEXT_IMPLEMENTATION
 _BUNDLE = 대단지+공급(Bundle A). NEXT_STEP = ChatGPT PM 판단 대기.**
+
+### STEP — STATISTICS V2.1-4: SUPPLY + LARGE COMPLEX
+
+STATISTICS_PLACEHOLDER_AUDIT_V1이 READY로 판정한 두 기능(공급, 대단지)을
+live 통계로 구현했다. 새 DB/스키마/외부 API 없이 기존 데이터(청약홈
+Presale, 건축물대장 ApartmentMaster)만 재사용했다. 상세 근거는
+`docs/development/STATISTICS_V2_1_SUPPLY_LARGE_COMPLEX.md` 참고.
+
+**공급**: `/api/stats/supply` 신규 — 입주지도(위치 확인된 단지만 지도에,
+"N개 중 M개 위치 확인" 정직한 커버리지 고지)와 공급추이(연도별
+세대수/단지수 bar chart + deterministic 문구)를 한 fetch로 함께 계산한다.
+Presale에는 시군구 필드가 없어 `locationAddress` 문자열에서 **두 번째
+토큰만**(REGION_DATA 실제 목록과 대조해) 안전하게 시군구를 추출하는
+`src/lib/presale-region.ts`를 새로 만들었다 — 세 번째 토큰부터는 지구명이
+섞여 신뢰할 수 없어 동 단위 drilldown은 지원하지 않는다. "전국" 토글은
+이 화면 전용 로컬 상태로, 공유 RegionContext는 건드리지 않았다.
+
+**대단지**: `/api/stats/large-complex` 신규(부산 한정, 서울/전국은
+`status:'UNSUPPORTED'` + "부산으로 이동" CTA로 정직하게 처리) —
+세대수 DESC 랭킹 + 구/동/세대수 필터 + 주차·입주연도·최근 매매가.
+**감사 중 데이터 신뢰 이슈를 발견해 수정했다**: 같은 총괄표제부
+(mgmBldrgstPk)를 공유하는 여러 row(같은 대단지의 서로 다른 동/구역)가
+`totalHouseholds`를 동일하게 중복 저장하고 있어, 세대수로 그대로
+정렬하면 상위 10건 중 9건이 실제로는 단 2개 단지("엘지메트로시티"
+7건, "레이카운티" 2건)였다. `src/lib/large-complex-dedup.ts`로 대표
+1건만 남기도록 고쳤다(이름을 새로 만들지 않고 실제 이름 중 결정론적
+규칙으로 선택). 평형 수는 커버리지가 0.3%(63건 중 11건)뿐이라 UI에
+표시하지 않는다(§30 지시).
+
+**성능**: 신규 N+1 없음. 공급은 MOLIT 의존이 전혀 없어(Presale 단일
+쿼리) cold/warm 모두 1초 미만. 대단지는 페이지에 등장하는 구만 batch
+MOLIT 조회 후 구 단위 5분 캐시를 추가해(성능 감사 중 발견해 보강)
+부산 전체 기본 랭킹 cold 4.3s → warm 0.27s로 확인했다.
+
+**검증**: 신규 `scripts/run-statistics-v2-1-supply-large-complex-qa.ts`
+— 단위 테스트 10개(dedup, region parsing, future-only 필터) + 라이브
+API(전국/부산/서울/구/세대수 필터, dedup 회귀 가드, 평형수 비노출
+정적 검사) + 기존 8개 live 화면 회귀 스모크 전부 PASS, findings 0건.
+`npx tsc --noEmit`/lint 신규 에러 0. `npm run build` PASS. 모바일
+390px/데스크톱 스모크 확인(overflow 없음, 콘솔 에러 없음), UNSUPPORTED
+→"부산으로 이동" CTA 실제 클릭까지 검증.
+
+DB 쓰기: 없음. 스키마 변경: 없음. 새 외부 API: 없음(기존 Presale/
+ApartmentMaster/MOLIT만 재사용).
+
+상태: 완료.
+
+**STATISTICS_V2_1_SUPPLY_LARGE_COMPLEX = PASS. SUPPLY = PASS. SUPPLY_MAP
+= PASS. SUPPLY_TREND = PASS. SUPPLY_REGION = PASS(동 단위 미지원, 의도된
+제한). COORDINATE_HONESTY = PASS. SUPPLY_SOURCE = TRUSTED. LARGE_COMPLEX
+= PASS. LARGE_COMPLEX_SCOPE = BUSAN_ONLY. HOUSEHOLD_DATA = TRUSTED
+(dedup 버그 발견 후 수정). PARKING = PASS. RECENT_PRICE = PASS.
+UNIT_TYPE_COUNT = HIDDEN. N_PLUS_ONE = ABSENT. MOBILE = PASS. DESKTOP
+= PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE. NEXT_STEP = ChatGPT PM
+판단 대기.**

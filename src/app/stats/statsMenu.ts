@@ -4,9 +4,9 @@ import {
   Construction, Users, AlertTriangle, Plane, Map, Mountain, Building2, Eye, Rows3,
 } from 'lucide-react';
 
-// 시장 통계 탭의 17개 메뉴 정의. status: 'live'는 실거래가 API로 실제 계산해서 보여주는
-// 메뉴, 'soon'은 이 앱에 아직 연동된 데이터 소스가 없어(입주예정물량/인구통계/외지인
-// 매수비율/고도데이터/사용자 조회 로그 등) 임의의 추정치를 지어내는 대신 "데이터 집계 중"
+// 시장 통계 탭의 17개 메뉴 정의. status: 'live'는 실제 데이터 소스로 계산해서 보여주는
+// 메뉴, 'soon'은 이 앱에 아직 연동된 데이터 소스가 없어(인구통계/외지인 매수비율/
+// 고도데이터/사용자 조회 로그 등) 임의의 추정치를 지어내는 대신 "데이터 집계 중"
 // 안내로 정직하게 비워두는 메뉴다. status는 이후 실제 데이터 소스가 생기면 'live'로
 // 바꾸기만 하면 되도록 각 항목에 이유를 코멘트로 남겨둔다.
 //
@@ -67,16 +67,10 @@ export const STATS_MENU: StatsMenuItem[] = [
   // 보라색 대신 거래 카테고리의 기본 브랜드 그린으로 맞춘다.
   { slug: 'top-traded', icon: '📌', Icon: Target, title: '거래집중', subtitle: '최근 거래가 몰린 단지', status: 'live', category: '거래', colorToken: 'brand' },
   { slug: 'gap-invest', icon: '💰', Icon: Coins, title: '갭투자', subtitle: '최근 갭투자 형태의 거래가 많은 지역과 단지를 확인해보세요.', status: 'live', category: '거래', colorToken: 'brand' },
-  {
-    slug: 'supply',
-    icon: '🏗️',
-    Icon: Construction,
-    title: '공급물량',
-    subtitle: '입주 예정 물량',
-    status: 'soon',
-    soonReason: '연도별 입주예정 물량 데이터셋이 아직 연동되지 않았습니다.',
-    category: '수요·공급',
-  },
+  // STATISTICS V2.1-4 §4/§8 — 청약홈(Presale) 데이터가 이미 있음을 확인해 입주지도+
+  // 공급추이로 live 전환했다(placeholder audit V1 §5/§8 근거). 메뉴명은 §36 지시대로
+  // 짧게("공급물량"→"공급").
+  { slug: 'supply', icon: '🏗️', Icon: Construction, title: '공급', subtitle: '앞으로 이 지역에 입주할 물량을 확인해보세요.', status: 'live', category: '수요·공급', colorToken: 'brand' },
   {
     slug: 'population',
     icon: '👥',
@@ -108,16 +102,10 @@ export const STATS_MENU: StatsMenuItem[] = [
     soonReason: '지형 고도·경사도 데이터셋이 아직 연동되지 않았습니다.',
     category: '지역',
   },
-  {
-    slug: 'large-complex',
-    icon: '🏢',
-    Icon: Building2,
-    title: '대단지',
-    subtitle: '1,000세대 이상 단지',
-    status: 'soon',
-    soonReason: '단지별 세대수는 현재 단지 상세페이지에서 개별 조회만 가능해, 지역 전체를 한 번에 집계하지 못합니다.',
-    category: '지역',
-  },
+  // STATISTICS V2.1-4 §14/§21 — ApartmentMaster(부산)에 이미 세대수 데이터가 있음을
+  // 확인해 live 전환했다(placeholder audit V1 §14 근거). V1은 부산 한정 — 다른 지역
+  // 선택 시 화면 내부에서 정직하게 unsupported 상태를 보여준다(빈 화면 금지).
+  { slug: 'large-complex', icon: '🏢', Icon: Building2, title: '대단지', subtitle: '세대수가 많은 단지를 확인해보세요.(부산)', status: 'live', category: '지역', colorToken: 'brand' },
   { slug: 'compare', icon: '⚖️', Icon: Scale, title: '가격비교', subtitle: '2개 단지 시세 겹쳐보기', status: 'live', category: '비교·분석' },
   { slug: 'multi-compare', icon: '🏘️', Icon: LayoutGrid, title: '여러단지비교', subtitle: '다중 단지 시세 비교', status: 'live', category: '비교·분석' },
   {

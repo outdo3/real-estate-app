@@ -1,0 +1,261 @@
+.wrap {
+  padding-bottom: 1rem;
+}
+
+.tabRow {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+.tab {
+  flex: 1;
+  padding: 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.tabActive {
+  background: var(--brand-color, #16a34a);
+  border-color: var(--brand-color, #16a34a);
+  color: #fff;
+}
+
+.chipRow {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  -webkit-overflow-scrolling: touch;
+}
+.chipRow::-webkit-scrollbar {
+  display: none;
+}
+.chip {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chipActive {
+  background: var(--bg-secondary, #f1f5f9);
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.summaryCard {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  background: var(--card-bg);
+  margin-bottom: 0.6rem;
+  margin-top: 0.25rem;
+}
+.summaryTitle {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.4rem;
+}
+.summaryText {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-top: 0.2rem;
+}
+.honestNote {
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.legendRow {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.legendDot {
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.mapBox {
+  height: 340px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.6rem;
+}
+
+.markerCard {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  background: var(--card-bg);
+  margin-bottom: 0.6rem;
+}
+.markerName {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.markerMeta {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+.markerStat {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  margin-top: 0.35rem;
+  font-weight: 600;
+}
+
+.listTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin: 0.5rem 0 0.4rem;
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--card-bg);
+}
+.listRowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.listName {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.listMeta {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.listRowRight {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+.listYm {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.listHouseholds {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.trendChart {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  height: 190px;
+  padding: 0.5rem 0.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  margin-bottom: 0.6rem;
+  overflow-x: auto;
+}
+.trendCol {
+  flex: 0 0 auto;
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+.trendBarWrap {
+  display: flex;
+  align-items: flex-end;
+  height: 140px;
+}
+.trendBar {
+  width: 28px;
+  border-radius: 4px 4px 0 0;
+  background: var(--brand-color, #16a34a);
+  opacity: 0.85;
+}
+.trendYear {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.trendValue {
+  font-size: 0.62rem;
+  color: var(--text-secondary);
+}
+
+.trendTable {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.trendTableRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  background: var(--card-bg);
+}
+
+.sourceNote {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  margin-top: 0.75rem;
+  line-height: 1.5;
+}

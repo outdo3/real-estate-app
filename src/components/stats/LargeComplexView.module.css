@@ -1,0 +1,164 @@
+.wrap {
+  padding-bottom: 1rem;
+}
+
+.question {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0.25rem 0 0.6rem;
+}
+
+.chipRow {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  -webkit-overflow-scrolling: touch;
+}
+.chipRow::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chipActive {
+  background: var(--brand-color, #16a34a);
+  border-color: var(--brand-color, #16a34a);
+  color: #fff;
+}
+
+.summary {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0.5rem 0 0.75rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.row {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.85rem 0.95rem;
+  background: var(--card-bg);
+  cursor: pointer;
+}
+
+.rowTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.rank {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+
+.rowInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.householdLine {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.householdValue {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.largeBadge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--brand-color, #16a34a);
+  background: var(--up-soft, #e6f4ea);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+}
+
+.subLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  margin-bottom: 0.3rem;
+}
+
+.interpretation {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
+.loadMoreBtn {
+  width: 100%;
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.freshnessNote {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.75rem;
+  line-height: 1.5;
+}
+
+.busanCta {
+  margin-top: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  border: none;
+  background: var(--brand-color, #16a34a);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  width: 100%;
+}
