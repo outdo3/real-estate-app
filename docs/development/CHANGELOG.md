@@ -10552,3 +10552,40 @@ DRILL_DOWN = PASS. SHARE = PASS. URL_STATE = PASS. N_PLUS_ONE = ABSENT.
 PERFORMANCE = PARTIAL. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
 DB_SCHEMA_CHANGE = NONE. NEXT_STEP = TRADE_HISTORY_DATA_V1 /
 FIX_REGION_PRICE_CHANGE_MAP(단지 레벨 지도 버블).**
+
+## 2026-08-29
+
+### STEP — ANALYTICS_V1: 이벤트 트래킹 기반 구축 (`feature/analytics-v1`)
+
+작업: docs/development/ANALYTICS_V1_EVENT_TRACKING_FOUNDATION.md 참고
+(전체 분석/설계/구현/테스트 기록). 클릭/즐겨찾기/공유 같은 범용
+커스텀 이벤트를 **DB schema 변경 없이** 기록할 수 있는 기반을
+구축했다. 신규: `src/lib/analytics/events.ts`(고정 eventName
+allow-list), `src/lib/analytics/trackEvent.ts`(클라이언트
+fire-and-forget 트래커), `src/app/api/log/event/route.ts`(수집
+API). 계측 연결: `FavoriteButton.tsx`(`favorite_add`/
+`favorite_remove`, 서버 성공 확인 시점에만), `useSharePage.ts`
+(`share_success`는 Web Share API/클립보드 성공처럼 실제 확인 가능한
+경로에서만, 카카오 SDK는 완료 콜백이 없어 `share_attempt`로 구분).
+
+**저장 전략(V1 한정)**: 전용 Event 테이블을 새로 만들지 않고, 기존
+`PageView` 테이블에 예약된 URL 네임스페이스(`/__event__/<name>`)로
+적재한다. `/api/admin/dashboard`의 `todayPageViews`/
+`todayUniqueSessions`/`popularAptGroups` 3개 쿼리에 이 네임스페이스를
+제외하는 필터를 추가해 기존 PV/방문자/인기단지 지표가 오염되지 않게
+했고, 이벤트는 `data.events`(최근 7일 이름별 카운트)로 별도 노출한다.
+
+**QA 한계(정직하게 기록)**: 이 worktree(`real-estate-app-work3`)에는
+`.env`/`.env.local`이 없어 `DATABASE_URL`/카카오 키가 미설정이었다
+(임의 생성/타 worktree 복사 없음). allow-list 게이트(`totally_made_up`
+같은 미등록 이벤트명이 DB에 안 쓰이고 무시됨)와 `/api/log/event`가
+기존 `/api/log/view`와 동일하게 실패하는 parity는 dev 서버로 실측
+확인했으나, 실제 DB row 적재/관리자 대시보드 회귀 숫자/공유 버튼
+실클릭 종단 검증은 이 환경에서 완료하지 못했다 — main 병합 전
+`DATABASE_URL`이 구성된 환경에서 재검증 필요.
+
+DB 쓰기: 없음(이벤트는 기존 PageView 테이블 재사용). 스키마 변경:
+없음. 기존 `/api/log/view`·`/api/log/heartbeat`·`/admin/dashboard`
+기존 지표 동작 불변(코드 리뷰 + 부분 라이브 검증).
+
+상태: 코드/문서 완료, main 병합 전 DB 연결 환경에서 라이브 회귀 재검증 권장.
