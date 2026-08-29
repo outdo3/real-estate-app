@@ -10552,3 +10552,70 @@ DRILL_DOWN = PASS. SHARE = PASS. URL_STATE = PASS. N_PLUS_ONE = ABSENT.
 PERFORMANCE = PARTIAL. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
 DB_SCHEMA_CHANGE = NONE. NEXT_STEP = TRADE_HISTORY_DATA_V1 /
 FIX_REGION_PRICE_CHANGE_MAP(단지 레벨 지도 버블).**
+
+## 2026-08-30
+
+### STEP — TRADE_HISTORY_DATA_V1: 전체 실거래 이력 영구 저장(부산 backfill)
+
+작업: docs/development/TRADE_HISTORY_DATA_V1.md 참고(설계/구현/QA 전체
+기록). MOLIT 아파트 매매 실거래를 신규 테이블 `ApartmentTradeHistory`에
+영구 저장해, 기존 24개월 lookback 제한(`HISTORICAL_LOOKBACK_MONTHS`,
+`price-ranking.ts`)을 근본적으로 해소할 데이터 기반을 마련했다. 이번
+STEP은 부산광역시 16개 구·군, 2006-01~2026-08(248개월) 범위로
+scope를 제한했다(전국 확장은 별도 승인 대상, §38).
+
+**Identity/중복 설계**: MOLIT 응답에 거래 고유 일련번호가 없어(§6),
+실측 감사(부산 서구 250건 표본)로 동일 자연키(identity+area+dealType+
+금액+일자+층) 그룹의 2.9%(7/243)가 실제로 서로 다른 거래 2건씩임을
+확인 — `occurrenceIndex`(그룹 내 원본 등장 순서)를 unique key에 추가해
+병합 없이 구분했다. `floor`는 not-null로 강제(Postgres NULL≠NULL이
+unique 제약을 깨뜨리는 것을 방지, 파싱 불가 시 값을 지어내지 않고
+invalid row로 명시 제외).
+
+**Backfill 실행(실측)**: 자체 보수적 순차 fetcher(동시 1, 350ms 간격,
+스로틀 감지 시 지수 백오프)를 backfill 전용으로 신규 구현 — 기존
+라이브 통계가 쓰는 세마포어(동시6+200ms)를 그대로 재사용했다가 대량
+연속 호출에서 data.go.kr "초당 서비스 요청제한" 실제 스로틀을 유발하는
+것을 실측으로 발견해 분리했다(라이브 세마포어 자체는 무수정).
+최초 실행이 data.go.kr 일일 quota 소진으로 중단됐다가(1,620/3,968
+attempts) 이번 세션에서 재개 — quota reset을 단일 lightweight fetch로
+먼저 확인한 뒤, 기존 SUCCESS/EMPTY_VALID(1,366건)는 재호출하지 않고
+FAILED+미시작 2,602 region-month만 `--resume`으로 처리했다.
+최종: 3,968/3,968 완료, FAILED 0, 총 855,045 rows(백필 전 189,951 +
+이번 665,094), 16/16 구·군 커버, 자연키 중복 0건, aptSeq 결측 0건.
+
+**QA에서 실제 버그 발견·수정**: `src/lib/trade-history-read.ts`의
+읽기 헬퍼 3개가 Decimal 컬럼(`exclusiveArea`)을 JS number 그대로
+Prisma where 필터에 넘겨, 특정 소수값(실측: 84.8773, 84.6389 등)에서
+Prisma 쿼리 엔진의 number→Decimal 직렬화 불일치로 **저장 거래가
+있어도 조용히 0건**을 반환하는 것을 8개 대표 단지 QA 중 2곳에서
+발견했다. 아직 어떤 라이브 route도 이 헬퍼를 쓰지 않아(§33, 다음
+STEP 대상) 프로덕션 영향은 없었지만, 이번 STEP 산출물 자체의 정확성
+버그라 문자열로 넘기도록 즉시 수정(시그니처/동작 계약 불변) —
+수정 후 8/8 정상 매칭 재검증 완료.
+
+**벤치마크(실측, 읽기 전용)**: DB 조회가 라이브 MOLIT 재조회 대비
+단일 단지 전체 이력 약 27.8배(78ms vs 2,166ms), 부산 전체 16개 구
+12개월 약 3.4배(6.8s vs 23.3s) 빠름 — 라이브 fetch 100% 성공(실제
+프로덕션 세마포어 그대로 사용, backfill 전용 보수적 fetcher 아님).
+
+취소(해제) 거래는 855,045건 중 0건 관측 — 필드 파싱 자체는 별도
+확인했으나 모집단 실제 취소율까지 단정할 근거는 없어 "확인 필요"로
+분류(§13/§15 원칙, 오류로 단정하지 않음).
+
+DB 쓰기: `apartment_trade_histories` 신규 데이터 855,045 rows(이번
+STEP에서 신규 fetch·삽입한 665,094건 포함). 스키마 변경: 없음(마이그
+레이션은 이전 STEP에서 이미 승인·적용됨, 이번 STEP은 데이터만).
+기존 통계 API/UI: 전혀 변경 없음(read path 전환은 다음 STEP).
+
+상태: 완료(부산 범위). 전국 확장은 §38 참고, 별도 승인 필요.
+
+**TRADE_HISTORY_DATA_V1 = PASS(부산 범위). BACKFILL_COMPLETE = PASS
+(3,968/3,968, FAILED=0). ROW_COUNT = 855,045. REGION_COVERAGE = 16/16.
+DUPLICATE_CHECK = PASS(0건). NULL_APTSEQ = PASS(0건).
+CANCELLED_TRADES = 확인 필요(0건 관측, 모집단 단정 불가).
+QA_CROSS_CHECK = PASS(8/8, live MOLIT 매칭). READ_HELPER_BUG =
+FOUND_AND_FIXED(Decimal number 필터 불일치, 프로덕션 영향 없음).
+BENCHMARK = PASS(3.4~27.8배 개선 실측). UNIT_TESTS = PASS(14/14).
+NATIONWIDE = NOT_STARTED(별도 승인 필요). DB_SCHEMA_CHANGE = NONE
+(이번 STEP). NEXT_STEP = TRADE_HISTORY_READ_MIGRATION_V1.**
