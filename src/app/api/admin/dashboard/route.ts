@@ -5,6 +5,7 @@ import { getOrSetCache } from '@/lib/server-cache';
 import { onlineSinceThreshold } from '@/lib/presence-server';
 import { fetchMolitData } from '@/lib/api-molit';
 import { detectLeadingRegionKeyword } from '@/lib/ai-search';
+import { ANALYTICS_EVENT_URL_PREFIX } from '@/lib/analytics/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,10 +97,17 @@ export async function GET() {
       recentPosts,
       unresolvedReports,
       recentErrors,
+      eventCounts,
       pipelineHealth,
     ] = await Promise.all([
-      prisma.pageView.count({ where: { createdAt: { gte: today } } }),
-      prisma.pageView.findMany({ where: { createdAt: { gte: today } }, select: { sessionId: true }, distinct: ['sessionId'] }),
+      prisma.pageView.count({
+        where: { createdAt: { gte: today }, url: { not: { startsWith: ANALYTICS_EVENT_URL_PREFIX } } },
+      }),
+      prisma.pageView.findMany({
+        where: { createdAt: { gte: today }, url: { not: { startsWith: ANALYTICS_EVENT_URL_PREFIX } } },
+        select: { sessionId: true },
+        distinct: ['sessionId'],
+      }),
       prisma.activeSession.findMany({ where: { lastSeenAt: { gte: onlineThreshold } } }),
       prisma.activeSession.groupBy({
         by: ['currentAptName'],
@@ -110,7 +118,11 @@ export async function GET() {
       }),
       prisma.pageView.groupBy({
         by: ['aptName'],
-        where: { createdAt: { gte: thirtyDaysAgo }, aptName: { not: null } },
+        where: {
+          createdAt: { gte: thirtyDaysAgo },
+          aptName: { not: null },
+          url: { not: { startsWith: ANALYTICS_EVENT_URL_PREFIX } },
+        },
         _count: { aptName: true },
         orderBy: { _count: { aptName: 'desc' } },
         take: 10,
@@ -129,6 +141,16 @@ export async function GET() {
       prisma.post.findMany({ orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, title: true, aptName: true, createdAt: true, author: { select: { name: true } } } }),
       prisma.report.count({ where: { resolved: false } }),
       prisma.errorLog.findMany({ orderBy: { createdAt: 'desc' }, take: 20 }),
+      // ANALYTICS V1 — 이벤트는 PageView를 재활용하되 /__event__/ 접두사로 분리 저장된다
+      // (src/lib/analytics/events.ts). 위 todayPageViews/todayUniqueSessions/popularAptGroups는
+      // 이 접두사를 명시적으로 제외해 실제 페이지뷰 지표를 오염시키지 않고, 이벤트는 여기서만
+      // 최근 7일 집계로 별도 노출한다.
+      prisma.pageView.groupBy({
+        by: ['url'],
+        where: { createdAt: { gte: sevenDaysAgo }, url: { startsWith: ANALYTICS_EVENT_URL_PREFIX } },
+        _count: { url: true },
+        orderBy: { _count: { url: 'desc' } },
+      }),
       checkPipelineHealth(),
     ]);
 
@@ -174,6 +196,10 @@ export async function GET() {
         },
         pipeline: pipelineHealth,
         errors: recentErrors,
+        events: eventCounts.map((e) => ({
+          name: e.url.slice(ANALYTICS_EVENT_URL_PREFIX.length),
+          count: e._count.url,
+        })),
       },
     });
   } catch (error) {
