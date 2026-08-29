@@ -11,6 +11,7 @@ import {
   sendKakaoShare,
   buildKakaoShareImageUrl,
 } from '@/lib/share/shareUtils';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 
 export type ShareStatus = 'idle' | 'shared' | 'copied' | 'error';
 
@@ -54,18 +55,25 @@ export function useSharePage({ title, text, params, enableKakao = true }: UseSha
 
     const nativeResult = await nativeShare({ title, text, url });
     if (nativeResult === 'shared') {
+      // ANALYTICS V1 — Web Share API의 promise가 resolve된 시점 = 브라우저가 공유 완료를
+      // 확인해준 시점이므로 share_success로 기록한다(과장 아님, 실제 확인 가능).
+      trackEvent('share_success');
       setStatus('shared');
       resetSoon();
       return;
     }
     if (nativeResult === 'aborted') {
-      // 사용자가 공유 시트를 닫은 정상 취소 — 오류로 처리하지 않는다.
+      // 사용자가 공유 시트를 닫은 정상 취소 — 오류로 처리하지 않는다. 이벤트도 기록하지 않는다.
       return;
     }
 
     if (enableKakao && isKakaoShareReady()) {
       try {
         sendKakaoShare({ title, description: text || title, url, imageUrl: buildKakaoShareImageUrl() });
+        // ANALYTICS V1 — 카카오 SDK는 실제 전송 완료를 알려주는 콜백이 없다(fire-and-forget
+        // 팝업 트리거일 뿐). 성공 여부를 신뢰성 있게 판별할 수 없으므로 share_success가
+        // 아닌 share_attempt로 기록한다.
+        trackEvent('share_attempt');
         setStatus('idle');
         return;
       } catch {
@@ -74,6 +82,10 @@ export function useSharePage({ title, text, params, enableKakao = true }: UseSha
     }
 
     const copied = await copyToClipboard(url);
+    if (copied) {
+      // ANALYTICS V1 — navigator.clipboard.writeText가 실제로 resolve된 시점(진짜 완료 확인).
+      trackEvent('share_success');
+    }
     setStatus(copied ? 'copied' : 'error');
     resetSoon();
   }, [title, text, params, enableKakao, resetSoon]);
