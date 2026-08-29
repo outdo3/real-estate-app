@@ -11,6 +11,7 @@ import {
   clearPendingFavorite,
   isPendingFavoriteValid,
 } from '@/lib/favorites';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import styles from './FavoriteButton.module.css';
 
 // AUTH/MY V1 — MY-2. 단지 상세(Hero)에 붙는 관심단지 찜 버튼. KakaoShareButton
@@ -151,6 +152,11 @@ export default function FavoriteButton({ lawdCd, dong, name, aptSeq, address, co
           });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'failed');
+      // ANALYTICS V1 — 서버가 성공을 확인해준 시점에만 기록한다(낙관적 업데이트 시점이 아님).
+      trackEvent(wasFavorited ? 'favorite_remove' : 'favorite_add', {
+        complexId: `${lawdCd}|${dong}|${name}`,
+        aptName: name,
+      });
     } catch {
       setFavorited(wasFavorited);
       broadcastFavoriteChanged(identity, wasFavorited);
