@@ -10552,3 +10552,69 @@ DRILL_DOWN = PASS. SHARE = PASS. URL_STATE = PASS. N_PLUS_ONE = ABSENT.
 PERFORMANCE = PARTIAL. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
 DB_SCHEMA_CHANGE = NONE. NEXT_STEP = TRADE_HISTORY_DATA_V1 /
 FIX_REGION_PRICE_CHANGE_MAP(단지 레벨 지도 버블).**
+
+
+## 2026-08-29
+
+### STEP — 분양·청약 페이지 정리 V1 (PRESALE / REDEVELOPMENT IA V2)
+
+`feature/parallel-work` 브랜치, "전체 실거래 이력 구축 V1"과 병렬 작업
+(main 미접촉, DB/schema 미접촉). 상세: `docs/development/
+PRESALE_REDEVELOPMENT_IA_V2.md`.
+
+작업:
+
+- `/redevelopment` 허브의 `분양·청약` 탭에서 "연동 준비 중입니다"
+  placeholder(`Empty variant="notReady"`) 제거, 이미 완성돼 있던
+  `/presales` 목록 UI(`PresaleListSection`으로 추출해 재사용)를 직접
+  렌더링하도록 교체 — 하단 탭 클릭 시 중간 페이지 없이 실 데이터가 즉시
+  보이도록 변경.
+- `src/app/presales/presales-client.tsx`: 필터/카드/페이지네이션 로직을
+  `export function PresaleListSection()`으로 분리하고, 기존
+  `PresalesClient`(default export)는 Header+intro만 유지한 채
+  `PresaleListSection`을 렌더 — `/presales` 라우트 동작은 그대로,
+  목록 UI 복제 없음.
+- `/api/presales`, `/presales/[id]`, `RedevelopmentListSection`,
+  Prisma `Presale` 스키마 등 기존 데이터/API는 전혀 변경하지 않음.
+
+서비스 기능 변경:
+
+`/redevelopment` 진입 시 `분양·청약`(기본 탭) 실 데이터 즉시 노출.
+`/presales` 단독 라우트는 기존과 동일하게 계속 동작.
+
+DB 변경:
+
+없음
+
+API 변경:
+
+없음
+
+QA:
+
+`npx tsc --noEmit`/`npm run lint`/`npm run build` 전부 변경 파일 기준
+신규 에러 0(저장소 전역 pre-existing 에러는 baseline과 동일함을
+`git stash` 대조로 확인). 기존 정적 회귀 가드
+(`verify-design-system-3.ts`) 16개 pass, 이 STEP과 무관한 기존 FAIL 2건은
+baseline에도 동일 존재. 브라우저 라이브 QA(360/375/390/desktop,
+placeholder 제거, 탭 전환, bottom-nav active, 콘솔 에러 없음) 완료.
+
+알려진 제한:
+
+이 worktree(`real-estate-app-work2`)에 `DATABASE_URL`이 설정돼 있지 않아
+`/api/presales`·`/api/redevelopment`가 500을 반환 — 실 데이터 기반
+카드/상세 QA(부산/타 시도 등)는 이번 세션에서 수행하지 못함. 시크릿을
+직접 채워 넣지 않았음(정책상 하드코딩 금지). ErrorState가 "준비중"으로
+위장되지 않고 정확히 오류로 표시되는 것은 라이브로 확인함.
+
+상태:
+
+완료(구현/빌드/정적 QA) — 실 데이터 라이브 QA는 DB 연결 가능한 환경에서
+재확인 필요.
+
+**PRESALE_REDEVELOPMENT_IA_V2 = PASS. PLACEHOLDER = REMOVED.
+PRESALE_ENTRY = DIRECT. REDEVELOPMENT = PASS(회귀 없음).
+SUPPLY_ROLE_SEPARATION = PASS(기존 경계 유지). MOBILE = PASS.
+DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE. MAIN_MODIFIED = NO.
+REAL_PRESALE_CONTENT = PARTIAL(DATABASE_URL 미설정으로 라이브 데이터
+미검증). NEXT_STEP = WAIT_FOR_MAIN_AND_MERGE.**

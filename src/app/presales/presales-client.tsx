@@ -84,7 +84,10 @@ function formatHouseholds(n: number | null): string {
   return `총 ${n.toLocaleString()}세대`;
 }
 
-export default function PresalesClient() {
+// 재개발·분양 허브(/redevelopment)의 '분양·청약' 탭에서도 이 목록을 그대로
+// 재사용한다(같은 목록 UI 복제 금지) — Header/intro가 없는 섹션만 필요하므로
+// 별도 컴포넌트로 분리해서 export.
+export function PresaleListSection() {
   const router = useRouter();
   const [page, setPage] = useState(1);
   const [region, setRegion] = useState('');
@@ -111,14 +114,7 @@ export default function PresalesClient() {
   };
 
   return (
-    <div className={styles.main}>
-      <Header pageTitle="분양정보" />
-      <div className="container">
-        <div className={styles.intro}>
-          <h1 className={styles.title}>분양정보</h1>
-          <p className={styles.desc}>현재 청약 가능한 분양부터 최근 3년 분양정보까지 확인하세요.</p>
-        </div>
-
+    <>
         <FilterBar>
           <SelectFilter
             value={region}
@@ -187,6 +183,20 @@ export default function PresalesClient() {
             <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>다음</Button>
           </div>
         )}
+    </>
+  );
+}
+
+export default function PresalesClient() {
+  return (
+    <div className={styles.main}>
+      <Header pageTitle="분양정보" />
+      <div className="container">
+        <div className={styles.intro}>
+          <h1 className={styles.title}>분양정보</h1>
+          <p className={styles.desc}>현재 청약 가능한 분양부터 최근 3년 분양정보까지 확인하세요.</p>
+        </div>
+        <PresaleListSection />
       </div>
     </div>
   );
