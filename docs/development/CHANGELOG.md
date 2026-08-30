@@ -11008,3 +11008,67 @@ PIPELINE_GUARD = PASS(dongNm 기반 가드 구현+테스트 완료).
 PRODUCTION_DB_WRITE = NONE. DB_SCHEMA_CHANGE = NONE. BUILD = PASS.
 NEXT_STEP = SOURCE_FOUNDATION_REQUIRED(K-APT 활용신청, 사용자 승인
 필요) → 이후 MASTER_DATA_REPAIR_V1.**
+
+## 2026-08-31
+
+### STEP — RECENT_MASTER_MISSING_16_AUDIT_V1: 최근 24개월 Master 누락 16건 정합성
+
+작업(AUDIT + CLASSIFICATION + REPAIR PLAN, Production write 없음):
+
+- **16건 전수 재구성**(`scripts/audit-recent-master-missing-16.ts`, 신규
+  read-only): 각 후보의 20년 전체 거래 이력(1~97건)까지 전부 재구성 —
+  전체 이력 내내 name/dong/jibun이 단 한 번도 흔들리지 않음을 확인
+  (`SOURCE_IDENTITY_CONFLICT` 0건). `ApartmentMaster` 3,402행 +
+  legacy `Apartment` 54행 전체 대상 중복/오매칭 스캔 — "보해이브빌"
+  1건만 이름이 겹쳤으나 dong+jibun이 완전히 달라 별개 건물(동명 브랜드
+  재사용)로 확정, 진짜 duplicate 0건.
+- **분류**(`scripts/classify-recent-master-missing-16.ts`, 신규):
+  16/16 전부 `A_ACTIVE_APARTMENT_MASTER_OMISSION` +
+  `READY_FOR_MASTER_CREATE`(11건 HIGH confidence, 5건 MEDIUM — 거래
+  이력이 얇은 신축/저빈도 단지). rename/legacy/other-type/duplicate
+  0건.
+- **Master import pipeline 근본원인 확정**: `ApartmentMaster` 3,402행
+  전부 2026-08-13 하루에 1회성으로 생성됐음을 `createdAt` 범위로 확인.
+  16건 중 절반은 그 이후 거래(구조적으로 스냅샷에 없을 수밖에 없음),
+  나머지 절반은 그 이전 거래이나 MOLIT 실거래 신고 지연(이미
+  `sync-trade-history.ts` §40에 문서화된 사실)으로 seed 조회 시점에
+  아직 미등록이었을 가능성이 높음 — 단일 원인은 "1회성 스냅샷 + 신고
+  지연"의 조합, 개별 backfill 로직 버그 아님.
+- **재발 위험 확정**: `.github/workflows/` 자체가 없고, `vercel.json`도
+  없으며, `package.json`에 cron/scheduler 스크립트가 전혀 없다 — Master를
+  주기적으로 재동기화하는 자동화가 **전혀 존재하지 않음**을 확정. 이번
+  16건을 보완해도 다음 달 신규 거래는 다시 같은 방식으로 누락된다
+  (`MASTER_COVERAGE_SYNC_V1` 후속 필요).
+- `scripts/audit-busan-search-coverage.ts --recent24` 재실행으로
+  SEARCH_API_MISSING=0(이전 STEP과 동일) 재확인 — code-only fix 대상
+  없음, 16건 전부 진짜 Master 데이터 공백.
+- Repair plan(§16): CREATE_MASTER_ROW(16건, 최소 필드만, MOLIT 원본
+  aptSeq/name/normalizedName/sido/sigungu/sggCd/umdName/jibun/buildYear
+  — targeted 재실행, 대량 backfill 아님), household/좌표는 별도 후속
+  enrichment로 분리.
+
+DB 변경: 없음(schema/migration 무변경, Production INSERT/UPDATE/DELETE
+없음 — 두 감사 스크립트 전부 read-only, repair candidate는 JSON
+파일로만 저장).
+
+API 변경: 없음(코드 변경 없음, 감사 스크립트만 신규 추가).
+
+QA: `npx tsc --noEmit` 신규 오류 0(작업 중 발견한 타입 narrowing
+이슈 1건은 이번 STEP 코드 자체에서 직접 수정, 최종 기존 20건만 유지).
+`npx eslint`(신규 스크립트) clean. `npm run build` PASS. 2-step 파이프라인
+(`audit-recent-master-missing-16.ts` → `classify-recent-master-missing-16.ts`)
+연속 2회 실행 결과 완전히 동일(READY=16/REVIEW=0/DO_NOT_CREATE=0)
+— deterministic 확인.
+
+상태: 완료.
+
+상세: `docs/development/RECENT_MASTER_MISSING_16_AUDIT_V1.md`
+
+**CURRENT_RECENT_COVERAGE = 99.53%. READY_FOR_MASTER_CREATE = 16.
+REVIEW_REQUIRED = 0. DO_NOT_CREATE = 0. EXPECTED_COVERAGE_AFTER_REPAIR =
+100.00%(승인+실행 후). MASTER_IMPORT_ROOT_CAUSE = PROVEN(1회성 스냅샷 +
+MOLIT 신고 지연). RECURRENCE_RISK = YES(주기적 재동기화 자동화 전혀
+없음, 실측 확정). MASTER_COVERAGE_SYNC = MISSING. PRODUCTION_DB_WRITE =
+NONE. DB_SCHEMA_CHANGE = NONE. BUILD = PASS. NEXT_STEP =
+MASTER_MISSING_REPAIR_V1(승인 필요) → MASTER_COVERAGE_SYNC_V1(승인
+필요).**
