@@ -10679,3 +10679,67 @@ WRONG_APT_FALLBACK = ELIMINATED. CANONICAL_ID_PRESERVED = PASS
 BUILD = PASS. NEXT_STEP = 선택적 라우팅 계약 확장(jibun/aptSeq를
 navigateToApt까지 전달) 또는 오염된 legacy 캐시 row 정리(별도 승인
 필요, §19).**
+
+## 2026-08-30
+
+### STEP — TRADE_CANCELLATION_AUDIT_V1: 실거래 취소·해제 검증
+
+작업:
+
+- TRADE_HISTORY_DATA_V1 backfill(부산 855,045 rows)에서 취소/해제 거래가
+  0건으로 관측된 원인을 raw MOLIT 응답 → parser → normalize → write →
+  DB 전 구간 실측 추적으로 증명.
+- 부산 3개구(해운대구/부산진구/동래구) × 최근 12개월, 13,716건 live
+  MOLIT 응답을 직접 스캔해 실제 취소 필드명과 값 형태를 확인.
+
+**원인(PARSER_BUG, 확정)**: `src/lib/api-molit.ts`가 문서상 가정이던
+한글 필드명(`해제여부`/`해제사유발생일`/`등기일자`)만 확인했는데, 실제
+`RTMSDataSvcAptTradeDev` 응답은 영문 필드명(`cdealType`/`cdealDay`/
+`rgstDate`)만 내려준다 — 한글 키가 응답에 아예 존재하지 않아 매 row
+`dealCanceled`가 100% `false`로 고정됐다. write(`backfill-trade-history.ts`
+upsert)와 dedup(자연키/occurrenceIndex) 단계는 원래 정상이었다(parser가
+올바른 값을 넘겼다면 문제없이 저장됐을 구조).
+
+실측 취소 샘플 786건 확보(요구 최소 3건 초과), 취소 비율 5.73%(786/
+13,716, 최근 고거래량 3개구 표본 — 전체 20년/부산 전역에 일반화 금지).
+같은 자연키를 가진 "취소 전 원본 + 취소 후 사본" 중복 row가 같은 fetch
+응답 안에 동시에 존재하는 패턴도 발견됐으나, `trade-history-read.ts`의
+기존 `dealCanceled: false` valid-trade 필터가 이미 이를 정확히 처리하고
+있어 별도 병합 로직은 불필요함을 확인(§10/§13, 새 abstraction 추가 없음).
+
+**수정**: `src/lib/api-molit.ts`에 `parseCancellationFields()` 순수 함수
+추가(한글+영문 필드명 모두 매칭, 하위 호환 유지) — 필드명 매핑 버그
+1곳만 수정, write/dedup/read 로직은 변경 없음(원래 정상이었음).
+
+**기존 DB 영향**: 855,045 rows 전체가 이 버그 기간 동안 backfill되어
+취소 마킹을 신뢰할 수 없다. 재동기화(부산 16개구 × 최근 12개월,
+`backfill-trade-history.ts --apply` 재사용) 필요 — 이번 STEP은
+production write를 하지 않고 계획만 제시, 실행은 승인 대기
+(§DB/schema 변경 없음, bulk 재처리는 STOP 조건).
+
+**QA**: 신규 유닛테스트 7개(`src/lib/api-molit.test.mjs` 6개,
+`scripts/trade-history-logic.test.mjs`에 중복-row-배치 시나리오 1개
+추가) — 전체 21/21 pass. `npx tsc --noEmit`은 사전 존재하던
+scripts/ 에러만 남음(FAIL_EXISTING_SCRIPT_ERRORS, 이번 변경과 무관
+확인 — git stash로 baseline에서도 동일 에러 재현). `npx eslint`
+변경 파일 전부 clean. `npm run build` PASS.
+
+DB 변경: 없음(schema/migration 무변경, production 855,045 rows
+임의 수정 없음).
+
+API 변경: 없음(내부 파서 함수 추가만, 외부 계약 무변경).
+
+상태: 완료(코드 수정 + 문서화, production 재동기화는 별도 승인 대기).
+
+상세: `docs/development/TRADE_CANCELLATION_AUDIT_V1.md`
+
+**CANCELLATION_CONTRACT = PROVEN. REAL_CANCEL_SAMPLE = PASS(786건).
+PARSER = PASS(수정 완료). WRITE_CONTRACT = PASS(원래 정상). DEDUP_UPSERT
+= PASS(원래 정상, 중복-row 케이스도 valid-trade 필터로 안전).
+VALID_TRADE_RULE = PASS(기존 trade-history-read.ts 구현이 이미 올바름).
+EXISTING_DB = NEEDS_RESYNC. RECORD_HIGH_READY = NO(재동기화 전까지
+"역대" 표현 전환 보류). DB_SCHEMA_CHANGE = NONE. PRODUCTION_DB_WRITE
+= NONE. UNIT_TESTS = PASS(21/21). TYPECHECK = PASS(변경 파일 기준,
+기존 scripts/ 에러는 FAIL_EXISTING_SCRIPT_ERRORS). LINT = PASS.
+BUILD = PASS. NEXT_STEP = RESYNC_REQUIRED(부산 16개구 × 최근 12개월,
+승인 후 실행).**

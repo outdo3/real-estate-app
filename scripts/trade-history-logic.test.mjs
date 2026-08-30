@@ -137,6 +137,26 @@ test('취소 여부는 자연키에 포함되지 않는다(취소 전/후가 같
   assert.equal(canceledRows[0].cancelDate, '20260601');
 });
 
+// TRADE_CANCELLATION_AUDIT_V1(2026-08-30) 실측 — 같은 fetch 배치 안에 동일 거래의
+// "취소 전" 원본 row와 "취소 후"(cdealType=O) row가 함께 오는 경우가 실제로 관측됐다
+// (해운대구 202607 등, groupKey+금액+일자+층+면적이 완전히 동일). occurrenceIndex가
+// 등장 순서로 서로 다른 값을 받아 두 row 모두 별개로 저장되지만, valid trade
+// contract(dealCanceled=false 필터, trade-history-read.ts)가 취소된 쪽을 자동
+// 제외하므로 유효 거래 집계에서는 정확히 1건으로만 카운트된다 — 별도 병합 로직 불필요.
+test('같은 배치에 취소 전/후 중복 row가 와도 서로 다른 occurrenceIndex로 둘 다 보존된다(valid trade 필터가 취소분을 제외)', () => {
+  const original = item({ dealCanceled: false, cancelDate: '' });
+  const canceledDuplicate = item({ dealCanceled: true, cancelDate: '20260804' });
+  const { rows, invalid } = normalizeMolitItemsToTradeRows([original, canceledDuplicate], '26140', '202605');
+  assert.equal(invalid.length, 0);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].groupKeyStr, rows[1].groupKeyStr);
+  assert.notEqual(rows[0].occurrenceIndex, rows[1].occurrenceIndex);
+  assert.equal(rows[0].dealCanceled, false);
+  assert.equal(rows[1].dealCanceled, true);
+  const validCount = rows.filter((r) => !r.dealCanceled).length;
+  assert.equal(validCount, 1);
+});
+
 test('층 정보가 없거나 숫자가 아니면 MISSING_FLOOR로 분류한다(자연키 구성요소라 null 저장 금지)', () => {
   const { rows, invalid } = normalizeMolitItemsToTradeRows([item({ floorRaw: '' })], '26140', '202605');
   assert.equal(rows.length, 0);
