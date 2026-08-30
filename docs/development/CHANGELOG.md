@@ -10743,3 +10743,54 @@ EXISTING_DB = NEEDS_RESYNC. RECORD_HIGH_READY = NO(재동기화 전까지
 기존 scripts/ 에러는 FAIL_EXISTING_SCRIPT_ERRORS). LINT = PASS.
 BUILD = PASS. NEXT_STEP = RESYNC_REQUIRED(부산 16개구 × 최근 12개월,
 승인 후 실행).**
+
+## 2026-08-30
+
+### STEP — TRADE_CANCELLATION_RESYNC_V1: 취소거래 보정 재동기화
+
+사용자가 production DB 재동기화를 명시적으로 승인(부산 16개구 × 최근
+13개월, 기존 자연키 upsert, schema/migration 변경 없음).
+
+작업:
+
+- `scripts/sync-trade-history.ts`(기존 스크립트 재사용, 신규 스크립트
+  없음)로 부산 16개 구·군 × 최근 13개월(202508~202608, 208
+  region-month) 재조회.
+- 대량 실행 전 단일 region-month(해운대구 26350, 202607) live probe로
+  parser 정상 동작 우선 확인(9건 취소 파싱, AUDIT V1 대표 샘플과
+  cancelDate까지 정확히 일치).
+- Before/After snapshot으로 결과 검증: `dealCanceled=true` rows
+  0 → 2,277(부산 최근 13개월 기준), total rows 855,045 → 855,047
+  (+2, 신규 등록 거래분, 폭증 없음), natural key 중복 0 → 0 유지,
+  208/208 region-month 커버리지 완료, failed batch 0건.
+- AUDIT V1 §7 대표 취소 샘플 3건(센텀KCC스위첸/삼정코아/동신) 전부
+  DB에서 재확인 — 원본 row는 `dealCanceled=false` 유지, 취소사본 row는
+  `dealCanceled=true`+정확한 `cancelDate`로 갱신됨(3/3 PASS).
+- `trade-history-read.ts`의 `getTradeHistory()`(valid trade read)가
+  raw read에는 존재하는 취소 row를 실제로 제외하는지 DB로 직접 증명.
+
+DB 변경: 없음(schema/migration 무변경). Production 데이터 write는
+기존 자연키 upsert 계약 그대로 사용(update: `dealCanceled`/
+`cancelDate`/`registryDate`/`aptName`/`jibun`/`buildYear`만 갱신,
+자연키 자체는 불변) — §5/§7 사용자 승인 범위 내.
+
+API 변경: 없음(코드 변경 없음, 데이터 resync + 문서화만 수행).
+
+QA: `scripts/qa-trade-history.ts` 8/8 sample apts 라이브 MOLIT 매칭
+clean. 유닛테스트 21/21 pass(AUDIT V1과 동일 스위트, 회귀 없음).
+`npx tsc --noEmit`은 사전 존재하던 scripts/ 20개 에러만 남음
+(FAIL_EXISTING_SCRIPT_ERRORS, trade-history/api-molit 관련 신규 에러
+0건). `npx eslint` 신규 이슈 없음(사전 존재 repo 전역 노이즈만,
+이번 STEP 코드 변경 없음). `npm run build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/TRADE_CANCELLATION_RESYNC_V1.md`
+
+**CANCELLATION_RESYNC = PASS. REGION_MONTHS = 208/208. FAILED_BATCHES
+= 0. CANCELLED_ROWS = 2,277. REAL_SAMPLE_MATCH = PASS(3/3).
+VALID_TRADE_EXCLUSION = PASS. DUPLICATES = 0. ROW_COUNT_SANITY = PASS.
+RECENT_13M_DB = SAFE. RECORD_HIGH_READY = NO(과거 13개월 초과 구간은
+별도 검증 필요). DB_SCHEMA_CHANGE = NONE. PRODUCTION_DB_WRITE =
+APPROVED_AND_COMPLETED. BUILD = PASS. NEXT_STEP =
+TRADE_HISTORY_READ_MIGRATION_V1 검토(§17).**
