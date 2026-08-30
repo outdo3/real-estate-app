@@ -10944,3 +10944,67 @@ LEGACY_CONTAMINATIONS = 2. HIGH_CONFIDENCE_REPAIR = 0. REVIEW_REQUIRED =
 필드 일부 구조적 위험 확인). PRODUCTION_DB_WRITE = NONE. DB_SCHEMA_CHANGE
 = NONE. BUILD = PASS. NEXT_STEP = MASTER_HOUSEHOLD_VERIFICATION_V1 /
 LEGACY_CACHE_CLEANUP_V1(둘 다 승인 필요) 검토.**
+
+## 2026-08-31
+
+### STEP — MASTER_HOUSEHOLD_VERIFICATION_V1: 마스터 세대수 검증
+
+작업(READ-ONLY VERIFICATION + CLASSIFICATION + CODE GUARD, Production
+write/schema 변경 없음):
+
+- **K-APT 접근성 확인(실측)**: `AptListService3`/`AptListService`/
+  `AptListService2`/`AptBasisInfoServiceV3` 4개 엔드포인트 변형을
+  기존 `DATA_GO_KR_API_KEY`로 시도, 전부 `NO_OPENAPI_SERVICE_ERROR` —
+  이 프로젝트 키가 K-APT 계열 상품에는 승인돼 있지 않음을 확정. source
+  priority가 건축물대장(총괄표제부/표제부)으로 강등됨을 문서화.
+- **30건 전수 재검증**(`scripts/verify-busan-household-outliers.ts`,
+  신규, targeted 60 API 호출): 전부 총괄표제부 0건 재확인(HIGH_CONFIDENCE
+  0건 — 최초 backfill이 놓친 케이스 없음). 표제부 응답의 `dongNm` 필드
+  (기존 파이프라인이 추출하지 않던 필드)를 새로 추출한 결과 27건이
+  "숫자+동"/"제N동"(예: 경동="103동") 패턴 — `SINGLE_BUILDING_AS_COMPLEX`
+  확정. 3건(일광/일루스타/성우이린타워)은 dongNm 공백 — 진짜 단일 건물
+  단지로 판정해 `NO_CORRECTION`(household 필드는 false positive). 1건은
+  dongNm이 비정형이라 `UNKNOWN`.
+- **파이프라인 근본원인 확정**: `parseBrTitleInfoRecord()`가 응답에
+  이미 존재하던 `dongNm` 필드를 아예 추출하지 않고 있었다 — "표제부
+  1건 = 그 지번 전체"라는 안전조건의 논리 자체는 정상이었으나, 그
+  가정을 반증할 수 있는 신호(dongNm)를 무시하고 있었다.
+- **코드 가드 추가**: `src/lib/apt-building-info.ts`에
+  `isNumberedBuildingUnit(dongNm)` 신규(순수 함수, `/^제?\d+동$/`
+  패턴). `fetchBrTitleInfoFallback()`(info/route.ts 라이브 조회 경로)과
+  `backfill-apartment-master-basic-data.ts`의 `fetchTitleFallbackOnce()`
+  (신규 상태 `building_unit_review`) 양쪽에 적용 — 향후 재실행/신규
+  발견 시 같은 오류 재발을 막는다. 이미 저장된 30건 데이터 자체는
+  건드리지 않음.
+- 경동마리나(aptSeq 26350-2) 최종 결론: 진짜 전체 세대수/동수 **미확정**
+  (총괄표제부 없음, K-APT 불가). MOLIT 실거래 981건 재분석 결과 같은
+  층 번호에서 여러 전용면적이 반복 관측돼 다동 단지일 개연성은
+  뒷받침되나, "892세대/8개동"은 여전히 미검증 — 채택하지 않음.
+
+DB 변경: 없음(schema/migration 무변경, Production INSERT/UPDATE/DELETE
+없음).
+
+API 변경: 없음(신규 export 함수 1개, 기존 함수 시그니처/동작 계약
+불변 — 표제부 fallback이 더 보수적으로 null을 반환하는 case가 늘었을
+뿐, 반환 타입/호출 방식 동일).
+
+QA: 신규 유닛테스트 9개(`src/lib/apt-building-info.test.mjs`,
+`isNumberedBuildingUnit` A/B/C + edge case) 전부 pass, 기존 8개 포함
+17/17. 세션 전체 회귀 테스트(`apt-name-match`/`trade-history-logic`/
+`api-molit`/`search-ranking`) 37/37 pass. `npx tsc --noEmit` 신규 오류
+0(기존 20건만 유지). `npx eslint`(변경 파일) clean. `npm run build`
+PASS. 브라우저 실측(경동/대신롯데캐슬 상세) 회귀 없음, 경동 세대수는
+문서 그대로 72(이번 STEP도 DB write 없었으므로 불변 확인).
+
+상태: 완료.
+
+상세: `docs/development/MASTER_HOUSEHOLD_VERIFICATION_V1.md`
+
+**GYEONGDONG_MARINA_HOUSEHOLDS = UNKNOWN(건물 "103동" 단독 72만 확인).
+GYEONGDONG_MARINA_BUILDINGS = UNKNOWN. HIGH_CONFIDENCE_REPAIR = 0.
+REVIEW_REQUIRED = 27. NO_CORRECTION = 3. HOUSEHOLD_PROVENANCE = PARTIAL
+(K-APT 최우선 source 접근 불가, 건축물대장 기준 계약은 확정).
+PIPELINE_GUARD = PASS(dongNm 기반 가드 구현+테스트 완료).
+PRODUCTION_DB_WRITE = NONE. DB_SCHEMA_CHANGE = NONE. BUILD = PASS.
+NEXT_STEP = SOURCE_FOUNDATION_REQUIRED(K-APT 활용신청, 사용자 승인
+필요) → 이후 MASTER_DATA_REPAIR_V1.**
