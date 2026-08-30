@@ -11072,3 +11072,65 @@ MOLIT 신고 지연). RECURRENCE_RISK = YES(주기적 재동기화 자동화 전
 NONE. DB_SCHEMA_CHANGE = NONE. BUILD = PASS. NEXT_STEP =
 MASTER_MISSING_REPAIR_V1(승인 필요) → MASTER_COVERAGE_SYNC_V1(승인
 필요).**
+
+## 2026-08-31
+
+### STEP — MASTER_MISSING_REPAIR_V1: 최근 거래 Master 누락 16건 보정
+
+사용자가 이번 STEP의 Production DB write를 명시적으로 승인(16건
+한정, canonical identity 필드만, secondary metadata는 공식 근거 없으면
+null 유지).
+
+작업:
+
+- 신규 repair 스크립트(`scripts/repair-recent-missing-masters.ts` +
+  순수 로직 분리 `scripts/repair-recent-missing-masters-logic.ts`,
+  dry-run 기본/`--apply`로만 반영, idempotent — 기존 row는 절대
+  UPDATE하지 않고 skip만) 작성. dry-run 결과 16 insert/0 duplicate/0
+  invalid로 예상과 정확히 일치 확인 후 적용.
+- **Production write 실행**: `RECENT_MASTER_MISSING_16_AUDIT_V1`이
+  확정한 16건(햇살좋은집/궁전그린파크빌라/동광맨션/삼풍아파트/
+  가야봄여름가을겨울/롯데캐슬인피니엘/퀀텀펠리스/대운스카이뷰1차/
+  보해이브빌/아틀리에933/대림포레/창신빌라/삼성빌라/에스케이드림피아/
+  일번파크맨션에이동/피렌체) 전부 `ApartmentMaster`에 신규 생성(id
+  5391~5406) — aptSeq/name/normalizedName/sido/sigungu/sggCd/umdName/
+  jibun/buildYear만 채우고 totalHouseholds 등 secondary metadata는
+  공식 근거가 없어 전부 null로 유지. 16/16 성공, 실패 0.
+- **Before/After**: `ApartmentMaster` 3,402→3,418(+16), 최근 24개월
+  검색 coverage 99.53%(3,387/3,403) → **100.00%**(3,403/3,403).
+  duplicate aptSeq 그룹 0건 유지(정합성 훼손 없음).
+- **QA**: 16개 이름 전부 `/api/search` 프로그래매틱 검색 → 16/16
+  정확히 자기 aptSeq를 exact-match tier로 반환(동명 타 지역 단지가
+  섞인 2건도 랭킹 정상). `/api/apt/[name]/verify` 16/16 `hasTrades=true`
+  확인, 다른 단지 fallback 0건. 대표 3건(고신뢰 2 + 중신뢰 1) 375px
+  모바일 브라우저로 검색→상세→실거래 확인, 정상.
+- **부수 발견 및 수정**: QA 중 `/apt/[name]` Hero 요약 줄이 세대수가
+  없을 때(신규 16건 특성상 전부 해당) "1978년 준공세대"처럼 숫자 없이
+  "세대"만 붙어 깨져 보이는 pre-existing UI 버그를 발견 — household이
+  있을 때만 "세대" 접미사 정규화를 적용하도록 `apt-client.tsx`를 좁게
+  수정(LOCKED 파일이지만 AGENTS.md의 data-error/severe-UX 예외 사유,
+  이번 STEP이 직접 노출시킨 결함이라 QA 범위 안에서 처리).
+- 성능 회귀 없음 재확인(warm p50 23~119ms, p95 55~179ms, 기존 목표
+  대비 이상 없음 — Master 3,402→3,418은 성능에 실질적 영향 없는 규모).
+
+DB 변경: schema/migration 없음. **Production INSERT 16건 실행**(승인
+범위 정확히 준수, UPDATE/DELETE 없음, 16건 초과 없음).
+
+API 변경: 없음(신규 스크립트만 추가, 기존 API 계약 불변).
+
+QA: 신규 유닛테스트 9개(`repair-recent-missing-masters-logic.test.mjs`,
+스펙 §21 A~F 커버) 전부 pass. 세션 전체 회귀 테스트 47/47 pass.
+`npx tsc --noEmit` 신규 오류 0(기존 20건만 유지). `npx eslint` 신규
+이슈 0(apt-client.tsx의 사전 존재 warning 1건은 이번 변경과 무관 —
+이전 STEP 기록과 대조해 재확인). `npm run build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/MASTER_MISSING_REPAIR_V1.md`
+
+**MASTER_MISSING_REPAIR = PASS. INSERTED = 16. RECENT_MISSING = 0.
+RECENT_SEARCH_COVERAGE = 100.00%. SEARCH_IDENTITY = PASS.
+DETAIL_IDENTITY = PASS. WRONG_APT_FALLBACK = ELIMINATED. DUPLICATES =
+0. PRODUCTION_DB_WRITE = APPROVED_AND_COMPLETED. DB_SCHEMA_CHANGE =
+NONE. SEARCH_PERFORMANCE = PASS. BUILD = PASS. NEXT_STEP =
+MASTER_COVERAGE_SYNC_V1(승인 필요).**
