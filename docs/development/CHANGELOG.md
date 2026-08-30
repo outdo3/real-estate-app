@@ -10794,3 +10794,80 @@ RECENT_13M_DB = SAFE. RECORD_HIGH_READY = NO(과거 13개월 초과 구간은
 별도 검증 필요). DB_SCHEMA_CHANGE = NONE. PRODUCTION_DB_WRITE =
 APPROVED_AND_COMPLETED. BUILD = PASS. NEXT_STEP =
 TRADE_HISTORY_READ_MIGRATION_V1 검토(§17).**
+
+## 2026-08-30
+
+### STEP — BUSAN_APARTMENT_SEARCH_COVERAGE_PERFORMANCE_V1: 부산 아파트 검색 커버리지 + 성능 긴급 개선
+
+작업:
+
+- 실제 사용자 신고("경동마리나" 검색 결과 0건)를 4개 진입점(홈/빠른검색/
+  지도/공통 endpoint) 전부 실측 재현하고, DB 전수 트레이스(ApartmentMaster/
+  Apartment/ApartmentTradeHistory/ApartmentUnitType)로 근본 원인을 확정.
+- **원인(CASE B, 확정)**: "경동마리나"는 카카오맵 POI가 쓰는 통용 별칭일 뿐,
+  ApartmentMaster/Apartment/ApartmentTradeHistory 어디에도 그 문자열이
+  없다 — 공식 등록명(MOLIT/건축물대장)은 "경동"(aptSeq 26350-2)뿐이며,
+  카카오 POI 좌표가 이 row의 좌표와 소수점 단위까지 일치함을 실측으로
+  증명(문자열 정규화 개선만으로는 해결 불가능한 케이스).
+- **두 번째 독립 버그**: exact 검색어("경동")조차 대상 단지를 못 찾음 —
+  `/api/search`가 household 수로만 정렬 후 상위 15개로 자르던 기존 로직
+  때문에, 정확히 일치하는 작은 단지(72세대)가 이름이 겹치는 더 큰 단지들
+  (최대 839세대)에 밀려 잘려나갔다. `take:50` DB 상한도 흔한 이름("현대"/
+  "동원"/"한신")에서 자기 자신조차 raw 결과에 없는 사례를 만들었다.
+- **수정 3건**(schema 변경 없음): (1) `src/lib/search-ranking.ts` 신설 —
+  exact>startsWith>contains tier 랭킹 + `apartment_master_seed.ts`와
+  동일한 정규화(아파트 접미사 제거) + `take:50` 제거(테이블 ~3,400행
+  규모라 성능 영향 없음, 실측 확인). (2) `src/lib/search-alias-fallback.ts`
+  신설 — DB 매칭 0건일 때만 기존 카카오 API로 좌표 역매칭(카테고리 필터 +
+  반경 80m + 유일후보 조건, 못 찾으면 그대로 no-result). (3)
+  `src/app/api/apt/[name]/verify/route.ts` 신설 — 검색 선택 후 상세 이동
+  전 "실거래 있는가" 확인 게이트를 기존 MOLIT 실시간 호출(캐시 미스 시
+  최대 12회 순차 호출, 실측 5.4초)에서 `ApartmentTradeHistory`/
+  `Apartment` DB-only 조회(실측 60~140ms)로 교체 — 동일 계약
+  (`hasTrades || hasUnitTypes`), 데이터 소스만 DB-first로 전환.
+- Busan 검색 커버리지 감사 스크립트(`scripts/audit-busan-search-coverage.
+  ts`, read-only) 신설: 실거래 universe(distinct aptSeq) 기준
+  RECENT_TRADED_APT_COVERAGE(최근 24개월) 97.91% → **99.53%**(목표 ≥99%
+  달성), SEARCH_API_MISSING 50→0, NAME_MISMATCH 5→0. 남은 유일한
+  카테고리(MASTER_MISSING 16건)는 진짜 데이터 공백이라 이번 STEP에서
+  임의 생성하지 않고 목록만 보고(§25 정책).
+- 성능 벤치마크 스크립트(`scripts/benchmark-apartment-search.ts`, HTTP
+  타이밍 전용) 신설: `/api/search` warm p50 78~120ms, p95 120~166ms(전부
+  목표 이내), `/api/apt/[name]/verify` 5,438ms→61~140ms.
+- 부가 발견(이번 STEP 범위 밖, 문서화만): `Apartment`(legacy 캐시) 테이블의
+  "해운대경동제이드" row가 실제로는 "경동"의 지번/세대수/준공연도를 갖고
+  있는 identity 오염 발견(§11); `ApartmentMaster.totalHouseholds=72`가
+  실거래 규모(981건)와 불일치해 명백히 오염된 값으로 판단(사용자 주장
+  892세대가 실제 값일 가능성).
+
+DB 변경: 없음(schema/migration 무변경, Production data write 없음 —
+카카오 별칭 폴백도 결과만 반환할 뿐 DB에 아무것도 쓰지 않는다).
+
+API 변경: `/api/search` 응답에 선택적 `matchNote` 필드 추가(카카오 별칭
+매칭 시에만 채워짐, 기존 소비자에 영향 없는 상위호환 확장). 신규 라우트
+`/api/apt/[name]/verify`(GET) 추가.
+
+QA: 신규 유닛테스트 8/8(`src/lib/search-ranking.test.mjs`, §38 A/B/C/D/F/H/J).
+기존 회귀 테스트 전부 재실행 pass(SEARCH_DETAIL_IDENTITY_HOTFIX_V2 8/8,
+trade-history-logic 15/15, api-molit 6/6) — 이번 변경으로 인한 회귀 없음.
+브라우저 실측(Chrome, localhost) — 홈/지도 검색에서 "경동마리나"→"경동"
+정상 해석, 상세페이지 identity/실거래 데이터 일치, 375px/360px 모바일
+가로 스크롤/겹침 없음, "해운대경동제이드"와 "경동" 교차 오염 없음
+(SEARCH_DETAIL_IDENTITY 유지). `npx tsc --noEmit` 신규 오류 0(기존
+scripts/ 20개 오류만 FAIL_EXISTING_SCRIPT_ERRORS). `npx eslint`(변경
+파일) clean. `npm run build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/BUSAN_APARTMENT_SEARCH_COVERAGE_PERFORMANCE_V1.md`
+
+**GYEONGDONG_MARINA_SEARCH = PASS. BUSAN_SEARCH_COVERAGE(전체 20년) =
+69.36%(데이터 성격상 정상, §9 근거). RECENT_TRADED_SEARCH_COVERAGE(24
+개월) = 99.53%. SEARCH_DETAIL_IDENTITY = PASS. WRONG_APT_FALLBACK =
+ELIMINATED. HOME_SEARCH = PASS. QUICK_SEARCH = PASS. MAP_SEARCH = PASS.
+SEARCH_API_P50 ≈ 90ms. SEARCH_API_P95 ≈ 150ms. SEARCH_PERFORMANCE = PASS.
+EXTERNAL_MOLIT_ON_SEARCH = NO. DUPLICATE_REQUEST = 0. N_PLUS_ONE = NO.
+SEARCH_INDEX_RECOMMENDATION = NO(현재 규모 기준). DB_SCHEMA_CHANGE =
+NONE. PRODUCTION_DB_WRITE = NONE. BUILD = PASS. NEXT_STEP =
+MASTER_DATA_COVERAGE_FIX_V1 / LEGACY_APARTMENT_IDENTITY_AUDIT(둘 다
+승인 필요) 검토.**
