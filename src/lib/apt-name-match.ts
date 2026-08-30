@@ -112,3 +112,52 @@ export function shouldAdoptFallbackUnitTypes(params: {
   if (fallbackUnitTypesCount === 0) return false;
   return normalizeAptName(fallbackName) === normalizeAptName(requestedAptName);
 }
+
+// SEARCH_DETAIL_IDENTITY_HOTFIX_V2 — /api/apt/[name]/route.ts는 같은 법정동(dong) 안의
+// MOLIT 실거래를 aptNamesMatch()의 느슨한 양방향 부분포함 규칙으로 걸러 특정 단지의
+// 거래만 추린다. 이 규칙은 원래 표기 차이(예: "명륜아이파크1단지")를 흡수하려고 만든
+// 것인데, 요청한 이름이 완전히 다른 실존 단지명의 부분 문자열일 때도 그대로 통과시켜
+// 버리는 위험이 있다 — 실측(부산 해운대구 우동): "경동"(aptSeq 26350-2, 지번 974,
+// 1995년 준공, 72세대)이 "해운대경동제이드"(aptSeq 26350-2206, 지번 763, 2012년 준공,
+// 278세대) 검색에 섞여 들어와, "경동"의 최근 거래가 더 최신이라는 이유만으로 상세
+// 페이지 전체 identity(이름/준공연도/세대수)가 "경동"으로 뒤바뀌는 사고로 이어졌다.
+//
+// STRONG_RESULT_PROTECTION(§12) 원칙을 여기 적용한다: 이 동 안에 요청한 이름과
+// "정규화 후 완전히 일치"하는 거래가 하나라도 있다면, 그것이 이미 이 라우트가 얻을 수
+// 있는 가장 강한 identity proof다 — 그 즉시 그 실거래의 aptSeq(들)만 인정하고, 부분
+// 포함만으로 통과되는 다른 단지의 거래는 전부 배제한다. exact match가 dong 안에 하나도
+// 없을 때만(예: 사용자가 "금호어울림"으로 검색했는데 국토부 등록명이 "서대신금호어울림"
+// 뿐인 정당한 표기차 케이스) 기존 aptNamesMatch 느슨한 규칙으로 폴백한다 — 이미
+// 통과되던 케이스를 깨뜨리지 않는 상위 안전장치일 뿐이다(집합을 줄이기만 함).
+export function resolveStrongIdentityAptSeqs(
+  items: Array<{ name?: string | null; dong?: string | null; aptSeq?: string | null }>,
+  requestedAptName: string,
+  dong?: string
+): Set<string> {
+  const requestedNorm = normalizeAptName(requestedAptName);
+  const scoped = dong ? items.filter((item) => item.dong === dong) : items;
+  const seqs = new Set<string>();
+  for (const item of scoped) {
+    if (!item.name || !item.aptSeq) continue;
+    if (normalizeAptName(item.name) === requestedNorm) seqs.add(item.aptSeq);
+  }
+  return seqs;
+}
+
+// strongAptSeqs가 비어있지 않으면(exact match 확보) aptSeq 보유 항목은 그 집합에 속할
+// 때만, aptSeq가 없는 항목(구주소 표기 등 일부 legacy 응답)은 정규화 이름이 완전히
+// 같을 때만 인정한다 — 어느 쪽도 aptNamesMatch의 느슨한 부분포함을 쓰지 않는다.
+// strongAptSeqs가 비어있으면(이 동 안에 exact match가 전혀 없으면) 기존 동작 그대로
+// aptNamesMatch로 폴백한다.
+export function matchesTradeIdentity(
+  item: { name?: string | null; aptSeq?: string | null },
+  requestedAptName: string,
+  strongAptSeqs: Set<string>
+): boolean {
+  if (!item.name) return false;
+  if (strongAptSeqs.size > 0) {
+    if (item.aptSeq) return strongAptSeqs.has(item.aptSeq);
+    return normalizeAptName(item.name) === normalizeAptName(requestedAptName);
+  }
+  return aptNamesMatch(item.name, requestedAptName);
+}

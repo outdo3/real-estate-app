@@ -10619,3 +10619,63 @@ FOUND_AND_FIXED(Decimal number 필터 불일치, 프로덕션 영향 없음).
 BENCHMARK = PASS(3.4~27.8배 개선 실측). UNIT_TESTS = PASS(14/14).
 NATIONWIDE = NOT_STARTED(별도 승인 필요). DB_SCHEMA_CHANGE = NONE
 (이번 STEP). NEXT_STEP = TRADE_HISTORY_READ_MIGRATION_V1.**
+
+## 2026-08-30
+
+### STEP — SEARCH_DETAIL_IDENTITY_HOTFIX_V2: 검색→상세 아파트 동일성 긴급 수정
+
+작업: docs/development/SEARCH_DETAIL_IDENTITY_HOTFIX_V2.md 참고(전체
+기록). P0 신고: "해운대경동제이드"(우동 763, 2012년 준공, 278세대)를
+검색·선택했는데 상세페이지가 완전히 다른 실존 단지 "경동"(우동 974,
+1995년 준공, 72세대)의 이름·준공연도·세대수를 표시하는 사고 발생.
+
+**근본 원인(2단계 cascading 버그, 실측 확인)**: (1)
+`/api/apt/[name]/route.ts`가 같은 법정동 안의 MOLIT 실거래를
+`aptNamesMatch()`(양방향 부분포함 — 정당한 표기차 흡수용)로만
+필터링해, "경동"이 "해운대경동제이드"의 부분 문자열이라는 이유만으로
+서로 다른 aptSeq(26350-2 vs 26350-2206)의 별개 실존 단지가 같은
+결과 집합에 섞였다. "경동"의 최근 거래(2026-08-22)가 더 최신이라
+정렬 0번째로 올라와 `apt-client.tsx`가 검증 없이 헤더/준공연도의
+근거로 삼았다. (2) 그렇게 잘못 전달된 지번(974)으로 과거에 이미
+`/api/apt/[name]/info`가 호출된 적이 있어, legacy `Apartment` 캐시
+row(id 399, name='해운대경동제이드')에 **"경동"의 지번·세대수·
+준공일**이 upsert되어 남아있었다 — (1)만 고쳐도 이 오염된 캐시가
+매 요청마다 재현시키는 별도 버그였다(§4-3).
+
+**수정**: `src/lib/apt-name-match.ts`에 순수 함수
+`resolveStrongIdentityAptSeqs()`/`matchesTradeIdentity()` 추가 —
+법정동 안에 요청 이름과 정규화 후 완전히 일치하는 실거래가 있으면
+그 aptSeq만 인정하고(STRONG_RESULT_PROTECTION) 부분포함 매칭은
+exact match가 전혀 없을 때만 폴백(집합을 줄이기만 해 회귀 불가능,
+기존 `aptNamesMatch` 계약 자체는 무변경). `/api/apt/[name]/info/
+route.ts`는 jibun이 아직 없는 "빠른 진입" 첫 호출에서도 이미
+backfill된 ApartmentMaster(이름+동 정규화 exact)로 지번을 먼저
+확보하고, name+dong 캐시 row에 저장된 jibun이 그와 다르면 오염된
+캐시로 간주해 신뢰하지 않는다 — 다음 upsert가 자동으로 self-heal한다
+(수동 DB 수정 없음, 오염된 legacy row 자체는 §16 known limitation으로
+남김, production 데이터 직접 수정은 하지 않음).
+
+**QA(실측, 부산 실제 데이터)**: 같은 법정동(우동)에 "경동"을 공유하는
+4개 실존 단지(경동/해운대경동제이드/센텀경동리인/해운대경동리인뷰2차)
+전부가 서로 섞이지 않고 각자 자신의 identity(aptSeq/jibun/buildYear)만
+반환함을 API 직접 호출로 확인. 브라우저로 상세페이지 방문해 헤더·
+hero·이집점수·단지상세제원·탭타이틀이 전부 "해운대경동제이드/2012년/
+278세대"로 일치함을 스크린샷으로 확인(§31 DATA_CONSISTENCY). 모바일
+390px 레이아웃 확인(가로 스크롤/겹침 없음). 레거시 alias 폴백(정당한
+표기차 케이스)은 단위테스트로 회귀 없음 확인.
+
+DB 변경: 없음(schema/migration 무변경, 오염된 legacy 캐시 row는
+의도적으로 UPDATE/DELETE하지 않고 코드 레벨 우회만 적용).
+
+상태: 완료.
+
+**SEARCH_DETAIL_IDENTITY = PASS. HAEUNDAE_GYEONGDONG_JADE = PASS.
+WRONG_APT_FALLBACK = ELIMINATED. CANONICAL_ID_PRESERVED = PASS
+(exact-match 우선 + ApartmentMaster 교차검증). DETAIL_DATA_CONSISTENCY
+= PASS(헤더/hero/score/spec grid 전부 일치). MOBILE = PASS(390px,
+실기기 미실시). DESKTOP = PASS. DB_SCHEMA_CHANGE = NONE. UNIT_TESTS
+= PASS(8/8 신규, 기존 8/8 유지). TYPECHECK = PASS(변경 파일 기준,
+기존 scripts/ 에러는 FAIL_EXISTING_SCRIPT_ERRORS로 분리). LINT = PASS.
+BUILD = PASS. NEXT_STEP = 선택적 라우팅 계약 확장(jibun/aptSeq를
+navigateToApt까지 전달) 또는 오염된 legacy 캐시 row 정리(별도 승인
+필요, §19).**
