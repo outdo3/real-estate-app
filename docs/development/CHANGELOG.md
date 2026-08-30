@@ -10871,3 +10871,76 @@ SEARCH_INDEX_RECOMMENDATION = NO(현재 규모 기준). DB_SCHEMA_CHANGE =
 NONE. PRODUCTION_DB_WRITE = NONE. BUILD = PASS. NEXT_STEP =
 MASTER_DATA_COVERAGE_FIX_V1 / LEGACY_APARTMENT_IDENTITY_AUDIT(둘 다
 승인 필요) 검토.**
+
+## 2026-08-31
+
+### STEP — BUSAN_APARTMENT_MASTER_DATA_INTEGRITY_V1: 부산 아파트 마스터 데이터 정합성 감사
+
+작업(AUDIT + CLASSIFICATION + PROVENANCE + REPAIR PLAN, 코드/DB 변경
+없음):
+
+- **경동/경동마리나 72세대 근본원인 규명(실측)**: 건축물대장
+  총괄표제부(`getBrRecapTitleInfo`, 복합단지 전체 집계) 재조회 결과
+  해당 주소(우동 974) 레코드 0건, 반면 표제부(`getBrTitleInfo`, 단일
+  건물) 재조회 결과 1건 — `bldNm="경동마리나아파트"`(건축물대장 자체의
+  공식 등록명, Kakao 콜로퀴얼 별칭이 아니었음), `dongNm="103동"`,
+  `hhldCnt=72`. 즉 현재 DB의 72세대는 다동 복합단지 중 "103동" 건물
+  하나만의 값이다. `backfill-apartment-master-basic-data.ts`의 표제부
+  fallback("정확히 1건이면 그 지번 전체로 신뢰")이 다동 복합단지에서
+  깨지는 구조적 한계를 실측으로 확정(단, 정확한 전체 세대수는 이번
+  STEP에서 미확정 — 892는 미검증 외부 수치이므로 채택하지 않음).
+- **해운대경동제이드 legacy 오염 재감사**: `SEARCH_DETAIL_IDENTITY_
+  HOTFIX_V2`(`d7059a6`)가 이미 이 정확한 사례를 발견하고
+  `cacheIdentityMismatch` guard로 화면 노출을 차단하고 있음을 코드
+  추적 + 브라우저 실측(정확한 763/2012년/278세대 표시 확인)으로 재확인.
+  단, 실측 결과 legacy DB row 자체는 self-heal되지 않음을 새로 발견
+  (`ApartmentMaster` tier가 registry를 완전히 채우면 live-fetch-upsert
+  경로에 도달하지 못함) — 화면은 안전하나 코드 주석의 "자동 정정" 주장은
+  부분적으로만 사실.
+- **부산 전체 정합성 전수감사**(`scripts/audit-busan-apartment-master-
+  integrity.ts`, 신규, read-only): `ApartmentMaster`(3,402) ↔ legacy
+  `Apartment`(54) ↔ `ApartmentTradeHistory`(distinct aptSeq 4,905) 비교.
+  identity 충돌(name/jibun/dong/buildYear) 0건(구조적으로 같은 MOLIT
+  뿌리에서 파생돼 tautological함을 문서에 명시). legacy identity
+  오염 2건(해운대경동제이드 + 신규 발견 명륜아이파크1단지). household
+  outlier 30건(세대당 주차 5대 초과 + 표제부-단일건물 출처만, calibration
+  으로 노이즈 1,741→32건 정제).
+- Master Missing 16건(이전 STEP에서 발견) 전수 재확인 — 전부 legacy
+  Apartment에도 없는 순수 공백, 이름 패턴 기반 잠정 분류(F: import
+  omission 다수), 1건("일번파크맨션에이동")은 경동과 동일한 분할-건물
+  등록 패턴 의심으로 별도 표시. 임의 Master row 생성 없음.
+- Repair candidate 32건을 `data/master-integrity/busan-master-repair-
+  candidates.json`에 저장(DB write 없음) — 전부 REVIEW_REQUIRED(정확한
+  올바른 값을 확정하지 못했거나 코드 guard로 이미 안전해 자동 수정
+  불필요), HIGH_CONFIDENCE 0건.
+
+DB 변경: 없음(schema/migration 무변경, Production INSERT/UPDATE/DELETE
+없음 — 감사 스크립트는 read-only, repair candidate는 JSON 파일로만
+저장).
+
+API 변경: 없음(코드 수정 없음 — 기존 identity-mismatch guard가 이미
+충분히 작동함을 확인했을 뿐, LOCKED 파일(`/apt/[name]` 계열) 추가 수정은
+이번 STEP 승인 범위 밖으로 판단해 보류).
+
+QA: `npx tsc --noEmit` 신규 오류 0(기존 20건 스크립트 오류만
+FAIL_EXISTING_SCRIPT_ERRORS). `npx eslint`(신규 스크립트) clean.
+`npm run build` PASS. 브라우저 실측(경동/해운대경동제이드 상세 페이지,
+375px 모바일) 문서 기록값과 일치, 오류 없음. 코드 변경이 없어 신규
+유닛테스트는 작성하지 않음(§32 조건부 요구사항 충족).
+
+상태: 완료.
+
+상세: `docs/development/BUSAN_APARTMENT_MASTER_DATA_INTEGRITY_V1.md`
+
+**GYEONGDONG_MARINA_MASTER = NEEDS_CORRECTION(정확한 값 미확정).
+GYEONGDONG_HOUSEHOLDS = 72(건물 "103동" 단독 확인값, 복합단지 전체는
+UNVERIFIED). HAEUNDAE_JADE_LEGACY = SAFE(화면 노출 차단 확인) +
+NEEDS_CLEANUP(DB row 자체, 사용자 영향 없음). MASTER_MISSING =
+1,503(전체 기간)/16(최근 24개월, 이전 STEP 확인분 재검증).
+IDENTITY_CONFLICTS = 0(name/jibun/dong/buildYear, tautological 성격
+문서화). HOUSEHOLD_CONFLICTS(outliers) = 30. BUILD_YEAR_CONFLICTS = 0.
+LEGACY_CONTAMINATIONS = 2. HIGH_CONFIDENCE_REPAIR = 0. REVIEW_REQUIRED =
+32. BUSAN_MASTER_INTEGRITY = PARTIAL(핵심 identity는 견고, household
+필드 일부 구조적 위험 확인). PRODUCTION_DB_WRITE = NONE. DB_SCHEMA_CHANGE
+= NONE. BUILD = PASS. NEXT_STEP = MASTER_HOUSEHOLD_VERIFICATION_V1 /
+LEGACY_CACHE_CLEANUP_V1(둘 다 승인 필요) 검토.**
