@@ -11552,3 +11552,67 @@ CANCELLATION_DEFAULT = EXCLUDED. NO_DATA_POLICY = HONEST_EMPTY(다른
 LIVE_API_MIGRATION = NOT_YET(의도적, STEP B 대상). TESTS = 691/691.
 BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0. NEXT_STEP =
 TRADE_DB_FIRST_V1 STEP B(84㎡ 순위 + 거래량 DB 전환).**
+
+## 2026-08-31
+
+### STEP — TRADE_DB_FIRST_V1 STEP B: 84㎡ 국민평형 순위 + 거래량 DB-FIRST 전환
+
+STEP A의 `queryTrades()` read core를 실제 사용자 경로에 처음 연결.
+대상은 사용자 스펙이 지정한 84㎡ 국민평형 순위(전체)와 거래량(부분).
+
+서비스 코드 변경:
+
+- `src/app/api/stats/price-rankings/route.ts`(`mode=area84`): 부산
+  스코프 요청(`sidoCode=26` 전체 또는 `lawdCd`가 `26`으로 시작)만
+  `queryTrades()` 기반 DB 조회로 전환, 비부산 요청은 기존 MOLIT
+  실시간 경로 완전 무변경. `buildArea84RankingRows` 등 기존 순수
+  business logic 함수는 한 글자도 변경하지 않음 — `allTrades`의 출처
+  함수만 부산 요청일 때 교체(어댑터 함수 `storedTradeToFeedTrade`
+  추가). 84~85㎡ 밴드 사전 필터링이 `groupKey`(exact area 포함) 구조상
+  전체-영역 fetch와 출력 동일함을 리뷰로 확인.
+- `src/lib/trade-history-read.ts`: 신규 `getYearlySaleAggregate()`
+  추가 — `$queryRaw` + `GROUP BY EXTRACT(YEAR FROM deal_date)`로 연도별
+  count/max/min/avg를 Postgres 안에서 직접 계산(raw row를 Node로
+  끌어와 reduce하지 않음, STEP A §6이 이미 경고한 패턴).
+- `src/app/api/stats/yearly/route.ts`: 부산 요청의 매매(sale) 연도별
+  표만 `fetchYearlySaleTableFromDb()`로 DB-first 전환. 전세/월세는
+  TradeHistory DB에 데이터 자체가 없어(V1 범위, `dealType='sale'`만
+  존재) 기존 MOLIT 경로 그대로 유지(고정 라우팅, fallback 아님).
+- **성능 버그 발견 및 수정**: yearly 최초 구현은 raw-row fetch(무제한
+  `queryTrades`)였는데, 해운대구(69,025행/13년) 실측 시 단독 12.9초,
+  전체 route는 60초 타임아웃으로 실패. `getYearlySaleAggregate()`로
+  교체 후 동일 요청 450ms로 해결. 취소 제외 정확성(서구: 취소 포함
+  10,337건 vs 제외 10,287건)과 연도별 count 합계(해운대구 69,025)를
+  raw-row 기준과 대조해 정합성 확인.
+- `/api/stats/dashboard`(그래프 뷰 + 건수 요약 배지)는 **이번 STEP에서
+  전환하지 않음** — 380줄 전체 조사 결과, 여러 다른 위젯과 공유하는
+  단일 캐시/계산 블록이며 전세/월세 차트는 애초에 DB에 데이터가 없어
+  전환 대상이 아니고, 매매 부분만 분리하려면 스펙 범위 밖의 리스크
+  있는 리팩터링이 필요해 의도적으로 제외(상세 근거는 STEP B 문서
+  §4-2).
+
+DB 변경: schema/migration 없음. Production write 없음(READ만).
+
+API 변경: 응답 스키마 변경 없음(source만 교체, 기존 계약 완전 유지).
+
+QA: Production 브라우저로 84㎡ 순위(6개 구+부산전체+기장군) 및
+거래량 표(서구 매매/전세 탭) 실제 데이터 확인, 375/360/390px 오버플로우
+없음 확인. 세션 전체 회귀 691/691 pass(STEP A 종료 시점과 동일).
+`npx tsc --noEmit` 신규 오류 0(기존 20건 유지, 변경 파일 오류 0).
+`npx eslint` clean. `npm run build` PASS.
+
+상태: 완료(84㎡ FULL PASS, 거래량 PARTIAL PASS — 근거는 상세 문서).
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_B.md`
+
+**TRADE_DB_FIRST_V1_STEP_B = PARTIAL. AREA84 = FULL_PASS(부산 스코프
+DB-first, 비부산 무변경, 6개 구+부산전체+기장군 실측 확인, 밴드필터
+출력 동일성 리뷰 확인). VOLUME = PARTIAL_PASS(`/api/stats/yearly`
+매매 표만 전환·검증 완료, `/api/stats/dashboard` 그래프/요약 배지는
+의도적 미전환). PERF_BUG_FOUND_AND_FIXED = yearly raw-fetch
+12.9s/60s-timeout → GROUP BY aggregate 450ms. MOLIT_CALLED_FOR_BUSAN =
+0(전환된 경로 기준). NO_DATA_POLICY = HONEST_EMPTY 유지. TESTS =
+691/691. BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
+NEXT_STEP = `/api/stats/dashboard` 매매 부분 DB 전환(후속 STEP 후보,
+이번 범위 아님) 또는 STEP A가 남긴 최근 상승/하락/지역 변동지도
+DB-FIRST 전환(스펙 §41 제외 대상).**

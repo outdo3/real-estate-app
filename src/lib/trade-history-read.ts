@@ -296,3 +296,46 @@ export async function queryTrades(input: TradeQueryInput): Promise<TradeQueryRes
     },
   };
 }
+
+export interface YearlySaleAggregateRow {
+  year: number;
+  count: number;
+  maxAmount: number;
+  minAmount: number;
+  avgAmount: number;
+}
+
+// TRADE_DB_FIRST_V1 STEP B — 연도별 매매 집계(count/max/min/avg). Prisma의
+// 타입세이프 groupBy는 "연도"처럼 컬럼에서 파생된 값으로 묶는 것을 지원하지
+// 않는다(dealDate 원본 컬럼 값으로만 묶을 수 있음) — 이 한 곳에서만 raw SQL을
+// 쓴다(queryTrades()의 §18 설계 노트와 동일하게, §16 "Prisma groupBy/distinct/
+// raw SQL 중 안전하고 성능 좋은 방식 선택"이 명시적으로 허용한 경로). 파라미터는
+// 전부 Prisma tagged-template 보간으로 넘겨 SQL injection 없이 파라미터화된다
+// (문자열 concat 없음). 실측: lawdCd 하나(해운대구)의 13년치 69,025 row를
+// Node로 끌어와 JS에서 reduce하면 12.9초가 걸렸다(§25 STEP B 벤치마크) — DB가
+// 직접 집계하게 바꾸면 raw row를 전혀 Node로 옮기지 않아도 된다.
+export async function getYearlySaleAggregate(lawdCd: string, fromYear: number): Promise<YearlySaleAggregateRow[]> {
+  const fromDate = new Date(Date.UTC(fromYear, 0, 1));
+  const rows = await prisma.$queryRaw<{ year: number; count: bigint | number; max_amount: number; min_amount: number; avg_amount: number }[]>`
+    SELECT
+      EXTRACT(YEAR FROM deal_date)::int AS year,
+      COUNT(*)::int AS count,
+      MAX(deal_amount)::int AS max_amount,
+      MIN(deal_amount)::int AS min_amount,
+      ROUND(AVG(deal_amount))::int AS avg_amount
+    FROM apartment_trade_histories
+    WHERE lawd_cd = ${lawdCd}
+      AND deal_type = 'sale'
+      AND deal_canceled = false
+      AND deal_date >= ${fromDate}
+    GROUP BY EXTRACT(YEAR FROM deal_date)
+    ORDER BY year ASC
+  `;
+  return rows.map((r) => ({
+    year: Number(r.year),
+    count: Number(r.count),
+    maxAmount: Number(r.max_amount),
+    minAmount: Number(r.min_amount),
+    avgAmount: Number(r.avg_amount),
+  }));
+}

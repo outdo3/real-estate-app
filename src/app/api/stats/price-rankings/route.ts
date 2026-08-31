@@ -5,6 +5,7 @@ import { resolveLawdCd, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { prisma } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, resolveApartmentContextBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
+import { queryTrades } from '@/lib/trade-history-read';
 import {
   dedupeTrades,
   buildDeclineRows,
@@ -42,6 +43,60 @@ const LOOKBACK_MONTHS = HISTORICAL_LOOKBACK_MONTHS;
 const VALID_PRESETS: PriceRankingPeriodPreset[] = ['1m', '7d', '30d', '3m', '6m', '12m', '24m'];
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
+
+// TRADE_DB_FIRST_V1 STEP B — 84㎡ 국민평형 순위(mode='area84')만 부산 요청에
+// 한해 TradeHistory DB-first로 전환한다. decline/record-high/rising/jeonse-risk
+// 4개 모드와 area84의 非부산 요청은 기존 live MOLIT 경로를 그대로 유지한다(§41
+// 범위 제한 — 그 모드들의 DB 전환은 STEP C 이후). 이집 TradeHistory DB는
+// 부산 16/16 구·군만 구축돼 있고(TRADE_HISTORY_DATA_V1) 다른 시/도는 데이터가
+// 아예 없다 — "DB에 없으면 MOLIT으로 보완"이 아니라, 애초에 데이터가 존재하는
+// 지역(부산)만 DB 경로를 타도록 하는 고정된 지역 라우팅이다(§15 "정직한
+// coverage 표시" — 非부산 사용자 동작은 이번 STEP으로 전혀 바뀌지 않는다).
+const BUSAN_SIDO_CODE = '26';
+
+function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
+  if (isSidoAll) return sidoCodeParam === BUSAN_SIDO_CODE;
+  return !!lawdCd && lawdCd.startsWith(BUSAN_SIDO_CODE);
+}
+
+// StoredTrade(queryTrades 반환)를 기존 순수 로직(buildArea84RankingRows 등)이
+// 기대하는 FeedTrade 형태로 변환한다. 이 변환 하나만 새로 만들고, 대표거래
+// 선정/직전거래 비교/2년최고가/interpretation 로직은 전부 기존 함수를 그대로
+// 재사용한다(§7 — 기존 제품 정의를 바꾸지 않기 위해 로직은 건드리지 않고
+// data source만 교체).
+function storedTradeToFeedTrade(t: Awaited<ReturnType<typeof queryTrades>>['trades'][number]): FeedTrade {
+  return {
+    uid: String(t.id),
+    aptSeq: t.aptSeq,
+    name: t.aptName,
+    dong: t.dong,
+    lawdCd: t.lawdCd,
+    dealType: 'sale',
+    dealAmount: t.dealAmount,
+    excluUseArea: Number(t.exclusiveArea),
+    floorRaw: t.floor,
+    dealDate: t.dealDate.toISOString().slice(0, 10),
+    dealCanceled: t.dealCanceled,
+  };
+}
+
+// area84는 84~85㎡ band 후보만 대표거래로 뽑히므로(§8 buildArea84RankingRows),
+// history(priorHigh/immediatePrior)도 같은 band의 exact area 그룹만 있으면
+// 충분하다 — 다른 면적 거래는 결과에 전혀 영향을 주지 않는다(groupKey가
+// exact area를 포함해 서로 다른 면적은 완전히 분리된 그룹). 따라서 DB fetch
+// 자체를 band로 좁혀도 buildArea84RankingRows의 출력은 100% 동일하며(STEP A
+// 벤치마크에서 이미 실측된 것처럼, area filter가 없으면 부산 전체 조회가
+// 수 초 더 걸린다 — 이 최적화로 그 비용을 피한다).
+async function fetchArea84TradesFromDb(lawdCds: string[]): Promise<FeedTrade[]> {
+  const from = new Date();
+  from.setMonth(from.getMonth() - HISTORICAL_LOOKBACK_MONTHS);
+  const { trades } = await queryTrades({
+    lawdCd: lawdCds,
+    from,
+    exclusiveAreaRange: { gte: 84, lt: 85 },
+  });
+  return trades.map(storedTradeToFeedTrade);
+}
 
 function monthsForLookback(now: Date): string[] {
   const months: string[] = [];
@@ -134,33 +189,45 @@ export async function GET(request: Request) {
         const shortName = d.name.split(' ').slice(1).join(' ');
         sigunguNameByLawdCd.set(d.code.substring(0, 5), shortName);
       }
-      // PERF §21 — apiType(apt/rent)이 다르면 완전히 다른 원본 데이터이므로
-      // 캐시 키에 반드시 포함한다(포함하지 않으면 decline/rising 캐시가
-      // jeonse-risk에 매매 데이터를 잘못 서빙할 위험).
-      const cacheKey = `stats-price-rankings-sido:${apiType}:${sidoCodeParam}:${months[0]}-${months[months.length - 1]}`;
-      const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
-        const tasks: MonthTask[] = [];
-        for (const dLawdCd of lawdCds) {
-          for (const m of months) tasks.push({ key: `${dLawdCd}|${m}`, lawdCd: dLawdCd, dealYmd: m, type: apiType });
-        }
-        const results = await fetchMonthsThrottledWithStatus(tasks);
-        const failedSet = new Set<string>();
-        for (const dLawdCd of lawdCds) {
-          for (const m of months) if (results[`${dLawdCd}|${m}`]?.failed) failedSet.add(dLawdCd);
-        }
-        return { results, failedLawdCds: Array.from(failedSet), lawdCds };
-      });
-      partial = cached.failedLawdCds.length > 0;
-      failedDistricts = cached.failedLawdCds;
-      for (const dLawdCd of cached.lawdCds) {
-        for (const m of months) {
-          for (const raw of cached.results[`${dLawdCd}|${m}`]?.items || []) {
-            const t = toFeedTrade(raw, dLawdCd, feedDealType);
-            if (t) allTrades.push(t);
+      if (mode === 'area84' && isBusanScopedRequest(null, sidoCodeParam, true)) {
+        // TRADE_DB_FIRST_V1 STEP B — 부산 전체(area84) DB-first 경로. MOLIT
+        // 재조회 없음, 지역별 부분 실패(failedDistricts) 개념 자체가 없음(DB
+        // read는 전체 성공 또는 예외 둘 중 하나 — try/catch가 바깥에서 처리).
+        const cacheKey = `stats-price-rankings-area84-db-sido:${sidoCodeParam}:${lawdCds.join(',')}`;
+        allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchArea84TradesFromDb(lawdCds));
+      } else {
+        // PERF §21 — apiType(apt/rent)이 다르면 완전히 다른 원본 데이터이므로
+        // 캐시 키에 반드시 포함한다(포함하지 않으면 decline/rising 캐시가
+        // jeonse-risk에 매매 데이터를 잘못 서빙할 위험).
+        const cacheKey = `stats-price-rankings-sido:${apiType}:${sidoCodeParam}:${months[0]}-${months[months.length - 1]}`;
+        const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
+          const tasks: MonthTask[] = [];
+          for (const dLawdCd of lawdCds) {
+            for (const m of months) tasks.push({ key: `${dLawdCd}|${m}`, lawdCd: dLawdCd, dealYmd: m, type: apiType });
+          }
+          const results = await fetchMonthsThrottledWithStatus(tasks);
+          const failedSet = new Set<string>();
+          for (const dLawdCd of lawdCds) {
+            for (const m of months) if (results[`${dLawdCd}|${m}`]?.failed) failedSet.add(dLawdCd);
+          }
+          return { results, failedLawdCds: Array.from(failedSet), lawdCds };
+        });
+        partial = cached.failedLawdCds.length > 0;
+        failedDistricts = cached.failedLawdCds;
+        for (const dLawdCd of cached.lawdCds) {
+          for (const m of months) {
+            for (const raw of cached.results[`${dLawdCd}|${m}`]?.items || []) {
+              const t = toFeedTrade(raw, dLawdCd, feedDealType);
+              if (t) allTrades.push(t);
+            }
           }
         }
+        if (cached.failedLawdCds.length === cached.lawdCds.length && cached.lawdCds.length > 0) apiError = true;
       }
-      if (cached.failedLawdCds.length === cached.lawdCds.length && cached.lawdCds.length > 0) apiError = true;
+    } else if (mode === 'area84' && isBusanScopedRequest(lawdCd, null, false)) {
+      // TRADE_DB_FIRST_V1 STEP B — 부산 단일 구(area84) DB-first 경로.
+      const cacheKey = `stats-price-rankings-area84-db:${lawdCd}`;
+      allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchArea84TradesFromDb([lawdCd!]));
     } else {
       const cacheKey = `stats-price-rankings:${apiType}:${lawdCd}:${months[0]}-${months[months.length - 1]}`;
       const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
