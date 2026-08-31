@@ -12030,3 +12030,70 @@ BUILD = PASS. PRODUCTION_WRITE = UPDATE 2432건(false→true만),
 INSERT 0, DELETE 0. DB_SCHEMA_CHANGE = 0. NEXT_STEP = 2006~24개월
 전 전체 이력 cancellation 확장(PM 결정 필요) 또는 전세/월세
 TradeHistory DB 구축.**
+
+## 2026-09-01
+
+### STEP — TRADE_DB_FIRST_V1 STEP F: 전국 Incremental Sync Engine
+
+부산에서 검증된 TradeHistory 수집 구조를 전국으로 확장 가능한
+incremental sync engine으로 일반화했다. 전국 20년치를 한 번에 채우는
+작업이 아니다 — engine을 만들고 소규모 bounded QA로 correctness를
+증명하는 것이 이번 STEP의 전부다. 대규모 nationwide backfill은
+실행하지 않았고 자동 스케줄러도 켜지 않았다(engine만 완성).
+
+신규 코드: `scripts/incremental-sync-logic.ts`(순수 함수 —
+`computeMonthsForRegion`: 지역별 "마지막 완료 달"에서 overlap만큼
+물러난 지점부터 현재월까지 재처리, 기록 없으면 overlap만 처리해
+딥 백필 방지), `scripts/incremental-sync-nationwide.ts`(오케스트레이션
+— `getSidoList()`/`getSigunguListForSido()`로 전국 지역 enumeration,
+전용 `nationwide-sync-manifest.json`). 기존 `fetchOneRegionMonth()`/
+`normalizeMolitItemsToTradeRows()`/`classifyAndWrite()`(전부 STEP
+TRADE_CANCELLATION_RESYNC_V2에서 이미 지역 무관하게 구현됨)를 100%
+그대로 재사용 — 새 fetch/parse/write 로직을 만들지 않았다.
+
+Overlap window=3개월은 기존 `sync-trade-history.ts`의 이미 검증된
+값을 재사용 + 이번 STEP에서 실측으로 뒷받침(부산 4,709건 취소 샘플
+lag 분포: p50=1개월/p90=3개월/p99=12개월, 3개월 overlap이 취소 반영의
+92.1% 커버). 전국 지역 모델: 16개 sido/261개 sigungu(실측,
+`getSidoList()` 결과 — 세종특별자치시가 현재 region source에 없음을
+발견해 known limitation으로 기록).
+
+Bounded QA(부산 서구+서울 강남구+대구 중구, 최근 1개월):
+dry-run/실제 write 완전 일치(COMPLETE=3/FAILED=0/INVALID=0,
+insert=132). Post-write 직접 확인: 서울 46 rows/대구 86 rows(전국
+데이터 최초 적재), 부산 서구 16,050 rows 불변. Idempotency 재-dry-run
+0건. 부산 regression 없음(기존 `sync-trade-history.ts` 정상, 별도
+manifest 파일이라 간섭 없음). 24M cancellation completeness도 STEP
+전후 완전 불변(older11mo canceled 2,432/recent13mo 2,277 그대로) —
+SAFE 유지.
+
+Capacity 실측 추정(Postgres `pg_total_relation_size` 528.1 bytes/row
+기준, 부산 밀도 선형 확장): 24개월 전국 ≈1,106,118 rows/≈584MB, 전체
+이력 ≈13,947,840 rows/≈7.4GB. 스케줄러 인프라 감사 결과 기존 cron
+없음 확인(vercel.json 없음) — 권장 cadence만 문서화, 활성화는 안 함.
+ADMIN OPS V1이 필요로 할 지표(latestCompleteMonth/failedCells/
+rowCount 등) 전부 기존 manifest 구조에서 파생 가능함을 확인(신규
+schema 불필요).
+
+DB 변경: schema/migration 없음. INSERT 132건(신규 지역), UPDATE 0건,
+DELETE 0건. 사용자 API(`price-rankings`/`region-change`/`dashboard`/
+`yearly`) 무변경.
+
+상태: 완료.
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_F.md`
+
+**TRADE_DB_FIRST_V1_STEP_F = PASS. NATIONWIDE_REGION_MODEL =
+16 sido/261 sigungu(실측, 세종 누락 확인). INCREMENTAL_DESIGN =
+last-complete-month + 3mo overlap(기존값 재사용+실측 검증,
+lag<=3mo 커버율 92.1%). DRY_RUN = COMPLETE=3/FAILED=0/INVALID=0.
+LIMITED_QA_WRITE = dry-run과 완전 일치, insert=132(서울/대구 신규).
+IDEMPOTENCY = PASS. BUSAN_REGRESSION = 없음. 24M_CANCELLATION_SAFE =
+유지(불변). CAPACITY_ESTIMATE = 24mo 전국 ≈584MB, 전체이력
+≈7.4GB(선형 추정). SCHEDULER = 기존 없음, 이번 STEP도 활성화 안 함.
+ADMIN_OPS_METRICS = 정의 완료(기존 manifest에서 파생 가능,
+신규 schema 불필요). TESTS = scripts 23개(신규 8개 포함)+src 211개
+전부 pass. BUILD = PASS. USER_API_CHANGE = 0. DB_SCHEMA_CHANGE = 0.
+NEXT_STEP = ADMIN OPS V1(관리자 UI) 또는 TRADE_DB_FIRST_V1 STEP G
+(Cache/Preaggregation), 혹은 스케줄러 실제 활성화(별도 운영 승인
+필요).**
