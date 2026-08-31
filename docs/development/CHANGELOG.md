@@ -11200,3 +11200,67 @@ PRODUCTION_WRITE = NOT_EXECUTED(missing=0). IDEMPOTENT = YES.
 WRONG_APT_FALLBACK = 0. DB_SCHEMA_CHANGE = NONE. TESTS = 672/672.
 BUILD = PASS. NEXT_STEP = scheduler 연결(승인 필요) 또는 정기 수동
 재실행.**
+
+### STEP — APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1: 공동주택 기본 정보제공 서비스 공식 소스 감사 (BLOCKED)
+
+사용자가 공공데이터포털에서 활용신청했다고 밝힌
+"국토교통부_공동주택 기본 정보제공 서비스"(`AptBasisInfoServiceV3`)가
+`ApartmentMaster`의 household/동수 enrichment authoritative source로
+쓸 수 있는지 검증. 경동마리나(aptSeq `26350-2`, 표제부 103동 hhldCnt=72
+가 892세대 단지 전체값으로 오인될 뻔했던 기존 사례)를 핵심 케이스로
+확인할 예정이었음.
+
+작업:
+
+- **Pre-flight**: `MASTER_MISSING_REPAIR_V1`(3,403) → `MASTER_COVERAGE_
+  SYNC_V1`(3,400) 차이를 배치 read-only 쿼리로 확인 — 원인은 window
+  경계 오차가 아니라 기존 `TRADE_CANCELLATION_RESYNC_V1` 파이프라인이
+  4건을 정상적으로 취소 처리한 결과(`EXPECTED_ROLLING_WINDOW_CHANGE`,
+  데이터 손실 아님). 진단 스크립트는 1회성으로 실행 후 삭제.
+- 기존 코드베이스 audit: `src/lib/apt-building-info.ts`(건축물대장
+  클라이언트, `SINGLE_BUILDING_AS_COMPLEX` 가드 `isNumberedBuildingUnit`
+  보유), `src/lib/api-molit.ts`, `scripts/backfill-apartment-master-
+  basic-data.ts`(`BasicSpecSource` provenance enum) 재확인. **K-APT
+  계열 상품(이번 타겟 endpoint 포함)이 직전 `MASTER_HOUSEHOLD_
+  VERIFICATION_V1` STEP에서 이미 시도되고 `NO_OPENAPI_SERVICE_ERROR`로
+  거부됐던 기록을 발견** — 새 클라이언트를 만들기 전에 실측 재확인이
+  먼저 필요하다고 판단.
+- 신규 read-only probe 스크립트(`scripts/audit-apartment-basic-info-
+  source.ts`, DB 접근 없음, key 값 미노출) 작성 — `AptBasisInfoServiceV3`
+  /`AptListService3` 5개 경로 후보 + 이미 승인된 `BldRgstHubService`
+  대조군 1개를 같은 `DATA_GO_KR_API_KEY`로 호출.
+- **실측 결과(BLOCKER)**: 대조군은 `resultCode=00 NORMAL SERVICE`로
+  즉시 성공(키 자체는 정상 작동), 타겟 5개 전부
+  `NO_OPENAPI_SERVICE_ERROR`("해당 오픈API 서비스가 없거나 폐기됨") —
+  이 상품이 현재 `DATA_GO_KR_API_KEY`에 아직 승인/활성화되지 않은
+  상태임을 확인(2회 반복 재현). `MASTER_HOUSEHOLD_VERIFICATION_V1`
+  §6이 이미 문서화한 것과 동일한 결과를 오늘 시점에 재확인했을 뿐.
+- 이 blocker로 §8~§13(경동마리나 공식 record 검증, 부산 복수 샘플,
+  household/buildingCount/좌표 적합성 판정)은 전부 필드명을 추측하지
+  않고 `CANNOT_DETERMINE`/`CANNOT_VERIFY`로 명시적으로 남김 — 문서
+  §4에 2차 출처(공개 wiki/검색) 기반 필드 목록만 참고용으로 기록.
+
+DB 변경: schema/migration 없음. **Production write 없음**(애초에 API
+응답을 받지 못해 write할 데이터 자체가 없음).
+
+API 변경: 없음(read-only probe 스크립트 1개만 추가).
+
+QA: probe 스크립트를 2회 반복 실행해 결과 재현성 확인(대조군
+성공/타겟 5개 실패 패턴 동일). `npx eslint` clean. `npx tsc --noEmit`
+신규 오류 0(기존 20건 baseline 유지). 기존 코드 변경 없어 전체 회귀
+테스트 재실행 생략(직전 STEP에서 672/672 확인됨), `npm run build`도
+`src/`/`prisma/` 변경이 없어 생략.
+
+상태: **BLOCKED**(PM 결정 필요 — §15).
+
+상세: `docs/development/APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`
+
+**APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1 = BLOCKED.
+PREFLIGHT_3403_TO_3400 = EXPECTED_ROLLING_WINDOW_CHANGE.
+API_KEY_CONFIGURED = true. LIVE_PROBE = NO_OPENAPI_SERVICE_ERROR(5/5
+후보). CONTROL_CALL = SUCCESS(같은 키). HOUSEHOLD_SOURCE_VERDICT =
+CANNOT_DETERMINE. BUILDING_COUNT_VERDICT = CANNOT_DETERMINE.
+COORDINATE_VERDICT = CANNOT_DETERMINE. PRODUCTION_WRITE = 0.
+DB_SCHEMA_CHANGE = 0. PM_DECISION_NEEDED = data.go.kr 활용신청 승인
+상태 재확인. NEXT_STEP = 승인 확인 후 scripts/audit-apartment-basic-
+info-source.ts 재실행으로 즉시 재검증 가능.**
