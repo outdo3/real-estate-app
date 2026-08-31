@@ -117,6 +117,15 @@ old와 같거나 더 이르다.
   정확한 priorHigh다. DB는 87500/2025-03-28을 정확히 반환했다 — MOLIT의
   실시간 fetch가 이 거래를 놓쳤다(throttling 관련 월별 부분 누락, §36
   MOLIT_DATA_MISSING).
+  >**[정정 — TRADE_CANCELLATION_RESYNC_V2, 2026-08-31]** 이 결론은
+  >틀렸다. `TRADE_CANCELLATION_RESYNC_V2_24M.md` §11에서 재조사한
+  >결과, 2025-03-28의 87500만원 거래는 **실제로 취소된 거래**였다
+  >(당시 이 STEP E 시점에는 §10 TRUST VERDICT가 지적한 "13~24개월
+  >구간 취소 미검증 갭" 때문에 DB에 `dealCanceled=false`로 잘못
+  >저장돼 있었다). 즉 MOLIT의 실시간 fetch가 오히려 정확했고, DB가
+  >틀렸다 — "MOLIT_DATA_MISSING"이 아니라 정확히 이 STEP이 경고한
+  >그 갭이 실제로 발현된 사례였다. resync 이후 현재 정답값은
+  >priorHighAmount=85000/2026-02-01(MOLIT이 원래 맞았던 값)이다.
 - `26710-630`(63.9811㎡): MOLIT은 priorHigh=36300만원(2025-06-10)이라고
   했지만, 원본 이력에는 2021~2024년에 걸쳐 41000~62200만원대 거래가 다수
   존재한다 — MOLIT이 이 지역/식별자의 과거 이력을 사실상 대부분 놓쳤다는

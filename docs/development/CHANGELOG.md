@@ -11963,3 +11963,70 @@ DB_DATA_MORE_COMPLETE(MOLIT이 실시간 fetch 누락, DB가 더 정확 —
 211/211(전체 실행). BUILD = PASS. PRODUCTION_WRITE = 0.
 DB_SCHEMA_CHANGE = 0. NEXT_STEP = 24개월 lookback 전체 cancellation
 재동기화 확장(PM 결정 필요) 또는 전세/월세 TradeHistory DB 구축.**
+
+## 2026-08-31
+
+### STEP — TRADE_CANCELLATION_RESYNC_V2: 부산 최근 24개월 취소/해제 완전성 보강
+
+STEP E의 TRUST VERDICT(2년최고가=LIMITED, PM_DECISION_REQUIRED)가
+지적한 "취소검증 13개월 vs 계산범위 24개월" 갭을 사용자 승인 하에
+해소. `TRADE_CANCELLATION_RESYNC_V1`(13개월)이 다루지 않은 older
+11개월(13~24개월 전, 202409~202507)의 `dealCanceled`를 MOLIT과
+재대조해 보강했다.
+
+서비스/스크립트 변경:
+
+- `scripts/backfill-trade-history.ts`: `fetchOneRegionMonth()`에
+  `export` 추가(로직 변경 없음, 재사용을 위한 export만).
+- `scripts/resync-cancellation-v2.ts` 신규: 기존 fetch/parse/rate-limit
+  로직(`fetchOneRegionMonth`, `normalizeMolitItemsToTradeRows`,
+  `parseCancellationFields`)을 전부 재사용하되, write 정책만 새로
+  작성 — dealCanceled는 **false→true로만** 갱신하고, 기존 true를
+  최신 fetch가 false라고 해도 **절대 되돌리지 않는다**(source가
+  취소를 취소하는 semantics가 불명확하므로 보수적 처리, 기존
+  `upsertRows()`에는 없던 신규 비대칭 가드). 자연키 매칭이 모호하면
+  (aptName/dong 불일치) CONFLICT로 분류해 건드리지 않음.
+
+**24M CANCELLATION COMPLETENESS = SAFE**: Phase 1 dry-run(older
+11개월, 176 cells) COMPLETE=176/FAILED=0/INVALID=0,
+flipFalseToTrue=2,432건(≈8.7%, V1의 5.7%와 같은 자릿수, 이상 없음).
+Production write 결과가 dry-run과 완전히 일치. Post-write: 24개월
+canceled 2,277→4,709(+2,432), **recent 13개월 canceled는 2,277→2,277로
+완전히 불변**(V1 검증 구간 무손상 직접 증거), aptSeq missing=0,
+natural-key duplicate=0. Idempotency 재-dry-run 결과 0건(완전 멱등).
+Full 24개월(384 cells) read-only 검증도 COMPLETE=384/FAILED=0/
+INVALID=0/변경=0 — §9 완전성 게이트 조건 전부 충족.
+
+DB-FIRST 기능 영향(record-high/decline, 부산 전체 12개월, 교정 전
+시뮬레이션 vs 정답 diff): record-high 5,208→5,247(가짜 신고가 4건
+제거, 가려져 있던 진짜 신고가 43건 노출), decline 4,007→3,999(가짜
+하락 8건 제거, 새 하락 0건 — 취소거래 제외는 논리상 하락을 늘릴 수
+없음, 방향 일관성 확인). STEP E가 "MOLIT 누락"으로 결론지었던
+`26140-1321`/92.9051㎡ 사례를 재조사한 결과, 실제로는 그 거래가
+취소된 거래였음을 확인 — STEP E 결론을 이 STEP 문서로 정정.
+
+**TRUST VERDICT 갱신**: 2년최고가 LIMITED → **SAFE**. 역대최고가/
+역대신고가는 UNSAFE 불변(24개월만 검증됐을 뿐 2006년 전체 이력은
+아님).
+
+DB 변경: schema/migration 없음. UPDATE 2,432건(dealCanceled
+false→true만), INSERT 0건, DELETE 0건.
+
+상태: 완료.
+
+상세: `docs/development/TRADE_CANCELLATION_RESYNC_V2_24M.md`
+
+**TRADE_CANCELLATION_RESYNC_V2 = PASS. TARGET = 부산 16/16 × older
+11개월(202409~202507). PHASE1_DRYRUN = COMPLETE=176/FAILED=0/
+INVALID=0/flip=2432. PRODUCTION_WRITE = dry-run과 완전 일치.
+IDEMPOTENCY = PASS(재실행 0건). FULL_24M_VERIFICATION =
+COMPLETE=384/FAILED=0/INVALID=0. 24M_COMPLETENESS = SAFE.
+TRUST_VERDICT: 2년최고가=SAFE(LIMITED에서 격상),
+역대최고가/역대신고가=UNSAFE(불변). DB_FIRST_IMPACT = record-high/
+decline 모두 논리적으로 일관된 방향(취소거래 제외는 priorHigh를
+낮추거나 유지만 가능) — STEP E의 26140-1321 사례 오진단 정정.
+aptSeq_missing = 0. natural_key_duplicates = 0. TESTS = 211/211.
+BUILD = PASS. PRODUCTION_WRITE = UPDATE 2432건(false→true만),
+INSERT 0, DELETE 0. DB_SCHEMA_CHANGE = 0. NEXT_STEP = 2006~24개월
+전 전체 이력 cancellation 확장(PM 결정 필요) 또는 전세/월세
+TradeHistory DB 구축.**

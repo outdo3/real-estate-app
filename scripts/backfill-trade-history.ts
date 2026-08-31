@@ -52,7 +52,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const MIN_INTERVAL_MS = 350;
 let lastFetchAt = 0;
 
-async function fetchOneRegionMonth(lawdCd: string, dealYmd: string): Promise<{ items: any[]; failed: boolean }> {
+// TRADE_CANCELLATION_RESYNC_V2 — export만 추가(로직 변경 없음). 24개월 cancellation
+// completeness resync 스크립트가 이 검증된 rate-limited fetcher를 재사용하기 위함
+// (같은 fetch/retry/backoff 로직을 새로 만들지 않음, §9 재발명 금지 원칙).
+export async function fetchOneRegionMonth(lawdCd: string, dealYmd: string): Promise<{ items: any[]; failed: boolean }> {
   for (let attempt = 0; attempt <= 5; attempt++) {
     const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastFetchAt));
     if (wait > 0) await sleep(wait);

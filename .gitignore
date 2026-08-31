@@ -64,6 +64,9 @@ scripts/_repair_recent_missing_masters_results/
 # MASTER_COVERAGE_SYNC_V1 — 반복 실행되는 coverage sync 리포트(재현 가능, 커밋 불필요)
 scripts/_master_coverage_sync_results/
 
+# TRADE_CANCELLATION_RESYNC_V2 — 24개월 resync 실행 로그(재현 가능, 커밋 불필요. manifest는 별도로 커밋함)
+scripts/_resync_cancellation_v2_results/
+
 # BRAND STEP 57-A — 브랜드 원본(PSD급 고해상도 PNG) 로컬 보관 전용.
 # production에서 실제로 서빙하는 최적화 자산은 public/brand/에 별도로 커밋된다.
 brand-source/
