@@ -11134,3 +11134,69 @@ DETAIL_IDENTITY = PASS. WRONG_APT_FALLBACK = ELIMINATED. DUPLICATES =
 0. PRODUCTION_DB_WRITE = APPROVED_AND_COMPLETED. DB_SCHEMA_CHANGE =
 NONE. SEARCH_PERFORMANCE = PASS. BUILD = PASS. NEXT_STEP =
 MASTER_COVERAGE_SYNC_V1(승인 필요).**
+
+### STEP — MASTER_COVERAGE_SYNC_V1: 아파트 Master 검색 커버리지 자동 유지
+
+`MASTER_MISSING_REPAIR_V1`이 이미 남긴 next step: 16건 보정은 1회성
+스냅샷 복구일 뿐, `ApartmentMaster`가 여전히 1회성 seed 구조라 다음
+달 새로 거래되는 aptSeq는 같은 방식으로 다시 누락된다(§14 recurrence
+risk). 이번 STEP은 그 재발을 반복적으로 탐지·검증·분류할 수 있는
+재사용 가능한 sync 도구를 만들었다. Production 신규 write는 사전
+승인되지 않았으므로 missing=0이면 write 없이 끝까지 진행하는 조건으로
+착수.
+
+작업:
+
+- 직전 `RECENT_MASTER_MISSING_16_AUDIT_V1`/`MASTER_MISSING_REPAIR_V1`
+  파이프라인(`audit-recent-master-missing-16.ts` →
+  `classify-recent-master-missing-16.ts` →
+  `repair-recent-missing-masters(-logic).ts`)을 역추적해, 실제 INSERT
+  plan 생성 로직(`buildMasterRowPlan`/`buildAllPlans`,
+  `BUSAN_GU_BY_LAWDCD`)은 변경 없이 그대로 재사용하고, missing
+  탐지·forensic profile·classification만 새 순수 함수 모듈
+  (`scripts/master-coverage-sync-logic.ts`)로 일반화했다 — write 경로가
+  두 곳으로 갈라지지 않는다.
+- 신규 CLI(`scripts/master-coverage-sync.ts`, dry-run 기본/`--apply`로만
+  write, `--months=N`으로 window 조정 가능, 기본 24개월): 배치 쿼리로
+  coverage 계산 → missing 탐지 → forensic profile → HIGH_CONFIDENCE/
+  REVIEW_REQUIRED/INVALID 분류 → (HIGH_CONFIDENCE만) INSERT plan →
+  `--apply` 시에만 write 직전 재조회 후 실제 insert. 콘솔 report +
+  `scripts/_master_coverage_sync_results/`(gitignore 추가, 재현 가능,
+  커밋 안 함)에 JSON 기록.
+- missing 건수와 무관하게 항상 고정된 배치 쿼리 횟수로 동작하도록
+  개선(원본 16건 audit 스크립트의 aptSeq당 개별 조회 루프를 단일
+  `findMany({aptSeq:{in:...}})` 배치로 교체) — N+1 없음.
+- 새 안전장치: aptSeq 접두부("{lawdCd}-...")와 거래 원본 lawdCd 교차
+  검증(`aptSeqLawdMismatch`) 가드를 추가해 불일치 시 `REVIEW_REQUIRED`.
+- **Production READ 감사**: 최근 24개월 Busan traded aptSeq 3,400 /
+  `ApartmentMaster` matched 3,400 / missing 0 / coverage **100.00%**
+  확인(dry-run, 2,138ms). missing=0이므로 Production write는 실행하지
+  않음(§13 조건 그대로).
+
+DB 변경: schema/migration 없음. **Production write 없음**(missing=0,
+승인 요청 자체가 발생하지 않음).
+
+API 변경: 없음(신규 스크립트 2개만 추가, 기존 API 계약 불변).
+
+QA: 신규 유닛테스트 12개(`master-coverage-sync-logic.test.mjs`) —
+coverage 계산, HIGH_CONFIDENCE/REVIEW_REQUIRED/INVALID 분류, 동일
+aptSeq 내 identity 흔들림, 기존 Master와의 address 충돌, **wrong-
+apartment-fallback 회귀 가드**(같은 브랜드명·다른 주소는 충돌로 취급
+안 함, §7 "보해이브빌" 사례 재확인), 필수 필드 결측, aptSeq/lawdCd
+불일치, duplicate 보호(idempotency), REVIEW_REQUIRED가 INSERT로
+이어지지 않음, secondary metadata null 정책까지 전부 pass. 세션 전체
+회귀 테스트 672/672 pass(신규 12개 포함). `npx tsc --noEmit` 신규
+오류 0(기존 20건만 유지). `npx eslint` 신규 파일 clean. `npm run
+build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/MASTER_COVERAGE_SYNC_V1.md`
+
+**MASTER_COVERAGE_SYNC_V1 = PASS. WINDOW = 24 MONTHS. TRADE_APTSEQ =
+3400. MASTER_MATCHED = 3400. MISSING = 0. COVERAGE = 100.00%.
+HIGH_CONFIDENCE = 0. REVIEW_REQUIRED = 0. INVALID = 0.
+PRODUCTION_WRITE = NOT_EXECUTED(missing=0). IDEMPOTENT = YES.
+WRONG_APT_FALLBACK = 0. DB_SCHEMA_CHANGE = NONE. TESTS = 672/672.
+BUILD = PASS. NEXT_STEP = scheduler 연결(승인 필요) 또는 정기 수동
+재실행.**
