@@ -9,7 +9,8 @@
 `26350-2`, 실제 표제부 hhldCnt=72가 892세대 단지의 103동 값이었음).
 
 이번 STEP은 사용자가 공공데이터포털에서 활용신청한
-**국토교통부_공동주택 기본 정보제공 서비스**(`AptBasisInfoServiceV3`)가
+**국토교통부_공동주택 기본 정보제공 서비스**(최종 확인된 공식 버전은
+`AptBasisInfoServiceV5` — §6-C 참고, 초기에는 `V3`로 잘못 추정했었다)가
 이 문제의 authoritative fix가 될 수 있는지 **검증만** 한다.
 Production `ApartmentMaster`는 이번 STEP에서 절대 수정하지 않는다.
 
@@ -242,39 +243,161 @@ data.go.kr 화면에서 직접 복사해야 한다(§15 PM Decision Needed 참�
 재검증 가능하고, 성공하면 §7~§13(경동마리나 실제 검증, 부산 샘플,
 source verdict)을 곧바로 채울 수 있다.
 
+## 6-C. Official V4/V5 Re-verification — BREAKTHROUGH (2026-08-31)
+
+사용자가 data.go.kr에 로그인한 상태의 실제 "활용신청 상세" 화면에서
+공식 End Point를 직접 확인해 전달했다:
+
+```
+공동주택 단지 목록제공 서비스: https://apis.data.go.kr/1613000/AptListService4
+공동주택 기본 정보제공 서비스: https://apis.data.go.kr/1613000/AptBasisInfoServiceV5
+```
+
+기존 V2/V3/V4(기본정보 기준) 추측은 전부 폐기 — 위 두 base URL이
+유일한 source of truth다. base URL은 확보됐지만 정확한 operation명은
+여전히 미확인이었으므로(추측 금지 원칙에 따라 §6/§6-B와 동일하게
+경험적 검증으로 접근):
+
+### 기본 정보제공 서비스 — **CONFIRMED WORKING**
+
+`getAphusBassInfoV5` operation이 `kaptCode` 파라미터로 실제 성공했다
+(`HTTP 200`, `resultCode=00 NORMAL SERVICE.`). 공개 예제
+(GitHub luritas/open-data-api wiki)에서 가져온 예시 `kaptCode=
+A10027875`로 실제 조회한 결과, 서울이 아니라 **부산 사하구**의 실존
+단지였다(우연히 딱 맞는 검증용 실사례를 얻음):
+
+```json
+{
+  "kaptCode": "A10027875",
+  "kaptName": "괴정 경성스마트W아파트",
+  "kaptAddr": "부산광역시 사하구 괴정동 258 괴정 경성스마트W아파트",
+  "doroJuso": "부산광역시 사하구 낙동대로 180",
+  "bjdCode": "2638010100",
+  "codeSaleNm": "분양", "codeHeatNm": "개별난방", "codeAptNm": "주상복합",
+  "codeMgrNm": "자치관리", "codeHallNm": "혼합식",
+  "kaptDongCnt": "3", "kaptdaCnt": 182.0, "hoCnt": 182,
+  "kaptUsedate": "20150806",
+  "kaptBcompany": "(주)경성리츠", "kaptAcompany": "(주)경성리츠",
+  "kaptTel": "0512949363", "kaptFax": "0512949364", "kaptUrl": " ",
+  "kaptTarea": 15040.163, "kaptMarea": 15040.163, "privArea": "9014.0338",
+  "kaptMparea60": 182.0, "kaptMparea85": 0.0, "kaptMparea135": 0.0, "kaptMparea136": 0.0,
+  "kaptTopFloor": 15, "ktownFlrNo": 15, "kaptBaseFloor": 2,
+  "kaptdEcntp": 5, "zipcode": "49338"
+}
+```
+
+핵심 확인 사항:
+
+- **응답 envelope이 문서상 추정(§4)과 다르다**: 단건(`kaptCode`) 조회는
+  `response.body.item`(단일 객체)이지, 이 프로젝트의 다른
+  data.go.kr client들이 쓰는 `response.body.items.item`(배열 wrapper)
+  이 아니다 — probe 스크립트를 이 실측에 맞춰 수정했다(두 shape 모두
+  처리하도록).
+- **좌표 필드 없음 — live 응답으로 최종 확인**(문서 추정이 아니라
+  실측): 위 26개 필드 어디에도 위도/경도가 없다.
+- **세대수/동수가 단지 전체 단위로 명확**: `kaptdaCnt=182`(세대수),
+  `kaptDongCnt=3`(동수) — 3동 182세대 주상복합에 대해 상식적으로
+  일관된 complex-level 값(동 1개당 값이 아님, §7-B에서 우려했던
+  "동 단위 값이 단지 전체로 잘못 나올 위험"과는 다른 종류의 필드 —
+  건축물대장 표제부/총괄표제부 구분과 달리 이 서비스는 애초에
+  "단지" 단위로만 응답한다).
+- 그 외 유용한 필드: `kaptUsedate`(사용승인일 YYYYMMDD), `kaptAddr`/
+  `doroJuso`(법정동/도로명 주소), `bjdCode`(법정동코드),
+  `kaptMparea60/85/135/136`(평형대별 세대수 분포 — 60/85/135/136㎡
+  초과 구간별), `kaptTopFloor`/`kaptBaseFloor`(층수), `zipcode`.
+
+### 단지 목록제공 서비스 — **여전히 미해결**
+
+`AptListService4` base는 사용자가 확인해 준 대로 확실하지만, 정확한
+operation명은 20개 후보(§ 아래 표)를 전부 시도해도 찾지 못했다:
+
+| 시도한 operation 패턴 | 결과 |
+|---|---|
+| `getSigunguAptListV4`/`getLegaldongAptListV4`/`getSidoAptListV4`/`getRoadnmAptListV4`(V3까지의 관례 그대로 V4로 버전만 교체) | `NO_OPENAPI_SERVICE_ERROR` |
+| 위 4개의 버전 접미사 없는 버전(`getSigunguAptList`/`getLegaldongAptList`) | `NO_OPENAPI_SERVICE_ERROR` |
+| `sigunguCode`→`sigunguCd`, `bjdCode`→`bjdCd` 파라미터명 변형 | `NO_OPENAPI_SERVICE_ERROR` |
+| `getBjdongAptListV4`/`getAptListV4`/`getEmdAptListV4`/`getUmdAptListV4`/`getAptBasisListV4` | `NO_OPENAPI_SERVICE_ERROR` |
+| 기본정보 서비스가 실제로 쓰는 legacy "Aphus" 표기를 목록 서비스에도 적용(`getSigunguAphusListV4`/`getLegaldongAphusListV4`/`getBjdongAphusListV4`/`getEmdAphusListV4`/`getAphusListV4`/`getAphusList`) | `NO_OPENAPI_SERVICE_ERROR` |
+
+20개 전부 동일한 오류. base가 사용자 확인으로 맞다는 게 확실하고,
+같은 key로 대조군(`BldRgstHubService`)과 방금 확인된 기본정보
+서비스가 둘 다 정상 작동하므로, 이건 승인/키 문제가 절대 아니다 —
+순수하게 **operation명을 아직 못 찾은 것**이다. 이 이상 추측을
+확장하지 않는다(스펙 §7/§30 — "이전 실패를 다시 분석하는 데 시간을
+쓰지 않는다"의 취지를 지금부터는 반대로 적용: 이 이상 재추측에
+시간을 쓰지 않는다).
+
+### 대안 경로 시도(부차적, 목록 서비스를 대체하지 못함)
+
+목록 서비스 없이 경동마리나 kaptCode를 얻기 위해 시도했으나 전부
+실패한 부차적 경로(참고용으로만 기록, 재시도 불필요):
+
+- K-apt(`k-apt.go.kr`) 공식 무료 다운로드 파일(단지코드 18,403건
+  포함, `국토교통부_공동주택 단지 기본 정보_20240913`, data.go.kr
+  #15073271) — 직접 HTTP 다운로드 시도 시 "정상적인 접근이 아닙니다"
+  봇 차단, 세션 쿠키/Referer 추가해도 "서비스 준비중입니다" 응답 —
+  자동화된 접근을 막는 것으로 보임.
+- K-apt 웹사이트 자체 단지 검색 UI(브라우저 자동화로 시도) — 검색
+  input에 "경동" 입력까지는 됐으나 자동완성/선택 UI가 필요해 완료하지
+  못함(시간 대비 효율 낮다고 판단해 중단).
+- 3rd-party 부동산 사이트(richgo.ai 등) — "경동마리나: 892세대, 8개동,
+  1995.06 완공"을 확인(사용자가 이번 STEP에서 언급한 892/8개동과 정확히
+  일치, MOLIT buildYear=1995와도 일치) — 다만 이건 **공식 정부 API가
+  아닌 3rd-party 집계 사이트**라서 Production 근거로 쓸 수 없다.
+  참고용 corroboration으로만 기록.
+
+## 7-C. 경동마리나 최종 상태
+
+- MOLIT/건축물대장 측(§7-1)은 변경 없음 — `72`는 여전히 103동 개별
+  값, 단지 전체 세대수 아님.
+- 공식 공동주택 기본정보 API(V5)가 실제로 작동함은 확인됐으나, 목록
+  서비스 미해결로 경동마리나의 정확한 `kaptCode`를 API로 조회하지
+  못해 **CANNOT_VERIFY 유지**(추측/3rd-party 값으로 대체하지 않음).
+- 단, §6-C에서 검증한 다른 단지(괴정 경성스마트W아파트) 사례가
+  `kaptdaCnt`/`kaptDongCnt`가 실제로 complex-level 값임을 real
+  evidence로 보여준다 — API 메커니즘 자체는 신뢰할 근거가 생겼다.
+
 ## 8. Household/BuildingCount/Coordinate Source Verdict
 
-세 항목 모두 **CANNOT_DETERMINE**(RECOMMENDED/LIMITED/NOT_RECOMMENDED
-중 어느 것도 아직 판정할 근거가 없음) — §6 blocker가 해소되고 실제
-응답 필드를 확인한 뒤에만 판정 가능하다. 문서상 필드 목록(§4)에는
-위도/경도가 보이지 않아 좌표는 `LIMITED` 또는 `NOT_RECOMMENDED`로
-기울 가능성이 있으나, 이는 2차 출처 기반 추정일 뿐 live 검증 전까지
-확정하지 않는다.
+| 항목 | 판정 | 근거 |
+|---|---|---|
+| Household(`kaptdaCnt`) | **LIMITED**(예비 긍정, n=1) | §6-C 실측 1건에서 complex-level 세대수로 확인(3동/182세대, 표제부 동 단위 문제와 다른 종류의 필드). 하지만 §14 스펙이 요구한 "부산 10개 이상 sample" 검증은 목록 서비스 미해결로 수행하지 못했다 — 표본 1건으로 `RECOMMENDED` 확정은 시기상조. |
+| Building count(`kaptDongCnt`) | **LIMITED**(예비 긍정, n=1) | 위와 동일 근거·동일 한계. `kaptDongCnt`가 문자열 타입("3")으로 오는 것도 확인(숫자 캐스팅 필요). 관리동/부속동 포함 여부는 명세로 확인 못함 — 표본이 1건뿐이라 실측으로도 아직 답할 수 없다. |
+| Coordinate | **NOT_AVAILABLE** | §6-C 실측 응답(26개 필드 전수)에 위도/경도 없음 — 문서 추정이 아니라 실제 라이브 응답으로 확정. |
 
 ## 9. 제안 Architecture(설계만, 미구현)
 
-§6이 해소된 이후를 가정한 최소 구조(스펙 §18과 동일한 방향, 구현은
-하지 않음 — 향후 STEP 대상):
+목록 서비스(`AptListService4`)가 해소된 이후를 가정한 최소 구조(스펙
+§20과 동일한 방향, 구현은 하지 않음 — 향후 STEP 대상):
 
 ```
-AptListService3(지역 → kaptCode 후보) 또는 사용자 보유 kaptCode 매핑
+ApartmentMaster aptSeq
         ↓
-AptBasisInfoServiceV3(kaptCode → 공식 단지 record)
+strong identity evidence(canonical name/sido/sigungu/dong/jibun/buildYear)
         ↓
-identity matcher(aptSeq 쪽 canonical name/sido/sigungu/dong/jibun/
-buildYear vs 공식 record의 kaptName/kaptAddr/bjdCode/kaptUsedate 다중
-strong field 대조 — 단지명 단독/substring/동일 동/first match 전부 금지)
+AptListService4(지역 → kaptCode 후보 목록) — operation명 확정 필요(§6-C)
         ↓
-EXACT_MATCH / HIGH_CONFIDENCE → enrichment candidate(리뷰 후 write 별도 승인)
+identity matcher(위 evidence vs 공식 record의 kaptName/kaptAddr/
+bjdCode/kaptUsedate 다중 strong field 대조 — 단지명 단독/substring/
+동일 동/first match 전부 금지)
+        ↓
+EXACT_MATCH / HIGH_CONFIDENCE
+        ↓
+AptBasisInfoServiceV5.getAphusBassInfoV5(kaptCode → 공식 단지 record)
+— **확인 완료, 실제 작동**(§6-C)
+        ↓
+official enrichment candidate(리뷰 후 write 별도 승인)
+
 REVIEW_REQUIRED / NO_MATCH / CONFLICT → 자동 연결 금지, 사람 검토
 ```
 
-`BasicSpecSource` enum에 신규 값(예: `APT_BASIS_INFO_V3`)을 추가하는
+`BasicSpecSource` enum에 신규 값(예: `APT_BASIS_INFO_V5`)을 추가하는
 안이 기존 provenance 패턴과 가장 잘 맞는다(schema 변경이지만 additive
 enum value 추가 — 이번 STEP에서는 실행하지 않음, 승인 필요 §11).
 기존 `SINGLE_BUILDING_AS_COMPLEX` 가드(`isNumberedBuildingUnit` 등)는
 그대로 유지 — 새 공식 API가 household 1차 source가 되더라도
-건축물대장은 보조 evidence로 남을 수 있다.
+건축물대장은 보조 evidence로 남을 수 있다. `kaptDongCnt`가 문자열
+타입으로 오므로 저장 전 숫자 캐스팅이 필요하다(§8).
 
 ## 10. Production Write
 
@@ -289,14 +412,14 @@ buildingCount 수정 없음.
 ## 12. Tests / Build
 
 - 신규 코드는 read-only probe 스크립트 1개뿐(DB 접근 없음, 순수 함수
-  없음 — 단위 테스트 대상 로직이 없다, 대신 §6에서 실제 2회 반복
-  실행으로 결과 재현성을 확인).
+  없음 — 단위 테스트 대상 로직이 없다). §6-C에서 실제 라이브 응답을
+  확보해 기본정보 서비스의 실제 동작을 실증했고, 목록 서비스는 20개
+  조합을 반복 실행해 재현성 있는 실패 패턴을 확인했다.
 - `npx eslint scripts/audit-apartment-basic-info-source.ts`: clean.
-- `npx tsc --noEmit`: 신규 오류 0(기존 20건 baseline 유지,
-  `master-coverage-sync` 관련 오류 없음 재확인).
+- `npx tsc --noEmit`: 신규 오류 0(기존 20건 baseline 유지).
 - `npm run build`: 이번 STEP은 `src/`/`prisma/` 변경이 없어(스크립트
-  1개만 추가) 별도 재실행 없이 직전 STEP(`MASTER_COVERAGE_SYNC_V1`)의
-  PASS가 유효하다고 판단 — 대규모 불필요 재빌드를 피하기 위해 생략.
+  1개만 추가/수정) 별도 재실행 없이 직전 STEP의 PASS가 유효하다고
+  판단 — 대규모 불필요 재빌드를 피하기 위해 생략.
 - 기존 회귀 테스트(`.test.mjs`/`.test.ts`): 이번 STEP이 기존 코드를
   전혀 수정하지 않아 재실행 불필요로 판단(직전 STEP에서 672/672
   PASS 확인됨).
@@ -304,47 +427,61 @@ buildingCount 수정 없음.
 ## 13. Known Limitations
 
 - 이 STEP의 핵심 질문("이 공식 API를 믿고 ApartmentMaster를 보강해도
-  되는가?")에 여전히 답하지 못했다 — 승인은 확인됐지만 정확한 End
-  Point를 아직 못 찾아 API 응답 자체를 못 받았다.
-- §4의 필드 목록은 2차 출처(GitHub wiki, 검색 결과 요약)에 의존한다 —
-  live 응답으로 검증되기 전까지는 "문서상 추정"으로만 취급해야 한다.
-- companion 목록 서비스의 정확한 request parameter 구조도 미확인이다.
-- 9개 후보(§6-B)는 이 프로젝트가 이미 알고 있는 두 그룹(1611000/
-  1613000)과 공개적으로 관찰된 operation 이름 패턴을 조합한 것이다 —
-  data.go.kr가 이 두 상품에 부여한 실제 그룹 번호가 그 조합 밖에 있을
-  가능성은 배제할 수 없다.
+  되는가?")에 **부분적으로만** 답했다 — 기본정보 서비스(V5)는 실제로
+  작동하고 실측 필드도 확보했지만(§6-C), 목록 서비스(V4) operation명
+  미해결로 경동마리나를 포함한 체계적 부산 sample 검증(스펙 §14)은
+  하지 못했다.
+- §4의 필드 목록(2차 출처)은 §6-C 실측으로 대부분 재확인됐으나
+  100% 일치는 아니다(`hoCnt`, `kaptTopFloor`, `kaptBaseFloor`,
+  `kaptMparea*`, `zipcode` 등은 §4에 없던 필드로 실측에서 추가
+  발견됨) — 앞으로도 문서보다 실측을 우선한다.
+- household/buildingCount verdict가 `LIMITED`인 것은 필드 자체의
+  결함이 아니라 **표본이 1건뿐이라 통계적 확신을 줄 수 없다는 뜻**이다
+  — 목록 서비스가 풀리면 부산 10개 이상 표본으로 재판정해야 한다.
+- companion 목록 서비스의 정확한 request parameter 구조는 여전히
+  미확인이다(20개 조합 전부 실패, §6-C).
+- 20개 후보(§6-C)는 이 서비스 API 그룹(`1613000`, 사용자 확인)
+  안에서 공개적으로 관찰된 operation 이름 패턴을 조합한 것이다 —
+  실제 operation명이 이 조합 밖에 있을 가능성은 배제할 수 없다.
 
 ## 14. Next Step
 
 한글명 우선 제안:
 
-1. **정확한 End Point 확보**(사용자 행동 필요, PM 결정 필요 — §15):
-   승인은 이미 끝났으므로, data.go.kr 마이페이지 → 활용신청 현황 →
-   해당 서비스 클릭 → "활용신청 상세" 또는 "개발계정 상세" 화면에서
-   "End Point"로 표시되는 정확한 URL 문자열을 그대로 복사해 전달.
-2. **End Point 확보 후 재검증**(승인 불필요, 코드 준비 완료): 그
-   문자열을 `scripts/audit-apartment-basic-info-source.ts`의 후보
-   목록에 한 줄 추가 후 재실행 — 성공하면 이 STEP의 §7~§9를 실제
-   데이터로 채우는 후속 STEP 진행.
-3. 그때까지는 기존 건축물대장 기반 파이프라인과 기존
+1. **목록 서비스 정확한 operation명 확보**(사용자 행동 필요, PM 결정
+   필요 — §15): data.go.kr 마이페이지 → `공동주택 단지 목록제공
+   서비스` 상세 → "Sample Code"/"미리보기" 탭에 노출되는 실제 요청
+   URL(operation명 포함)을 그대로 복사해 전달.
+2. **확보 후 재검증**(승인 불필요, 코드 준비 완료):
+   `scripts/audit-apartment-basic-info-source.ts`의
+   `LIST_OPERATION_CANDIDATES`에 한 줄 추가 후 재실행 — 성공하면
+   경동마리나 kaptCode 확정 + 부산 10개 이상 sample QA를 곧바로
+   진행할 수 있다(기본정보 서비스는 이미 확인 완료 — 목록 서비스만
+   풀리면 끝).
+3. **경동마리나 kaptCode를 다른 경로로 먼저 확보하는 대안**(목록
+   서비스 없이도 가능): `scripts/audit-apartment-basic-info-source.ts
+   <kaptCode>` 형태로 CLI 인자를 받도록 이미 구현해 뒀다 — 사용자가
+   K-apt 웹사이트(`k-apt.go.kr`, 로그인 불필요, 단지명 검색 UI 있음)
+   에서 직접 검색해 kaptCode를 확인해 전달하면, 목록 서비스 없이도
+   경동마리나 건 하나는 즉시 검증 가능하다(단, 10개 이상 sample QA는
+   여전히 목록 서비스가 필요).
+4. 그때까지는 기존 건축물대장 기반 파이프라인과 기존
    `SINGLE_BUILDING_AS_COMPLEX` 가드를 그대로 유지.
 
 ## 15. PM Decision Needed
 
 **이번 STEP 자체는 Production write/schema 변경이 필요 없다.**
-활용신청 승인 상태는 이미 확인 완료(2026-08-31, 사용자 제공)됐다 —
-더 이상 재확인을 요청하지 않는다. 남은 것은 순수하게 기술적인 정보
-하나뿐이다:
+승인 상태는 이미 확인 완료됐고, 기본정보 서비스(V5)는 실제로 작동한다
+— 남은 것은 목록 서비스(V4) 하나의 operation명뿐이다:
 
-- **정확한 End Point 문자열 확보**: data.go.kr 마이페이지 → 활용신청
-  현황 → `국토교통부_공동주택 기본 정보제공 서비스`(및 companion
-  `공동주택 단지 목록제공 서비스`) 클릭 → 상세 화면에 표시되는 "End
-  Point" 필드(또는 "미리보기"/"Sample Code" 탭에 노출되는 실제 요청
-  URL)를 그대로 복사해서 전달. 이 화면은 로그인 세션이 있어야만
-  보이므로(§6-B에서 비로그인 접근이 SSO 로그인 페이지로 리다이렉트됨을
-  확인) 프로그래매틱으로는 얻을 수 없다 — 사용자가 직접 화면을 보고
-  복사해줘야 하는, 코드로 우회할 수 없는 유일한 남은 정보다.
-- 별도의 새 서비스키가 필요한지는 그 End Point로 재검증했을 때
-  `NO_OPENAPI_SERVICE_ERROR`가 아닌 다른 오류(예: 인증 관련 오류)가
-  나오면 그때 판단한다 — 현재로선 그 가능성을 시사하는 증거가 없다
-  (control 호출이 같은 `DATA_GO_KR_API_KEY`로 정상 작동).
+- **목록 서비스 정확한 operation명/Sample Code 확보**: data.go.kr
+  마이페이지 → `국토교통부_공동주택 단지 목록제공 서비스` 상세 화면의
+  "Sample Code" 또는 "미리보기" 탭에 노출되는 실제 요청 URL을 그대로
+  복사해서 전달. 이 화면은 로그인 세션이 있어야만 보이므로
+  프로그래매틱으로는 얻을 수 없다(§6-C에서 20개 조합 전부 실패로
+  확인) — 사용자가 직접 화면을 보고 복사해줘야 하는 유일한 남은
+  정보다.
+- (선택) 위 확보가 어렵다면, K-apt 웹사이트에서 경동마리나를 검색해
+  `kaptCode` 하나만 알려줘도 §14-3 대안으로 그 건 하나는 바로 검증
+  가능하다 — 다만 부산 전체 sample QA(스펙 §14 목표 10건 이상)에는
+  결국 목록 서비스가 필요하다.

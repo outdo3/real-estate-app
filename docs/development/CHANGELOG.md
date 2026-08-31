@@ -11318,3 +11318,71 @@ CONTROL_CALL = SUCCESS(같은 키). DIAGNOSIS = ENDPOINT_URL_UNKNOWN(
 PM_DECISION_NEEDED = data.go.kr 로그인 후 정확한 End Point 문자열
 복사·전달(승인 재확인 아님, 코드로 해결 불가). NEXT_STEP = End Point
 확보 후 probe 스크립트에 한 줄 추가·재실행.**
+
+### STEP — APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1 V4/V5 재검증: 기본정보 서비스 실제 작동 확인(BREAKTHROUGH), 목록 서비스는 여전히 미해결
+
+사용자가 data.go.kr에 로그인한 상태의 실제 "활용신청 상세" 화면에서
+공식 End Point 두 개를 직접 확인해 전달(`AptListService4`,
+`AptBasisInfoServiceV5`, 둘 다 group `1613000`) — 이전의 모든 V2/V3/
+V4(기본정보 기준) 추측을 폐기하고 이 두 base로만 재검증.
+
+작업:
+
+- probe 스크립트를 공식 base 2개 중심으로 재작성. operation명은
+  base와 별개로 여전히 미확인이었으므로(추측 금지 원칙 유지)
+  경험적으로 검증.
+- **기본 정보제공 서비스 — CONFIRMED WORKING**: `getAphusBassInfoV5`
+  operation이 `kaptCode` 파라미터로 실제 성공(`HTTP 200,
+  resultCode=00 NORMAL SERVICE.`). 공개 예제 kaptCode(`A10027875`)로
+  실제 조회한 결과가 우연히 부산 사하구 실존 단지("괴정 경성스마트W
+  아파트", 3동/182세대/2015년 사용승인)였다 — 26개 필드 전수 확보,
+  세대수/동수가 complex-level 값임을 실측으로 확인, **좌표 필드는
+  응답에 없음을 실측으로 최종 확인**(문서 추정이 아님). 응답 envelope
+  이 문서상 추정과 달리 `response.body.item`(단일 객체, 배열 wrapper
+  아님)임을 발견해 probe 파싱 로직도 이 실측에 맞춰 수정.
+- **단지 목록제공 서비스 — 여전히 미해결**: `AptListService4` base는
+  확실하지만 operation명은 20개 후보(V3까지의 관례 그대로 버전만
+  V4로 교체/버전 접미사 제거/파라미터명 변형/"Aphus" legacy 표기
+  적용 등)를 전부 시도해도 전부 `NO_OPENAPI_SERVICE_ERROR` — 승인/키
+  문제가 아님을 대조군과 방금 확인된 기본정보 서비스 성공으로 재확인.
+  이 이상 추측을 확장하지 않고 사용자에게 정확한 operation명(Sample
+  Code/미리보기 화면)을 요청하는 것으로 전환.
+- 목록 서비스 없이 경동마리나 kaptCode를 얻는 대안 경로(K-apt 무료
+  다운로드 파일, K-apt 웹 검색 UI)도 시도했으나 봇 차단/UI 완료
+  실패로 부차적 참고 기록만 남기고 목록 서비스를 대체하지 못함 — 단,
+  3rd-party 부동산 사이트에서 "경동마리나 892세대/8개동/1995.06"을
+  확인해 스펙이 언급한 수치와 정확히 일치함을 corroboration으로
+  기록(공식 API 근거는 아님, Production 판단에 쓰지 않음).
+- probe 스크립트에 CLI kaptCode 인자를 추가해, 목록 서비스 없이도
+  사용자가 kaptCode 하나만 알려주면 즉시 그 단지를 검증할 수 있게
+  준비해 뒀다.
+- 문서(`APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`)에 §6-C/§7-C
+  추가, §8(household/buildingCount=LIMITED 예비 긍정 n=1, coordinate=
+  NOT_AVAILABLE 확정), §9(architecture, 기본정보 단계 확인 완료로
+  갱신), §13~§15(Known Limitations/Next Step/PM Decision) 갱신.
+
+DB 변경: schema/migration 없음. Production write 없음.
+
+API 변경: 없음(기존 probe 스크립트 수정만).
+
+QA: 기본정보 서비스 성공 응답 재현 확인(2회), 목록 서비스 20개 후보
+반복 실패 재현 확인, 대조군 성공 재확인(3회 중 2회 즉시 성공, 1회
+무관한 일시적 타임아웃). `npx eslint`/`npx tsc --noEmit` 신규 오류 0.
+
+상태: **PARTIAL**(기본정보 서비스는 PASS, 목록 서비스/경동마리나/
+부산 sample은 BLOCKED — §15).
+
+상세: `docs/development/APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`
+§6-C, §7-C, §8, §9, §13~§15.
+
+**V4V5_REVERIFICATION = PARTIAL. LIST_SERVICE(AptListService4) =
+BLOCKED(operation명 미확인, 20 candidates tried). BASIC_INFO_SERVICE
+(AptBasisInfoServiceV5.getAphusBassInfoV5) = CONFIRMED_WORKING.
+LIVE_SAMPLE = 1건(괴정 경성스마트W아파트, 부산 사하구). COORDINATE_
+VERDICT = NOT_AVAILABLE(확정). HOUSEHOLD_VERDICT = LIMITED(예비
+긍정, n=1). BUILDING_COUNT_VERDICT = LIMITED(예비 긍정, n=1).
+GYEONGDONG_MARINA = CANNOT_VERIFY(kaptCode 미확보). BUSAN_SAMPLE =
+CANNOT_DETERMINE(목록 서비스 필요). PRODUCTION_WRITE = 0. DB_SCHEMA_
+CHANGE = 0. PM_DECISION_NEEDED = 목록 서비스 정확한 operation명(Sample
+Code/미리보기 화면) 확보, 또는 최소 경동마리나 kaptCode 1건. NEXT_STEP
+= 확보 후 probe 재실행 한 줄로 즉시 완료 가능.**
