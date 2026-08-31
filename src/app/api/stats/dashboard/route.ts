@@ -8,6 +8,64 @@ import { prisma } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import { resolvePriceRankingPeriod, type PriceRankingPeriodPreset } from '@/lib/price-ranking';
 import { previousPeriodRange } from '@/lib/regional-feed';
+import { queryTrades, type StoredTrade } from '@/lib/trade-history-read';
+
+// TRADE_DB_FIRST_V1 STEP B-2 — 거래량 dashboard(그래프+요약)의 매매(sale) 쪽만
+// 부산 요청에 한해 DB-first로 전환한다. 전세/월세는 TradeHistory DB에 데이터
+// 자체가 없어(dealType='sale'만 V1 범위) 기존 MOLIT 경로를 그대로 유지한다 —
+// "DB에 없으면 MOLIT 호출"이 아니라, 이 dealType은 애초에 이 분기를 타지 않는
+// 고정 라우팅이다(STEP B의 area84/yearly 전환과 동일 원칙). hotIssues/topPrices/
+// gapInvest/complexTrades 등은 개별 거래 row 단위 로직(정렬/그룹핑/짝짓기)이라
+// 순수 aggregate(COUNT/SUM 등)로 대체할 수 없다 — 12개월(무제한 지역과 달리
+// 시간 범위는 bounded) 원본 row를 그대로 가져와 기존 JS 로직(변경 없음)에
+// 넣는다. MOLIT-shape과 동일한 필드(price/info/dealAmount/aptSeq/dealCanceled 등)를
+// 만드는 어댑터만 새로 추가한다.
+const BUSAN_SIDO_CODE = '26';
+
+function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
+  if (isSidoAll) return sidoCodeParam === BUSAN_SIDO_CODE;
+  return !!lawdCd && lawdCd.startsWith(BUSAN_SIDO_CODE);
+}
+
+function storedTradeToDashboardTrade(t: StoredTrade): any {
+  const areaStr = `${t.exclusiveArea}m²`;
+  const floorStr = t.floor != null ? `${t.floor}층` : '';
+  const tradeDate = t.dealDate.toISOString().slice(0, 10);
+  return {
+    id: `db-sale-${t.id}`,
+    name: t.aptName,
+    price: formatKoreanPrice(t.dealAmount),
+    dealAmount: t.dealAmount,
+    monthlyRent: 0,
+    typeLabel: '실거래',
+    info: `${areaStr} • ${floorStr} • ${tradeDate}`,
+    dong: t.dong,
+    dealCanceled: t.dealCanceled,
+    aptSeq: t.aptSeq,
+    excluUseArea: Number(t.exclusiveArea),
+    dealDate: tradeDate,
+    floorRaw: t.floor,
+    lawdCd: t.lawdCd,
+  };
+}
+
+// last12Months(예: ["202509", ..., "202608"]) 형태와 동일하게 12개 월버킷으로
+// 나눠 돌려준다 — 기존 aptMonthly[i]/aptMonthly.slice(...) 등 하위 로직이 이
+// 배열 모양(12개 배열의 배열)에 의존하므로 그대로 맞춘다. lawdCd는 DB row
+// 자체가 이미 정확한 값을 갖고 있어(배치 조회) 기존 MOLIT 경로처럼 수동으로
+// 태그할 필요가 없다(오히려 더 정확 — 원본 row 자체의 값).
+async function fetchApt12MonthBucketsFromDb(lawdCds: string[], months: string[]): Promise<any[][]> {
+  const fromYear = Number(months[0].slice(0, 4));
+  const fromMonth = Number(months[0].slice(4, 6));
+  const from = new Date(Date.UTC(fromYear, fromMonth - 1, 1));
+  const { trades } = await queryTrades({ lawdCd: lawdCds, from });
+  const buckets = new Map<string, any[]>(months.map((m) => [m, []]));
+  trades.forEach((t) => {
+    const ym = t.dealDate.toISOString().slice(0, 7).replace('-', '');
+    buckets.get(ym)?.push(storedTradeToDashboardTrade(t));
+  });
+  return months.map((m) => buckets.get(m)!);
+}
 
 // FIX_STATISTICS_DATA_TRUST — item.info === "면적m² • 층 • YYYY-MM-DD"에서
 // raw 전용면적(㎡)만 파싱한다. 예전에는 `Math.round(areaNum / 3.3058)`로 가짜
@@ -61,18 +119,29 @@ export async function GET(request: Request) {
         // rankings sido-all과 동일한 공유 스로틀을 그대로 쓴다(새 동시성 풀 없음).
         const districts = await getSigunguListForSido(sidoCodeParam!);
         const lawdCds = districts.map((d) => d.code.substring(0, 5));
+        const isBusan = isBusanScopedRequest(null, sidoCodeParam, true);
         const tasks: MonthTask[] = [];
         for (const dLawdCd of lawdCds) {
           for (const ym of last12Months) {
-            tasks.push({ key: `${dLawdCd}|apt:${ym}`, lawdCd: dLawdCd, dealYmd: ym, type: 'apt' });
+            // 부산 매매는 DB에서 가져오므로 MOLIT apt task 자체를 만들지 않는다
+            // (호출 수 절반 절감, yearly.ts와 동일 원칙). 전세/월세는 DB에
+            // 없어(V1 범위) 부산이어도 여전히 rent MOLIT task가 필요하다.
+            if (!isBusan) tasks.push({ key: `${dLawdCd}|apt:${ym}`, lawdCd: dLawdCd, dealYmd: ym, type: 'apt' });
             tasks.push({ key: `${dLawdCd}|rent:${ym}`, lawdCd: dLawdCd, dealYmd: ym, type: 'rent' });
           }
         }
-        const results = await fetchMonthsThrottledWithStatus(tasks);
+        const [results, aptMonthlyFromDb] = await Promise.all([
+          fetchMonthsThrottledWithStatus(tasks),
+          isBusan ? fetchApt12MonthBucketsFromDb(lawdCds, last12Months) : Promise.resolve(null),
+        ]);
         const failedSet = new Set<string>();
         for (const dLawdCd of lawdCds) {
           for (const ym of last12Months) {
-            if (results[`${dLawdCd}|apt:${ym}`]?.failed || results[`${dLawdCd}|rent:${ym}`]?.failed) failedSet.add(dLawdCd);
+            // 부산 매매는 MOLIT을 호출하지 않으므로 실패 개념이 없다(DB 조회
+            // 실패는 route 최상위 catch로 전체 실패 처리 — MOLIT처럼 구별
+            // partial degrade 대상 아님). rent 실패만 partial 판정에 반영.
+            const aptFailed = !isBusan && results[`${dLawdCd}|apt:${ym}`]?.failed;
+            if (aptFailed || results[`${dLawdCd}|rent:${ym}`]?.failed) failedSet.add(dLawdCd);
           }
         }
         failedLawdCds = Array.from(failedSet);
@@ -80,16 +149,25 @@ export async function GET(request: Request) {
         // 시도 전체 집계는 구별로 트레이드를 합치기 때문에, 합치기 전 원본
         // lawdCd를 각 거래에 태그해 둔다 — GapInvestView/hotIssues 등이 단지
         // 상세로 이동할 때 어느 구 소속인지 몰라 잘못된 단지로 연결되는 것을
-        // 막기 위함(§25 canonical route 요구사항).
-        aptMonthly = last12Months.map((ym) => lawdCds.flatMap((d) => (results[`${d}|apt:${ym}`]?.items || []).map((t: any) => ({ ...t, lawdCd: d }))));
+        // 막기 위함(§25 canonical route 요구사항). DB 경로는 row 자체가 이미
+        // 정확한 lawdCd를 갖고 있어 별도 태그가 필요 없다.
+        aptMonthly = isBusan
+          ? aptMonthlyFromDb!
+          : last12Months.map((ym) => lawdCds.flatMap((d) => (results[`${d}|apt:${ym}`]?.items || []).map((t: any) => ({ ...t, lawdCd: d }))));
         rentMonthly = last12Months.map((ym) => lawdCds.flatMap((d) => (results[`${d}|rent:${ym}`]?.items || []).map((t: any) => ({ ...t, lawdCd: d }))));
       } else {
+        const isBusan = isBusanScopedRequest(lawdCd, null, false);
         const rollingTasks: MonthTask[] = [
-          ...last12Months.map((dealYmd) => ({ key: `apt-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'apt' as const })),
+          ...(isBusan ? [] : last12Months.map((dealYmd) => ({ key: `apt-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'apt' as const }))),
           ...last12Months.map((dealYmd) => ({ key: `rent-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'rent' as const })),
         ];
-        const taskResults = await fetchMonthsThrottled(rollingTasks);
-        aptMonthly = last12Months.map((dealYmd) => (taskResults[`apt-roll-${dealYmd}`] || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
+        const [taskResults, aptMonthlyFromDb] = await Promise.all([
+          fetchMonthsThrottled(rollingTasks),
+          isBusan ? fetchApt12MonthBucketsFromDb([lawdCd!], last12Months) : Promise.resolve(null),
+        ]);
+        aptMonthly = isBusan
+          ? aptMonthlyFromDb!
+          : last12Months.map((dealYmd) => (taskResults[`apt-roll-${dealYmd}`] || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
         rentMonthly = last12Months.map((dealYmd) => (taskResults[`rent-roll-${dealYmd}`] || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
       }
 

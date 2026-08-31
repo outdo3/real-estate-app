@@ -11616,3 +11616,73 @@ DB-first, 비부산 무변경, 6개 구+부산전체+기장군 실측 확인, �
 NEXT_STEP = `/api/stats/dashboard` 매매 부분 DB 전환(후속 STEP 후보,
 이번 범위 아님) 또는 STEP A가 남긴 최근 상승/하락/지역 변동지도
 DB-FIRST 전환(스펙 §41 제외 대상).**
+
+## 2026-08-31
+
+### STEP — TRADE_DB_FIRST_V1 STEP B-2: 거래량 대시보드 매매 DB-FIRST 마무리
+
+STEP B가 PARTIAL로 남긴 gap(`/api/stats/dashboard`의 매매 그래프/요약
+배지가 여전히 MOLIT 의존)을 닫는다. `/stats/volume`이 실제로 두 개의
+API(`dashboard.ts` 그래프+요약, `yearly.ts` 표)를 쓴다는 STEP B의 발견을
+그대로 이어받아, 이번엔 `dashboard.ts` 쪽 매매만 전환.
+
+서비스 코드 변경:
+
+- `src/app/api/stats/dashboard/route.ts`: 부산 스코프 요청만
+  `queryTrades()` 기반 DB 조회로 매매(sale) row를 가져오도록 전환,
+  비부산 요청은 완전 무변경. `hotIssues`/`topPrices`/`gapInvest`/
+  `jeonseRate`/`currentMonthTrades`/`complexTrades`/`volumeRanking`
+  등은 개별 거래 row 단위 로직(이름 정규화, Unit Master 평형 조회,
+  매매-전세 짝짓기)이라 순수 SQL aggregate로 대체할 수 없다고 판단해
+  — 12개월(시간 bounded) 매매 원본 row를 DB에서 그대로 가져와 기존
+  JS 로직(0줄 변경)에 그대로 넣는 방식을 택함(STEP B의 area84 전환과
+  동일 패턴). MOLIT-shape과 동일한 필드를 만드는 어댑터
+  (`storedTradeToDashboardTrade`)와 12개월 버킷 재구성 함수
+  (`fetchApt12MonthBucketsFromDb`)만 추가. 전세/월세는 TradeHistory
+  DB에 데이터가 없어(V1 범위) 완전 무변경.
+- 응답 JSON 계약 무변경 — 프론트(`VolumeChartCard.tsx`) 무수정으로
+  동작.
+
+성능 실측(같은 dev 서버에서 코드만 stash/복원해 직접 A/B 비교, 추정
+아님): 부산 전체(sido-all) dashboard cold, apt+rent 둘 다 MOLIT이던
+변경 전 **43.0초** → 매매만 DB로 전환한 변경 후 **28.0초**(약 35%
+개선). 매매 DB fetch 자체는 격리 측정 시 5.06초에 불과 — 남은 28초의
+대부분(~23초)은 이번 STEP이 건드리지 않은 전세 192-task MOLIT 스로틀
+병목으로, 목표(3초) 초과분의 원인을 정확히 지목해 문서화(전세 DB
+자체가 없어 이번 범위에서 추가 단축 불가, 후속 STEP 후보로 기록).
+
+QA: 정합성 raw SQL COUNT 대조(서구 49=49, 해운대구 173=173[취소 7건
+제외 확인], 부산전체 1571=1571) 전부 일치. MOLIT 호출 0 검증은 런타임
+probe로 확인(미검증 부산 구 0건, 미검증 비부산 구 12건 — probe 자체
+정상 동작도 함께 증명, 검증 후 즉시 원복). Production 브라우저로
+매매/전세/월세 3탭+표 토글+area84 회귀 없음 확인. 세션 전체 회귀
+691/691 pass. `npx tsc --noEmit` 신규 오류 0(기존 20건 유지).
+`npx eslint` clean. `npm run build` PASS.
+
+DB 변경: schema/migration 없음. Production write 없음(READ만).
+
+API 변경: 응답 스키마 변경 없음(source만 교체).
+
+상태: 완료.
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_B2.md`
+
+**TRADE_DB_FIRST_V1_STEP_B2 = PASS. DASHBOARD_SALE = DB_FIRST(부산
+스코프, row-level 로직 유지, 비부산/전세/월세 완전 무변경). MOLIT_
+CALLS_FOR_BUSAN_SALE = 0(런타임 probe 확인). CORRECTNESS = raw SQL
+COUNT 3/3 일치, 취소 제외 정확. PERFORMANCE = 부산전체 43.0s→28.0s
+실측 A/B(35% 개선), 잔여 지연 원인은 전세 MOLIT(이번 범위 밖)로 명확히
+귀속. N+1 = 0(항상 단일 queryTrades 호출). RESPONSE_CONTRACT =
+무변경. TESTS = 691/691. BUILD = PASS. PRODUCTION_WRITE = 0.
+DB_SCHEMA_CHANGE = 0.
+
+TRADE_DB_FIRST_V1 STEP B 전체 최종 판정: 84㎡ = FULL_PASS(STEP B).
+거래량 yearly 표 = FULL_PASS(STEP B). 거래량 dashboard 매매 =
+FULL_PASS(STEP B-2, 이번). 거래량 dashboard 전세/월세 = 의도적
+미전환(TradeHistory DB가 sale-only인 구조적 한계, DB 구축 자체가
+범위 밖). STEP B(+B-2) 종합 = PASS로 최종 완료 처리.
+
+NEXT_STEP = 전세/월세 TradeHistory DB 구축(있어야 dashboard 완전
+DB-first 가능, 대규모 범위) 또는 STEP A가 남긴 최근 상승/하락/지역
+변동지도 DB-FIRST 전환(스펙이 이번/직전 STEP 모두에서 범위 밖으로
+명시).**
