@@ -11,7 +11,7 @@
 // STEP(TRADE_HISTORY_READ_MIGRATION_V1, 기존 라이브 통계 API를 이 core로 단계적 전환)
 // 의 대상. 이번 STEP은 그 전환에 쓸 "공통 read core"만 완성한다(§27 — 기존 84㎡/거래량/
 // 상승/하락/변동지도 API를 한꺼번에 갈아끼우지 않음).
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { identityKey } from './regional-feed';
 
@@ -622,4 +622,188 @@ export async function getRisingRowsFromDb(lawdCds: string[], periodFrom: string,
       c.deal_amount, c.deal_date, c.immediate_prior_amount, c.immediate_prior_date
   `;
   return rows.map((r) => ({ ...r, trailingSampleCount: Number(r.trailingSampleCount) }));
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// TRADE_DB_FIRST_V1 STEP D — 지역 변동지도(region-change.ts) DB-FIRST. STEP
+// C-2의 교훈(원본 row를 Node로 옮기지 않고 SQL이 최종/준최종 결과까지 계산)을
+// 처음부터 적용한다 — "먼저 만들고 나중에 최적화"를 반복하지 않는다.
+//
+// §PAIR — region-change.ts의 buildRegionChangePairs()와 정확히 같은 정의:
+// group_key(=identityKey+exact area+dealType)별로 current window의
+// "가장 최근" 거래와 previous window의 "가장 최근" 거래를 각각 하나씩 뽑아
+// 짝짓는다. "가장 최근" 선정 tie-break는 pickLatest()의
+// `dealDate DESC → dealAmount DESC → uid ASC`를 그대로 재현한다 — 여기서
+// uid는 FeedTrade 변환 시 `String(t.id)`이므로, SQL에서도 `id::text`를
+// **문자열로 정렬**해야 정확히 동일한 승자가 나온다(id를 숫자로 정렬하면
+// "10" vs "9" 같은 경우 다른 순서가 나올 수 있음 — 기존 동작을 "개선"하지
+// 않고 있는 그대로 재현). `DISTINCT ON (group_key) ... ORDER BY group_key,
+// deal_date DESC, deal_amount DESC, id::text ASC`가 pickLatest()와
+// 완전히 동치다.
+//
+// §MEDIAN — PostgreSQL `percentile_cont(0.5) WITHIN GROUP (ORDER BY x)`는
+// 연속 보간 방식의 50th percentile로, 정확히 "정렬 후 홀수면 가운데 값,
+// 짝수면 가운데 두 값의 평균"과 수학적으로 동일하다(region-change.ts의
+// medianOf()와 동일 정의) — 별도 재구현 없이 신뢰할 수 있다.
+//
+// §GROUPING SETS — "부산 전체(overall)"와 "구별(district) breakdown"을
+// 한 번의 쿼리로 함께 얻기 위해 `GROUP BY GROUPING SETS ((lawd_cd), ())`를
+// 쓴다 — overall 행은 lawd_cd가 NULL로 나온다.
+export interface RegionChangeBucketRow {
+  bucketKey: string | null; // null이면 overall
+  pairCount: number;
+  complexCount: number;
+  medianPct: number | null;
+  minPct: number | null;
+  maxPct: number | null;
+}
+
+/** sigungu/dong level 공용 — bucketBy에 따라 lawd_cd 또는 dong으로 묶는다.
+ * overall(전체 1행, bucketKey=null)과 bucket별 행을 한 쿼리로 함께 반환한다. */
+export async function getRegionChangeBucketsFromDb(
+  lawdCds: string[],
+  currentFrom: string,
+  currentTo: string,
+  previousFrom: string,
+  previousTo: string,
+  bucketBy: 'lawdCd' | 'dong',
+  dongFilter?: string
+): Promise<RegionChangeBucketRow[]> {
+  const bucketExpr = bucketBy === 'lawdCd' ? Prisma.sql`lawd_cd` : Prisma.sql`dong`;
+  const dongClause = dongFilter ? Prisma.sql`AND dong = ${dongFilter}` : Prisma.empty;
+  const rows = await prisma.$queryRaw<{ bucket_key: string | null; pair_count: bigint; complex_count: bigint; median_pct: number | null; min_pct: number | null; max_pct: number | null }[]>`
+    WITH base AS (
+      SELECT id, group_key, identity_key, lawd_cd, dong, deal_amount, deal_date
+      FROM apartment_trade_histories
+      WHERE lawd_cd = ANY(${lawdCds})
+        AND deal_type = 'sale'
+        AND deal_canceled = false
+        AND deal_date BETWEEN ${previousFrom}::date AND ${currentTo}::date
+        ${dongClause}
+    ),
+    current_latest AS (
+      SELECT DISTINCT ON (group_key) group_key, identity_key, lawd_cd, dong, deal_amount AS current_amount
+      FROM base
+      WHERE deal_date BETWEEN ${currentFrom}::date AND ${currentTo}::date
+      ORDER BY group_key, deal_date DESC, deal_amount DESC, id::text ASC
+    ),
+    previous_latest AS (
+      SELECT DISTINCT ON (group_key) group_key, deal_amount AS baseline_amount
+      FROM base
+      WHERE deal_date BETWEEN ${previousFrom}::date AND ${previousTo}::date
+      ORDER BY group_key, deal_date DESC, deal_amount DESC, id::text ASC
+    ),
+    pairs AS (
+      SELECT c.group_key, c.identity_key, c.lawd_cd, c.dong,
+        ((c.current_amount - p.baseline_amount)::numeric / p.baseline_amount) * 100 AS change_pct
+      FROM current_latest c
+      JOIN previous_latest p ON p.group_key = c.group_key
+      WHERE p.baseline_amount > 0
+    )
+    SELECT
+      ${bucketExpr} AS bucket_key,
+      COUNT(*) AS pair_count,
+      COUNT(DISTINCT identity_key) AS complex_count,
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY change_pct) AS median_pct,
+      MIN(change_pct)::float8 AS min_pct,
+      MAX(change_pct)::float8 AS max_pct
+    FROM pairs
+    GROUP BY GROUPING SETS ((${bucketExpr}), ())
+  `;
+  return rows.map((r) => ({
+    bucketKey: r.bucket_key,
+    pairCount: Number(r.pair_count),
+    complexCount: Number(r.complex_count),
+    medianPct: r.median_pct,
+    minPct: r.min_pct,
+    maxPct: r.max_pct,
+  }));
+}
+
+export interface ComplexChangeCandidateRow {
+  identityKey: string;
+  groupKey: string;
+  aptSeq: string | null;
+  aptName: string;
+  dong: string;
+  lawdCd: string;
+  exclusiveArea: string;
+  currentAmount: number;
+  currentDate: Date;
+  baselineAmount: number;
+  baselineDate: Date;
+  sampleTradeCount: number;
+}
+
+/** complex(단지) level — buildComplexChangeRows()와 동일하게, 단지(identity_key)
+ * 안에 여러 raw 전용면적이 있으면 두 window 모두 거래가 있는 면적 그룹 중
+ * "표본(current+previous 거래 건수 합)이 가장 많은" 면적 1개만 대표로 고른다
+ * (동점이면 최근 current 거래일 DESC → group_key ASC — buildComplexChangeRows의
+ * candidates.sort()와 동일한 tie-break). */
+export async function getComplexChangeRowsFromDb(
+  lawdCd: string,
+  currentFrom: string,
+  currentTo: string,
+  previousFrom: string,
+  previousTo: string,
+  dongFilter?: string
+): Promise<ComplexChangeCandidateRow[]> {
+  const dongClause = dongFilter ? Prisma.sql`AND dong = ${dongFilter}` : Prisma.empty;
+  const rows = await prisma.$queryRaw<
+    { identityKey: string; groupKey: string; aptSeq: string | null; aptName: string; dong: string; lawdCd: string; exclusiveArea: string; currentAmount: number; currentDate: Date; baselineAmount: number; baselineDate: Date; sampleTradeCount: bigint }[]
+  >`
+    WITH base AS (
+      SELECT id, group_key, identity_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, deal_amount, deal_date
+      FROM apartment_trade_histories
+      WHERE lawd_cd = ${lawdCd}
+        AND deal_type = 'sale'
+        AND deal_canceled = false
+        AND deal_date BETWEEN ${previousFrom}::date AND ${currentTo}::date
+        ${dongClause}
+    ),
+    area_current AS (
+      SELECT DISTINCT ON (group_key) group_key, identity_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area,
+        deal_amount AS current_amount, deal_date AS current_date
+      FROM base
+      WHERE deal_date BETWEEN ${currentFrom}::date AND ${currentTo}::date
+      ORDER BY group_key, deal_date DESC, deal_amount DESC, id::text ASC
+    ),
+    area_previous AS (
+      SELECT DISTINCT ON (group_key) group_key, deal_amount AS baseline_amount, deal_date AS baseline_date
+      FROM base
+      WHERE deal_date BETWEEN ${previousFrom}::date AND ${previousTo}::date
+      ORDER BY group_key, deal_date DESC, deal_amount DESC, id::text ASC
+    ),
+    area_counts AS (
+      SELECT group_key,
+        COUNT(*) FILTER (WHERE deal_date BETWEEN ${currentFrom}::date AND ${currentTo}::date) AS current_count,
+        COUNT(*) FILTER (WHERE deal_date BETWEEN ${previousFrom}::date AND ${previousTo}::date) AS previous_count
+      FROM base GROUP BY group_key
+    ),
+    area_pairs AS (
+      SELECT c.group_key, c.identity_key, c.apt_seq, c.apt_name, c.dong, c.lawd_cd, c.exclusive_area,
+        c.current_amount, c.current_date, p.baseline_amount, p.baseline_date,
+        (ac.current_count + ac.previous_count) AS sample_trade_count
+      FROM area_current c
+      JOIN area_previous p ON p.group_key = c.group_key
+      JOIN area_counts ac ON ac.group_key = c.group_key
+      WHERE p.baseline_amount > 0
+    ),
+    ranked AS (
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY identity_key
+        ORDER BY sample_trade_count DESC, current_date DESC, group_key ASC
+      ) AS rn
+      FROM area_pairs
+    )
+    SELECT
+      identity_key AS "identityKey", group_key AS "groupKey", apt_seq AS "aptSeq", apt_name AS "aptName",
+      dong, lawd_cd AS "lawdCd", exclusive_area::text AS "exclusiveArea",
+      current_amount AS "currentAmount", current_date AS "currentDate",
+      baseline_amount AS "baselineAmount", baseline_date AS "baselineDate",
+      sample_trade_count AS "sampleTradeCount"
+    FROM ranked
+    WHERE rn = 1
+  `;
+  return rows.map((r) => ({ ...r, sampleTradeCount: Number(r.sampleTradeCount) }));
 }

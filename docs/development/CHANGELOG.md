@@ -11817,3 +11817,67 @@ same-month peer 오포함) — 전부 raw SQL vs oracle A/B로 발견, 숫자를
 BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
 TRADE_DB_FIRST_V1 STEP C 최종 판정 = FULL PASS(기능+성능 모두 달성).
 NEXT_STEP = 지역 변동지도 DB 전환(STEP D) 또는 record-high DB 전환.**
+
+## 2026-08-31
+
+### STEP — TRADE_DB_FIRST_V1 STEP D: 지역 변동지도 부산 DB-FIRST 전환
+
+지역 변동지도(`/stats/change-map`, `/api/stats/region-change`)를 부산
+요청에 한해 DB-first로 전환. STEP C-2의 교훈("SQL이 최종/준최종
+결과까지 계산, 원본 row를 Node로 옮기지 않음")을 처음부터 적용해
+naive 구현 없이 바로 성능 목표를 달성했다.
+
+서비스 코드 변경:
+
+- `src/lib/trade-history-read.ts`: `getRegionChangeBucketsFromDb()`
+  (sigungu/dong level, `GROUPING SETS`로 overall+구·동별 breakdown을
+  한 쿼리로), `getComplexChangeRowsFromDb()`(complex level, 단지별
+  대표 면적 선택까지 SQL에서) 신규. `pickLatest()`의 tie-break
+  (dealDate DESC → dealAmount DESC → **uid 문자열 ASC**)를 `DISTINCT
+  ON`으로, median을 `percentile_cont(0.5) WITHIN GROUP`으로, 대표
+  면적 선택을 `ROW_NUMBER() OVER (PARTITION BY identity_key ...)`로
+  재현 — region-change.ts의 기존 정의를 한 글자도 바꾸지 않고 SQL로
+  그대로 옮겼다. confidence/direction/intensity 판정은 SQL로 재구현
+  하지 않고 region-change.ts의 기존 순수 함수(무변경)를 재사용.
+- `src/app/api/stats/region-change/route.ts`: sigungu/dong/complex
+  3개 level 전부 부산 스코프 요청만 DB-first 경로로 분기, 비부산은
+  기존 MOLIT 경로 완전 무변경.
+
+성능 실측(부산 전체 sigungu level, MOLIT vs DB): 1개월 6.9초→235ms,
+3개월 11.8초→35ms, 6개월 17.9초→29ms, **12개월 41.4초→23ms**(warm
+캐시 기준) — 이 STEP이 필요한 이유를 실측으로 재확인했다.
+
+QA: 6개 지역×4개 기간×3 level(sigungu/dong/complex) A/B — 1개월/
+3개월/6개월은 전부 완전 일치, 12개월만 일부 지역에서 DB가 MOLIT보다
+pairCount가 더 많음(예: 해운대구 574→578) — STEP A의 검증된
+`queryTrades()`로 독립 재계산해 DB 값(578)이 정확함을 확인, MOLIT이
+많은 호출량(24개월×16개 구)에서 일부 거래를 놓친 것으로 결론
+(DATA_COMPLETENESS, DB가 더 정확 — STEP C가 이미 문서화한 것과
+동일한 패턴). MOLIT 호출 0 런타임 확인(부산 fresh 0건, 비부산 3건).
+Production 브라우저로 전체 drill-down 체인(대한민국→부산광역시→
+동구→수정동) 실제 클릭 확인 — sigungu/dong/complex 3개 level 전부
+정상. decline/area84/홈 회귀 없음(trade-history-read.ts에 함수
+추가만, 기존 함수 무변경). 세션 전체 회귀 691/691 pass. `npx tsc
+--noEmit` 신규 오류 0(기존 20건 유지). `npx eslint` clean. `npm run
+build` PASS.
+
+DB 변경: schema/migration 없음. Production write 없음(READ만).
+쿼리 수 부산 전체 기준 1개(GROUPING SETS로 overall+구별 한 번에).
+기존 인덱스로 충분(신규 index 불필요, PREAGGREGATION_REQUIRED 아님).
+
+API 변경: 응답 스키마 변경 없음.
+
+상태: 완료.
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_D.md`
+
+**TRADE_DB_FIRST_V1_STEP_D = PASS. SIGUNGU/DONG/COMPLEX = 전부 부산
+DB-FIRST. MOLIT_CALLS_FOR_BUSAN = 0(런타임 확인). PERFORMANCE = 41.4초
+→23ms(부산전체 12개월, 최악 케이스). PREAGGREGATION_VERDICT =
+NOT_REQUIRED. INDEX_CHANGE = 불필요. CORRECTNESS = 1m/3m/6m 60/60
+완전 일치, 12m만 DATA_COMPLETENESS 차이(DB가 더 정확, queryTrades()로
+독립 검증). QUERY_COUNT = 1(부산 전체 기준). N+1 = 0. TESTS = 691/691.
+BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
+NEXT_STEP = record-high DB 전환(STEP E) 또는 전세/월세 TradeHistory
+DB 구축(대규모, dashboard/region-change 전세 breakdown 등 완전
+DB-first를 위한 유일한 근본 해결책).**

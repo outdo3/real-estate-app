@@ -3,6 +3,7 @@ import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
 import { fetchMonthsThrottledWithStatus, type MonthTask } from '@/lib/molit-stats-helpers';
 import { getSigunguListForSido, getSidoList, resolveRegionNameByLawdCd } from '@/lib/region-utils';
+import { getRegionChangeBucketsFromDb, getComplexChangeRowsFromDb, type RegionChangeBucketRow, type ComplexChangeCandidateRow } from '@/lib/trade-history-read';
 import {
   resolveRegionChangeWindows,
   regionChangeFetchMonths,
@@ -10,11 +11,71 @@ import {
   buildComplexChangeRows,
   aggregateChangeByBucket,
   buildRegionChangeInterpretation,
+  deriveConfidence,
+  classifyDirection,
+  classifyIntensity,
   periodLabelOf,
   MIN_SAMPLE_PAIRS,
   type FeedTrade,
+  type RegionChangeAggregate,
+  type ComplexChangeRow,
   type RegionChangePeriodPreset,
 } from '@/lib/region-change';
+
+// TRADE_DB_FIRST_V1 STEP D — 지역 변동지도를 부산 요청에 한해 DB-first로
+// 전환했다. 이집 TradeHistory DB는 부산 16/16 구·군만 구축돼 있고 다른
+// 시/도는 데이터가 아예 없다 — "DB에 없으면 MOLIT으로 보완"이 아니라,
+// 애초에 데이터가 존재하는 지역(부산)만 DB 경로를 타도록 하는 고정된 지역
+// 라우팅이다(STEP B/C와 동일 원칙). 非부산 사용자 동작은 이번 STEP으로
+// 전혀 바뀌지 않는다.
+const BUSAN_SIDO_CODE = '26';
+
+function isBusanScopedRequest(lawdCd: string | null, sidoCode: string | null): boolean {
+  if (sidoCode) return sidoCode === BUSAN_SIDO_CODE;
+  return !!lawdCd && lawdCd.startsWith(BUSAN_SIDO_CODE);
+}
+
+// DB 집계 결과(RegionChangeBucketRow)를 기존 aggregateChangeByBucket()이
+// 만드는 RegionChangeAggregate와 동일한 shape으로 변환한다 — confidence/
+// direction/intensity 판정은 region-change.ts의 기존 순수 함수(무변경)를
+// 그대로 재사용해, "숫자 계산은 SQL, 임계값 판정은 검증된 기존 JS"로
+// 책임을 나눈다(판정 로직을 SQL로 재구현하지 않음 — 재구현 시 threshold
+// 두 곳에 흩어져 나중에 어긋날 위험을 피한다).
+function dbBucketToAggregate(b: RegionChangeBucketRow, key: string, label: string): RegionChangeAggregate {
+  const confidence = deriveConfidence(b.pairCount);
+  const medianPct = confidence === 'INSUFFICIENT' ? null : b.medianPct;
+  return {
+    key,
+    label,
+    medianPct,
+    pairCount: b.pairCount,
+    complexCount: b.complexCount,
+    minPct: b.minPct,
+    maxPct: b.maxPct,
+    confidence,
+    direction: confidence === 'INSUFFICIENT' || medianPct == null ? null : classifyDirection(medianPct),
+    intensity: confidence === 'INSUFFICIENT' || medianPct == null ? null : classifyIntensity(medianPct),
+  };
+}
+
+function dbComplexRowToComplexChangeRow(r: ComplexChangeCandidateRow): ComplexChangeRow {
+  const changePct = ((r.currentAmount - r.baselineAmount) / r.baselineAmount) * 100;
+  return {
+    complexKey: r.identityKey,
+    name: r.aptName,
+    dong: r.dong,
+    lawdCd: r.lawdCd,
+    aptSeq: r.aptSeq,
+    excluUseArea: Number(r.exclusiveArea),
+    currentAmount: r.currentAmount,
+    currentDate: r.currentDate.toISOString().slice(0, 10),
+    baselineAmount: r.baselineAmount,
+    baselineDate: r.baselineDate.toISOString().slice(0, 10),
+    changePct,
+    sampleTradeCount: r.sampleTradeCount,
+    confidence: deriveConfidence(r.sampleTradeCount),
+  };
+}
 
 // REGION_PRICE_CHANGE_MAP_V2 — "지역 변동지도". 세 가지 level만 서버에서
 // 계산한다(§10 LEVEL 0/1은 클라이언트가 이 API를 시도별로 여러 번 호출해
@@ -115,19 +176,40 @@ export async function GET(request: Request) {
       });
       const sidoName = districts[0].name.split(' ')[0];
 
-      const results = await Promise.all(lawdCds.map((lawdCd) => fetchDistrictTrades(lawdCd, months)));
-      const failedDistricts = lawdCds.filter((_, i) => results[i].failed);
-      const allTrades = results.flatMap((r) => r.trades);
-      const partial = failedDistricts.length > 0;
-      const apiError = failedDistricts.length === lawdCds.length && lawdCds.length > 0;
+      let overallBuckets: RegionChangeAggregate[];
+      let districtBuckets: RegionChangeAggregate[];
+      let partial = false;
+      let apiError = false;
+      let failedDistricts: string[] = [];
 
-      const pairs = buildRegionChangePairs(allTrades, windows);
-      const overallBuckets = aggregateChangeByBucket(pairs, () => 'overall', () => sidoName);
-      const districtBuckets = aggregateChangeByBucket(
-        pairs,
-        (p) => p.lawdCd,
-        (key) => sigunguNameByLawdCd.get(key) || key
-      );
+      if (isBusanScopedRequest(null, sidoCode)) {
+        // TRADE_DB_FIRST_V1 STEP D — 부산 전체(sigungu) DB-first 경로. DB
+        // read는 전체 성공 또는 예외 둘 중 하나(부분 실패 개념 없음, STEP
+        // B/C와 동일 패턴).
+        const cacheKey = `region-change-db-sigungu:${sidoCode}:${preset}`;
+        const buckets = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
+          getRegionChangeBucketsFromDb(lawdCds, windows.current.from, windows.current.to, windows.previous.from, windows.previous.to, 'lawdCd')
+        );
+        const overall = buckets.find((b) => b.bucketKey === null);
+        overallBuckets = overall ? [dbBucketToAggregate(overall, 'overall', sidoName)] : [];
+        districtBuckets = buckets
+          .filter((b) => b.bucketKey !== null)
+          .map((b) => dbBucketToAggregate(b, b.bucketKey!, sigunguNameByLawdCd.get(b.bucketKey!) || b.bucketKey!));
+      } else {
+        const results = await Promise.all(lawdCds.map((lawdCd) => fetchDistrictTrades(lawdCd, months)));
+        failedDistricts = lawdCds.filter((_, i) => results[i].failed);
+        const allTrades = results.flatMap((r) => r.trades);
+        partial = failedDistricts.length > 0;
+        apiError = failedDistricts.length === lawdCds.length && lawdCds.length > 0;
+
+        const pairs = buildRegionChangePairs(allTrades, windows);
+        overallBuckets = aggregateChangeByBucket(pairs, () => 'overall', () => sidoName);
+        districtBuckets = aggregateChangeByBucket(
+          pairs,
+          (p) => p.lawdCd,
+          (key) => sigunguNameByLawdCd.get(key) || key
+        );
+      }
       const interpretation = buildRegionChangeInterpretation(districtBuckets, sidoName, periodLabel);
 
       return NextResponse.json({
@@ -152,12 +234,53 @@ export async function GET(request: Request) {
       if (!lawdCd || !/^\d{5}$/.test(lawdCd)) {
         return NextResponse.json({ status: 'ERROR', message: 'lawdCd 파라미터가 필요합니다.' }, { status: 400 });
       }
-      const [{ trades, failed }, regionName] = await Promise.all([fetchDistrictTrades(lawdCd, months), resolveRegionNameByLawdCd(lawdCd)]);
+      const isBusan = isBusanScopedRequest(lawdCd, null);
+      let overallBuckets: RegionChangeAggregate[];
+      let dongBuckets: RegionChangeAggregate[];
+      let failed = false;
+      let tradesLength = 0;
+
+      if (isBusan) {
+        // TRADE_DB_FIRST_V1 STEP D — 부산 단일 구(dong) DB-first 경로.
+        const regionNameDb = await resolveRegionNameByLawdCd(lawdCd);
+        const sigunguLabelDb = regionNameDb?.sigungu || regionNameDb?.fullName || lawdCd;
+        const sidoLabelDb = regionNameDb?.sido || '';
+        const cacheKey = `region-change-db-dong:${lawdCd}:${preset}`;
+        const buckets = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
+          getRegionChangeBucketsFromDb([lawdCd], windows.current.from, windows.current.to, windows.previous.from, windows.previous.to, 'dong')
+        );
+        const overall = buckets.find((b) => b.bucketKey === null);
+        overallBuckets = overall ? [dbBucketToAggregate(overall, 'overall', sigunguLabelDb)] : [];
+        dongBuckets = buckets
+          .filter((b) => b.bucketKey !== null)
+          .map((b) => dbBucketToAggregate(b, b.bucketKey || '(동 정보 없음)', b.bucketKey || '(동 정보 없음)'));
+        const interpretation = buildRegionChangeInterpretation(dongBuckets, sigunguLabelDb, periodLabel);
+        return NextResponse.json({
+          status: 'OK',
+          level: 'dong',
+          lawdCd,
+          sidoName: sidoLabelDb,
+          sigunguName: sigunguLabelDb,
+          period: { preset, label: periodLabel, current: windows.current, previous: windows.previous },
+          minSamplePairs: MIN_SAMPLE_PAIRS,
+          overall: overallBuckets[0] ? roundBucket(overallBuckets[0]) : null,
+          dongs: dongBuckets.sort((a, b) => a.label.localeCompare(b.label, 'ko')).map(roundBucket),
+          interpretation,
+          callBudget: { districtsFetched: 1, monthsFetched: months.length },
+          apiError: false,
+          partial: false,
+          failedDistricts: [],
+        });
+      }
+
+      const [{ trades, failed: fetchFailed }, regionName] = await Promise.all([fetchDistrictTrades(lawdCd, months), resolveRegionNameByLawdCd(lawdCd)]);
+      failed = fetchFailed;
+      tradesLength = trades.length;
       const sigunguLabel = regionName?.sigungu || regionName?.fullName || lawdCd;
       const sidoLabel = regionName?.sido || '';
       const pairs = buildRegionChangePairs(trades, windows);
-      const overallBuckets = aggregateChangeByBucket(pairs, () => 'overall', () => sigunguLabel);
-      const dongBuckets = aggregateChangeByBucket(
+      overallBuckets = aggregateChangeByBucket(pairs, () => 'overall', () => sigunguLabel);
+      dongBuckets = aggregateChangeByBucket(
         pairs,
         (p) => p.dong || '(동 정보 없음)',
         (key) => key
@@ -176,7 +299,7 @@ export async function GET(request: Request) {
         dongs: dongBuckets.sort((a, b) => a.label.localeCompare(b.label, 'ko')).map(roundBucket),
         interpretation,
         callBudget: { districtsFetched: 1, monthsFetched: months.length },
-        apiError: failed && trades.length === 0,
+        apiError: failed && tradesLength === 0,
         partial: false,
         failedDistricts: failed ? [lawdCd] : [],
       });
@@ -192,9 +315,31 @@ export async function GET(request: Request) {
     const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
     const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT));
 
-    const [{ trades, failed }, regionName] = await Promise.all([fetchDistrictTrades(lawdCd, months), resolveRegionNameByLawdCd(lawdCd)]);
-    const scoped = dong && dong !== 'all' ? trades.filter((t) => t.dong === dong) : trades;
-    let rows = buildComplexChangeRows(scoped, windows);
+    const isBusanComplex = isBusanScopedRequest(lawdCd, null);
+    let rows: ComplexChangeRow[];
+    let complexFailed = false;
+    let complexTradesLength = 0;
+    let regionName: Awaited<ReturnType<typeof resolveRegionNameByLawdCd>>;
+
+    if (isBusanComplex) {
+      // TRADE_DB_FIRST_V1 STEP D — 부산 단지(complex) DB-first 경로.
+      const cacheKey = `region-change-db-complex:${lawdCd}:${preset}:${dong || 'all'}`;
+      const [dbRows, regionNameDb] = await Promise.all([
+        getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
+          getComplexChangeRowsFromDb(lawdCd, windows.current.from, windows.current.to, windows.previous.from, windows.previous.to, dong && dong !== 'all' ? dong : undefined)
+        ),
+        resolveRegionNameByLawdCd(lawdCd),
+      ]);
+      regionName = regionNameDb;
+      rows = dbRows.map(dbComplexRowToComplexChangeRow);
+    } else {
+      const [{ trades, failed }, regionNameLive] = await Promise.all([fetchDistrictTrades(lawdCd, months), resolveRegionNameByLawdCd(lawdCd)]);
+      complexFailed = failed;
+      complexTradesLength = trades.length;
+      regionName = regionNameLive;
+      const scoped = dong && dong !== 'all' ? trades.filter((t) => t.dong === dong) : trades;
+      rows = buildComplexChangeRows(scoped, windows);
+    }
 
     const sortFns: Record<string, (a: any, b: any) => number> = {
       changePct: (a, b) => b.changePct - a.changePct,
@@ -225,7 +370,7 @@ export async function GET(request: Request) {
       rows: pageRows,
       pagination: { offset, limit, total, hasMore: offset + limit < total },
       callBudget: { districtsFetched: 1, monthsFetched: months.length },
-      apiError: failed && trades.length === 0,
+      apiError: !isBusanComplex && complexFailed && complexTradesLength === 0,
       partial: false,
     });
   } catch (error) {
