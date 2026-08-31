@@ -200,19 +200,33 @@ export default function AdminOpsPage() {
               </div>
               <div className={styles.kvGrid}>
                 <div className={styles.kv}>
-                  <span>최근 {d.cancellation.coverageLabel}({d.cancellation.lookbackMonths}개월) 취소검증</span>
+                  <span>
+                    {d.cancellation.window24m.evidenceType === 'SNAPSHOT'
+                      ? `완료된 24개월 전체 검증(${formatMonth(d.cancellation.window24m.startMonth)}~${formatMonth(d.cancellation.window24m.endMonth)})`
+                      : '24개월 전체 취소검증'}
+                  </span>
                   <b><StatusPill label={d.cancellation.window24m.verdict} /></b>
                 </div>
                 <div className={styles.kv}><span>전체 역사(2006년~) 취소검증</span><b><StatusPill label="미검증" /></b></div>
               </div>
               {d.cancellation.window24m.evidenceType === 'SNAPSHOT' ? (
                 <div className={styles.detailBox}>
-                  <div className={styles.detailRow}><span>마지막 전체 검증</span><b>{formatDateTime(d.cancellation.window24m.verifiedAt)}</b></div>
-                  <div className={styles.detailRow}><span>검증 범위</span><b>{formatMonth(d.cancellation.window24m.startMonth)} ~ {formatMonth(d.cancellation.window24m.endMonth)}</b></div>
-                  <div className={styles.detailRow}><span>완료 cell</span><b>{d.cancellation.window24m.complete} / {d.cancellation.window24m.cells}</b></div>
-                  <div className={styles.detailRow}><span>FAILED · INVALID</span><b>{d.cancellation.window24m.failed} · {d.cancellation.window24m.invalid}</b></div>
+                  <div className={styles.detailRow}><span>검증 결과</span><b>{d.cancellation.window24m.verdict}</b></div>
+                  <div className={styles.detailRow}><span>처리 완료</span><b>{d.cancellation.window24m.complete} / {d.cancellation.window24m.cells}</b></div>
+                  <div className={styles.detailRow}><span>EMPTY_VALID</span><b>{d.cancellation.window24m.emptyValid}</b></div>
+                  <div className={styles.detailRow}><span>FAILED</span><b className={d.cancellation.window24m.failed > 0 ? styles.badValue : ''}>{d.cancellation.window24m.failed}</b></div>
+                  <div className={styles.detailRow}><span>INVALID</span><b className={d.cancellation.window24m.invalid > 0 ? styles.badValue : ''}>{d.cancellation.window24m.invalid}</b></div>
+                  <div className={styles.detailRow}><span>충돌(conflicts)</span><b className={d.cancellation.window24m.conflicts > 0 ? styles.badValue : ''}>{d.cancellation.window24m.conflicts}</b></div>
+                  <div className={styles.detailRow}><span>false→true 교정 반영</span><b>{d.cancellation.window24m.correctedFalseToTrue ?? '기록 없음'}건</b></div>
                   <div className={styles.detailRow}><span>재검증 시 변경사항</span><b>{d.cancellation.window24m.idempotent ? '없음(멱등)' : '있음'}</b></div>
-                  <div className={styles.detailFooter}>이 검증은 「마지막 검증 Snapshot 기준」입니다 — 매 페이지 로드마다 재계산되지 않습니다.</div>
+                  <div className={styles.detailRow}><span>마지막 검증 시각</span><b>{formatDateTime(d.cancellation.window24m.verifiedAt)}</b></div>
+                  {d.cancellation.window24m.provenance && (
+                    <div className={styles.detailRow}>
+                      <span>근거 문서</span>
+                      <b>{d.cancellation.window24m.provenance.sourceDocument} ({d.cancellation.window24m.provenance.sourceCommit})</b>
+                    </div>
+                  )}
+                  <div className={styles.detailFooter}>이 결과는 「마지막 검증 Snapshot 기준」의 고정된 과거 검증 범위입니다 — 오늘 날짜에 맞춰 자동으로 갱신되지 않으며, 검증 범위 이후({formatMonth(d.cancellation.window24m.endMonth)} 이후) 발생한 거래·취소는 이 결과에 포함되지 않습니다.</div>
                 </div>
               ) : (
                 <div className={styles.detailBox}>

@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/auth-helpers';
 import { getOrSetCache } from '@/lib/server-cache';
 import { getSidoList, getSigunguListForSido } from '@/lib/region-utils';
 import { HISTORICAL_LOOKBACK_MONTHS, historicalCoverageLabel } from '@/lib/price-ranking';
-import { summarizeManifest, computeOverallHealth, OVERALL_STATUS_LABELS, type Manifest, type EvidenceType } from '@/lib/admin-ops-evidence';
+import { summarizeManifest, computeOverallHealth, computeCancellationVerdict, OVERALL_STATUS_LABELS, type Manifest, type EvidenceType } from '@/lib/admin-ops-evidence';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,8 +55,16 @@ interface Cancellation24mSnapshot {
   failed: number;
   invalid: number;
   conflicts: number;
+  correctedFalseToTrue?: number;
   idempotency: { verdict: boolean; note: string };
-  verdict: 'SAFE' | 'UNSAFE';
+  verdict: 'SAFE' | 'UNSAFE'; // 참고용 — API는 이 값을 그대로 신뢰하지 않고 원본 필드로 재계산한다(§7)
+  provenance?: {
+    sourceDocument: string;
+    sourceCommit: string;
+    verificationType: string;
+    generatedBy: string;
+    generatedAt: string;
+  };
 }
 
 function readCancellation24mSnapshot(): { status: 'ok'; data: Cancellation24mSnapshot } | { status: 'missing' } | { status: 'unreadable' } {
@@ -104,6 +112,22 @@ async function buildSummary() {
   const nationwideSummary = nationwideManifestResult.status === 'ok' ? summarizeManifest(nationwideManifestResult.manifest) : null;
 
   const cancellation24m = readCancellation24mSnapshot();
+  // §7 — snapshot 파일에 저장된 verdict 문자열을 그대로 신뢰하지 않는다. 파일이
+  // 손상/변조되거나 저장 당시 로직에 버그가 있어도 API 자신이 원본 필드에서
+  // 다시 계산해 걸러낸다(ADMIN_OPS_V1.2의 핵심 교훈 — 저장된 결론이 아니라 원본
+  // 사실을 근거로 삼는다).
+  const cancellation24mVerdict =
+    cancellation24m.status === 'ok'
+      ? computeCancellationVerdict({
+          cells: cancellation24m.data.cells,
+          complete: cancellation24m.data.complete,
+          emptyValid: cancellation24m.data.emptyValid,
+          failed: cancellation24m.data.failed,
+          invalid: cancellation24m.data.invalid,
+          conflicts: cancellation24m.data.conflicts,
+          idempotent: cancellation24m.data.idempotency.verdict,
+        })
+      : null;
 
   const regionModel = await buildNationwideRegionModel();
 
@@ -118,7 +142,7 @@ async function buildSummary() {
     nationwideInvalid: nationwideSummary?.invalid ?? 0,
     nationwideReviewRequired: nationwideSummary?.reviewRequired ?? 0,
     cancellation24mStatus: cancellation24m.status,
-    cancellation24mVerdict: cancellation24m.status === 'ok' ? cancellation24m.data.verdict : null,
+    cancellation24mVerdict,
     sejongInRegionModel: regionModel.sejongInRegionModel,
   });
   const allReasons = [...health.criticalReasons, ...health.warningReasons];
@@ -186,16 +210,20 @@ async function buildSummary() {
         cancellation24m.status === 'ok'
           ? {
               evidenceType: 'SNAPSHOT' as EvidenceType,
-              verdict: cancellation24m.data.verdict,
+              verdict: cancellation24mVerdict, // API가 원본 필드에서 재계산한 값(§7) — 저장된 문자열이 아님
               verifiedAt: cancellation24m.data.verifiedAt,
               startMonth: cancellation24m.data.startMonth,
               endMonth: cancellation24m.data.endMonth,
               cells: cancellation24m.data.cells,
               complete: cancellation24m.data.complete,
+              emptyValid: cancellation24m.data.emptyValid,
               failed: cancellation24m.data.failed,
               invalid: cancellation24m.data.invalid,
+              conflicts: cancellation24m.data.conflicts,
+              correctedFalseToTrue: cancellation24m.data.correctedFalseToTrue ?? null,
               idempotent: cancellation24m.data.idempotency.verdict,
               source: 'data/trade-history/cancellation-24m-verification-snapshot.json',
+              provenance: cancellation24m.data.provenance ?? null,
             }
           : {
               evidenceType: 'UNKNOWN' as EvidenceType,
@@ -205,10 +233,14 @@ async function buildSummary() {
               endMonth: null,
               cells: 0,
               complete: 0,
+              emptyValid: 0,
               failed: 0,
               invalid: 0,
+              conflicts: 0,
+              correctedFalseToTrue: null,
               idempotent: null,
               source: cancellation24m.status === 'missing' ? 'snapshot 파일 없음' : 'snapshot 파일 손상',
+              provenance: null,
             },
       allTime: {
         evidenceType: 'CONFIG' as EvidenceType,
@@ -233,7 +265,7 @@ export async function GET() {
   if (error) return NextResponse.json({ success: false, error }, { status });
 
   try {
-    const data = await getOrSetCache('admin-ops:summary-v1_1', CACHE_TTL_MS, buildSummary);
+    const data = await getOrSetCache('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary);
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('Failed to build admin ops summary:', error);

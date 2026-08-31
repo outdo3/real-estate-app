@@ -12339,3 +12339,94 @@ SECURITY_REGRESSION = 없음. PRODUCTION_WRITE = 0(READ만, duplicate
 실험 롤백 확인). DB_SCHEMA_CHANGE = 0. NEXT_STEP = TRADE_DB_FIRST_V1
 STEP G 또는 사용자 화면 개발 복귀, 혹은 `[lawdCd, dealCanceled]`
 인덱스 추가 검토(별도 schema 변경 승인 필요).**
+
+
+## 2026-09-01
+
+### STEP — ADMIN OPS V1.2: Cancellation Evidence Correction + Admin Query Performance Audit
+
+PM 검수에서 `ADMIN OPS V1.1`이 다시 PARTIAL — V1.1이 저장한 24개월
+cancellation snapshot(window `202410~202609`, COMPLETE 368+EMPTY_VALID
+16)이 이미 문서화된 실제 검증(`TRADE_CANCELLATION_RESYNC_V2`, window
+`202409~202608`, 384/384 COMPLETE, false→true 2,432건)과 불일치했기
+때문. 핵심 원칙: "검증했다고 기록된 범위"와 "오늘 기준 최근 N개월"은
+같지 않다 — SAFE는 실제 검증의 결과이지, 시간이 흐른다고 자동으로
+앞으로 미끄러지지 않는다.
+
+**근본 원인을 로그로 증명**: gitignore된 로컬 실행 로그
+(`scripts/_resync_cancellation_v2_results/*.log`)를 직접 대조해,
+V1.1의 `generate-cancellation-24m-snapshot.ts`가 인자 없이 실행될
+때마다 "현재 시점 기준 최근 24개월"을 매번 새로 계산해 window를
+덮어쓰는 rolling-window 버그였음을 확인(추측 아님). EMPTY_VALID=16은
+날조가 아니라 2026년 9월이 시작한 지 하루뿐이라 16개 구·군 전부 그
+달 거래가 정당하게 0건이었던 것.
+
+**구조적 수정**: `compute24mWindow(now)` 자동 계산을 완전히
+제거하고, `--from`/`--to`를 반드시 명시적으로 받도록 변경(기본값
+없음, 인자 없으면 즉시 에러) — 같은 버그 클래스가 재발할 수 없게
+함. 원래 검증 window(`202409~202608`)를 오늘 다시 read-only로
+재실행해 완전히 동일한 결과(384/384, FAILED 0, INVALID 0)를 얻어
+원 검증 이후 회귀가 없음을 독립적으로 재확인. `correctedFalseToTrue`
+(2,432건)는 dry-run 재실행으로 재발견 불가능한 값이라
+`--correctedFalseToTrueOverride`를 신설해 실제 APPLY 로그 근거와
+함께 명시적으로 보존. Snapshot에 `provenance`(근거 문서/커밋/검증
+유형) 필드 신규 추가.
+
+**SAFE 판정 로직 강화**: `computeCancellationVerdict()`에
+`cells === complete + emptyValid` 내부 일관성 체크 추가(FAILED/
+INVALID/conflicts가 전부 0이어도 데이터가 앞뒤 안 맞으면 SAFE
+차단). `route.ts`는 이제 snapshot에 저장된 `verdict` 문자열을
+그대로 신뢰하지 않고 매 요청마다 원본 필드에서 재계산 — 저장된
+값이 조작/오래된 로직으로 잘못 계산됐어도 API가 그대로 노출하지
+않음.
+
+**Admin Query Performance Audit**: `busanCanceled` 8.7초 쿼리를
+다시 EXPLAIN(Index Scan on lawd_cd + 비인덱스 deal_canceled Filter
+확인, V1.1과 동일 원인 재확인). Conditional Aggregate(`COUNT(*)
+FILTER`) 단일 쿼리를 기존 3-쿼리-병렬 방식과 실행 순서를 바꿔가며
+재측정한 결과, 최초 측정의 "병합이 더 느림"은 버퍼 캐시 편향이었고
+warm 상태에서는 두 방식이 사실상 동등함을 확인 — 근본 병목(인덱스
+부재)이 그대로라 route.ts의 기존 3-쿼리 구조를 유지하기로 결정.
+`INDEX_CHANGE_RECOMMENDED`로 `[lawdCd, dealCanceled]` 복합 인덱스를
+문서화(예상 개선/저장 비용/쓰기 비용/기존 인덱스 비중복 확인 포함,
+이번 STEP은 schema=0이라 실제 생성하지 않음).
+
+**UI 표현 수정**: `page.tsx`의 취소검증 라벨이 snapshot의 고정
+window 대신 `price-ranking.ts`의 범용 "최근 N개월" 상수를 재사용하고
+있던 것을 발견 — 오늘은 우연히 일치하지만 다음 달엔 같은 종류의
+착시가 재발할 수 있어, snapshot 자신의 고정 `startMonth`/`endMonth`를
+쓰도록 수정. `emptyValid`/`conflicts`/`correctedFalseToTrue`/
+`provenance` 신규 노출, "검증 범위 이후 거래는 포함 안 됨" 정직한
+disclaimer 추가(임의 freshness-WARNING 정책은 만들지 않음).
+
+**Tests**: `admin-ops-evidence.test.ts` 신규 4개(cell mismatch,
+conflicts>0, idempotent=false → UNSAFE, 정확한 합 → SAFE) — 파일
+전체 29개 전부 pass, 전체 test suite 240개(기존 236+신규 4) 전부
+pass.
+
+Regression: proxy.ts/requireAdmin() 무변경, 비로그인 401/307 그대로.
+Production QA: `buildSummary()` 직접 호출 결과/snapshot 파일/원본
+검증 로그 3자 대조 완전 일치. UI QA: 임시 미리보기 라우트(auth
+무변경)로 데스크톱+360/375/390 확인, overflow 없음.
+
+DB 변경: schema/migration 없음. INSERT/UPDATE/DELETE 0건(EXPLAIN
+2건+오늘자 read-only 재검증 1회만).
+
+상태: 완료.
+
+상세: `docs/development/ADMIN_OPS_V1_2_EVIDENCE_CORRECTION.md`
+
+**ADMIN_OPS_V1_2 = PASS. ROOT_CAUSE = rolling-window 자동 계산
+버그(로그로 증명, 추측 아님). SNAPSHOT_CORRECTION = 원래 검증
+window(202409~202608)로 교정+오늘자 독립 재검증으로 회귀 없음
+확인+provenance 필드 추가. SAFE_LOGIC = cell-mismatch 내부 일관성
+체크 신설+API가 저장된 verdict 대신 원본 필드에서 항상 재계산.
+PERFORMANCE_AUDIT = conditional aggregate 실측 결과 유의미한 이득
+없음(캐시 편향이었음, warm 상태 동등)→기존 3-쿼리 구조 유지.
+INDEX_RECOMMENDATION = `[lawdCd, dealCanceled]` 문서화만(생성 안 함,
+schema=0). UI = 라벨을 rolling 상수에서 snapshot 고정 window로
+전환+신규 필드 노출. TESTS = 신규 4개 전부 pass(총 240개).
+BUILD = PASS. LINT = clean. SECURITY_REGRESSION = 없음.
+PRODUCTION_WRITE = 0(READ만). DB_SCHEMA_CHANGE = 0. NEXT_STEP =
+`[lawdCd, dealCanceled]` 인덱스 추가 검토(schema 변경 승인 필요) 또는
+TRADE_DB_FIRST_V1 STEP G/사용자 화면 개발 복귀.**

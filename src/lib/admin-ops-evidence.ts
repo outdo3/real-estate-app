@@ -51,13 +51,30 @@ export function summarizeManifest(manifest: Manifest): ManifestSummary {
   return { cells: entries.length, regionsInScope: regions.size, complete, emptyValid, failed, invalid, rowsInserted, cancellationsUpdated, reviewRequired, lastSyncAt };
 }
 
-/** §6/§11 — cells가 0건(아무것도 검증되지 않음)이면 "완전 검증됨"이라고 볼 수
- * 없으므로 SAFE가 아니다(incomplete snapshot → SAFE 금지). FAILED/INVALID가
- * 하나라도 있으면 SAFE가 아니다. */
-export function computeCancellationVerdict(cells: number, failed: number, invalid: number): 'SAFE' | 'UNSAFE' {
-  if (cells <= 0) return 'UNSAFE';
-  if (failed > 0) return 'UNSAFE';
-  if (invalid > 0) return 'UNSAFE';
+export interface CancellationVerdictInput {
+  cells: number;
+  complete: number;
+  emptyValid: number;
+  failed: number;
+  invalid: number;
+  conflicts: number;
+  idempotent: boolean;
+}
+
+// ADMIN_OPS_V1.2 §7 — API는 snapshot 파일에 저장된 verdict 문자열을 그대로
+// 신뢰하지 않고, 매번 원본 필드에서 이 함수로 재계산한다(저장된 문자열이
+// 손상/변조돼도 걸러낸다). SAFE 조건: cells가 0건(아무것도 검증되지 않음)이면
+// SAFE 금지(incomplete snapshot). FAILED/INVALID/conflicts가 하나라도 있으면
+// SAFE 금지. idempotency가 확인되지 않았으면(재실행 시 변경이 발견됐다면)
+// SAFE 금지. cells != complete+emptyValid(내부 정합성 깨짐, 예: 파일 수기
+// 조작이나 버그)면 SAFE 금지.
+export function computeCancellationVerdict(input: CancellationVerdictInput): 'SAFE' | 'UNSAFE' {
+  if (input.cells <= 0) return 'UNSAFE';
+  if (input.failed > 0) return 'UNSAFE';
+  if (input.invalid > 0) return 'UNSAFE';
+  if (input.conflicts > 0) return 'UNSAFE';
+  if (!input.idempotent) return 'UNSAFE';
+  if (input.cells !== input.complete + input.emptyValid) return 'UNSAFE';
   return 'SAFE';
 }
 

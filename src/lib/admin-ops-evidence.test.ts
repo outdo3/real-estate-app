@@ -82,26 +82,53 @@ test('summarizeManifest: 빈 manifest는 전부 0/null이다', () => {
   assert.equal(s.lastSyncAt, null);
 });
 
-// ── computeCancellationVerdict — "incomplete/FAILED/INVALID → SAFE 금지" ──
+// ── computeCancellationVerdict — ADMIN_OPS_V1.2 §8: "실제 검증 기록과 일치하지
+// 않거나 incomplete/FAILED/INVALID/conflicts/non-idempotent → SAFE 금지" ──
 
-test('computeCancellationVerdict: 384/384 완료, FAILED/INVALID 0이면 SAFE', () => {
-  assert.equal(computeCancellationVerdict(384, 0, 0), 'SAFE');
+function verdictInput(overrides: Partial<Parameters<typeof computeCancellationVerdict>[0]> = {}) {
+  return { cells: 384, complete: 384, emptyValid: 0, failed: 0, invalid: 0, conflicts: 0, idempotent: true, ...overrides };
+}
+
+// §8 "실제 Snapshot" — TRADE_CANCELLATION_RESYNC_V2의 실제 검증 결과
+// (202409~202608, 384/384 COMPLETE, FAILED 0, INVALID 0)와 정확히 같은 형태.
+test('computeCancellationVerdict: 실제 검증 기록(384/384 완료, FAILED/INVALID 0)이면 SAFE', () => {
+  assert.equal(computeCancellationVerdict(verdictInput()), 'SAFE');
 });
 
 test('computeCancellationVerdict: cells=0(검증된 적 없음)이면 SAFE 금지', () => {
-  assert.equal(computeCancellationVerdict(0, 0, 0), 'UNSAFE');
+  assert.equal(computeCancellationVerdict(verdictInput({ cells: 0, complete: 0 })), 'UNSAFE');
 });
 
 test('computeCancellationVerdict: FAILED가 1건이라도 있으면 SAFE 금지', () => {
-  assert.equal(computeCancellationVerdict(384, 1, 0), 'UNSAFE');
+  assert.equal(computeCancellationVerdict(verdictInput({ failed: 1, complete: 383 })), 'UNSAFE');
 });
 
 test('computeCancellationVerdict: INVALID가 1건이라도 있으면 SAFE 금지', () => {
-  assert.equal(computeCancellationVerdict(384, 0, 1), 'UNSAFE');
+  assert.equal(computeCancellationVerdict(verdictInput({ invalid: 1, complete: 383 })), 'UNSAFE');
 });
 
 test('computeCancellationVerdict: FAILED와 INVALID가 둘 다 있어도 UNSAFE(중복 문제 아님)', () => {
-  assert.equal(computeCancellationVerdict(384, 2, 3), 'UNSAFE');
+  assert.equal(computeCancellationVerdict(verdictInput({ failed: 2, invalid: 3, complete: 379 })), 'UNSAFE');
+});
+
+// §8 "cell mismatch" — cells 합계가 complete+emptyValid와 다르면(내부 정합성
+// 깨짐 — 예: 파일 수기 조작, 계산 버그) SAFE 금지. 이 케이스 자체는 FAILED/
+// INVALID가 0이라도 막아야 한다("논리적으로 complete일 수 있지만 실제
+// verification record와 다르면 SAFE 금지").
+test('computeCancellationVerdict: cells != complete+emptyValid(내부 정합성 깨짐)면 SAFE 금지', () => {
+  assert.equal(computeCancellationVerdict(verdictInput({ cells: 384, complete: 368, emptyValid: 16 - 1 })), 'UNSAFE');
+});
+
+test('computeCancellationVerdict: conflicts가 1건이라도 있으면 SAFE 금지', () => {
+  assert.equal(computeCancellationVerdict(verdictInput({ conflicts: 1 })), 'UNSAFE');
+});
+
+test('computeCancellationVerdict: idempotent가 false이면(재검증 시 변경 발견) SAFE 금지', () => {
+  assert.equal(computeCancellationVerdict(verdictInput({ idempotent: false })), 'UNSAFE');
+});
+
+test('computeCancellationVerdict: EMPTY_VALID가 섞여 있어도 complete+emptyValid=cells면 정합성 통과', () => {
+  assert.equal(computeCancellationVerdict(verdictInput({ complete: 368, emptyValid: 16 })), 'SAFE');
 });
 
 // ── computeOverallHealth ────────────────────────────────────────────────────
