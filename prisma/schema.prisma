@@ -249,7 +249,7 @@ model ApartmentMaster {
   // parkingCount / totalHouseholds, totalHouseholds > 0일 때만 계산해 저장(추정치 아님 —
   // 이미 저장된 두 확정값의 단순 나눗셈). 매 응답마다 다시 계산하지 않도록 backfill 시점에
   // 함께 저장한다.
-  parkingPerHousehold Float? @map("parking_per_household")
+  parkingPerHousehold   Float? @map("parking_per_household")
 
   basicSpecSource BasicSpecSource @default(UNKNOWN) @map("basic_spec_source")
 
@@ -1191,4 +1191,85 @@ model ApartmentUnitType {
   @@unique([apartmentId, canonicalExclusiveArea, variantKey])
   @@index([apartmentId, canonicalExclusiveArea])
   @@map("apartment_unit_types")
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// TRADE_HISTORY_DATA_V1 — 아파트 매매 실거래 영구 이력. MOLIT RTMSDataSvcAptTradeDev
+// raw 필드를 그대로 보존한다(display 가공값을 truth로 저장하지 않음, RAW FIRST 원칙).
+// identity/area/그룹 판정은 이 STEP에서 새로 발명하지 않고 src/lib/regional-feed.ts가
+// 이미 확립해 라이브 통계 화면이 쓰고 있는 identityKey()/areaKey()/groupKey() 함수를
+// 그대로 호출해 계산한 값을 저장한다 — 나중에 통계 API를 DB-first로 전환할 때 정의가
+// 어긋나지 않도록 하기 위함(별도 STEP: TRADE_HISTORY_READ_MIGRATION_V1).
+//
+// UNIQUE KEY 설계 근거(§7 DUPLICATE AUDIT 실측, 2026-08-29, 부산 서구 26140 3개월
+// 250건 raw): 같은 (identity+area+dealType+dealAmount+dealDate+floor) 조합이 실제로
+// 2건씩 존재하는 사례가 243개 그룹 중 7개(2.9%) 확인됨 — MOLIT 응답에 거래 일련번호가
+// 없어 안전하게 구분할 다른 raw 필드가 없다. occurrenceIndex(같은 자연키 그룹 내 MOLIT
+// 응답 원본 등장 순서, 0부터)를 최후 discriminator로 추가해 두 행을 병합하지 않는다 —
+// 두 행은 이미 모든 관측 필드가 동일하므로, 재fetch마다 순서가 바뀌어도 저장값 자체는
+// 항상 정확하다(어느 슬롯이 어느 행인지 뒤바뀔 뿐 내용은 똑같음).
+//
+// dealAmount/dealDate/floor가 UNIQUE 키에 포함되므로, "가격/일자 정정"은 새 행으로
+// 나타난다(기존 행이 자동으로 갱신되지 않음) — 이는 실제 국토부 실거래가 정정 관행과
+// 일치한다: 정정은 원 신고를 해제(취소)하고 새 신고를 등록하는 방식으로 이뤄지므로,
+// dealCanceled/cancelDate/registryDate(자연키 밖의 필드)에 대한 upsert만으로 취소
+// 반영이 정확히 동작한다. 진짜 "같은 행의 가격만 조용히 수정"되는 사례는 관측되지
+// 않았다(KNOWN LIMITATION — 문서 참고).
+model ApartmentTradeHistory {
+  id Int @id @default(autoincrement())
+
+  source String @default("MOLIT_APT_TRADE") @map("source")
+
+  // MOLIT 조회 파라미터(raw) — 배치 추적/재실행용. dealYmd는 항상 dealYear/dealMonth와
+  // 같은 달이지만(MOLIT는 계약월 단위로만 조회 가능), 어느 fetch로 들어왔는지 감사하기
+  // 위해 그대로 보존한다.
+  lawdCd  String @map("lawd_cd")
+  dealYmd String @map("deal_ymd")
+
+  // Identity — regional-feed.ts의 identityKey()/areaKey()/groupKey()를 그대로 호출한
+  // 결과를 저장한다(별도 재구현 금지, 라이브 통계와 동일 정의 보장).
+  aptSeq      String? @map("apt_seq")
+  identityKey String  @map("identity_key") // aptSeq 있으면 "id:{aptSeq}", 없으면 "nd:{name}|{dong}"
+  dealType    String  @default("sale") @map("deal_type") // FeedTrade.dealType과 동일 값('sale'만 V1 범위)
+  groupKeyStr String  @map("group_key") // identityKey::areaKey::dealType
+
+  // Raw MOLIT 필드 — 가공 없이 그대로.
+  aptName String  @map("apt_name")
+  dong    String  @map("dong")
+  jibun   String? @map("jibun")
+
+  // 전용면적(㎡), raw 그대로(반올림/평형 변환 금지 — Unit Master protection 원칙과 동일).
+  exclusiveArea Decimal @map("exclusive_area")
+
+  dealAmount Int @map("deal_amount") // 만원 단위, 정수(float 금지)
+
+  dealYear  Int      @map("deal_year")
+  dealMonth Int      @map("deal_month")
+  dealDay   Int      @map("deal_day")
+  // 위 3개 raw 필드로부터 무손실 재구성한 날짜(범위 쿼리/인덱스 전용) — display 가공값이
+  // 아니라 동일한 원본 정수 3개를 합친 것뿐이므로 truth 원칙에 위배되지 않는다.
+  dealDate  DateTime @map("deal_date") @db.Date
+
+  floor     Int? @map("floor")
+  buildYear Int? @map("build_year")
+
+  dealCanceled Boolean @default(false) @map("deal_canceled")
+  cancelDate   String? @map("cancel_date") // raw 해제사유발생일(YYYYMMDD), 파싱 없이 원본 그대로
+  registryDate String? @map("registry_date") // raw 등기일자
+
+  // §6/§7 IDENTITY — 같은 자연키 내 MOLIT 응답 원본 등장 순서(0부터). 위 모델 주석 참고.
+  occurrenceIndex Int @default(0) @map("occurrence_index")
+
+  rawUid String? @map("raw_uid") // fetchMolitData()가 만든 합성 id — 디버그 추적용, identity 아님
+
+  sourceFetchedAt DateTime @default(now()) @map("source_fetched_at") // 이 row가 마지막으로 API 응답에서 확인된 시각(incremental sync용)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([groupKeyStr, dealAmount, dealDate, floor, occurrenceIndex], name: "trade_natural_key")
+  @@index([aptSeq, exclusiveArea, dealDate])
+  @@index([lawdCd, dealDate])
+  @@index([identityKey, dealDate])
+  @@index([dealDate])
+  @@map("apartment_trade_histories")
 }

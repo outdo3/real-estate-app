@@ -33,7 +33,7 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
 import { PrismaClient, BasicSpecSource } from '@prisma/client';
-import { parseBrTitleInfoRecord } from '../src/lib/apt-building-info';
+import { parseBrTitleInfoRecord, isNumberedBuildingUnit } from '../src/lib/apt-building-info';
 import { planField, calcParkingPerHousehold, type FieldPlan as SharedFieldPlan } from './backfill-basic-data-logic';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env'), quiet: true });
@@ -190,7 +190,7 @@ async function fetchGeneralTitle(sggCd: string, umdCd: string, jibun: string): P
 }
 
 interface TitleFallbackResult {
-  status: 'success' | 'not_found' | 'multiple_review' | 'failed_retryable';
+  status: 'success' | 'not_found' | 'multiple_review' | 'building_unit_review' | 'failed_retryable';
   info: ReturnType<typeof parseBrTitleInfoRecord> | null;
 }
 
@@ -219,6 +219,10 @@ async function fetchTitleFallbackOnce(sggCd: string, umdCd: string, jibun: strin
   const arr = Array.isArray(items) ? items : (items ? [items] : []);
   if (arr.length === 0) return { status: 'not_found', info: null };
   if (arr.length > 1) return { status: 'multiple_review', info: null }; // 안전조건: 자동 대표값 선택 금지
+  // MASTER_HOUSEHOLD_VERIFICATION_V1 안전조건: 지번에 표제부가 1건뿐이어도, dongNm이
+  // "103동"처럼 구체적 건물번호면 다동 복합단지 중 하나일 위험이 있어 사람 검토로 돌린다
+  // (src/lib/apt-building-info.ts의 isNumberedBuildingUnit 주석 — 실측 근거 동일).
+  if (isNumberedBuildingUnit(arr[0]?.dongNm)) return { status: 'building_unit_review', info: null };
   return { status: 'success', info: parseBrTitleInfoRecord(arr[0]) };
 }
 
@@ -289,6 +293,9 @@ async function processRow(row: {
     }
     if (title.status === 'multiple_review') {
       return { outcome: 'REVIEW', source: null, plans: [], note: '표제부 2건 이상 — 자동 대표값 선택 금지' };
+    }
+    if (title.status === 'building_unit_review') {
+      return { outcome: 'REVIEW', source: null, plans: [], note: '표제부 1건이지만 dongNm이 구체적 건물번호(예: "103동") — 다동 복합단지의 일부일 위험, 자동 채택 금지(MASTER_HOUSEHOLD_VERIFICATION_V1)' };
     }
     if (title.status === 'not_found' || !title.info) {
       return { outcome: 'NO_SOURCE', source: null, plans: [], note: '총괄표제부/표제부 모두 레코드 없음' };

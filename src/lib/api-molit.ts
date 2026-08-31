@@ -25,6 +25,23 @@ export const formatKoreanPrice = (val: string | number) => {
   return `${num.toLocaleString('ko-KR')}만`;
 };
 
+// RTMSDataSvcAptTradeDev(매매 상세) 응답에만 존재하는 실제 필드. 등기일자가 채워져 있으면
+// 등기 완료, 해제여부가 'O'면 계약 해제(취소) 건으로 판단한다 — 추정치가 아닌 원본 데이터.
+// TRADE_CANCELLATION_AUDIT_V1(2026-08-30): 문서상 한글 필드명(등기일자/해제여부/해제사유발생일)을
+// 써왔으나, 실제 live 응답은 영문 필드명(rgstDate/cdealType/cdealDay)만 내려온다는 것을
+// 실측으로 확인했다(부산 3개구 x 최근 12개월, 13,716건 스캔, cdealType='O' 786건/13716건
+// 관측 — 기존 한글 필드명 매칭은 항상 실패해 dealCanceled가 늘 false로 저장되고 있었다).
+// 두 이름 다 매칭하도록 남겨 향후 응답 스키마가 한글로 바뀌어도 깨지지 않게 한다.
+// cancelDate(cdealDay)는 관측된 실제 포맷이 "YY.MM.DD"(예: "26.08.04")로, 모델 주석이
+// 가정한 YYYYMMDD와 다르다 — 파싱하지 않고 원본 그대로 저장하므로 이 차이가 저장값에
+// 영향을 주지는 않지만, 소비하는 코드가 있다면 포맷을 가정하지 말 것.
+export function parseCancellationFields(item: any): { registryDate: string; dealCanceled: boolean; cancelDate: string } {
+  const registryDate = (item.등기일자 || item.rgstDate || '').toString().trim();
+  const dealCanceled = (item.해제여부 || item.cdealType || '').toString().trim() === 'O';
+  const cancelDate = (item.해제사유발생일 || item.cdealDay || '').toString().trim();
+  return { registryDate, dealCanceled, cancelDate };
+}
+
 export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
   try {
     if (!API_KEY) {
@@ -137,11 +154,7 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
       const dong = (item.법정동 || item.umdNm || '').toString().trim();
       const buildYear = (item.건축년도 || item.buildYear || '').toString().trim();
       const jibun = (item.지번 || item.jibun || '').toString().trim();
-      // RTMSDataSvcAptTradeDev(매매 상세) 응답에만 존재하는 실제 필드. 등기일자가 채워져 있으면
-      // 등기 완료로, 해제여부가 'O'면 계약 해제(취소) 건으로 판단한다 — 추정치가 아닌 원본 데이터.
-      const registryDate = (item.등기일자 || '').toString().trim();
-      const dealCanceled = (item.해제여부 || '').toString().trim() === 'O';
-      const cancelDate = (item.해제사유발생일 || '').toString().trim();
+      const { registryDate, dealCanceled, cancelDate } = parseCancellationFields(item);
 
       return {
         id: `${type}-${lawdCd}-${dealYmd}-${index}`,

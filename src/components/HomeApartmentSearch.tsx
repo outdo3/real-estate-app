@@ -40,14 +40,14 @@ export default function HomeApartmentSearch() {
     // It's an APARTMENT
     if (result.lawdCd && result.dong) {
       setVerifying(true);
+      const aptSeqParam = result.aptSeq ? `&aptSeq=${encodeURIComponent(result.aptSeq)}` : '';
       fetch(
-        `/api/apt/${encodeURIComponent(result.name)}?type=apt&period=12&lawdCd=${encodeURIComponent(result.lawdCd)}&dong=${encodeURIComponent(result.dong)}`
+        `/api/apt/${encodeURIComponent(result.name)}/verify?dong=${encodeURIComponent(result.dong)}${aptSeqParam}`
       )
         .then(res => res.json())
-        .then(data => {
-          const hasTrades = Array.isArray(data.trades) && data.trades.length > 0;
+        .then((data: { hasTrades: boolean; hasUnitTypes: boolean }) => {
           setVerifying(false);
-          if (hasTrades || data.unitTypes?.length > 0) { // Check if we have data or units
+          if (data.hasTrades || data.hasUnitTypes) {
             navigateToApt(result.name, result.lawdCd!, result.dong!);
           } else {
             setConnectFailed(result.name);

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { FileText, Building2 } from 'lucide-react';
 import Header from '@/components/Header';
 import RedevelopmentListSection from './RedevelopmentListSection';
-import Empty from '@/components/ui/Empty';
+import { PresaleListSection } from '@/app/presales/presales-client';
 import styles from './redevelopment.module.css';
 
 // [DESIGN SYSTEM 3 §22] 이 파일을 이번 STEP에서 직접 손대는 김에 탭 emoji를
@@ -38,12 +38,7 @@ export default function RedevelopmentClient() {
         </div>
 
         {activeTab === 'sale' ? (
-          <Empty
-            variant="notReady"
-            title="분양·청약 정보 연동 준비 중입니다."
-            description="청약홈 등 공공데이터 연동이 완료되는 대로 지역별 분양 일정과 경쟁률을 제공할 예정입니다."
-            action={{ label: '분양정보 전체 보기', href: '/presales' }}
-          />
+          <PresaleListSection />
         ) : (
           <RedevelopmentListSection />
         )}

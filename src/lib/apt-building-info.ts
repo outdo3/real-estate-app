@@ -7,6 +7,24 @@ export interface BuildingRegistryInfo {
   approvalDate: string | null; // 사용승인일, "YYYY년" 형태
 }
 
+// MASTER_HOUSEHOLD_VERIFICATION_V1 — 표제부(getBrTitleInfo) 응답이 그 지번에서 정확히
+// 1건이어도, 그 1건이 다동 복합단지 중 특정 건물 하나만 가리키는 경우가 실측으로
+// 확인됐다(BUSAN_APARTMENT_MASTER_DATA_INTEGRITY_V1 — aptSeq=26350-2 "경동": 총괄표제부
+// 0건, 표제부 1건("dongNm=103동", hhldCnt=72)이 그대로 단지 전체값으로 저장돼 실제
+// 892세대/8개동 복합단지의 세대수가 72로 왜곡됨). 이번 STEP에서 같은
+// basicSpecSource=BUILDINGHUB_TITLE로 채워진 부산 전체 outlier 30건을 재조회한 결과
+// 27건이 "숫자+동"/"제N동" 형태의 구체적 건물번호 dongNm을 갖고 있어 동일 패턴임을
+// 확인했다 — 반면 실제 단일 건물 단지 3건(일광/일루스타/성우이린타워)은 전부 dongNm이
+// 공백이었다. dongNm이 특정 건물번호를 가리키면(예: "103동", "6동", "제108동") 그
+// 지번에 표제부가 1건뿐이어도 단지 전체값으로 신뢰하지 않는다 — dongNm이 공백이면
+// (진짜 단일 건물 단지의 정상 패턴) 기존처럼 신뢰한다.
+const NUMBERED_BUILDING_UNIT_PATTERN = /^제?\d+동$/;
+
+export function isNumberedBuildingUnit(dongNm: unknown): boolean {
+  if (typeof dongNm !== 'string') return false;
+  return NUMBERED_BUILDING_UNIT_PATTERN.test(dongNm.trim());
+}
+
 // getBrTitleInfo(표제부, 건물 1건 단위) 응답에서 단일 레코드를 BuildingRegistryInfo로
 // 변환한다. 총괄표제부(getBrRecapTitleInfo) fallback 전용 — 호출부(fetchBuildingRegistryInfo)가
 // "이 지번에 표제부가 정확히 1건뿐일 때만" 호출하므로, 여기서 다루는 값은 항상 "그 단지의
@@ -70,6 +88,9 @@ async function fetchBrTitleInfoFallback(
   if (!items) return null;
   const itemsArr = Array.isArray(items) ? items : [items];
   if (itemsArr.length !== 1) return null; // 안전조건: 정확히 1건일 때만 신뢰
+  // MASTER_HOUSEHOLD_VERIFICATION_V1 안전조건: 그 1건이 다동 복합단지의 특정 건물이면
+  // (dongNm이 "103동"처럼 구체적 건물번호) 단지 전체값으로 신뢰하지 않는다(위 주석 참고).
+  if (isNumberedBuildingUnit(itemsArr[0]?.dongNm)) return null;
 
   return parseBrTitleInfoRecord(itemsArr[0]);
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseBrTitleInfoRecord } from './apt-building-info.ts';
+import { parseBrTitleInfoRecord, isNumberedBuildingUnit } from './apt-building-info.ts';
 
 // 실측 원본(연산동한솔솔파크, APARTMENT_BASIC_DATA_COVERAGE_AUDIT_V1 §5) 기반.
 const realRecord = {
@@ -70,4 +70,34 @@ test('useAprDay 형식이 8자리 숫자가 아니면 준공년도를 추출하�
 
 test('레코드 자체가 null이면 null을 반환한다', () => {
   assert.equal(parseBrTitleInfoRecord(null), null);
+});
+
+// MASTER_HOUSEHOLD_VERIFICATION_V1 §13/§19 — isNumberedBuildingUnit 가드 테스트.
+// 실측 fixture(BUSAN_APARTMENT_MASTER_DATA_INTEGRITY_V1 재검증, 부산 outlier 30건)
+// 기반: 경동(aptSeq 26350-2) 등 27건이 "숫자+동"/"제N동" dongNm을 가졌고, 실제 단일
+// 건물 단지 3건(일광/일루스타/성우이린타워)은 전부 dongNm이 공백이었다.
+
+// A. single-building register row cannot become complex total without proof
+test('A: "103동"처럼 구체적 건물번호 dongNm은 단지 전체값으로 신뢰하지 않는다(true)', () => {
+  assert.equal(isNumberedBuildingUnit('103동'), true); // 실측: 경동(aptSeq 26350-2)
+  assert.equal(isNumberedBuildingUnit('6동'), true); // 실측: 삼호가든맨션
+  assert.equal(isNumberedBuildingUnit('제108동'), true); // 실측: 대림
+});
+
+// B. verified(=단일 건물임이 확인된) 값은 그대로 accepted
+test('B: dongNm이 공백이면(진짜 단일 건물 단지) 신뢰 가능한 신호로 유지한다(false)', () => {
+  assert.equal(isNumberedBuildingUnit(''), false);
+  assert.equal(isNumberedBuildingUnit(' '), false); // 실측: 일광/일루스타/성우이린타워
+});
+
+// C. multi-building uncertain(패턴에 안 걸리는 애매한 경우)은 이 좁은 가드가 못 잡음을
+// 명시적으로 문서화 — 향후 개선 여지, 알려진 한계(§25).
+test('C: 숫자+동 패턴이 아닌 비정형 dongNm(애매한 경우)은 이 가드로 잡지 못한다(알려진 한계)', () => {
+  assert.equal(isNumberedBuildingUnit('범일역 삼정그린코아 더 시티'), false); // 실측: 단지명이 그대로 dongNm에 들어간 사례
+});
+
+test('dongNm이 문자열이 아니거나 undefined/null이면 false를 반환한다', () => {
+  assert.equal(isNumberedBuildingUnit(undefined), false);
+  assert.equal(isNumberedBuildingUnit(null), false);
+  assert.equal(isNumberedBuildingUnit(123), false);
 });

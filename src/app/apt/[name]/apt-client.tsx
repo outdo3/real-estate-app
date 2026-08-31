@@ -850,7 +850,16 @@ export default function ApartmentDetail() {
                     <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>
                       📍 {heroRegionLabel} {firstTrade?.jibun || ''}
                     </span>
-                    {heroMetaLine && <span style={{ flexShrink: 0 }}>· {heroMetaLine.split('세대')[0]}세대</span>}
+                    {/* MASTER_MISSING_REPAIR_V1 — heroHouseholds가 없으면(신규 Master row는
+                        secondary metadata를 의도적으로 비워둠) heroMetaLine엔 "준공" 문구만
+                        남는데, 기존 코드는 "세대"가 있다고 가정하고 무조건 잘라붙여
+                        "...준공세대"로 깨져 보였다. heroHouseholds가 있을 때만 정규화(어떤
+                        형태로 오든 "세대" 접미사 정확히 1번) 로직을 적용한다. */}
+                    {heroMetaLine && (
+                      <span style={{ flexShrink: 0 }}>
+                        · {heroHouseholds ? `${heroMetaLine.split('세대')[0]}세대` : heroMetaLine}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, marginTop: '0.2rem' }}>
