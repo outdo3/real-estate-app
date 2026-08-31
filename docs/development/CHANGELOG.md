@@ -12174,3 +12174,82 @@ PRODUCTION_QA_WRITE_RECOMMENDED = 아니오(dry-run으로 correctness
 충분히 증명됨, 필요시 사용자 요청 시 별도 진행 가능).
 STEP_F_FINAL_VERDICT: engine=PASS, region coverage=PASS(17/17),
 identity safety=PASS. NEXT_STEP = ADMIN OPS V1.**
+
+## 2026-09-01
+
+### STEP — ADMIN OPS V1: 데이터 운영 관리자 콘솔
+
+관리자가 30초 안에 "지금 이집 데이터를 사용자가 믿고 봐도 되는가"를
+판단할 수 있는 read-only 관찰/진단 화면. Production write 0건(강제
+sync/재수집/DB 수정/삭제 버튼 없음).
+
+**Auth — 신규 체계 없음**: 전수 감사 결과 이미 2단 admin 보호 체계가
+존재했다 — UI는 `src/proxy.ts`(matcher `/admin/:path*`, role 또는
+ADMIN_EMAIL 확인, 비관리자 `/`로 redirect)가 모든 `/admin` 하위
+경로를 자동 보호하고, API는 `src/lib/auth-helpers.ts`의
+`requireAdmin()`을 기존 admin 라우트 4개가 이미 공유 중이었다. 새
+auth 코드를 한 줄도 추가하지 않고 이 두 체계를 그대로 재사용했다.
+
+`src/app/api/admin/ops/route.ts` 신규(단일 GET, `requireAdmin()` 가드,
+5분 캐시). `src/app/admin/ops/page.tsx`+CSS 신규(기존 admin
+dashboard와 동일 패턴/디자인 토큰 재사용). `src/app/my/page.tsx`에
+"데이터 운영 센터" 링크 1줄 추가.
+
+**성능**: 무스코프 COUNT(*)는 실측 5~9초(855,047 rows) — 개별 쿼리
+최적화 대신 응답 전체를 5분 캐시해 구조적으로 해결. 표시 지표는
+부산 스코프로만 계산(빠르고 실제로 의미 있는 지역). 자연키 중복은
+라이브 재계산하지 않고 `trade_natural_key` DB unique constraint가
+구조적으로 보장하는 "0"을 근거와 함께 표시(추정 아님, 스키마가
+증명하는 사실).
+
+**정직성 설계**: 전국 시도/sync-target 수는 `getSidoList()`/
+`getSigunguListForSido()` 실시간 조회(하드코딩 아님). "전국 sync
+engine 준비 완료"와 "전국 DB 실데이터 적재 완료"를 명시적으로
+분리(엔진 coverage ≠ 데이터 coverage 오해 방지). 세종은 region
+model(정상) vs 실거래 DB 적재(미수집) 두 층위로 구분 표시. 24개월
+cancellation SAFE는 "문서 기준"임을 명시(384-cell 전체 재검증은
+dry-run이라 파일로 영속화되지 않아 매 요청 재계산 불가) — older
+window manifest(FAILED/INVALID)만 라이브 재확인. 역대(all-time)는
+상수 NOT_VERIFIED로 "역대" 표현 금지를 화면에서도 명확히 구분.
+
+**QA**: 보안 계층부터 실측 — 비로그인 API 401, 비로그인 UI 307
+redirect(proxy.ts 정상 동작), 기존 admin dashboard/users API 401
+그대로(회귀 없음). 데이터값은 `buildSummary()`를 임시 export해(auth
+코드 무변경 확인 후 원복) 직접 호출, §38 known facts 전부와 대조해
+전항목 일치 확인(부산 16/16, 전국 17시도/262 sync-target, 24M
+SAFE, all-time NOT_VERIFIED, aptSeq missing 0, dup 0, scheduler OFF,
+6개 기능 전부 DB-FIRST). UI는 `/admin` 밖 임시 미리보기 라우트(auth
+무변경, 실캡처 데이터 하드코딩)로 시각 QA 후 즉시 삭제 — iframe
+격리 기법(360/375/390 동시 렌더링, `resize_window` 이 세션에서
+계속 비정상)으로 실제 버그 1건 발견+수정: 고정 하단 네비가 콘텐츠를
+가림(`padding-bottom` 부족) — 동일 네비를 쓰는 형제 페이지가 이미
+검증해 둔 `7rem` 값을 그대로 적용해 해결(새 값 추측 아님).
+
+DB 변경: schema/migration 없음. READ만, INSERT/UPDATE/DELETE 0건.
+
+이 프로젝트의 `src/app/api/**` 라우트는 단 하나도 전용 테스트 파일이
+없음을 확인(기존 관례) — 이번 STEP도 라이브 QA로 검증, 신규
+자동화 테스트 미추가. 기존 scripts/src 테스트(32+211개) 전부 pass
+(변경 없음 확인). `npx tsc --noEmit` 신규 오류 0(기존 20건 유지).
+`npx eslint` clean. `npm run build` PASS(`/admin/ops`,
+`/api/admin/ops` 둘 다 빌드 결과 포함 확인).
+
+상태: 완료.
+
+상세: `docs/development/ADMIN_OPS_V1.md`
+
+**ADMIN_OPS_V1 = PASS. AUTH = 신규 체계 0(기존 proxy.ts matcher +
+requireAdmin() 100% 재사용, UI+API 이중 보호 확인). SECURITY_QA =
+비로그인 401/307 확인, 기존 admin 라우트 회귀 없음. DATA_ACCURACY =
+buildSummary() 직접 검증, known facts 전항목 일치(Busan 16,
+sido 17, sync-target 262, 24M SAFE, all-time NOT_VERIFIED, aptSeq
+missing 0, dup 0 스키마 근거, scheduler OFF, feature 6/6 DB-FIRST).
+PERFORMANCE = 5분 캐시로 warm 즉시 응답(무스코프 쿼리 5~9초 문제
+구조적 해결). UI_BUG_FOUND_AND_FIXED = 하단 네비 오버랩(padding-bottom
+3rem→7rem, 형제 페이지 기존 검증값 재사용). RESPONSIVE = 360/375/390
+overflow 없음(iframe 격리 기법). REGRESSION = 없음(기존 admin
+라우트/일반 페이지 전부 정상). TESTS = 신규 라우트 테스트 없음(이
+프로젝트 전체 관례와 일치, 라이브 QA로 대체) — 기존 243개(scripts
+32+src 211) 전부 pass. BUILD = PASS. PRODUCTION_WRITE = 0.
+DB_SCHEMA_CHANGE = 0. NEXT_STEP = TRADE_DB_FIRST_V1 STEP G(Cache/
+Preaggregation 정리) 또는 사용자 화면 개발 복귀.**
