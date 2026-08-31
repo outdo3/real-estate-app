@@ -38,6 +38,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 import { PrismaClient, Prisma } from '@prisma/client';
 import { fetchOneRegionMonth, monthsInRange, makeLogger } from './backfill-trade-history';
 import { normalizeMolitItemsToTradeRows, type TradeRowInput } from './trade-history-logic';
+import { classifyRow } from './write-policy-logic';
 
 export const prisma = new PrismaClient();
 
@@ -60,6 +61,7 @@ interface CellEntry {
   updateFalseToTrue: number;
   updateTrueToFalseSkipped: number;
   conflicts: number;
+  reviewRequired: number;
   at: string;
 }
 type ResyncManifest = Record<string, CellEntry>; // key = `${lawdCd}:${dealYmd}`
@@ -106,7 +108,7 @@ function parseArgs() {
 const CHUNK_SIZE = 500;
 
 interface RowClassification {
-  kind: 'noop' | 'insert' | 'updateFalseToTrue' | 'updateTrueToFalseSkipped' | 'conflict';
+  kind: 'noop' | 'insert' | 'updateFalseToTrue' | 'updateTrueToFalseSkipped' | 'conflict' | 'reviewRequired';
   fresh: TradeRowInput;
   existingId?: number;
 }
@@ -120,7 +122,7 @@ async function classifyAndWrite(
   dealYmd: string,
   freshRows: TradeRowInput[],
   apply: boolean
-): Promise<{ insertCount: number; updateFalseToTrue: number; updateTrueToFalseSkipped: number; conflicts: number }> {
+): Promise<{ insertCount: number; updateFalseToTrue: number; updateTrueToFalseSkipped: number; conflicts: number; reviewRequired: number }> {
   const existing = await prisma.apartmentTradeHistory.findMany({
     where: { lawdCd, dealYmd },
     select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, aptName: true, dong: true },
@@ -132,34 +134,23 @@ async function classifyAndWrite(
     existingMap.set(key, e);
   }
 
-  const classified: RowClassification[] = [];
-  for (const fresh of freshRows) {
-    const key = naturalKeyStr(fresh);
-    const match = existingMap.get(key);
-    if (!match) {
-      classified.push({ kind: 'insert', fresh });
-      continue;
-    }
-    // §10 — 같은 자연키인데 aptName/dong이 다르면 occurrence 순서가 fetch마다 달라져
-    // 서로 다른 실제 거래를 잘못 매칭했을 가능성 — 건드리지 않는다.
-    if (match.aptName !== fresh.aptName || match.dong !== fresh.dong) {
-      classified.push({ kind: 'conflict', fresh, existingId: match.id });
-      continue;
-    }
-    if (match.dealCanceled === fresh.dealCanceled) {
-      classified.push({ kind: 'noop', fresh, existingId: match.id });
-    } else if (!match.dealCanceled && fresh.dealCanceled) {
-      classified.push({ kind: 'updateFalseToTrue', fresh, existingId: match.id });
-    } else {
-      // match.dealCanceled === true && fresh.dealCanceled === false — §14 가드, 절대 되돌리지 않음.
-      classified.push({ kind: 'updateTrueToFalseSkipped', fresh, existingId: match.id });
-    }
-  }
+  // §11/§12/§14 결정 로직은 write-policy-logic.ts의 순수 함수 classifyRow()로
+  // 분리했다(테스트 가능 — resync-cancellation-v2.ts 자체는 DB I/O 때문에
+  // 순수하지 않음). aptSeq 없는 새 row를 name+dong fallback만으로 canonical
+  // apartment identity에 편입시키지 않는다는 §11/§12 가드가 이 함수 안에 있다
+  // (부산 서구 등 7개 지역 654건 실측 aptSeq missing=0%로, 기존 부산 데이터
+  // 동작에는 영향 없음을 확인했다 — §12 STOP 조건 미해당).
+  const classified: RowClassification[] = freshRows.map((fresh) => {
+    const match = existingMap.get(naturalKeyStr(fresh));
+    const kind = classifyRow(fresh, match);
+    return { kind, fresh, existingId: match?.id };
+  });
 
   const inserts = classified.filter((c) => c.kind === 'insert');
   const flips = classified.filter((c) => c.kind === 'updateFalseToTrue');
   const skipped = classified.filter((c) => c.kind === 'updateTrueToFalseSkipped');
   const conflicts = classified.filter((c) => c.kind === 'conflict');
+  const reviewRequired = classified.filter((c) => c.kind === 'reviewRequired');
 
   if (apply) {
     // §17 — small batch(CHUNK_SIZE), region-month 단위가 이미 자연스러운 batch 경계.
@@ -214,7 +205,7 @@ async function classifyAndWrite(
     }
   }
 
-  return { insertCount: inserts.length, updateFalseToTrue: flips.length, updateTrueToFalseSkipped: skipped.length, conflicts: conflicts.length };
+  return { insertCount: inserts.length, updateFalseToTrue: flips.length, updateTrueToFalseSkipped: skipped.length, conflicts: conflicts.length, reviewRequired: reviewRequired.length };
 }
 
 async function main() {
@@ -243,6 +234,7 @@ async function main() {
   let totalFlip = 0;
   let totalSkippedTrueToFalse = 0;
   let totalConflicts = 0;
+  let totalReviewRequired = 0;
   let cellComplete = 0;
   let cellEmptyValid = 0;
   let cellFailed = 0;
@@ -256,7 +248,7 @@ async function main() {
     const result = await fetchOneRegionMonth(t.lawdCd, t.dealYmd);
 
     if (result.failed) {
-      manifest[key] = { status: 'FAILED', fetched: 0, invalidRows: 0, insertCount: 0, updateFalseToTrue: 0, updateTrueToFalseSkipped: 0, conflicts: 0, at: new Date().toISOString() };
+      manifest[key] = { status: 'FAILED', fetched: 0, invalidRows: 0, insertCount: 0, updateFalseToTrue: 0, updateTrueToFalseSkipped: 0, conflicts: 0, reviewRequired: 0, at: new Date().toISOString() };
       cellFailed++;
       log(`FAILED ${key}`);
     } else {
@@ -265,20 +257,21 @@ async function main() {
       totalInvalidRows += invalid.length;
 
       if (rows.length === 0) {
-        manifest[key] = { status: 'EMPTY_VALID', fetched: result.items.length, invalidRows: invalid.length, insertCount: 0, updateFalseToTrue: 0, updateTrueToFalseSkipped: 0, conflicts: 0, at: new Date().toISOString() };
+        manifest[key] = { status: 'EMPTY_VALID', fetched: result.items.length, invalidRows: invalid.length, insertCount: 0, updateFalseToTrue: 0, updateTrueToFalseSkipped: 0, conflicts: 0, reviewRequired: 0, at: new Date().toISOString() };
         cellEmptyValid++;
       } else {
-        const { insertCount, updateFalseToTrue, updateTrueToFalseSkipped, conflicts } = await classifyAndWrite(t.lawdCd, t.dealYmd, rows, opts.apply);
+        const { insertCount, updateFalseToTrue, updateTrueToFalseSkipped, conflicts, reviewRequired } = await classifyAndWrite(t.lawdCd, t.dealYmd, rows, opts.apply);
         totalInsert += insertCount;
         totalFlip += updateFalseToTrue;
         totalSkippedTrueToFalse += updateTrueToFalseSkipped;
         totalConflicts += conflicts;
+        totalReviewRequired += reviewRequired;
         // §7-INVALID(cell-level) — 자연키 매칭 자체가 모호한 conflict가 있으면 이 cell은
         // 완전한 SAFE 판정 대상이 아니다(개별 row invalid는 §8 원칙대로 별도 카운트만).
         const status: CellStatus = conflicts > 0 ? 'INVALID' : 'COMPLETE';
         if (status === 'INVALID') cellInvalid++;
         else cellComplete++;
-        manifest[key] = { status, fetched: result.items.length, invalidRows: invalid.length, insertCount, updateFalseToTrue, updateTrueToFalseSkipped, conflicts, at: new Date().toISOString() };
+        manifest[key] = { status, fetched: result.items.length, invalidRows: invalid.length, insertCount, updateFalseToTrue, updateTrueToFalseSkipped, conflicts, reviewRequired, at: new Date().toISOString() };
       }
     }
 
@@ -286,7 +279,7 @@ async function main() {
     if ((i + 1) % LOG_EVERY === 0 || i === allTasks.length - 1) {
       const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
       log(
-        `PROGRESS ${i + 1}/${allTasks.length} fetched=${totalFetched} invalidRows=${totalInvalidRows} insert=${totalInsert} flipFalseToTrue=${totalFlip} skippedTrueToFalse=${totalSkippedTrueToFalse} conflicts=${totalConflicts} COMPLETE=${cellComplete} EMPTY_VALID=${cellEmptyValid} FAILED=${cellFailed} INVALID=${cellInvalid} elapsed=${elapsedSec}s`
+        `PROGRESS ${i + 1}/${allTasks.length} fetched=${totalFetched} invalidRows=${totalInvalidRows} insert=${totalInsert} flipFalseToTrue=${totalFlip} skippedTrueToFalse=${totalSkippedTrueToFalse} conflicts=${totalConflicts} reviewRequired=${totalReviewRequired} COMPLETE=${cellComplete} EMPTY_VALID=${cellEmptyValid} FAILED=${cellFailed} INVALID=${cellInvalid} elapsed=${elapsedSec}s`
       );
     }
   }
@@ -296,7 +289,7 @@ async function main() {
   const safe = cellFailed === 0 && cellInvalid === 0;
   log(
     `DONE mode=${opts.apply ? 'APPLY' : 'DRY_RUN'} cells=${allTasks.length} COMPLETE=${cellComplete} EMPTY_VALID=${cellEmptyValid} FAILED=${cellFailed} INVALID=${cellInvalid} ` +
-      `insert=${totalInsert} flipFalseToTrue=${totalFlip} skippedTrueToFalse=${totalSkippedTrueToFalse} conflicts=${totalConflicts} SAFE_GATE=${safe} elapsedSec=${((Date.now() - startedAt) / 1000).toFixed(1)}`
+      `insert=${totalInsert} flipFalseToTrue=${totalFlip} skippedTrueToFalse=${totalSkippedTrueToFalse} conflicts=${totalConflicts} reviewRequired=${totalReviewRequired} SAFE_GATE=${safe} elapsedSec=${((Date.now() - startedAt) / 1000).toFixed(1)}`
   );
 
   return {
@@ -311,6 +304,7 @@ async function main() {
     totalFlip,
     totalSkippedTrueToFalse,
     totalConflicts,
+    totalReviewRequired,
     safe,
   };
 }

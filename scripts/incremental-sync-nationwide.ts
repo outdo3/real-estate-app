@@ -134,6 +134,7 @@ async function main() {
   let totalFlip = 0;
   let totalSkippedTrueToFalse = 0;
   let totalConflicts = 0;
+  let totalReviewRequired = 0;
   let cellComplete = 0;
   let cellEmptyValid = 0;
   let cellFailed = 0;
@@ -150,7 +151,7 @@ async function main() {
     const result = await fetchOneRegionMonth(t.lawdCd, t.dealYmd);
 
     if (result.failed) {
-      manifest[key] = { status: 'FAILED', fetched: 0, invalidRows: 0, insertCount: 0, updateFalseToTrue: 0, updateTrueToFalseSkipped: 0, conflicts: 0, at: new Date().toISOString() };
+      manifest[key] = { status: 'FAILED', fetched: 0, invalidRows: 0, insertCount: 0, updateFalseToTrue: 0, updateTrueToFalseSkipped: 0, conflicts: 0, reviewRequired: 0, at: new Date().toISOString() };
       cellFailed++;
     } else {
       const { rows, invalid } = normalizeMolitItemsToTradeRows(result.items as any[], t.lawdCd, t.dealYmd);
@@ -158,18 +159,19 @@ async function main() {
       totalInvalidRows += invalid.length;
 
       if (rows.length === 0) {
-        manifest[key] = { status: 'EMPTY_VALID', fetched: result.items.length, invalidRows: invalid.length, insertCount: 0, updateFalseToTrue: 0, updateTrueToFalseSkipped: 0, conflicts: 0, at: new Date().toISOString() };
+        manifest[key] = { status: 'EMPTY_VALID', fetched: result.items.length, invalidRows: invalid.length, insertCount: 0, updateFalseToTrue: 0, updateTrueToFalseSkipped: 0, conflicts: 0, reviewRequired: 0, at: new Date().toISOString() };
         cellEmptyValid++;
       } else {
-        const { insertCount, updateFalseToTrue, updateTrueToFalseSkipped, conflicts } = await classifyAndWrite(t.lawdCd, t.dealYmd, rows, opts.apply);
+        const { insertCount, updateFalseToTrue, updateTrueToFalseSkipped, conflicts, reviewRequired } = await classifyAndWrite(t.lawdCd, t.dealYmd, rows, opts.apply);
         totalInsert += insertCount;
         totalFlip += updateFalseToTrue;
         totalSkippedTrueToFalse += updateTrueToFalseSkipped;
         totalConflicts += conflicts;
+        totalReviewRequired += reviewRequired;
         const status: CellStatus = conflicts > 0 ? 'INVALID' : 'COMPLETE';
         if (status === 'INVALID') cellInvalid++;
         else cellComplete++;
-        manifest[key] = { status, fetched: result.items.length, invalidRows: invalid.length, insertCount, updateFalseToTrue, updateTrueToFalseSkipped, conflicts, at: new Date().toISOString() };
+        manifest[key] = { status, fetched: result.items.length, invalidRows: invalid.length, insertCount, updateFalseToTrue, updateTrueToFalseSkipped, conflicts, reviewRequired, at: new Date().toISOString() };
       }
     }
 
@@ -177,7 +179,7 @@ async function main() {
     if ((i + 1) % LOG_EVERY === 0 || i === allTasks.length - 1) {
       const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
       log(
-        `PROGRESS ${i + 1}/${allTasks.length} fetched=${totalFetched} invalidRows=${totalInvalidRows} insert=${totalInsert} flipFalseToTrue=${totalFlip} skippedTrueToFalse=${totalSkippedTrueToFalse} conflicts=${totalConflicts} COMPLETE=${cellComplete} EMPTY_VALID=${cellEmptyValid} FAILED=${cellFailed} INVALID=${cellInvalid} elapsed=${elapsedSec}s`
+        `PROGRESS ${i + 1}/${allTasks.length} fetched=${totalFetched} invalidRows=${totalInvalidRows} insert=${totalInsert} flipFalseToTrue=${totalFlip} skippedTrueToFalse=${totalSkippedTrueToFalse} conflicts=${totalConflicts} reviewRequired=${totalReviewRequired} COMPLETE=${cellComplete} EMPTY_VALID=${cellEmptyValid} FAILED=${cellFailed} INVALID=${cellInvalid} elapsed=${elapsedSec}s`
       );
     }
   }
@@ -187,10 +189,10 @@ async function main() {
   const safe = cellFailed === 0 && cellInvalid === 0;
   log(
     `DONE mode=${opts.apply ? 'APPLY' : 'DRY_RUN'} regions=${regions.length} cells=${allTasks.length} COMPLETE=${cellComplete} EMPTY_VALID=${cellEmptyValid} FAILED=${cellFailed} INVALID=${cellInvalid} ` +
-      `insert=${totalInsert} flipFalseToTrue=${totalFlip} skippedTrueToFalse=${totalSkippedTrueToFalse} conflicts=${totalConflicts} SAFE_GATE=${safe} elapsedSec=${((Date.now() - startedAt) / 1000).toFixed(1)}`
+      `insert=${totalInsert} flipFalseToTrue=${totalFlip} skippedTrueToFalse=${totalSkippedTrueToFalse} conflicts=${totalConflicts} reviewRequired=${totalReviewRequired} SAFE_GATE=${safe} elapsedSec=${((Date.now() - startedAt) / 1000).toFixed(1)}`
   );
 
-  return { regions: regions.length, cells: allTasks.length, cellComplete, cellEmptyValid, cellFailed, cellInvalid, totalFetched, totalInvalidRows, totalInsert, totalFlip, totalSkippedTrueToFalse, totalConflicts, safe };
+  return { regions: regions.length, cells: allTasks.length, cellComplete, cellEmptyValid, cellFailed, cellInvalid, totalFetched, totalInvalidRows, totalInsert, totalFlip, totalSkippedTrueToFalse, totalConflicts, totalReviewRequired, safe };
 }
 
 if (require.main === module) {

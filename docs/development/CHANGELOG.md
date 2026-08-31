@@ -12097,3 +12097,80 @@ ADMIN_OPS_METRICS = 정의 완료(기존 manifest에서 파생 가능,
 NEXT_STEP = ADMIN OPS V1(관리자 UI) 또는 TRADE_DB_FIRST_V1 STEP G
 (Cache/Preaggregation), 혹은 스케줄러 실제 활성화(별도 운영 승인
 필요).**
+
+## 2026-09-01
+
+### STEP — TRADE_DB_FIRST_V1 STEP F-2: 전국 Region Coverage 완결 + Identity Gate 검증
+
+STEP F PM 검수 PARTIAL 판정(세종 누락) 두 gap을 닫았다. Production
+write 없음(READ only).
+
+**세종 root cause(실측)**: REGCODE_PROXY 직접 조회로 확인 — 세종은
+대한민국에서 유일하게 구/군 하위 행정구역이 없는 특별자치시라
+법정동코드 최상위 항목이 다른 시도처럼 `XX00000000` 패턴이 아니라
+`3611000000`(사실상 시군구 레벨 코드 구조)이다. `getSidoList()`의
+`*00000000` 패턴이 이 구조상 세종을 영영 못 찾는다 — 프록시 버그
+아님. 반면 `getSigunguListForSido('36')`는 이미 수정 없이 정상
+동작함을 확인(`36*00000` 패턴이 `3611000000`과 자연히 일치) — 누락
+지점은 `getSidoList()` 하나뿐이었다.
+
+`src/lib/region-utils.ts`의 `getSidoList()`에 세종을 명시적으로
+보강(근본 원인 문서화한 최소 매핑). 이 fix는 이번 STEP의 sync
+엔진뿐 아니라 **이미 라이브인** `/api/stats/region-change?
+level=nation`("대한민국 전체" 첫 화면)도 함께 고쳤다 — 그 라우트의
+기존 주석이 이미 "시도 17개 타일"이라 명시하고 있어, 세종 누락은
+의도와 다르게 동작하던 잠재 버그였음을 확인. `npm run build` +
+실제 dev 서버로 해당 API가 세종 포함 17개 sido를 정상 반환함을
+직접 검증했다.
+
+**Identity safety audit**: 실제 ingestion flow를 코드 레벨로 추적한
+결과, aptSeq 없는 row도 `name+dong` fallback으로 기존에는 DB insert
+까지 도달할 수 있었음을 확인(구조적으로는 가능했으나, 실측상 발생한
+적 없음 — 전국 7개 지역 654건 샘플에서 aptSeq missing=0%, 부산의
+기존 0% 결과와 동일). 실측 0%로 기존 부산 동작에 영향이 없음을
+확인한 뒤, 방어적 gate를 실제 구현: `classifyAndWrite()`
+(resync-cancellation-v2.ts, STEP TRADE_CANCELLATION_RESYNC_V2와 STEP
+F 엔진이 공유하는 함수)에서 자연키 매칭 기존 row가 없는 "신규 row"
+중 aptSeq 없는 것은 `reviewRequired`로 분류해 insert하지 않는다(기존
+row의 취소 flag 업데이트는 identity를 새로 만드는 게 아니므로 이
+gate 대상이 아님). 결정 로직은 순수 함수 `classifyRow()`
+(`scripts/write-policy-logic.ts` 신규)로 분리해 테스트 가능하게 했다.
+`identityKey`는 TradeHistory 내부 grouping convenience일 뿐 —
+ApartmentMaster canonical identity(별도 시스템, `HIGH_CONFIDENCE`/
+`REVIEW_REQUIRED` 신뢰도 매칭)와 무관함을 문서로 명확히 구분했다.
+
+QA(전부 read-only, apply=false): 세종 dry-run(lawdCd=36110, 3개월)
+COMPLETE=2/EMPTY_VALID=1/FAILED=0/INVALID=0, 529건 정상 파싱. 전국
+대표 샘플(서울/부산/대구/세종/경기/제주/강원) dry-run 전부 정상.
+aptSeq gate 시뮬레이션 검증(aptSeq 있는/없는 row 혼합 입력 →
+insertCount=1/reviewRequired=1로 정확히 분리, PASS). 기존 incremental
+엔진 테스트(8개)+신규 classifyRow 테스트(9개) 전부 pass. 부산
+regression 없음(FAILED=0/INVALID=0/reviewRequired=0). 24M
+cancellation 데이터 STEP F 이후와 완전 동일(older11mo 2,432/
+recent13mo 2,277 불변) — Production write 0건이므로 당연한 결과지만
+직접 재확인.
+
+DB 변경: schema/migration 없음. INSERT/UPDATE/DELETE 전부 0건.
+
+상태: 완료. **STEP F = FINAL PASS로 잠금.**
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_F2.md`
+
+**TRADE_DB_FIRST_V1_STEP_F2 = PASS. SEJONG_ROOT_CAUSE =
+법정동코드 구조 특이사항(구/군 없음, getSidoList 패턴 미매칭) —
+getSigunguListForSido는 이미 정상, getSidoList만 수정. NATIONWIDE_
+REGION_MODEL = 17 sido(세종 포함)/262 sync-target, 중복 0/invalid 0.
+SEJONG_DRYRUN = COMPLETE=2/EMPTY_VALID=1/FAILED=0/INVALID=0, 529건
+정상. SAMPLE_DRYRUN = 7개 지역 전부 정상(FAILED=0/INVALID=0).
+IDENTITY_AUDIT = aptSeq missing 전국 실측 0%(654건), name+dong
+canonical fallback 위험 있었음(구조적으로 가능) → aptSeq 없는 신규
+row는 reviewRequired로 insert 차단(gate 구현+검증 PASS).
+INCREMENTAL_REGRESSION = 없음(기존 8개 테스트 pass). BUSAN_REGRESSION
+= 없음(FAILED=0/INVALID=0/reviewRequired=0). 24M_CANCELLATION_SAFE =
+불변 유지(Production write 0건). TESTS = scripts 32개(신규 9개
+포함)+src 211개 전부 pass. BUILD = PASS(라이브 region-change API
+직접 검증). PRODUCTION_WRITE = 0(READ only). DB_SCHEMA_CHANGE = 0.
+PRODUCTION_QA_WRITE_RECOMMENDED = 아니오(dry-run으로 correctness
+충분히 증명됨, 필요시 사용자 요청 시 별도 진행 가능).
+STEP_F_FINAL_VERDICT: engine=PASS, region coverage=PASS(17/17),
+identity safety=PASS. NEXT_STEP = ADMIN OPS V1.**

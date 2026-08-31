@@ -12,12 +12,27 @@ let sidoListCache: { code: string; name: string }[] | null = null;
 // REGION_PRICE_CHANGE_MAP_V2 §11 — "대한민국 전체" 첫 화면(시도 17개 타일)에
 // 필요한 전국 시도 목록. RegionSelectModal.selectSido가 이미 쓰는 것과 동일한
 // 프록시/패턴이라 항상 최신·전국 대상이다(새 데이터 소스 없음).
+// TRADE_DB_FIRST_V1 STEP F-2 — 세종특별자치시는 대한민국에서 유일하게 구/군 하위
+// 행정구역이 없는 특별자치시다(강원/제주 "특별자치도"는 일반 도처럼 시군구가 있음).
+// 그래서 법정동코드 최상위 항목 자체가 다른 시도처럼 "XX00000000"(뒤 8자리 전부
+// 0) 패턴이 아니라 "3611000000"(사실상 시군구 레벨과 동일한 코드 구조)이다(실측
+// 확인: REGCODE_PROXY 원본 데이터 자체의 구조적 특이사항, 프록시 버그 아님 —
+// `regcode_pattern=36*`로 직접 조회하면 세종의 최상위 항목이 3611000000 하나뿐임을
+// 확인할 수 있다). 아래 `*00000000` 패턴은 이 구조 때문에 세종을 영영 찾지 못한다.
+// `getSigunguListForSido('36')`는 이미 이 구조 덕분에 수정 없이 정상 동작한다
+// (`36*00000` 패턴이 "3611000000"과 자연히 일치하므로) — sido 목록에만 명시적으로
+// 보강한다. 이 지역 코드가 실제로 MOLIT lawdCd로 유효함은 "36110"이 공개적으로
+// 알려진 세종 lawdCd라는 사실과 위 실측이 일치함으로 확인했다.
+const SEJONG_SIDO_CODE = '36';
+const SEJONG_SIDO_NAME = '세종특별자치시';
+
 export async function getSidoList(): Promise<{ code: string; name: string }[]> {
   if (sidoListCache) return sidoListCache;
   try {
     const res = await fetch(`${REGCODE_PROXY}?regcode_pattern=*00000000`);
     const data = await res.json();
     const list = ((data.regcodes || []) as { code: string; name: string }[]).map((r) => ({ code: r.code.substring(0, 2), name: r.name }));
+    if (!list.some((s) => s.code === SEJONG_SIDO_CODE)) list.push({ code: SEJONG_SIDO_CODE, name: SEJONG_SIDO_NAME });
     sidoListCache = list;
     return list;
   } catch (e) {

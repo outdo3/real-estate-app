@@ -14,6 +14,7 @@ export interface NationwideCellEntry {
   updateFalseToTrue: number;
   updateTrueToFalseSkipped: number;
   conflicts: number;
+  reviewRequired: number;
   at: string;
 }
 export type NationwideManifest = Record<string, NationwideCellEntry>; // key = `${lawdCd}:${dealYmd}`
