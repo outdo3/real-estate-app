@@ -339,3 +339,287 @@ export async function getYearlySaleAggregate(lawdCd: string, fromYear: number): 
     avgAmount: Number(r.avg_amount),
   }));
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// TRADE_DB_FIRST_V1 STEP C-2 — 최근 상승/하락 성능 최적화. STEP C는 부산
+// 전체 24개월×전체면적 65,532 row를 통째로 Node로 가져와 buildHistory()가
+// 계산했다(4.0~7.3초). 첫 시도는 "후보 group_key만 SQL로 판정 → 후보 group의
+// 24개월 전체 이력을 다시 fetch → 기존 buildHistory() 재사용"이었으나, 실측
+// 결과 후보 group 수가 기간이 길어질수록 전체 group 수에 근접해(12개월
+// 하락 기준 4,007개 group, 재조회 시 51,729 row — 원래 65,532 row와 큰
+// 차이가 없음) 오히려 STEP C보다 느려졌다(최악 11.2초, FAIL 근접) — 이
+// 실패 원인과 실측 수치는 TRADE_DB_FIRST_V1_STEP_C2.md에 그대로 기록했다.
+//
+// 최종 채택: priorHigh(하락)/immediatePrior(상승)의 **금액과 날짜 둘 다**를
+// row 재조회 없이 순수 window function만으로 한 번에 계산해, 최종 후보
+// row(부산 전체 기준 881~4012건 정도)만 애플리케이션으로 반환한다 — 중간
+// row 재조회 단계 자체가 없다. priorHigh의 "언제"(날짜)는 표준 MAX() OVER가
+// 직접 주지 않으므로(집계값은 얻어도 그 값이 나온 시점은 별도 계산 필요),
+// "이 row가 실제로 running max를 갱신시켰는가"(is_new_high)를 먼저 계산하고,
+// 그 상태를 다시 앞으로 전파(propagate)하는 3단계 CTE로 얻는다(§SQL DESIGN).
+// 실측(부산 전체, 12개월, 하락, 최악 케이스): 42.5초(CTE 참조 상관 서브쿼리,
+// group_key 미인덱스) → 23.9초(인덱스 컬럼 기반 서브쿼리로 교체해도 여전히
+// row당 반복 실행이라 느림) → **2.1초**(순수 window function, 서브쿼리
+// 없음) — 최종 채택안.
+//
+// 최종 계산 필드(현재가/직전가/priorHigh/변화율 등)는 buildDeclineRows()/
+// buildRisingRows()(price-ranking.ts)와 정의상 동일해야 하므로, 호출부
+// (price-rankings/route.ts)가 이 함수의 raw 결과를 그 두 함수와 **동일한
+// 반올림 공식**(Math.round(x*1000)/10)으로 DeclineRow/RisingRow를 직접
+// 구성한다 — buildHistory()를 재사용하지 않는 대신, §13 old-vs-new A/B에서
+// 기존 STEP C(=STEP C 자체가 이미 buildDeclineRows/buildRisingRows의
+// oracle 역할) 결과와 광범위하게(6개 지역×5개 기간×2모드=60케이스) 대조해
+// 정확성을 검증했다(TRADE_DB_FIRST_V1_STEP_C2.md §5 참고).
+//
+// PARTITION BY는 group_key 컬럼(스키마에 이미 저장돼 있음, regional-feed.ts의
+// groupKey()를 backfill/sync 시점에 그대로 호출한 결과)을 직접 쓴다 — 855,047개
+// 부산 row 전체를 Node에서 재계산해 대조한 결과 불일치 0건으로, 이 컬럼이
+// JS groupKey()와 항상 동일함을 실측 확인했다(재구현 없이 그대로 신뢰 가능).
+//
+// §SAME-DAY TIE — buildHistory()의 `sorted = [...list].sort((a,b) =>
+// a.dealDate.localeCompare(b.dealDate))`는 Array.sort가 stable이므로,
+// 동일 dealDate(시각 없음) 여러 거래의 상대 순서는 정렬 "이전"(즉 원본
+// allTrades 배열 순서)을 그대로 보존한다. STEP C의 DB fetch가 Prisma
+// `orderBy: [{dealDate:'desc'},{id:'desc'}]`를 쓰므로, 같은 날짜 거래는
+// id 내림차순(더 큰 id 먼저) 순서로 도착하고, 오름차순 안정 정렬 후에도
+// 그 상대 순서(큰 id가 먼저)가 유지된다 — 즉 "latest in period" 선정과
+// "priorHigh" running-max 둘 다 동일 날짜 동점에서는 **id가 더 큰 거래를
+// 먼저(시간상 앞선 것처럼) 취급**한다(실측: 26260-1476/84.965㎡ 사례로
+// 검증, STEP C 문서 §5-2). 아래 window ORDER BY를 `deal_date ASC, id DESC`
+// (priorHigh/immediatePrior)와 `deal_date DESC, id DESC`("latest in
+// period" 선정)로 맞춘 이유가 이 실측 tie-break를 그대로 재현하기
+// 위함이다. 이 tie-break는 이번 STEP이 새로 만든 규칙이 아니라 STEP C가
+// 이미 프로덕션에 내놓은 기존 동작을 그대로 따르는 것뿐이다(§9 — 몰래
+// 새 규칙을 넣지 않음).
+//
+// §TRAILING12MO — DeclineRow/RisingRow의 trailing12moSampleCount(§15 표본
+// 규칙)는 JS `monthsBetween(a,b) = (by-ay)*12+(bm-am)`를 그대로 재현해야
+// 한다 — **일(day)은 완전히 무시하고 연·월만 비교**하는 값이다(예:
+// 2025-01-31과 2026-01-05는 monthsBetween=12로 "포함"). 처음엔
+// `RANGE BETWEEN INTERVAL '12 months' PRECEDING`(일 단위 정밀 뺄셈)을
+// 썼는데, 실측 A/B(6개 지역×5개 기간, TRADE_DB_FIRST_V1_STEP_C2.md §5)에서
+// 매 케이스 수십 건씩 JS 값과 어긋났다 — 원인은 정확히 이 day-vs-month
+// 정밀도 차이였다. 고정: `(연*12+월)`을 정수 "month_index"로 미리
+// 계산해두고, RANGE 경계를 정수 오프셋(`12 PRECEDING`)으로 준다 — 이러면
+// 같은 달의 서로 다른 날짜 거래는 전부 같은 month_index를 가져 RANGE의
+// "peer" 규칙에 따라 함께 포함되고(일 단위 무시), 경계도 정확히 12개월
+// 차이로 판정된다(day-of-month에 영향받지 않음). RANGE frame은 ORDER BY
+// 컬럼이 하나여야 하는 제약이 있어(id tie-break 불가) 이 카운트 전용
+// window는 `ORDER BY month_index`만 쓴다 — COUNT는 tie-break 순서와
+// 무관하므로 안전하다.
+//
+// §DEDUPE — month_index 수정 후에도 여전히 소수 케이스가 JS보다 1건씩 더
+// 세고 있었다. 원인은 완전히 다른 곳: 기존 route.ts는 `buildDeclineRows`/
+// `buildRisingRows` 호출 전에 항상 `allTrades = dedupeTrades(allTrades)`
+// (regional-feed.ts, groupKey+dealAmount+dealDate+floor가 같으면 하나만
+// 남김)를 거친다 — MOLIT 월별 fetch가 달 경계에서 같은 거래를 두 번
+// 반환할 수 있어 생긴 기존 안전장치인데, DB에도 동일 자연키를 가진 row가
+// 실제로 2건 이상 존재하는 사례가 있었다(예: 26140-978/84.9891, 2025-08-19
+// 동일 금액·동일 층 row 2개). 이 함수의 base CTE는 원래 이 dedup을 거치지
+// 않아 group_key+deal_amount+deal_date+floor가 같은 row를 전부 별도로
+// 세고 있었다 — `ROW_NUMBER() OVER (PARTITION BY group_key, deal_amount,
+// deal_date, floor ORDER BY id DESC) = 1`로 dedupeTrades와 동일한 자연키
+// 기준 dedup을 재현했다(dedupeTrades가 배열의 "먼저 나온" 것을 남기는데,
+// STEP C의 DB fetch 순서가 항상 `id DESC`였으므로 id가 더 큰 쪽이
+// "먼저" 나온 것과 동치 — 동일한 승자 선택 재현).
+//
+// §SAME-MONTH PEER — month_index + dedupe 수정 후에도 여전히 소수 케이스가
+// 어긋났다. 원인: `RANGE ... CURRENT ROW`는 "같은 month_index를 가진 모든
+// row"를 무조건 peer로 묶어 전부 포함시킨다 — 그런데 JS의 `sampleCount`는
+// `sorted`에서 자기 자신보다 **앞쪽(더 이른 row_seq)** 에 있는 row만 센다.
+// 같은 달(often 같은 날) 안에 여러 거래가 있고 그중 "latest in period"로
+// 뽑힌 row가 그 달의 첫 번째(id DESC라 가장 큰 id)라면, 같은 달의 "나중"
+// row(다른 낮은 id)는 RANGE peer로는 포함되지만 JS 기준으로는 포함되면 안
+// 된다 — 실측(26260-1476/84.965㎡, 2026-08-18 동일가 2건)으로 확인.
+// 고정: base에 `row_seq`(그룹별 deal_date ASC, id DESC 순번)를 추가하고,
+// 후보(candidates)와 base를 `row_seq <= 후보.row_seq AND month_index >=
+// 후보.month_index - 12` 조건으로 JOIN해 GROUP BY로 COUNT — "자기 자신
+// 이전(포함)의 row만, 그리고 12개월 이내"라는 JS의 정확한 의미를 재현한다.
+// **성능 함정**: 이 조인 조건을 상관 서브쿼리(`(SELECT COUNT(*) FROM base b
+// WHERE ...) AS trailing_sample_count`, 후보 row마다 한 번씩 실행)로 처음
+// 구현했더니 부산 전체 12개월(하락 4,012건/상승 2,645건 후보) 기준
+// 43.4초/28.9초가 걸렸다 — group_key가 인덱스 없는 컬럼이라 후보 하나당
+// base 전체에 가까운 scan이 반복된 것. 동일 조건을 상관 서브쿼리 대신
+// **JOIN + GROUP BY**로 바꾸자(옵티마이저가 nested-loop 대신 hash join을
+// 선택) 1.17초/0.62초로 떨어졌다 — 완전히 동일한 논리 조건이라도 상관
+// 서브쿼리 대 JOIN의 실행계획 차이가 이렇게 클 수 있다는 실측 교훈.
+//
+// 위 3개 수정(month_index + dedupe + same-month-peer-JOIN) 전부 적용 후
+// 6개 지역×5개 기간×2모드=60케이스, 매 요청 직전 코드를 stash/복원해
+// 동일 시점 기준으로 재측정한 tight A/B에서 모든 필드(currentAmount/
+// currentDate/priorHighAmount/priorHighDate/previousAmount/previousDate/
+// declinePct/risePct/trailing12moSampleCount)가 완전히 일치했다 — 남은
+// 유일한 차이(8/60 파일, 페이지 경계에서 row 1개씩)는 risePct/declinePct
+// 동점 후보가 페이지네이션 컷오프(limit=100)에 걸릴 때 동점 tie-break
+// 순서 차이로 어느 쪽이 100번째에 들어가는지가 갈리는 것 — STEP C가 이미
+// 문서화한 "동일 날짜/동점 tie-break 미정의"와 같은 근본 원인이며 데이터
+// 오류가 아니다(TRADE_DB_FIRST_V1_STEP_C2.md §5 상세).
+// §BOUNDARY-FIX — raw SQL(`$queryRaw`)로 보내는 Date는 Prisma의 타입세이프
+// 필터(예: queryTrades()의 `dealDate: {gte: input.from}`)와 달리 컬럼
+// 타입(@db.Date)에 맞춰 자동으로 정규화되지 않는다. `new Date()`가 만드는
+// "현재 시각"의 시/분/초를 그대로 유지한 채 24개월만 뺀 값을 그대로
+// 파라미터로 보내면, Postgres가 그 값을 자정 이후 시각으로 취급해
+// 경계일(24개월 전 그 날짜) 거래가 `>=` 비교에서 조용히 제외되는 실측
+// 버그를 발견했다(동래구 12개월 하락 A/B에서 2건 누락 — 둘 다 정확히
+// 경계일 priorHighDate를 가진 케이스였다, TRADE_DB_FIRST_V1_STEP_C2.md
+// §5 참고). STEP B의 getYearlySaleAggregate()가 이미 안전하게 쓰던 패턴
+// (`Date.UTC(year, 0, 1)`, 시각 없이 자정 고정)과 동일하게 UTC 자정으로
+// 명시 생성해 재발을 막는다.
+function candidateFromDate(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 24, now.getUTCDate()));
+}
+
+export interface DeclineCandidateRow {
+  id: number;
+  aptSeq: string | null;
+  aptName: string;
+  dong: string;
+  lawdCd: string;
+  exclusiveArea: string;
+  floor: number | null;
+  currentAmount: number;
+  currentDate: Date;
+  priorHighAmount: number;
+  priorHighDate: Date;
+  trailingSampleCount: number;
+}
+
+/** 하락 후보 전체 row를 단일 SQL pass로 반환한다(중간 row 재조회 없음) —
+ * priorHigh(트레일링 24개월 running max, strictly 이전 시점)보다 기간 내
+ * 최근 거래가 낮은 group만. */
+export async function getDeclineRowsFromDb(lawdCds: string[], periodFrom: string, periodTo: string): Promise<DeclineCandidateRow[]> {
+  const from = candidateFromDate();
+  const rows = await prisma.$queryRaw<
+    { id: number; aptSeq: string | null; aptName: string; dong: string; lawdCd: string; exclusiveArea: string; floor: number | null; currentAmount: number; currentDate: Date; priorHighAmount: number; priorHighDate: Date; trailingSampleCount: bigint }[]
+  >`
+    WITH raw AS (
+      SELECT id, group_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, floor, deal_amount, deal_date,
+        ROW_NUMBER() OVER (PARTITION BY group_key, deal_amount, deal_date, floor ORDER BY id DESC) AS dedupe_rn
+      FROM apartment_trade_histories
+      WHERE lawd_cd = ANY(${lawdCds})
+        AND deal_type = 'sale'
+        AND deal_canceled = false
+        AND deal_date >= ${from}
+    ),
+    base AS (
+      SELECT id, group_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, floor, deal_amount, deal_date,
+        (EXTRACT(YEAR FROM deal_date)::int * 12 + EXTRACT(MONTH FROM deal_date)::int) AS month_index,
+        ROW_NUMBER() OVER (PARTITION BY group_key ORDER BY deal_date ASC, id DESC) AS row_seq
+      FROM raw
+      WHERE dedupe_rn = 1
+    ),
+    step1 AS (
+      SELECT *,
+        MAX(deal_amount) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS prior_high_amount
+      FROM base
+    ),
+    step2 AS (
+      SELECT *, (deal_amount > COALESCE(prior_high_amount, -2147483648)) AS is_new_high
+      FROM step1
+    ),
+    step3 AS (
+      SELECT *,
+        MAX(CASE WHEN is_new_high THEN deal_date END) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS prior_high_date
+      FROM step2
+    ),
+    period_latest AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY group_key ORDER BY deal_date DESC, id DESC) AS rn
+      FROM step3
+      WHERE deal_date BETWEEN ${periodFrom}::date AND ${periodTo}::date
+    ),
+    candidates AS (
+      SELECT * FROM period_latest
+      WHERE rn = 1 AND prior_high_amount IS NOT NULL AND deal_amount < prior_high_amount
+    )
+    SELECT
+      c.id, c.apt_seq AS "aptSeq", c.apt_name AS "aptName", c.dong, c.lawd_cd AS "lawdCd",
+      c.exclusive_area::text AS "exclusiveArea", c.floor,
+      c.deal_amount AS "currentAmount", c.deal_date AS "currentDate",
+      c.prior_high_amount AS "priorHighAmount", c.prior_high_date AS "priorHighDate",
+      COUNT(b.id) AS "trailingSampleCount"
+    FROM candidates c
+    JOIN base b ON b.group_key = c.group_key AND b.row_seq <= c.row_seq AND b.month_index >= c.month_index - 12
+    GROUP BY c.id, c.apt_seq, c.apt_name, c.dong, c.lawd_cd, c.exclusive_area, c.floor,
+      c.deal_amount, c.deal_date, c.prior_high_amount, c.prior_high_date
+  `;
+  return rows.map((r) => ({ ...r, trailingSampleCount: Number(r.trailingSampleCount) }));
+}
+
+export interface RisingCandidateRow {
+  id: number;
+  aptSeq: string | null;
+  aptName: string;
+  dong: string;
+  lawdCd: string;
+  exclusiveArea: string;
+  floor: number | null;
+  currentAmount: number;
+  currentDate: Date;
+  previousAmount: number;
+  previousDate: Date;
+  trailingSampleCount: number;
+}
+
+/** 상승 후보 전체 row를 단일 SQL pass로 반환한다 — immediatePrior(시간순
+ * 바로 직전 거래, LAG로 금액·날짜 모두 직접 계산 가능해 decline과 달리
+ * 별도 argmax 계산이 필요 없다)보다 기간 내 최근 거래가 높은 group만. */
+export async function getRisingRowsFromDb(lawdCds: string[], periodFrom: string, periodTo: string): Promise<RisingCandidateRow[]> {
+  const from = candidateFromDate();
+  const rows = await prisma.$queryRaw<
+    { id: number; aptSeq: string | null; aptName: string; dong: string; lawdCd: string; exclusiveArea: string; floor: number | null; currentAmount: number; currentDate: Date; previousAmount: number; previousDate: Date; trailingSampleCount: bigint }[]
+  >`
+    WITH raw AS (
+      SELECT id, group_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, floor, deal_amount, deal_date,
+        ROW_NUMBER() OVER (PARTITION BY group_key, deal_amount, deal_date, floor ORDER BY id DESC) AS dedupe_rn
+      FROM apartment_trade_histories
+      WHERE lawd_cd = ANY(${lawdCds})
+        AND deal_type = 'sale'
+        AND deal_canceled = false
+        AND deal_date >= ${from}
+    ),
+    base AS (
+      SELECT id, group_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, floor, deal_amount, deal_date,
+        (EXTRACT(YEAR FROM deal_date)::int * 12 + EXTRACT(MONTH FROM deal_date)::int) AS month_index,
+        ROW_NUMBER() OVER (PARTITION BY group_key ORDER BY deal_date ASC, id DESC) AS row_seq
+      FROM raw
+      WHERE dedupe_rn = 1
+    ),
+    step1 AS (
+      SELECT *,
+        LAG(deal_amount) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+        ) AS immediate_prior_amount,
+        LAG(deal_date) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+        ) AS immediate_prior_date
+      FROM base
+    ),
+    period_latest AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY group_key ORDER BY deal_date DESC, id DESC) AS rn
+      FROM step1
+      WHERE deal_date BETWEEN ${periodFrom}::date AND ${periodTo}::date
+    ),
+    candidates AS (
+      SELECT * FROM period_latest
+      WHERE rn = 1 AND immediate_prior_amount IS NOT NULL AND deal_amount > immediate_prior_amount
+    )
+    SELECT
+      c.id, c.apt_seq AS "aptSeq", c.apt_name AS "aptName", c.dong, c.lawd_cd AS "lawdCd",
+      c.exclusive_area::text AS "exclusiveArea", c.floor,
+      c.deal_amount AS "currentAmount", c.deal_date AS "currentDate",
+      c.immediate_prior_amount AS "previousAmount", c.immediate_prior_date AS "previousDate",
+      COUNT(b.id) AS "trailingSampleCount"
+    FROM candidates c
+    JOIN base b ON b.group_key = c.group_key AND b.row_seq <= c.row_seq AND b.month_index >= c.month_index - 12
+    GROUP BY c.id, c.apt_seq, c.apt_name, c.dong, c.lawd_cd, c.exclusive_area, c.floor,
+      c.deal_amount, c.deal_date, c.immediate_prior_amount, c.immediate_prior_date
+  `;
+  return rows.map((r) => ({ ...r, trailingSampleCount: Number(r.trailingSampleCount) }));
+}

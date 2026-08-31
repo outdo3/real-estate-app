@@ -5,9 +5,10 @@ import { resolveLawdCd, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { prisma } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, resolveApartmentContextBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
-import { queryTrades } from '@/lib/trade-history-read';
+import { queryTrades, getDeclineRowsFromDb, getRisingRowsFromDb } from '@/lib/trade-history-read';
 import {
   dedupeTrades,
+  groupKey,
   buildDeclineRows,
   buildRecordHighRows,
   buildRisingRows,
@@ -22,6 +23,9 @@ import {
   resolvePriceRankingPeriod,
   historicalCoverageLabel,
   HISTORICAL_LOOKBACK_MONTHS,
+  RISING_SUFFICIENT_SAMPLE,
+  type DeclineRow,
+  type RisingRow,
   type FeedTrade,
   type PriceRankingPeriodPreset,
 } from '@/lib/price-ranking';
@@ -102,32 +106,60 @@ async function fetchArea84TradesFromDb(lawdCds: string[]): Promise<FeedTrade[]> 
   return trades.map(storedTradeToFeedTrade);
 }
 
-// TRADE_DB_FIRST_V1 STEP C — decline(하락)/rising(상승) 전용. area84와 달리
-// area band 필터가 없어(모든 면적이 후보) 부산 전체를 단일 IN 쿼리로 가져오면
-// 6.5만+ row 직렬화가 병목이 되어 실측 9.3~10.1초가 걸린다(§21 목표인 heavy
-// <3초, 5초 초과 시 최적화 검토를 크게 넘음). 구별로 쪼개 병렬 실행하면 동일
-// 결과를 4.6초에 받는다(실측) — Supabase 세션모드 pooler의 15-connection
-// 한도를 넘지 않도록 8개씩 배치(§21이 허용한 "query 최적화" 범위, schema/
-// index 변경 없음, queryTrades()의 필터링/취소제외/정렬 로직은 그대로 재사용).
-// record-high(신고가)/jeonse-risk(전세 위험)는 이번 STEP 범위 밖(§44) —
-// jeonse-risk는 apiType이 rent라 애초에 TradeHistory DB(dealType='sale'만
-// 존재) 대상이 아니다.
-const DECLINE_RISING_DB_BATCH_SIZE = 8;
+// TRADE_DB_FIRST_V1 STEP C — decline(하락)/rising(상승) 전용. record-high
+// (신고가)/jeonse-risk(전세 위험)는 이번 STEP 범위 밖(§44) — jeonse-risk는
+// apiType이 rent라 애초에 TradeHistory DB(dealType='sale'만 존재) 대상이
+// 아니다.
+//
+// TRADE_DB_FIRST_V1 STEP C-2 — 성능 최적화. getDeclineRowsFromDb()/
+// getRisingRowsFromDb()(trade-history-read.ts, 설계 근거 상세 주석 참고)가
+// 이미 priorHigh/immediatePrior/트레일링 표본수까지 SQL 단일 pass로 전부
+// 계산해 반환하므로, 여기서는 buildDeclineRows()/buildRisingRows()와
+// **동일한 반올림 공식**으로 최종 DeclineRow/RisingRow shape만 조립한다
+// (declinePct/risePct = Math.round(x*1000)/10 — price-ranking.ts의 공식을
+// 그대로 복사, 재발명 아님). groupKey는 price-ranking.ts가 재노출하는
+// groupKey() 순수 함수를 그대로 재사용한다.
+function sqlDeclineRowToDeclineRow(r: Awaited<ReturnType<typeof getDeclineRowsFromDb>>[number]): DeclineRow {
+  const excluUseArea = Number(r.exclusiveArea);
+  const declineAmount = r.currentAmount - r.priorHighAmount;
+  return {
+    groupKey: groupKey({ aptSeq: r.aptSeq, name: r.aptName, dong: r.dong, excluUseArea, dealType: 'sale' }),
+    aptSeq: r.aptSeq,
+    name: r.aptName,
+    dong: r.dong,
+    lawdCd: r.lawdCd,
+    excluUseArea,
+    floorRaw: r.floor,
+    currentAmount: r.currentAmount,
+    currentDate: r.currentDate.toISOString().slice(0, 10),
+    priorHighAmount: r.priorHighAmount,
+    priorHighDate: r.priorHighDate.toISOString().slice(0, 10),
+    declineAmount,
+    declinePct: r.priorHighAmount > 0 ? Math.round((declineAmount / r.priorHighAmount) * 1000) / 10 : 0,
+    trailing12moSampleCount: r.trailingSampleCount,
+  };
+}
 
-async function fetchDeclineRisingTradesFromDb(lawdCds: string[]): Promise<FeedTrade[]> {
-  const from = new Date();
-  from.setMonth(from.getMonth() - HISTORICAL_LOOKBACK_MONTHS);
-  if (lawdCds.length <= 1) {
-    const { trades } = await queryTrades({ lawdCd: lawdCds, from });
-    return trades.map(storedTradeToFeedTrade);
-  }
-  const all: FeedTrade[] = [];
-  for (let i = 0; i < lawdCds.length; i += DECLINE_RISING_DB_BATCH_SIZE) {
-    const chunk = lawdCds.slice(i, i + DECLINE_RISING_DB_BATCH_SIZE);
-    const results = await Promise.all(chunk.map((code) => queryTrades({ lawdCd: code, from })));
-    for (const r of results) all.push(...r.trades.map(storedTradeToFeedTrade));
-  }
-  return all;
+function sqlRisingRowToRisingRow(r: Awaited<ReturnType<typeof getRisingRowsFromDb>>[number]): RisingRow {
+  const excluUseArea = Number(r.exclusiveArea);
+  const riseAmount = r.currentAmount - r.previousAmount;
+  return {
+    groupKey: groupKey({ aptSeq: r.aptSeq, name: r.aptName, dong: r.dong, excluUseArea, dealType: 'sale' }),
+    aptSeq: r.aptSeq,
+    name: r.aptName,
+    dong: r.dong,
+    lawdCd: r.lawdCd,
+    excluUseArea,
+    floorRaw: r.floor,
+    currentAmount: r.currentAmount,
+    currentDate: r.currentDate.toISOString().slice(0, 10),
+    previousAmount: r.previousAmount,
+    previousDate: r.previousDate.toISOString().slice(0, 10),
+    riseAmount,
+    risePct: r.previousAmount > 0 ? Math.round((riseAmount / r.previousAmount) * 1000) / 10 : 0,
+    trailing12moSampleCount: r.trailingSampleCount,
+    hasSufficientSample: r.trailingSampleCount >= RISING_SUFFICIENT_SAMPLE,
+  };
 }
 
 function monthsForLookback(now: Date): string[] {
@@ -204,7 +236,18 @@ export async function GET(request: Request) {
 
     const now = new Date();
     const months = monthsForLookback(now);
+    // TRADE_DB_FIRST_V1 STEP C-2 — decline/rising의 DB candidate-filter
+    // 쿼리가 기간(period.from/to)을 필요로 해서, 기존에 훨씬 아래(정렬 직전)
+    // 계산하던 것을 여기로 끌어올렸다. resolvePriceRankingPeriod는 순수
+    // 함수(부작용 없음)라 호출 시점을 옮겨도 값/동작은 동일하다.
+    const period = resolvePriceRankingPeriod(preset, now);
     let allTrades: FeedTrade[] = [];
+    // TRADE_DB_FIRST_V1 STEP C-2 — decline/rising의 부산 DB-first 경로는
+    // buildDeclineRows()/buildRisingRows()를 거치지 않고 최종 row를 SQL에서
+    // 직접 만든다(§ 위 getDeclineRowsFromDb/getRisingRowsFromDb 주석 참고).
+    // null이면 기존 allTrades → build*Rows() 경로를 그대로 탄다(area84/
+    // record-high/jeonse-risk/비부산 decline·rising 전부 무변경).
+    let dbComputedRows: Array<DeclineRow | RisingRow> | null = null;
     let apiError = false;
     let partial = false;
     let failedDistricts: string[] = [];
@@ -228,10 +271,17 @@ export async function GET(request: Request) {
         const cacheKey = `stats-price-rankings-area84-db-sido:${sidoCodeParam}:${lawdCds.join(',')}`;
         allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchArea84TradesFromDb(lawdCds));
       } else if ((mode === 'decline' || mode === 'rising') && isBusanScopedRequest(null, sidoCodeParam, true)) {
-        // TRADE_DB_FIRST_V1 STEP C — 부산 전체(decline/rising) DB-first 경로.
-        // area84와 동일하게 부분 실패 개념 없음(DB read는 전체 성공 또는 예외).
-        const cacheKey = `stats-price-rankings-declinerising-db-sido:${sidoCodeParam}:${lawdCds.join(',')}`;
-        allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchDeclineRisingTradesFromDb(lawdCds));
+        // TRADE_DB_FIRST_V1 STEP C-2 — 부산 전체(decline/rising) DB-first
+        // 경로(단일 SQL pass, 최종 row 직접 반환). area84와 동일하게 부분
+        // 실패 개념 없음(DB read는 전체 성공 또는 예외). 캐시 키에
+        // mode+period preset을 포함한다 — 기간이 바뀌면 실제로 다른 후보
+        // 집합이 나온다(STEP C의 "기간 무관 통짜 fetch"와 다른 지점).
+        const cacheKey = `stats-price-rankings-declinerising-v3-db-sido:${mode}:${preset}:${sidoCodeParam}:${lawdCds.join(',')}`;
+        dbComputedRows = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
+          mode === 'decline'
+            ? (await getDeclineRowsFromDb(lawdCds, period.from, period.to)).map(sqlDeclineRowToDeclineRow)
+            : (await getRisingRowsFromDb(lawdCds, period.from, period.to)).map(sqlRisingRowToRisingRow)
+        );
       } else {
         // PERF §21 — apiType(apt/rent)이 다르면 완전히 다른 원본 데이터이므로
         // 캐시 키에 반드시 포함한다(포함하지 않으면 decline/rising 캐시가
@@ -266,9 +316,13 @@ export async function GET(request: Request) {
       const cacheKey = `stats-price-rankings-area84-db:${lawdCd}`;
       allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchArea84TradesFromDb([lawdCd!]));
     } else if ((mode === 'decline' || mode === 'rising') && isBusanScopedRequest(lawdCd, null, false)) {
-      // TRADE_DB_FIRST_V1 STEP C — 부산 단일 구(decline/rising) DB-first 경로.
-      const cacheKey = `stats-price-rankings-declinerising-db:${lawdCd}`;
-      allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchDeclineRisingTradesFromDb([lawdCd!]));
+      // TRADE_DB_FIRST_V1 STEP C-2 — 부산 단일 구(decline/rising) DB-first 경로.
+      const cacheKey = `stats-price-rankings-declinerising-v3-db:${mode}:${preset}:${lawdCd}`;
+      dbComputedRows = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
+        mode === 'decline'
+          ? (await getDeclineRowsFromDb([lawdCd!], period.from, period.to)).map(sqlDeclineRowToDeclineRow)
+          : (await getRisingRowsFromDb([lawdCd!], period.from, period.to)).map(sqlRisingRowToRisingRow)
+      );
     } else {
       const cacheKey = `stats-price-rankings:${apiType}:${lawdCd}:${months[0]}-${months[months.length - 1]}`;
       const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
@@ -292,18 +346,26 @@ export async function GET(request: Request) {
       }
     }
 
-    allTrades = dedupeTrades(allTrades);
-    if (dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
-    if (areaFilter) allTrades = allTrades.filter((t) => t.excluUseArea != null && t.excluUseArea.toString() === areaFilter);
-
-    const period = resolvePriceRankingPeriod(preset, now);
-
     let rows: Array<Record<string, any>>;
-    if (mode === 'decline') rows = buildDeclineRows(allTrades, period);
-    else if (mode === 'record-high') rows = buildRecordHighRows(allTrades, period);
-    else if (mode === 'jeonse-risk') rows = buildJeonseRiskRows(allTrades, period);
-    else if (mode === 'area84') rows = buildArea84RankingRows(allTrades, period);
-    else rows = buildRisingRows(allTrades, period);
+    if (dbComputedRows) {
+      // TRADE_DB_FIRST_V1 STEP C-2 — dong/areaFilter를 SQL 결과에 직접
+      // 적용한다. build*Rows()가 allTrades에 대해 하던 것과 동일한 필터
+      // 조건(단지가 어떤 다른 후보와 비교되는지에 영향받지 않는, 각 row
+      // 독립적인 필터)이라 적용 순서를 바꿔도 최종 집합은 동일하다.
+      rows = dbComputedRows.filter(
+        (r) => (dong === 'all' || r.dong === dong) && (!areaFilter || r.excluUseArea?.toString() === areaFilter)
+      );
+    } else {
+      allTrades = dedupeTrades(allTrades);
+      if (dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
+      if (areaFilter) allTrades = allTrades.filter((t) => t.excluUseArea != null && t.excluUseArea.toString() === areaFilter);
+
+      if (mode === 'decline') rows = buildDeclineRows(allTrades, period);
+      else if (mode === 'record-high') rows = buildRecordHighRows(allTrades, period);
+      else if (mode === 'jeonse-risk') rows = buildJeonseRiskRows(allTrades, period);
+      else if (mode === 'area84') rows = buildArea84RankingRows(allTrades, period);
+      else rows = buildRisingRows(allTrades, period);
+    }
 
     // §7 정렬 — 기존 API가 지원 가능한 필드 범위에서만 구현(새 데이터 소스 없음).
     // PERF — 정렬 키(declinePct/riseAmount 등)는 pyung/interpretation과 무관하게

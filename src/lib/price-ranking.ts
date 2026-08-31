@@ -263,7 +263,7 @@ export interface RisingRow {
   hasSufficientSample: boolean;
 }
 
-const RISING_SUFFICIENT_SAMPLE = 3;
+export const RISING_SUFFICIENT_SAMPLE = 3;
 
 /** §14/§15/§16 — 그룹별 "기간 내 가장 최근" 정상 거래를 시간순으로 "바로
  * 직전" 거래(역대 최고가가 아님)와 비교한다. 직전 거래가 없거나 현재가가

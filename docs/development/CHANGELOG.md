@@ -11749,3 +11749,71 @@ CANCELLATION = 정확히 제외. OLD_VS_NEW_COMPARISON = 수행함, 차이 2건
 QA로 검증). BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
 NEXT_STEP = 지역 변동지도 DB 전환(STEP D) 또는 record-high DB 전환
 (둘 다 이번 STEP 범위 밖으로 명시).**
+
+## 2026-08-31
+
+### STEP — TRADE_DB_FIRST_V1 STEP C-2: 최근 상승·하락 부산 전체 성능 최적화
+
+STEP C가 "기능 PASS / 성능 PARTIAL"(부산 전체 cold ≈7.3초)로 남긴
+성능 문제를 기능 정의 변경 없이 해결. index/schema 변경 없이 순수 SQL
+(window function + JOIN)만으로 목표(3초) 달성.
+
+서비스 코드 변경:
+
+- `src/lib/trade-history-read.ts`: `getDeclineRowsFromDb()`/
+  `getRisingRowsFromDb()` 신규 — priorHigh(하락)/immediatePrior(상승)의
+  금액·날짜를 row 재조회 없이 단일 SQL pass(window function)로 직접
+  계산해 최종 후보 row만 반환(부산 전체 12개월 기준 65,532→4,012 row,
+  약 94% 감소). 1차 시도("후보 group_key만 SQL 판정 → 후보 전체 이력
+  재조회 → 기존 buildDeclineRows() 재사용")는 기간이 길수록 후보가
+  전체에 근접해 오히려 STEP C보다 느려져(최악 11.2초) 폐기, 문서에
+  실패 사례로 기록.
+- `src/app/api/stats/price-rankings/route.ts`: decline/rising 부산
+  경로가 이제 buildDeclineRows()/buildRisingRows()/allTrades 파이프라인을
+  거치지 않고 SQL 결과로 직접 DeclineRow/RisingRow를 구성(반올림 공식은
+  price-ranking.ts와 동일하게 재사용, groupKey()도 그대로 재사용).
+  dong/areaFilter는 SQL 결과에 직접 적용.
+- `src/lib/price-ranking.ts`: `RISING_SUFFICIENT_SAMPLE`을 export로
+  변경(값 무변경, route.ts가 재사용하기 위함).
+- **3개 실측 버그 발견 및 수정**(6개 지역×5개 기간×2모드=60케이스
+  tight A/B, 매번 코드 stash/restart로 시점 일치): (1) raw SQL의 24개월
+  경계 Date가 캐스팅 안 돼 경계일 거래가 조용히 누락 — UTC 자정 고정으로
+  수정, (2) DB에 실존하는 자연키 중복(같은 group+금액+날짜+층)을 SQL이
+  거르지 않아 과다 카운트 — dedupeTrades와 동일한 ROW_NUMBER dedup 추가,
+  (3) trailing12moSampleCount가 day 단위 INTERVAL 뺄셈이라 JS의 월 단위
+  monthsBetween()과 불일치, 이어서 같은 달 "나중" row를 잘못 peer로
+  포함 — month_index 정수화 + row_seq 기반 JOIN으로 수정. JOIN 조건을
+  상관 서브쿼리로 처음 구현했을 때 43초/29초였던 것을 JOIN+GROUP BY로
+  바꿔 1.2초/0.6초로 개선(동일 논리의 실행계획 차이 실측).
+
+QA: 60케이스 A/B 최종 재검증 — 모든 필드 완전 일치, 유일한 잔여 차이
+(8/60, 페이지 경계 tie-break)는 STEP C가 이미 문서화한 동점 미정의
+문제로 데이터 오류 아님(별도 확인: total 값은 old=new로 완전 동일).
+MOLIT 호출 0 런타임 재확인(부산 fresh 0건, 비부산 24건). Production
+브라우저로 하락/상승/area84/홈 STEP B/C 캡처와 byte-identical 확인.
+세션 전체 회귀 691/691 pass. `npx tsc --noEmit` 신규 오류 0(기존 20건
+유지). `npx eslint` clean. `npm run build` PASS.
+
+DB 변경: schema/migration 없음. Production write 없음(READ만).
+`EXPLAIN (ANALYZE, BUFFERS)`로 기존 인덱스가 그대로 활용됨을 확인해
+index 변경도 불필요했음을 검증.
+
+API 변경: 응답 스키마 변경 없음.
+
+상태: 완료.
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_C2.md`
+
+**TRADE_DB_FIRST_V1_STEP_C2 = PASS. PERFORMANCE = Busan-wide decline
+12m 7.3s→1.35s, rising 12m 2.45s→1.11s(3초 목표 달성, 모든 시나리오
+<2초). ROW_REDUCTION = 65,532→4,012(94% 감소, 부산 전체 12개월 하락
+기준). QUERY_COUNT = 16→1. INDEX_CHANGE = 불필요(기존 인덱스로 충분,
+EXPLAIN으로 확인). BUGS_FOUND_AND_FIXED = 3건(24개월 경계일 캐스팅,
+자연키 중복 미제거, trailing12moSampleCount day-vs-month 정밀도 +
+same-month peer 오포함) — 전부 raw SQL vs oracle A/B로 발견, 숫자를
+맞추기 위해 데이터 조작 없음. CORRECTNESS = 60/60 케이스 전체 필드
+일치(잔여 8건은 STEP C가 이미 문서화한 tie-break 미정의, 데이터
+오류 아님). MOLIT_CALLS_FOR_BUSAN = 0(런타임 재확인). TESTS = 691/691.
+BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
+TRADE_DB_FIRST_V1 STEP C 최종 판정 = FULL PASS(기능+성능 모두 달성).
+NEXT_STEP = 지역 변동지도 DB 전환(STEP D) 또는 record-high DB 전환.**
