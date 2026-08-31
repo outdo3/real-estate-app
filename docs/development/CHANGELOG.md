@@ -12253,3 +12253,89 @@ overflow 없음(iframe 격리 기법). REGRESSION = 없음(기존 admin
 32+src 211) 전부 pass. BUILD = PASS. PRODUCTION_WRITE = 0.
 DB_SCHEMA_CHANGE = 0. NEXT_STEP = TRADE_DB_FIRST_V1 STEP G(Cache/
 Preaggregation 정리) 또는 사용자 화면 개발 복귀.**
+
+## 2026-09-01
+
+### STEP — ADMIN OPS V1.1: Operational Evidence / Trust Hardening
+
+`ADMIN OPS V1` PM 검수 PARTIAL(LIVE 계산값과 과거 검증 Snapshot이
+충분히 구분되지 않음) 보완. 새 기능이 아니라 표현의 정직성 보강 —
+Production write 0건.
+
+**Evidence 4분류 도입**(LIVE/SNAPSHOT/CONFIG/UNKNOWN)와 `/api/admin/ops`
+전체 필드 재감사. 핵심 변경: `reviewRequired`/`incrementalSync`를
+"전국 운영 전체 상태"처럼 보이지 않게 SNAPSHOT+scopeNote로 명시
+재표현(STEP F의 3개 지역 bounded QA 결과일 뿐임을 숨기지 않음).
+`coverage.busan.covered`/`coverage.sejong.tradeDbCoverage`를 하드코딩
+문자열에서 실제 LIVE 쿼리로 전환. `features[].trust`의 "정상"을
+"DB-FIRST 적용"으로 재표현(매 로드마다 health-check한 것처럼 오해
+방지).
+
+**Duplicate=0 근거 정밀 검증**: `pg_constraint`엔 안 잡히지만(Prisma
+`@@unique`가 Postgres UNIQUE INDEX로 구현되기 때문) `pg_indexes`로
+정확한 index(`..._group_key_deal_amount_deal_date_f_key`, 자연키 5개
+컬럼과 정확히 일치) 확인 후, 실제 중복 자연키 INSERT를 트랜잭션
+내부에서 시도해(강제 롤백, Production 데이터 변경 없음) P2002로
+즉시 차단됨을 실측 확인 — CONFIG/STRUCTURAL 근거로 명시.
+
+**24개월 cancellation을 처음으로 machine-readable화**: 기존엔 문서
+prose만 있었다 — 이번에 384-cell 전체 24개월 read-only 재검증을
+실제로 재실행(Production READ만)해
+`data/trade-history/cancellation-24m-verification-snapshot.json`
+생성(신규 스크립트 `scripts/generate-cancellation-24m-snapshot.ts`,
+기존 resync-cancellation-v2.ts의 dry-run 로직 재사용). 결과:
+384/384 cells(COMPLETE 368+EMPTY_VALID 16), FAILED 0, INVALID 0,
+재실행 시 변경 0건(멱등) → SAFE. API가 이 파일을 직접 읽고, 파일이
+없거나 손상되면 UNKNOWN으로 표시(SAFE로 보이게 하지 않음). UI에
+"마지막 전체 검증/검증 범위/완료 cell/FAILED·INVALID/재검증 시
+변경사항" 상세 블록 추가 — 임의 freshness 정책(7일/30일 경고)은
+의도적으로 만들지 않고 검증 날짜만 정직하게 노출.
+
+**Overall Health 4단계 재설계**(정상/확인 필요/문제/확인 불가) —
+`src/lib/admin-ops-evidence.ts`(순수 함수)로 결정 로직을 분리:
+CRITICAL(live aptSeq missing>0, 최근 sync FAILED/INVALID>0, 24개월
+snapshot verdict≠SAFE), WARNING(세종 region model 누락,
+REVIEW_REQUIRED>0), UNKNOWN(snapshot/manifest 파일 손상 — CRITICAL이
+있으면 CRITICAL 우선), HEALTHY. 개발 단계상 정상적으로 미완성인
+상태(전국 DB coverage, 스케줄러 OFF)는 애초에 이 함수 입력에 없어
+자동 경고화될 수 없다. HEALTHY여도 "현재 확인 가능한 운영 지표 기준"
+subtitle을 항상 표시.
+
+**성능 실측**(이전엔 "수 초"로만 보고): `busanCanceled` 카운트
+8.7초 측정 — 원인 조사 결과 `dealCanceled` 컬럼에 인덱스가 없어
+(schema 변경은 이번 STEP 범위 밖) 5분 캐시로 흡수. 나머지 5개 쿼리는
+82ms~4s대.
+
+**Tests**: `admin-ops-evidence.test.ts` 신규 25개(manifest 집계,
+cancellation verdict의 "incomplete/FAILED/INVALID → SAFE 금지" 게이팅,
+overall health 4단계 전체 트리거+우선순위). "route 테스트 없음" 기존
+관례는 이번 STEP 예외(spec 명시 요구, 관리자 신뢰 판단 직결).
+
+Regression: proxy.ts/requireAdmin() 무변경, 기존 admin 라우트 401
+그대로. UI QA: 임시 미리보기 라우트(auth 무변경, 실캡처 데이터)로
+데스크톱+360/375/390 확인, 5컬럼 feature 테이블도 페이지 레벨
+overflow 없이 정상.
+
+DB 변경: schema/migration 없음. INSERT/UPDATE/DELETE 0건(duplicate
+실측 실험은 트랜잭션 강제 롤백, 잔존 데이터 0건 확인).
+
+상태: 완료.
+
+상세: `docs/development/ADMIN_OPS_V1_1_TRUST.md`
+
+**ADMIN_OPS_V1_1 = PASS. EVIDENCE_CLASSIFICATION = 전체 필드 재감사
+완료(LIVE/SNAPSHOT/CONFIG/UNKNOWN). CANCELLATION_24M_EVIDENCE =
+최초로 machine-readable화(384/384, FAILED 0, INVALID 0, idempotent,
+SAFE) — 문서 prose에서 실제 재검증+snapshot 파일로 전환.
+DUPLICATE_EVIDENCE = CONFIG/STRUCTURAL(정확한 index 이름+실측 INSERT
+차단 확인). REVIEW_REQUIRED/SYNC_SCOPE = bounded QA(3지역)임을
+명시(전국 운영 전체로 오인 방지). COVERAGE_SEMANTICS = region model
+(17/17)과 실거래 DB 적재(부산만) 분리 유지+세종 tradeDbCoverage
+LIVE 전환. OVERALL_HEALTH = 4단계 재설계(CRITICAL/WARNING/UNKNOWN
+신설), 미완성 상태 자동 경고화 안 됨. PERFORMANCE =
+busanCanceled 8.7초 원인 규명(무인덱스, schema 변경 범위 밖, 5분
+캐시로 흡수). TESTS = 신규 25개 전부 pass(총 236개). BUILD = PASS.
+SECURITY_REGRESSION = 없음. PRODUCTION_WRITE = 0(READ만, duplicate
+실험 롤백 확인). DB_SCHEMA_CHANGE = 0. NEXT_STEP = TRADE_DB_FIRST_V1
+STEP G 또는 사용자 화면 개발 복귀, 혹은 `[lawdCd, dealCanceled]`
+인덱스 추가 검토(별도 schema 변경 승인 필요).**

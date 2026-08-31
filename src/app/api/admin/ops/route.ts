@@ -6,13 +6,16 @@ import { requireAdmin } from '@/lib/auth-helpers';
 import { getOrSetCache } from '@/lib/server-cache';
 import { getSidoList, getSigunguListForSido } from '@/lib/region-utils';
 import { HISTORICAL_LOOKBACK_MONTHS, historicalCoverageLabel } from '@/lib/price-ranking';
+import { summarizeManifest, computeOverallHealth, OVERALL_STATUS_LABELS, type Manifest, type EvidenceType } from '@/lib/admin-ops-evidence';
 
 export const dynamic = 'force-dynamic';
 
-// ADMIN_OPS_V1 §11/§28 — "지금 데이터가 정상인가"를 30초 안에 판단하게 하는 것이
-// 목적이다(§48). 무거운 unscoped COUNT(*)는 실측 5~9초(부산 스코프는 158ms~2s대) —
-// 매 페이지 로드마다 재계산하면 안 되므로(§28 성능 요구) 전체 응답을 5분 캐시한다
-// (기존 admin/dashboard/route.ts의 pipeline health 캐시와 동일 패턴 재사용).
+// ADMIN_OPS_V1.1 §1 — 모든 핵심 값은 근거 종류(evidence)를 명시한다. 과거 검증
+// 결과를 실시간 정상처럼, 코드 상 가정을 실제 Production 상태처럼, 확인 불가능한
+// 것을 정상처럼 표현하지 않는다(§2 절대 원칙). 결정 로직(summarizeManifest/
+// computeOverallHealth)은 src/lib/admin-ops-evidence.ts로 분리해 테스트한다 —
+// 이 파일은 그 결과를 조립하는 I/O 오케스트레이션만 담당한다.
+
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const BUSAN_16 = [
@@ -21,53 +24,53 @@ const BUSAN_16 = [
 ];
 
 const NATIONWIDE_MANIFEST_PATH = path.join(process.cwd(), 'data/trade-history/nationwide-sync-manifest.json');
-const RESYNC_V2_MANIFEST_PATH = path.join(process.cwd(), 'data/trade-history/cancellation-resync-v2-manifest.json');
+const CANCELLATION_24M_SNAPSHOT_PATH = path.join(process.cwd(), 'data/trade-history/cancellation-24m-verification-snapshot.json');
 
-interface CellEntry {
-  status: 'COMPLETE' | 'EMPTY_VALID' | 'FAILED' | 'INVALID';
-  fetched: number;
-  invalidRows: number;
-  insertCount: number;
-  updateFalseToTrue: number;
-  updateTrueToFalseSkipped: number;
-  conflicts: number;
-  reviewRequired?: number; // STEP F-2 이전 manifest entry는 이 필드가 없을 수 있음 — 방어적으로 처리
-  at: string;
-}
-type Manifest = Record<string, CellEntry>;
+type ManifestReadResult =
+  | { status: 'ok'; manifest: Manifest }
+  | { status: 'missing' } // 아직 한 번도 실행된 적 없음 — 정상적인 "데이터 없음" 상태
+  | { status: 'unreadable'; error: string }; // 존재하는데 파싱 실패 — 진짜 UNKNOWN 사유
 
-function readManifest(filePath: string): Manifest {
+// §2 "확인 불가능 → 정상" 금지 — 파일이 아예 없는 것(missing, 정당한 무상태)과
+// 파일이 손상돼 못 읽는 것(unreadable, 진짜 UNKNOWN)을 구분한다. 기존 V1은 둘 다
+// 조용히 {}로 취급해 구분이 없었다.
+function readManifest(filePath: string): ManifestReadResult {
+  if (!fs.existsSync(filePath)) return { status: 'missing' };
   try {
-    if (!fs.existsSync(filePath)) return {};
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return { status: 'ok', manifest: JSON.parse(fs.readFileSync(filePath, 'utf-8')) };
   } catch (e) {
     console.error(`[admin/ops] manifest 읽기 실패: ${filePath}`, e);
-    return {};
+    return { status: 'unreadable', error: String(e) };
   }
 }
 
-function summarizeManifest(manifest: Manifest) {
-  const entries = Object.values(manifest);
-  let complete = 0, emptyValid = 0, failed = 0, invalid = 0;
-  let rowsInserted = 0, cancellationsUpdated = 0, reviewRequired = 0;
-  let lastSyncAt: string | null = null;
-  for (const e of entries) {
-    if (e.status === 'COMPLETE') complete++;
-    else if (e.status === 'EMPTY_VALID') emptyValid++;
-    else if (e.status === 'FAILED') failed++;
-    else if (e.status === 'INVALID') invalid++;
-    rowsInserted += e.insertCount || 0;
-    cancellationsUpdated += e.updateFalseToTrue || 0;
-    reviewRequired += e.reviewRequired || 0;
-    if (!lastSyncAt || e.at > lastSyncAt) lastSyncAt = e.at;
-  }
-  return { cells: entries.length, complete, emptyValid, failed, invalid, rowsInserted, cancellationsUpdated, reviewRequired, lastSyncAt };
+interface Cancellation24mSnapshot {
+  verifiedAt: string;
+  startMonth: string;
+  endMonth: string;
+  districtCount: number;
+  cells: number;
+  complete: number;
+  emptyValid: number;
+  failed: number;
+  invalid: number;
+  conflicts: number;
+  idempotency: { verdict: boolean; note: string };
+  verdict: 'SAFE' | 'UNSAFE';
 }
 
-// ADMIN_OPS_V1 §13 — 하드코딩된 숫자만 표시하지 않는다. getSidoList()/
-// getSigunguListForSido()는 이미 STEP F/F-2가 검증한 런타임 조회 함수를 그대로
-// 재사용한다(§7 새 auth/region 체계를 만들지 않음과 동일 원칙 — sync 엔진과
-// 동일한 함수). 외부 REGCODE_PROXY 호출이라 5분 캐시 안에서만 재계산한다.
+function readCancellation24mSnapshot(): { status: 'ok'; data: Cancellation24mSnapshot } | { status: 'missing' } | { status: 'unreadable' } {
+  if (!fs.existsSync(CANCELLATION_24M_SNAPSHOT_PATH)) return { status: 'missing' };
+  try {
+    return { status: 'ok', data: JSON.parse(fs.readFileSync(CANCELLATION_24M_SNAPSHOT_PATH, 'utf-8')) };
+  } catch (e) {
+    console.error('[admin/ops] 24개월 취소검증 snapshot 읽기 실패', e);
+    return { status: 'unreadable' };
+  }
+}
+
+// §13 하드코딩 금지 — RegionSelectModal/sync 엔진과 동일한 런타임 조회를 그대로
+// 재사용한다(§7 새 체계 금지와 동일 원칙).
 async function buildNationwideRegionModel() {
   const sidoList = await getSidoList();
   let syncTargets = 0;
@@ -81,110 +84,147 @@ async function buildNationwideRegionModel() {
 
 async function buildSummary() {
   const now = new Date();
+  const nowIso = now.toISOString();
 
-  // §11 TradeHistory — 부산 스코프 count는 158ms~2s대(실측)로 캐시 없이도 감당
-  // 가능하지만, 전체 응답을 5분 캐시하므로 여기서도 안전하게 병렬 실행한다.
-  // duplicate는 DB 레벨 unique constraint(`trade_natural_key`, prisma/schema.prisma)로
-  // 구조적으로 0이 보장된다 — 매번 무거운 COUNT DISTINCT 재계산 없이 "0(스키마
-  // 제약으로 보장)"으로 정직하게 표시한다(§12 — 실시간 계산이 비효율적이면 최근
-  // 검증 결과로 표시, 숫자를 추정하지 않는다. 이 경우는 추정이 아니라 스키마
-  // 자체가 보장하는 사실이라는 점을 doc에 근거로 남긴다).
-  const [busanTotal, busanCanceled, aptSeqMissing, latestDealAgg] = await Promise.all([
+  // §11/§12 TradeHistory — 전부 부산 스코프 LIVE 쿼리. §16 세종은 실거래 DB에
+  // 적재된 row가 실제로 있는지 라이브로 직접 확인한다(하드코딩 문자열 아님).
+  // 부산 coverage(16/16)도 "목표 지역 수"가 아니라 "실제 row가 있는 지역 수"를
+  // 라이브로 센다 — §2 "확인 불가능을 정상처럼" 금지 원칙상, 검증 없이 16/16을
+  // 그냥 참으로 표시하지 않는다.
+  const [busanTotal, busanCanceled, aptSeqMissing, latestDealAgg, busanCoveredGroups, sejongTradeCount] = await Promise.all([
     prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 } } }),
     prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, dealCanceled: true } }),
     prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, aptSeq: null } }),
     prisma.apartmentTradeHistory.aggregate({ where: { lawdCd: { in: BUSAN_16 } }, _max: { dealDate: true } }),
+    prisma.apartmentTradeHistory.groupBy({ by: ['lawdCd'], where: { lawdCd: { in: BUSAN_16 } } }),
+    prisma.apartmentTradeHistory.count({ where: { lawdCd: '36110' } }),
   ]);
 
-  const nationwideManifest = readManifest(NATIONWIDE_MANIFEST_PATH);
-  const nationwideSummary = summarizeManifest(nationwideManifest);
-  const resyncV2Manifest = readManifest(RESYNC_V2_MANIFEST_PATH);
-  const resyncV2Summary = summarizeManifest(resyncV2Manifest);
+  const nationwideManifestResult = readManifest(NATIONWIDE_MANIFEST_PATH);
+  const nationwideSummary = nationwideManifestResult.status === 'ok' ? summarizeManifest(nationwideManifestResult.manifest) : null;
+
+  const cancellation24m = readCancellation24mSnapshot();
 
   const regionModel = await buildNationwideRegionModel();
 
-  // §18/§19 — 24개월 cancellation completeness는 TRADE_CANCELLATION_RESYNC_V2가
-  // 이미 실측/문서화한 결론이다(older 11개월 write manifest는 여기서 라이브로
-  // 재확인 가능하지만, "전체 24개월 read-only 재검증" 384-cell dry-run 결과는
-  // 파일로 영속화되지 않아 — dry-run은 manifest를 저장하지 않음 — 라이브로 다시
-  // 계산할 수 없다). older window write manifest(FAILED/INVALID=0 여부)는 실제로
-  // 재확인하고, 전체 24개월 SAFE 판정 자체는 문서 근거(TRADE_CANCELLATION_RESYNC_
-  // V2_24M.md)를 명시해 "코드 실행 시점이 아니라 문서 기준"임을 숨기지 않는다.
-  const olderWindowIntact = resyncV2Summary.failed === 0 && resyncV2Summary.invalid === 0;
+  // §18 Overall Health — 4단계(정상/확인 필요/문제/확인 불가) 결정은
+  // computeOverallHealth()(src/lib/admin-ops-evidence.ts, 테스트 대상)로 분리했다.
+  // 개발 단계상 정상적으로 미완성인 상태(전국 DB coverage, 스케줄러 OFF)는
+  // 애초에 그 함수의 입력에 포함되지 않아 경고 후보가 될 수 없다.
+  const health = computeOverallHealth({
+    aptSeqMissing,
+    nationwideManifestStatus: nationwideManifestResult.status,
+    nationwideFailed: nationwideSummary?.failed ?? 0,
+    nationwideInvalid: nationwideSummary?.invalid ?? 0,
+    nationwideReviewRequired: nationwideSummary?.reviewRequired ?? 0,
+    cancellation24mStatus: cancellation24m.status,
+    cancellation24mVerdict: cancellation24m.status === 'ok' ? cancellation24m.data.verdict : null,
+    sejongInRegionModel: regionModel.sejongInRegionModel,
+  });
+  const allReasons = [...health.criticalReasons, ...health.warningReasons];
 
-  const overallWarnings: string[] = [];
-  if (aptSeqMissing > 0) overallWarnings.push(`부산 aptSeq 없는 row ${aptSeqMissing}건 발견`);
-  if (nationwideSummary.failed > 0) overallWarnings.push(`전국 sync FAILED cell ${nationwideSummary.failed}건`);
-  if (nationwideSummary.invalid > 0) overallWarnings.push(`전국 sync INVALID cell ${nationwideSummary.invalid}건`);
-  if (nationwideSummary.reviewRequired > 0) overallWarnings.push(`REVIEW_REQUIRED 거래 ${nationwideSummary.reviewRequired}건(aptSeq 없어 미반영)`);
-  if (!olderWindowIntact) overallWarnings.push('24개월 취소검증(older window) manifest에 FAILED/INVALID 존재');
-  if (!regionModel.sejongInRegionModel) overallWarnings.push('세종특별자치시가 region model에서 조회되지 않음');
-
-  const overallStatus: '정상' | '확인 필요' = overallWarnings.length === 0 ? '정상' : '확인 필요';
+  const busanCoveredCount = busanCoveredGroups.length;
 
   return {
     overall: {
-      status: overallStatus,
-      warningsCount: overallWarnings.length,
-      lastCheckedAt: now.toISOString(),
+      status: OVERALL_STATUS_LABELS[health.statusCode],
+      statusCode: health.statusCode,
+      subtitle: '현재 확인 가능한 운영 지표 기준',
+      warningsCount: allReasons.length,
+      lastCheckedAt: nowIso,
     },
     tradeHistory: {
+      evidenceType: 'LIVE' as EvidenceType,
+      checkedAt: nowIso,
       busanTotal,
       busanActive: busanTotal - busanCanceled,
       busanCanceled,
       latestDealDate: latestDealAgg._max.dealDate ? latestDealAgg._max.dealDate.toISOString().slice(0, 10) : null,
       aptSeqMissing,
-      // §12 — DB unique constraint(trade_natural_key)가 자연키 중복을 구조적으로
-      // 차단하므로, 무거운 COUNT DISTINCT 재계산 없이도 항상 참인 사실이다.
-      naturalKeyDuplicates: { value: 0, source: 'schema_constraint' as const },
-      reviewRequired: nationwideSummary.reviewRequired,
+      naturalKeyDuplicates: {
+        value: 0,
+        evidenceType: 'CONFIG' as EvidenceType,
+        note: 'DB unique index(apartment_trade_histories_group_key_deal_amount_deal_date_f_key)가 자연키 중복을 구조적으로 차단 — 실제 중복 INSERT 시도가 P2002로 차단됨을 실측 확인(2026-09-01)',
+      },
+      reviewRequired: {
+        value: nationwideSummary?.reviewRequired ?? 0,
+        evidenceType: 'SNAPSHOT' as EvidenceType,
+        verifiedAt: nationwideSummary?.lastSyncAt ?? null,
+        note: '최근 sync 실행 결과 기준(전체 DB 스캔 아님) — aptSeq 없어 insert하지 않고 건너뛴 거래 수',
+      },
     },
     coverage: {
-      busan: { covered: 16, total: 16 },
+      evidenceType: 'LIVE' as EvidenceType,
+      checkedAt: nowIso,
+      busan: { covered: busanCoveredCount, total: 16 },
       nationwide: { sido: regionModel.sidoCount, syncTargets: regionModel.syncTargets },
       sejong: {
         regionModel: regionModel.sejongInRegionModel ? '정상' : '확인 필요',
-        tradeDbCoverage: '미수집', // STEP F-2 §12 — dry-run만 검증됨, 실제 write 없음(문서 근거)
+        tradeDbCoverage: sejongTradeCount > 0 ? `적재됨(${sejongTradeCount}건)` : '미수집',
       },
-      // §22 — 전국 sync engine이 있다고 전국 DB coverage가 끝났다고 과장하지 않는다.
       nationwideDbCoverageNote: '전국 sync engine 준비 완료(엔진), 전국 DB 실데이터 적재는 부산 외 극히 일부 QA 샘플만 존재',
     },
     incrementalSync: {
-      lastSyncAt: nationwideSummary.lastSyncAt,
-      cells: nationwideSummary.cells,
-      complete: nationwideSummary.complete,
-      emptyValid: nationwideSummary.emptyValid,
-      failed: nationwideSummary.failed,
-      invalid: nationwideSummary.invalid,
-      rowsInserted: nationwideSummary.rowsInserted,
-      cancellationsUpdated: nationwideSummary.cancellationsUpdated,
-      scheduler: 'OFF' as const, // §16 — 사실. vercel.json/cron 없음(STEP F 감사 결과), 의도된 상태.
-      nextScheduledSync: null, // §17 — 스케줄러가 없으므로 임의로 만들지 않음.
+      evidenceType: 'SNAPSHOT' as EvidenceType,
+      scopeNote: '최근 제한 QA sync 결과 — 전국 운영 전체 상태가 아니다',
+      verifiedAt: nationwideSummary?.lastSyncAt ?? null,
+      regionsInScope: nationwideSummary?.regionsInScope ?? 0,
+      cells: nationwideSummary?.cells ?? 0,
+      complete: nationwideSummary?.complete ?? 0,
+      emptyValid: nationwideSummary?.emptyValid ?? 0,
+      failed: nationwideSummary?.failed ?? 0,
+      invalid: nationwideSummary?.invalid ?? 0,
+      rowsInserted: nationwideSummary?.rowsInserted ?? 0,
+      cancellationsUpdated: nationwideSummary?.cancellationsUpdated ?? 0,
+      scheduler: { value: 'OFF' as const, evidenceType: 'CONFIG' as EvidenceType, note: 'vercel.json/cron 부재 확인(STEP F) — 아직 활성화하지 않은 의도된 상태' },
+      nextScheduledSync: { value: null, evidenceType: 'CONFIG' as EvidenceType },
     },
     cancellation: {
       lookbackMonths: HISTORICAL_LOOKBACK_MONTHS,
       coverageLabel: historicalCoverageLabel(),
-      window24m: {
-        verdict: 'SAFE' as const,
-        source: 'TRADE_CANCELLATION_RESYNC_V2_24M.md(문서 기준, 코드 실행 시점 재계산 아님)',
-        olderWindowManifestIntact: olderWindowIntact,
-        olderWindowFailed: resyncV2Summary.failed,
-        olderWindowInvalid: resyncV2Summary.invalid,
-      },
+      window24m:
+        cancellation24m.status === 'ok'
+          ? {
+              evidenceType: 'SNAPSHOT' as EvidenceType,
+              verdict: cancellation24m.data.verdict,
+              verifiedAt: cancellation24m.data.verifiedAt,
+              startMonth: cancellation24m.data.startMonth,
+              endMonth: cancellation24m.data.endMonth,
+              cells: cancellation24m.data.cells,
+              complete: cancellation24m.data.complete,
+              failed: cancellation24m.data.failed,
+              invalid: cancellation24m.data.invalid,
+              idempotent: cancellation24m.data.idempotency.verdict,
+              source: 'data/trade-history/cancellation-24m-verification-snapshot.json',
+            }
+          : {
+              evidenceType: 'UNKNOWN' as EvidenceType,
+              verdict: 'UNKNOWN' as const,
+              verifiedAt: null,
+              startMonth: null,
+              endMonth: null,
+              cells: 0,
+              complete: 0,
+              failed: 0,
+              invalid: 0,
+              idempotent: null,
+              source: cancellation24m.status === 'missing' ? 'snapshot 파일 없음' : 'snapshot 파일 손상',
+            },
       allTime: {
+        evidenceType: 'CONFIG' as EvidenceType,
         verdict: 'NOT_VERIFIED' as const,
         note: '역대(2006년~) 전체 이력 취소 완전성은 검증되지 않음 — "역대" 표현 계속 금지',
       },
     },
     features: [
-      { name: '84㎡ 국민평형', source: 'TradeHistory DB', busan: 'DB-FIRST', trust: '정상' },
-      { name: '거래량(매매)', source: 'TradeHistory DB', busan: 'DB-FIRST', trust: '정상' },
-      { name: '최근 상승', source: 'TradeHistory DB', busan: 'DB-FIRST', trust: '정상' },
-      { name: '최근 하락', source: 'TradeHistory DB', busan: 'DB-FIRST', trust: '정상' },
-      { name: '지역 변동지도', source: 'TradeHistory DB', busan: 'DB-FIRST', trust: '정상' },
-      { name: '2년최고가', source: 'TradeHistory DB', busan: 'DB-FIRST', trust: '24개월 SAFE' },
+      { name: '84㎡ 국민평형', source: 'TradeHistory DB', busan: 'DB-FIRST 적용', trust: 'DB-FIRST 적용', evidenceType: 'CONFIG' as EvidenceType },
+      { name: '거래량(매매)', source: 'TradeHistory DB', busan: 'DB-FIRST 적용', trust: 'DB-FIRST 적용', evidenceType: 'CONFIG' as EvidenceType },
+      { name: '최근 상승', source: 'TradeHistory DB', busan: 'DB-FIRST 적용', trust: 'DB-FIRST 적용', evidenceType: 'CONFIG' as EvidenceType },
+      { name: '최근 하락', source: 'TradeHistory DB', busan: 'DB-FIRST 적용', trust: 'DB-FIRST 적용', evidenceType: 'CONFIG' as EvidenceType },
+      { name: '지역 변동지도', source: 'TradeHistory DB', busan: 'DB-FIRST 적용', trust: 'DB-FIRST 적용', evidenceType: 'CONFIG' as EvidenceType },
+      { name: '2년최고가', source: 'TradeHistory DB', busan: 'DB-FIRST 적용', trust: '24개월 SAFE', evidenceType: 'SNAPSHOT' as EvidenceType },
     ],
-    warnings: overallWarnings,
+    warnings: allReasons,
   };
 }
 
@@ -193,7 +233,7 @@ export async function GET() {
   if (error) return NextResponse.json({ success: false, error }, { status });
 
   try {
-    const data = await getOrSetCache('admin-ops:summary', CACHE_TTL_MS, buildSummary);
+    const data = await getOrSetCache('admin-ops:summary-v1_1', CACHE_TTL_MS, buildSummary);
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('Failed to build admin ops summary:', error);

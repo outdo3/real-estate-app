@@ -1,0 +1,25 @@
+{
+  "verifiedAt": "2026-08-31T16:16:51.820Z",
+  "startMonth": "202410",
+  "endMonth": "202609",
+  "districtCount": 16,
+  "cells": 384,
+  "complete": 368,
+  "emptyValid": 16,
+  "failed": 0,
+  "invalid": 0,
+  "conflicts": 0,
+  "duplicates": 0,
+  "changesFoundThisRun": {
+    "insert": 0,
+    "flipFalseToTrue": 0,
+    "skippedTrueToFalse": 0,
+    "reviewRequired": 0
+  },
+  "idempotency": {
+    "verdict": true,
+    "note": "dry-run 자체의 무변경 여부(TRUE=이미 완전히 반영된 상태). apply 후 재-dry-run 0건이라는 최초 증명은 TRADE_CANCELLATION_RESYNC_V2(2026-08-31) 문서 참고 — 이번 실행은 write를 하지 않았다."
+  },
+  "verdict": "SAFE",
+  "generatedBy": "scripts/generate-cancellation-24m-snapshot.ts"
+}

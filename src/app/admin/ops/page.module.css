@@ -26,6 +26,10 @@
   border-color: rgba(245, 158, 11, 0.4);
 }
 
+.overallCritical {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
 .overallStatus {
   display: flex;
   align-items: center;
@@ -36,6 +40,13 @@
   font-weight: 800;
   font-size: 1.05rem;
   color: var(--text-primary);
+}
+
+.overallSubtitle {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .overallMeta {
@@ -135,11 +146,95 @@
   box-shadow: var(--shadow-card);
 }
 
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+
 .sectionTitle {
   font-weight: 800;
   font-size: 0.95rem;
   color: var(--text-primary);
+}
+
+.sectionMeta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
   margin-bottom: 0.85rem;
+}
+
+.evidenceBadge {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.evidenceLive {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.evidenceSnapshot {
+  background: rgba(148, 163, 184, 0.18);
+  color: #475569;
+}
+
+.evidenceConfig {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+}
+
+.evidenceUnknown {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+.noteStrong {
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-top: 0.5rem;
+  line-height: 1.5;
+}
+
+.detailBox {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-lg);
+  background: var(--bg-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.detailRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+}
+
+.detailRow span {
+  color: var(--text-muted);
+}
+
+.detailRow b {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.detailFooter {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 0.2rem;
 }
 
 .kvGrid {
@@ -170,10 +265,14 @@
   gap: 0.2rem;
 }
 
-.kv span {
+.kv > span {
   font-size: 0.72rem;
   color: var(--text-muted);
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
 .kv b {
