@@ -11486,3 +11486,69 @@ CANNOT_DETERMINE(목록 서비스 필요). PRODUCTION_WRITE = 0. DB_SCHEMA_
 CHANGE = 0. PM_DECISION_NEEDED = 목록 서비스 정확한 operation명(Sample
 Code/미리보기 화면) 확보, 또는 최소 경동마리나 kaptCode 1건. NEXT_STEP
 = 확보 후 probe 재실행 한 줄로 즉시 완료 가능.**
+
+### STEP — TRADE_DB_FIRST_V1 STEP A: 실거래 DB Read Core 구축
+
+부산 전체 실거래 이력(`ApartmentTradeHistory`, 855,000+ rows, 16/16
+구·군, 2006-01~)을 향후 사용자 실거래 기능(84㎡ 순위/거래량/최근
+상승·하락/지역 변동지도, STEP B~D)이 공통으로 재사용할 DB 읽기
+기반만 구축(눈에 보이는 새 기능 없음, 기존 API 전환은 후속 STEP).
+
+작업:
+
+- 기존 코드 전수 audit: `src/lib/trade-history-read.ts`(`TRADE_HISTORY_
+  DATA_V1`이 이미 만들어 둔 4개 좁은 헬퍼, 어떤 live route에도 아직
+  미연결 확인), `regional-feed.ts`의 identityKey/areaKey/groupKey(재사용,
+  재발명 안 함), `busan-manifest.json`(재사용 가능성 조사 후 core
+  자체에는 미통합 결정 — DB aggregate가 더 정확).
+- **버그 수정(안전, 시그니처 불변)**: `trade-history-read.ts`가 자체
+  `new PrismaClient()`를 쓰고 있던 것을 프로젝트 전역 싱글턴
+  (`src/lib/prisma.ts`)으로 교체 — 이번 세션에서 실제로 겪은 Supabase
+  connection pool 고갈 문제와 직결된 안전 조치.
+- 신규 일반 진입점 `queryTrades()` + 순수 로직 `buildTradeQuery()`
+  (DB 없이 단위 테스트 가능) 추가: aptSeq/identity(name+dong 폴백)/
+  lawdCd 배열(batch, N+1 방지) 필터, exclusiveArea 정확 일치(문자열
+  비교, §QA-FIX 재사용)/bounded range, from·to(양쪽 inclusive),
+  dealCanceled=false 기본(opt-in만 취소 포함), dealDate+id 2단
+  deterministic 정렬, limit 생략 시 무제한(aggregation 용도)·지정 시
+  5000 clamp, aptSeq/identity/lawdCd 중 최소 하나 없으면 검증 에러(전체
+  테이블 스캔 방지). MOLIT fetch 헬퍼는 이 파일 어디에도 import하지
+  않음(정적 감사 테스트로 고정).
+- 기존 4개 함수(`getTradeHistory`/`getAllTimeHigh`/`getPreviousTrade`/
+  `getRegionalTrades`)는 변경 없이 유지 — `qa-trade-history.ts` 재실행으로
+  회귀 없음 재확인(8개 대표 단지 전부 라이브 MOLIT 매칭 OK).
+- **Production 실측 QA**(`scripts/qa-trade-history-read-core.ts`,
+  신규, read-only): §24 A~H 케이스(단일 aptSeq/취소 제외/기간/면적/
+  지역/no-fallback/deterministic ordering/bounded limit) 전부 실제
+  Production 데이터로 18/18 PASS.
+- **Production 벤치마크**: 단일 단지 45~124ms, 구 단위 151~212ms, 부산
+  전체+84㎡대 필터 2.2~2.4초(목표 충족) — 전부 목표 이내. 필터 없는
+  "부산 전체×12개월×raw 3.7만 row" stress case만 6.3초로 목표(5초)
+  초과(직전 STEP이 동일 패턴으로 이미 측정한 6.8초와 사실상 일치, 회귀
+  아님, 어떤 live route에도 미연결이라 사용자 영향 0) — STEP B 설계
+  가이드로 aggregate 방식 권장을 문서에 기록.
+- 인덱스 audit: 기존 4개 인덱스가 `queryTrades()`의 모든 필터 조합과
+  이미 일치 — 신규 인덱스/schema 변경 불필요.
+
+DB 변경: schema/migration 없음. Production write 없음(READ만).
+
+API 변경: 없음(신규 read core 추가만, 기존 84㎡/거래량/상승/하락/
+변동지도 API 미접촉 — 전환은 `TRADE_HISTORY_READ_MIGRATION_V1` 대상).
+
+QA: 신규 유닛테스트 19개(`trade-history-read.test.mjs`) 전부 pass.
+세션 전체 회귀 691/691 pass. `npx tsc --noEmit` 신규 오류 0(기존 20건
+유지). `npx eslint` clean. `npm run build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_A.md`
+
+**TRADE_DB_FIRST_V1_STEP_A = PASS. READ_CORE = queryTrades()+
+buildTradeQuery(). MOLIT_FALLBACK_IN_CORE = 0(정적 감사 확인).
+CANCELLATION_DEFAULT = EXCLUDED. NO_DATA_POLICY = HONEST_EMPTY(다른
+단지 대체 0). N_PLUS_1 = 0(aptSeq/lawdCd batch IN 지원). INDEX_AUDIT =
+기존 인덱스로 충분(SCHEMA_CHANGE 불필요). BENCHMARK = 3/4 시나리오
+목표 충족, 1개(필터없는 최대부하) 목표 초과이나 미연결·비회귀.
+LIVE_API_MIGRATION = NOT_YET(의도적, STEP B 대상). TESTS = 691/691.
+BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0. NEXT_STEP =
+TRADE_DB_FIRST_V1 STEP B(84㎡ 순위 + 거래량 DB 전환).**
