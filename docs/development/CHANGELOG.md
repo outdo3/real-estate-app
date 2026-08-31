@@ -11264,3 +11264,57 @@ COORDINATE_VERDICT = CANNOT_DETERMINE. PRODUCTION_WRITE = 0.
 DB_SCHEMA_CHANGE = 0. PM_DECISION_NEEDED = data.go.kr 활용신청 승인
 상태 재확인. NEXT_STEP = 승인 확인 후 scripts/audit-apartment-basic-
 info-source.ts 재실행으로 즉시 재검증 가능.**
+
+### STEP — APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1 재검증: 승인 확인됨, blocker 재정의 (여전히 BLOCKED)
+
+사용자가 data.go.kr 마이페이지에서 `국토교통부_공동주택 기본
+정보제공 서비스`와 `공동주택 단지 목록제공 서비스` 둘 다 `[승인]`
+상태(만료 2028-08-24/2028-08-31)임을 직접 확인해 전달 — 직전 STEP의
+"미승인" 가설을 폐기하고 옛 V3 endpoint를 전제하지 않은 채 재검증.
+
+작업:
+
+- probe 스크립트(`scripts/audit-apartment-basic-info-source.ts`) 후보를
+  9개로 확장 — 두 API group(1611000/1613000) × 여러 버전/무버전
+  조합, companion 목록 서비스의 legacy/V2/V3 변형까지 전부 포함(웹
+  검색으로 발견한 실사용 예제 `1611000/AptListService/
+  getLegaldongAptList?bjdCode=...` 조합 포함, `bjdCode`는 기존
+  regcode 프록시로 정확히 조회한 값 사용 — 추측 아님).
+- **재검증 결과**: 9개 후보 전부 여전히 `NO_OPENAPI_SERVICE_ERROR`,
+  대조군(`BldRgstHubService`, 같은 key)은 재현성 있게 성공(3회 중 2회
+  즉시 성공, 1회는 무관한 일시적 `SERVICETIMEOUT_ERROR`).
+- **진단을 재정의**: `NO_OPENAPI_SERVICE_ERROR`(`returnReasonCode=12`)
+  는 data.go.kr 공통 오류 체계에서 "요청 URL이 등록된 서비스와
+  불일치"를 뜻하는 코드로, 승인/권한 오류 코드와 다르다 — 승인이
+  확인된 지금 이 오류가 계속 나는 것은 미승인이 아니라 **정확한 End
+  Point 경로를 아직 못 찾았기 때문**이라고 결론.
+- data.go.kr의 로그인 전용 "개발계정 상세" 화면(정확한 End Point가
+  표시되는 곳)에 비로그인 접근을 시도했으나 SSO 로그인 페이지로
+  리다이렉트됨을 확인 — 프로그래매틱으로는 더 이상 좁힐 수 없는 지점.
+- 문서(`APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`)에 §6-B/§7-B
+  재검증 섹션 추가, §13~§15(Known Limitations/Next Step/PM Decision)
+  갱신 — "승인 재확인" 요청 대신 "정확한 End Point 문자열 확보"로
+  요청 내용을 좁혔다.
+
+DB 변경: schema/migration 없음. Production write 없음(여전히 API
+응답 자체를 받지 못함).
+
+API 변경: 없음(기존 probe 스크립트 후보 목록만 확장).
+
+QA: 재검증 2회 실행, 9개 후보 결과 재현성 확인. `npx eslint`/`npx tsc
+--noEmit` 신규 오류 0.
+
+상태: **BLOCKED**(진단은 진전됐으나 여전히 사용자의 1회성 조치 필요
+— §15).
+
+상세: `docs/development/APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`
+§6-B, §7-B, §13~§15.
+
+**RE-VERIFICATION = BLOCKED(원인 재정의). APPROVAL_STATUS = CONFIRMED
+(user-provided, 두 서비스 모두 승인, 만료 2028). CANDIDATES_TESTED = 9.
+ALL = NO_OPENAPI_SERVICE_ERROR(returnReasonCode=12, wrong-URL 코드).
+CONTROL_CALL = SUCCESS(같은 키). DIAGNOSIS = ENDPOINT_URL_UNKNOWN(
+승인/키 문제 아님). PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
+PM_DECISION_NEEDED = data.go.kr 로그인 후 정확한 End Point 문자열
+복사·전달(승인 재확인 아님, 코드로 해결 불가). NEXT_STEP = End Point
+확보 후 probe 스크립트에 한 줄 추가·재실행.**

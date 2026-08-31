@@ -195,6 +195,53 @@ STEP에서는 이 항목들을 "필드명을 추측"해서 채우지 않는다(�
 **CANNOT_DETERMINE** — §6 blocker로 단 1건도 실제 API 응답을 받지
 못해 샘플 테이블 자체를 만들 수 없다.
 
+## 6-B. Re-verification After Approval Confirmed (2026-08-31)
+
+사용자가 data.go.kr 마이페이지 → 활용신청 현황에서 두 서비스 모두
+`[승인]` 상태(공동주택 단지 목록제공 서비스: 신청일 2026-08-31, 만료
+2028-08-31 / 공동주택 기본 정보제공 서비스: 신청일 2026-08-24, 만료
+2028-08-24)임을 직접 확인해 전달했다 — §6의 "미승인" 가설은 폐기한다.
+
+**옛 V3 endpoint를 그대로 전제하지 말라는 지시에 따라** 후보를
+9개로 넓혀 재검증했다(같은 probe 스크립트, 동일 key, 반복 2~3회):
+
+| 후보 | 결과 |
+|---|---|
+| `1613000/AptBasisInfoServiceV3/getAphusBassInfoV3` | `NO_OPENAPI_SERVICE_ERROR` |
+| `1613000/AptBasisInfoServiceV4/getAphusBassInfoV4`(신버전 가능성) | `NO_OPENAPI_SERVICE_ERROR` |
+| `1613000/AptBasisInfoService/getAphusBassInfo`(버전 접미사 없음) | `NO_OPENAPI_SERVICE_ERROR` |
+| `1611000/AptBasisInfoService/getAphusBassInfo`(legacy) | `NO_OPENAPI_SERVICE_ERROR` |
+| `1613000/AptListService3/getSigunguAptListV3` | `NO_OPENAPI_SERVICE_ERROR` |
+| `1613000/AptListService3/getSidoAptListV3` | `NO_OPENAPI_SERVICE_ERROR` |
+| `1613000/AptListService2/getLegaldongAptList`(이전 STEP이 시도한 변형) | `NO_OPENAPI_SERVICE_ERROR` |
+| `1611000/AptListService/getSigunguAptList` | `NO_OPENAPI_SERVICE_ERROR` |
+| `1611000/AptListService/getLegaldongAptList`(웹 검색으로 발견한 실사용 예제 조합, `bjdCode=2635010500` 우동) | `NO_OPENAPI_SERVICE_ERROR` |
+| **CONTROL**: `1613000/BldRgstHubService/getBrTitleInfo`(동일 key) | `resultCode=00 NORMAL SERVICE` — 성공(2/3회, 1회는 무관한 `SERVICETIMEOUT_ERROR` 일시 네트워크 문제) |
+
+**진단이 바뀌었다**: `NO_OPENAPI_SERVICE_ERROR`(`returnReasonCode=12`)는
+data.go.kr 공통 오류 체계에서 "요청 URL 자체가 등록된 서비스와
+일치하지 않음"을 뜻하는 코드로, 승인/권한 문제에 쓰이는 다른
+코드(`SERVICE_ACCESS_DENIED_ERROR` 등)와 다르다. 승인 상태가 이미
+확인된 지금, 9개 후보가 전부 이 코드로 실패한다는 것은 "미승인"이
+아니라 **"이 두 서비스의 정확한 End Point 경로를 아직 못 찾았다"**는
+뜻으로 재해석해야 한다.
+
+data.go.kr의 실제 End Point는 로그인한 사용자의 "마이페이지 → 개발
+계정 상세" 화면에만 정확히 노출되며(비로그인 상태로 `data.go.kr/iim/
+api/selectAPIAcountView.do` 접근을 시도했으나 SSO 로그인 페이지로
+리다이렉트됨 — 프로그래매틱 접근 불가), 공개 문서/블로그는 버전이
+자주 바뀌어 신뢰할 수 없다는 것이 이번 재검증으로 실증됐다(9개의
+그럴듯한 후보 전부 틀림).
+
+## 7-B. 남은 Blocker(재정의)
+
+승인 blocker는 해소됐다. 남은 것은 **정확한 End Point 문자열
+확보**뿐이다 — 이는 코드나 재추측으로 풀 수 없고, 사용자가 로그인한
+data.go.kr 화면에서 직접 복사해야 한다(§15 PM Decision Needed 참고).
+그 텍스트만 확보되면 이 STEP의 probe 스크립트에 한 줄 추가해 즉시
+재검증 가능하고, 성공하면 §7~§13(경동마리나 실제 검증, 부산 샘플,
+source verdict)을 곧바로 채울 수 있다.
+
 ## 8. Household/BuildingCount/Coordinate Source Verdict
 
 세 항목 모두 **CANNOT_DETERMINE**(RECOMMENDED/LIMITED/NOT_RECOMMENDED
@@ -257,36 +304,47 @@ buildingCount 수정 없음.
 ## 13. Known Limitations
 
 - 이 STEP의 핵심 질문("이 공식 API를 믿고 ApartmentMaster를 보강해도
-  되는가?")에 답하지 못했다 — API 접근 자체가 막혀 있다.
+  되는가?")에 여전히 답하지 못했다 — 승인은 확인됐지만 정확한 End
+  Point를 아직 못 찾아 API 응답 자체를 못 받았다.
 - §4의 필드 목록은 2차 출처(GitHub wiki, 검색 결과 요약)에 의존한다 —
   live 응답으로 검증되기 전까지는 "문서상 추정"으로만 취급해야 한다.
-- companion 목록 서비스(`AptListService3`)의 정확한 request parameter
-  구조도 미확인이다.
+- companion 목록 서비스의 정확한 request parameter 구조도 미확인이다.
+- 9개 후보(§6-B)는 이 프로젝트가 이미 알고 있는 두 그룹(1611000/
+  1613000)과 공개적으로 관찰된 operation 이름 패턴을 조합한 것이다 —
+  data.go.kr가 이 두 상품에 부여한 실제 그룹 번호가 그 조합 밖에 있을
+  가능성은 배제할 수 없다.
 
 ## 14. Next Step
 
 한글명 우선 제안:
 
-1. **data.go.kr 활용신청 상태 재확인**(사용자 행동 필요, PM 결정
-   필요 — §15): 마이페이지에서 `AptBasisInfoServiceV3`/`AptListService3`
-   승인 상태 확인, 필요 시 재신청 또는 활성화 대기.
-2. **활성화 확인 후 재검증**(승인 불필요, 코드 준비 완료):
-   `npx ts-node --compiler-options '{"module":"commonjs"}'
-   scripts/audit-apartment-basic-info-source.ts` 재실행 한 줄로 즉시
-   재확인 가능 — 성공하면 이 STEP의 §7~§9를 실제 데이터로 채우는
-   후속 STEP 진행.
+1. **정확한 End Point 확보**(사용자 행동 필요, PM 결정 필요 — §15):
+   승인은 이미 끝났으므로, data.go.kr 마이페이지 → 활용신청 현황 →
+   해당 서비스 클릭 → "활용신청 상세" 또는 "개발계정 상세" 화면에서
+   "End Point"로 표시되는 정확한 URL 문자열을 그대로 복사해 전달.
+2. **End Point 확보 후 재검증**(승인 불필요, 코드 준비 완료): 그
+   문자열을 `scripts/audit-apartment-basic-info-source.ts`의 후보
+   목록에 한 줄 추가 후 재실행 — 성공하면 이 STEP의 §7~§9를 실제
+   데이터로 채우는 후속 STEP 진행.
 3. 그때까지는 기존 건축물대장 기반 파이프라인과 기존
    `SINGLE_BUILDING_AS_COMPLEX` 가드를 그대로 유지.
 
 ## 15. PM Decision Needed
 
 **이번 STEP 자체는 Production write/schema 변경이 필요 없다.**
-다만 다음 단계로 진행하려면 사용자 조치가 필요하다:
+활용신청 승인 상태는 이미 확인 완료(2026-08-31, 사용자 제공)됐다 —
+더 이상 재확인을 요청하지 않는다. 남은 것은 순수하게 기술적인 정보
+하나뿐이다:
 
-- data.go.kr 마이페이지에서 `국토교통부_공동주택 기본 정보제공
-  서비스`(및 companion 단지 목록제공 서비스)의 활용신청이 실제로
-  "승인" 상태인지 확인.
-- 승인됐는데도 여전히 `NO_OPENAPI_SERVICE_ERROR`가 나면, 이 서비스가
-  기존 `DATA_GO_KR_API_KEY`와 다른 별도 키를 요구하는지 data.go.kr
-  고객센터/문서로 확인 필요 — 확인되면 새 env var 추가(예:
-  `KAPT_API_KEY` 또는 유사 관례)는 안전한 후속 작업(schema/write 아님).
+- **정확한 End Point 문자열 확보**: data.go.kr 마이페이지 → 활용신청
+  현황 → `국토교통부_공동주택 기본 정보제공 서비스`(및 companion
+  `공동주택 단지 목록제공 서비스`) 클릭 → 상세 화면에 표시되는 "End
+  Point" 필드(또는 "미리보기"/"Sample Code" 탭에 노출되는 실제 요청
+  URL)를 그대로 복사해서 전달. 이 화면은 로그인 세션이 있어야만
+  보이므로(§6-B에서 비로그인 접근이 SSO 로그인 페이지로 리다이렉트됨을
+  확인) 프로그래매틱으로는 얻을 수 없다 — 사용자가 직접 화면을 보고
+  복사해줘야 하는, 코드로 우회할 수 없는 유일한 남은 정보다.
+- 별도의 새 서비스키가 필요한지는 그 End Point로 재검증했을 때
+  `NO_OPENAPI_SERVICE_ERROR`가 아닌 다른 오류(예: 인증 관련 오류)가
+  나오면 그때 판단한다 — 현재로선 그 가능성을 시사하는 증거가 없다
+  (control 호출이 같은 `DATA_GO_KR_API_KEY`로 정상 작동).
