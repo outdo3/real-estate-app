@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { resolveApartmentViaKakaoAlias } from '@/lib/search-alias-fallback';
+import { rankApartmentMatches, normalizeSearchKeyword } from '@/lib/search-ranking';
 
 // Define our result types
 export type RegionSearchResult = {
@@ -23,6 +25,8 @@ export type ApartmentSearchResult = {
   lng: number | null;
   totalHouseholds: number | null;
   completionYear: number | null;
+  /** DB 문자열 매칭이 아니라 카카오 POI 별칭 좌표 역매칭으로 찾은 경우에만 채워짐(§14 fallback) */
+  matchNote?: string | null;
 };
 
 export type UnifiedSearchResult = {
@@ -39,7 +43,7 @@ export async function GET(request: Request) {
   }
 
   const keyword = q.trim();
-  const normalizedKeyword = keyword.replace(/\s+/g, '');
+  const normalizedKeyword = normalizeSearchKeyword(keyword);
 
   // Run Region distinct and Apartment search in parallel
   const [regionRows, rawApartments] = await Promise.all([
@@ -60,10 +64,16 @@ export async function GET(request: Request) {
           { name: { contains: normalizedKeyword } }
         ]
       },
-      take: 50,
+      // BUSAN_APARTMENT_SEARCH_COVERAGE_PERFORMANCE_V1 §7/§37 감사 결과 — take:50에
+      // 걸려 이 시점에서 이미 잘려나가는 실제 사례를 발견했다("현대"/"동원"/"한신" 같은
+      // 흔한 단지명은 Busan 안에서만도 50건을 넘는 substring 매칭이 있다). 이 테이블은
+      // 전체 약 3,400행 규모(Busan 전용)라 take 제거는 성능에 사실상 영향이 없고
+      // (벤치마크로 검증), exact-match가 하위 랭킹에서 잘리는 문제를 근본적으로
+      // 없앤다 — 대신 아래에서 tier 랭킹 후 상위 15개만 응답한다.
       select: {
         id: true,
         name: true,
+        normalizedName: true,
         sggCd: true,
         umdName: true,
         jibun: true,
@@ -83,9 +93,34 @@ export async function GET(request: Request) {
     lawdCd: r.sggCd || ''
   }));
 
-  // Sort apartments in JS to avoid expensive DB sorts on full table scans
-  rawApartments.sort((a, b) => (b.totalHouseholds || 0) - (a.totalHouseholds || 0));
-  const topApartments = rawApartments.slice(0, 15);
+  // §11 SEARCH RANKING RULE — src/lib/search-ranking.ts 참고. 예전에는 household 수만
+  // 으로 정렬해 정확히 일치하는 작은 단지가 이름이 겹치는 더 큰 단지들에 밀려 top-15
+  // 밖으로 잘려나가는 실제 사례가 있었다(§7 감사에서 확인: "현대"/"경동" 등 50건 이상).
+  let topApartments = rankApartmentMatches(rawApartments, normalizedKeyword, 15);
+
+  // §14/§26 ALIAS FALLBACK — DB contains 매칭이 완전히 0건일 때만, 이미 앱 전역에서
+  // 쓰는 카카오 키워드 검색으로 "공식 등록명과 다른 통용 별칭" 케이스를 좌표 기반으로
+  // 역매칭한다(src/lib/search-alias-fallback.ts 참고, 반경 80m + 카테고리 필터 +
+  // 유일 후보 조건 — 못 찾으면 그대로 no-result, 억지 fallback 없음). 정상적인 DB 매칭
+  // 경로에는 전혀 영향 없음(외부 API는 이 드문 경우에만, 키워드당 최대 1회).
+  let aliasNote: string | null = null;
+  if (topApartments.length === 0) {
+    const aliasMatch = await resolveApartmentViaKakaoAlias(keyword);
+    if (aliasMatch) {
+      topApartments = [{
+        id: aliasMatch.id,
+        name: aliasMatch.name,
+        normalizedName: aliasMatch.name,
+        sggCd: aliasMatch.sggCd,
+        umdName: aliasMatch.umdName,
+        jibun: aliasMatch.jibun,
+        aptSeq: aliasMatch.aptSeq,
+        buildYear: aliasMatch.buildYear,
+        totalHouseholds: aliasMatch.totalHouseholds,
+      }];
+      aliasNote = aliasMatch.matchedViaAlias;
+    }
+  }
 
   const aptSeqs = topApartments.map(a => a.aptSeq).filter(Boolean) as string[];
   const locations = await prisma.apartmentLocationFeature.findMany({
@@ -114,7 +149,8 @@ export async function GET(request: Request) {
       lat: loc ? loc.latitude : null,
       lng: loc ? loc.longitude : null,
       totalHouseholds: a.totalHouseholds,
-      completionYear: a.buildYear
+      completionYear: a.buildYear,
+      matchNote: aliasNote,
     };
   });
 

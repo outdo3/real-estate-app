@@ -54,6 +54,16 @@ scripts/_data_coverage_fix_v1_results/
 # STEP R4/R4.1 재개발 ingestion — quality report/sigungu 해석 원본 JSON 결과(재현 가능, 커밋 불필요)
 scripts/redevelopment/_results/
 
+# TRADE_HISTORY_DATA_V1 — backfill/sync 실행 로그(재현 가능, 커밋 불필요. manifest는 별도로 커밋함)
+scripts/_backfill_trade_history_results/
+scripts/_sync_trade_history_results/
+
+# MASTER_MISSING_REPAIR_V1 — 16건 apply 실행 로그(재현 가능, 커밋 불필요. 결과는 CHANGELOG/docs에 기록함)
+scripts/_repair_recent_missing_masters_results/
+
+# MASTER_COVERAGE_SYNC_V1 — 반복 실행되는 coverage sync 리포트(재현 가능, 커밋 불필요)
+scripts/_master_coverage_sync_results/
+
 # BRAND STEP 57-A — 브랜드 원본(PSD급 고해상도 PNG) 로컬 보관 전용.
 # production에서 실제로 서빙하는 최적화 자산은 public/brand/에 별도로 커밋된다.
 brand-source/

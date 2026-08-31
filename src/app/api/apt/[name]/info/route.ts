@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { fetchBuildingRegistryInfo, formatRatio, formatParking } from '@/lib/apt-building-info';
-import { shouldAdoptFallbackUnitTypes } from '@/lib/apt-name-match';
+import { shouldAdoptFallbackUnitTypes, normalizeAptName } from '@/lib/apt-name-match';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,7 +64,16 @@ export async function GET(
     const dongKey = dong || '';
     type Registry = { parkingCount: number | null; far: number | null; bcr: number | null; totalHouseholds: number | null; approvalDate: string | null };
     let unitTypes: any[] | null = null;
-    
+
+    // SEARCH_DETAIL_IDENTITY_HOTFIX_V2 — apt-client.tsx의 "빠른 진입" 최초 호출은
+    // dong+lawdCd만 알고 jibun은 아직 모른 채(실거래 응답을 기다리지 않고) 이 라우트를
+    // 부른다(§성능, 대기 없음). jibun이 비어있다는 이유만으로 이름+동 캐시를 무조건
+    // 신뢰하면, 아래에서 채택 여부를 판단하는 오염된 캐시가 그대로 화면에 노출된다.
+    // fetchCachedRegistry() 안에서 ApartmentMaster 교차검증으로 알아낸 지번을 여기 채워
+    // 넣어, 이후 모든 로직(byJibun 조회·master supplement·live registry fetch·upsert)이
+    // "요청이 준 jibun"과 "확보한 effectiveJibun"을 구분 없이 하나의 값으로 다루게 한다.
+    let effectiveJibun = jibun;
+
     const fetchCachedRegistry = async (): Promise<Registry | null> => {
       try {
         // APT INFO IDENTITY HOTFIX V1 §IDENTITY_PRINCIPLE — 이 name+dong exact 조회가
@@ -76,11 +85,34 @@ export async function GET(
           include: { unitTypes: true }
         });
 
-        if (cached) {
+        // §MASTER_EXACT_CROSSCHECK — jibun이 아직 없을 때, 이미 Busan 전역이
+        // backfill된 ApartmentMaster에서 이 이름+동과 정규화 후 완전히 일치하는 row가
+        // 있으면 그 지번을 신뢰 가능한 identity로 채택한다. 외부 API 호출 없이 인덱싱된
+        // DB 조회 1회만 추가되므로(§25) "빠른 진입" 첫 호출의 저지연 이점은 유지된다.
+        if (!effectiveJibun && dong) {
+          const masterExact = await prisma.apartmentMaster.findFirst({
+            where: { sggCd: lawdCd, umdName: dong, normalizedName: normalizeAptName(aptName) },
+            select: { jibun: true },
+          });
+          if (masterExact?.jibun) effectiveJibun = masterExact.jibun;
+        }
+
+        // SEARCH_DETAIL_IDENTITY_HOTFIX_V2 — name+dong exact match만으로는 이 캐시
+        // row가 실제로 이 요청의 주소(지번)를 가리키는지 보장하지 못한다. 과거 실거래
+        // 라우트의 substring 오매칭 버그(이 커밋에서 수정)로 인해, "해운대경동제이드"
+        // 캐시 row에 완전히 다른 단지("경동", 지번 974)의 지번/세대수/준공연도가
+        // upsert되어 남아있던 사례가 실측으로 확인됐다. 신뢰 가능한 지번(effectiveJibun)이
+        // 있고 캐시 row에 이미 저장된 jibun과 다르면, 이 캐시는 identity mismatch로
+        // 간주해 "미확보"로 취급한다 — 그래야 아래 live/master 흐름이 실행되어 올바른
+        // jibun/registry 값으로 upsert가 이 row를 self-heal한다(수동 DB 수정 없이
+        // 코드만으로 오염된 캐시가 다음 정상 요청에서 자동 정정됨).
+        const cacheIdentityMismatch = !!(effectiveJibun && cached?.jibun && cached.jibun !== effectiveJibun);
+
+        if (cached && !cacheIdentityMismatch) {
           unitTypes = cached.unitTypes;
         }
 
-        if (cached && cached.parkingCount && cached.far && cached.bcr && cached.approvalDate) {
+        if (cached && !cacheIdentityMismatch && cached.parkingCount && cached.far && cached.bcr && cached.approvalDate) {
           return {
             parkingCount: cached.parkingCount,
             far: cached.far,
@@ -90,7 +122,7 @@ export async function GET(
           };
         }
 
-        if (jibun) {
+        if (effectiveJibun) {
           // 이 조회는 name 제약이 전혀 없는 "dong+jibun만" 매칭이라(§NAMELESS_ADDRESS_
           // FALLBACK), 같은 주소의 다른 이름 표기 row를 얼마든지 집을 수 있다. 건축물대장
           // registry 필드(parkingCount/far/bcr/approvalDate/totalHouseholds)는 특정
@@ -98,7 +130,7 @@ export async function GET(
           // fetchBuildingRegistryInfo 자체도 아파트명이 아니라 lawdCd+dong+jibun으로
           // 조회하므로, 이 필드들을 이 fallback에서 보충하는 것은 안전하다(변경 없음).
           const byJibun = await prisma.apartment.findFirst({
-            where: { dong: dongKey, jibun },
+            where: { dong: dongKey, jibun: effectiveJibun },
             include: { unitTypes: true }
           });
 
@@ -143,10 +175,10 @@ export async function GET(
     // 이미 legacy Apartment의 byJibun 조회가 신뢰하는 것과 동일한 정밀도의 identity)
     // 로만 조회한다. 채워지지 않은 필드만 보충하고, legacy가 이미 채운 값은 덮지 않는다.
     const fetchMasterRegistrySupplement = async (partial: Registry | null): Promise<Registry | null> => {
-      if (!dong || !jibun) return partial;
+      if (!dong || !effectiveJibun) return partial;
       try {
         const master = await prisma.apartmentMaster.findFirst({
-          where: { sggCd: lawdCd, umdName: dong, jibun },
+          where: { sggCd: lawdCd, umdName: dong, jibun: effectiveJibun },
         });
         if (!master) return partial;
 
@@ -179,7 +211,7 @@ export async function GET(
     }
 
     if (!isFullyPopulated(registry)) {
-      const live = await fetchBuildingRegistryInfo(aptName, lawdCd, dong, jibun);
+      const live = await fetchBuildingRegistryInfo(aptName, lawdCd, dong, effectiveJibun);
       if (live) {
         // tier1(legacy 캐시)/tier2(ApartmentMaster)가 이미 채운 필드는 덮지 않고 병합한다
         // (live가 registry 전체를 대체하던 기존 동작은 registry가 항상 null 아니면 완전
@@ -200,7 +232,7 @@ export async function GET(
                 name: aptName,
                 dong: dongKey,
                 lawdCd,
-                jibun: jibun || undefined,
+                jibun: effectiveJibun || undefined,
                 parkingCount: live.parkingCount ?? undefined,
                 far: live.far ?? undefined,
                 bcr: live.bcr ?? undefined,
@@ -208,7 +240,7 @@ export async function GET(
                 approvalDate: live.approvalDate ?? undefined,
               },
               update: {
-                ...(jibun ? { jibun } : {}),
+                ...(effectiveJibun ? { jibun: effectiveJibun } : {}),
                 ...(live.parkingCount ? { parkingCount: live.parkingCount } : {}),
                 ...(live.far ? { far: live.far } : {}),
                 ...(live.bcr ? { bcr: live.bcr } : {}),

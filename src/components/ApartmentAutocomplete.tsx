@@ -19,6 +19,7 @@ export interface ApartmentSearchResult {
   aptSeq?: string | null;
   totalHouseholds?: number | null;
   completionYear?: number | null;
+  matchNote?: string | null;
 }
 
 interface ApartmentAutocompleteProps {
@@ -231,9 +232,17 @@ export default function ApartmentAutocomplete({
       item.totalHouseholds ? `${item.totalHouseholds}세대` : null,
       item.completionYear ? `${item.completionYear}년 준공` : null,
     ].filter(Boolean);
-    
-    if (parts.length === 0) return null;
-    return <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{parts.join(' · ')}</div>;
+
+    return (
+      <>
+        {parts.length > 0 && (
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{parts.join(' · ')}</div>
+        )}
+        {item.matchNote && (
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>지도상 명칭: {item.matchNote}</div>
+        )}
+      </>
+    );
   };
 
   return (

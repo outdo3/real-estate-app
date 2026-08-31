@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { geocodeApartmentName } from '@/lib/geocode-apt';
 import { getOrSetCache } from '@/lib/server-cache';
 import { logServerError } from '@/lib/log-server-error';
-import { aptNamesMatch } from '@/lib/apt-name-match';
+import { resolveStrongIdentityAptSeqs, matchesTradeIdentity } from '@/lib/apt-name-match';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,11 +109,19 @@ export async function GET(
     // 그대로, 건물번호 접미사·차수 위치·LG/엘지 alias만 안전하게 보강)로 옮겼다 — 이미
     // 매칭되던 쌍을 깨뜨리지 않고 표기 차이만 추가로 흡수하는 상위집합이라 이 라우트를
     // 쓰는 다른 진입 경로(지도, 직접 URL 등)에도 안전하다(회귀 없이 매칭만 넓어짐).
+    // SEARCH_DETAIL_IDENTITY_HOTFIX_V2 — 위 aptNamesMatch의 느슨한 양방향 부분포함
+    // 규칙은 요청한 이름이 완전히 다른 실존 단지명의 부분 문자열일 때도 통과시켜버린다
+    // (실측: 해운대구 우동 "경동"(1995년 준공, 지번 974)이 "해운대경동제이드"(2012년
+    // 준공, 지번 763) 검색에 섞여 상세페이지 identity 전체가 바뀌는 사고로 이어짐).
+    // resolveStrongIdentityAptSeqs()로 이 동 안에 정규화 후 완전히 일치하는 exact
+    // match가 있는지 먼저 확인하고, 있으면 그 aptSeq(들)만 인정한다(STRONG_RESULT_
+    // PROTECTION) — exact match가 전혀 없을 때만 기존 느슨한 규칙으로 폴백해 정당한
+    // 표기차 alias 케이스(예: "명륜아이파크1단지")는 그대로 매칭되게 둔다.
+    const strongAptSeqs = resolveStrongIdentityAptSeqs(allTrades, aptName, dong);
     const filteredTrades = allTrades
       .filter(item => {
-        if (!item.name) return false;
         if (dong && item.dong !== dong) return false;
-        return aptNamesMatch(item.name, aptName);
+        return matchesTradeIdentity(item, aptName, strongAptSeqs);
       })
       .map(item => {
         const priceStr = item.price;

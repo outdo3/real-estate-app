@@ -10553,7 +10553,6 @@ PERFORMANCE = PARTIAL. MOBILE = PASS. DESKTOP = PASS. BUILD = PASS.
 DB_SCHEMA_CHANGE = NONE. NEXT_STEP = TRADE_HISTORY_DATA_V1 /
 FIX_REGION_PRICE_CHANGE_MAP(단지 레벨 지도 버블).**
 
-
 ## 2026-08-29
 
 ### STEP — 분양·청약 페이지 정리 V1 (PRESALE / REDEVELOPMENT IA V2)
@@ -10618,3 +10617,837 @@ SUPPLY_ROLE_SEPARATION = PASS(기존 경계 유지). MOBILE = PASS.
 DESKTOP = PASS. BUILD = PASS. DB_SCHEMA_CHANGE = NONE. MAIN_MODIFIED = NO.
 REAL_PRESALE_CONTENT = PARTIAL(DATABASE_URL 미설정으로 라이브 데이터
 미검증). NEXT_STEP = WAIT_FOR_MAIN_AND_MERGE.**
+
+## 2026-08-30
+
+### STEP — TRADE_HISTORY_DATA_V1: 전체 실거래 이력 영구 저장(부산 backfill)
+
+작업: docs/development/TRADE_HISTORY_DATA_V1.md 참고(설계/구현/QA 전체
+기록). MOLIT 아파트 매매 실거래를 신규 테이블 `ApartmentTradeHistory`에
+영구 저장해, 기존 24개월 lookback 제한(`HISTORICAL_LOOKBACK_MONTHS`,
+`price-ranking.ts`)을 근본적으로 해소할 데이터 기반을 마련했다. 이번
+STEP은 부산광역시 16개 구·군, 2006-01~2026-08(248개월) 범위로
+scope를 제한했다(전국 확장은 별도 승인 대상, §38).
+
+**Identity/중복 설계**: MOLIT 응답에 거래 고유 일련번호가 없어(§6),
+실측 감사(부산 서구 250건 표본)로 동일 자연키(identity+area+dealType+
+금액+일자+층) 그룹의 2.9%(7/243)가 실제로 서로 다른 거래 2건씩임을
+확인 — `occurrenceIndex`(그룹 내 원본 등장 순서)를 unique key에 추가해
+병합 없이 구분했다. `floor`는 not-null로 강제(Postgres NULL≠NULL이
+unique 제약을 깨뜨리는 것을 방지, 파싱 불가 시 값을 지어내지 않고
+invalid row로 명시 제외).
+
+**Backfill 실행(실측)**: 자체 보수적 순차 fetcher(동시 1, 350ms 간격,
+스로틀 감지 시 지수 백오프)를 backfill 전용으로 신규 구현 — 기존
+라이브 통계가 쓰는 세마포어(동시6+200ms)를 그대로 재사용했다가 대량
+연속 호출에서 data.go.kr "초당 서비스 요청제한" 실제 스로틀을 유발하는
+것을 실측으로 발견해 분리했다(라이브 세마포어 자체는 무수정).
+최초 실행이 data.go.kr 일일 quota 소진으로 중단됐다가(1,620/3,968
+attempts) 이번 세션에서 재개 — quota reset을 단일 lightweight fetch로
+먼저 확인한 뒤, 기존 SUCCESS/EMPTY_VALID(1,366건)는 재호출하지 않고
+FAILED+미시작 2,602 region-month만 `--resume`으로 처리했다.
+최종: 3,968/3,968 완료, FAILED 0, 총 855,045 rows(백필 전 189,951 +
+이번 665,094), 16/16 구·군 커버, 자연키 중복 0건, aptSeq 결측 0건.
+
+**QA에서 실제 버그 발견·수정**: `src/lib/trade-history-read.ts`의
+읽기 헬퍼 3개가 Decimal 컬럼(`exclusiveArea`)을 JS number 그대로
+Prisma where 필터에 넘겨, 특정 소수값(실측: 84.8773, 84.6389 등)에서
+Prisma 쿼리 엔진의 number→Decimal 직렬화 불일치로 **저장 거래가
+있어도 조용히 0건**을 반환하는 것을 8개 대표 단지 QA 중 2곳에서
+발견했다. 아직 어떤 라이브 route도 이 헬퍼를 쓰지 않아(§33, 다음
+STEP 대상) 프로덕션 영향은 없었지만, 이번 STEP 산출물 자체의 정확성
+버그라 문자열로 넘기도록 즉시 수정(시그니처/동작 계약 불변) —
+수정 후 8/8 정상 매칭 재검증 완료.
+
+**벤치마크(실측, 읽기 전용)**: DB 조회가 라이브 MOLIT 재조회 대비
+단일 단지 전체 이력 약 27.8배(78ms vs 2,166ms), 부산 전체 16개 구
+12개월 약 3.4배(6.8s vs 23.3s) 빠름 — 라이브 fetch 100% 성공(실제
+프로덕션 세마포어 그대로 사용, backfill 전용 보수적 fetcher 아님).
+
+취소(해제) 거래는 855,045건 중 0건 관측 — 필드 파싱 자체는 별도
+확인했으나 모집단 실제 취소율까지 단정할 근거는 없어 "확인 필요"로
+분류(§13/§15 원칙, 오류로 단정하지 않음).
+
+DB 쓰기: `apartment_trade_histories` 신규 데이터 855,045 rows(이번
+STEP에서 신규 fetch·삽입한 665,094건 포함). 스키마 변경: 없음(마이그
+레이션은 이전 STEP에서 이미 승인·적용됨, 이번 STEP은 데이터만).
+기존 통계 API/UI: 전혀 변경 없음(read path 전환은 다음 STEP).
+
+상태: 완료(부산 범위). 전국 확장은 §38 참고, 별도 승인 필요.
+
+**TRADE_HISTORY_DATA_V1 = PASS(부산 범위). BACKFILL_COMPLETE = PASS
+(3,968/3,968, FAILED=0). ROW_COUNT = 855,045. REGION_COVERAGE = 16/16.
+DUPLICATE_CHECK = PASS(0건). NULL_APTSEQ = PASS(0건).
+CANCELLED_TRADES = 확인 필요(0건 관측, 모집단 단정 불가).
+QA_CROSS_CHECK = PASS(8/8, live MOLIT 매칭). READ_HELPER_BUG =
+FOUND_AND_FIXED(Decimal number 필터 불일치, 프로덕션 영향 없음).
+BENCHMARK = PASS(3.4~27.8배 개선 실측). UNIT_TESTS = PASS(14/14).
+NATIONWIDE = NOT_STARTED(별도 승인 필요). DB_SCHEMA_CHANGE = NONE
+(이번 STEP). NEXT_STEP = TRADE_HISTORY_READ_MIGRATION_V1.**
+
+## 2026-08-30
+
+### STEP — SEARCH_DETAIL_IDENTITY_HOTFIX_V2: 검색→상세 아파트 동일성 긴급 수정
+
+작업: docs/development/SEARCH_DETAIL_IDENTITY_HOTFIX_V2.md 참고(전체
+기록). P0 신고: "해운대경동제이드"(우동 763, 2012년 준공, 278세대)를
+검색·선택했는데 상세페이지가 완전히 다른 실존 단지 "경동"(우동 974,
+1995년 준공, 72세대)의 이름·준공연도·세대수를 표시하는 사고 발생.
+
+**근본 원인(2단계 cascading 버그, 실측 확인)**: (1)
+`/api/apt/[name]/route.ts`가 같은 법정동 안의 MOLIT 실거래를
+`aptNamesMatch()`(양방향 부분포함 — 정당한 표기차 흡수용)로만
+필터링해, "경동"이 "해운대경동제이드"의 부분 문자열이라는 이유만으로
+서로 다른 aptSeq(26350-2 vs 26350-2206)의 별개 실존 단지가 같은
+결과 집합에 섞였다. "경동"의 최근 거래(2026-08-22)가 더 최신이라
+정렬 0번째로 올라와 `apt-client.tsx`가 검증 없이 헤더/준공연도의
+근거로 삼았다. (2) 그렇게 잘못 전달된 지번(974)으로 과거에 이미
+`/api/apt/[name]/info`가 호출된 적이 있어, legacy `Apartment` 캐시
+row(id 399, name='해운대경동제이드')에 **"경동"의 지번·세대수·
+준공일**이 upsert되어 남아있었다 — (1)만 고쳐도 이 오염된 캐시가
+매 요청마다 재현시키는 별도 버그였다(§4-3).
+
+**수정**: `src/lib/apt-name-match.ts`에 순수 함수
+`resolveStrongIdentityAptSeqs()`/`matchesTradeIdentity()` 추가 —
+법정동 안에 요청 이름과 정규화 후 완전히 일치하는 실거래가 있으면
+그 aptSeq만 인정하고(STRONG_RESULT_PROTECTION) 부분포함 매칭은
+exact match가 전혀 없을 때만 폴백(집합을 줄이기만 해 회귀 불가능,
+기존 `aptNamesMatch` 계약 자체는 무변경). `/api/apt/[name]/info/
+route.ts`는 jibun이 아직 없는 "빠른 진입" 첫 호출에서도 이미
+backfill된 ApartmentMaster(이름+동 정규화 exact)로 지번을 먼저
+확보하고, name+dong 캐시 row에 저장된 jibun이 그와 다르면 오염된
+캐시로 간주해 신뢰하지 않는다 — 다음 upsert가 자동으로 self-heal한다
+(수동 DB 수정 없음, 오염된 legacy row 자체는 §16 known limitation으로
+남김, production 데이터 직접 수정은 하지 않음).
+
+**QA(실측, 부산 실제 데이터)**: 같은 법정동(우동)에 "경동"을 공유하는
+4개 실존 단지(경동/해운대경동제이드/센텀경동리인/해운대경동리인뷰2차)
+전부가 서로 섞이지 않고 각자 자신의 identity(aptSeq/jibun/buildYear)만
+반환함을 API 직접 호출로 확인. 브라우저로 상세페이지 방문해 헤더·
+hero·이집점수·단지상세제원·탭타이틀이 전부 "해운대경동제이드/2012년/
+278세대"로 일치함을 스크린샷으로 확인(§31 DATA_CONSISTENCY). 모바일
+390px 레이아웃 확인(가로 스크롤/겹침 없음). 레거시 alias 폴백(정당한
+표기차 케이스)은 단위테스트로 회귀 없음 확인.
+
+DB 변경: 없음(schema/migration 무변경, 오염된 legacy 캐시 row는
+의도적으로 UPDATE/DELETE하지 않고 코드 레벨 우회만 적용).
+
+상태: 완료.
+
+**SEARCH_DETAIL_IDENTITY = PASS. HAEUNDAE_GYEONGDONG_JADE = PASS.
+WRONG_APT_FALLBACK = ELIMINATED. CANONICAL_ID_PRESERVED = PASS
+(exact-match 우선 + ApartmentMaster 교차검증). DETAIL_DATA_CONSISTENCY
+= PASS(헤더/hero/score/spec grid 전부 일치). MOBILE = PASS(390px,
+실기기 미실시). DESKTOP = PASS. DB_SCHEMA_CHANGE = NONE. UNIT_TESTS
+= PASS(8/8 신규, 기존 8/8 유지). TYPECHECK = PASS(변경 파일 기준,
+기존 scripts/ 에러는 FAIL_EXISTING_SCRIPT_ERRORS로 분리). LINT = PASS.
+BUILD = PASS. NEXT_STEP = 선택적 라우팅 계약 확장(jibun/aptSeq를
+navigateToApt까지 전달) 또는 오염된 legacy 캐시 row 정리(별도 승인
+필요, §19).**
+
+## 2026-08-30
+
+### STEP — TRADE_CANCELLATION_AUDIT_V1: 실거래 취소·해제 검증
+
+작업:
+
+- TRADE_HISTORY_DATA_V1 backfill(부산 855,045 rows)에서 취소/해제 거래가
+  0건으로 관측된 원인을 raw MOLIT 응답 → parser → normalize → write →
+  DB 전 구간 실측 추적으로 증명.
+- 부산 3개구(해운대구/부산진구/동래구) × 최근 12개월, 13,716건 live
+  MOLIT 응답을 직접 스캔해 실제 취소 필드명과 값 형태를 확인.
+
+**원인(PARSER_BUG, 확정)**: `src/lib/api-molit.ts`가 문서상 가정이던
+한글 필드명(`해제여부`/`해제사유발생일`/`등기일자`)만 확인했는데, 실제
+`RTMSDataSvcAptTradeDev` 응답은 영문 필드명(`cdealType`/`cdealDay`/
+`rgstDate`)만 내려준다 — 한글 키가 응답에 아예 존재하지 않아 매 row
+`dealCanceled`가 100% `false`로 고정됐다. write(`backfill-trade-history.ts`
+upsert)와 dedup(자연키/occurrenceIndex) 단계는 원래 정상이었다(parser가
+올바른 값을 넘겼다면 문제없이 저장됐을 구조).
+
+실측 취소 샘플 786건 확보(요구 최소 3건 초과), 취소 비율 5.73%(786/
+13,716, 최근 고거래량 3개구 표본 — 전체 20년/부산 전역에 일반화 금지).
+같은 자연키를 가진 "취소 전 원본 + 취소 후 사본" 중복 row가 같은 fetch
+응답 안에 동시에 존재하는 패턴도 발견됐으나, `trade-history-read.ts`의
+기존 `dealCanceled: false` valid-trade 필터가 이미 이를 정확히 처리하고
+있어 별도 병합 로직은 불필요함을 확인(§10/§13, 새 abstraction 추가 없음).
+
+**수정**: `src/lib/api-molit.ts`에 `parseCancellationFields()` 순수 함수
+추가(한글+영문 필드명 모두 매칭, 하위 호환 유지) — 필드명 매핑 버그
+1곳만 수정, write/dedup/read 로직은 변경 없음(원래 정상이었음).
+
+**기존 DB 영향**: 855,045 rows 전체가 이 버그 기간 동안 backfill되어
+취소 마킹을 신뢰할 수 없다. 재동기화(부산 16개구 × 최근 12개월,
+`backfill-trade-history.ts --apply` 재사용) 필요 — 이번 STEP은
+production write를 하지 않고 계획만 제시, 실행은 승인 대기
+(§DB/schema 변경 없음, bulk 재처리는 STOP 조건).
+
+**QA**: 신규 유닛테스트 7개(`src/lib/api-molit.test.mjs` 6개,
+`scripts/trade-history-logic.test.mjs`에 중복-row-배치 시나리오 1개
+추가) — 전체 21/21 pass. `npx tsc --noEmit`은 사전 존재하던
+scripts/ 에러만 남음(FAIL_EXISTING_SCRIPT_ERRORS, 이번 변경과 무관
+확인 — git stash로 baseline에서도 동일 에러 재현). `npx eslint`
+변경 파일 전부 clean. `npm run build` PASS.
+
+DB 변경: 없음(schema/migration 무변경, production 855,045 rows
+임의 수정 없음).
+
+API 변경: 없음(내부 파서 함수 추가만, 외부 계약 무변경).
+
+상태: 완료(코드 수정 + 문서화, production 재동기화는 별도 승인 대기).
+
+상세: `docs/development/TRADE_CANCELLATION_AUDIT_V1.md`
+
+**CANCELLATION_CONTRACT = PROVEN. REAL_CANCEL_SAMPLE = PASS(786건).
+PARSER = PASS(수정 완료). WRITE_CONTRACT = PASS(원래 정상). DEDUP_UPSERT
+= PASS(원래 정상, 중복-row 케이스도 valid-trade 필터로 안전).
+VALID_TRADE_RULE = PASS(기존 trade-history-read.ts 구현이 이미 올바름).
+EXISTING_DB = NEEDS_RESYNC. RECORD_HIGH_READY = NO(재동기화 전까지
+"역대" 표현 전환 보류). DB_SCHEMA_CHANGE = NONE. PRODUCTION_DB_WRITE
+= NONE. UNIT_TESTS = PASS(21/21). TYPECHECK = PASS(변경 파일 기준,
+기존 scripts/ 에러는 FAIL_EXISTING_SCRIPT_ERRORS). LINT = PASS.
+BUILD = PASS. NEXT_STEP = RESYNC_REQUIRED(부산 16개구 × 최근 12개월,
+승인 후 실행).**
+
+## 2026-08-30
+
+### STEP — TRADE_CANCELLATION_RESYNC_V1: 취소거래 보정 재동기화
+
+사용자가 production DB 재동기화를 명시적으로 승인(부산 16개구 × 최근
+13개월, 기존 자연키 upsert, schema/migration 변경 없음).
+
+작업:
+
+- `scripts/sync-trade-history.ts`(기존 스크립트 재사용, 신규 스크립트
+  없음)로 부산 16개 구·군 × 최근 13개월(202508~202608, 208
+  region-month) 재조회.
+- 대량 실행 전 단일 region-month(해운대구 26350, 202607) live probe로
+  parser 정상 동작 우선 확인(9건 취소 파싱, AUDIT V1 대표 샘플과
+  cancelDate까지 정확히 일치).
+- Before/After snapshot으로 결과 검증: `dealCanceled=true` rows
+  0 → 2,277(부산 최근 13개월 기준), total rows 855,045 → 855,047
+  (+2, 신규 등록 거래분, 폭증 없음), natural key 중복 0 → 0 유지,
+  208/208 region-month 커버리지 완료, failed batch 0건.
+- AUDIT V1 §7 대표 취소 샘플 3건(센텀KCC스위첸/삼정코아/동신) 전부
+  DB에서 재확인 — 원본 row는 `dealCanceled=false` 유지, 취소사본 row는
+  `dealCanceled=true`+정확한 `cancelDate`로 갱신됨(3/3 PASS).
+- `trade-history-read.ts`의 `getTradeHistory()`(valid trade read)가
+  raw read에는 존재하는 취소 row를 실제로 제외하는지 DB로 직접 증명.
+
+DB 변경: 없음(schema/migration 무변경). Production 데이터 write는
+기존 자연키 upsert 계약 그대로 사용(update: `dealCanceled`/
+`cancelDate`/`registryDate`/`aptName`/`jibun`/`buildYear`만 갱신,
+자연키 자체는 불변) — §5/§7 사용자 승인 범위 내.
+
+API 변경: 없음(코드 변경 없음, 데이터 resync + 문서화만 수행).
+
+QA: `scripts/qa-trade-history.ts` 8/8 sample apts 라이브 MOLIT 매칭
+clean. 유닛테스트 21/21 pass(AUDIT V1과 동일 스위트, 회귀 없음).
+`npx tsc --noEmit`은 사전 존재하던 scripts/ 20개 에러만 남음
+(FAIL_EXISTING_SCRIPT_ERRORS, trade-history/api-molit 관련 신규 에러
+0건). `npx eslint` 신규 이슈 없음(사전 존재 repo 전역 노이즈만,
+이번 STEP 코드 변경 없음). `npm run build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/TRADE_CANCELLATION_RESYNC_V1.md`
+
+**CANCELLATION_RESYNC = PASS. REGION_MONTHS = 208/208. FAILED_BATCHES
+= 0. CANCELLED_ROWS = 2,277. REAL_SAMPLE_MATCH = PASS(3/3).
+VALID_TRADE_EXCLUSION = PASS. DUPLICATES = 0. ROW_COUNT_SANITY = PASS.
+RECENT_13M_DB = SAFE. RECORD_HIGH_READY = NO(과거 13개월 초과 구간은
+별도 검증 필요). DB_SCHEMA_CHANGE = NONE. PRODUCTION_DB_WRITE =
+APPROVED_AND_COMPLETED. BUILD = PASS. NEXT_STEP =
+TRADE_HISTORY_READ_MIGRATION_V1 검토(§17).**
+
+## 2026-08-30
+
+### STEP — BUSAN_APARTMENT_SEARCH_COVERAGE_PERFORMANCE_V1: 부산 아파트 검색 커버리지 + 성능 긴급 개선
+
+작업:
+
+- 실제 사용자 신고("경동마리나" 검색 결과 0건)를 4개 진입점(홈/빠른검색/
+  지도/공통 endpoint) 전부 실측 재현하고, DB 전수 트레이스(ApartmentMaster/
+  Apartment/ApartmentTradeHistory/ApartmentUnitType)로 근본 원인을 확정.
+- **원인(CASE B, 확정)**: "경동마리나"는 카카오맵 POI가 쓰는 통용 별칭일 뿐,
+  ApartmentMaster/Apartment/ApartmentTradeHistory 어디에도 그 문자열이
+  없다 — 공식 등록명(MOLIT/건축물대장)은 "경동"(aptSeq 26350-2)뿐이며,
+  카카오 POI 좌표가 이 row의 좌표와 소수점 단위까지 일치함을 실측으로
+  증명(문자열 정규화 개선만으로는 해결 불가능한 케이스).
+- **두 번째 독립 버그**: exact 검색어("경동")조차 대상 단지를 못 찾음 —
+  `/api/search`가 household 수로만 정렬 후 상위 15개로 자르던 기존 로직
+  때문에, 정확히 일치하는 작은 단지(72세대)가 이름이 겹치는 더 큰 단지들
+  (최대 839세대)에 밀려 잘려나갔다. `take:50` DB 상한도 흔한 이름("현대"/
+  "동원"/"한신")에서 자기 자신조차 raw 결과에 없는 사례를 만들었다.
+- **수정 3건**(schema 변경 없음): (1) `src/lib/search-ranking.ts` 신설 —
+  exact>startsWith>contains tier 랭킹 + `apartment_master_seed.ts`와
+  동일한 정규화(아파트 접미사 제거) + `take:50` 제거(테이블 ~3,400행
+  규모라 성능 영향 없음, 실측 확인). (2) `src/lib/search-alias-fallback.ts`
+  신설 — DB 매칭 0건일 때만 기존 카카오 API로 좌표 역매칭(카테고리 필터 +
+  반경 80m + 유일후보 조건, 못 찾으면 그대로 no-result). (3)
+  `src/app/api/apt/[name]/verify/route.ts` 신설 — 검색 선택 후 상세 이동
+  전 "실거래 있는가" 확인 게이트를 기존 MOLIT 실시간 호출(캐시 미스 시
+  최대 12회 순차 호출, 실측 5.4초)에서 `ApartmentTradeHistory`/
+  `Apartment` DB-only 조회(실측 60~140ms)로 교체 — 동일 계약
+  (`hasTrades || hasUnitTypes`), 데이터 소스만 DB-first로 전환.
+- Busan 검색 커버리지 감사 스크립트(`scripts/audit-busan-search-coverage.
+  ts`, read-only) 신설: 실거래 universe(distinct aptSeq) 기준
+  RECENT_TRADED_APT_COVERAGE(최근 24개월) 97.91% → **99.53%**(목표 ≥99%
+  달성), SEARCH_API_MISSING 50→0, NAME_MISMATCH 5→0. 남은 유일한
+  카테고리(MASTER_MISSING 16건)는 진짜 데이터 공백이라 이번 STEP에서
+  임의 생성하지 않고 목록만 보고(§25 정책).
+- 성능 벤치마크 스크립트(`scripts/benchmark-apartment-search.ts`, HTTP
+  타이밍 전용) 신설: `/api/search` warm p50 78~120ms, p95 120~166ms(전부
+  목표 이내), `/api/apt/[name]/verify` 5,438ms→61~140ms.
+- 부가 발견(이번 STEP 범위 밖, 문서화만): `Apartment`(legacy 캐시) 테이블의
+  "해운대경동제이드" row가 실제로는 "경동"의 지번/세대수/준공연도를 갖고
+  있는 identity 오염 발견(§11); `ApartmentMaster.totalHouseholds=72`가
+  실거래 규모(981건)와 불일치해 명백히 오염된 값으로 판단(사용자 주장
+  892세대가 실제 값일 가능성).
+
+DB 변경: 없음(schema/migration 무변경, Production data write 없음 —
+카카오 별칭 폴백도 결과만 반환할 뿐 DB에 아무것도 쓰지 않는다).
+
+API 변경: `/api/search` 응답에 선택적 `matchNote` 필드 추가(카카오 별칭
+매칭 시에만 채워짐, 기존 소비자에 영향 없는 상위호환 확장). 신규 라우트
+`/api/apt/[name]/verify`(GET) 추가.
+
+QA: 신규 유닛테스트 8/8(`src/lib/search-ranking.test.mjs`, §38 A/B/C/D/F/H/J).
+기존 회귀 테스트 전부 재실행 pass(SEARCH_DETAIL_IDENTITY_HOTFIX_V2 8/8,
+trade-history-logic 15/15, api-molit 6/6) — 이번 변경으로 인한 회귀 없음.
+브라우저 실측(Chrome, localhost) — 홈/지도 검색에서 "경동마리나"→"경동"
+정상 해석, 상세페이지 identity/실거래 데이터 일치, 375px/360px 모바일
+가로 스크롤/겹침 없음, "해운대경동제이드"와 "경동" 교차 오염 없음
+(SEARCH_DETAIL_IDENTITY 유지). `npx tsc --noEmit` 신규 오류 0(기존
+scripts/ 20개 오류만 FAIL_EXISTING_SCRIPT_ERRORS). `npx eslint`(변경
+파일) clean. `npm run build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/BUSAN_APARTMENT_SEARCH_COVERAGE_PERFORMANCE_V1.md`
+
+**GYEONGDONG_MARINA_SEARCH = PASS. BUSAN_SEARCH_COVERAGE(전체 20년) =
+69.36%(데이터 성격상 정상, §9 근거). RECENT_TRADED_SEARCH_COVERAGE(24
+개월) = 99.53%. SEARCH_DETAIL_IDENTITY = PASS. WRONG_APT_FALLBACK =
+ELIMINATED. HOME_SEARCH = PASS. QUICK_SEARCH = PASS. MAP_SEARCH = PASS.
+SEARCH_API_P50 ≈ 90ms. SEARCH_API_P95 ≈ 150ms. SEARCH_PERFORMANCE = PASS.
+EXTERNAL_MOLIT_ON_SEARCH = NO. DUPLICATE_REQUEST = 0. N_PLUS_ONE = NO.
+SEARCH_INDEX_RECOMMENDATION = NO(현재 규모 기준). DB_SCHEMA_CHANGE =
+NONE. PRODUCTION_DB_WRITE = NONE. BUILD = PASS. NEXT_STEP =
+MASTER_DATA_COVERAGE_FIX_V1 / LEGACY_APARTMENT_IDENTITY_AUDIT(둘 다
+승인 필요) 검토.**
+
+## 2026-08-31
+
+### STEP — BUSAN_APARTMENT_MASTER_DATA_INTEGRITY_V1: 부산 아파트 마스터 데이터 정합성 감사
+
+작업(AUDIT + CLASSIFICATION + PROVENANCE + REPAIR PLAN, 코드/DB 변경
+없음):
+
+- **경동/경동마리나 72세대 근본원인 규명(실측)**: 건축물대장
+  총괄표제부(`getBrRecapTitleInfo`, 복합단지 전체 집계) 재조회 결과
+  해당 주소(우동 974) 레코드 0건, 반면 표제부(`getBrTitleInfo`, 단일
+  건물) 재조회 결과 1건 — `bldNm="경동마리나아파트"`(건축물대장 자체의
+  공식 등록명, Kakao 콜로퀴얼 별칭이 아니었음), `dongNm="103동"`,
+  `hhldCnt=72`. 즉 현재 DB의 72세대는 다동 복합단지 중 "103동" 건물
+  하나만의 값이다. `backfill-apartment-master-basic-data.ts`의 표제부
+  fallback("정확히 1건이면 그 지번 전체로 신뢰")이 다동 복합단지에서
+  깨지는 구조적 한계를 실측으로 확정(단, 정확한 전체 세대수는 이번
+  STEP에서 미확정 — 892는 미검증 외부 수치이므로 채택하지 않음).
+- **해운대경동제이드 legacy 오염 재감사**: `SEARCH_DETAIL_IDENTITY_
+  HOTFIX_V2`(`d7059a6`)가 이미 이 정확한 사례를 발견하고
+  `cacheIdentityMismatch` guard로 화면 노출을 차단하고 있음을 코드
+  추적 + 브라우저 실측(정확한 763/2012년/278세대 표시 확인)으로 재확인.
+  단, 실측 결과 legacy DB row 자체는 self-heal되지 않음을 새로 발견
+  (`ApartmentMaster` tier가 registry를 완전히 채우면 live-fetch-upsert
+  경로에 도달하지 못함) — 화면은 안전하나 코드 주석의 "자동 정정" 주장은
+  부분적으로만 사실.
+- **부산 전체 정합성 전수감사**(`scripts/audit-busan-apartment-master-
+  integrity.ts`, 신규, read-only): `ApartmentMaster`(3,402) ↔ legacy
+  `Apartment`(54) ↔ `ApartmentTradeHistory`(distinct aptSeq 4,905) 비교.
+  identity 충돌(name/jibun/dong/buildYear) 0건(구조적으로 같은 MOLIT
+  뿌리에서 파생돼 tautological함을 문서에 명시). legacy identity
+  오염 2건(해운대경동제이드 + 신규 발견 명륜아이파크1단지). household
+  outlier 30건(세대당 주차 5대 초과 + 표제부-단일건물 출처만, calibration
+  으로 노이즈 1,741→32건 정제).
+- Master Missing 16건(이전 STEP에서 발견) 전수 재확인 — 전부 legacy
+  Apartment에도 없는 순수 공백, 이름 패턴 기반 잠정 분류(F: import
+  omission 다수), 1건("일번파크맨션에이동")은 경동과 동일한 분할-건물
+  등록 패턴 의심으로 별도 표시. 임의 Master row 생성 없음.
+- Repair candidate 32건을 `data/master-integrity/busan-master-repair-
+  candidates.json`에 저장(DB write 없음) — 전부 REVIEW_REQUIRED(정확한
+  올바른 값을 확정하지 못했거나 코드 guard로 이미 안전해 자동 수정
+  불필요), HIGH_CONFIDENCE 0건.
+
+DB 변경: 없음(schema/migration 무변경, Production INSERT/UPDATE/DELETE
+없음 — 감사 스크립트는 read-only, repair candidate는 JSON 파일로만
+저장).
+
+API 변경: 없음(코드 수정 없음 — 기존 identity-mismatch guard가 이미
+충분히 작동함을 확인했을 뿐, LOCKED 파일(`/apt/[name]` 계열) 추가 수정은
+이번 STEP 승인 범위 밖으로 판단해 보류).
+
+QA: `npx tsc --noEmit` 신규 오류 0(기존 20건 스크립트 오류만
+FAIL_EXISTING_SCRIPT_ERRORS). `npx eslint`(신규 스크립트) clean.
+`npm run build` PASS. 브라우저 실측(경동/해운대경동제이드 상세 페이지,
+375px 모바일) 문서 기록값과 일치, 오류 없음. 코드 변경이 없어 신규
+유닛테스트는 작성하지 않음(§32 조건부 요구사항 충족).
+
+상태: 완료.
+
+상세: `docs/development/BUSAN_APARTMENT_MASTER_DATA_INTEGRITY_V1.md`
+
+**GYEONGDONG_MARINA_MASTER = NEEDS_CORRECTION(정확한 값 미확정).
+GYEONGDONG_HOUSEHOLDS = 72(건물 "103동" 단독 확인값, 복합단지 전체는
+UNVERIFIED). HAEUNDAE_JADE_LEGACY = SAFE(화면 노출 차단 확인) +
+NEEDS_CLEANUP(DB row 자체, 사용자 영향 없음). MASTER_MISSING =
+1,503(전체 기간)/16(최근 24개월, 이전 STEP 확인분 재검증).
+IDENTITY_CONFLICTS = 0(name/jibun/dong/buildYear, tautological 성격
+문서화). HOUSEHOLD_CONFLICTS(outliers) = 30. BUILD_YEAR_CONFLICTS = 0.
+LEGACY_CONTAMINATIONS = 2. HIGH_CONFIDENCE_REPAIR = 0. REVIEW_REQUIRED =
+32. BUSAN_MASTER_INTEGRITY = PARTIAL(핵심 identity는 견고, household
+필드 일부 구조적 위험 확인). PRODUCTION_DB_WRITE = NONE. DB_SCHEMA_CHANGE
+= NONE. BUILD = PASS. NEXT_STEP = MASTER_HOUSEHOLD_VERIFICATION_V1 /
+LEGACY_CACHE_CLEANUP_V1(둘 다 승인 필요) 검토.**
+
+## 2026-08-31
+
+### STEP — MASTER_HOUSEHOLD_VERIFICATION_V1: 마스터 세대수 검증
+
+작업(READ-ONLY VERIFICATION + CLASSIFICATION + CODE GUARD, Production
+write/schema 변경 없음):
+
+- **K-APT 접근성 확인(실측)**: `AptListService3`/`AptListService`/
+  `AptListService2`/`AptBasisInfoServiceV3` 4개 엔드포인트 변형을
+  기존 `DATA_GO_KR_API_KEY`로 시도, 전부 `NO_OPENAPI_SERVICE_ERROR` —
+  이 프로젝트 키가 K-APT 계열 상품에는 승인돼 있지 않음을 확정. source
+  priority가 건축물대장(총괄표제부/표제부)으로 강등됨을 문서화.
+- **30건 전수 재검증**(`scripts/verify-busan-household-outliers.ts`,
+  신규, targeted 60 API 호출): 전부 총괄표제부 0건 재확인(HIGH_CONFIDENCE
+  0건 — 최초 backfill이 놓친 케이스 없음). 표제부 응답의 `dongNm` 필드
+  (기존 파이프라인이 추출하지 않던 필드)를 새로 추출한 결과 27건이
+  "숫자+동"/"제N동"(예: 경동="103동") 패턴 — `SINGLE_BUILDING_AS_COMPLEX`
+  확정. 3건(일광/일루스타/성우이린타워)은 dongNm 공백 — 진짜 단일 건물
+  단지로 판정해 `NO_CORRECTION`(household 필드는 false positive). 1건은
+  dongNm이 비정형이라 `UNKNOWN`.
+- **파이프라인 근본원인 확정**: `parseBrTitleInfoRecord()`가 응답에
+  이미 존재하던 `dongNm` 필드를 아예 추출하지 않고 있었다 — "표제부
+  1건 = 그 지번 전체"라는 안전조건의 논리 자체는 정상이었으나, 그
+  가정을 반증할 수 있는 신호(dongNm)를 무시하고 있었다.
+- **코드 가드 추가**: `src/lib/apt-building-info.ts`에
+  `isNumberedBuildingUnit(dongNm)` 신규(순수 함수, `/^제?\d+동$/`
+  패턴). `fetchBrTitleInfoFallback()`(info/route.ts 라이브 조회 경로)과
+  `backfill-apartment-master-basic-data.ts`의 `fetchTitleFallbackOnce()`
+  (신규 상태 `building_unit_review`) 양쪽에 적용 — 향후 재실행/신규
+  발견 시 같은 오류 재발을 막는다. 이미 저장된 30건 데이터 자체는
+  건드리지 않음.
+- 경동마리나(aptSeq 26350-2) 최종 결론: 진짜 전체 세대수/동수 **미확정**
+  (총괄표제부 없음, K-APT 불가). MOLIT 실거래 981건 재분석 결과 같은
+  층 번호에서 여러 전용면적이 반복 관측돼 다동 단지일 개연성은
+  뒷받침되나, "892세대/8개동"은 여전히 미검증 — 채택하지 않음.
+
+DB 변경: 없음(schema/migration 무변경, Production INSERT/UPDATE/DELETE
+없음).
+
+API 변경: 없음(신규 export 함수 1개, 기존 함수 시그니처/동작 계약
+불변 — 표제부 fallback이 더 보수적으로 null을 반환하는 case가 늘었을
+뿐, 반환 타입/호출 방식 동일).
+
+QA: 신규 유닛테스트 9개(`src/lib/apt-building-info.test.mjs`,
+`isNumberedBuildingUnit` A/B/C + edge case) 전부 pass, 기존 8개 포함
+17/17. 세션 전체 회귀 테스트(`apt-name-match`/`trade-history-logic`/
+`api-molit`/`search-ranking`) 37/37 pass. `npx tsc --noEmit` 신규 오류
+0(기존 20건만 유지). `npx eslint`(변경 파일) clean. `npm run build`
+PASS. 브라우저 실측(경동/대신롯데캐슬 상세) 회귀 없음, 경동 세대수는
+문서 그대로 72(이번 STEP도 DB write 없었으므로 불변 확인).
+
+상태: 완료.
+
+상세: `docs/development/MASTER_HOUSEHOLD_VERIFICATION_V1.md`
+
+**GYEONGDONG_MARINA_HOUSEHOLDS = UNKNOWN(건물 "103동" 단독 72만 확인).
+GYEONGDONG_MARINA_BUILDINGS = UNKNOWN. HIGH_CONFIDENCE_REPAIR = 0.
+REVIEW_REQUIRED = 27. NO_CORRECTION = 3. HOUSEHOLD_PROVENANCE = PARTIAL
+(K-APT 최우선 source 접근 불가, 건축물대장 기준 계약은 확정).
+PIPELINE_GUARD = PASS(dongNm 기반 가드 구현+테스트 완료).
+PRODUCTION_DB_WRITE = NONE. DB_SCHEMA_CHANGE = NONE. BUILD = PASS.
+NEXT_STEP = SOURCE_FOUNDATION_REQUIRED(K-APT 활용신청, 사용자 승인
+필요) → 이후 MASTER_DATA_REPAIR_V1.**
+
+## 2026-08-31
+
+### STEP — RECENT_MASTER_MISSING_16_AUDIT_V1: 최근 24개월 Master 누락 16건 정합성
+
+작업(AUDIT + CLASSIFICATION + REPAIR PLAN, Production write 없음):
+
+- **16건 전수 재구성**(`scripts/audit-recent-master-missing-16.ts`, 신규
+  read-only): 각 후보의 20년 전체 거래 이력(1~97건)까지 전부 재구성 —
+  전체 이력 내내 name/dong/jibun이 단 한 번도 흔들리지 않음을 확인
+  (`SOURCE_IDENTITY_CONFLICT` 0건). `ApartmentMaster` 3,402행 +
+  legacy `Apartment` 54행 전체 대상 중복/오매칭 스캔 — "보해이브빌"
+  1건만 이름이 겹쳤으나 dong+jibun이 완전히 달라 별개 건물(동명 브랜드
+  재사용)로 확정, 진짜 duplicate 0건.
+- **분류**(`scripts/classify-recent-master-missing-16.ts`, 신규):
+  16/16 전부 `A_ACTIVE_APARTMENT_MASTER_OMISSION` +
+  `READY_FOR_MASTER_CREATE`(11건 HIGH confidence, 5건 MEDIUM — 거래
+  이력이 얇은 신축/저빈도 단지). rename/legacy/other-type/duplicate
+  0건.
+- **Master import pipeline 근본원인 확정**: `ApartmentMaster` 3,402행
+  전부 2026-08-13 하루에 1회성으로 생성됐음을 `createdAt` 범위로 확인.
+  16건 중 절반은 그 이후 거래(구조적으로 스냅샷에 없을 수밖에 없음),
+  나머지 절반은 그 이전 거래이나 MOLIT 실거래 신고 지연(이미
+  `sync-trade-history.ts` §40에 문서화된 사실)으로 seed 조회 시점에
+  아직 미등록이었을 가능성이 높음 — 단일 원인은 "1회성 스냅샷 + 신고
+  지연"의 조합, 개별 backfill 로직 버그 아님.
+- **재발 위험 확정**: `.github/workflows/` 자체가 없고, `vercel.json`도
+  없으며, `package.json`에 cron/scheduler 스크립트가 전혀 없다 — Master를
+  주기적으로 재동기화하는 자동화가 **전혀 존재하지 않음**을 확정. 이번
+  16건을 보완해도 다음 달 신규 거래는 다시 같은 방식으로 누락된다
+  (`MASTER_COVERAGE_SYNC_V1` 후속 필요).
+- `scripts/audit-busan-search-coverage.ts --recent24` 재실행으로
+  SEARCH_API_MISSING=0(이전 STEP과 동일) 재확인 — code-only fix 대상
+  없음, 16건 전부 진짜 Master 데이터 공백.
+- Repair plan(§16): CREATE_MASTER_ROW(16건, 최소 필드만, MOLIT 원본
+  aptSeq/name/normalizedName/sido/sigungu/sggCd/umdName/jibun/buildYear
+  — targeted 재실행, 대량 backfill 아님), household/좌표는 별도 후속
+  enrichment로 분리.
+
+DB 변경: 없음(schema/migration 무변경, Production INSERT/UPDATE/DELETE
+없음 — 두 감사 스크립트 전부 read-only, repair candidate는 JSON
+파일로만 저장).
+
+API 변경: 없음(코드 변경 없음, 감사 스크립트만 신규 추가).
+
+QA: `npx tsc --noEmit` 신규 오류 0(작업 중 발견한 타입 narrowing
+이슈 1건은 이번 STEP 코드 자체에서 직접 수정, 최종 기존 20건만 유지).
+`npx eslint`(신규 스크립트) clean. `npm run build` PASS. 2-step 파이프라인
+(`audit-recent-master-missing-16.ts` → `classify-recent-master-missing-16.ts`)
+연속 2회 실행 결과 완전히 동일(READY=16/REVIEW=0/DO_NOT_CREATE=0)
+— deterministic 확인.
+
+상태: 완료.
+
+상세: `docs/development/RECENT_MASTER_MISSING_16_AUDIT_V1.md`
+
+**CURRENT_RECENT_COVERAGE = 99.53%. READY_FOR_MASTER_CREATE = 16.
+REVIEW_REQUIRED = 0. DO_NOT_CREATE = 0. EXPECTED_COVERAGE_AFTER_REPAIR =
+100.00%(승인+실행 후). MASTER_IMPORT_ROOT_CAUSE = PROVEN(1회성 스냅샷 +
+MOLIT 신고 지연). RECURRENCE_RISK = YES(주기적 재동기화 자동화 전혀
+없음, 실측 확정). MASTER_COVERAGE_SYNC = MISSING. PRODUCTION_DB_WRITE =
+NONE. DB_SCHEMA_CHANGE = NONE. BUILD = PASS. NEXT_STEP =
+MASTER_MISSING_REPAIR_V1(승인 필요) → MASTER_COVERAGE_SYNC_V1(승인
+필요).**
+
+## 2026-08-31
+
+### STEP — MASTER_MISSING_REPAIR_V1: 최근 거래 Master 누락 16건 보정
+
+사용자가 이번 STEP의 Production DB write를 명시적으로 승인(16건
+한정, canonical identity 필드만, secondary metadata는 공식 근거 없으면
+null 유지).
+
+작업:
+
+- 신규 repair 스크립트(`scripts/repair-recent-missing-masters.ts` +
+  순수 로직 분리 `scripts/repair-recent-missing-masters-logic.ts`,
+  dry-run 기본/`--apply`로만 반영, idempotent — 기존 row는 절대
+  UPDATE하지 않고 skip만) 작성. dry-run 결과 16 insert/0 duplicate/0
+  invalid로 예상과 정확히 일치 확인 후 적용.
+- **Production write 실행**: `RECENT_MASTER_MISSING_16_AUDIT_V1`이
+  확정한 16건(햇살좋은집/궁전그린파크빌라/동광맨션/삼풍아파트/
+  가야봄여름가을겨울/롯데캐슬인피니엘/퀀텀펠리스/대운스카이뷰1차/
+  보해이브빌/아틀리에933/대림포레/창신빌라/삼성빌라/에스케이드림피아/
+  일번파크맨션에이동/피렌체) 전부 `ApartmentMaster`에 신규 생성(id
+  5391~5406) — aptSeq/name/normalizedName/sido/sigungu/sggCd/umdName/
+  jibun/buildYear만 채우고 totalHouseholds 등 secondary metadata는
+  공식 근거가 없어 전부 null로 유지. 16/16 성공, 실패 0.
+- **Before/After**: `ApartmentMaster` 3,402→3,418(+16), 최근 24개월
+  검색 coverage 99.53%(3,387/3,403) → **100.00%**(3,403/3,403).
+  duplicate aptSeq 그룹 0건 유지(정합성 훼손 없음).
+- **QA**: 16개 이름 전부 `/api/search` 프로그래매틱 검색 → 16/16
+  정확히 자기 aptSeq를 exact-match tier로 반환(동명 타 지역 단지가
+  섞인 2건도 랭킹 정상). `/api/apt/[name]/verify` 16/16 `hasTrades=true`
+  확인, 다른 단지 fallback 0건. 대표 3건(고신뢰 2 + 중신뢰 1) 375px
+  모바일 브라우저로 검색→상세→실거래 확인, 정상.
+- **부수 발견 및 수정**: QA 중 `/apt/[name]` Hero 요약 줄이 세대수가
+  없을 때(신규 16건 특성상 전부 해당) "1978년 준공세대"처럼 숫자 없이
+  "세대"만 붙어 깨져 보이는 pre-existing UI 버그를 발견 — household이
+  있을 때만 "세대" 접미사 정규화를 적용하도록 `apt-client.tsx`를 좁게
+  수정(LOCKED 파일이지만 AGENTS.md의 data-error/severe-UX 예외 사유,
+  이번 STEP이 직접 노출시킨 결함이라 QA 범위 안에서 처리).
+- 성능 회귀 없음 재확인(warm p50 23~119ms, p95 55~179ms, 기존 목표
+  대비 이상 없음 — Master 3,402→3,418은 성능에 실질적 영향 없는 규모).
+
+DB 변경: schema/migration 없음. **Production INSERT 16건 실행**(승인
+범위 정확히 준수, UPDATE/DELETE 없음, 16건 초과 없음).
+
+API 변경: 없음(신규 스크립트만 추가, 기존 API 계약 불변).
+
+QA: 신규 유닛테스트 9개(`repair-recent-missing-masters-logic.test.mjs`,
+스펙 §21 A~F 커버) 전부 pass. 세션 전체 회귀 테스트 47/47 pass.
+`npx tsc --noEmit` 신규 오류 0(기존 20건만 유지). `npx eslint` 신규
+이슈 0(apt-client.tsx의 사전 존재 warning 1건은 이번 변경과 무관 —
+이전 STEP 기록과 대조해 재확인). `npm run build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/MASTER_MISSING_REPAIR_V1.md`
+
+**MASTER_MISSING_REPAIR = PASS. INSERTED = 16. RECENT_MISSING = 0.
+RECENT_SEARCH_COVERAGE = 100.00%. SEARCH_IDENTITY = PASS.
+DETAIL_IDENTITY = PASS. WRONG_APT_FALLBACK = ELIMINATED. DUPLICATES =
+0. PRODUCTION_DB_WRITE = APPROVED_AND_COMPLETED. DB_SCHEMA_CHANGE =
+NONE. SEARCH_PERFORMANCE = PASS. BUILD = PASS. NEXT_STEP =
+MASTER_COVERAGE_SYNC_V1(승인 필요).**
+
+### STEP — MASTER_COVERAGE_SYNC_V1: 아파트 Master 검색 커버리지 자동 유지
+
+`MASTER_MISSING_REPAIR_V1`이 이미 남긴 next step: 16건 보정은 1회성
+스냅샷 복구일 뿐, `ApartmentMaster`가 여전히 1회성 seed 구조라 다음
+달 새로 거래되는 aptSeq는 같은 방식으로 다시 누락된다(§14 recurrence
+risk). 이번 STEP은 그 재발을 반복적으로 탐지·검증·분류할 수 있는
+재사용 가능한 sync 도구를 만들었다. Production 신규 write는 사전
+승인되지 않았으므로 missing=0이면 write 없이 끝까지 진행하는 조건으로
+착수.
+
+작업:
+
+- 직전 `RECENT_MASTER_MISSING_16_AUDIT_V1`/`MASTER_MISSING_REPAIR_V1`
+  파이프라인(`audit-recent-master-missing-16.ts` →
+  `classify-recent-master-missing-16.ts` →
+  `repair-recent-missing-masters(-logic).ts`)을 역추적해, 실제 INSERT
+  plan 생성 로직(`buildMasterRowPlan`/`buildAllPlans`,
+  `BUSAN_GU_BY_LAWDCD`)은 변경 없이 그대로 재사용하고, missing
+  탐지·forensic profile·classification만 새 순수 함수 모듈
+  (`scripts/master-coverage-sync-logic.ts`)로 일반화했다 — write 경로가
+  두 곳으로 갈라지지 않는다.
+- 신규 CLI(`scripts/master-coverage-sync.ts`, dry-run 기본/`--apply`로만
+  write, `--months=N`으로 window 조정 가능, 기본 24개월): 배치 쿼리로
+  coverage 계산 → missing 탐지 → forensic profile → HIGH_CONFIDENCE/
+  REVIEW_REQUIRED/INVALID 분류 → (HIGH_CONFIDENCE만) INSERT plan →
+  `--apply` 시에만 write 직전 재조회 후 실제 insert. 콘솔 report +
+  `scripts/_master_coverage_sync_results/`(gitignore 추가, 재현 가능,
+  커밋 안 함)에 JSON 기록.
+- missing 건수와 무관하게 항상 고정된 배치 쿼리 횟수로 동작하도록
+  개선(원본 16건 audit 스크립트의 aptSeq당 개별 조회 루프를 단일
+  `findMany({aptSeq:{in:...}})` 배치로 교체) — N+1 없음.
+- 새 안전장치: aptSeq 접두부("{lawdCd}-...")와 거래 원본 lawdCd 교차
+  검증(`aptSeqLawdMismatch`) 가드를 추가해 불일치 시 `REVIEW_REQUIRED`.
+- **Production READ 감사**: 최근 24개월 Busan traded aptSeq 3,400 /
+  `ApartmentMaster` matched 3,400 / missing 0 / coverage **100.00%**
+  확인(dry-run, 2,138ms). missing=0이므로 Production write는 실행하지
+  않음(§13 조건 그대로).
+
+DB 변경: schema/migration 없음. **Production write 없음**(missing=0,
+승인 요청 자체가 발생하지 않음).
+
+API 변경: 없음(신규 스크립트 2개만 추가, 기존 API 계약 불변).
+
+QA: 신규 유닛테스트 12개(`master-coverage-sync-logic.test.mjs`) —
+coverage 계산, HIGH_CONFIDENCE/REVIEW_REQUIRED/INVALID 분류, 동일
+aptSeq 내 identity 흔들림, 기존 Master와의 address 충돌, **wrong-
+apartment-fallback 회귀 가드**(같은 브랜드명·다른 주소는 충돌로 취급
+안 함, §7 "보해이브빌" 사례 재확인), 필수 필드 결측, aptSeq/lawdCd
+불일치, duplicate 보호(idempotency), REVIEW_REQUIRED가 INSERT로
+이어지지 않음, secondary metadata null 정책까지 전부 pass. 세션 전체
+회귀 테스트 672/672 pass(신규 12개 포함). `npx tsc --noEmit` 신규
+오류 0(기존 20건만 유지). `npx eslint` 신규 파일 clean. `npm run
+build` PASS.
+
+상태: 완료.
+
+상세: `docs/development/MASTER_COVERAGE_SYNC_V1.md`
+
+**MASTER_COVERAGE_SYNC_V1 = PASS. WINDOW = 24 MONTHS. TRADE_APTSEQ =
+3400. MASTER_MATCHED = 3400. MISSING = 0. COVERAGE = 100.00%.
+HIGH_CONFIDENCE = 0. REVIEW_REQUIRED = 0. INVALID = 0.
+PRODUCTION_WRITE = NOT_EXECUTED(missing=0). IDEMPOTENT = YES.
+WRONG_APT_FALLBACK = 0. DB_SCHEMA_CHANGE = NONE. TESTS = 672/672.
+BUILD = PASS. NEXT_STEP = scheduler 연결(승인 필요) 또는 정기 수동
+재실행.**
+
+### STEP — APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1: 공동주택 기본 정보제공 서비스 공식 소스 감사 (BLOCKED)
+
+사용자가 공공데이터포털에서 활용신청했다고 밝힌
+"국토교통부_공동주택 기본 정보제공 서비스"(`AptBasisInfoServiceV3`)가
+`ApartmentMaster`의 household/동수 enrichment authoritative source로
+쓸 수 있는지 검증. 경동마리나(aptSeq `26350-2`, 표제부 103동 hhldCnt=72
+가 892세대 단지 전체값으로 오인될 뻔했던 기존 사례)를 핵심 케이스로
+확인할 예정이었음.
+
+작업:
+
+- **Pre-flight**: `MASTER_MISSING_REPAIR_V1`(3,403) → `MASTER_COVERAGE_
+  SYNC_V1`(3,400) 차이를 배치 read-only 쿼리로 확인 — 원인은 window
+  경계 오차가 아니라 기존 `TRADE_CANCELLATION_RESYNC_V1` 파이프라인이
+  4건을 정상적으로 취소 처리한 결과(`EXPECTED_ROLLING_WINDOW_CHANGE`,
+  데이터 손실 아님). 진단 스크립트는 1회성으로 실행 후 삭제.
+- 기존 코드베이스 audit: `src/lib/apt-building-info.ts`(건축물대장
+  클라이언트, `SINGLE_BUILDING_AS_COMPLEX` 가드 `isNumberedBuildingUnit`
+  보유), `src/lib/api-molit.ts`, `scripts/backfill-apartment-master-
+  basic-data.ts`(`BasicSpecSource` provenance enum) 재확인. **K-APT
+  계열 상품(이번 타겟 endpoint 포함)이 직전 `MASTER_HOUSEHOLD_
+  VERIFICATION_V1` STEP에서 이미 시도되고 `NO_OPENAPI_SERVICE_ERROR`로
+  거부됐던 기록을 발견** — 새 클라이언트를 만들기 전에 실측 재확인이
+  먼저 필요하다고 판단.
+- 신규 read-only probe 스크립트(`scripts/audit-apartment-basic-info-
+  source.ts`, DB 접근 없음, key 값 미노출) 작성 — `AptBasisInfoServiceV3`
+  /`AptListService3` 5개 경로 후보 + 이미 승인된 `BldRgstHubService`
+  대조군 1개를 같은 `DATA_GO_KR_API_KEY`로 호출.
+- **실측 결과(BLOCKER)**: 대조군은 `resultCode=00 NORMAL SERVICE`로
+  즉시 성공(키 자체는 정상 작동), 타겟 5개 전부
+  `NO_OPENAPI_SERVICE_ERROR`("해당 오픈API 서비스가 없거나 폐기됨") —
+  이 상품이 현재 `DATA_GO_KR_API_KEY`에 아직 승인/활성화되지 않은
+  상태임을 확인(2회 반복 재현). `MASTER_HOUSEHOLD_VERIFICATION_V1`
+  §6이 이미 문서화한 것과 동일한 결과를 오늘 시점에 재확인했을 뿐.
+- 이 blocker로 §8~§13(경동마리나 공식 record 검증, 부산 복수 샘플,
+  household/buildingCount/좌표 적합성 판정)은 전부 필드명을 추측하지
+  않고 `CANNOT_DETERMINE`/`CANNOT_VERIFY`로 명시적으로 남김 — 문서
+  §4에 2차 출처(공개 wiki/검색) 기반 필드 목록만 참고용으로 기록.
+
+DB 변경: schema/migration 없음. **Production write 없음**(애초에 API
+응답을 받지 못해 write할 데이터 자체가 없음).
+
+API 변경: 없음(read-only probe 스크립트 1개만 추가).
+
+QA: probe 스크립트를 2회 반복 실행해 결과 재현성 확인(대조군
+성공/타겟 5개 실패 패턴 동일). `npx eslint` clean. `npx tsc --noEmit`
+신규 오류 0(기존 20건 baseline 유지). 기존 코드 변경 없어 전체 회귀
+테스트 재실행 생략(직전 STEP에서 672/672 확인됨), `npm run build`도
+`src/`/`prisma/` 변경이 없어 생략.
+
+상태: **BLOCKED**(PM 결정 필요 — §15).
+
+상세: `docs/development/APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`
+
+**APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1 = BLOCKED.
+PREFLIGHT_3403_TO_3400 = EXPECTED_ROLLING_WINDOW_CHANGE.
+API_KEY_CONFIGURED = true. LIVE_PROBE = NO_OPENAPI_SERVICE_ERROR(5/5
+후보). CONTROL_CALL = SUCCESS(같은 키). HOUSEHOLD_SOURCE_VERDICT =
+CANNOT_DETERMINE. BUILDING_COUNT_VERDICT = CANNOT_DETERMINE.
+COORDINATE_VERDICT = CANNOT_DETERMINE. PRODUCTION_WRITE = 0.
+DB_SCHEMA_CHANGE = 0. PM_DECISION_NEEDED = data.go.kr 활용신청 승인
+상태 재확인. NEXT_STEP = 승인 확인 후 scripts/audit-apartment-basic-
+info-source.ts 재실행으로 즉시 재검증 가능.**
+
+### STEP — APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1 재검증: 승인 확인됨, blocker 재정의 (여전히 BLOCKED)
+
+사용자가 data.go.kr 마이페이지에서 `국토교통부_공동주택 기본
+정보제공 서비스`와 `공동주택 단지 목록제공 서비스` 둘 다 `[승인]`
+상태(만료 2028-08-24/2028-08-31)임을 직접 확인해 전달 — 직전 STEP의
+"미승인" 가설을 폐기하고 옛 V3 endpoint를 전제하지 않은 채 재검증.
+
+작업:
+
+- probe 스크립트(`scripts/audit-apartment-basic-info-source.ts`) 후보를
+  9개로 확장 — 두 API group(1611000/1613000) × 여러 버전/무버전
+  조합, companion 목록 서비스의 legacy/V2/V3 변형까지 전부 포함(웹
+  검색으로 발견한 실사용 예제 `1611000/AptListService/
+  getLegaldongAptList?bjdCode=...` 조합 포함, `bjdCode`는 기존
+  regcode 프록시로 정확히 조회한 값 사용 — 추측 아님).
+- **재검증 결과**: 9개 후보 전부 여전히 `NO_OPENAPI_SERVICE_ERROR`,
+  대조군(`BldRgstHubService`, 같은 key)은 재현성 있게 성공(3회 중 2회
+  즉시 성공, 1회는 무관한 일시적 `SERVICETIMEOUT_ERROR`).
+- **진단을 재정의**: `NO_OPENAPI_SERVICE_ERROR`(`returnReasonCode=12`)
+  는 data.go.kr 공통 오류 체계에서 "요청 URL이 등록된 서비스와
+  불일치"를 뜻하는 코드로, 승인/권한 오류 코드와 다르다 — 승인이
+  확인된 지금 이 오류가 계속 나는 것은 미승인이 아니라 **정확한 End
+  Point 경로를 아직 못 찾았기 때문**이라고 결론.
+- data.go.kr의 로그인 전용 "개발계정 상세" 화면(정확한 End Point가
+  표시되는 곳)에 비로그인 접근을 시도했으나 SSO 로그인 페이지로
+  리다이렉트됨을 확인 — 프로그래매틱으로는 더 이상 좁힐 수 없는 지점.
+- 문서(`APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`)에 §6-B/§7-B
+  재검증 섹션 추가, §13~§15(Known Limitations/Next Step/PM Decision)
+  갱신 — "승인 재확인" 요청 대신 "정확한 End Point 문자열 확보"로
+  요청 내용을 좁혔다.
+
+DB 변경: schema/migration 없음. Production write 없음(여전히 API
+응답 자체를 받지 못함).
+
+API 변경: 없음(기존 probe 스크립트 후보 목록만 확장).
+
+QA: 재검증 2회 실행, 9개 후보 결과 재현성 확인. `npx eslint`/`npx tsc
+--noEmit` 신규 오류 0.
+
+상태: **BLOCKED**(진단은 진전됐으나 여전히 사용자의 1회성 조치 필요
+— §15).
+
+상세: `docs/development/APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`
+§6-B, §7-B, §13~§15.
+
+**RE-VERIFICATION = BLOCKED(원인 재정의). APPROVAL_STATUS = CONFIRMED
+(user-provided, 두 서비스 모두 승인, 만료 2028). CANDIDATES_TESTED = 9.
+ALL = NO_OPENAPI_SERVICE_ERROR(returnReasonCode=12, wrong-URL 코드).
+CONTROL_CALL = SUCCESS(같은 키). DIAGNOSIS = ENDPOINT_URL_UNKNOWN(
+승인/키 문제 아님). PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
+PM_DECISION_NEEDED = data.go.kr 로그인 후 정확한 End Point 문자열
+복사·전달(승인 재확인 아님, 코드로 해결 불가). NEXT_STEP = End Point
+확보 후 probe 스크립트에 한 줄 추가·재실행.**
+
+### STEP — APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1 V4/V5 재검증: 기본정보 서비스 실제 작동 확인(BREAKTHROUGH), 목록 서비스는 여전히 미해결
+
+사용자가 data.go.kr에 로그인한 상태의 실제 "활용신청 상세" 화면에서
+공식 End Point 두 개를 직접 확인해 전달(`AptListService4`,
+`AptBasisInfoServiceV5`, 둘 다 group `1613000`) — 이전의 모든 V2/V3/
+V4(기본정보 기준) 추측을 폐기하고 이 두 base로만 재검증.
+
+작업:
+
+- probe 스크립트를 공식 base 2개 중심으로 재작성. operation명은
+  base와 별개로 여전히 미확인이었으므로(추측 금지 원칙 유지)
+  경험적으로 검증.
+- **기본 정보제공 서비스 — CONFIRMED WORKING**: `getAphusBassInfoV5`
+  operation이 `kaptCode` 파라미터로 실제 성공(`HTTP 200,
+  resultCode=00 NORMAL SERVICE.`). 공개 예제 kaptCode(`A10027875`)로
+  실제 조회한 결과가 우연히 부산 사하구 실존 단지("괴정 경성스마트W
+  아파트", 3동/182세대/2015년 사용승인)였다 — 26개 필드 전수 확보,
+  세대수/동수가 complex-level 값임을 실측으로 확인, **좌표 필드는
+  응답에 없음을 실측으로 최종 확인**(문서 추정이 아님). 응답 envelope
+  이 문서상 추정과 달리 `response.body.item`(단일 객체, 배열 wrapper
+  아님)임을 발견해 probe 파싱 로직도 이 실측에 맞춰 수정.
+- **단지 목록제공 서비스 — 여전히 미해결**: `AptListService4` base는
+  확실하지만 operation명은 20개 후보(V3까지의 관례 그대로 버전만
+  V4로 교체/버전 접미사 제거/파라미터명 변형/"Aphus" legacy 표기
+  적용 등)를 전부 시도해도 전부 `NO_OPENAPI_SERVICE_ERROR` — 승인/키
+  문제가 아님을 대조군과 방금 확인된 기본정보 서비스 성공으로 재확인.
+  이 이상 추측을 확장하지 않고 사용자에게 정확한 operation명(Sample
+  Code/미리보기 화면)을 요청하는 것으로 전환.
+- 목록 서비스 없이 경동마리나 kaptCode를 얻는 대안 경로(K-apt 무료
+  다운로드 파일, K-apt 웹 검색 UI)도 시도했으나 봇 차단/UI 완료
+  실패로 부차적 참고 기록만 남기고 목록 서비스를 대체하지 못함 — 단,
+  3rd-party 부동산 사이트에서 "경동마리나 892세대/8개동/1995.06"을
+  확인해 스펙이 언급한 수치와 정확히 일치함을 corroboration으로
+  기록(공식 API 근거는 아님, Production 판단에 쓰지 않음).
+- probe 스크립트에 CLI kaptCode 인자를 추가해, 목록 서비스 없이도
+  사용자가 kaptCode 하나만 알려주면 즉시 그 단지를 검증할 수 있게
+  준비해 뒀다.
+- 문서(`APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`)에 §6-C/§7-C
+  추가, §8(household/buildingCount=LIMITED 예비 긍정 n=1, coordinate=
+  NOT_AVAILABLE 확정), §9(architecture, 기본정보 단계 확인 완료로
+  갱신), §13~§15(Known Limitations/Next Step/PM Decision) 갱신.
+
+DB 변경: schema/migration 없음. Production write 없음.
+
+API 변경: 없음(기존 probe 스크립트 수정만).
+
+QA: 기본정보 서비스 성공 응답 재현 확인(2회), 목록 서비스 20개 후보
+반복 실패 재현 확인, 대조군 성공 재확인(3회 중 2회 즉시 성공, 1회
+무관한 일시적 타임아웃). `npx eslint`/`npx tsc --noEmit` 신규 오류 0.
+
+상태: **PARTIAL**(기본정보 서비스는 PASS, 목록 서비스/경동마리나/
+부산 sample은 BLOCKED — §15).
+
+상세: `docs/development/APARTMENT_OFFICIAL_BASIC_INFO_SOURCE_AUDIT_V1.md`
+§6-C, §7-C, §8, §9, §13~§15.
+
+**V4V5_REVERIFICATION = PARTIAL. LIST_SERVICE(AptListService4) =
+BLOCKED(operation명 미확인, 20 candidates tried). BASIC_INFO_SERVICE
+(AptBasisInfoServiceV5.getAphusBassInfoV5) = CONFIRMED_WORKING.
+LIVE_SAMPLE = 1건(괴정 경성스마트W아파트, 부산 사하구). COORDINATE_
+VERDICT = NOT_AVAILABLE(확정). HOUSEHOLD_VERDICT = LIMITED(예비
+긍정, n=1). BUILDING_COUNT_VERDICT = LIMITED(예비 긍정, n=1).
+GYEONGDONG_MARINA = CANNOT_VERIFY(kaptCode 미확보). BUSAN_SAMPLE =
+CANNOT_DETERMINE(목록 서비스 필요). PRODUCTION_WRITE = 0. DB_SCHEMA_
+CHANGE = 0. PM_DECISION_NEEDED = 목록 서비스 정확한 operation명(Sample
+Code/미리보기 화면) 확보, 또는 최소 경동마리나 kaptCode 1건. NEXT_STEP
+= 확보 후 probe 재실행 한 줄로 즉시 완료 가능.**
