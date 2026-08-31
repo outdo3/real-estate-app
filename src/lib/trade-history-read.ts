@@ -625,6 +625,100 @@ export async function getRisingRowsFromDb(lawdCds: string[], periodFrom: string,
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// TRADE_DB_FIRST_V1 STEP E — 신고가(price-ranking.ts buildRecordHighRows) DB-FIRST.
+//
+// §STRUCTURE-DIFF — decline/rising과 CTE 구조(raw dedupe → base row_seq/
+// month_index → step1 prior_high_amount → step2 is_new_high → step3
+// prior_high_date 전파)는 완전히 동일하게 재사용한다(§9 — 이미 검증된 tie-break/
+// dedupe/trailing12mo 로직을 새로 발명하지 않음). 유일한 구조적 차이는 decline/
+// rising이 `period_latest`에서 `ROW_NUMBER() ... rn = 1`로 그룹당 "기간 내
+// 최근 거래" 단 하나만 남기는 반면, 신고가는 buildRecordHighRows()의 정의상
+// "기간 내에서 실제로 자기 자신의 이전 최고가를 넘어선 거래는 전부" row로
+// 남겨야 한다(§11/§12 — 같은 그룹에서 기간 내 여러 건이 각각 신고가를
+// 경신했다면 전부 별도 row) — 따라서 rn 필터를 두지 않고 `is_new_high = true`
+// 조건만으로 candidates를 뽑는다. is_new_high 자체는 STEP C-2가 이미 증명한
+// `deal_amount > COALESCE(prior_high_amount, sentinel)` 패턴(step2)을 그대로
+// 재사용 — 신고가 판정의 핵심 조건이 decline의 "step2 부산물"과 정확히
+// 동일한 연산이었다는 뜻이다.
+export interface RecordHighCandidateRow {
+  id: number;
+  aptSeq: string | null;
+  aptName: string;
+  dong: string;
+  lawdCd: string;
+  exclusiveArea: string;
+  floor: number | null;
+  currentAmount: number;
+  currentDate: Date;
+  priorHighAmount: number;
+  priorHighDate: Date;
+  trailingSampleCount: number;
+}
+
+/** 신고가 후보 전체 row를 단일 SQL pass로 반환한다 — 그룹별로 기간 내
+ * "자기 자신 이전 최고가를 실제로 넘어선" 거래는 전부(그룹당 여러 건 가능). */
+export async function getRecordHighRowsFromDb(lawdCds: string[], periodFrom: string, periodTo: string): Promise<RecordHighCandidateRow[]> {
+  const from = candidateFromDate();
+  const rows = await prisma.$queryRaw<
+    { id: number; aptSeq: string | null; aptName: string; dong: string; lawdCd: string; exclusiveArea: string; floor: number | null; currentAmount: number; currentDate: Date; priorHighAmount: number; priorHighDate: Date; trailingSampleCount: bigint }[]
+  >`
+    WITH raw AS (
+      SELECT id, group_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, floor, deal_amount, deal_date,
+        ROW_NUMBER() OVER (PARTITION BY group_key, deal_amount, deal_date, floor ORDER BY id DESC) AS dedupe_rn
+      FROM apartment_trade_histories
+      WHERE lawd_cd = ANY(${lawdCds})
+        AND deal_type = 'sale'
+        AND deal_canceled = false
+        AND deal_date >= ${from}
+    ),
+    base AS (
+      SELECT id, group_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, floor, deal_amount, deal_date,
+        (EXTRACT(YEAR FROM deal_date)::int * 12 + EXTRACT(MONTH FROM deal_date)::int) AS month_index,
+        ROW_NUMBER() OVER (PARTITION BY group_key ORDER BY deal_date ASC, id DESC) AS row_seq
+      FROM raw
+      WHERE dedupe_rn = 1
+    ),
+    step1 AS (
+      SELECT *,
+        MAX(deal_amount) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS prior_high_amount
+      FROM base
+    ),
+    step2 AS (
+      SELECT *, (deal_amount > COALESCE(prior_high_amount, -2147483648)) AS is_new_high
+      FROM step1
+    ),
+    step3 AS (
+      SELECT *,
+        MAX(CASE WHEN is_new_high THEN deal_date END) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS prior_high_date
+      FROM step2
+    ),
+    candidates AS (
+      SELECT * FROM step3
+      WHERE deal_date BETWEEN ${periodFrom}::date AND ${periodTo}::date
+        AND is_new_high = true
+        AND prior_high_amount IS NOT NULL
+    )
+    SELECT
+      c.id, c.apt_seq AS "aptSeq", c.apt_name AS "aptName", c.dong, c.lawd_cd AS "lawdCd",
+      c.exclusive_area::text AS "exclusiveArea", c.floor,
+      c.deal_amount AS "currentAmount", c.deal_date AS "currentDate",
+      c.prior_high_amount AS "priorHighAmount", c.prior_high_date AS "priorHighDate",
+      COUNT(b.id) AS "trailingSampleCount"
+    FROM candidates c
+    JOIN base b ON b.group_key = c.group_key AND b.row_seq <= c.row_seq AND b.month_index >= c.month_index - 12
+    GROUP BY c.id, c.apt_seq, c.apt_name, c.dong, c.lawd_cd, c.exclusive_area, c.floor,
+      c.deal_amount, c.deal_date, c.prior_high_amount, c.prior_high_date
+  `;
+  return rows.map((r) => ({ ...r, trailingSampleCount: Number(r.trailingSampleCount) }));
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // TRADE_DB_FIRST_V1 STEP D — 지역 변동지도(region-change.ts) DB-FIRST. STEP
 // C-2의 교훈(원본 row를 Node로 옮기지 않고 SQL이 최종/준최종 결과까지 계산)을
 // 처음부터 적용한다 — "먼저 만들고 나중에 최적화"를 반복하지 않는다.

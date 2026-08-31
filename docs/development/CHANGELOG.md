@@ -11881,3 +11881,85 @@ BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
 NEXT_STEP = record-high DB 전환(STEP E) 또는 전세/월세 TradeHistory
 DB 구축(대규모, dashboard/region-change 전세 breakdown 등 완전
 DB-first를 위한 유일한 근본 해결책).**
+
+## 2026-08-31
+
+### STEP — TRADE_DB_FIRST_V1 STEP E: 신고가(2년최고가) 부산 DB-FIRST 전환 + Completeness Gate 검증
+
+"2년최고가"(`/stats/record-high`, `/api/stats/price-rankings?mode=record-high`)를
+부산 요청에 한해 DB-first로 전환. 이번 STEP의 핵심은 전환 자체가
+아니라 — 취소거래(cancellation) 재검증이 최근 13개월만 완료된 상태
+(`TRADE_CANCELLATION_RESYNC_V1`)에서 24개월(`HISTORICAL_LOOKBACK_MONTHS`)
+lookback을 쓰는 "2년최고가" 문구가 여전히 안전한지를 명시적으로
+재검증하는 것이었다.
+
+서비스 코드 변경:
+
+- `src/lib/trade-history-read.ts`: `getRecordHighRowsFromDb()` 신규.
+  STEP C-2의 decline용 `is_new_high` CTE(raw dedupe → base row_seq/
+  month_index → prior_high_amount → is_new_high → prior_high_date 전파)를
+  그대로 재사용 — decline의 "step2 부산물"이 신고가 판정의 핵심
+  조건과 정확히 동일한 연산이었다. decline/rising과의 유일한 구조적
+  차이는 `rn=1`("기간 내 최근 거래 1건") 필터를 두지 않는 것 —
+  신고가는 그룹당 기간 내 신고가 갱신 건을 전부 별도 row로 남기는
+  기존 제품 정의(§ `buildRecordHighRows`)를 그대로 따른다.
+- `src/app/api/stats/price-rankings/route.ts`: `mode==='record-high'`
+  부산 스코프 요청(sido-all/단일구)을 DB-first로 분기. 캐시 키
+  prefix(`recordhigh-v1`)를 decline/rising(`declinerising-v3`)과
+  완전히 분리해 충돌 방지. 문구(`buildRecordHighInterpretation`,
+  `historicalCoverageLabel`)는 한 글자도 바꾸지 않음.
+
+**TRUST VERDICT**(spec 핵심 요구): "2년최고가" 문구는 **LIMITED**
+판정 — 완전성을 주장하지 않고 조회 범위만 정직하게 주장한다는 점에서
+안전하지만, 24개월 lookback 중 뒤쪽 11개월(13~24개월 전)은 취소거래
+정확성이 미검증 상태로 남아있다. "역대최고가"/"역대신고가"는
+**UNSAFE**(변경 없음, 기존에도 금지 — `price-ranking.test.ts`가
+이미 코드 레벨에서 강제). 이 STEP은 문구를 바꾸지 않았다(현행 유지가
+곧 올바른 결정) — 단, "13개월 검증 vs 24개월 계산"이라는 잔여
+리스크는 STEP B/C/C-2/D가 이미 동일한 24개월 DB 윈도우로 먼저
+노출시킨 구조적 리스크임을 문서로 명시 보고하며, 이 갭을 해소할지
+여부(과거 취소 재동기화 확장)는 **PM_DECISION_REQUIRED**로 보고한다
+(이번 STEP 범위 밖, 과거 데이터 재수집 금지 원칙 §3 STOP 조건).
+
+A/B(18케이스, 부산 전체/해운대구/서구/동래구/부산진구/기장군 ×
+30일/3개월/12개월): 전 케이스에서 DB priorHighAmount ≥ MOLIT,
+날짜는 같거나 더 이름 — 방향 100% 일관. 2건(`26140-1321`,
+`26710-630`) 원본 저장 이력 직접 대조로 root cause 확정: MOLIT
+실시간 fetch가 특정 거래를 누락(throttling 관련, STEP C/D와 동일
+패턴의 4번째 재현) — DB가 더 정확. 취소거래 제외 직접 검증(57만원대
+취소 샘플이 후보군에 등장하지 않음 확인). MOLIT 호출 0 런타임 확인
+(부산 record-high 18회 요청 = probe 0회, 비교 대조군 비부산 1회
+요청 = probe 24회 — probe 자체 유효성도 함께 증명).
+
+성능: raw SQL 부산 전체 12개월 466~769ms, 단일구 27~121ms. HTTP
+라우트 warm 292~434ms(전 지역·기간, 목표 ≤500ms 충족). Row reduction:
+24개월 base raw rows 65,532건 중 단 한 건도 Node로 옮기지 않음(SQL이
+최종 candidate까지 계산, 최대 5,190건만 전송). 쿼리 수 요청당 1회.
+
+Production 브라우저 회귀: `/stats/decline`(서구) 정상, `/stats/
+record-high` 30일(7건)/12개월(134건) 전부 raw SQL probe와 정확히
+일치, 힐스테이트이진베이시티아파트(92.91㎡) priorHighDate가 §A/B에서
+직접 검증한 2025-03-28로 화면에 정확히 표시됨을 확인(SQL→route→API→UI
+종단 검증). `npx tsc --noEmit` 신규 오류 0(기존 20건 유지). `npx
+eslint` clean. `npm run build` PASS. `npx tsx --test`(전체 *.test.ts,
+211개) 전부 pass, 0 fail — record-high 순수 로직 무변경이라 신규
+테스트 추가하지 않음(STEP C-2/D와 동일 판단).
+
+DB 변경: schema/migration 없음. Production write 없음(READ만).
+
+상태: 완료.
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_E.md`
+
+**TRADE_DB_FIRST_V1_STEP_E = PASS. RECORD-HIGH = 부산 DB-FIRST.
+TRUST_VERDICT: 2년최고가=LIMITED(현행 문구 유지, 변경 없음),
+역대최고가/역대신고가=UNSAFE(변경 없음, 계속 금지).
+PM_DECISION_REQUIRED = 예(13개월 검증 vs 24개월 계산 범위 갭의 해소
+여부 — record-high 전용 아닌 STEP B/C/C-2/D 공통 구조적 리스크).
+MOLIT_CALLS_FOR_BUSAN = 0(런타임 확인). PERFORMANCE = warm
+292~434ms(목표 500ms 충족). CORRECTNESS = 18/18 케이스 전부
+DB_DATA_MORE_COMPLETE(MOLIT이 실시간 fetch 누락, DB가 더 정확 —
+원본 이력 직접 대조로 확정). QUERY_COUNT = 1. N+1 = 0. TESTS =
+211/211(전체 실행). BUILD = PASS. PRODUCTION_WRITE = 0.
+DB_SCHEMA_CHANGE = 0. NEXT_STEP = 24개월 lookback 전체 cancellation
+재동기화 확장(PM 결정 필요) 또는 전세/월세 TradeHistory DB 구축.**

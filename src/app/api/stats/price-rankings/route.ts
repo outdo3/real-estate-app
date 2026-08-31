@@ -5,7 +5,7 @@ import { resolveLawdCd, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { prisma } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, resolveApartmentContextBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
-import { queryTrades, getDeclineRowsFromDb, getRisingRowsFromDb } from '@/lib/trade-history-read';
+import { queryTrades, getDeclineRowsFromDb, getRisingRowsFromDb, getRecordHighRowsFromDb } from '@/lib/trade-history-read';
 import {
   dedupeTrades,
   groupKey,
@@ -26,6 +26,7 @@ import {
   RISING_SUFFICIENT_SAMPLE,
   type DeclineRow,
   type RisingRow,
+  type RecordHighRow,
   type FeedTrade,
   type PriceRankingPeriodPreset,
 } from '@/lib/price-ranking';
@@ -49,16 +50,31 @@ const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 
 // TRADE_DB_FIRST_V1 STEP B — 84㎡ 국민평형 순위(mode='area84'), STEP C —
-// 하락/상승(mode='decline'/'rising')을 부산 요청에 한해 TradeHistory
-// DB-first로 전환했다. record-high(신고가)/jeonse-risk(전세 위험) 2개
-// 모드와 3개 모드의 非부산 요청은 기존 live MOLIT 경로를 그대로 유지한다 —
-// jeonse-risk는 apiType이 rent라 TradeHistory DB(dealType='sale'만 존재)
-// 대상이 아니고, record-high는 스펙이 명시적으로 다음 STEP 대상으로
-// 남겨뒀다. 이집 TradeHistory DB는 부산 16/16 구·군만 구축돼 있고
+// 하락/상승(mode='decline'/'rising'), STEP E — 신고가(mode='record-high')를
+// 부산 요청에 한해 TradeHistory DB-first로 전환했다. jeonse-risk(전세 위험)
+// 1개 모드와 4개 모드의 非부산 요청은 기존 live MOLIT 경로를 그대로
+// 유지한다 — jeonse-risk는 apiType이 rent라 TradeHistory DB(dealType='sale'만
+// 존재) 대상이 아니다. 이집 TradeHistory DB는 부산 16/16 구·군만 구축돼 있고
 // (TRADE_HISTORY_DATA_V1) 다른 시/도는 데이터가 아예 없다 — "DB에 없으면
 // MOLIT으로 보완"이 아니라, 애초에 데이터가 존재하는 지역(부산)만 DB
 // 경로를 타도록 하는 고정된 지역 라우팅이다(§15 "정직한 coverage 표시" —
 // 非부산 사용자 동작은 이번 STEP으로 전혀 바뀌지 않는다).
+//
+// TRADE_DB_FIRST_V1 STEP E §TRUST — record-high가 쓰는 24개월
+// (HISTORICAL_LOOKBACK_MONTHS) 트레일링 윈도우 중 취소(dealCanceled) 정확성이
+// 실측 검증된 구간은 가장 최근 13개월뿐이다(TRADE_CANCELLATION_RESYNC_V1.md
+// §3/§5 — 2026-08-30 시점 "현재월+직전12개월"만 재동기화, 그 이전 구간은 과거
+// parser 버그로 dealCanceled가 항상 false로 backfill되어 있을 수 있음, 재수집은
+// 명시적으로 범위 밖). 즉 "2년최고가" 문구가 가리키는 24개월 중 뒤쪽 약 11개월
+// (13~24개월 전)은 취소거래가 유효거래로 잘못 섞여 priorHigh를 부풀릴 위험이
+// 이론상 있다 — 단, 이 wording 자체("최근 24개월"/coverageLabel, "역대" 아님)는
+// 이미 완료 범위만 정직하게 주장하고 있어 완전성(completeness)을 주장하지
+// 않는다. 이 노출은 STEP B/C/C-2/D가 이미 동일한 24개월 DB 윈도우를 써서
+// 선행 도입한 것과 동일한 성격이며 STEP E가 새로 만든 것이 아니다(문구를 더
+// 과장되게 바꾸지 않는다는 §40 원칙 준수) — 결론(LIMITED, PM_DECISION_REQUIRED
+// 권고)은 docs/development/TRADE_DB_FIRST_V1_STEP_E.md §TRUST VERDICT 참고.
+// 이번 STEP은 과거 취소 재동기화를 수행하지 않으며(범위 밖), UI 문구도 임의로
+// 바꾸지 않는다(기존 buildRecordHighInterpretation을 그대로 재사용).
 const BUSAN_SIDO_CODE = '26';
 
 function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
@@ -162,6 +178,32 @@ function sqlRisingRowToRisingRow(r: Awaited<ReturnType<typeof getRisingRowsFromD
   };
 }
 
+// TRADE_DB_FIRST_V1 STEP E — getRecordHighRowsFromDb()가 이미 priorHigh/
+// trailingSampleCount까지 SQL 단일 pass로 계산해 반환하므로, 여기서는
+// buildRecordHighRows()와 동일한 반올림 공식(deltaPct = Math.round(x*1000)/10)
+// 으로 최종 RecordHighRow shape만 조립한다 — decline/rising 변환 함수와 동일한
+// 패턴(§9 재발명 아님).
+function sqlRecordHighRowToRecordHighRow(r: Awaited<ReturnType<typeof getRecordHighRowsFromDb>>[number]): RecordHighRow {
+  const excluUseArea = Number(r.exclusiveArea);
+  const deltaAmount = r.currentAmount - r.priorHighAmount;
+  return {
+    groupKey: groupKey({ aptSeq: r.aptSeq, name: r.aptName, dong: r.dong, excluUseArea, dealType: 'sale' }),
+    aptSeq: r.aptSeq,
+    name: r.aptName,
+    dong: r.dong,
+    lawdCd: r.lawdCd,
+    excluUseArea,
+    floorRaw: r.floor,
+    currentAmount: r.currentAmount,
+    currentDate: r.currentDate.toISOString().slice(0, 10),
+    priorHighAmount: r.priorHighAmount,
+    priorHighDate: r.priorHighDate.toISOString().slice(0, 10),
+    deltaAmount,
+    deltaPct: r.priorHighAmount > 0 ? Math.round((deltaAmount / r.priorHighAmount) * 1000) / 10 : 0,
+    trailing12moSampleCount: r.trailingSampleCount,
+  };
+}
+
 function monthsForLookback(now: Date): string[] {
   const months: string[] = [];
   const d = new Date(now);
@@ -246,8 +288,10 @@ export async function GET(request: Request) {
     // buildDeclineRows()/buildRisingRows()를 거치지 않고 최종 row를 SQL에서
     // 직접 만든다(§ 위 getDeclineRowsFromDb/getRisingRowsFromDb 주석 참고).
     // null이면 기존 allTrades → build*Rows() 경로를 그대로 탄다(area84/
-    // record-high/jeonse-risk/비부산 decline·rising 전부 무변경).
-    let dbComputedRows: Array<DeclineRow | RisingRow> | null = null;
+    // jeonse-risk/비부산 decline·rising·record-high 전부 무변경).
+    // TRADE_DB_FIRST_V1 STEP E — RecordHighRow 추가(record-high도 이제 DB-first
+    // 후보).
+    let dbComputedRows: Array<DeclineRow | RisingRow | RecordHighRow> | null = null;
     let apiError = false;
     let partial = false;
     let failedDistricts: string[] = [];
@@ -281,6 +325,16 @@ export async function GET(request: Request) {
           mode === 'decline'
             ? (await getDeclineRowsFromDb(lawdCds, period.from, period.to)).map(sqlDeclineRowToDeclineRow)
             : (await getRisingRowsFromDb(lawdCds, period.from, period.to)).map(sqlRisingRowToRisingRow)
+        );
+      } else if (mode === 'record-high' && isBusanScopedRequest(null, sidoCodeParam, true)) {
+        // TRADE_DB_FIRST_V1 STEP E — 부산 전체(record-high) DB-first 경로.
+        // 캐시 키 prefix(recordhigh-v1)를 decline/rising(declinerising-v3)과
+        // 완전히 분리한다 — 같은 mode 문자열 세그먼트를 키에 넣더라도, 오래된
+        // decline/rising 캐시 엔트리와 절대 충돌하지 않도록 새 STEP은 항상 새
+        // prefix를 쓴다(§ 캐시 감사 요구사항).
+        const cacheKey = `stats-price-rankings-recordhigh-v1-db-sido:${preset}:${sidoCodeParam}:${lawdCds.join(',')}`;
+        dbComputedRows = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
+          (await getRecordHighRowsFromDb(lawdCds, period.from, period.to)).map(sqlRecordHighRowToRecordHighRow)
         );
       } else {
         // PERF §21 — apiType(apt/rent)이 다르면 완전히 다른 원본 데이터이므로
@@ -322,6 +376,12 @@ export async function GET(request: Request) {
         mode === 'decline'
           ? (await getDeclineRowsFromDb([lawdCd!], period.from, period.to)).map(sqlDeclineRowToDeclineRow)
           : (await getRisingRowsFromDb([lawdCd!], period.from, period.to)).map(sqlRisingRowToRisingRow)
+      );
+    } else if (mode === 'record-high' && isBusanScopedRequest(lawdCd, null, false)) {
+      // TRADE_DB_FIRST_V1 STEP E — 부산 단일 구(record-high) DB-first 경로.
+      const cacheKey = `stats-price-rankings-recordhigh-v1-db:${preset}:${lawdCd}`;
+      dbComputedRows = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
+        (await getRecordHighRowsFromDb([lawdCd!], period.from, period.to)).map(sqlRecordHighRowToRecordHighRow)
       );
     } else {
       const cacheKey = `stats-price-rankings:${apiType}:${lawdCd}:${months[0]}-${months[months.length - 1]}`;
