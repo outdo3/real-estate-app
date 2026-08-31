@@ -11686,3 +11686,66 @@ NEXT_STEP = 전세/월세 TradeHistory DB 구축(있어야 dashboard 완전
 DB-first 가능, 대규모 범위) 또는 STEP A가 남긴 최근 상승/하락/지역
 변동지도 DB-FIRST 전환(스펙이 이번/직전 STEP 모두에서 범위 밖으로
 명시).**
+
+## 2026-08-31
+
+### STEP — TRADE_DB_FIRST_V1 STEP C: 최근 상승 / 최근 하락 DB-FIRST 전환
+
+`/stats/rising`(`mode=rising`)과 `/stats/decline`(`mode=decline`)을 부산
+요청에 한해 TradeHistory DB-first로 전환. `record-high`/`jeonse-risk`는
+이번 STEP 범위 밖(스펙 §44, jeonse-risk는 rent라 DB 대상 자체가 아님).
+
+서비스 코드 변경:
+
+- `src/app/api/stats/price-rankings/route.ts`: decline/rising 부산
+  스코프 요청만 신규 `fetchDeclineRisingTradesFromDb()`(area84와 달리
+  면적 band 필터 없음, 24개월 트레일링 윈도우)로 DB 조회. STEP B의
+  `fetchArea84TradesFromDb`/`buildDeclineRows`/`buildRisingRows` 등
+  기존 코드는 전혀 건드리지 않음(§25 "area84 코드는 원칙적으로 수정
+  금지"를 문자 그대로 지킴 — 별도 함수로 분리).
+- **성능 최적화**: 부산 전체 24개월 전체면적 raw fetch가 65,532 row
+  규모라 단일 IN 쿼리로는 9.3~10.1초(FAIL 임계 10초 근접/근소 초과
+  위험) — 구별로 8개씩 배치 병렬 쿼리로 바꿔 4.0~4.6초로 단축(schema/
+  index 변경 없음, query 호출 패턴만 변경). decline/rising은 캐시 키를
+  공유(동일 원본 데이터, 다운스트림 계산만 다름) — 기존 MOLIT 경로도
+  이미 이렇게 공유하던 관례 그대로 유지.
+
+QA: raw SQL 대조로 priorHigh 계산이 byte 단위로 정확함을 확인.
+동명이인 단지(경동 7개/경남 5개 aptSeq 등) 실사례로 identity 안전성
+확인(aptSeq 기반 grouping이 병합 없이 분리). 취소거래 제외 확인.
+MOLIT 호출 0 런타임 probe 확인(부산 fresh 요청 0건, 비부산 24건,
+record-high는 부산이어도 여전히 24건 — 범위 밖 항목이 실수로 함께
+전환되지 않았음을 검증). **Old(MOLIT) vs New(DB) 실측 A/B 비교**(동일
+dev 서버, 코드 stash/복원): 동래구 decline 61건=61건, 페이지 30건 중
+28건 완전 일치·2건 실제 차이 발견 — 원인을 raw SQL로 직접 증명해
+분류: (1) DATA_COMPLETENESS — DB가 MOLIT이 놓친 2024-09 거래를 찾아내
+더 정확한 하락률 계산(-22.2% vs MOLIT의 -16.7%), (2) 같은 날짜 다건
+거래에 대한 tie-break 미정의 — DB-first 전환과 무관하게 기존
+알고리즘(`buildDeclineRows`, 무변경)에 이미 존재하던 공백이며 숫자를
+맞추기 위해 데이터를 조작하지 않고 정직하게 문서화. BUG/
+ALGORITHM_MISMATCH/IDENTITY_MISMATCH 없음. Production 브라우저로
+하락/상승/area84 회귀 없음 확인. 세션 전체 회귀 691/691 pass.
+`npx tsc --noEmit` 신규 오류 0(기존 20건 유지). `npx eslint` clean.
+`npm run build` PASS.
+
+DB 변경: schema/migration 없음. Production write 없음(READ만).
+
+API 변경: 응답 스키마 변경 없음(source만 교체).
+
+상태: 완료.
+
+상세: `docs/development/TRADE_DB_FIRST_V1_STEP_C.md`
+
+**TRADE_DB_FIRST_V1_STEP_C = PASS. DECLINE = DB_FIRST(부산 스코프).
+RISING = DB_FIRST(부산 스코프). RECORD_HIGH/JEONSE_RISK = 무변경(범위
+밖, MOLIT 유지 확인됨). MOLIT_CALLS_FOR_BUSAN_DECLINE_RISING = 0(런타임
+probe 확인). IDENTITY_SAFETY = aptSeq 기반, 동명이인 실사례로 검증.
+CANCELLATION = 정확히 제외. OLD_VS_NEW_COMPARISON = 수행함, 차이 2건
+전부 원인 규명(DATA_COMPLETENESS 1건 — DB가 더 정확, TIE_BREAK_UNDEFINED
+1건 — 기존 알고리즘의 사전 존재 공백). PERFORMANCE = 배치 병렬 쿼리로
+9.3~10.1초(FAIL 위험)→4.0~7.3초(10초 FAIL 회피, 3초 목표는 데이터
+규모상 미달성). N+1 = 0. TESTS = 691/691(신규 unit test 없음, 기존
+46개 price-ranking 테스트가 이미 경계 케이스 커버 + 광범위한 live
+QA로 검증). BUILD = PASS. PRODUCTION_WRITE = 0. DB_SCHEMA_CHANGE = 0.
+NEXT_STEP = 지역 변동지도 DB 전환(STEP D) 또는 record-high DB 전환
+(둘 다 이번 STEP 범위 밖으로 명시).**

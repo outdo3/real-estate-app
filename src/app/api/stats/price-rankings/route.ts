@@ -44,14 +44,17 @@ const VALID_PRESETS: PriceRankingPeriodPreset[] = ['1m', '7d', '30d', '3m', '6m'
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 
-// TRADE_DB_FIRST_V1 STEP B — 84㎡ 국민평형 순위(mode='area84')만 부산 요청에
-// 한해 TradeHistory DB-first로 전환한다. decline/record-high/rising/jeonse-risk
-// 4개 모드와 area84의 非부산 요청은 기존 live MOLIT 경로를 그대로 유지한다(§41
-// 범위 제한 — 그 모드들의 DB 전환은 STEP C 이후). 이집 TradeHistory DB는
-// 부산 16/16 구·군만 구축돼 있고(TRADE_HISTORY_DATA_V1) 다른 시/도는 데이터가
-// 아예 없다 — "DB에 없으면 MOLIT으로 보완"이 아니라, 애초에 데이터가 존재하는
-// 지역(부산)만 DB 경로를 타도록 하는 고정된 지역 라우팅이다(§15 "정직한
-// coverage 표시" — 非부산 사용자 동작은 이번 STEP으로 전혀 바뀌지 않는다).
+// TRADE_DB_FIRST_V1 STEP B — 84㎡ 국민평형 순위(mode='area84'), STEP C —
+// 하락/상승(mode='decline'/'rising')을 부산 요청에 한해 TradeHistory
+// DB-first로 전환했다. record-high(신고가)/jeonse-risk(전세 위험) 2개
+// 모드와 3개 모드의 非부산 요청은 기존 live MOLIT 경로를 그대로 유지한다 —
+// jeonse-risk는 apiType이 rent라 TradeHistory DB(dealType='sale'만 존재)
+// 대상이 아니고, record-high는 스펙이 명시적으로 다음 STEP 대상으로
+// 남겨뒀다. 이집 TradeHistory DB는 부산 16/16 구·군만 구축돼 있고
+// (TRADE_HISTORY_DATA_V1) 다른 시/도는 데이터가 아예 없다 — "DB에 없으면
+// MOLIT으로 보완"이 아니라, 애초에 데이터가 존재하는 지역(부산)만 DB
+// 경로를 타도록 하는 고정된 지역 라우팅이다(§15 "정직한 coverage 표시" —
+// 非부산 사용자 동작은 이번 STEP으로 전혀 바뀌지 않는다).
 const BUSAN_SIDO_CODE = '26';
 
 function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
@@ -86,7 +89,8 @@ function storedTradeToFeedTrade(t: Awaited<ReturnType<typeof queryTrades>>['trad
 // exact area를 포함해 서로 다른 면적은 완전히 분리된 그룹). 따라서 DB fetch
 // 자체를 band로 좁혀도 buildArea84RankingRows의 출력은 100% 동일하며(STEP A
 // 벤치마크에서 이미 실측된 것처럼, area filter가 없으면 부산 전체 조회가
-// 수 초 더 걸린다 — 이 최적화로 그 비용을 피한다).
+// 수 초 더 걸린다 — 이 최적화로 그 비용을 피한다). STEP C에서 이 함수는
+// 건드리지 않는다(§25 — area84 코드는 이번 STEP에서 원칙적으로 수정 금지).
 async function fetchArea84TradesFromDb(lawdCds: string[]): Promise<FeedTrade[]> {
   const from = new Date();
   from.setMonth(from.getMonth() - HISTORICAL_LOOKBACK_MONTHS);
@@ -96,6 +100,34 @@ async function fetchArea84TradesFromDb(lawdCds: string[]): Promise<FeedTrade[]> 
     exclusiveAreaRange: { gte: 84, lt: 85 },
   });
   return trades.map(storedTradeToFeedTrade);
+}
+
+// TRADE_DB_FIRST_V1 STEP C — decline(하락)/rising(상승) 전용. area84와 달리
+// area band 필터가 없어(모든 면적이 후보) 부산 전체를 단일 IN 쿼리로 가져오면
+// 6.5만+ row 직렬화가 병목이 되어 실측 9.3~10.1초가 걸린다(§21 목표인 heavy
+// <3초, 5초 초과 시 최적화 검토를 크게 넘음). 구별로 쪼개 병렬 실행하면 동일
+// 결과를 4.6초에 받는다(실측) — Supabase 세션모드 pooler의 15-connection
+// 한도를 넘지 않도록 8개씩 배치(§21이 허용한 "query 최적화" 범위, schema/
+// index 변경 없음, queryTrades()의 필터링/취소제외/정렬 로직은 그대로 재사용).
+// record-high(신고가)/jeonse-risk(전세 위험)는 이번 STEP 범위 밖(§44) —
+// jeonse-risk는 apiType이 rent라 애초에 TradeHistory DB(dealType='sale'만
+// 존재) 대상이 아니다.
+const DECLINE_RISING_DB_BATCH_SIZE = 8;
+
+async function fetchDeclineRisingTradesFromDb(lawdCds: string[]): Promise<FeedTrade[]> {
+  const from = new Date();
+  from.setMonth(from.getMonth() - HISTORICAL_LOOKBACK_MONTHS);
+  if (lawdCds.length <= 1) {
+    const { trades } = await queryTrades({ lawdCd: lawdCds, from });
+    return trades.map(storedTradeToFeedTrade);
+  }
+  const all: FeedTrade[] = [];
+  for (let i = 0; i < lawdCds.length; i += DECLINE_RISING_DB_BATCH_SIZE) {
+    const chunk = lawdCds.slice(i, i + DECLINE_RISING_DB_BATCH_SIZE);
+    const results = await Promise.all(chunk.map((code) => queryTrades({ lawdCd: code, from })));
+    for (const r of results) all.push(...r.trades.map(storedTradeToFeedTrade));
+  }
+  return all;
 }
 
 function monthsForLookback(now: Date): string[] {
@@ -195,6 +227,11 @@ export async function GET(request: Request) {
         // read는 전체 성공 또는 예외 둘 중 하나 — try/catch가 바깥에서 처리).
         const cacheKey = `stats-price-rankings-area84-db-sido:${sidoCodeParam}:${lawdCds.join(',')}`;
         allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchArea84TradesFromDb(lawdCds));
+      } else if ((mode === 'decline' || mode === 'rising') && isBusanScopedRequest(null, sidoCodeParam, true)) {
+        // TRADE_DB_FIRST_V1 STEP C — 부산 전체(decline/rising) DB-first 경로.
+        // area84와 동일하게 부분 실패 개념 없음(DB read는 전체 성공 또는 예외).
+        const cacheKey = `stats-price-rankings-declinerising-db-sido:${sidoCodeParam}:${lawdCds.join(',')}`;
+        allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchDeclineRisingTradesFromDb(lawdCds));
       } else {
         // PERF §21 — apiType(apt/rent)이 다르면 완전히 다른 원본 데이터이므로
         // 캐시 키에 반드시 포함한다(포함하지 않으면 decline/rising 캐시가
@@ -228,6 +265,10 @@ export async function GET(request: Request) {
       // TRADE_DB_FIRST_V1 STEP B — 부산 단일 구(area84) DB-first 경로.
       const cacheKey = `stats-price-rankings-area84-db:${lawdCd}`;
       allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchArea84TradesFromDb([lawdCd!]));
+    } else if ((mode === 'decline' || mode === 'rising') && isBusanScopedRequest(lawdCd, null, false)) {
+      // TRADE_DB_FIRST_V1 STEP C — 부산 단일 구(decline/rising) DB-first 경로.
+      const cacheKey = `stats-price-rankings-declinerising-db:${lawdCd}`;
+      allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchDeclineRisingTradesFromDb([lawdCd!]));
     } else {
       const cacheKey = `stats-price-rankings:${apiType}:${lawdCd}:${months[0]}-${months[months.length - 1]}`;
       const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
