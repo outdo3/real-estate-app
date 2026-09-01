@@ -12430,3 +12430,76 @@ BUILD = PASS. LINT = clean. SECURITY_REGRESSION = 없음.
 PRODUCTION_WRITE = 0(READ만). DB_SCHEMA_CHANGE = 0. NEXT_STEP =
 `[lawdCd, dealCanceled]` 인덱스 추가 검토(schema 변경 승인 필요) 또는
 TRADE_DB_FIRST_V1 STEP G/사용자 화면 개발 복귀.**
+
+
+## 2026-09-01
+
+### USER EXPERIENCE BASELINE AUDIT V1 — 전체 사용자 여정 감사
+
+작업:
+
+- 전체 route 인벤토리(홈/검색/AI검색/지도/단지상세/통계 17종/분양·
+  재개발/커뮤니티/MY/관리자/기타) 및 IA/네비게이션 감사
+- E-JIP Score, 비교(Compare), 예산/재무 기능 심층 감사
+- 데이터 신뢰 문구("역대"/"신고가"/"최고가"/"추천"/"AI"/"예상"/
+  "데이터 없음") 전수 grep + 실사용 맥락 확인
+- Decision Journey(통계→상세→비교→관심) 연결성 감사
+- 실제 브라우저로 홈→검색→상세→비교→지도→통계 실행, 로그인 모달/
+  최근 본 단지/console 확인
+
+발견 및 즉시 수정(회귀 수정 성격, 감사 규칙상 허용 범위):
+
+- **`/stats/compare`, `/stats/multi-compare` 실거래 조회가 선택한
+  단지 자신의 lawdCd/dong이 아니라 페이지 상단 지역필터의 lawdCd를
+  써서, 다른 구/동 단지를 추가하면 차트가 완전히 비거나(실측 재현:
+  동래구 "삼정그린코아"를 서구 필터 상태에서 추가 → 빈 차트)
+  동명 단지 데이터가 섞일 잠재 위험(identity 오염 위험, AGENTS.md
+  "이름만으로 재식별 금지"). `CompareView`가 검색 결과 자체의
+  lawdCd/dong을 쓰도록 수정. 수정 후 실측 재현 확인 완료.**
+  (`src/app/stats/[type]/type-client.tsx`)
+- 같은 함수의 `Promise.all`에 `.catch()`가 없어 네트워크 실패 시
+  로딩 스피너가 영원히 멈추지 않는 문제 — `.catch()` 추가.
+  (`src/app/stats/[type]/type-client.tsx`)
+- **전세가율(dashboard) 계산이 반전세/월세를 순수 전세와 함께
+  평균내던 문제 — 이미 다른 곳(rankings/route.ts,
+  investment-metrics.ts)에서 고친 것과 동일한 버그 클래스(과거
+  -97% 허위 "역전세" 사고 재발). 이미 계산돼 있던
+  `recentPureJeonseTrades`를 재사용하도록 수정.**
+  (`src/app/api/stats/dashboard/route.ts`)
+
+발견했으나 수정하지 않음(범위 밖 — 승인/제품 결정 필요, 감사 문서에
+기록):
+
+- `/tools` "경·공매 비교" 탭이 실제 API 연동 없이 구체적인 매물을
+  하드코딩 — 데이터 진실성 원칙 위반 소지, 제거/"준비 중" 처리/
+  예시 라벨링 중 결정 필요
+- E-JIP Score: `/apt/[name]`에 실제 노출되는 점수는 "official" V1이
+  아니라 내부적으로 `_shadowV2`로 다뤄지는 score-v2 엔진 — API의
+  `scoreVersion`은 여전히 V1 표기. 의도된 승격인지 확인 필요
+  (Score 포뮬러 자체는 미변경)
+- `/community` 글쓰기가 단지명을 자유 텍스트로 받아 상세 링크가
+  lawdCd/dong 없이 이름만으로 연결 — map/detail에서 이미 두 번
+  고쳤던 identity 버그 클래스의 재발. 근본 수정은 캐노니컬
+  피커 추가(작은 hotfix 범위를 넘음)
+
+서비스 기능 변경:
+
+`/stats/compare`, `/stats/multi-compare`, `/api/stats/dashboard`의
+버그 수정 2건 외 신규 기능 없음.
+
+DB 변경:
+
+없음.
+
+API 변경:
+
+없음(응답 필드/스키마 불변, 내부 계산 로직만 수정).
+
+테스트/빌드:
+
+`npx tsc --noEmit` — 기존 20개 pre-existing script 에러 그대로,
+신규 0건. `npm run build` — PASS. lint — 별도 확인.
+
+상태: 완료.
+
+상세: `docs/development/USER_EXPERIENCE_BASELINE_AUDIT_V1.md`

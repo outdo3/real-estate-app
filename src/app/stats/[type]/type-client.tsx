@@ -46,14 +46,17 @@ function ComingSoonCard({ title, reason }: { title: string; reason?: string }) {
 const COMPARE_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
 function CompareView({ lawdCd, maxComplexes }: { lawdCd: string | null; maxComplexes: number }) {
-  const [selected, setSelected] = useState<{ name: string }[]>([]);
+  const [selected, setSelected] = useState<{ name: string; lawdCd?: string; dong?: string }[]>([]);
   const [series, setSeries] = useState<Record<string, { date: string; price: number }[]>>({});
   const [loading, setLoading] = useState(false);
 
   const addComplex = (result: ApartmentSearchResult) => {
     if (selected.length >= maxComplexes) return;
     if (selected.some((s) => s.name === result.name)) return;
-    setSelected((prev) => [...prev, { name: result.name }]);
+    // 검색 결과 자체의 lawdCd/dong을 써야 한다 — 상단 지역 필터의 lawdCd를 그대로 쓰면
+    // 선택한 단지가 다른 구/동에 있을 때 동명 단지와 섞이거나(identity 오염) 조회 결과가
+    // 아예 비어버린다(AGENTS.md "이름만으로 재식별 금지").
+    setSelected((prev) => [...prev, { name: result.name, lawdCd: result.lawdCd, dong: result.dong }]);
   };
   const removeComplex = (name: string) => {
     setSelected((prev) => prev.filter((s) => s.name !== name));
@@ -70,22 +73,27 @@ function CompareView({ lawdCd, maxComplexes }: { lawdCd: string | null; maxCompl
     if (missing.length === 0) return;
     setLoading(true);
     Promise.all(
-      missing.map((s) =>
-        fetch(`/api/apt/${encodeURIComponent(s.name)}?lawdCd=${lawdCd}&type=apt&period=36`)
+      missing.map((s) => {
+        const params = new URLSearchParams({ lawdCd: s.lawdCd || lawdCd, type: 'apt', period: '36' });
+        if (s.dong) params.set('dong', s.dong);
+        return fetch(`/api/apt/${encodeURIComponent(s.name)}?${params.toString()}`)
           .then((res) => res.json())
           .then((data) => ({
             name: s.name,
             points: (data.trades || [])
               .map((t: any) => ({ date: t.tradeDate, price: t.price }))
               .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-          }))
-      )
+          }));
+      })
     ).then((results) => {
       setSeries((prev) => {
         const next = { ...prev };
         results.forEach((r) => { next[r.name] = r.points; });
         return next;
       });
+      setLoading(false);
+    }).catch(() => {
+      // fetch 실패 시 loading이 영원히 true로 남아 스피너가 멈추지 않는 문제 방지
       setLoading(false);
     });
   }, [selected, lawdCd, series]);

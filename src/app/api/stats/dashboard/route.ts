@@ -348,7 +348,10 @@ export async function GET(request: Request) {
         (aptByComplex[key] ||= []).push(t);
       });
       const rentByComplex: Record<string, any[]> = {};
-      recentRentTrades.forEach((t: any) => {
+      // 전세가율은 전세 보증금 대비 매매가라 반전세/월세(monthlyRent>0)가 섞이면
+      // 평균 보증금이 왜곡된다 — recentPureJeonseTrades(순수 전세만, §5에서 계산됨)를
+      // 써야 한다(과거 -97% 허위 "역전세" 사례와 동일한 버그 클래스, rankings/route.ts:113 참고).
+      recentPureJeonseTrades.forEach((t: any) => {
         const key = normalizeAptName(t.name);
         (rentByComplex[key] ||= []).push(t);
       });
