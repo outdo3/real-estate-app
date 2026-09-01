@@ -1,0 +1,1308 @@
+{
+  "generatedAt": "2026-09-01T02:51:44.203Z",
+  "totalUniverse": 3401,
+  "scoredCount": 2833,
+  "distribution": {
+    "overall": {
+      "n": 2833,
+      "min": 15,
+      "p10": 40,
+      "p25": 47,
+      "median": 55,
+      "p75": 62,
+      "p90": 67,
+      "max": 78,
+      "mean": 54.2,
+      "std": 10.4
+    },
+    "해운대구": {
+      "n": 238,
+      "min": 18,
+      "p10": 35,
+      "p25": 43,
+      "median": 54,
+      "p75": 61,
+      "p90": 66,
+      "max": 74,
+      "mean": 51.7,
+      "std": 12
+    },
+    "서구": {
+      "n": 129,
+      "min": 22,
+      "p10": 38,
+      "p25": 49,
+      "median": 61,
+      "p75": 65,
+      "p90": 67,
+      "max": 73,
+      "mean": 56.1,
+      "std": 12.2
+    },
+    "동래구": {
+      "n": 284,
+      "min": 35,
+      "p10": 48,
+      "p25": 53,
+      "median": 59,
+      "p75": 65,
+      "p90": 68,
+      "max": 77,
+      "mean": 58.9,
+      "std": 8
+    },
+    "부산진구": {
+      "n": 338,
+      "min": 21,
+      "p10": 42,
+      "p25": 49,
+      "median": 59,
+      "p75": 65,
+      "p90": 68,
+      "max": 78,
+      "mean": 56.6,
+      "std": 10.3
+    },
+    "기장군": {
+      "n": 116,
+      "min": 23,
+      "p10": 36,
+      "p25": 42,
+      "median": 48,
+      "p75": 54,
+      "p90": 57,
+      "max": 66,
+      "mean": 47.3,
+      "std": 8.5
+    },
+    "신축(2015+)": {
+      "n": 718,
+      "min": 23,
+      "p10": 49,
+      "p25": 56,
+      "median": 62,
+      "p75": 66,
+      "p90": 70,
+      "max": 78,
+      "mean": 60.5,
+      "std": 8.5
+    },
+    "구축(2000미만)": {
+      "n": 1102,
+      "min": 15,
+      "p10": 36,
+      "p25": 42,
+      "median": 49,
+      "p75": 55,
+      "p90": 60,
+      "max": 74,
+      "mean": 48.6,
+      "std": 9.4
+    },
+    "대단지(>=312세대,p75)": {
+      "n": 686,
+      "min": 26,
+      "p10": 43,
+      "p25": 50,
+      "median": 57,
+      "p75": 63,
+      "p90": 69,
+      "max": 78,
+      "mean": 56.3,
+      "std": 9.9
+    },
+    "소단지(<=40세대,p25)": {
+      "n": 718,
+      "min": 15,
+      "p10": 40,
+      "p25": 47,
+      "median": 55,
+      "p75": 61,
+      "p90": 65,
+      "max": 75,
+      "mean": 53.3,
+      "std": 10.2
+    },
+    "고가(평당가 상위25%,>=449)": {
+      "n": 678,
+      "min": 29,
+      "p10": 48,
+      "p25": 55,
+      "median": 60,
+      "p75": 66,
+      "p90": 71,
+      "max": 78,
+      "mean": 59.9,
+      "std": 8.7
+    },
+    "중저가(평당가 하위25%,<=227)": {
+      "n": 675,
+      "min": 15,
+      "p10": 35,
+      "p25": 40,
+      "median": 47,
+      "p75": 53,
+      "p90": 58,
+      "max": 72,
+      "mean": 46.4,
+      "std": 9.3
+    }
+  },
+  "bias": {
+    "priceVsScore": {
+      "rho": 0.5127090525212682,
+      "n": 2696,
+      "note": "medianPricePerM2_12m vs V2 overallScore (tx>=1)"
+    },
+    "buildYearVsScore": {
+      "rho": 0.4896206383639679,
+      "n": 2833
+    },
+    "householdsVsScore": {
+      "rho": 0.09134416242139451,
+      "n": 2740
+    },
+    "householdsVsComplexDomain": {
+      "rho": 0.616728910758072,
+      "n": 2740,
+      "note": "expected-high (definitional, not double counting by itself)"
+    },
+    "transportDomainVsOverall": {
+      "rho": 0.7260854582919231,
+      "n": 2782
+    },
+    "educationDomainVsOverall": {
+      "rho": 0.3733787363968787,
+      "n": 2815
+    },
+    "livingDomainVsOverall": {
+      "rho": 0.6906700095933755,
+      "n": 2833
+    },
+    "complexDomainVsOverall": {
+      "rho": 0.44119368138677423,
+      "n": 2740
+    },
+    "clusterIn60to70Pct": 29.6
+  },
+  "rankingStability": {
+    "ModelA_vs_ModelB": {
+      "rho": 0.999999999339716,
+      "n": 2833
+    },
+    "ModelA_vs_ModelC": {
+      "rho": 0.7608479854802556,
+      "n": 2833
+    },
+    "ModelB_vs_ModelC": {
+      "rho": 0.7608480089505772,
+      "n": 2833
+    },
+    "note": "Model A = current absolute V2 score; Model B = Busan-wide percentile of the SAME V2 score; Model C = sigungu+decade peer-group percentile of the SAME V2 score (post-hoc re-ranking only, no new formula run in production)"
+  },
+  "modelCPeerPoolSizing": {
+    "n": 95,
+    "min": 1,
+    "p10": 5,
+    "p25": 9,
+    "median": 24,
+    "p75": 45,
+    "p90": 69,
+    "max": 101,
+    "mean": 29.8,
+    "std": 24.9
+  },
+  "modelCSmallPoolFallbackPct": 3.1,
+  "residentBacklashSample": {
+    "bottom20": [
+      {
+        "aptSeq": "26530-48",
+        "name": "엄궁",
+        "gu": "사상구",
+        "dong": "엄궁동",
+        "buildYear": 1983,
+        "totalHouseholds": 10,
+        "pricePerM2": 189,
+        "v2Score": 15,
+        "modelB_percentile": 0,
+        "modelC_percentile": 2.3,
+        "domains": {
+          "transport": 7,
+          "living": 22,
+          "education": 14,
+          "complex": 19
+        }
+      },
+      {
+        "aptSeq": "26200-15",
+        "name": "동산(1106)",
+        "gu": "영도구",
+        "dong": "영선동4가",
+        "buildYear": 1990,
+        "totalHouseholds": 52,
+        "pricePerM2": 115,
+        "v2Score": 16,
+        "modelB_percentile": 0.1,
+        "modelC_percentile": 2,
+        "domains": {
+          "transport": null,
+          "living": 3,
+          "education": 18,
+          "complex": 28
+        }
+      },
+      {
+        "aptSeq": "26350-297",
+        "name": "그린빌라",
+        "gu": "해운대구",
+        "dong": "송정동",
+        "buildYear": 1991,
+        "totalHouseholds": 19,
+        "pricePerM2": 177,
+        "v2Score": 18,
+        "modelB_percentile": 0.1,
+        "modelC_percentile": 0.5,
+        "domains": {
+          "transport": null,
+          "living": 12,
+          "education": null,
+          "complex": 25
+        }
+      },
+      {
+        "aptSeq": "26350-296",
+        "name": "라온힐즈",
+        "gu": "해운대구",
+        "dong": "송정동",
+        "buildYear": 1993,
+        "totalHouseholds": 19,
+        "pricePerM2": 186,
+        "v2Score": 19,
+        "modelB_percentile": 0.1,
+        "modelC_percentile": 1.5,
+        "domains": {
+          "transport": 12,
+          "living": 15,
+          "education": null,
+          "complex": 31
+        }
+      },
+      {
+        "aptSeq": "26350-295",
+        "name": "영동써니",
+        "gu": "해운대구",
+        "dong": "송정동",
+        "buildYear": 1992,
+        "totalHouseholds": 19,
+        "pricePerM2": 183,
+        "v2Score": 20,
+        "modelB_percentile": 0.2,
+        "modelC_percentile": 2.6,
+        "domains": {
+          "transport": 15,
+          "living": 18,
+          "education": null,
+          "complex": 28
+        }
+      },
+      {
+        "aptSeq": "26230-42",
+        "name": "대진파레스필즈",
+        "gu": "부산진구",
+        "dong": "초읍동",
+        "buildYear": 1992,
+        "totalHouseholds": 160,
+        "pricePerM2": 213,
+        "v2Score": 21,
+        "modelB_percentile": 0.2,
+        "modelC_percentile": 1.1,
+        "domains": {
+          "transport": 22,
+          "living": 8,
+          "education": 16,
+          "complex": 40
+        }
+      },
+      {
+        "aptSeq": "26350-276",
+        "name": "동부썬빌라",
+        "gu": "해운대구",
+        "dong": "중동",
+        "buildYear": 1993,
+        "totalHouseholds": 19,
+        "pricePerM2": null,
+        "v2Score": 22,
+        "modelB_percentile": 0.3,
+        "modelC_percentile": 3.6,
+        "domains": {
+          "transport": 14,
+          "living": 22,
+          "education": 16,
+          "complex": 35
+        }
+      },
+      {
+        "aptSeq": "26410-341",
+        "name": "동성베스트",
+        "gu": "금정구",
+        "dong": "회동동",
+        "buildYear": 2004,
+        "totalHouseholds": 19,
+        "pricePerM2": 232,
+        "v2Score": 22,
+        "modelB_percentile": 0.3,
+        "modelC_percentile": 0.7,
+        "domains": {
+          "transport": 24,
+          "living": 11,
+          "education": 15,
+          "complex": 37
+        }
+      },
+      {
+        "aptSeq": "26140-114",
+        "name": "송도현대",
+        "gu": "서구",
+        "dong": "암남동",
+        "buildYear": 1992,
+        "totalHouseholds": 208,
+        "pricePerM2": 179,
+        "v2Score": 22,
+        "modelB_percentile": 0.3,
+        "modelC_percentile": 2.5,
+        "domains": {
+          "transport": 22,
+          "living": 15,
+          "education": 13,
+          "complex": 40
+        }
+      },
+      {
+        "aptSeq": "26230-43",
+        "name": "삼환",
+        "gu": "부산진구",
+        "dong": "초읍동",
+        "buildYear": 2002,
+        "totalHouseholds": 230,
+        "pricePerM2": 312,
+        "v2Score": 23,
+        "modelB_percentile": 0.4,
+        "modelC_percentile": 0.5,
+        "domains": {
+          "transport": 18,
+          "living": 7,
+          "education": 12,
+          "complex": 53
+        }
+      },
+      {
+        "aptSeq": "26710-41",
+        "name": "재흥",
+        "gu": "기장군",
+        "dong": "정관읍 달산리",
+        "buildYear": 1990,
+        "totalHouseholds": 170,
+        "pricePerM2": 139,
+        "v2Score": 23,
+        "modelB_percentile": 0.4,
+        "modelC_percentile": 2.9,
+        "domains": {
+          "transport": 25,
+          "living": 16,
+          "education": 15,
+          "complex": 37
+        }
+      },
+      {
+        "aptSeq": "26350-204",
+        "name": "동서하이빌아파트",
+        "gu": "해운대구",
+        "dong": "송정동",
+        "buildYear": 2000,
+        "totalHouseholds": 40,
+        "pricePerM2": 301,
+        "v2Score": 23,
+        "modelB_percentile": 0.4,
+        "modelC_percentile": 1,
+        "domains": {
+          "transport": 16,
+          "living": 15,
+          "education": null,
+          "complex": 39
+        }
+      },
+      {
+        "aptSeq": "26380-275",
+        "name": "제일(13-1105)",
+        "gu": "사하구",
+        "dong": "감천동",
+        "buildYear": 1976,
+        "totalHouseholds": 60,
+        "pricePerM2": 80,
+        "v2Score": 23,
+        "modelB_percentile": 0.4,
+        "modelC_percentile": 0.4,
+        "domains": {
+          "transport": 27,
+          "living": 18,
+          "education": 24,
+          "complex": 23
+        }
+      },
+      {
+        "aptSeq": "26710-570",
+        "name": "명례솔터시티",
+        "gu": "기장군",
+        "dong": "장안읍 명례리",
+        "buildYear": 2016,
+        "totalHouseholds": 84,
+        "pricePerM2": 154,
+        "v2Score": 23,
+        "modelB_percentile": 0.4,
+        "modelC_percentile": 1.1,
+        "domains": {
+          "transport": 13,
+          "living": 5,
+          "education": null,
+          "complex": 53
+        }
+      },
+      {
+        "aptSeq": "26140-111",
+        "name": "전원비치맨션",
+        "gu": "서구",
+        "dong": "암남동",
+        "buildYear": 1990,
+        "totalHouseholds": 82,
+        "pricePerM2": 209,
+        "v2Score": 23,
+        "modelB_percentile": 0.4,
+        "modelC_percentile": 7.5,
+        "domains": {
+          "transport": 24,
+          "living": 20,
+          "education": 18,
+          "complex": 31
+        }
+      },
+      {
+        "aptSeq": "26350-200",
+        "name": "상림팰리스빌",
+        "gu": "해운대구",
+        "dong": "중동",
+        "buildYear": 2003,
+        "totalHouseholds": 10,
+        "pricePerM2": 373,
+        "v2Score": 24,
+        "modelB_percentile": 0.6,
+        "modelC_percentile": 2.9,
+        "domains": {
+          "transport": 17,
+          "living": 20,
+          "education": 18,
+          "complex": 42
+        }
+      },
+      {
+        "aptSeq": "26350-361",
+        "name": "동부문빌라",
+        "gu": "해운대구",
+        "dong": "중동",
+        "buildYear": 1997,
+        "totalHouseholds": 10,
+        "pricePerM2": 426,
+        "v2Score": 24,
+        "modelB_percentile": 0.6,
+        "modelC_percentile": 5.2,
+        "domains": {
+          "transport": 15,
+          "living": 27,
+          "education": 17,
+          "complex": 38
+        }
+      },
+      {
+        "aptSeq": "26140-115",
+        "name": "송도혜성비치타운",
+        "gu": "서구",
+        "dong": "암남동",
+        "buildYear": 1993,
+        "totalHouseholds": 150,
+        "pricePerM2": 205,
+        "v2Score": 24,
+        "modelB_percentile": 0.6,
+        "modelC_percentile": 12.5,
+        "domains": {
+          "transport": 24,
+          "living": 18,
+          "education": 17,
+          "complex": 36
+        }
+      },
+      {
+        "aptSeq": "26350-262",
+        "name": "대림엠파이어빌라",
+        "gu": "해운대구",
+        "dong": "중동",
+        "buildYear": 1992,
+        "totalHouseholds": 18,
+        "pricePerM2": 270,
+        "v2Score": 24,
+        "modelB_percentile": 0.6,
+        "modelC_percentile": 5.2,
+        "domains": {
+          "transport": 22,
+          "living": 21,
+          "education": 23,
+          "complex": 31
+        }
+      },
+      {
+        "aptSeq": "26710-40",
+        "name": "성림",
+        "gu": "기장군",
+        "dong": "정관읍 달산리",
+        "buildYear": 1989,
+        "totalHouseholds": 70,
+        "pricePerM2": null,
+        "v2Score": 25,
+        "modelB_percentile": 0.7,
+        "modelC_percentile": 0.7,
+        "domains": {
+          "transport": 25,
+          "living": 25,
+          "education": 22,
+          "complex": 27
+        }
+      }
+    ],
+    "middle20": [
+      {
+        "aptSeq": "26380-13",
+        "name": "동덕",
+        "gu": "사하구",
+        "dong": "괴정동",
+        "buildYear": 1987,
+        "totalHouseholds": 40,
+        "pricePerM2": 148,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 76.6,
+        "domains": {
+          "transport": 75,
+          "living": 56,
+          "education": 66,
+          "complex": 24
+        }
+      },
+      {
+        "aptSeq": "26380-31",
+        "name": "새괴정화신",
+        "gu": "사하구",
+        "dong": "괴정동",
+        "buildYear": 1981,
+        "totalHouseholds": 100,
+        "pricePerM2": null,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 76.6,
+        "domains": {
+          "transport": 53,
+          "living": 63,
+          "education": 74,
+          "complex": 29
+        }
+      },
+      {
+        "aptSeq": "26350-131",
+        "name": "엘지",
+        "gu": "해운대구",
+        "dong": "좌동",
+        "buildYear": 1996,
+        "totalHouseholds": 48,
+        "pricePerM2": 582,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 64.9,
+        "domains": {
+          "transport": 53,
+          "living": 53,
+          "education": 71,
+          "complex": 43
+        }
+      },
+      {
+        "aptSeq": "26350-2342",
+        "name": "해운대자이2차1단지",
+        "gu": "해운대구",
+        "dong": "우동",
+        "buildYear": 2018,
+        "totalHouseholds": 734,
+        "pricePerM2": 1265,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 40.4,
+        "domains": {
+          "transport": 36,
+          "living": 48,
+          "education": 54,
+          "complex": 79
+        }
+      },
+      {
+        "aptSeq": "26470-1421",
+        "name": "세경미가",
+        "gu": "연제구",
+        "dong": "거제동",
+        "buildYear": 2016,
+        "totalHouseholds": 30,
+        "pricePerM2": 385,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 13.8,
+        "domains": {
+          "transport": 73,
+          "living": 67,
+          "education": 27,
+          "complex": 51
+        }
+      },
+      {
+        "aptSeq": "26470-11",
+        "name": "대원",
+        "gu": "연제구",
+        "dong": "거제동",
+        "buildYear": 1983,
+        "totalHouseholds": 80,
+        "pricePerM2": 355,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 85.9,
+        "domains": {
+          "transport": 52,
+          "living": 66,
+          "education": 74,
+          "complex": 27
+        }
+      },
+      {
+        "aptSeq": "26380-1964",
+        "name": "JPark",
+        "gu": "사하구",
+        "dong": "괴정동",
+        "buildYear": 2017,
+        "totalHouseholds": 19,
+        "pricePerM2": 454,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 31,
+        "domains": {
+          "transport": 53,
+          "living": 61,
+          "education": 51,
+          "complex": 57
+        }
+      },
+      {
+        "aptSeq": "26170-748",
+        "name": "부산역유림로미오",
+        "gu": "동구",
+        "dong": "초량동",
+        "buildYear": 2014,
+        "totalHouseholds": 286,
+        "pricePerM2": 327,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 27.6,
+        "domains": {
+          "transport": 78,
+          "living": 61,
+          "education": 21,
+          "complex": 60
+        }
+      },
+      {
+        "aptSeq": "26170-51",
+        "name": "초량하이츠빌리지",
+        "gu": "동구",
+        "dong": "초량동",
+        "buildYear": 2002,
+        "totalHouseholds": 19,
+        "pricePerM2": 296,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 59.4,
+        "domains": {
+          "transport": 73,
+          "living": 66,
+          "education": 47,
+          "complex": 34
+        }
+      },
+      {
+        "aptSeq": "26530-72",
+        "name": "주례",
+        "gu": "사상구",
+        "dong": "주례동",
+        "buildYear": 1975,
+        "totalHouseholds": 31,
+        "pricePerM2": 153,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 48.9,
+        "domains": {
+          "transport": 74,
+          "living": 62,
+          "education": 66,
+          "complex": 19
+        }
+      },
+      {
+        "aptSeq": "26530-54",
+        "name": "광우파크",
+        "gu": "사상구",
+        "dong": "주례동",
+        "buildYear": 1986,
+        "totalHouseholds": 25,
+        "pricePerM2": 127,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 70.5,
+        "domains": {
+          "transport": 56,
+          "living": 58,
+          "education": 86,
+          "complex": 22
+        }
+      },
+      {
+        "aptSeq": "26710-23",
+        "name": "대진로얄",
+        "gu": "기장군",
+        "dong": "기장읍 동부리",
+        "buildYear": 1990,
+        "totalHouseholds": 116,
+        "pricePerM2": 193,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 85.3,
+        "domains": {
+          "transport": 58,
+          "living": 59,
+          "education": 69,
+          "complex": 33
+        }
+      },
+      {
+        "aptSeq": "26290-76",
+        "name": "무학프라자",
+        "gu": "남구",
+        "dong": "문현동",
+        "buildYear": 1997,
+        "totalHouseholds": 64,
+        "pricePerM2": 293,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 91.2,
+        "domains": {
+          "transport": 82,
+          "living": 56,
+          "education": 43,
+          "complex": 39
+        }
+      },
+      {
+        "aptSeq": "26320-56",
+        "name": "화명대우",
+        "gu": "북구",
+        "dong": "화명동",
+        "buildYear": 2000,
+        "totalHouseholds": 316,
+        "pricePerM2": 306,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 28.8,
+        "domains": {
+          "transport": 52,
+          "living": 41,
+          "education": 69,
+          "complex": 59
+        }
+      },
+      {
+        "aptSeq": "26320-1481",
+        "name": "화명동롯데캐슬멤버스",
+        "gu": "북구",
+        "dong": "화명동",
+        "buildYear": 2007,
+        "totalHouseholds": 299,
+        "pricePerM2": 411,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 28.8,
+        "domains": {
+          "transport": 44,
+          "living": 56,
+          "education": 53,
+          "complex": 66
+        }
+      },
+      {
+        "aptSeq": "26470-207",
+        "name": "보성하이츠빌라2차",
+        "gu": "연제구",
+        "dong": "연산동",
+        "buildYear": 2001,
+        "totalHouseholds": 9,
+        "pricePerM2": 253,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 28.1,
+        "domains": {
+          "transport": 58,
+          "living": 77,
+          "education": 56,
+          "complex": 30
+        }
+      },
+      {
+        "aptSeq": "26470-99",
+        "name": "진흥목화",
+        "gu": "연제구",
+        "dong": "연산동",
+        "buildYear": 1984,
+        "totalHouseholds": 70,
+        "pricePerM2": 268,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 85.9,
+        "domains": {
+          "transport": 47,
+          "living": 77,
+          "education": 72,
+          "complex": 26
+        }
+      },
+      {
+        "aptSeq": "26500-206",
+        "name": "주안골드빌리지",
+        "gu": "수영구",
+        "dong": "광안동",
+        "buildYear": 2004,
+        "totalHouseholds": 16,
+        "pricePerM2": 304,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 42.2,
+        "domains": {
+          "transport": 73,
+          "living": 71,
+          "education": 41,
+          "complex": 36
+        }
+      },
+      {
+        "aptSeq": "26500-150",
+        "name": "솔내음파비르",
+        "gu": "수영구",
+        "dong": "광안동",
+        "buildYear": 2003,
+        "totalHouseholds": 24,
+        "pricePerM2": 360,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 42.2,
+        "domains": {
+          "transport": 54,
+          "living": 78,
+          "education": 43,
+          "complex": 43
+        }
+      },
+      {
+        "aptSeq": "26500-156",
+        "name": "보람빌리지",
+        "gu": "수영구",
+        "dong": "광안동",
+        "buildYear": 2003,
+        "totalHouseholds": 11,
+        "pricePerM2": 643,
+        "v2Score": 55,
+        "modelB_percentile": 48.9,
+        "modelC_percentile": 42.2,
+        "domains": {
+          "transport": 60,
+          "living": 78,
+          "education": 45,
+          "complex": 38
+        }
+      }
+    ],
+    "top20": [
+      {
+        "aptSeq": "26230-2523",
+        "name": "개금역금강펜테리움더스퀘어아파트",
+        "gu": "부산진구",
+        "dong": "개금동",
+        "buildYear": 2018,
+        "totalHouseholds": 620,
+        "pricePerM2": 721,
+        "v2Score": 78,
+        "modelB_percentile": 100,
+        "modelC_percentile": 99.5,
+        "domains": {
+          "transport": 88,
+          "living": 72,
+          "education": 74,
+          "complex": 80
+        }
+      },
+      {
+        "aptSeq": "26260-2110",
+        "name": "동래효성해링턴플레이스",
+        "gu": "동래구",
+        "dong": "온천동",
+        "buildYear": 2019,
+        "totalHouseholds": 762,
+        "pricePerM2": 719,
+        "v2Score": 77,
+        "modelB_percentile": 99.9,
+        "modelC_percentile": 99.4,
+        "domains": {
+          "transport": 81,
+          "living": 75,
+          "education": 71,
+          "complex": 83
+        }
+      },
+      {
+        "aptSeq": "26230-1682",
+        "name": "전포동에메랄드홈",
+        "gu": "부산진구",
+        "dong": "전포동",
+        "buildYear": 2006,
+        "totalHouseholds": 241,
+        "pricePerM2": 415,
+        "v2Score": 77,
+        "modelB_percentile": 99.9,
+        "modelC_percentile": 99.5,
+        "domains": {
+          "transport": 89,
+          "living": 80,
+          "education": 77,
+          "complex": 60
+        }
+      },
+      {
+        "aptSeq": "26230-2845",
+        "name": "서면롯데캐슬엘루체",
+        "gu": "부산진구",
+        "dong": "부전동",
+        "buildYear": 2023,
+        "totalHouseholds": 450,
+        "pricePerM2": 823,
+        "v2Score": 77,
+        "modelB_percentile": 99.9,
+        "modelC_percentile": 97.7,
+        "domains": {
+          "transport": 60,
+          "living": 78,
+          "education": 84,
+          "complex": 85
+        }
+      },
+      {
+        "aptSeq": "26230-2853",
+        "name": "서면동원시티비스타",
+        "gu": "부산진구",
+        "dong": "부전동",
+        "buildYear": 2024,
+        "totalHouseholds": 176,
+        "pricePerM2": 732,
+        "v2Score": 77,
+        "modelB_percentile": 99.9,
+        "modelC_percentile": 97.7,
+        "domains": {
+          "transport": 88,
+          "living": 80,
+          "education": 67,
+          "complex": 72
+        }
+      },
+      {
+        "aptSeq": "26470-1566",
+        "name": "아시아드코오롱하늘채",
+        "gu": "연제구",
+        "dong": "거제동",
+        "buildYear": 2019,
+        "totalHouseholds": 660,
+        "pricePerM2": 1017,
+        "v2Score": 76,
+        "modelB_percentile": 99.8,
+        "modelC_percentile": 99.1,
+        "domains": {
+          "transport": 68,
+          "living": 77,
+          "education": 78,
+          "complex": 80
+        }
+      },
+      {
+        "aptSeq": "26260-2024",
+        "name": "사직롯데캐슬더클래식",
+        "gu": "동래구",
+        "dong": "사직동",
+        "buildYear": 2017,
+        "totalHouseholds": 1064,
+        "pricePerM2": 1395,
+        "v2Score": 75,
+        "modelB_percentile": 99.7,
+        "modelC_percentile": 97.5,
+        "domains": {
+          "transport": 70,
+          "living": 73,
+          "education": 77,
+          "complex": 82
+        }
+      },
+      {
+        "aptSeq": "26500-1941",
+        "name": "광일센텀스카이뷰",
+        "gu": "수영구",
+        "dong": "광안동",
+        "buildYear": 2016,
+        "totalHouseholds": 58,
+        "pricePerM2": 502,
+        "v2Score": 75,
+        "modelB_percentile": 99.7,
+        "modelC_percentile": 99.1,
+        "domains": {
+          "transport": 86,
+          "living": 79,
+          "education": 74,
+          "complex": 62
+        }
+      },
+      {
+        "aptSeq": "26470-3051",
+        "name": "레이카운티(5단지)",
+        "gu": "연제구",
+        "dong": "거제동",
+        "buildYear": 2024,
+        "totalHouseholds": 4470,
+        "pricePerM2": 875,
+        "v2Score": 75,
+        "modelB_percentile": 99.7,
+        "modelC_percentile": 96.4,
+        "domains": {
+          "transport": 79,
+          "living": 60,
+          "education": 68,
+          "complex": 90
+        }
+      },
+      {
+        "aptSeq": "26500-2288",
+        "name": "리부스남천",
+        "gu": "수영구",
+        "dong": "남천동",
+        "buildYear": 2021,
+        "totalHouseholds": 19,
+        "pricePerM2": 442,
+        "v2Score": 75,
+        "modelB_percentile": 99.7,
+        "modelC_percentile": 97.8,
+        "domains": {
+          "transport": 81,
+          "living": 75,
+          "education": 82,
+          "complex": 62
+        }
+      },
+      {
+        "aptSeq": "26380-2053",
+        "name": "사하역비스타동원",
+        "gu": "사하구",
+        "dong": "괴정동",
+        "buildYear": 2021,
+        "totalHouseholds": 513,
+        "pricePerM2": 667,
+        "v2Score": 75,
+        "modelB_percentile": 99.7,
+        "modelC_percentile": 94.4,
+        "domains": {
+          "transport": 84,
+          "living": 62,
+          "education": 73,
+          "complex": 81
+        }
+      },
+      {
+        "aptSeq": "26260-2172",
+        "name": "동래롯데캐슬퀸",
+        "gu": "동래구",
+        "dong": "명륜동",
+        "buildYear": 2020,
+        "totalHouseholds": 210,
+        "pricePerM2": 765,
+        "v2Score": 75,
+        "modelB_percentile": 99.7,
+        "modelC_percentile": 97.9,
+        "domains": {
+          "transport": 89,
+          "living": 79,
+          "education": 60,
+          "complex": 72
+        }
+      },
+      {
+        "aptSeq": "26260-2104",
+        "name": "명륜자이",
+        "gu": "동래구",
+        "dong": "명륜동",
+        "buildYear": 2019,
+        "totalHouseholds": 671,
+        "pricePerM2": 1060,
+        "v2Score": 75,
+        "modelB_percentile": 99.7,
+        "modelC_percentile": 97.5,
+        "domains": {
+          "transport": 71,
+          "living": 77,
+          "education": 73,
+          "complex": 80
+        }
+      },
+      {
+        "aptSeq": "26470-3047",
+        "name": "레이카운티(1단지)",
+        "gu": "연제구",
+        "dong": "거제동",
+        "buildYear": 2023,
+        "totalHouseholds": 4470,
+        "pricePerM2": 1267,
+        "v2Score": 74,
+        "modelB_percentile": 99.2,
+        "modelC_percentile": 78.6,
+        "domains": {
+          "transport": 78,
+          "living": 60,
+          "education": 68,
+          "complex": 90
+        }
+      },
+      {
+        "aptSeq": "26260-2055",
+        "name": "천일스카이원",
+        "gu": "동래구",
+        "dong": "명륜동",
+        "buildYear": 2018,
+        "totalHouseholds": 215,
+        "pricePerM2": 511,
+        "v2Score": 74,
+        "modelB_percentile": 99.2,
+        "modelC_percentile": 95.7,
+        "domains": {
+          "transport": 70,
+          "living": 78,
+          "education": 78,
+          "complex": 69
+        }
+      },
+      {
+        "aptSeq": "26500-2172",
+        "name": "센텀디아이리더스",
+        "gu": "수영구",
+        "dong": "광안동",
+        "buildYear": 2019,
+        "totalHouseholds": 28,
+        "pricePerM2": 463,
+        "v2Score": 74,
+        "modelB_percentile": 99.2,
+        "modelC_percentile": 96.5,
+        "domains": {
+          "transport": 88,
+          "living": 78,
+          "education": 68,
+          "complex": 61
+        }
+      },
+      {
+        "aptSeq": "26500-2132",
+        "name": "라움팰리스타워",
+        "gu": "수영구",
+        "dong": "남천동",
+        "buildYear": 2018,
+        "totalHouseholds": 73,
+        "pricePerM2": 539,
+        "v2Score": 74,
+        "modelB_percentile": 99.2,
+        "modelC_percentile": 96.5,
+        "domains": {
+          "transport": 82,
+          "living": 77,
+          "education": 76,
+          "complex": 61
+        }
+      },
+      {
+        "aptSeq": "26470-3050",
+        "name": "레이카운티(4단지)",
+        "gu": "연제구",
+        "dong": "거제동",
+        "buildYear": 2023,
+        "totalHouseholds": 4470,
+        "pricePerM2": 977,
+        "v2Score": 74,
+        "modelB_percentile": 99.2,
+        "modelC_percentile": 78.6,
+        "domains": {
+          "transport": 79,
+          "living": 60,
+          "education": 68,
+          "complex": 90
+        }
+      },
+      {
+        "aptSeq": "26380-2019",
+        "name": "대림SM",
+        "gu": "사하구",
+        "dong": "당리동",
+        "buildYear": 2019,
+        "totalHouseholds": 26,
+        "pricePerM2": 421,
+        "v2Score": 74,
+        "modelB_percentile": 99.2,
+        "modelC_percentile": 99.1,
+        "domains": {
+          "transport": 86,
+          "living": 75,
+          "education": 74,
+          "complex": 61
+        }
+      },
+      {
+        "aptSeq": "26260-1469",
+        "name": "강변뜨란채",
+        "gu": "동래구",
+        "dong": "안락동",
+        "buildYear": 2006,
+        "totalHouseholds": 814,
+        "pricePerM2": 605,
+        "v2Score": 74,
+        "modelB_percentile": 99.2,
+        "modelC_percentile": 99.3,
+        "domains": {
+          "transport": 89,
+          "living": 62,
+          "education": 78,
+          "complex": 67
+        }
+      }
+    ]
+  },
+  "eligibilityBreakdown": {
+    "SCORE_AVAILABLE": 2833,
+    "NOT_ENOUGH_DATA": 568
+  }
+}

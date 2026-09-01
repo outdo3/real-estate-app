@@ -12578,3 +12578,64 @@ API 변경: `/api/apt/[name]/score`의 `scoreVersion` 값이 이제 실제
 상태: 완료.
 
 상세: `docs/development/LAUNCH_TRUST_BLOCKERS_V1.md`
+
+
+## 2026-09-01
+
+### E-JIP SCORE V2 — PHASE 1: Product/Formula Architecture Audit
+
+Production score formula/가중치는 이번 STEP에서 변경하지 않음(25/25/25/25
+그대로). DB write 0, schema 0, migration 0. 목적은 감사 + 실측 데이터
+기반 모델 후보 비교 + PM 권고안 작성.
+
+작업:
+
+- V1(peer-percentile)/V2(absolute) 전체 파이프라인을 파일:라인 단위로
+  재구성 — INPUT→NORMALIZATION→SUBSCORE→WEIGHT→FINAL 문서화.
+- **BLOCKER급 발견**: `calculateApartmentScore()`가 V2 결과를
+  무조건 먼저 계산해두고도(V1 coverage 체크보다 앞줄), V1의 coverage<0.6
+  분기에서는 반환 객체에 `_shadowV2`를 아예 누락시켜, V2가 실제로는
+  SCORE_AVAILABLE이어도 화면엔 "준비 중"만 뜰 수 있는 구조적 결함을
+  발견. 전수(부산 3,401건) 실측 결과 **현재 실제 영향은 0건(0.0%)**
+  — V1의 category coverage가 지금까지 한 번도 0.6 밑으로 떨어진 적이
+  없어 우연히 드러나지 않았을 뿐, 코드 결함 자체는 실재함. Phase 2에서
+  V2 자신의 eligibility 기준으로 게이트를 바꾸도록 수정 권고.
+- 이번 audit의 전제 하나를 실측으로 정정: V1의 categories/briefing/
+  regionalStrengths/market는 "단지 상세페이지에서 여전히 쓰이고 있다"는
+  기존 가정과 달리, `apt-client.tsx` 전수 검색 결과 **아무 곳에서도
+  읽히지 않음**을 확인 — "단지 브리핑" UI는 V1과 무관한 완전히 별도의
+  V2 기반 컴포넌트(`ApartmentBriefingV2.tsx`)가 담당. V1의 저 4개
+  필드는 매 요청마다 계산되지만 아무도 소비하지 않는 순수 서버 비용.
+- 원본 raw input(교통/생활/교육/단지) 4종 전부 SAFE 분류(identity는
+  전부 aptSeq 기반, missing이 0으로 둔갑하는 경로 없음, peer/타 단지
+  데이터가 섞여 들어가는 경로 없음) — BLOCKER 없음.
+- **실제 Production 데이터 실측**(read-only, 부산 전체 3,401건 중
+  2,833건 산정 가능): 분포(median 55, p10 40, p90 67), 가격 편향
+  (ρ=0.51, 고가-중저가 13.5점 차), 신축 편향(ρ=0.49, 신축-구축
+  11.9점 차), 대단지 편향은 전체로는 약함(ρ=0.09)이나 극소규모(10-20
+  세대) 구간에서 구조적 저점 확인, 교육 도메인이 명목 25% 가중치와
+  달리 실제 총점 설명력은 가장 약함(ρ=0.37).
+- Bottom/Middle/Top 20 실측 샘플로 resident-backlash 감사 — 낮은
+  점수는 데이터 결측이 아니라 실제 사실(초소형/구축 단지)에 기반해
+  메커니즘상 설명 가능하지만, "100점 만점 절대점수" 자체가 신축
+  대단지와 비교되는 부당한 프레이밍이라는 것이 가장 큰 위험으로 확인.
+- Model A(현행 절대)/B(부산 전체 percentile)/C(구+연식대 peer
+  percentile)/D(A+C 하이브리드) 4개 모델을 **동일한 실측 V2 데이터로
+  사후 재순위화**하여 비교(신규 formula를 production에 실행하지
+  않음) — Model B는 순수 relabeling(rho(A,B)≈1.0, 편향 무보정),
+  Model C는 실질적 재순위화(rho(A,C)=0.76) 확인.
+- **PM 추천: Model D(하이브리드)** — 기존 절대 evidence는 그대로
+  유지하고 peer-relative percentile을 두 번째 숫자로 병기. `score-v2`
+  타입에 이미 정의돼 있지만 한 번도 채워진 적 없는 `RelativeContext`
+  타입을 그대로 재사용 가능(구현 리스크 낮음).
+
+서비스 기능 변경: 없음(감사/분석 전용, production 코드 변경 없음).
+
+DB 변경: 없음. 실행한 모든 script는 read-only(SELECT만).
+
+테스트/빌드: `npx tsc --noEmit` — 기존 20개 그대로, 신규 0건. 신규
+스크립트 2개 lint clean.
+
+상태: 완료.
+
+상세: `docs/development/EJIP_SCORE_V2_PRODUCT_FORMULA_AUDIT.md`
