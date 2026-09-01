@@ -1,10 +1,53 @@
 import { NextResponse } from 'next/server';
-import { fetchMolitData, DataType } from '@/lib/api-molit';
+import { fetchMolitData, formatKoreanPrice, DataType } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
 import { buildMasterCoordIndex, resolveApartmentCoords, type MasterCoordRow } from '@/lib/map-marker-coords';
 import { aptNamesMatch } from '@/lib/apt-name-match';
 import { recentMonths } from '@/lib/molit-months';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
+import { queryTrades } from '@/lib/trade-history-read';
+import { getOrSetCache } from '@/lib/server-cache';
+
+// MAP_PERFORMANCE_V1 — 이 route가 지도(map/page.tsx)·분위지도(stats type-client.tsx)·
+// AI 검색 조건검색(ai-search.ts runConditionSearch) 3곳 모두에서 정확히 같은 모양
+// (`type=apt&lawdCd=X&months=12`, dong/loadMore 없음)으로만 호출된다는 것을 실제
+// 호출부 전수 확인으로 검증했다. 이 정확한 모양일 때만 부산 지역에 한해 DB-first로
+// 전환한다(TRADE_DB_FIRST_V1 STEP A/AREA84 SQL PUSHDOWN과 동일한 "정확히 알려진 모양만
+// 좁혀서 전환" 원칙 — 다른 파라미터 조합은 기존 MOLIT-live 경로를 그대로 탄다, 회귀 없음).
+// 지도의 첫 마커 로드가 이 route를 기다리는 동안 실측 3.6~4.5s가 걸렸는데(부산 16개 구
+// 중 큰 구는 더 심함), 원인은 이 route가 이미 완성된 apartment_trade_histories DB를 전혀
+// 쓰지 않고 12개월치 MOLIT 실시간 호출(월별 병렬)을 그대로 하고 있었기 때문이다.
+const BUSAN_SIDO_CODE = '26';
+
+async function fetchApt12MonthsFromDb(lawdCd: string): Promise<any[]> {
+  const from = new Date();
+  from.setMonth(from.getMonth() - 12);
+  const { trades } = await queryTrades({ lawdCd, from });
+  return trades.map((t) => {
+    const areaNum = Number(t.exclusiveArea);
+    const tradeDate = t.dealDate.toISOString().slice(0, 10);
+    return {
+      id: `db-apt-${t.id}`,
+      rank: 0,
+      name: t.aptName,
+      price: formatKoreanPrice(t.dealAmount),
+      dealAmount: t.dealAmount,
+      monthlyRent: 0,
+      priceChange: '',
+      changeType: 'new',
+      typeLabel: '실거래',
+      dong: t.dong,
+      buildYear: t.buildYear != null ? String(t.buildYear) : '',
+      jibun: t.jibun || '',
+      dealCanceled: t.dealCanceled,
+      aptSeq: t.aptSeq,
+      area: `${areaNum}m²`,
+      areaNum,
+      floor: t.floor ?? 0,
+      tradeDate,
+    };
+  });
+}
 
 export async function GET(request: Request) {
   try {
@@ -19,19 +62,33 @@ export async function GET(request: Request) {
     // 별개 파라미터라 기존 호출부(홈 화면 "더보기")는 영향받지 않는다.
     const monthsParam = searchParams.get('months');
 
-    // 1. type과 lawdCd가 있으면 국토부 API 실시간 호출
+    // 1. type과 lawdCd가 있으면 국토부 API 실시간 호출(단, 아래 조건에 맞으면 DB-first)
     if (type && lawdCd) {
-      // loadMore=0 -> offset=0 (last 3 months)
-      // loadMore=1 -> offset=3 (previous 3 months)
-      const months = monthsParam
-        ? recentMonths(Math.max(1, parseInt(monthsParam, 10) || 3), 0)
-        : recentMonths(3, loadMore * 3);
+      // MAP_PERFORMANCE_V1 — 지도/분위지도/AI조건검색이 실제로 쓰는 정확히 이 모양
+      // (apt, 12개월, dong/loadMore 없음)이고 부산 지역이면 DB-first. 캐시는 기존
+      // getOrSetCache 재사용(신규 인프라 없음), TTL 30분 — Score/area84가 이미 쓰는
+      // "배치 갱신 데이터라 30분 지연은 문제 없음" 원칙과 동일.
+      const isMapMarkerShape = type === 'apt' && monthsParam === '12' && loadMore === 0 && (!dong || dong === 'all');
+      const isDbFirstEligible = isMapMarkerShape && lawdCd.startsWith(BUSAN_SIDO_CODE);
 
-      // 공공데이터 API 병렬 호출 (속도 개선)
-      const promises = months.map(dealYmd => fetchMolitData({ lawdCd, dealYmd, type }));
-      const results = await Promise.all(promises);
+      let data: any[];
+      let usedDbFirst = false;
 
-      let data = results.flat();
+      if (isDbFirstEligible) {
+        data = await getOrSetCache(`transactions-apt-12mo-db:${lawdCd}`, 30 * 60 * 1000, () => fetchApt12MonthsFromDb(lawdCd));
+        usedDbFirst = true;
+      } else {
+        // loadMore=0 -> offset=0 (last 3 months)
+        // loadMore=1 -> offset=3 (previous 3 months)
+        const months = monthsParam
+          ? recentMonths(Math.max(1, parseInt(monthsParam, 10) || 3), 0)
+          : recentMonths(3, loadMore * 3);
+
+        // 공공데이터 API 병렬 호출 (속도 개선)
+        const promises = months.map(dealYmd => fetchMolitData({ lawdCd, dealYmd, type }));
+        const results = await Promise.all(promises);
+        data = results.flat();
+      }
 
       if (dong && dong !== 'all') {
         data = data.filter((item: any) => item.dong === dong);
@@ -40,18 +97,23 @@ export async function GET(request: Request) {
       // 정렬/표시용 필드 보강: info 문자열("면적 • 층 • 계약일")에서 층·계약일자를
       // 파싱한다 (api/apt/[name]/route.ts와 동일한 규칙). 여러 달치 데이터를 합친 뒤이므로
       // 단순 배열 순서로는 최신순이 보장되지 않아, 실제 계약일자 기준으로 명시적으로 정렬한다.
+      // DB-first 경로는 fetchApt12MonthsFromDb()가 이미 area/floor/tradeDate/areaNum을
+      // 최종 형태로 채워뒀으므로(가짜 .info 문자열을 만들어 다시 파싱하는 왕복 금지) 이
+      // 재파싱 단계를 건너뛴다.
       // FIX_STATISTICS_DATA_TRUST — 예전에는 `areaNum / 3.3058`로 "평형"을 만들어
       // 그대로 내려줬다(가짜 평형, AGENTS.md Unit Master 보호 원칙 위반). 이제
       // raw ㎡만 파싱하고, pyung은 아래에서 Unit Master를 batch 조회해서만 채운다
       // (없으면 null — raw ㎡만 표시).
-      data = data.map((item: any) => {
-        const infoParts = (item.info || '').split('•');
-        const area = infoParts[0]?.trim() || '';
-        const floor = parseInt(infoParts[1]?.trim() || '0', 10) || 0;
-        const tradeDate = infoParts[infoParts.length - 1]?.trim() || '';
-        const areaNum = parseFloat(area) || null;
-        return { ...item, area, floor, tradeDate, areaNum };
-      });
+      if (!usedDbFirst) {
+        data = data.map((item: any) => {
+          const infoParts = (item.info || '').split('•');
+          const area = infoParts[0]?.trim() || '';
+          const floor = parseInt(infoParts[1]?.trim() || '0', 10) || 0;
+          const tradeDate = infoParts[infoParts.length - 1]?.trim() || '';
+          const areaNum = parseFloat(area) || null;
+          return { ...item, area, floor, tradeDate, areaNum };
+        });
+      }
 
       {
         const lookupKeys = new Map<string, PyeongLookupKey>();

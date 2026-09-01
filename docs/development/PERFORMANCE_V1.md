@@ -193,3 +193,7 @@ There is also a residual, uncached ~1.2s of post-cache-hit JS-side cost (pyeong 
 - `scripts/apartment-score/output/score-v2-phase2-crosscheck.json` — regenerated (same 30/30/0-mismatch result) after re-running the cross-check post-fix.
 
 No DB writes, no schema changes, no new dependencies, no auth/security changes.
+
+---
+
+**Update (2026-09-01) — `MAP_PERFORMANCE_V1`:** the Home→Map journey (L/M journeys in §7's list, not deeply benchmarked in this original document) got its own dedicated STEP — see `docs/development/MAP_PERFORMANCE_V1.md`. Found and fixed two real bottlenecks: a render gate that blocked the entire map on marker-fetch completion (not just SDK readiness), and a marker API (`/api/transactions?type=apt`) that had never been migrated to `TRADE_DB_FIRST_V1`, making 12 live MOLIT calls per map load (4.1–4.5s) — converted to a narrowly-scoped DB-first path (0.16–1.03s).

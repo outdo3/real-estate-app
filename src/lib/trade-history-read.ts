@@ -36,6 +36,10 @@ export interface StoredTrade {
   dealDate: Date;
   floor: number | null; // DB 컬럼 자체는 nullable(스키마 참고) — 정상 backfill row는 항상 값이 있음
   dealCanceled: boolean;
+  // MAP_PERFORMANCE_V1 — 기존에도 findMany가 select 없이 전체 row를 가져오고 있었으므로
+  // (row 자체는 이미 이 두 컬럼을 포함) 추가 DB 비용 없이 노출만 추가한다.
+  buildYear: number | null;
+  jibun: string | null;
 }
 
 function toStoredTrade<
@@ -50,10 +54,12 @@ function toStoredTrade<
     dealDate: Date;
     floor: number | null;
     dealCanceled: boolean;
+    buildYear: number | null;
+    jibun: string | null;
   },
 >(row: T): StoredTrade {
-  const { id, lawdCd, aptSeq, aptName, dong, dealAmount, dealDate, floor, dealCanceled } = row;
-  return { id, lawdCd, aptSeq, aptName, dong, dealAmount, dealDate, floor, dealCanceled, exclusiveArea: row.exclusiveArea.toString() };
+  const { id, lawdCd, aptSeq, aptName, dong, dealAmount, dealDate, floor, dealCanceled, buildYear, jibun } = row;
+  return { id, lawdCd, aptSeq, aptName, dong, dealAmount, dealDate, floor, dealCanceled, buildYear, jibun, exclusiveArea: row.exclusiveArea.toString() };
 }
 
 /** 취소 제외, 같은 identity+exact area(dealType='sale')의 전체 저장 이력(시간순). */

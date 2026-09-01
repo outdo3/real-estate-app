@@ -3,6 +3,18 @@
    기존에 없었음) 이 파일은 인라인으로 표현할 수 없는 두 가지(키프레임 애니메이션,
    :focus-visible 의사클래스)만 담당한다 — 나머지 색상/크기는 그대로 인라인 유지. */
 
+/* MAP_PERFORMANCE_V1 — 마커 fetch 중 작은 non-blocking 인디케이터의 회전 스피너.
+   인라인 style은 @keyframes를 표현할 수 없어 이 파일에 둔다. */
+@keyframes ejipMapMarkerSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.markerLoadingSpinner {
+  animation: ejipMapMarkerSpin 0.8s linear infinite;
+}
+
 /* compact/detailed 칩의 steady-state selected scale(1.1 / 1.08)과 애니메이션의
    마지막 프레임이 어긋나면 애니메이션 종료 시 순간적으로 크기가 튀어 보이므로,
    CSS 커스텀 프로퍼티 대신 tier별로 별도 키프레임을 둔다. */

@@ -13094,3 +13094,60 @@ STEP은 schema를 만들지 않고 감사+설계까지만 진행.
 상태: 완료(PHASE A). 다음: PHASE B(Schema + Sync Engine, 승인 필요).
 
 상세: `docs/development/RENT_TRADE_HISTORY_V1_ARCHITECTURE.md`
+
+
+## 2026-09-01
+
+### MAP PERFORMANCE V1 — 홈→지도 진입 체감속도 개선
+
+사용자가 홈에서 "지도에서 찾기"를 눌렀을 때 지도가 뜨기까지 걸리는
+실제 체감시간을 개선. 새 지도 기능 없음, provider 변경 없음, API
+contract 변경 없음.
+
+작업:
+
+- **핵심 원인 1 — loading gate**: `/map` 페이지가 SDK 준비
+  (isMapReady)와 마커 fetch 완료(isLoadingData) 둘 다 끝나야
+  KakaoMap 자체를 마운트했다 — 지도가 뜨기까지의 시간이 "SDK 로드
+  시간 + 마커 fetch 시간"의 합이었다(마커 fetch는 Kakao 역지오코딩
+  후 서버 API까지 왕복해 SDK보다 항상 오래 걸림). SDK만 준비되면
+  즉시 지도를 띄우고 마커는 점진적으로 표시되도록 게이트를
+  분리(관련 effect 2곳도 동일하게 수정), 마커 fetch 중에는 지도를
+  가리지 않는 작은 비차단 안내 pill만 표시.
+- **핵심 원인 2 — 마커 API가 DB-FIRST가 아니었음**: 지도/분위지도
+  (stats)/AI 조건검색 3곳이 모두 정확히 같은 모양
+  (`/api/transactions?type=apt&lawdCd=X&months=12`)으로 호출하는
+  이 API가 완성된 `apartment_trade_histories` DB를 전혀 안 쓰고
+  매번 MOLIT 실시간 12개월 병렬 호출을 하고 있었다(실측 서구
+  4.14s, 해운대구 4.55s, 캐시 자체가 없어 반복해도 안 빨라짐). 정확히
+  이 모양+부산 지역일 때만 DB-first로 전환(다른 파라미터 조합은
+  기존 MOLIT-live 경로 그대로, 회귀 없음) — 실제 MOLIT 응답과
+  필드 단위 대조 검증 완료. 서구 4.14s→0.75s(cold)/0.16s(warm,
+  기존엔 캐시가 없어 warm도 0.99s였음), 해운대구 4.55s→1.03s(cold).
+- DB-first 데이터가 최근 며칠 치를 덜 갖고 있는 것(실측 14~19%)을
+  발견 — 조사 결과 이미 문서화된 MOLIT 신고 지연 현상(3개월
+  overlap sync가 다음 실행에서 흡수)과 동일한, decline/rising/
+  area84/dashboard가 이미 감수하고 있는 것과 같은 특성임을 확인
+  (새로 생긴 위험 아님, 자동 sync 스케줄이 없다는 점은 전체
+  TRADE_DB_FIRST_V1에 공통된 별도 개선 과제로 기록만).
+- 회귀 확인: 마커 클릭→상세 이동 identity 정확(lawdCd/dong 일치),
+  뒤로가기 정상, 분위지도(다른 소비자)도 동일 데이터로 정상 동작.
+
+서비스 기능 변경: 있음(체감 성능만 — API 응답 shape/정렬/식별자
+전부 동일).
+
+DB 변경: 없음(read-only, 신규 index/schema/migration 0).
+
+테스트/빌드: `npx tsc --noEmit` 기존 20건(신규 0), lint clean,
+`npm run build` 성공.
+
+알려진 제한: 모바일 뷰포트(360/375/390) 브라우저 확인은 세션 도중
+`dapi.kakao.com`에 대한 브라우저 레벨 네트워크 차단(동일 세션의
+Node 직접 fetch는 성공, 브라우저 fetch만 실패 — 코드/Kakao 서비스
+문제 아님, 확장 프로그램 등 환경 문제로 추정)으로 완료하지 못함 —
+차단 발생 전 데스크톱(1280px) 확인은 완료(SDK/마커/클릭/상세이동
+전부 정상). 다음 세션에서 모바일 스크린샷 재확인 권장.
+
+상태: 완료.
+
+상세: `docs/development/MAP_PERFORMANCE_V1.md`

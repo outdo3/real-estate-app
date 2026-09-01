@@ -558,7 +558,10 @@ export default function FullscreenMapPage() {
   // 파일의 기존 관례(위 checkKakao setInterval)를 그대로 따라 짧은 폴링으로 실제 인스턴스
   // 생성을 기다린다.
   useEffect(() => {
-    if (isLoadingData || !isMapReady) return;
+    // MAP_PERFORMANCE_V1 — isLoadingData(마커 fetch 완료 여부)를 의존성에서 뺐다.
+    // 렌더 게이트가 이미 isMapReady만 보고 KakaoMap을 마운트하므로, mapRef.current가
+    // 채워지는 시점도 마커 완료와 무관해졌다 — 그 타이밍을 그대로 따라간다.
+    if (!isMapReady) return;
     if (mapRef.current) {
       setMapInstanceReady(true);
       return;
@@ -570,7 +573,7 @@ export default function FullscreenMapPage() {
       }
     }, 100);
     return () => clearInterval(checkMapInstance);
-  }, [isLoadingData, isMapReady]);
+  }, [isMapReady]);
 
   // 지도 인스턴스가 실제로 준비된 뒤 줌/드래그가 끝날 때마다(native 'idle' 이벤트) 클러스터를
   // 다시 계산한다. 데이터가 새로 들어와도(aptMarkers 변경) 같은 화면 상태 기준으로 즉시 한
@@ -926,7 +929,16 @@ export default function FullscreenMapPage() {
     );
   }
 
-  if (isLoadingData || !isMapReady) {
+  // MAP_PERFORMANCE_V1 — 이전에는 SDK 준비(isMapReady)와 마커 데이터 준비
+  // (isLoadingData) 둘 다 끝나야 지도 자체(KakaoMap)가 마운트됐다 — 즉 지도가
+  // 뜨기까지의 시간이 "SDK 로드 시간 + 마커 fetch 시간"의 합이었다. 마커 fetch는
+  // Kakao 역지오코딩(서비스 라이브러리 필요) 뒤에 서버 API까지 왕복하므로 SDK
+  // 로드보다 항상 오래 걸린다 — 사용자는 지도를 조작할 수 있는데도 그보다 훨씬
+  // 오래 흰 화면에 갇혀 있었다. SDK만 준비되면 즉시 지도를 띄우고, 마커는
+  // 준비되는 대로 점진적으로 그려지게 한다(§14/§42 — 마커 미완료가 pan/zoom을
+  // 막지 않아야 한다는 요구사항 그대로). 아래 두 곳의 관련 effect도 동일하게
+  // isLoadingData 의존을 제거했다(§ mapInstanceReady 관련 useEffect).
+  if (!isMapReady) {
     return <FullPageLoader active message="지도 데이터를 불러오는 중입니다..." />;
   }
 
@@ -1055,6 +1067,32 @@ export default function FullscreenMapPage() {
           }}
         >
           {activeComingSoon.map((key) => COMING_SOON_MESSAGE[key]).join(' ')}
+        </div>
+      )}
+
+      {/* MAP_PERFORMANCE_V1 — 지도 자체는 이미 떴고(isMapReady) 주변 마커만 아직
+          fetch 중일 때 보여주는 작은, 화면을 막지 않는 안내. 예전 FullPageLoader처럼
+          지도 전체를 가리지 않고, 사용자가 그 사이에도 바로 pan/zoom할 수 있다(§42). */}
+      {isLoadingData && (
+        <div
+          style={{
+            position: 'absolute', bottom: '76px', left: '50%', transform: 'translateX(-50%)', zIndex: 10,
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.95)', borderRadius: '99px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)',
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className={mapMarkerStyles.markerLoadingSpinner}
+            style={{
+              display: 'inline-block', width: '14px', height: '14px', borderRadius: '50%',
+              border: '2px solid rgba(0,0,0,0.15)', borderTopColor: 'var(--primary-color)',
+            }}
+            aria-hidden="true"
+          />
+          주변 매물을 불러오는 중...
         </div>
       )}
 
