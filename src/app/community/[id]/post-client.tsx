@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Link from 'next/link';
 import useSWR from 'swr';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
@@ -106,9 +105,12 @@ export default function PostDetailPage() {
                       <span>·</span>
                       <span>{new Date(post.createdAt).toLocaleString('ko-KR')}</span>
                       {post.aptName && (
-                        <Link href={`/apt/${encodeURIComponent(post.aptName)}`} className={styles.aptBadge}>
-                          🏢 {post.aptName}
-                        </Link>
+                        // LAUNCH_TRUST_BLOCKERS_V1 — 게시글의 aptName은 자유 텍스트(또는
+                        // 과거에 자유 텍스트로 저장된 값)라 lawdCd/dong이 없다. 예전처럼
+                        // /apt/[name]으로 바로 링크하면 동명의 다른 단지로 잘못 연결될
+                        // 위험이 있어(AGENTS.md "이름만으로 재식별 금지"), 클릭 가능한
+                        // 링크가 아닌 라벨로만 표시한다.
+                        <span className={styles.aptBadge}>🏢 {post.aptName}</span>
                       )}
                     </div>
                   </div>

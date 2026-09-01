@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Header from '@/components/Header';
+import Empty from '@/components/ui/Empty';
 import styles from './tools.module.css';
 
 const TABS = [
@@ -134,38 +135,15 @@ export default function ToolsPage() {
                 <h2 className={styles.cardTitle}>⚖️ 지역 경매 및 온비드 공매 물건</h2>
               </div>
               <div className={styles.cardBody}>
-                <ul className={styles.checkList}>
-                  <li className={styles.checkItem}>
-                    <div style={{ width: '100%' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                        <span className={styles.checkItemTitle}>힐스테이트이진베이시티 103동 15층</span>
-                        <span className={styles.badgeDanger}>유찰 2회</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>감정가: 12억 5,000만</span>
-                        <span style={{ fontWeight: 800, color: 'var(--primary-color)' }}>최저가: 8억 7,500만</span>
-                      </div>
-                      <div className={styles.resultBox} style={{ padding: '0.75rem', marginTop: '0.75rem' }}>
-                        최근 실거래가(11.5억) 대비 <strong style={{ color: 'var(--primary-color)' }}>2.75억 저렴</strong>
-                      </div>
-                    </div>
-                  </li>
-                  <li className={styles.checkItem}>
-                    <div style={{ width: '100%' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                        <span className={styles.checkItemTitle}>대신푸르지오 105동 4층</span>
-                        <span className={styles.badgeWarning}>유찰 1회</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>감정가: 8억 5,000만</span>
-                        <span style={{ fontWeight: 800, color: 'var(--primary-color)' }}>최저가: 6억 8,000만</span>
-                      </div>
-                      <div className={styles.resultBox} style={{ padding: '0.75rem', marginTop: '0.75rem' }}>
-                        최근 실거래가(7.2억) 대비 <strong style={{ color: 'var(--primary-color)' }}>0.4억 저렴</strong>
-                      </div>
-                    </div>
-                  </li>
-                </ul>
+                {/* LAUNCH_TRUST_BLOCKERS_V1 — 이전에는 실제 경매 API 연동 없이 특정
+                    단지/동/층/감정가를 지어낸 예시 매물을 실제 매물처럼 보여줬다.
+                    데이터 소스가 없는 상태이므로, /map의 경·공매 레이어와 동일하게
+                    정직한 "준비 중" 상태로 대체한다(가짜 데이터 > 데이터 없음 금지). */}
+                <Empty
+                  variant="notReady"
+                  title="경매·공매 매물 데이터는 아직 연동 준비 중입니다."
+                  description="실제 경매/온비드 공매 데이터가 연동될 때까지 임의의 예시 매물을 보여드리지 않습니다."
+                />
               </div>
             </div>
           </div>

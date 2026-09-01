@@ -88,13 +88,12 @@ export default function CommunityPage() {
                     {post.title} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>[{post._count.comments}]</span>
                   </span>
                   {post.aptName && (
-                    <Link
-                      href={`/apt/${encodeURIComponent(post.aptName)}`}
-                      className={styles.aptBadge}
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    // LAUNCH_TRUST_BLOCKERS_V1 — aptName은 lawdCd/dong이 없는 텍스트라
+                    // /apt/[name]으로 바로 연결하면 동명의 다른 단지로 잘못 연결될 위험이
+                    // 있다(AGENTS.md "이름만으로 재식별 금지") — 라벨로만 표시한다.
+                    <span className={styles.aptBadge} onClick={(e) => e.stopPropagation()}>
                       🏢 {post.aptName}
-                    </Link>
+                    </span>
                   )}
                   <span className={styles.rowMeta}>
                     {post.author.role === 'ADMIN' && <span className={styles.adminBadge}>관리자</span>}

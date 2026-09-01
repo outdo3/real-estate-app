@@ -172,3 +172,23 @@ Given what this audit found, the highest-leverage next STEPs, in order:
 **NOT_READY:** 예산/재무, 결정 여정(Decision Journey)
 
 **Overall: LIMITED.** The core "find and evaluate one apartment" path is solid and trustworthy. What's missing is almost entirely the "then what?" layer — comparing, budgeting, discovering alternatives — plus three specific trust items (fabricated auction data, Score labeling, Community identity) that are small to fix but shouldn't ship silently.
+
+---
+
+## Addendum (2026-09-01) — LAUNCH_TRUST_BLOCKERS_V1 resolved status
+
+The five items below, all flagged in §5/§14 above, were fixed in the immediately-following `LAUNCH_TRUST_BLOCKERS_V1` STEP. Full detail: `docs/development/LAUNCH_TRUST_BLOCKERS_V1.md`.
+
+| Item | Section above | Status |
+|---|---|---|
+| `/tools` fabricated auction listings | §5.4, §14 P1 | **RESOLVED** — replaced with honest "준비 중" state |
+| Community free-text apartment identity | §5.5, §14 P1 | **RESOLVED (schema-free)** — canonical picker on write, link removed on read |
+| Score V1/V2 `scoreVersion` label mismatch | §5.3, §14 P1 | **RESOLVED** — API label now matches the engine actually displayed; formula unchanged |
+| Dashboard volume zero/missing conflation | §5.6, §16 | **RESOLVED** — single-region path now tracks `partial`/`failedDistricts`, surfaced in UI + AI-search text |
+| Region-change / price-map error vs. no-data conflation | §16 P2 | **RESOLVED** — both `change-map` and `price-map` now distinguish `apiError` from a genuine empty result |
+
+Still open (unchanged from this audit, tracked for future STEPs, not part of the trust-blocker fix):
+- Two divergent Compare implementations (Compare V2 backlog).
+- `/tools` tax/DSR calculators labeled "스마트" while using simplified mock formulas.
+- Decision Journey gap on apartment detail (no Compare/Nearby entry point) — still a frozen scope per the documented V1 lock.
+- E-JIP Score V2 product/formula redesign questions (relative vs. absolute, personalization) — explicitly deferred to a dedicated future STEP.

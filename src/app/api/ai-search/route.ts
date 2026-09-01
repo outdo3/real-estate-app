@@ -189,7 +189,12 @@ export async function POST(request: Request) {
       if (!stats) {
         return NextResponse.json({ success: false, error: '지역 통계를 불러오지 못했습니다.' });
       }
-      const summary = `최근 1개월 거래량 ${stats.volume}건(전월 대비 ${stats.volumeChange >= 0 ? '+' : ''}${stats.volumeChange}건), 평균 전세가율 ${stats.jeonseRate != null ? `${stats.jeonseRate}%` : '데이터 없음'}.`;
+      // LAUNCH_TRUST_BLOCKERS_V1 — partial=true는 일부 월의 국토부 실거래 조회가
+      // 실패해 거래량이 실제보다 적게 집계됐을 수 있다는 뜻이다. 이 경우 "0건"/
+      // 특정 수치를 사실처럼 단정하지 않는다(§13 zero/no-data 원칙).
+      const summary = stats.partial
+        ? `최근 1개월 거래량 데이터 일부를 불러오지 못해 정확한 수치를 제공할 수 없습니다. 평균 전세가율 ${stats.jeonseRate != null ? `${stats.jeonseRate}%` : '데이터 없음'}.`
+        : `최근 1개월 거래량 ${stats.volume}건(전월 대비 ${stats.volumeChange >= 0 ? '+' : ''}${stats.volumeChange}건), 평균 전세가율 ${stats.jeonseRate != null ? `${stats.jeonseRate}%` : '데이터 없음'}.`;
       const briefing = await generateBriefing('regional_stats', summary);
       payload = { intent: 'regional_stats', briefing, stats, lawdCd };
     } else {

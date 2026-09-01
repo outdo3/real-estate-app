@@ -201,6 +201,14 @@ export default function VolumeChartCard({
 
   return (
     <section className={styles.card} aria-label="거래량·시세 추이">
+      {data?.partial && (
+        // LAUNCH_TRUST_BLOCKERS_V1 — dashboard route가 이미 partial/failedDistricts를
+        // 반환하고 있었지만 이 컴포넌트만 배너를 안 띄워, 일부 지역 조회 실패가
+        // 조용히 "거래량 0건"처럼 보일 수 있었다(다른 stats 뷰들과 동일 패턴으로 통일).
+        <div className={styles.partialBanner}>
+          일부 지역({(data.failedDistricts || []).length}곳) 데이터 조회가 지연되고 있어요. 나머지 지역 결과만 우선 표시합니다.
+        </div>
+      )}
       <div className={styles.header}>
         <h3 className={styles.title}>거래량·시세 추이</h3>
         <div className={styles.viewToggle} role="group" aria-label="그래프/표 보기 전환">

@@ -91,10 +91,6 @@
   white-space: nowrap;
 }
 
-.aptBadge:hover {
-  background: #dbeafe;
-}
-
 .pinBadge {
   flex-shrink: 0;
   font-size: 0.7rem;

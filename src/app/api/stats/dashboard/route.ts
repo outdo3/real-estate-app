@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
-import { resolveLawdCd, isValidTrade, fetchMonthsThrottled, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
+import { resolveLawdCd, isValidTrade, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { buildGapCandidates, normalizeAptName } from '@/lib/gap-invest-calc';
 import { prisma } from '@/lib/prisma';
@@ -161,14 +161,25 @@ export async function GET(request: Request) {
           ...(isBusan ? [] : last12Months.map((dealYmd) => ({ key: `apt-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'apt' as const }))),
           ...last12Months.map((dealYmd) => ({ key: `rent-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'rent' as const })),
         ];
+        // LAUNCH_TRUST_BLOCKERS_V1 — 예전에는 실패 여부를 버리는 fetchMonthsThrottled를
+        // 써서, 단일 지역(구) 요청에서 MOLIT 호출이 실패한 달이 조용히 빈 배열이 되어
+        // "거래 0건"과 구분이 안 됐다(시도 전체 분기는 이미 failedLawdCds로 구분함).
+        // fetchMonthsThrottledWithStatus로 바꿔 실패 여부를 유지하고, 부산(DB 조회,
+        // 실패 시 상위 try/catch가 전체 요청을 실패 처리함)이 아닌 한 개라도 실패한
+        // 달이 있으면 partial=true로 표시한다.
         const [taskResults, aptMonthlyFromDb] = await Promise.all([
-          fetchMonthsThrottled(rollingTasks),
+          fetchMonthsThrottledWithStatus(rollingTasks),
           isBusan ? fetchApt12MonthBucketsFromDb([lawdCd!], last12Months) : Promise.resolve(null),
         ]);
         aptMonthly = isBusan
           ? aptMonthlyFromDb!
-          : last12Months.map((dealYmd) => (taskResults[`apt-roll-${dealYmd}`] || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
-        rentMonthly = last12Months.map((dealYmd) => (taskResults[`rent-roll-${dealYmd}`] || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
+          : last12Months.map((dealYmd) => (taskResults[`apt-roll-${dealYmd}`]?.items || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
+        rentMonthly = last12Months.map((dealYmd) => (taskResults[`rent-roll-${dealYmd}`]?.items || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
+        const anyTaskFailed = rollingTasks.some((task) => taskResults[task.key]?.failed);
+        if (anyTaskFailed) {
+          partial = true;
+          failedLawdCds = [lawdCd!];
+        }
       }
 
       const allAptTrades = aptMonthly.flat().filter(isValidTrade);

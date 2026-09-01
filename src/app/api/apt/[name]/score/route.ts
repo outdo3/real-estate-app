@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { aptNamesMatch, normalizeAptName } from '@/lib/apt-name-match';
 import { calculateApartmentScore } from '@/lib/apartment-score/server/calculate';
+import { resolveDisplayedScoreVersion } from '@/lib/apartment-score/resolve-score-version';
 import { logServerError } from '@/lib/log-server-error';
 
 export const dynamic = 'force-dynamic';
@@ -76,18 +77,24 @@ export async function GET(
     }
 
     const result = await calculateApartmentScore(matched[0].aptSeq!);
+    const shadowV2 = (result as any)._shadowV2;
 
+    // LAUNCH_TRUST_BLOCKERS_V1 — ApartmentScoreCard는 _shadowV2가 있으면(거의 항상
+    // 있음) V1의 score 대신 V2 엔진의 overallScore를 화면에 보여준다. scoreVersion을
+    // 항상 V1의 SCORE_VERSION으로 응답하면 실제로 사용자에게 노출되는 엔진과 label이
+    // 어긋난다 — 실제로 화면에 쓰이는 엔진의 버전을 그대로 보고한다(score formula 자체는
+    // 변경하지 않음).
     return NextResponse.json({
       status: result.status,
       score: result.score,
-      scoreVersion: result.scoreVersion,
+      scoreVersion: resolveDisplayedScoreVersion(shadowV2?.scoreVersion, result.scoreVersion),
       coverage: result.coverage,
       confidence: result.confidence,
       categories: result.categories,
       regionalStrengths: result.regionalStrengths.map((r) => ({ type: r.type, level: r.level, label: r.label })),
       market: result.market,
       briefing: result.briefing,
-      _shadowV2: (result as any)._shadowV2,
+      _shadowV2: shadowV2,
     });
   } catch (error) {
     logServerError((error as Error)?.message || 'apt score route error', '/api/apt/[name]/score', (error as Error)?.stack).catch(() => {});

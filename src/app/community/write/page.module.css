@@ -44,17 +44,28 @@
   border-color: var(--primary-color);
 }
 
-.aptNameInput {
+.aptChip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.6rem 0.85rem;
   border-radius: 8px;
   border: 1px solid var(--border-color);
   font-size: 0.85rem;
-  outline: none;
+  font-weight: 600;
   color: var(--text-secondary);
+  background: var(--background-color);
 }
 
-.aptNameInput:focus {
-  border-color: var(--primary-color);
+.aptChipRemove {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
 }
 
 .contentInput {

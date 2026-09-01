@@ -353,6 +353,10 @@ export interface RegionalStatsData {
   jeonseRate: number | null;
   volumeRanking: Record<StatsPeriodKey, VolumeRankingItem[]>;
   volumeByPeriod: Record<StatsPeriodKey, number>;
+  // LAUNCH_TRUST_BLOCKERS_V1 — dashboard route가 MOLIT 조회 일부 실패를
+  // partial/failedDistricts로 알려준다. 이걸 무시하면 실패로 인한 0건이 진짜
+  // 0건처럼 문장으로 단정된다(§13 zero/no-data 원칙).
+  partial: boolean;
 }
 
 export async function runRegionalStats(lawdCd: string, requestUrl: string): Promise<RegionalStatsData | null> {
@@ -367,6 +371,7 @@ export async function runRegionalStats(lawdCd: string, requestUrl: string): Prom
     jeonseRate: json.data.jeonseRate,
     volumeRanking: json.data.volumeRanking,
     volumeByPeriod: json.data.volumeByPeriod,
+    partial: !!json.data.partial,
   };
 }
 

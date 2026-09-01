@@ -11,6 +11,7 @@ import RegionSelectModal from '@/components/RegionSelectModal';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import SectionHeader from '@/components/ui/SectionHeader';
 import Empty from '@/components/ui/Empty';
+import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
@@ -166,6 +167,10 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
   const [isMapReady, setIsMapReady] = useState(false);
   const [markers, setMarkers] = useState<{ id: string; name: string; lat: number; lng: number; pricePerPyung: number; tier: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  // LAUNCH_TRUST_BLOCKERS_V1 — 예전에는 fetch 실패(.catch)도 markers=[]로 이어져
+  // "표시할 좌표 데이터가 없습니다"(no-data)와 구분이 안 됐다. 실패 여부를 별도로
+  // 추적해 에러와 진짜 0건을 다른 화면으로 보여준다.
+  const [apiError, setApiError] = useState(false);
   const [KakaoMap, setKakaoMap] = useState<any>(null);
 
   useEffect(() => {
@@ -202,11 +207,23 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
   useEffect(() => {
     if (!lawdCd) return;
     setLoading(true);
+    setApiError(false);
     fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`)
       .then((res) => res.json())
-      .then((data: any[]) => {
+      .then((data: any) => {
+        // LAUNCH_TRUST_BLOCKERS_V1 — /api/transactions는 실패 시 예외를 던지지
+        // 않고 { error: ... }(배열이 아닌 객체)를 200/500으로 반환한다. 이전에는
+        // Array.isArray 체크만 하고 그냥 빈 배열([])로 취급해, API 실패가 "이
+        // 지역엔 거래가 없다"는 진짜 0건과 구분 없이 같은 화면(no-data)으로
+        // 보였다.
+        if (!Array.isArray(data)) {
+          setApiError(true);
+          setMarkers([]);
+          setLoading(false);
+          return;
+        }
         const byComplex: Record<string, any> = {};
-        (Array.isArray(data) ? data : []).forEach((t) => {
+        data.forEach((t) => {
           if (!t.lat || !t.lng || !t.pyung || t.pyung <= 0) return;
           const key = `${t.dong}|${t.name}`;
           if (!byComplex[key]) byComplex[key] = t; // 이미 계약일 최신순 정렬되어 내려옴
@@ -225,7 +242,11 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
         setMarkers(withPrice.map((m) => ({ ...m, tier: tierByName[m.id] ?? 0 })));
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setApiError(true);
+        setMarkers([]);
+        setLoading(false);
+      });
   }, [lawdCd]);
 
   // STATISTICS REGION FILTER V2 §26 — 지도 렌더링/분위 계산이 시/군/구 하나를
@@ -259,6 +280,10 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><InlineLoading message="지도를 불러오는 중입니다..." /></div>
         ) : loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><InlineLoading message="가격 데이터를 분석 중입니다..." /></div>
+        ) : apiError ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <ErrorState variant="section" message="데이터를 불러오지 못했어요. 잠시 후 다시 시도해주세요." />
+          </div>
         ) : markers.length === 0 ? (
           <Empty variant="noData" title="표시할 좌표 데이터가 없습니다." showMascot={false} />
         ) : (

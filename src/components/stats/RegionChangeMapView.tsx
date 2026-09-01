@@ -326,6 +326,13 @@ function ScopedLevel({
   if (uiLevel === 'dong') {
     const rows = data.rows || [];
     if (rows.length === 0) {
+      // LAUNCH_TRUST_BLOCKERS_V1 — API가 실거래 조회 자체에 실패했을 때(apiError)와
+      // 정상 조회했지만 비교 가능한 거래가 진짜 없을 때(INSUFFICIENT)를 API는 이미
+      // 구분해서 내려주는데(region-change/route.ts), 화면에서는 둘 다 같은 "거래가
+      // 없어요" 문구로 보여 실패가 마치 확인된 데이터 없음처럼 보였다.
+      if (data.apiError) {
+        return <ErrorState variant="section" message="데이터를 불러오지 못했어요. 잠시 후 다시 시도해주세요." />;
+      }
       return <Empty variant="noResult" title="선택한 기간에 비교 가능한 거래가 없어요." description="기간을 넓히거나 다른 동을 선택해보세요." />;
     }
     return (
@@ -357,6 +364,10 @@ function ScopedLevel({
 
   const buckets: Bucket[] = uiLevel === 'sido' ? data.districts || [] : data.dongs || [];
   if (buckets.length === 0) {
+    // LAUNCH_TRUST_BLOCKERS_V1 — 위 dong 분기와 동일한 이유로 apiError를 먼저 본다.
+    if (data.apiError) {
+      return <ErrorState variant="section" message="데이터를 불러오지 못했어요. 잠시 후 다시 시도해주세요." />;
+    }
     return <Empty variant="noResult" title="선택한 기간에 비교 가능한 거래가 없어요." />;
   }
 

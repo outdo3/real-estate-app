@@ -12503,3 +12503,78 @@ API 변경:
 상태: 완료.
 
 상세: `docs/development/USER_EXPERIENCE_BASELINE_AUDIT_V1.md`
+
+
+## 2026-09-01
+
+### LAUNCH TRUST BLOCKERS V1 — 출시 전 데이터/Identity/표현 신뢰성 보완
+
+USER_EXPERIENCE_BASELINE_AUDIT_V1에서 발견된 5개 신뢰성 블로커를
+모두 최소·안전한 방식으로 해소. DB schema/migration 없음, Score
+포뮬러(25/25/25/25) 미변경, production write 없음.
+
+작업:
+
+- **Auction 가짜 매물 제거**: `/tools` "경·공매 비교" 탭이 하드코딩된
+  가짜 매물(구체적 단지/동/층/감정가/유찰횟수)을 실제 매물처럼
+  보여주던 것을, `/map`의 경·공매 레이어와 동일한 정직한 "준비 중"
+  상태(`Empty variant="notReady"`)로 교체.
+  (`src/app/tools/page.tsx`)
+- **Community 단지 identity**: `/community/write`의 자유 텍스트
+  단지명 입력을 기존 `ApartmentAutocomplete`(동 disambiguation 포함)
+  로 교체 — 실제 존재하는 정확한 단지명만 저장 가능. `Post` 테이블에
+  lawdCd/dong 저장 컬럼이 없어(schema 변경 없음, 이번 STEP 범위 밖)
+  여전히 이름만 저장되므로, 커뮤니티 글의 단지 배지를 `/apt/[name]`
+  링크에서 클릭 불가능한 라벨로 변경 — 동명 타 단지로 잘못 연결될
+  위험을 0으로 만듦(schema 변경 없이 안전하게 비활성화).
+  (`src/app/community/write/page.tsx`, `src/app/community/page.tsx`,
+  `src/app/community/[id]/post-client.tsx` 외 관련 CSS 모듈)
+- **E-JIP Score V1/V2 label 불일치 수정**: 실제 화면에 노출되는
+  score-v2 엔진과 API의 `scoreVersion`(항상 V1 라벨)이 어긋나 있던
+  것을 발견 — API가 실제로 화면에 쓰이는 엔진의 버전을 정확히
+  보고하도록 수정. Score 계산식/가중치는 전혀 변경하지 않음. V1의
+  categories/briefing/market 출력은 여전히 상세페이지에서 쓰이고
+  있어 삭제 대상 아님(audit 결과 dead code 아님).
+  (`src/app/api/apt/[name]/score/route.ts`,
+  `src/lib/apartment-score/resolve-score-version.ts` 신규 + 테스트)
+- **거래량 0건/NO DATA 혼동 보완**: dashboard 단일 지역(구) 분기가
+  실패 여부를 버리는 `fetchMonthsThrottled`를 써서 MOLIT 조회 실패가
+  "거래 0건"과 구분이 안 됐다(시도 전체 분기는 이미 구분함) —
+  `fetchMonthsThrottledWithStatus`로 교체+`partial`/`failedDistricts`
+  추적 추가. 이미 계산돼 있었지만 화면에 반영 안 되던 `partial`을
+  거래량 화면(VolumeChartCard)과 AI검색 요약 문장에도 연결.
+  (`src/app/api/stats/dashboard/route.ts`,
+  `src/components/stats/VolumeChartCard.tsx`, `src/lib/ai-search.ts`,
+  `src/app/api/ai-search/route.ts`)
+- **지역 변동지도 error/no-data 혼동 보완**: `region-change` API가
+  이미 계산해 두고 있던 `apiError`를 `RegionChangeMapView`가 전혀
+  읽지 않아, 완전한 조회 실패가 "비교 가능한 거래가 없어요"(진짜
+  0건)와 같은 화면으로 보였다 — apiError 우선 체크 추가. 별도로
+  분위지도(PriceMapView)의 `/api/transactions` 실패(네트워크 예외 +
+  `{error:...}` 응답 둘 다)도 같은 방식으로 "표시할 좌표 데이터
+  없음"과 분리.
+  (`src/components/stats/RegionChangeMapView.tsx`,
+  `src/app/stats/[type]/type-client.tsx`)
+
+서비스 기능 변경: 위 5건 수정 외 신규 기능 없음.
+
+DB 변경: 없음(schema/migration 0건).
+
+API 변경: `/api/apt/[name]/score`의 `scoreVersion` 값이 이제 실제
+표시 엔진을 반영(필드 자체는 기존과 동일하게 존재, 값만 정확해짐).
+`/api/stats/dashboard` 응답의 기존 `partial`/`failedDistricts`
+필드가 단일 지역 요청에서도 이제 의미 있는 값을 가짐(필드는
+기존에도 존재).
+
+테스트/빌드: `npx tsc --noEmit` — 기존 20개 pre-existing 에러
+그대로, 신규 0건. `node --experimental-strip-types --test`(.test.mjs
+전체) — 234/237 pass, 실패 3건은 전부 이번 STEP과 무관한
+기존(`@/` 경로 alias를 node 네이티브 ESM이 못 푸는) 인프라 문제
+(`trade-history-read.test.mjs`,
+`scripts/master-coverage-sync-logic.test.mjs`,
+`scripts/repair-recent-missing-masters-logic.test.mjs`). 신규 테스트
+`resolve-score-version.test.mjs` 3/3 pass. `npm run build` — PASS.
+
+상태: 완료.
+
+상세: `docs/development/LAUNCH_TRUST_BLOCKERS_V1.md`
