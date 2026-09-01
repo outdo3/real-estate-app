@@ -12639,3 +12639,63 @@ DB 변경: 없음. 실행한 모든 script는 read-only(SELECT만).
 상태: 완료.
 
 상세: `docs/development/EJIP_SCORE_V2_PRODUCT_FORMULA_AUDIT.md`
+
+
+## 2026-09-01
+
+### E-JIP SCORE V2 — PHASE 1.5: Peer Group & Housing-Type Trust Gate
+
+Production Score/UI/schema 변경 없음. Phase 1이 추천한 Model D(절대
+evidence + peer-relative context)를 실제로 노출하기 전에, 비교군
+자체가 공정한지 검증. Read-only.
+
+작업:
+
+- **주택유형(아파트/연립/다세대/빌라) 필드는 ApartmentMaster에 아예
+  없음을 스키마로 확인 — 그러나 이름 문자열로 추정하는 대신 데이터
+  파이프라인을 추적**: `apartment_master_seed.ts`가 오직 MOLIT
+  `RTMSDataSvcAptTradeDev`(아파트 매매 전용 오퍼레이션)만 discovery
+  source로 쓰고, 연립다세대 전용 오퍼레이션(`RTMSDataSvcRHTrade`)은
+  코드에 정의만 있을 뿐 어디서도 호출되지 않음을 확인 — 즉 현재
+  universe(3,401건)는 전부 MOLIT이 이미 "아파트"로 분류한 건물이며,
+  이름에 "빌라"가 들어간 건(그린빌라 등)도 법적으로는 아파트임.
+  Phase 1이 우려했던 "주택유형 혼입"은 실측 결과 애초에 존재하지
+  않는 문제였음 — 대신 실제 위험은 **세대수(규모)** 축이었다는 점을
+  실측으로 정정.
+- **세대수 인지 계층형 peer model 실측 비교**(sigungu×decade
+  단독 vs sigungu×decade×규모밴드 계층형, fallback: L1→L2→L3→L4):
+  전체 부산 2,833건 재계산 결과 계층형 모델이 가격(0.27→0.20)/
+  신축(0.07→0.03)/세대수(0.17→0.05) 편향 **3개 전부**에서 단순
+  모델보다 개선 — 특히 세대수 편향은 계층형 모델이 오히려 절대점수
+  자체(0.09)보다도 낮음. L1(3중 일치) 커버리지 82.4%, fallback L4
+  0%.
+- **MIN_SAMPLE 8/10/15/20 전수 스윕**: 8이 Phase 1의 추천이자 이번
+  실측으로도 **가장 우수한 선택**임을 확인(임계값을 올릴수록 커버리지
+  하락 + 편향 전부 악화, 개선되는 지표 없음). 다만 정확히 8명짜리
+  소규모 peer group에서 1등이 percentile 93.8%로 튀는 현상(실측 확인)
+  — 임계값을 올리는 대신 confidence tier(HIGH/MEDIUM/LOW)로 작은
+  peer group의 정밀도를 낮춰 표시하는 방향 권고.
+- Phase 1의 bottom-10 실제 재계산: 계층형 모델 적용 후 전부 percentile
+  2~4배 상승했으나 대부분 여전히 하위 2~12% — "불공정 비교" 때문이
+  아니라 진짜 동급 단지 대비로도 약한 것으로 확인(정직한 결과).
+- V1/V2 eligibility gate 불일치를 독립적으로 재검증 — 실제 영향
+  0건 재확인, 발생 가능한 구체적 조건(위치데이터 수집이 불균등한
+  지역) 특정. V1 필드 9개 전부 USED/DEAD/SHARED로 분류 — DEAD는
+  UI에서 안 쓰이지만 `scripts/apartment-score/*` 내부 감사 스크립트가
+  in-process로 여전히 소비 중이라, public API 응답에서만 제거
+  가능(V1 계산 자체 제거는 미승인 범위 그대로 유지).
+- Model D 최종 구조 확정(absolute+peer+confidence+display 4계층),
+  총점 유지+peer 병기 권고 재확인, 사용자 문구 confidence별 3단계
+  제안, naming은 기본("이집점수" 유지)과 개인화("내 조건 적합도",
+  개인화 이후에만 사용) 분리 제안.
+
+서비스 기능 변경: 없음(감사/분석 전용).
+
+DB 변경: 없음. 모든 script는 read-only.
+
+테스트/빌드: `npx tsc --noEmit` — 기존 20개 그대로, 신규 0건. 신규
+스크립트 lint clean.
+
+상태: 완료.
+
+상세: `docs/development/EJIP_SCORE_V2_PEER_GROUP_AUDIT.md`

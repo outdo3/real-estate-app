@@ -1,0 +1,1375 @@
+{
+  "generatedAt": "2026-09-01T04:11:41.208Z",
+  "scoredCount": 2833,
+  "sizeBandThresholds": {
+    "small": "<50",
+    "mid": "50-221",
+    "large": ">=221"
+  },
+  "minSampleSweep": [
+    {
+      "minSample": 8,
+      "p1": {
+        "poolSizing": {
+          "n": 95,
+          "min": 1,
+          "p10": 5,
+          "p25": 9,
+          "median": 24,
+          "p75": 45,
+          "p90": 69,
+          "max": 101
+        },
+        "fallbackRate": 3.1,
+        "bias": {
+          "price": {
+            "rho": 0.26691691770514386,
+            "n": 2696
+          },
+          "buildYear": {
+            "rho": 0.06849738133633941,
+            "n": 2833
+          },
+          "households": {
+            "rho": 0.16485222110418146,
+            "n": 2740
+          }
+        }
+      },
+      "hierarchical": {
+        "levelCounts": {
+          "L2": 410,
+          "L3": 89,
+          "L1": 2334
+        },
+        "levelCountsPct": {
+          "L2": 14.5,
+          "L3": 3.1,
+          "L1": 82.4
+        },
+        "notAvailable": 0,
+        "l1PoolSizing": {
+          "n": 291,
+          "min": 1,
+          "p10": 1,
+          "p25": 2,
+          "median": 6,
+          "p75": 14,
+          "p90": 24,
+          "max": 48
+        },
+        "bias": {
+          "price": {
+            "rho": 0.19675214579146894,
+            "n": 2696
+          },
+          "buildYear": {
+            "rho": 0.03186749448184409,
+            "n": 2833
+          },
+          "households": {
+            "rho": 0.04575073837988181,
+            "n": 2740
+          }
+        }
+      },
+      "rankingStability_P1_vs_Hier": {
+        "rho": 0.9462756167498796,
+        "n": 2833
+      }
+    },
+    {
+      "minSample": 10,
+      "p1": {
+        "poolSizing": {
+          "n": 95,
+          "min": 1,
+          "p10": 5,
+          "p25": 9,
+          "median": 24,
+          "p75": 45,
+          "p90": 69,
+          "max": 101
+        },
+        "fallbackRate": 5,
+        "bias": {
+          "price": {
+            "rho": 0.281713511694498,
+            "n": 2696
+          },
+          "buildYear": {
+            "rho": 0.08676259122495364,
+            "n": 2833
+          },
+          "households": {
+            "rho": 0.1708386607465826,
+            "n": 2740
+          }
+        }
+      },
+      "hierarchical": {
+        "levelCounts": {
+          "L2": 529,
+          "L3": 141,
+          "L1": 2163
+        },
+        "levelCountsPct": {
+          "L2": 18.7,
+          "L3": 5,
+          "L1": 76.4
+        },
+        "notAvailable": 0,
+        "l1PoolSizing": {
+          "n": 291,
+          "min": 1,
+          "p10": 1,
+          "p25": 2,
+          "median": 6,
+          "p75": 14,
+          "p90": 24,
+          "max": 48
+        },
+        "bias": {
+          "price": {
+            "rho": 0.20760070087587476,
+            "n": 2696
+          },
+          "buildYear": {
+            "rho": 0.034043569207928455,
+            "n": 2833
+          },
+          "households": {
+            "rho": 0.05160491326580978,
+            "n": 2740
+          }
+        }
+      },
+      "rankingStability_P1_vs_Hier": {
+        "rho": 0.9470321270134896,
+        "n": 2833
+      }
+    },
+    {
+      "minSample": 15,
+      "p1": {
+        "poolSizing": {
+          "n": 95,
+          "min": 1,
+          "p10": 5,
+          "p25": 9,
+          "median": 24,
+          "p75": 45,
+          "p90": 69,
+          "max": 101
+        },
+        "fallbackRate": 9.7,
+        "bias": {
+          "price": {
+            "rho": 0.30328375809020264,
+            "n": 2696
+          },
+          "buildYear": {
+            "rho": 0.12935771971043425,
+            "n": 2833
+          },
+          "households": {
+            "rho": 0.18339665814360814,
+            "n": 2740
+          }
+        }
+      },
+      "hierarchical": {
+        "levelCounts": {
+          "L3": 263,
+          "L2": 850,
+          "L1": 1707,
+          "L4": 13
+        },
+        "levelCountsPct": {
+          "L3": 9.3,
+          "L2": 30,
+          "L1": 60.3,
+          "L4": 0.5
+        },
+        "notAvailable": 0,
+        "l1PoolSizing": {
+          "n": 291,
+          "min": 1,
+          "p10": 1,
+          "p25": 2,
+          "median": 6,
+          "p75": 14,
+          "p90": 24,
+          "max": 48
+        },
+        "bias": {
+          "price": {
+            "rho": 0.2231286604653998,
+            "n": 2696
+          },
+          "buildYear": {
+            "rho": 0.036639710322839227,
+            "n": 2833
+          },
+          "households": {
+            "rho": 0.07624864903695995,
+            "n": 2740
+          }
+        }
+      },
+      "rankingStability_P1_vs_Hier": {
+        "rho": 0.9523430367289902,
+        "n": 2833
+      }
+    },
+    {
+      "minSample": 20,
+      "p1": {
+        "poolSizing": {
+          "n": 95,
+          "min": 1,
+          "p10": 5,
+          "p25": 9,
+          "median": 24,
+          "p75": 45,
+          "p90": 69,
+          "max": 101
+        },
+        "fallbackRate": 12.6,
+        "bias": {
+          "price": {
+            "rho": 0.3123102532715093,
+            "n": 2696
+          },
+          "buildYear": {
+            "rho": 0.14920489376270535,
+            "n": 2833
+          },
+          "households": {
+            "rho": 0.17913326951356978,
+            "n": 2740
+          }
+        }
+      },
+      "hierarchical": {
+        "levelCounts": {
+          "L3": 345,
+          "L2": 1252,
+          "L1": 1223,
+          "L4": 13
+        },
+        "levelCountsPct": {
+          "L3": 12.2,
+          "L2": 44.2,
+          "L1": 43.2,
+          "L4": 0.5
+        },
+        "notAvailable": 0,
+        "l1PoolSizing": {
+          "n": 291,
+          "min": 1,
+          "p10": 1,
+          "p25": 2,
+          "median": 6,
+          "p75": 14,
+          "p90": 24,
+          "max": 48
+        },
+        "bias": {
+          "price": {
+            "rho": 0.24399282488092203,
+            "n": 2696
+          },
+          "buildYear": {
+            "rho": 0.050735737118214275,
+            "n": 2833
+          },
+          "households": {
+            "rho": 0.08707270923173391,
+            "n": 2740
+          }
+        }
+      },
+      "rankingStability_P1_vs_Hier": {
+        "rho": 0.9562726225739644,
+        "n": 2833
+      }
+    }
+  ],
+  "phase1BottomTracking": [
+    {
+      "aptSeq": "26530-48",
+      "name": "엄궁",
+      "gu": "사상구",
+      "buildYear": 1983,
+      "totalHouseholds": 10,
+      "sizeBand": "small",
+      "v2Score": 15,
+      "p1_percentile_gu_decade": 2.3,
+      "hier_percentile": 5.6,
+      "hier_level": 1,
+      "hier_poolSize": 9,
+      "hier_peerKey": "사상구|1980s|small"
+    },
+    {
+      "aptSeq": "26200-15",
+      "name": "동산(1106)",
+      "gu": "영도구",
+      "buildYear": 1990,
+      "totalHouseholds": 52,
+      "sizeBand": "mid",
+      "v2Score": 16,
+      "p1_percentile_gu_decade": 2,
+      "hier_percentile": 5.6,
+      "hier_level": 1,
+      "hier_poolSize": 9,
+      "hier_peerKey": "영도구|1990s|mid"
+    },
+    {
+      "aptSeq": "26350-297",
+      "name": "그린빌라",
+      "gu": "해운대구",
+      "buildYear": 1991,
+      "totalHouseholds": 19,
+      "sizeBand": "small",
+      "v2Score": 18,
+      "p1_percentile_gu_decade": 0.5,
+      "hier_percentile": 1.7,
+      "hier_level": 1,
+      "hier_poolSize": 30,
+      "hier_peerKey": "해운대구|1990s|small"
+    },
+    {
+      "aptSeq": "26350-296",
+      "name": "라온힐즈",
+      "gu": "해운대구",
+      "buildYear": 1993,
+      "totalHouseholds": 19,
+      "sizeBand": "small",
+      "v2Score": 19,
+      "p1_percentile_gu_decade": 1.5,
+      "hier_percentile": 5,
+      "hier_level": 1,
+      "hier_poolSize": 30,
+      "hier_peerKey": "해운대구|1990s|small"
+    },
+    {
+      "aptSeq": "26350-295",
+      "name": "영동써니",
+      "gu": "해운대구",
+      "buildYear": 1992,
+      "totalHouseholds": 19,
+      "sizeBand": "small",
+      "v2Score": 20,
+      "p1_percentile_gu_decade": 2.6,
+      "hier_percentile": 8.3,
+      "hier_level": 1,
+      "hier_poolSize": 30,
+      "hier_peerKey": "해운대구|1990s|small"
+    },
+    {
+      "aptSeq": "26230-42",
+      "name": "대진파레스필즈",
+      "gu": "부산진구",
+      "buildYear": 1992,
+      "totalHouseholds": 160,
+      "sizeBand": "mid",
+      "v2Score": 21,
+      "p1_percentile_gu_decade": 1.1,
+      "hier_percentile": 5.6,
+      "hier_level": 1,
+      "hier_poolSize": 9,
+      "hier_peerKey": "부산진구|1990s|mid"
+    },
+    {
+      "aptSeq": "26350-276",
+      "name": "동부썬빌라",
+      "gu": "해운대구",
+      "buildYear": 1993,
+      "totalHouseholds": 19,
+      "sizeBand": "small",
+      "v2Score": 22,
+      "p1_percentile_gu_decade": 3.6,
+      "hier_percentile": 11.7,
+      "hier_level": 1,
+      "hier_poolSize": 30,
+      "hier_peerKey": "해운대구|1990s|small"
+    },
+    {
+      "aptSeq": "26410-341",
+      "name": "동성베스트",
+      "gu": "금정구",
+      "buildYear": 2004,
+      "totalHouseholds": 19,
+      "sizeBand": "small",
+      "v2Score": 22,
+      "p1_percentile_gu_decade": 0.7,
+      "hier_percentile": 1.2,
+      "hier_level": 1,
+      "hier_poolSize": 41,
+      "hier_peerKey": "금정구|2000s|small"
+    },
+    {
+      "aptSeq": "26140-114",
+      "name": "송도현대",
+      "gu": "서구",
+      "buildYear": 1992,
+      "totalHouseholds": 208,
+      "sizeBand": "mid",
+      "v2Score": 22,
+      "p1_percentile_gu_decade": 2.5,
+      "hier_percentile": 3.6,
+      "hier_level": 1,
+      "hier_poolSize": 14,
+      "hier_peerKey": "서구|1990s|mid"
+    },
+    {
+      "aptSeq": "26230-43",
+      "name": "삼환",
+      "gu": "부산진구",
+      "buildYear": 2002,
+      "totalHouseholds": 230,
+      "sizeBand": "large",
+      "v2Score": 23,
+      "p1_percentile_gu_decade": 0.5,
+      "hier_percentile": 1.5,
+      "hier_level": 1,
+      "hier_poolSize": 33,
+      "hier_peerKey": "부산진구|2000s|large"
+    }
+  ],
+  "sampleDetail_minSample8": {
+    "bottom20": [
+      {
+        "aptSeq": "26530-48",
+        "name": "엄궁",
+        "gu": "사상구",
+        "buildYear": 1983,
+        "totalHouseholds": 10,
+        "sizeBand": "small",
+        "v2Score": 15,
+        "p1_percentile": 2.3,
+        "hier_percentile": 5.6,
+        "hier_level": 1,
+        "hier_poolSize": 9,
+        "hier_peerKey": "사상구|1980s|small"
+      },
+      {
+        "aptSeq": "26200-15",
+        "name": "동산(1106)",
+        "gu": "영도구",
+        "buildYear": 1990,
+        "totalHouseholds": 52,
+        "sizeBand": "mid",
+        "v2Score": 16,
+        "p1_percentile": 2,
+        "hier_percentile": 5.6,
+        "hier_level": 1,
+        "hier_poolSize": 9,
+        "hier_peerKey": "영도구|1990s|mid"
+      },
+      {
+        "aptSeq": "26350-297",
+        "name": "그린빌라",
+        "gu": "해운대구",
+        "buildYear": 1991,
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "v2Score": 18,
+        "p1_percentile": 0.5,
+        "hier_percentile": 1.7,
+        "hier_level": 1,
+        "hier_poolSize": 30,
+        "hier_peerKey": "해운대구|1990s|small"
+      },
+      {
+        "aptSeq": "26350-296",
+        "name": "라온힐즈",
+        "gu": "해운대구",
+        "buildYear": 1993,
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "v2Score": 19,
+        "p1_percentile": 1.5,
+        "hier_percentile": 5,
+        "hier_level": 1,
+        "hier_poolSize": 30,
+        "hier_peerKey": "해운대구|1990s|small"
+      },
+      {
+        "aptSeq": "26350-295",
+        "name": "영동써니",
+        "gu": "해운대구",
+        "buildYear": 1992,
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "v2Score": 20,
+        "p1_percentile": 2.6,
+        "hier_percentile": 8.3,
+        "hier_level": 1,
+        "hier_poolSize": 30,
+        "hier_peerKey": "해운대구|1990s|small"
+      },
+      {
+        "aptSeq": "26230-42",
+        "name": "대진파레스필즈",
+        "gu": "부산진구",
+        "buildYear": 1992,
+        "totalHouseholds": 160,
+        "sizeBand": "mid",
+        "v2Score": 21,
+        "p1_percentile": 1.1,
+        "hier_percentile": 5.6,
+        "hier_level": 1,
+        "hier_poolSize": 9,
+        "hier_peerKey": "부산진구|1990s|mid"
+      },
+      {
+        "aptSeq": "26350-276",
+        "name": "동부썬빌라",
+        "gu": "해운대구",
+        "buildYear": 1993,
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "v2Score": 22,
+        "p1_percentile": 3.6,
+        "hier_percentile": 11.7,
+        "hier_level": 1,
+        "hier_poolSize": 30,
+        "hier_peerKey": "해운대구|1990s|small"
+      },
+      {
+        "aptSeq": "26410-341",
+        "name": "동성베스트",
+        "gu": "금정구",
+        "buildYear": 2004,
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "v2Score": 22,
+        "p1_percentile": 0.7,
+        "hier_percentile": 1.2,
+        "hier_level": 1,
+        "hier_poolSize": 41,
+        "hier_peerKey": "금정구|2000s|small"
+      },
+      {
+        "aptSeq": "26140-114",
+        "name": "송도현대",
+        "gu": "서구",
+        "buildYear": 1992,
+        "totalHouseholds": 208,
+        "sizeBand": "mid",
+        "v2Score": 22,
+        "p1_percentile": 2.5,
+        "hier_percentile": 3.6,
+        "hier_level": 1,
+        "hier_poolSize": 14,
+        "hier_peerKey": "서구|1990s|mid"
+      },
+      {
+        "aptSeq": "26230-43",
+        "name": "삼환",
+        "gu": "부산진구",
+        "buildYear": 2002,
+        "totalHouseholds": 230,
+        "sizeBand": "large",
+        "v2Score": 23,
+        "p1_percentile": 0.5,
+        "hier_percentile": 1.5,
+        "hier_level": 1,
+        "hier_poolSize": 33,
+        "hier_peerKey": "부산진구|2000s|large"
+      },
+      {
+        "aptSeq": "26710-41",
+        "name": "재흥",
+        "gu": "기장군",
+        "buildYear": 1990,
+        "totalHouseholds": 170,
+        "sizeBand": "mid",
+        "v2Score": 23,
+        "p1_percentile": 2.9,
+        "hier_percentile": 2.9,
+        "hier_level": 2,
+        "hier_poolSize": 17,
+        "hier_peerKey": "기장군|1990s"
+      },
+      {
+        "aptSeq": "26350-204",
+        "name": "동서하이빌아파트",
+        "gu": "해운대구",
+        "buildYear": 2000,
+        "totalHouseholds": 40,
+        "sizeBand": "small",
+        "v2Score": 23,
+        "p1_percentile": 1,
+        "hier_percentile": 4.2,
+        "hier_level": 1,
+        "hier_poolSize": 12,
+        "hier_peerKey": "해운대구|2000s|small"
+      },
+      {
+        "aptSeq": "26380-275",
+        "name": "제일(13-1105)",
+        "gu": "사하구",
+        "buildYear": 1976,
+        "totalHouseholds": 60,
+        "sizeBand": "mid",
+        "v2Score": 23,
+        "p1_percentile": 0.4,
+        "hier_percentile": 0.5,
+        "hier_level": 3,
+        "hier_poolSize": 109,
+        "hier_peerKey": "1970s"
+      },
+      {
+        "aptSeq": "26710-570",
+        "name": "명례솔터시티",
+        "gu": "기장군",
+        "buildYear": 2016,
+        "totalHouseholds": 84,
+        "sizeBand": "mid",
+        "v2Score": 23,
+        "p1_percentile": 1.1,
+        "hier_percentile": 4.5,
+        "hier_level": 1,
+        "hier_poolSize": 11,
+        "hier_peerKey": "기장군|2010s|mid"
+      },
+      {
+        "aptSeq": "26140-111",
+        "name": "전원비치맨션",
+        "gu": "서구",
+        "buildYear": 1990,
+        "totalHouseholds": 82,
+        "sizeBand": "mid",
+        "v2Score": 23,
+        "p1_percentile": 7.5,
+        "hier_percentile": 10.7,
+        "hier_level": 1,
+        "hier_poolSize": 14,
+        "hier_peerKey": "서구|1990s|mid"
+      },
+      {
+        "aptSeq": "26350-200",
+        "name": "상림팰리스빌",
+        "gu": "해운대구",
+        "buildYear": 2003,
+        "totalHouseholds": 10,
+        "sizeBand": "small",
+        "v2Score": 24,
+        "p1_percentile": 2.9,
+        "hier_percentile": 12.5,
+        "hier_level": 1,
+        "hier_poolSize": 12,
+        "hier_peerKey": "해운대구|2000s|small"
+      },
+      {
+        "aptSeq": "26350-361",
+        "name": "동부문빌라",
+        "gu": "해운대구",
+        "buildYear": 1997,
+        "totalHouseholds": 10,
+        "sizeBand": "small",
+        "v2Score": 24,
+        "p1_percentile": 5.2,
+        "hier_percentile": 16.7,
+        "hier_level": 1,
+        "hier_poolSize": 30,
+        "hier_peerKey": "해운대구|1990s|small"
+      },
+      {
+        "aptSeq": "26140-115",
+        "name": "송도혜성비치타운",
+        "gu": "서구",
+        "buildYear": 1993,
+        "totalHouseholds": 150,
+        "sizeBand": "mid",
+        "v2Score": 24,
+        "p1_percentile": 12.5,
+        "hier_percentile": 17.9,
+        "hier_level": 1,
+        "hier_poolSize": 14,
+        "hier_peerKey": "서구|1990s|mid"
+      },
+      {
+        "aptSeq": "26350-262",
+        "name": "대림엠파이어빌라",
+        "gu": "해운대구",
+        "buildYear": 1992,
+        "totalHouseholds": 18,
+        "sizeBand": "small",
+        "v2Score": 24,
+        "p1_percentile": 5.2,
+        "hier_percentile": 16.7,
+        "hier_level": 1,
+        "hier_poolSize": 30,
+        "hier_peerKey": "해운대구|1990s|small"
+      },
+      {
+        "aptSeq": "26710-40",
+        "name": "성림",
+        "gu": "기장군",
+        "buildYear": 1989,
+        "totalHouseholds": 70,
+        "sizeBand": "mid",
+        "v2Score": 25,
+        "p1_percentile": 0.7,
+        "hier_percentile": 0.4,
+        "hier_level": 3,
+        "hier_poolSize": 388,
+        "hier_peerKey": "1980s"
+      }
+    ],
+    "middle20": [
+      {
+        "aptSeq": "26380-13",
+        "name": "동덕",
+        "gu": "사하구",
+        "buildYear": 1987,
+        "totalHouseholds": 40,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 76.6,
+        "hier_percentile": 84.2,
+        "hier_level": 1,
+        "hier_poolSize": 19,
+        "hier_peerKey": "사하구|1980s|small"
+      },
+      {
+        "aptSeq": "26380-31",
+        "name": "새괴정화신",
+        "gu": "사하구",
+        "buildYear": 1981,
+        "totalHouseholds": 100,
+        "sizeBand": "mid",
+        "v2Score": 55,
+        "p1_percentile": 76.6,
+        "hier_percentile": 81,
+        "hier_level": 1,
+        "hier_poolSize": 29,
+        "hier_peerKey": "사하구|1980s|mid"
+      },
+      {
+        "aptSeq": "26350-131",
+        "name": "엘지",
+        "gu": "해운대구",
+        "buildYear": 1996,
+        "totalHouseholds": 48,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 64.9,
+        "hier_percentile": 76.7,
+        "hier_level": 1,
+        "hier_poolSize": 30,
+        "hier_peerKey": "해운대구|1990s|small"
+      },
+      {
+        "aptSeq": "26350-2342",
+        "name": "해운대자이2차1단지",
+        "gu": "해운대구",
+        "buildYear": 2018,
+        "totalHouseholds": 734,
+        "sizeBand": "large",
+        "v2Score": 55,
+        "p1_percentile": 40.4,
+        "hier_percentile": 40,
+        "hier_level": 1,
+        "hier_poolSize": 25,
+        "hier_peerKey": "해운대구|2010s|large"
+      },
+      {
+        "aptSeq": "26470-1421",
+        "name": "세경미가",
+        "gu": "연제구",
+        "buildYear": 2016,
+        "totalHouseholds": 30,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 13.8,
+        "hier_percentile": 10.5,
+        "hier_level": 1,
+        "hier_poolSize": 19,
+        "hier_peerKey": "연제구|2010s|small"
+      },
+      {
+        "aptSeq": "26470-11",
+        "name": "대원",
+        "gu": "연제구",
+        "buildYear": 1983,
+        "totalHouseholds": 80,
+        "sizeBand": "mid",
+        "v2Score": 55,
+        "p1_percentile": 85.9,
+        "hier_percentile": 81.3,
+        "hier_level": 1,
+        "hier_poolSize": 16,
+        "hier_peerKey": "연제구|1980s|mid"
+      },
+      {
+        "aptSeq": "26380-1964",
+        "name": "JPark",
+        "gu": "사하구",
+        "buildYear": 2017,
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 31,
+        "hier_percentile": 34.1,
+        "hier_level": 1,
+        "hier_poolSize": 22,
+        "hier_peerKey": "사하구|2010s|small"
+      },
+      {
+        "aptSeq": "26170-748",
+        "name": "부산역유림로미오",
+        "gu": "동구",
+        "buildYear": 2014,
+        "totalHouseholds": 286,
+        "sizeBand": "large",
+        "v2Score": 55,
+        "p1_percentile": 27.6,
+        "hier_percentile": 38.9,
+        "hier_level": 1,
+        "hier_poolSize": 9,
+        "hier_peerKey": "동구|2010s|large"
+      },
+      {
+        "aptSeq": "26170-51",
+        "name": "초량하이츠빌리지",
+        "gu": "동구",
+        "buildYear": 2002,
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 59.4,
+        "hier_percentile": 68.2,
+        "hier_level": 1,
+        "hier_poolSize": 11,
+        "hier_peerKey": "동구|2000s|small"
+      },
+      {
+        "aptSeq": "26530-72",
+        "name": "주례",
+        "gu": "사상구",
+        "buildYear": 1975,
+        "totalHouseholds": 31,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 48.9,
+        "hier_percentile": 81.7,
+        "hier_level": 3,
+        "hier_poolSize": 109,
+        "hier_peerKey": "1970s"
+      },
+      {
+        "aptSeq": "26530-54",
+        "name": "광우파크",
+        "gu": "사상구",
+        "buildYear": 1986,
+        "totalHouseholds": 25,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 70.5,
+        "hier_percentile": 83.3,
+        "hier_level": 1,
+        "hier_poolSize": 9,
+        "hier_peerKey": "사상구|1980s|small"
+      },
+      {
+        "aptSeq": "26710-23",
+        "name": "대진로얄",
+        "gu": "기장군",
+        "buildYear": 1990,
+        "totalHouseholds": 116,
+        "sizeBand": "mid",
+        "v2Score": 55,
+        "p1_percentile": 85.3,
+        "hier_percentile": 85.3,
+        "hier_level": 2,
+        "hier_poolSize": 17,
+        "hier_peerKey": "기장군|1990s"
+      },
+      {
+        "aptSeq": "26290-76",
+        "name": "무학프라자",
+        "gu": "남구",
+        "buildYear": 1997,
+        "totalHouseholds": 64,
+        "sizeBand": "mid",
+        "v2Score": 55,
+        "p1_percentile": 91.2,
+        "hier_percentile": 84.4,
+        "hier_level": 1,
+        "hier_poolSize": 16,
+        "hier_peerKey": "남구|1990s|mid"
+      },
+      {
+        "aptSeq": "26320-56",
+        "name": "화명대우",
+        "gu": "북구",
+        "buildYear": 2000,
+        "totalHouseholds": 316,
+        "sizeBand": "large",
+        "v2Score": 55,
+        "p1_percentile": 28.8,
+        "hier_percentile": 18,
+        "hier_level": 1,
+        "hier_poolSize": 25,
+        "hier_peerKey": "북구|2000s|large"
+      },
+      {
+        "aptSeq": "26320-1481",
+        "name": "화명동롯데캐슬멤버스",
+        "gu": "북구",
+        "buildYear": 2007,
+        "totalHouseholds": 299,
+        "sizeBand": "large",
+        "v2Score": 55,
+        "p1_percentile": 28.8,
+        "hier_percentile": 18,
+        "hier_level": 1,
+        "hier_poolSize": 25,
+        "hier_peerKey": "북구|2000s|large"
+      },
+      {
+        "aptSeq": "26470-207",
+        "name": "보성하이츠빌라2차",
+        "gu": "연제구",
+        "buildYear": 2001,
+        "totalHouseholds": 9,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 28.1,
+        "hier_percentile": 31.8,
+        "hier_level": 1,
+        "hier_poolSize": 22,
+        "hier_peerKey": "연제구|2000s|small"
+      },
+      {
+        "aptSeq": "26470-99",
+        "name": "진흥목화",
+        "gu": "연제구",
+        "buildYear": 1984,
+        "totalHouseholds": 70,
+        "sizeBand": "mid",
+        "v2Score": 55,
+        "p1_percentile": 85.9,
+        "hier_percentile": 81.3,
+        "hier_level": 1,
+        "hier_poolSize": 16,
+        "hier_peerKey": "연제구|1980s|mid"
+      },
+      {
+        "aptSeq": "26500-206",
+        "name": "주안골드빌리지",
+        "gu": "수영구",
+        "buildYear": 2004,
+        "totalHouseholds": 16,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 42.2,
+        "hier_percentile": 39.2,
+        "hier_level": 1,
+        "hier_poolSize": 37,
+        "hier_peerKey": "수영구|2000s|small"
+      },
+      {
+        "aptSeq": "26500-150",
+        "name": "솔내음파비르",
+        "gu": "수영구",
+        "buildYear": 2003,
+        "totalHouseholds": 24,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 42.2,
+        "hier_percentile": 39.2,
+        "hier_level": 1,
+        "hier_poolSize": 37,
+        "hier_peerKey": "수영구|2000s|small"
+      },
+      {
+        "aptSeq": "26500-156",
+        "name": "보람빌리지",
+        "gu": "수영구",
+        "buildYear": 2003,
+        "totalHouseholds": 11,
+        "sizeBand": "small",
+        "v2Score": 55,
+        "p1_percentile": 42.2,
+        "hier_percentile": 39.2,
+        "hier_level": 1,
+        "hier_poolSize": 37,
+        "hier_peerKey": "수영구|2000s|small"
+      }
+    ],
+    "top20": [
+      {
+        "aptSeq": "26230-2523",
+        "name": "개금역금강펜테리움더스퀘어아파트",
+        "gu": "부산진구",
+        "buildYear": 2018,
+        "totalHouseholds": 620,
+        "sizeBand": "large",
+        "v2Score": 78,
+        "p1_percentile": 99.5,
+        "hier_percentile": 96.7,
+        "hier_level": 1,
+        "hier_poolSize": 15,
+        "hier_peerKey": "부산진구|2010s|large"
+      },
+      {
+        "aptSeq": "26260-2110",
+        "name": "동래효성해링턴플레이스",
+        "gu": "동래구",
+        "buildYear": 2019,
+        "totalHouseholds": 762,
+        "sizeBand": "large",
+        "v2Score": 77,
+        "p1_percentile": 99.4,
+        "hier_percentile": 97.9,
+        "hier_level": 1,
+        "hier_poolSize": 24,
+        "hier_peerKey": "동래구|2010s|large"
+      },
+      {
+        "aptSeq": "26230-1682",
+        "name": "전포동에메랄드홈",
+        "gu": "부산진구",
+        "buildYear": 2006,
+        "totalHouseholds": 241,
+        "sizeBand": "large",
+        "v2Score": 77,
+        "p1_percentile": 99.5,
+        "hier_percentile": 98.5,
+        "hier_level": 1,
+        "hier_poolSize": 33,
+        "hier_peerKey": "부산진구|2000s|large"
+      },
+      {
+        "aptSeq": "26230-2845",
+        "name": "서면롯데캐슬엘루체",
+        "gu": "부산진구",
+        "buildYear": 2023,
+        "totalHouseholds": 450,
+        "sizeBand": "large",
+        "v2Score": 77,
+        "p1_percentile": 97.7,
+        "hier_percentile": 98.1,
+        "hier_level": 1,
+        "hier_poolSize": 26,
+        "hier_peerKey": "부산진구|2020s|large"
+      },
+      {
+        "aptSeq": "26230-2853",
+        "name": "서면동원시티비스타",
+        "gu": "부산진구",
+        "buildYear": 2024,
+        "totalHouseholds": 176,
+        "sizeBand": "mid",
+        "v2Score": 77,
+        "p1_percentile": 97.7,
+        "hier_percentile": 96.2,
+        "hier_level": 1,
+        "hier_poolSize": 13,
+        "hier_peerKey": "부산진구|2020s|mid"
+      },
+      {
+        "aptSeq": "26470-1566",
+        "name": "아시아드코오롱하늘채",
+        "gu": "연제구",
+        "buildYear": 2019,
+        "totalHouseholds": 660,
+        "sizeBand": "large",
+        "v2Score": 76,
+        "p1_percentile": 99.1,
+        "hier_percentile": 96.9,
+        "hier_level": 1,
+        "hier_poolSize": 16,
+        "hier_peerKey": "연제구|2010s|large"
+      },
+      {
+        "aptSeq": "26260-2024",
+        "name": "사직롯데캐슬더클래식",
+        "gu": "동래구",
+        "buildYear": 2017,
+        "totalHouseholds": 1064,
+        "sizeBand": "large",
+        "v2Score": 75,
+        "p1_percentile": 97.5,
+        "hier_percentile": 91.7,
+        "hier_level": 1,
+        "hier_poolSize": 24,
+        "hier_peerKey": "동래구|2010s|large"
+      },
+      {
+        "aptSeq": "26500-1941",
+        "name": "광일센텀스카이뷰",
+        "gu": "수영구",
+        "buildYear": 2016,
+        "totalHouseholds": 58,
+        "sizeBand": "mid",
+        "v2Score": 75,
+        "p1_percentile": 99.1,
+        "hier_percentile": 97.4,
+        "hier_level": 1,
+        "hier_poolSize": 19,
+        "hier_peerKey": "수영구|2010s|mid"
+      },
+      {
+        "aptSeq": "26470-3051",
+        "name": "레이카운티(5단지)",
+        "gu": "연제구",
+        "buildYear": 2024,
+        "totalHouseholds": 4470,
+        "sizeBand": "large",
+        "v2Score": 75,
+        "p1_percentile": 96.4,
+        "hier_percentile": 95.5,
+        "hier_level": 1,
+        "hier_poolSize": 11,
+        "hier_peerKey": "연제구|2020s|large"
+      },
+      {
+        "aptSeq": "26500-2288",
+        "name": "리부스남천",
+        "gu": "수영구",
+        "buildYear": 2021,
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "v2Score": 75,
+        "p1_percentile": 97.8,
+        "hier_percentile": 97.8,
+        "hier_level": 2,
+        "hier_poolSize": 23,
+        "hier_peerKey": "수영구|2020s"
+      },
+      {
+        "aptSeq": "26380-2053",
+        "name": "사하역비스타동원",
+        "gu": "사하구",
+        "buildYear": 2021,
+        "totalHouseholds": 513,
+        "sizeBand": "large",
+        "v2Score": 75,
+        "p1_percentile": 94.4,
+        "hier_percentile": 94.4,
+        "hier_level": 2,
+        "hier_poolSize": 9,
+        "hier_peerKey": "사하구|2020s"
+      },
+      {
+        "aptSeq": "26260-2172",
+        "name": "동래롯데캐슬퀸",
+        "gu": "동래구",
+        "buildYear": 2020,
+        "totalHouseholds": 210,
+        "sizeBand": "mid",
+        "v2Score": 75,
+        "p1_percentile": 97.9,
+        "hier_percentile": 97.9,
+        "hier_level": 2,
+        "hier_poolSize": 24,
+        "hier_peerKey": "동래구|2020s"
+      },
+      {
+        "aptSeq": "26260-2104",
+        "name": "명륜자이",
+        "gu": "동래구",
+        "buildYear": 2019,
+        "totalHouseholds": 671,
+        "sizeBand": "large",
+        "v2Score": 75,
+        "p1_percentile": 97.5,
+        "hier_percentile": 91.7,
+        "hier_level": 1,
+        "hier_poolSize": 24,
+        "hier_peerKey": "동래구|2010s|large"
+      },
+      {
+        "aptSeq": "26470-3047",
+        "name": "레이카운티(1단지)",
+        "gu": "연제구",
+        "buildYear": 2023,
+        "totalHouseholds": 4470,
+        "sizeBand": "large",
+        "v2Score": 74,
+        "p1_percentile": 78.6,
+        "hier_percentile": 72.7,
+        "hier_level": 1,
+        "hier_poolSize": 11,
+        "hier_peerKey": "연제구|2020s|large"
+      },
+      {
+        "aptSeq": "26260-2055",
+        "name": "천일스카이원",
+        "gu": "동래구",
+        "buildYear": 2018,
+        "totalHouseholds": 215,
+        "sizeBand": "mid",
+        "v2Score": 74,
+        "p1_percentile": 95.7,
+        "hier_percentile": 97.9,
+        "hier_level": 1,
+        "hier_poolSize": 24,
+        "hier_peerKey": "동래구|2010s|mid"
+      },
+      {
+        "aptSeq": "26500-2172",
+        "name": "센텀디아이리더스",
+        "gu": "수영구",
+        "buildYear": 2019,
+        "totalHouseholds": 28,
+        "sizeBand": "small",
+        "v2Score": 74,
+        "p1_percentile": 96.5,
+        "hier_percentile": 98.1,
+        "hier_level": 1,
+        "hier_poolSize": 26,
+        "hier_peerKey": "수영구|2010s|small"
+      },
+      {
+        "aptSeq": "26500-2132",
+        "name": "라움팰리스타워",
+        "gu": "수영구",
+        "buildYear": 2018,
+        "totalHouseholds": 73,
+        "sizeBand": "mid",
+        "v2Score": 74,
+        "p1_percentile": 96.5,
+        "hier_percentile": 92.1,
+        "hier_level": 1,
+        "hier_poolSize": 19,
+        "hier_peerKey": "수영구|2010s|mid"
+      },
+      {
+        "aptSeq": "26470-3050",
+        "name": "레이카운티(4단지)",
+        "gu": "연제구",
+        "buildYear": 2023,
+        "totalHouseholds": 4470,
+        "sizeBand": "large",
+        "v2Score": 74,
+        "p1_percentile": 78.6,
+        "hier_percentile": 72.7,
+        "hier_level": 1,
+        "hier_poolSize": 11,
+        "hier_peerKey": "연제구|2020s|large"
+      },
+      {
+        "aptSeq": "26380-2019",
+        "name": "대림SM",
+        "gu": "사하구",
+        "buildYear": 2019,
+        "totalHouseholds": 26,
+        "sizeBand": "small",
+        "v2Score": 74,
+        "p1_percentile": 99.1,
+        "hier_percentile": 97.7,
+        "hier_level": 1,
+        "hier_poolSize": 22,
+        "hier_peerKey": "사하구|2010s|small"
+      },
+      {
+        "aptSeq": "26260-1469",
+        "name": "강변뜨란채",
+        "gu": "동래구",
+        "buildYear": 2006,
+        "totalHouseholds": 814,
+        "sizeBand": "large",
+        "v2Score": 74,
+        "p1_percentile": 99.3,
+        "hier_percentile": 97.6,
+        "hier_level": 1,
+        "hier_poolSize": 21,
+        "hier_peerKey": "동래구|2000s|large"
+      }
+    ]
+  },
+  "tinyPoolSensitivityExamples": [
+    {
+      "peerKey": "부산진구|1990s|UNKNOWN",
+      "poolSize": 8,
+      "sortedScoresDesc": [
+        60,
+        58,
+        50,
+        50,
+        45,
+        43,
+        40,
+        34
+      ],
+      "rank1Percentile": 93.8,
+      "rank2Percentile": 81.3
+    },
+    {
+      "peerKey": "해운대구|2000s|mid",
+      "poolSize": 8,
+      "sortedScoresDesc": [
+        69,
+        67,
+        65,
+        64,
+        63,
+        58,
+        56,
+        34
+      ],
+      "rank1Percentile": 93.8,
+      "rank2Percentile": 81.3
+    },
+    {
+      "peerKey": "동구|1960s|mid",
+      "poolSize": 8,
+      "sortedScoresDesc": [
+        45,
+        44,
+        43,
+        43,
+        42,
+        42,
+        42,
+        40
+      ],
+      "rank1Percentile": 93.8,
+      "rank2Percentile": 81.3
+    },
+    {
+      "peerKey": "영도구|2000s|mid",
+      "poolSize": 8,
+      "sortedScoresDesc": [
+        55,
+        55,
+        53,
+        51,
+        46,
+        38,
+        34,
+        34
+      ],
+      "rank1Percentile": 87.5,
+      "rank2Percentile": 87.5
+    },
+    {
+      "peerKey": "사상구|2000s|small",
+      "poolSize": 8,
+      "sortedScoresDesc": [
+        60,
+        55,
+        52,
+        46,
+        46,
+        36,
+        32,
+        32
+      ],
+      "rank1Percentile": 93.8,
+      "rank2Percentile": 81.3
+    }
+  ],
+  "l1PoolsAtExactlyMinSample": {
+    "count8": 9,
+    "totalL1Groups": 291
+  }
+}
