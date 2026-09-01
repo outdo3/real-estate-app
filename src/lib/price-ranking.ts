@@ -15,6 +15,7 @@
 // 재사용하지 않고 이 파일에서 별도로 계산한다.
 
 import { identityKey, areaKey, groupKey, dedupeTrades, filterVerifiedTrades, type FeedTrade } from './regional-feed';
+import { deriveArea84PriceFields, isInArea84Band, DEFAULT_AREA84_BAND, type Area84Band } from './area84-pure';
 
 export type { FeedTrade };
 export { identityKey, areaKey, groupKey, dedupeTrades, filterVerifiedTrades };
@@ -402,20 +403,12 @@ export function buildJeonseRiskInterpretation(row: Pick<JeonseRiskRow, 'declineP
 // 명백히 다른 면적군). "84㎡ 국민평형" 실거래 군집은 정확히 이 경계와 일치해
 // 추정 없이 그대로 채택한다. §7/§8 — inclusion은 이 raw band로만 판정하고, 각
 // 거래의 exact raw area(예: 84.7855 vs 84.9950)는 절대 병합하지 않는다 — band는
-// "후보를 넓게 모으는" 용도일 뿐 identity가 아니다.
-export const AREA84_BAND_MIN = 84;
-export const AREA84_BAND_MAX = 85; // exclusive
-
-export interface Area84Band {
-  min: number;
-  max: number;
-}
-
-export const DEFAULT_AREA84_BAND: Area84Band = { min: AREA84_BAND_MIN, max: AREA84_BAND_MAX };
-
-export function isInArea84Band(area: number | null, band: Area84Band = DEFAULT_AREA84_BAND): boolean {
-  return area != null && area >= band.min && area < band.max;
-}
+// "후보를 넓게 모으는" 용도일 뿐 identity가 아니다. 정의는 area84-pure.ts에
+// 있다(§PERFORMANCE_V1_1_B — zero-import 순수 모듈로 분리해 .test.mjs로
+// 직접 테스트 가능하게 함), 여기서는 재노출만 한다.
+export { AREA84_BAND_MIN, AREA84_BAND_MAX } from './area84-pure';
+export { DEFAULT_AREA84_BAND, isInArea84Band, deriveArea84PriceFields };
+export type { Area84Band, Area84DerivedFields } from './area84-pure';
 
 export interface Area84RankingRow {
   /** identity-only 키(aptSeq 우선, 없으면 name+dong) — "단지별 대표 거래 1건"의
@@ -485,9 +478,7 @@ export function buildArea84RankingRows(allTrades: FeedTrade[], period: PeriodRan
     const point = points.find((p) => p.trade.uid === rep.uid);
     const priorHigh = point?.priorHigh ?? null;
     const immediatePrior = point?.immediatePrior ?? null;
-
-    const recent2yHighAmount = priorHigh && priorHigh.amount > rep.dealAmount ? priorHigh.amount : rep.dealAmount;
-    const isRecent2yHigh = recent2yHighAmount === rep.dealAmount;
+    const derived = deriveArea84PriceFields(rep.dealAmount, priorHigh?.amount ?? null, immediatePrior);
 
     rows.push({
       complexKey,
@@ -500,13 +491,7 @@ export function buildArea84RankingRows(allTrades: FeedTrade[], period: PeriodRan
       floorRaw: rep.floorRaw,
       currentAmount: rep.dealAmount,
       currentDate: rep.dealDate,
-      previousAmount: immediatePrior?.amount ?? null,
-      previousDate: immediatePrior?.date ?? null,
-      changeAmount: immediatePrior ? rep.dealAmount - immediatePrior.amount : null,
-      changePct: immediatePrior && immediatePrior.amount > 0 ? Math.round(((rep.dealAmount - immediatePrior.amount) / immediatePrior.amount) * 1000) / 10 : null,
-      recent2yHighAmount,
-      isRecent2yHigh,
-      recent2yHighDeltaPct: isRecent2yHigh ? null : Math.round(((rep.dealAmount - recent2yHighAmount) / recent2yHighAmount) * 1000) / 10,
+      ...derived,
       trailing12moSampleCount: point?.trailing12moSampleCount ?? 1,
     });
   }

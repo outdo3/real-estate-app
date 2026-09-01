@@ -719,6 +719,127 @@ export async function getRecordHighRowsFromDb(lawdCds: string[], periodFrom: str
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// PERFORMANCE_V1_1_B — 84㎡ 순위(buildArea84RankingRows, price-ranking.ts)
+// SQL pushdown. 이전(TRADE_DB_FIRST_V1 STEP A)에는 84~85㎡ band만 DB에서
+// 걸러 fetchArea84TradesFromDb()로 raw row ~23K건을 그대로 Node로 옮긴 뒤
+// buildArea84RankingRows()가 JS에서 그룹핑/랭킹했다 — PERFORMANCE_V1.1-A에서
+// 실측한 것처럼 SQL 자체는 75~150ms인데 Prisma가 23K row를 역직렬화하는 데만
+// 3.2~3.8초가 걸렸다(§PERFORMANCE_V1_1_A). raw/base/step1(priorHigh MAX
+// window)/dedupe/month_index/row_seq 구조는 decline/rising/record-high가
+// 이미 검증한 것을 그대로 재사용한다(§9 — 새로 발명하지 않음) — 차이는 두 곳뿐:
+//
+// §1 area84는 decline/rising처럼 group_key(=identity+exact area+dealType)
+// 단위가 아니라 **complexKey(=identity_key만, exact area 무시)** 단위로
+// "대표 거래" 1건을 뽑는다(buildArea84RankingRows의 candidatesByComplex가
+// identityKey()로만 묶는 것과 동일) — 같은 단지의 서로 다른 정확 면적(예:
+// 84.51㎡와 84.8758㎡)이 둘 다 band 안에 있으면 그중 하나만 대표로 남는다.
+// 대표 선정 tie-break(compareArea84Candidates)는 `deal_date DESC →
+// deal_amount DESC → exclusive_area DESC → floor DESC → uid(=id를 String()한
+// 값) ASC`이므로, region-change.ts의 buildRegionChangePairs()가 이미 쓰는
+//것과 동일하게 `DISTINCT ON (identity_key) ... ORDER BY identity_key,
+// deal_date DESC, deal_amount DESC, exclusive_area DESC, COALESCE(floor,0)
+// DESC, id::text ASC`로 재현한다(id를 숫자가 아니라 문자열로 정렬 — "10" vs
+// "9" 같은 경우 기존 동작과 다르게 나오는 것을 방지, region-change.ts §PAIR와
+// 동일 원칙).
+//
+// §2 area84는 priorHigh(신고가 대비용, recent2yHighAmount/isRecent2yHigh)와
+// immediatePrior(직전거래 대비용, previousAmount/previousDate) 둘 다
+// 동시에 필요하다(decline은 priorHigh만, rising은 immediatePrior만) — 하나의
+// step1 CTE에서 MAX() window와 LAG() window를 함께 계산해 얻는다.
+// trailingSampleCount는 대표 거래가 속한 정확 그룹(group_key, exact area
+// 그대로)의 표본이어야 한다(buildArea84RankingRows가 `repGroupKey =
+// groupKey(rep)`로 정확히 그 그룹의 history만 보는 것과 동일) — base와의
+// JOIN 조건(`row_seq <=`, `month_index >=`)은 STEP C-2가 이미 검증한 것을
+// 그대로 쓴다.
+//
+// exclusive_area >= 84 AND < 85를 base 단계(raw CTE)에서부터 필터링해도
+// 결과가 100% 동일한 이유는 fetchArea84TradesFromDb()가 이미 문서화한
+// 것과 같다 — band 밖 거래는 candidatesByComplex에 애초에 들어가지 않고,
+// group_key가 exact area를 포함해 band 밖 거래가 band 안 거래의 history에도
+// 절대 섞이지 않는다(§9 area84 exact area rule, 서로 다른 면적은 완전히
+// 분리된 그룹).
+export interface Area84CandidateRow {
+  id: number;
+  aptSeq: string | null;
+  aptName: string;
+  dong: string;
+  lawdCd: string;
+  exclusiveArea: string;
+  floor: number | null;
+  currentAmount: number;
+  currentDate: Date;
+  priorHighAmount: number | null;
+  previousAmount: number | null;
+  previousDate: Date | null;
+  trailingSampleCount: number;
+}
+
+/** 84㎡ 순위 후보 전체 row를 단일 SQL pass로 반환한다(raw row를 Node로
+ * 옮기지 않음) — 단지(identity_key)별 대표 거래 1건 + 그 거래의 priorHigh/
+ * immediatePrior/trailing12moSampleCount. buildArea84RankingRows()와 동일
+ * semantics(§ 위 주석 참고). */
+export async function getArea84RowsFromDb(lawdCds: string[], periodFrom: string, periodTo: string): Promise<Area84CandidateRow[]> {
+  const from = candidateFromDate();
+  const rows = await prisma.$queryRaw<
+    { id: number; aptSeq: string | null; aptName: string; dong: string; lawdCd: string; exclusiveArea: string; floor: number | null; currentAmount: number; currentDate: Date; priorHighAmount: number | null; previousAmount: number | null; previousDate: Date | null; trailingSampleCount: bigint }[]
+  >`
+    WITH raw AS (
+      SELECT id, group_key, identity_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, floor, deal_amount, deal_date,
+        ROW_NUMBER() OVER (PARTITION BY group_key, deal_amount, deal_date, floor ORDER BY id DESC) AS dedupe_rn
+      FROM apartment_trade_histories
+      WHERE lawd_cd = ANY(${lawdCds})
+        AND deal_type = 'sale'
+        AND deal_canceled = false
+        AND deal_date >= ${from}
+        AND exclusive_area >= 84 AND exclusive_area < 85
+    ),
+    base AS (
+      SELECT id, group_key, identity_key, apt_seq, apt_name, dong, lawd_cd, exclusive_area, floor, deal_amount, deal_date,
+        (EXTRACT(YEAR FROM deal_date)::int * 12 + EXTRACT(MONTH FROM deal_date)::int) AS month_index,
+        ROW_NUMBER() OVER (PARTITION BY group_key ORDER BY deal_date ASC, id DESC) AS row_seq
+      FROM raw
+      WHERE dedupe_rn = 1
+    ),
+    step1 AS (
+      SELECT *,
+        MAX(deal_amount) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS prior_high_amount,
+        LAG(deal_amount) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+        ) AS immediate_prior_amount,
+        LAG(deal_date) OVER (
+          PARTITION BY group_key ORDER BY deal_date ASC, id DESC
+        ) AS immediate_prior_date
+      FROM base
+    ),
+    period_filtered AS (
+      SELECT * FROM step1
+      WHERE deal_date BETWEEN ${periodFrom}::date AND ${periodTo}::date
+    ),
+    representative AS (
+      SELECT DISTINCT ON (identity_key) *
+      FROM period_filtered
+      ORDER BY identity_key, deal_date DESC, deal_amount DESC, exclusive_area DESC, COALESCE(floor, 0) DESC, id::text ASC
+    )
+    SELECT
+      r.id, r.apt_seq AS "aptSeq", r.apt_name AS "aptName", r.dong, r.lawd_cd AS "lawdCd",
+      r.exclusive_area::text AS "exclusiveArea", r.floor,
+      r.deal_amount AS "currentAmount", r.deal_date AS "currentDate",
+      r.prior_high_amount AS "priorHighAmount",
+      r.immediate_prior_amount AS "previousAmount", r.immediate_prior_date AS "previousDate",
+      COUNT(b.id) AS "trailingSampleCount"
+    FROM representative r
+    JOIN base b ON b.group_key = r.group_key AND b.row_seq <= r.row_seq AND b.month_index >= r.month_index - 12
+    GROUP BY r.id, r.apt_seq, r.apt_name, r.dong, r.lawd_cd, r.exclusive_area, r.floor,
+      r.deal_amount, r.deal_date, r.prior_high_amount, r.immediate_prior_amount, r.immediate_prior_date
+    ORDER BY r.deal_date DESC, r.id DESC
+  `;
+  return rows.map((r) => ({ ...r, trailingSampleCount: Number(r.trailingSampleCount) }));
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // TRADE_DB_FIRST_V1 STEP D — 지역 변동지도(region-change.ts) DB-FIRST. STEP
 // C-2의 교훈(원본 row를 Node로 옮기지 않고 SQL이 최종/준최종 결과까지 계산)을
 // 처음부터 적용한다 — "먼저 만들고 나중에 최적화"를 반복하지 않는다.

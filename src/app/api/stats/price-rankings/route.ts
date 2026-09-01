@@ -5,15 +5,17 @@ import { resolveLawdCd, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { prisma } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, resolveApartmentContextBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
-import { queryTrades, getDeclineRowsFromDb, getRisingRowsFromDb, getRecordHighRowsFromDb } from '@/lib/trade-history-read';
+import { getDeclineRowsFromDb, getRisingRowsFromDb, getRecordHighRowsFromDb, getArea84RowsFromDb } from '@/lib/trade-history-read';
 import {
   dedupeTrades,
+  identityKey,
   groupKey,
   buildDeclineRows,
   buildRecordHighRows,
   buildRisingRows,
   buildJeonseRiskRows,
   buildArea84RankingRows,
+  deriveArea84PriceFields,
   buildDeclineInterpretation,
   buildRecordHighInterpretation,
   buildRisingInterpretation,
@@ -27,6 +29,7 @@ import {
   type DeclineRow,
   type RisingRow,
   type RecordHighRow,
+  type Area84RankingRow,
   type FeedTrade,
   type PriceRankingPeriodPreset,
 } from '@/lib/price-ranking';
@@ -82,45 +85,12 @@ function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | nul
   return !!lawdCd && lawdCd.startsWith(BUSAN_SIDO_CODE);
 }
 
-// StoredTrade(queryTrades 반환)를 기존 순수 로직(buildArea84RankingRows 등)이
-// 기대하는 FeedTrade 형태로 변환한다. 이 변환 하나만 새로 만들고, 대표거래
-// 선정/직전거래 비교/2년최고가/interpretation 로직은 전부 기존 함수를 그대로
-// 재사용한다(§7 — 기존 제품 정의를 바꾸지 않기 위해 로직은 건드리지 않고
-// data source만 교체).
-function storedTradeToFeedTrade(t: Awaited<ReturnType<typeof queryTrades>>['trades'][number]): FeedTrade {
-  return {
-    uid: String(t.id),
-    aptSeq: t.aptSeq,
-    name: t.aptName,
-    dong: t.dong,
-    lawdCd: t.lawdCd,
-    dealType: 'sale',
-    dealAmount: t.dealAmount,
-    excluUseArea: Number(t.exclusiveArea),
-    floorRaw: t.floor,
-    dealDate: t.dealDate.toISOString().slice(0, 10),
-    dealCanceled: t.dealCanceled,
-  };
-}
-
-// area84는 84~85㎡ band 후보만 대표거래로 뽑히므로(§8 buildArea84RankingRows),
-// history(priorHigh/immediatePrior)도 같은 band의 exact area 그룹만 있으면
-// 충분하다 — 다른 면적 거래는 결과에 전혀 영향을 주지 않는다(groupKey가
-// exact area를 포함해 서로 다른 면적은 완전히 분리된 그룹). 따라서 DB fetch
-// 자체를 band로 좁혀도 buildArea84RankingRows의 출력은 100% 동일하며(STEP A
-// 벤치마크에서 이미 실측된 것처럼, area filter가 없으면 부산 전체 조회가
-// 수 초 더 걸린다 — 이 최적화로 그 비용을 피한다). STEP C에서 이 함수는
-// 건드리지 않는다(§25 — area84 코드는 이번 STEP에서 원칙적으로 수정 금지).
-async function fetchArea84TradesFromDb(lawdCds: string[]): Promise<FeedTrade[]> {
-  const from = new Date();
-  from.setMonth(from.getMonth() - HISTORICAL_LOOKBACK_MONTHS);
-  const { trades } = await queryTrades({
-    lawdCd: lawdCds,
-    from,
-    exclusiveAreaRange: { gte: 84, lt: 85 },
-  });
-  return trades.map(storedTradeToFeedTrade);
-}
+// PERFORMANCE_V1_1_B — area84 전용이던 fetchArea84TradesFromDb()/
+// storedTradeToFeedTrade()(raw trade를 Node로 옮겨 buildArea84RankingRows로
+// 계산하던 옛 경로)는 getArea84RowsFromDb() SQL pushdown으로 완전히
+// 대체되어 area84의 마지막 호출부가 사라졌다 — area84 전용 코드였으므로
+// 삭제한다(공용 trade-history read core인 queryTrades()는 decline/rising/
+// record-high 등 다른 모드가 여전히 쓰므로 그대로 유지, §29).
 
 // TRADE_DB_FIRST_V1 STEP C — decline(하락)/rising(상승) 전용. record-high
 // (신고가)/jeonse-risk(전세 위험)는 이번 STEP 범위 밖(§44) — jeonse-risk는
@@ -200,6 +170,32 @@ function sqlRecordHighRowToRecordHighRow(r: Awaited<ReturnType<typeof getRecordH
     priorHighDate: r.priorHighDate.toISOString().slice(0, 10),
     deltaAmount,
     deltaPct: r.priorHighAmount > 0 ? Math.round((deltaAmount / r.priorHighAmount) * 1000) / 10 : 0,
+    trailing12moSampleCount: r.trailingSampleCount,
+  };
+}
+
+// PERFORMANCE_V1_1_B — 파생 필드 공식은 buildArea84RankingRows()와 완전히
+// 동일한 deriveArea84PriceFields()(price-ranking.ts)를 그대로 재사용한다
+// (공식이 두 경로에서 따로 유지되며 갈라지는 것을 방지). A/B로 0 mismatch
+// 검증됨 — Busan-wide/16개 구 개별/4개 구×3개 기간, 1226+행(§46).
+function sqlArea84RowToArea84Row(r: Awaited<ReturnType<typeof getArea84RowsFromDb>>[number]): Area84RankingRow {
+  const excluUseArea = Number(r.exclusiveArea);
+  const immediatePrior = r.previousAmount != null && r.previousDate
+    ? { amount: r.previousAmount, date: r.previousDate.toISOString().slice(0, 10) }
+    : null;
+  const derived = deriveArea84PriceFields(r.currentAmount, r.priorHighAmount, immediatePrior);
+  return {
+    complexKey: identityKey({ aptSeq: r.aptSeq, name: r.aptName, dong: r.dong }),
+    groupKey: groupKey({ aptSeq: r.aptSeq, name: r.aptName, dong: r.dong, excluUseArea, dealType: 'sale' }),
+    aptSeq: r.aptSeq,
+    name: r.aptName,
+    dong: r.dong,
+    lawdCd: r.lawdCd,
+    excluUseArea,
+    floorRaw: r.floor,
+    currentAmount: r.currentAmount,
+    currentDate: r.currentDate.toISOString().slice(0, 10),
+    ...derived,
     trailing12moSampleCount: r.trailingSampleCount,
   };
 }
@@ -291,7 +287,7 @@ export async function GET(request: Request) {
     // jeonse-risk/비부산 decline·rising·record-high 전부 무변경).
     // TRADE_DB_FIRST_V1 STEP E — RecordHighRow 추가(record-high도 이제 DB-first
     // 후보).
-    let dbComputedRows: Array<DeclineRow | RisingRow | RecordHighRow> | null = null;
+    let dbComputedRows: Array<DeclineRow | RisingRow | RecordHighRow | Area84RankingRow> | null = null;
     let apiError = false;
     let partial = false;
     let failedDistricts: string[] = [];
@@ -309,20 +305,18 @@ export async function GET(request: Request) {
         sigunguNameByLawdCd.set(d.code.substring(0, 5), shortName);
       }
       if (mode === 'area84' && isBusanScopedRequest(null, sidoCodeParam, true)) {
-        // TRADE_DB_FIRST_V1 STEP B — 부산 전체(area84) DB-first 경로. MOLIT
-        // 재조회 없음, 지역별 부분 실패(failedDistricts) 개념 자체가 없음(DB
-        // read는 전체 성공 또는 예외 둘 중 하나 — try/catch가 바깥에서 처리).
-        // PERFORMANCE_V1 §33/§42 — 16개 구 전체를 lawdCd IN(...)으로 한 번에
-        // 조회하는 이 경로는 실측 3.4~6s(단일 구는 0.6s)로, exclusiveArea
-        // range를 걸치는 조합에 최적화된 복합 인덱스가 없어 생기는 구조적
-        // DB 비용이다(해결하려면 스키마 변경 필요 — 이번 STEP 승인 범위 밖,
-        // docs/development/PERFORMANCE_V1.md의 Index Recommendations 참고).
-        // 스키마 없이 가능한 유일한 완화책으로 TTL만 5분→30분으로 늘려 이
-        // 비싼 재계산 빈도를 줄인다(캐시 키/의미는 그대로, 데이터는 배치
-        // 갱신이라 30분 지연이 실질적 문제가 되지 않음 — Score peer
-        // universe의 1시간 TTL과 같은 원칙).
-        const cacheKey = `stats-price-rankings-area84-db-sido:${sidoCodeParam}:${lawdCds.join(',')}`;
-        allTrades = await getOrSetCache(cacheKey, 30 * 60 * 1000, async () => fetchArea84TradesFromDb(lawdCds));
+        // PERFORMANCE_V1_1_B — area84도 decline/rising/record-high와 동일한
+        // SQL pushdown 경로로 전환(getArea84RowsFromDb, trade-history-read.ts).
+        // PERFORMANCE_V1.1-A에서 index를 추가했지만 실제 병목은 SQL이 아니라
+        // Prisma가 raw row 23K건을 Node로 역직렬화하는 비용이었다(§ 실측
+        // 3.2~3.8s) — raw row를 아예 Node로 옮기지 않고 SQL이 단지별 대표
+        // 거래+priorHigh+immediatePrior+trailing12moSampleCount까지 전부
+        // 계산해 최종 후보 행만 반환한다. 캐시 키에 기간을 포함(decline/
+        // rising과 동일 이유 — 기간이 바뀌면 다른 후보 집합).
+        const cacheKey = `stats-price-rankings-area84-v2-db-sido:${preset}:${sidoCodeParam}:${lawdCds.join(',')}`;
+        dbComputedRows = await getOrSetCache(cacheKey, 30 * 60 * 1000, async () =>
+          (await getArea84RowsFromDb(lawdCds, period.from, period.to)).map(sqlArea84RowToArea84Row)
+        );
       } else if ((mode === 'decline' || mode === 'rising') && isBusanScopedRequest(null, sidoCodeParam, true)) {
         // TRADE_DB_FIRST_V1 STEP C-2 — 부산 전체(decline/rising) DB-first
         // 경로(단일 SQL pass, 최종 row 직접 반환). area84와 동일하게 부분
@@ -375,9 +369,11 @@ export async function GET(request: Request) {
         if (cached.failedLawdCds.length === cached.lawdCds.length && cached.lawdCds.length > 0) apiError = true;
       }
     } else if (mode === 'area84' && isBusanScopedRequest(lawdCd, null, false)) {
-      // TRADE_DB_FIRST_V1 STEP B — 부산 단일 구(area84) DB-first 경로.
-      const cacheKey = `stats-price-rankings-area84-db:${lawdCd}`;
-      allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchArea84TradesFromDb([lawdCd!]));
+      // PERFORMANCE_V1_1_B — 부산 단일 구(area84)도 SQL pushdown 경로로 전환.
+      const cacheKey = `stats-price-rankings-area84-v2-db:${preset}:${lawdCd}`;
+      dbComputedRows = await getOrSetCache(cacheKey, 30 * 60 * 1000, async () =>
+        (await getArea84RowsFromDb([lawdCd!], period.from, period.to)).map(sqlArea84RowToArea84Row)
+      );
     } else if ((mode === 'decline' || mode === 'rising') && isBusanScopedRequest(lawdCd, null, false)) {
       // TRADE_DB_FIRST_V1 STEP C-2 — 부산 단일 구(decline/rising) DB-first 경로.
       const cacheKey = `stats-price-rankings-declinerising-v3-db:${mode}:${preset}:${lawdCd}`;

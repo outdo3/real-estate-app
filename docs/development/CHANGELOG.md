@@ -12956,3 +12956,66 @@ Prisma row 역직렬화). 다음 권장 STEP: 84㎡ 랭킹 query rewrite
 상태: 완료.
 
 상세: `docs/development/PERFORMANCE_V1_1_AREA84_INDEX.md`
+
+
+## 2026-09-01
+
+### PERFORMANCE V1.1-B — 84㎡ 부산 전체 조회 SQL Pushdown
+
+PERFORMANCE_V1.1-A가 밝혀낸 진짜 원인(Prisma가 raw row 23K건을
+Node로 역직렬화하는 비용, SQL 자체는 이미 빠름)을 해결. raw row를
+Node로 옮기지 않고 랭킹 계산 전체를 SQL로 이전. Index/schema 변경
+없음(V1.1-A의 index는 그대로 유지).
+
+작업:
+
+- **기존 JS 의미 그대로 복원+문서화**: `fetchArea84TradesFromDb`→
+  `buildArea84RankingRows`(price-ranking.ts) 전체 흐름을 코드로
+  추적(기간/취소/그룹핑/대표거래 tie-break/직전거래/2년최고가/
+  trailing12개월 표본수 전부) — 추측 없이 실제 구현 확인.
+- **decline/rising/record-high가 이미 검증한 SQL 패턴 재사용**:
+  raw(dedupe)→base(month_index/row_seq)→step1(priorHigh MAX +
+  immediatePrior LAG를 한 번에)→기간 필터→`DISTINCT ON
+  (identity_key) ... id::text ASC`로 대표거래 선정(region-change.ts의
+  `id::text` 문자열 정렬 tie-break 기법 재사용)→base와 JOIN해
+  trailing12moSampleCount 계산. 새로 만든 부분은 "단지(identity)당
+  대표 거래 1건, 서로 다른 정확 면적도 하나로 묶어 고름" 레이어뿐.
+- **A/B 검증**: 영구 스크립트(`scripts/verify-area84-sql-pushdown.ts`)
+  작성 — 부산 전체×3개 기간 + 16개 구 개별×3개 기간 = 51 케이스,
+  4,633행 비교, **불일치 0건**(요구 100건의 46배). 정렬 tie-break까지
+  전수 비교(가격순 1,226행 전부 일치, 최신순은 동일 날짜 동점
+  5/1,226행만 상대 순서 차이 — STEP C-2가 이미 문서화한 "동점
+  tie-break 미정의"와 같은 종류, 데이터 값 자체는 전부 정확).
+  검증 중 실제로 발견한 버그는 테스트 하네스 쪽이었음(oracle에
+  dedupeTrades 누락) — 고친 뒤 재검증해 0건으로 확정.
+- **성능 실측**(fresh 프로세스, 캐시 완전 비움, PROD-LOCAL): 부산
+  전체 cold 4.65~4.83s→**1.49s**, warm 1.20~1.77s→**0.10s**. DB
+  round-trip 2회→1회. Node로 옮기는 row 수 ~23,000→342(부산 전체
+  30일 기준, 최종 후보만).
+- 84.0000≤area<85.0000 규칙/취소 정책 불변 확인(신규 unit test
+  11개: 경계값, priorHigh 없음/새 최고가/최고가 아님/직전거래
+  0원 나누기 방지 등). decline/rising/record-high/dashboard/
+  region-change smoke 재확인 — 영향 없음(각자 별도 SQL 함수 사용).
+- 파생 필드 공식(`deriveArea84PriceFields`)을 zero-import 순수
+  모듈(`area84-pure.ts`)로 분리 — JS 경로와 SQL 경로 양쪽이 하나의
+  구현만 공유하게 하고, 이 저장소 `.test.mjs` 관례(확장자 없는
+  상대 import 미해석)로 직접 테스트 가능하게 함.
+- 완전히 죽은 area84 전용 코드(`fetchArea84TradesFromDb`,
+  `storedTradeToFeedTrade`)만 삭제, 공용 `queryTrades()`는 다른
+  모드가 계속 쓰므로 그대로 유지.
+
+서비스 기능 변경: 없음(API 응답 shape·정렬·페이지네이션 전부 동일,
+순수 성능 개선).
+
+DB 변경: 없음(read-only, 신규 index 0, schema 0, migration 0).
+
+테스트/빌드: 신규 unit test 11/11 pass, A/B 검증 51 케이스/4,633행/
+불일치 0, `npx tsc --noEmit` 기존 20건(신규 0), lint 0, `npm run
+build` 성공.
+
+**성능 판정: PASS** — cold/warm 목표 모두 달성. PERFORMANCE_V1.md가
+남긴 area84 항목을 이번 STEP으로 마무리.
+
+상태: 완료.
+
+상세: `docs/development/PERFORMANCE_V1_1_AREA84_SQL_PUSHDOWN.md`
