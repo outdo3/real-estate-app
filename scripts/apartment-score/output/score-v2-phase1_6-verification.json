@@ -1,0 +1,1177 @@
+{
+  "generatedAt": "2026-09-01T05:02:36.541Z",
+  "scoreablePoolSize": 2833,
+  "sizeBandDefinition_tertile": {
+    "small": {
+      "lower": 0,
+      "upper": 49,
+      "count": 879
+    },
+    "mid": {
+      "lower": 50,
+      "upper": 220,
+      "count": 954
+    },
+    "large": {
+      "lower": 221,
+      "upper": null,
+      "count": 907
+    },
+    "unknown": {
+      "count": 93
+    }
+  },
+  "correctedMinSampleSweep": [
+    {
+      "minSample": 8,
+      "levelCounts": {
+        "L2": 410,
+        "L3": 89,
+        "L1": 2334
+      },
+      "levelCountsPct": {
+        "L2": 14.5,
+        "L3": 3.1,
+        "L1": 82.4
+      },
+      "comparisonCountByLevel": {
+        "L1": {
+          "n": 2334,
+          "min": 8,
+          "p10": 10,
+          "p25": 14,
+          "median": 21,
+          "p75": 30,
+          "p90": 38,
+          "max": 48
+        },
+        "L2": {
+          "n": 410,
+          "min": 8,
+          "p10": 9,
+          "p25": 13,
+          "median": 21,
+          "p75": 38,
+          "p90": 57,
+          "max": 98
+        },
+        "L3": {
+          "n": 89,
+          "min": 13,
+          "p10": 109,
+          "p25": 109,
+          "median": 218,
+          "p75": 388,
+          "p90": 756,
+          "max": 756
+        },
+        "L4": {
+          "n": 0,
+          "min": null,
+          "p10": null,
+          "p25": null,
+          "median": null,
+          "p75": null,
+          "p90": null,
+          "max": null
+        }
+      },
+      "denominatorBuckets": {
+        "lt5": 0,
+        "lt8": 0,
+        "b8_9": 223,
+        "b10_14": 548,
+        "b15_19": 537,
+        "ge20": 1525
+      },
+      "bias": {
+        "price": {
+          "rho": 0.19675214579146894,
+          "n": 2696
+        },
+        "buildYear": {
+          "rho": 0.03186749448184409,
+          "n": 2833
+        },
+        "households": {
+          "rho": 0.04575073837988181,
+          "n": 2740
+        }
+      }
+    },
+    {
+      "minSample": 10,
+      "levelCounts": {
+        "L2": 529,
+        "L3": 141,
+        "L1": 2163
+      },
+      "levelCountsPct": {
+        "L2": 18.7,
+        "L3": 5,
+        "L1": 76.4
+      },
+      "comparisonCountByLevel": {
+        "L1": {
+          "n": 2163,
+          "min": 10,
+          "p10": 12,
+          "p25": 15,
+          "median": 23,
+          "p75": 30,
+          "p90": 39,
+          "max": 48
+        },
+        "L2": {
+          "n": 529,
+          "min": 10,
+          "p10": 12,
+          "p25": 16,
+          "median": 25,
+          "p75": 39,
+          "p90": 52,
+          "max": 98
+        },
+        "L3": {
+          "n": 141,
+          "min": 13,
+          "p10": 109,
+          "p25": 109,
+          "median": 218,
+          "p75": 388,
+          "p90": 592,
+          "max": 756
+        },
+        "L4": {
+          "n": 0,
+          "min": null,
+          "p10": null,
+          "p25": null,
+          "median": null,
+          "p75": null,
+          "p90": null,
+          "max": null
+        }
+      },
+      "denominatorBuckets": {
+        "lt5": 0,
+        "lt8": 0,
+        "b8_9": 0,
+        "b10_14": 573,
+        "b15_19": 545,
+        "ge20": 1715
+      },
+      "bias": {
+        "price": {
+          "rho": 0.20760070087587476,
+          "n": 2696
+        },
+        "buildYear": {
+          "rho": 0.034043569207928455,
+          "n": 2833
+        },
+        "households": {
+          "rho": 0.05160491326580978,
+          "n": 2740
+        }
+      }
+    },
+    {
+      "minSample": 15,
+      "levelCounts": {
+        "L3": 263,
+        "L2": 850,
+        "L1": 1707,
+        "L4": 13
+      },
+      "levelCountsPct": {
+        "L3": 9.3,
+        "L2": 30,
+        "L1": 60.3,
+        "L4": 0.5
+      },
+      "comparisonCountByLevel": {
+        "L1": {
+          "n": 1707,
+          "min": 15,
+          "p10": 16,
+          "p25": 19,
+          "median": 25,
+          "p75": 33,
+          "p90": 41,
+          "max": 48
+        },
+        "L2": {
+          "n": 850,
+          "min": 15,
+          "p10": 20,
+          "p25": 24,
+          "median": 31,
+          "p75": 45,
+          "p90": 57,
+          "max": 98
+        },
+        "L3": {
+          "n": 263,
+          "min": 109,
+          "p10": 109,
+          "p25": 109,
+          "median": 218,
+          "p75": 218,
+          "p90": 388,
+          "max": 756
+        },
+        "L4": {
+          "n": 13,
+          "min": 2833,
+          "p10": 2833,
+          "p25": 2833,
+          "median": 2833,
+          "p75": 2833,
+          "p90": 2833,
+          "max": 2833
+        }
+      },
+      "denominatorBuckets": {
+        "lt5": 0,
+        "lt8": 0,
+        "b8_9": 0,
+        "b10_14": 0,
+        "b15_19": 566,
+        "ge20": 2267
+      },
+      "bias": {
+        "price": {
+          "rho": 0.2231286604653998,
+          "n": 2696
+        },
+        "buildYear": {
+          "rho": 0.036639710322839227,
+          "n": 2833
+        },
+        "households": {
+          "rho": 0.07624864903695995,
+          "n": 2740
+        }
+      }
+    },
+    {
+      "minSample": 20,
+      "levelCounts": {
+        "L3": 345,
+        "L2": 1252,
+        "L1": 1223,
+        "L4": 13
+      },
+      "levelCountsPct": {
+        "L3": 12.2,
+        "L2": 44.2,
+        "L1": 43.2,
+        "L4": 0.5
+      },
+      "comparisonCountByLevel": {
+        "L1": {
+          "n": 1223,
+          "min": 20,
+          "p10": 22,
+          "p25": 25,
+          "median": 29,
+          "p75": 37,
+          "p90": 43,
+          "max": 48
+        },
+        "L2": {
+          "n": 1252,
+          "min": 20,
+          "p10": 24,
+          "p25": 29,
+          "median": 39,
+          "p75": 57,
+          "p90": 74,
+          "max": 101
+        },
+        "L3": {
+          "n": 345,
+          "min": 109,
+          "p10": 109,
+          "p25": 109,
+          "median": 218,
+          "p75": 592,
+          "p90": 756,
+          "max": 757
+        },
+        "L4": {
+          "n": 13,
+          "min": 2833,
+          "p10": 2833,
+          "p25": 2833,
+          "median": 2833,
+          "p75": 2833,
+          "p90": 2833,
+          "max": 2833
+        }
+      },
+      "denominatorBuckets": {
+        "lt5": 0,
+        "lt8": 0,
+        "b8_9": 0,
+        "b10_14": 0,
+        "b15_19": 0,
+        "ge20": 2833
+      },
+      "bias": {
+        "price": {
+          "rho": 0.24399282488092203,
+          "n": 2696
+        },
+        "buildYear": {
+          "rho": 0.050735737118214275,
+          "n": 2833
+        },
+        "households": {
+          "rho": 0.08707270923173391,
+          "n": 2740
+        }
+      }
+    }
+  ],
+  "oldBuggyStat_forComparison": {
+    "note": "This is Phase 1.5's original l1PoolSizing computation — unconditional over ALL raw L1 groups, identical regardless of minSample. Kept here only to prove the contrast against correctedMinSampleSweep above.",
+    "rawL1GroupSizeDistribution_allGroups": {
+      "n": 291,
+      "min": 1,
+      "p10": 1,
+      "p25": 2,
+      "median": 6,
+      "p75": 14,
+      "p90": 24,
+      "max": 48
+    }
+  },
+  "sizeBandSensitivity": {
+    "tertile_recommended": {
+      "thresholds": {
+        "t1": 50,
+        "t2": 221
+      },
+      "levelCountsPct": {
+        "L2": 14.5,
+        "L3": 3.1,
+        "L1": 82.4
+      },
+      "bias": {
+        "price": {
+          "rho": 0.19675214579146894,
+          "n": 2696
+        },
+        "buildYear": {
+          "rho": 0.03186749448184409,
+          "n": 2833
+        },
+        "households": {
+          "rho": 0.04575073837988181,
+          "n": 2740
+        }
+      }
+    },
+    "alt1_quartile": {
+      "thresholds": {
+        "q1": 40,
+        "q2": 100,
+        "q3": 312
+      },
+      "levelCountsPct": {
+        "L2": 20.7,
+        "L3": 3.1,
+        "L1": 76.2
+      },
+      "bias": {
+        "price": {
+          "rho": 0.19472952768504143,
+          "n": 2696
+        },
+        "buildYear": {
+          "rho": 0.024724824704956502,
+          "n": 2833
+        },
+        "households": {
+          "rho": 0.047437396164347015,
+          "n": 2740
+        }
+      }
+    },
+    "alt2_fixedRoundNumbers": {
+      "thresholds": {
+        "t1": 100,
+        "t2": 500
+      },
+      "levelCountsPct": {
+        "L2": 16.1,
+        "L3": 3.1,
+        "L1": 80.7
+      },
+      "bias": {
+        "price": {
+          "rho": 0.20998463241598073,
+          "n": 2696
+        },
+        "buildYear": {
+          "rho": 0.027478220355181594,
+          "n": 2833
+        },
+        "households": {
+          "rho": 0.06634113527331618,
+          "n": 2740
+        }
+      }
+    },
+    "rankingStability_tertile_vs_quartile": {
+      "rho": 0.9637921233849864,
+      "n": 2833
+    },
+    "rankingStability_tertile_vs_fixed": {
+      "rho": 0.9539872111758775,
+      "n": 2833
+    }
+  },
+  "boundaryFairnessSample": [
+    {
+      "aptSeq": "26140-77",
+      "name": "문화",
+      "gu": "서구",
+      "totalHouseholds": 47,
+      "sizeBand": "small",
+      "buildYear": 1975,
+      "v2Score": 45,
+      "level": 2,
+      "comparisonCount": 8,
+      "percentile": 6.3,
+      "peerKey": "서구|1970s",
+      "confidence": "MEDIUM"
+    },
+    {
+      "aptSeq": "26230-2441",
+      "name": "메리온시티",
+      "gu": "부산진구",
+      "totalHouseholds": 57,
+      "sizeBand": "mid",
+      "buildYear": 2017,
+      "v2Score": 64,
+      "level": 1,
+      "comparisonCount": 48,
+      "percentile": 42.7,
+      "peerKey": "부산진구|2010s|mid",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26290-2614",
+      "name": "문현동월가아파트",
+      "gu": "남구",
+      "totalHouseholds": 42,
+      "sizeBand": "small",
+      "buildYear": 2018,
+      "v2Score": 57,
+      "level": 1,
+      "comparisonCount": 17,
+      "percentile": 38.2,
+      "peerKey": "남구|2010s|small",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-2541",
+      "name": "더샵골드6",
+      "gu": "부산진구",
+      "totalHouseholds": 50,
+      "sizeBand": "mid",
+      "buildYear": 2018,
+      "v2Score": 63,
+      "level": 1,
+      "comparisonCount": 48,
+      "percentile": 35.4,
+      "peerKey": "부산진구|2010s|mid",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-2456",
+      "name": "서면TK골드뷰",
+      "gu": "부산진구",
+      "totalHouseholds": 40,
+      "sizeBand": "small",
+      "buildYear": 2017,
+      "v2Score": 59,
+      "level": 1,
+      "comparisonCount": 31,
+      "percentile": 46.8,
+      "peerKey": "부산진구|2010s|small",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-2444",
+      "name": "가야누리애",
+      "gu": "부산진구",
+      "totalHouseholds": 56,
+      "sizeBand": "mid",
+      "buildYear": 2017,
+      "v2Score": 67,
+      "level": 1,
+      "comparisonCount": 48,
+      "percentile": 70.8,
+      "peerKey": "부산진구|2010s|mid",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26500-100",
+      "name": "복음",
+      "gu": "수영구",
+      "totalHouseholds": 48,
+      "sizeBand": "small",
+      "buildYear": 1981,
+      "v2Score": 39,
+      "level": 1,
+      "comparisonCount": 15,
+      "percentile": 6.7,
+      "peerKey": "수영구|1980s|small",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-2325",
+      "name": "수목하우스",
+      "gu": "부산진구",
+      "totalHouseholds": 46,
+      "sizeBand": "small",
+      "buildYear": 2015,
+      "v2Score": 71,
+      "level": 1,
+      "comparisonCount": 31,
+      "percentile": 98.4,
+      "peerKey": "부산진구|2010s|small",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-2428",
+      "name": "개금역스마트더블유",
+      "gu": "부산진구",
+      "totalHouseholds": 224,
+      "sizeBand": "large",
+      "buildYear": 2016,
+      "v2Score": 66,
+      "level": 1,
+      "comparisonCount": 15,
+      "percentile": 70,
+      "peerKey": "부산진구|2010s|large",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-2070",
+      "name": "백양산삼정그린코아",
+      "gu": "부산진구",
+      "totalHouseholds": 215,
+      "sizeBand": "mid",
+      "buildYear": 2012,
+      "v2Score": 39,
+      "level": 1,
+      "comparisonCount": 48,
+      "percentile": 1,
+      "peerKey": "부산진구|2010s|mid",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-2645",
+      "name": "서면스위트엠골드에비뉴",
+      "gu": "부산진구",
+      "totalHouseholds": 225,
+      "sizeBand": "large",
+      "buildYear": 2022,
+      "v2Score": 69,
+      "level": 1,
+      "comparisonCount": 26,
+      "percentile": 88.5,
+      "peerKey": "부산진구|2020s|large",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-106",
+      "name": "동원",
+      "gu": "부산진구",
+      "totalHouseholds": 224,
+      "sizeBand": "large",
+      "buildYear": 1985,
+      "v2Score": 53,
+      "level": 1,
+      "comparisonCount": 9,
+      "percentile": 72.2,
+      "peerKey": "부산진구|1980s|large",
+      "confidence": "MEDIUM"
+    },
+    {
+      "aptSeq": "26500-1368",
+      "name": "카라디움",
+      "gu": "수영구",
+      "totalHouseholds": 46,
+      "sizeBand": "small",
+      "buildYear": 2005,
+      "v2Score": 57,
+      "level": 1,
+      "comparisonCount": 37,
+      "percentile": 56.8,
+      "peerKey": "수영구|2000s|small",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-26",
+      "name": "로얄",
+      "gu": "부산진구",
+      "totalHouseholds": 235,
+      "sizeBand": "large",
+      "buildYear": 1986,
+      "v2Score": 48,
+      "level": 1,
+      "comparisonCount": 9,
+      "percentile": 33.3,
+      "peerKey": "부산진구|1980s|large",
+      "confidence": "MEDIUM"
+    },
+    {
+      "aptSeq": "26500-1809",
+      "name": "성우센텀스카이뷰비",
+      "gu": "수영구",
+      "totalHouseholds": 44,
+      "sizeBand": "small",
+      "buildYear": 2014,
+      "v2Score": 50,
+      "level": 1,
+      "comparisonCount": 26,
+      "percentile": 5.8,
+      "peerKey": "수영구|2010s|small",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-75",
+      "name": "삼부본동",
+      "gu": "부산진구",
+      "totalHouseholds": 55,
+      "sizeBand": "mid",
+      "buildYear": 1976,
+      "v2Score": 48,
+      "level": 2,
+      "comparisonCount": 13,
+      "percentile": 30.8,
+      "peerKey": "부산진구|1970s",
+      "confidence": "MEDIUM"
+    },
+    {
+      "aptSeq": "26230-1976",
+      "name": "범일역풍림아이원",
+      "gu": "부산진구",
+      "totalHouseholds": 223,
+      "sizeBand": "large",
+      "buildYear": 2012,
+      "v2Score": 69,
+      "level": 1,
+      "comparisonCount": 15,
+      "percentile": 76.7,
+      "peerKey": "부산진구|2010s|large",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-91",
+      "name": "백산",
+      "gu": "부산진구",
+      "totalHouseholds": 235,
+      "sizeBand": "large",
+      "buildYear": 1988,
+      "v2Score": 54,
+      "level": 1,
+      "comparisonCount": 9,
+      "percentile": 88.9,
+      "peerKey": "부산진구|1980s|large",
+      "confidence": "MEDIUM"
+    },
+    {
+      "aptSeq": "26230-39",
+      "name": "덕인디오네빌",
+      "gu": "부산진구",
+      "totalHouseholds": 54,
+      "sizeBand": "mid",
+      "buildYear": 2002,
+      "v2Score": 47,
+      "level": 1,
+      "comparisonCount": 28,
+      "percentile": 23.2,
+      "peerKey": "부산진구|2000s|mid",
+      "confidence": "HIGH"
+    },
+    {
+      "aptSeq": "26230-2560",
+      "name": "서면루미랑스",
+      "gu": "부산진구",
+      "totalHouseholds": 42,
+      "sizeBand": "small",
+      "buildYear": 2019,
+      "v2Score": 58,
+      "level": 1,
+      "comparisonCount": 31,
+      "percentile": 38.7,
+      "peerKey": "부산진구|2010s|small",
+      "confidence": "HIGH"
+    }
+  ],
+  "sampleAudit": {
+    "bottom10": [
+      {
+        "aptSeq": "26530-48",
+        "name": "엄궁",
+        "gu": "사상구",
+        "totalHouseholds": 10,
+        "sizeBand": "small",
+        "buildYear": 1983,
+        "v2Score": 15,
+        "level": 1,
+        "comparisonCount": 9,
+        "peerCountExcludingSelf": 8,
+        "percentile": 5.6,
+        "peerKey": "사상구|1980s|small",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26200-15",
+        "name": "동산(1106)",
+        "gu": "영도구",
+        "totalHouseholds": 52,
+        "sizeBand": "mid",
+        "buildYear": 1990,
+        "v2Score": 16,
+        "level": 1,
+        "comparisonCount": 9,
+        "peerCountExcludingSelf": 8,
+        "percentile": 5.6,
+        "peerKey": "영도구|1990s|mid",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26350-297",
+        "name": "그린빌라",
+        "gu": "해운대구",
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "buildYear": 1991,
+        "v2Score": 18,
+        "level": 1,
+        "comparisonCount": 30,
+        "peerCountExcludingSelf": 29,
+        "percentile": 1.7,
+        "peerKey": "해운대구|1990s|small",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26350-296",
+        "name": "라온힐즈",
+        "gu": "해운대구",
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "buildYear": 1993,
+        "v2Score": 19,
+        "level": 1,
+        "comparisonCount": 30,
+        "peerCountExcludingSelf": 29,
+        "percentile": 5,
+        "peerKey": "해운대구|1990s|small",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26350-295",
+        "name": "영동써니",
+        "gu": "해운대구",
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "buildYear": 1992,
+        "v2Score": 20,
+        "level": 1,
+        "comparisonCount": 30,
+        "peerCountExcludingSelf": 29,
+        "percentile": 8.3,
+        "peerKey": "해운대구|1990s|small",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26230-42",
+        "name": "대진파레스필즈",
+        "gu": "부산진구",
+        "totalHouseholds": 160,
+        "sizeBand": "mid",
+        "buildYear": 1992,
+        "v2Score": 21,
+        "level": 1,
+        "comparisonCount": 9,
+        "peerCountExcludingSelf": 8,
+        "percentile": 5.6,
+        "peerKey": "부산진구|1990s|mid",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26350-276",
+        "name": "동부썬빌라",
+        "gu": "해운대구",
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "buildYear": 1993,
+        "v2Score": 22,
+        "level": 1,
+        "comparisonCount": 30,
+        "peerCountExcludingSelf": 29,
+        "percentile": 11.7,
+        "peerKey": "해운대구|1990s|small",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26410-341",
+        "name": "동성베스트",
+        "gu": "금정구",
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "buildYear": 2004,
+        "v2Score": 22,
+        "level": 1,
+        "comparisonCount": 41,
+        "peerCountExcludingSelf": 40,
+        "percentile": 1.2,
+        "peerKey": "금정구|2000s|small",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26140-114",
+        "name": "송도현대",
+        "gu": "서구",
+        "totalHouseholds": 208,
+        "sizeBand": "mid",
+        "buildYear": 1992,
+        "v2Score": 22,
+        "level": 1,
+        "comparisonCount": 14,
+        "peerCountExcludingSelf": 13,
+        "percentile": 3.6,
+        "peerKey": "서구|1990s|mid",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26230-43",
+        "name": "삼환",
+        "gu": "부산진구",
+        "totalHouseholds": 230,
+        "sizeBand": "large",
+        "buildYear": 2002,
+        "v2Score": 23,
+        "level": 1,
+        "comparisonCount": 33,
+        "peerCountExcludingSelf": 32,
+        "percentile": 1.5,
+        "peerKey": "부산진구|2000s|large",
+        "confidence": "HIGH"
+      }
+    ],
+    "middle10": [
+      {
+        "aptSeq": "26470-11",
+        "name": "대원",
+        "gu": "연제구",
+        "totalHouseholds": 80,
+        "sizeBand": "mid",
+        "buildYear": 1983,
+        "v2Score": 55,
+        "level": 1,
+        "comparisonCount": 16,
+        "peerCountExcludingSelf": 15,
+        "percentile": 81.3,
+        "peerKey": "연제구|1980s|mid",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26380-1964",
+        "name": "JPark",
+        "gu": "사하구",
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "buildYear": 2017,
+        "v2Score": 55,
+        "level": 1,
+        "comparisonCount": 22,
+        "peerCountExcludingSelf": 21,
+        "percentile": 34.1,
+        "peerKey": "사하구|2010s|small",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26170-748",
+        "name": "부산역유림로미오",
+        "gu": "동구",
+        "totalHouseholds": 286,
+        "sizeBand": "large",
+        "buildYear": 2014,
+        "v2Score": 55,
+        "level": 1,
+        "comparisonCount": 9,
+        "peerCountExcludingSelf": 8,
+        "percentile": 38.9,
+        "peerKey": "동구|2010s|large",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26170-51",
+        "name": "초량하이츠빌리지",
+        "gu": "동구",
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "buildYear": 2002,
+        "v2Score": 55,
+        "level": 1,
+        "comparisonCount": 11,
+        "peerCountExcludingSelf": 10,
+        "percentile": 68.2,
+        "peerKey": "동구|2000s|small",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26530-72",
+        "name": "주례",
+        "gu": "사상구",
+        "totalHouseholds": 31,
+        "sizeBand": "small",
+        "buildYear": 1975,
+        "v2Score": 55,
+        "level": 3,
+        "comparisonCount": 109,
+        "peerCountExcludingSelf": 108,
+        "percentile": 81.7,
+        "peerKey": "1970s",
+        "confidence": "LOW"
+      },
+      {
+        "aptSeq": "26530-54",
+        "name": "광우파크",
+        "gu": "사상구",
+        "totalHouseholds": 25,
+        "sizeBand": "small",
+        "buildYear": 1986,
+        "v2Score": 55,
+        "level": 1,
+        "comparisonCount": 9,
+        "peerCountExcludingSelf": 8,
+        "percentile": 83.3,
+        "peerKey": "사상구|1980s|small",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26710-23",
+        "name": "대진로얄",
+        "gu": "기장군",
+        "totalHouseholds": 116,
+        "sizeBand": "mid",
+        "buildYear": 1990,
+        "v2Score": 55,
+        "level": 2,
+        "comparisonCount": 17,
+        "peerCountExcludingSelf": 16,
+        "percentile": 85.3,
+        "peerKey": "기장군|1990s",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26290-76",
+        "name": "무학프라자",
+        "gu": "남구",
+        "totalHouseholds": 64,
+        "sizeBand": "mid",
+        "buildYear": 1997,
+        "v2Score": 55,
+        "level": 1,
+        "comparisonCount": 16,
+        "peerCountExcludingSelf": 15,
+        "percentile": 84.4,
+        "peerKey": "남구|1990s|mid",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26320-56",
+        "name": "화명대우",
+        "gu": "북구",
+        "totalHouseholds": 316,
+        "sizeBand": "large",
+        "buildYear": 2000,
+        "v2Score": 55,
+        "level": 1,
+        "comparisonCount": 25,
+        "peerCountExcludingSelf": 24,
+        "percentile": 18,
+        "peerKey": "북구|2000s|large",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26320-1481",
+        "name": "화명동롯데캐슬멤버스",
+        "gu": "북구",
+        "totalHouseholds": 299,
+        "sizeBand": "large",
+        "buildYear": 2007,
+        "v2Score": 55,
+        "level": 1,
+        "comparisonCount": 25,
+        "peerCountExcludingSelf": 24,
+        "percentile": 18,
+        "peerKey": "북구|2000s|large",
+        "confidence": "HIGH"
+      }
+    ],
+    "top10": [
+      {
+        "aptSeq": "26230-2523",
+        "name": "개금역금강펜테리움더스퀘어아파트",
+        "gu": "부산진구",
+        "totalHouseholds": 620,
+        "sizeBand": "large",
+        "buildYear": 2018,
+        "v2Score": 78,
+        "level": 1,
+        "comparisonCount": 15,
+        "peerCountExcludingSelf": 14,
+        "percentile": 96.7,
+        "peerKey": "부산진구|2010s|large",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26260-2110",
+        "name": "동래효성해링턴플레이스",
+        "gu": "동래구",
+        "totalHouseholds": 762,
+        "sizeBand": "large",
+        "buildYear": 2019,
+        "v2Score": 77,
+        "level": 1,
+        "comparisonCount": 24,
+        "peerCountExcludingSelf": 23,
+        "percentile": 97.9,
+        "peerKey": "동래구|2010s|large",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26230-1682",
+        "name": "전포동에메랄드홈",
+        "gu": "부산진구",
+        "totalHouseholds": 241,
+        "sizeBand": "large",
+        "buildYear": 2006,
+        "v2Score": 77,
+        "level": 1,
+        "comparisonCount": 33,
+        "peerCountExcludingSelf": 32,
+        "percentile": 98.5,
+        "peerKey": "부산진구|2000s|large",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26230-2845",
+        "name": "서면롯데캐슬엘루체",
+        "gu": "부산진구",
+        "totalHouseholds": 450,
+        "sizeBand": "large",
+        "buildYear": 2023,
+        "v2Score": 77,
+        "level": 1,
+        "comparisonCount": 26,
+        "peerCountExcludingSelf": 25,
+        "percentile": 98.1,
+        "peerKey": "부산진구|2020s|large",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26230-2853",
+        "name": "서면동원시티비스타",
+        "gu": "부산진구",
+        "totalHouseholds": 176,
+        "sizeBand": "mid",
+        "buildYear": 2024,
+        "v2Score": 77,
+        "level": 1,
+        "comparisonCount": 13,
+        "peerCountExcludingSelf": 12,
+        "percentile": 96.2,
+        "peerKey": "부산진구|2020s|mid",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26470-1566",
+        "name": "아시아드코오롱하늘채",
+        "gu": "연제구",
+        "totalHouseholds": 660,
+        "sizeBand": "large",
+        "buildYear": 2019,
+        "v2Score": 76,
+        "level": 1,
+        "comparisonCount": 16,
+        "peerCountExcludingSelf": 15,
+        "percentile": 96.9,
+        "peerKey": "연제구|2010s|large",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26260-2024",
+        "name": "사직롯데캐슬더클래식",
+        "gu": "동래구",
+        "totalHouseholds": 1064,
+        "sizeBand": "large",
+        "buildYear": 2017,
+        "v2Score": 75,
+        "level": 1,
+        "comparisonCount": 24,
+        "peerCountExcludingSelf": 23,
+        "percentile": 91.7,
+        "peerKey": "동래구|2010s|large",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26500-1941",
+        "name": "광일센텀스카이뷰",
+        "gu": "수영구",
+        "totalHouseholds": 58,
+        "sizeBand": "mid",
+        "buildYear": 2016,
+        "v2Score": 75,
+        "level": 1,
+        "comparisonCount": 19,
+        "peerCountExcludingSelf": 18,
+        "percentile": 97.4,
+        "peerKey": "수영구|2010s|mid",
+        "confidence": "HIGH"
+      },
+      {
+        "aptSeq": "26470-3051",
+        "name": "레이카운티(5단지)",
+        "gu": "연제구",
+        "totalHouseholds": 4470,
+        "sizeBand": "large",
+        "buildYear": 2024,
+        "v2Score": 75,
+        "level": 1,
+        "comparisonCount": 11,
+        "peerCountExcludingSelf": 10,
+        "percentile": 95.5,
+        "peerKey": "연제구|2020s|large",
+        "confidence": "MEDIUM"
+      },
+      {
+        "aptSeq": "26500-2288",
+        "name": "리부스남천",
+        "gu": "수영구",
+        "totalHouseholds": 19,
+        "sizeBand": "small",
+        "buildYear": 2021,
+        "v2Score": 75,
+        "level": 2,
+        "comparisonCount": 23,
+        "peerCountExcludingSelf": 22,
+        "percentile": 97.8,
+        "peerKey": "수영구|2020s",
+        "confidence": "MEDIUM"
+      }
+    ]
+  }
+}

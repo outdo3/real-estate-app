@@ -12699,3 +12699,55 @@ DB 변경: 없음. 모든 script는 read-only.
 상태: 완료.
 
 상세: `docs/development/EJIP_SCORE_V2_PEER_GROUP_AUDIT.md`
+
+
+## 2026-09-01
+
+### E-JIP SCORE V2 — PHASE 1.6: Peer Sample Semantics Final Verification
+
+Production Score/UI/schema 변경 없음. Phase 1.5 FINAL REPORT의
+"MIN_SAMPLE=8인데 L1 median peer size=6"이라는 모순을 Phase 2 구현
+전 마지막으로 검증. Read-only.
+
+작업:
+
+- **모순의 정확한 원인을 코드+output으로 증명(추측 없음)**: Phase 1.5
+  스크립트의 `l1PoolSizing` 필드가 `minSample`과 무관하게 **한 번만,
+  무조건적으로** 계산된 뒤(291개 raw peer-key 그룹 전체의 크기 분포)
+  MIN_SAMPLE 8/10/15/20 4개 결과 전부에 **동일한 값**으로 보고되고
+  있었음을 실제 저장된 JSON에서 직접 확인(4개 항목이 byte-identical)
+  — 이는 REPORT_LABEL_ERROR이지, 실제 peer 배정 게이트(`pool.length
+  >= minSample`)의 버그가 아님. 실제 게이트 로직은 처음부터 정상.
+- **전체 부산 2,833건 재실행으로 정정된 지표 제시**: 실제로 L1에
+  배정된 단지만 필터링한 comparisonCount 분포는 min=8(정확히
+  MIN_SAMPLE과 일치), median=21 — "median=6"은 애초에 다른 모집단
+  (사용되지도 않는 소규모 raw 그룹 포함 전체)을 설명한 숫자였음이
+  실측으로 확인됨. denominator<8인 사례 **0건**(전체 2,833건 중).
+- 세대수 밴드(50/221 tertile) 경계 민감도 검증 — quartile/고정값
+  2개 대안과 비교한 결과 bias(가격/신축/세대수) 수치가 3개 방식
+  모두 거의 동일(0.02~0.07 범위) → 현재 tertile 방식이 유리한 결과만
+  골라낸 게 아니라 커버리지(82.4%, 대안 대비 최고)가 더 나아서
+  채택된 것임을 확인. 경계(50/221) 바로 양쪽 실제 20개 단지 검증 —
+  경계 효과 자체는 실재하나(다른 peer key/pool로 배정), fallback이
+  이미 흡수해 NOT_AVAILABLE이나 극단적 불이익으로 이어지지 않음
+  확인 — Phase 2 이후 continuous-similarity 등 개선 후보로 기록만.
+- **peer count 사용자 표시 정의 확정**: `comparisonCount - 1`
+  (self 제외) — 기존엔 미정이었음.
+- Confidence 등급 기준을 raw pool이 아닌 실제 percentile 분모
+  (comparisonCount)로 명시적으로 재확인 — 실측 sample audit에서
+  예외 0건.
+
+서비스 기능 변경: 없음(검증 전용).
+
+DB 변경: 없음. 모든 script는 read-only.
+
+테스트/빌드: `npx tsc --noEmit` — 기존 20개 그대로, 신규 0건. 신규
+스크립트 lint clean.
+
+**신뢰 판정: MIN_SAMPLE=SAFE, size-band=SAFE, peer count 표시=이번에
+확정(NEEDS_FIX→해결), confidence=SAFE. BUG 없음 — Phase 2 구현 진행
+가능.**
+
+상태: 완료.
+
+상세: `docs/development/EJIP_SCORE_V2_PEER_SAMPLE_VERIFICATION.md`
