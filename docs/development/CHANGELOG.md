@@ -12891,3 +12891,68 @@ DATABASE_URL 등 프로덕션 설정 변경 없음).
 상태: 완료.
 
 상세: `docs/development/PERFORMANCE_V1.md`
+
+
+## 2026-09-01
+
+### PERFORMANCE V1.1-A — 84㎡ 부산 전체 조회 Production Index 추가
+
+PERFORMANCE_V1에서 발견한 area84(84㎡ 순위) 부산 전체 조회 병목
+해결. 사용자가 이번 STEP에 한해 Production DB index 추가를 명시적
+승인. Index 하나만 적용, 그 외 스키마/데이터 변경 없음.
+
+작업:
+
+- **실제 쿼리 추적**: `price-rankings` API → `fetchArea84TradesFromDb`
+  → `queryTrades()`의 실제 WHERE(`deal_type='sale' AND lawd_cd IN(16개
+  구) AND exclusive_area>=84 AND <85 AND deal_date>=24개월전 AND
+  deal_canceled=false`)를 코드로 직접 확인(추측 없음).
+- **선택도 실측**(read-only): `deal_canceled=true` 0.55%(거의 무의미),
+  `exclusive_area 84~85` 29.66%, `deal_date>=24개월` 7.92%, `lawd_cd`
+  현재 99.98%가 부산(테이블 자체가 아직 부산 전용이라 지금은 거의
+  필터링 효과 없음, 전국 확장 후 다시 유효해질 예정) — 4개 조건 전체
+  조합 시 2.68%로 매우 선택적.
+- **기존 인덱스 4개 전수 확인**: `(lawdCd,dealDate)`,
+  `(aptSeq,exclusiveArea,dealDate)`, `(identityKey,dealDate)`,
+  `(dealDate)` — 이 조합(lawdCd IN + exclusiveArea range + dealDate
+  range)을 커버하는 게 하나도 없음을 확인.
+- **인덱스 적용**: `(lawd_cd, exclusive_area, deal_date)` 신규 인덱스를
+  `CREATE INDEX CONCURRENTLY`로 production에 적용(855k+ row 테이블의
+  진행 중인 incremental sync 쓰기를 막지 않기 위함 — Prisma Migrate가
+  CONCURRENTLY를 감지해 트랜잭션 없이 실행). 적용 전/후 `pg_indexes`로
+  존재 여부, `indisvalid`/`indisready`, 크기(33MB) 확인. `ANALYZE`
+  실행(통계 갱신, 데이터 쓰기 아님).
+- **EXPLAIN ANALYZE 전/후 비교**(반복 측정으로 재현성 확인): buffer
+  hit 42,532→23,599(-44%), filter로 버려지는 행 44,736→1,935(-96%) —
+  DB 레벨에서는 실측으로 확실한 개선.
+- **정직한 결론(과장 없음)**: 그런데 실제 API/애플리케이션 레벨
+  체감속도는 거의 그대로(여전히 ~3.4s)였다. 원인을 직접 대조
+  측정 — 동일 쿼리를 raw SQL로 실행하면 75~150ms인데 Prisma
+  `findMany()`로 실행하면 3.2~3.8초가 걸림(25~40배 차이). 즉 병목은
+  SQL 실행 계획이 아니라 **Prisma ORM이 22,910개 row를 Node
+  객체로 역직렬화하는 비용**이었다 — `getYearlySaleAggregate`에서
+  이미 한 번 발견했던 것과 같은 종류의 문제("row를 그대로 Node로
+  옮기면 느림, DB에서 집계해야 함"). §24 지침에 따라 두 번째/세
+  번째 인덱스를 추가하지 않고, 대신 QUERY_REWRITE_RECOMMENDED로
+  보고만 함(다음 STEP 후보 — 84㎡ 랭킹 계산 자체를 raw SQL로
+  이전해 최종 ~30개 row만 Node로 가져오도록 재작성).
+- 84.0000<=area<85.0000 identity 규칙 불변 확인(API 응답에서 원본
+  84.994/84.8758 값 그대로 확인). deal_canceled 정책 불변.
+  decline/rising 등 다른 거래 쿼리 회귀 없음(smoke 재확인).
+
+서비스 기능 변경: 없음(index만 추가, application 코드 변경 없음).
+
+DB 변경: **있음 — production index 1개 추가**(승인됨). 데이터
+INSERT/UPDATE/DELETE 없음, table/column 구조 변경 없음.
+
+테스트/빌드: `npx tsc --noEmit` 기존 20건(신규 0), `npm run build`
+성공.
+
+**성능 판정: PARTIAL** — DB 레벨 개선은 실측으로 확실하나, 사용자
+체감 목표(<=2s)는 이번 인덱스만으로는 달성하지 못함(진짜 병목은
+Prisma row 역직렬화). 다음 권장 STEP: 84㎡ 랭킹 query rewrite
+(raw SQL 집계로 전환).
+
+상태: 완료.
+
+상세: `docs/development/PERFORMANCE_V1_1_AREA84_INDEX.md`

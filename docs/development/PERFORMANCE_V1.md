@@ -157,7 +157,7 @@ There is also a residual, uncached ~1.2s of post-cache-hit JS-side cost (pyeong 
 
 ## 10. Index Recommendations (for future approval)
 
-1. `ApartmentTradeHistory`: add `@@index([exclusiveArea, lawdCd, dealDate])` (or equivalent) to support the sido-wide 84㎡ ranking query. Expected to bring `queryTrades` for this shape from ~3.4–6s down toward the ~0.6s single-district baseline. Requires a Prisma migration — needs explicit approval per `AGENTS.md`.
+1. `ApartmentTradeHistory`: add a composite index covering the sido-wide 84㎡ ranking query's actual filter shape (`lawdCd IN(...)` + `exclusiveArea` range + `dealDate` range). **Update (2026-09-01, `PERFORMANCE_V1.1-A`):** user approved and this index was applied to production — see `docs/development/PERFORMANCE_V1_1_AREA84_INDEX.md`. Result: the index is a real, measured DB-level win (buffers -44%, wasted filtered rows -96%), but it did **not** bring the endpoint's user-facing latency under target, because the true bottleneck turned out to be Prisma ORM row-materialization of ~23K rows, not the SQL plan. Verdict: PARTIAL — see that doc's §19 for the follow-up recommendation (`QUERY_REWRITE_RECOMMENDED`, not a further index).
 
 ## 11. Launch Performance Risks
 
