@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { aptNamesMatch, normalizeAptName } from '@/lib/apt-name-match';
 import { calculateApartmentScore } from '@/lib/apartment-score/server/calculate';
 import { resolveDisplayedScoreVersion } from '@/lib/apartment-score/resolve-score-version';
+import { getPeerContext } from '@/lib/apartment-score/peer-context';
 import { logServerError } from '@/lib/log-server-error';
 
 export const dynamic = 'force-dynamic';
@@ -79,6 +80,28 @@ export async function GET(
     const result = await calculateApartmentScore(matched[0].aptSeq!);
     const shadowV2 = (result as any)._shadowV2;
 
+    // EJIP_SCORE_V2_PHASE2 — peer context는 V2가 실제로 표시 가능할 때만 계산한다
+    // (identityEligible/coverage로 이미 NOT_ENOUGH_DATA면 절대점수 자체가 없어
+    // 비교할 대상이 없음). 대상의 sigungu/buildYear/totalHouseholds는 score
+    // 계산에 이미 쓰인 값과 동일한 것을 한 번만 추가 조회한다(peer마다 조회하는
+    // 게 아니라 대상 1건뿐 — N+1 아님).
+    let peerContext = null;
+    if (shadowV2 && shadowV2.eligibility !== 'NOT_ENOUGH_DATA' && shadowV2.overallScore != null) {
+      const targetMaster = await prisma.apartmentMaster.findUnique({
+        where: { aptSeq: matched[0].aptSeq! },
+        select: { sigungu: true, buildYear: true, totalHouseholds: true },
+      });
+      if (targetMaster) {
+        peerContext = await getPeerContext({
+          aptSeq: matched[0].aptSeq!,
+          sigungu: targetMaster.sigungu,
+          buildYear: targetMaster.buildYear,
+          totalHouseholds: targetMaster.totalHouseholds,
+          v2Score: Math.round(shadowV2.overallScore),
+        });
+      }
+    }
+
     // LAUNCH_TRUST_BLOCKERS_V1 — ApartmentScoreCard는 _shadowV2가 있으면(거의 항상
     // 있음) V1의 score 대신 V2 엔진의 overallScore를 화면에 보여준다. scoreVersion을
     // 항상 V1의 SCORE_VERSION으로 응답하면 실제로 사용자에게 노출되는 엔진과 label이
@@ -95,6 +118,7 @@ export async function GET(
       market: result.market,
       briefing: result.briefing,
       _shadowV2: shadowV2,
+      peerContext,
     });
   } catch (error) {
     logServerError((error as Error)?.message || 'apt score route error', '/api/apt/[name]/score', (error as Error)?.stack).catch(() => {});
@@ -114,5 +138,6 @@ function emptyResponse(status: 'NOT_FOUND' | 'AMBIGUOUS' | 'INSUFFICIENT_DATA') 
     regionalStrengths: [],
     market: null,
     briefing: null,
+    peerContext: null,
   };
 }

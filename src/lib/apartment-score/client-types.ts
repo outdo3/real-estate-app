@@ -31,6 +31,26 @@ export interface ApartmentScoreBriefing {
 
 export type ApartmentScoreStatus = 'OK' | 'INSUFFICIENT_DATA' | 'NOT_FOUND' | 'AMBIGUOUS';
 
+// EJIP_SCORE_V2_PHASE2 — peer-relative context. Computed entirely outside the
+// score-v2 engine (src/lib/apartment-score/peer-context.ts); see that file for
+// the hierarchy/min-sample/confidence definitions (PHASE 1.5/1.6-validated,
+// not redefined here). `peerCount` (self-excluded) is what the UI should show
+// to users — `comparisonCount` (self-included) is the internal percentile
+// denominator and generally should not be shown directly.
+export interface ApartmentScorePeerContext {
+  available: boolean;
+  level: 'SIGUNGU_DECADE_SIZE' | 'SIGUNGU_DECADE' | 'DECADE_BUSAN' | 'BUSAN_ALL' | null;
+  comparisonCount: number | null;
+  peerCount: number | null;
+  percentile: number | null;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NOT_AVAILABLE';
+  basis: {
+    sigungu: string | null;
+    buildDecade: string | null;
+    sizeBand: 'small' | 'mid' | 'large' | 'UNKNOWN' | null;
+  } | null;
+}
+
 export interface ApartmentScoreApiResponse {
   status: ApartmentScoreStatus;
   score: number | null;
@@ -40,5 +60,7 @@ export interface ApartmentScoreApiResponse {
   categories: ApartmentScoreCategory[];
   regionalStrengths: ApartmentScoreRegionalStrength[];
   market: ApartmentScoreMarketInfo | null;
-  briefing: ApartmentScoreBriefing | null; _shadowV2?: any;
+  briefing: ApartmentScoreBriefing | null;
+  peerContext: ApartmentScorePeerContext | null;
+  _shadowV2?: any;
 }

@@ -164,6 +164,15 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
       market,
       briefing: null,
       preparingReason: classifyPreparingReason(categories),
+      // EJIP_SCORE_V2_PHASE2 — V2는 V1의 peer-percentile 기반 coverage와 무관한
+      // 자체 identityEligible/coverage 게이트를 쓴다(adapter.ts/eligibility.ts).
+      // shadowV2Result는 이미 위(§141-153)에서 계산 완료됐는데 이 분기에서
+      // 누락시키면, V2 자체는 SCORE_AVAILABLE/LIMITED인데도 V1의 무관한
+      // coverage<0.6 때문에 화면에 "준비 중"만 뜨는 결함이 생긴다(PHASE 1.5/1.6
+      // 감사에서 발견, 현재 데이터에서 실측 영향은 0건이지만 구조적으로 잘못됨).
+      // V1 formula/coverage 계산 자체는 전혀 건드리지 않는다 — 이미 계산된 값을
+      // 응답에 포함시키기만 한다.
+      _shadowV2: shadowV2Result,
     };
   }
 

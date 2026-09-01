@@ -1,0 +1,157 @@
+{
+  "generatedAt": "2026-09-01T06:04:12.784Z",
+  "totalSamples": 30,
+  "mismatches": 0,
+  "results": [
+    {
+      "aptSeq": "26530-48",
+      "name": "엄궁",
+      "match": true
+    },
+    {
+      "aptSeq": "26200-15",
+      "name": "동산(1106)",
+      "match": true
+    },
+    {
+      "aptSeq": "26350-297",
+      "name": "그린빌라",
+      "match": true
+    },
+    {
+      "aptSeq": "26350-296",
+      "name": "라온힐즈",
+      "match": true
+    },
+    {
+      "aptSeq": "26350-295",
+      "name": "영동써니",
+      "match": true
+    },
+    {
+      "aptSeq": "26230-42",
+      "name": "대진파레스필즈",
+      "match": true
+    },
+    {
+      "aptSeq": "26350-276",
+      "name": "동부썬빌라",
+      "match": true
+    },
+    {
+      "aptSeq": "26410-341",
+      "name": "동성베스트",
+      "match": true
+    },
+    {
+      "aptSeq": "26140-114",
+      "name": "송도현대",
+      "match": true
+    },
+    {
+      "aptSeq": "26230-43",
+      "name": "삼환",
+      "match": true
+    },
+    {
+      "aptSeq": "26470-11",
+      "name": "대원",
+      "match": true
+    },
+    {
+      "aptSeq": "26380-1964",
+      "name": "JPark",
+      "match": true
+    },
+    {
+      "aptSeq": "26170-748",
+      "name": "부산역유림로미오",
+      "match": true
+    },
+    {
+      "aptSeq": "26170-51",
+      "name": "초량하이츠빌리지",
+      "match": true
+    },
+    {
+      "aptSeq": "26530-72",
+      "name": "주례",
+      "match": true
+    },
+    {
+      "aptSeq": "26530-54",
+      "name": "광우파크",
+      "match": true
+    },
+    {
+      "aptSeq": "26710-23",
+      "name": "대진로얄",
+      "match": true
+    },
+    {
+      "aptSeq": "26290-76",
+      "name": "무학프라자",
+      "match": true
+    },
+    {
+      "aptSeq": "26320-56",
+      "name": "화명대우",
+      "match": true
+    },
+    {
+      "aptSeq": "26320-1481",
+      "name": "화명동롯데캐슬멤버스",
+      "match": true
+    },
+    {
+      "aptSeq": "26230-2523",
+      "name": "개금역금강펜테리움더스퀘어아파트",
+      "match": true
+    },
+    {
+      "aptSeq": "26260-2110",
+      "name": "동래효성해링턴플레이스",
+      "match": true
+    },
+    {
+      "aptSeq": "26230-1682",
+      "name": "전포동에메랄드홈",
+      "match": true
+    },
+    {
+      "aptSeq": "26230-2845",
+      "name": "서면롯데캐슬엘루체",
+      "match": true
+    },
+    {
+      "aptSeq": "26230-2853",
+      "name": "서면동원시티비스타",
+      "match": true
+    },
+    {
+      "aptSeq": "26470-1566",
+      "name": "아시아드코오롱하늘채",
+      "match": true
+    },
+    {
+      "aptSeq": "26260-2024",
+      "name": "사직롯데캐슬더클래식",
+      "match": true
+    },
+    {
+      "aptSeq": "26500-1941",
+      "name": "광일센텀스카이뷰",
+      "match": true
+    },
+    {
+      "aptSeq": "26470-3051",
+      "name": "레이카운티(5단지)",
+      "match": true
+    },
+    {
+      "aptSeq": "26500-2288",
+      "name": "리부스남천",
+      "match": true
+    }
+  ]
+}

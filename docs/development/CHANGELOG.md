@@ -12751,3 +12751,73 @@ DB 변경: 없음. 모든 script는 read-only.
 상태: 완료.
 
 상세: `docs/development/EJIP_SCORE_V2_PEER_SAMPLE_VERIFICATION.md`
+
+
+## 2026-09-01
+
+### E-JIP SCORE V2 — PHASE 2: Peer Context Production Implementation
+
+Phase 1/1.5/1.6에서 검증한 Model D(절대 평가 + 계층적 peer context +
+confidence)를 실제 프로덕션 API/UI에 구현. 절대 25/25/25/25 공식은
+변경 없음. DB schema/migration 없음, personalization 없음.
+
+작업:
+
+- **V1/V2 eligibility 게이트 버그 수정**: V1 coverage<0.6일 때
+  `_shadowV2`가 이미 계산돼 있음에도 응답에서 누락되어 V2가 화면에
+  뜨지 못하던 구조적 결함(Phase 1.5/1.6에서 발견) 수정
+  (`calculate.ts`). 화면 표시 판단 기준을 V1의 `status`에서 V2
+  자신의 `eligibility`로 전환(`ApartmentScoreCard.tsx`).
+- **계층적 peer context 구현**: L1(구+연식대+규모)→L2(구+연식대)→
+  L3(연식대, 부산 전체)→L4(부산 전체), MIN_PEER_SAMPLE=8, 세대수
+  unknown이면 L1 강제 배정 금지 — Phase 1.5/1.6 검증 그대로.
+  `comparisonCount`(self 포함, percentile 분모)와 `peerCount`(self
+  제외, 사용자 표시용)를 명확히 구분(`peer-context-pure.ts`,
+  `peer-context.ts`).
+- **성능**: V1 orchestration을 2,800회 이상 호출하는 대신
+  ApartmentMaster/ApartmentLocationFeature를 한 번씩만 배치 조회하고
+  순수 함수 `calculateScoreV2`를 직접 호출 — DB round-trip 2회
+  고정(N+1 없음). 기존 `getOrSetCache`(1시간 TTL) 재사용, 신규 캐시
+  인프라 없음. 실측: warm ~500-650ms, true cold ~2.5s(1s 목표 초과,
+  2s 재검토 기준 이내로 문서화).
+- **Confidence 등급별 wording 정책**: HIGH만 정확한 percentile 노출,
+  MEDIUM은 방향성 wording만, LOW는 숫자/방향성 모두 비노출("넓은
+  비교군 기준 참고 수준"). "꼴찌/최하위/나쁜 아파트" 등 거주자
+  적대적 표현 사용하지 않음.
+- **테스트 작성 중 실제 버그 발견+수정**: `confidenceFor()`에서
+  L2(`SIGUNGU_DECADE`)와 L3(`DECADE_BUSAN`)가 뒤바뀌어 있었음 —
+  고쳤다면 L2 단지는 LOW로, L3 단지는 MEDIUM으로 잘못 표시될
+  뻔했음. 단위 테스트(34/34 pass)와 실제 L2-fallback 단지(좌천시민)
+  라이브 확인 양쪽으로 수정 검증.
+- **Phase 1.6 cross-check**: Phase 1.6 sampleAudit(bottom10+
+  middle10+top10=30건, 실제 부산 데이터)을 실제 production
+  `getPeerContext()`로 재실행 — **30/30 일치, mismatch 0건**(요구
+  ≥20건/mismatch=0 초과 달성). 세대수 경계(49/50/220/221) 실제
+  단지로도 별도 확인.
+- **프로덕션+모바일 QA**: HIGH/MEDIUM/LOW 3개 confidence 등급 모두
+  실제 단지로 라이브 확인. 360/375/390px 모바일 QA에서 오버플로/
+  잘림/하단 네비 겹침 없음 확인. 검색→상세, 통계→상세, 단지
+  브리핑(V1 의존) 공존, `/stats/compare` 무관함, 관심단지 버튼
+  비간섭 등 회귀 확인 — 이상 없음.
+- **`SCORE_V2_VERSION` 유지 결정**: 엔진(곡선/가중치) 자체는
+  변경되지 않았고 peerContext는 순수 외부 추가 필드이므로
+  `EJIP_SCORE_V2_1` 그대로 유지. 근거는 `DECISIONS.md` #6 참고.
+
+서비스 기능 변경: 있음 — 아파트 상세 페이지 이집점수 카드에
+"비슷한 단지와 비교" 섹션 추가, V1 coverage 부족으로 숨겨지던 V2
+점수가 정상 노출됨.
+
+DB 변경: 없음.
+
+테스트/빌드: `node --experimental-strip-types --test` 34/34 pass,
+Phase 1.6 cross-check 30/30 match, `npx tsc --noEmit` 신규 에러
+0건(기존 스크립트 에러만 잔존), `npm run build` 성공, 신규 파일
+lint clean.
+
+알려진 제한사항: cold-path 지연시간(~2.5s)이 1s 목표 초과(2s 기준
+이내), `adapter.ts`의 기존 디버그 로그가 peer universe 빌드마다
+~3,400회 호출(기존 이슈, 이번 STEP 범위 밖).
+
+상태: 완료.
+
+상세: `docs/development/EJIP_SCORE_V2_PHASE2_IMPLEMENTATION.md`
