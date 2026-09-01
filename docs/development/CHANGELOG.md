@@ -13151,3 +13151,58 @@ Node 직접 fetch는 성공, 브라우저 fetch만 실패 — 코드/Kakao 서�
 상태: 완료.
 
 상세: `docs/development/MAP_PERFORMANCE_V1.md`
+
+
+### RENT TRADE HISTORY V1 — PHASE B: Production Schema + Sync Engine
+
+전월세(전세/월세) 전용 DB 기반 구축. PHASE A(source/identity 감사)에
+이어, 사용자가 이번 PHASE에 대해 명시적으로 production schema 생성과
+sync engine 구축을 승인.
+
+작업:
+
+- **신규 테이블 `apartment_rent_histories`** production 생성(신규
+  테이블이라 lock 위험 낮음, CONCURRENTLY 불필요). PHASE A가 추천한
+  스키마를 그대로 구현 — `dealCanceled` 등 취소 컬럼 없음(source
+  자체에 취소 개념이 없음, 실측 재확인), `ApartmentMaster` FK 없음
+  (미매칭 aptSeq row가 막히지 않게), money는 전부 `Int`(만원 단위,
+  float 없음).
+- 정규화 로직(`rent-history-logic.ts`, 22개 단위테스트)과 completeness
+  판정(`rent-completeness-logic.ts`, 6개 단위테스트) 순수함수로 분리
+  구현. 매매(`trade-history-logic.ts`)와 다르게 결정한 지점 2가지를
+  `DECISIONS.md` #9에 기록: (1) aptSeq 없는 row는 이름 기반 폴백 없이
+  차단(MISSING_APTSEQ) — 이번 STEP이 전월세에 한해 명시적으로 요구,
+  (2) occurrenceIndex를 API 응답 등장 순서가 아니라 전체 필드
+  결정적 정렬 순서로 부여(재동기화 시 순서가 바뀌어도 동일 자연키
+  집합 보장, PHASE A에 없던 새 요구사항).
+- Sync engine(`sync-rent-history.ts`) + CLI: 실제 페이지네이션
+  (totalCount 검증, 매매는 지금까지 필요 없었던 부분), 매매 backfill의
+  검증된 rate-limited 순차 fetcher 재사용, `--lawdCd`/`--from`/`--to`
+  전부 필수(무인 default 전체 백필 금지), 청크 upsert(500행).
+- **Production 검증 write**: 서구+부산진구+해운대구 × 2026-07,
+  1,238건. dry-run→apply→2차 apply(idempotency) 전부 실측: 2차
+  실행에서 신규 insert 0/변경 0/중복 0. Transaction rollback 방식
+  unique 제약 위반 검증(P2002 발생 확인, 영구 데이터 0건). 미매칭
+  aptSeq(48건, 12%)도 실제로 정상 저장되고 이름 폴백 없음을 직접
+  쿼리로 확인.
+- Correction 정책 재조회 실험(3개 구, 2개 월, 16분 간격 실측): 1,316행
+  전부 변화 없음(NOT_OBSERVED_IN_SAMPLE로 정직하게 분류 — 시차가
+  짧아 "정정 없음"을 단정하지 않음).
+- 기존 전월세 소비자(대시보드/상세/전세위험/갭투자/AI검색)는 전혀
+  변경하지 않음 — 계속 MOLIT 실시간 조회.
+
+서비스 기능 변경: 없음(신규 테이블만 추가, 아직 어떤 화면도 이 DB를
+읽지 않음).
+
+DB 변경: 있음(production, 신규 테이블 1개 + index 5개 + unique 제약
+1개, 승인됨). 검증 write 1,238행 production에 실존.
+
+테스트/빌드: 신규 단위테스트 28개 전부 통과, `npx tsc --noEmit` 신규
+에러 0, lint clean, `npm run build` 성공.
+
+알려진 제한: 부산 24개월 backfill은 PHASE C(다음 STEP)로 명시적 보류.
+Correction 정책은 16분 표본만 확보(장기 재실험 권장, PHASE D 이전).
+
+상태: 완료.
+
+상세: `docs/development/RENT_TRADE_HISTORY_V1_PHASE_B.md`

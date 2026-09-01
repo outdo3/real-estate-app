@@ -1,0 +1,44 @@
+{
+  "generatedAt": "2026-09-01T14:58:57.671Z",
+  "results": [
+    {
+      "lawdCd": "26140",
+      "dealYmd": "202607",
+      "gapMinutes": 16.041083333333333,
+      "olderCapturedAt": "2026-09-01T14:42:38.989Z",
+      "newerCapturedAt": "2026-09-01T14:58:41.454Z",
+      "olderRowCount": 65,
+      "newerRowCount": 65,
+      "added": 0,
+      "removed": 0,
+      "changed": 0,
+      "verdict": "NOT_OBSERVED_IN_SAMPLE"
+    },
+    {
+      "lawdCd": "26230",
+      "dealYmd": "202607",
+      "gapMinutes": 16.041083333333333,
+      "olderCapturedAt": "2026-09-01T14:42:38.989Z",
+      "newerCapturedAt": "2026-09-01T14:58:41.454Z",
+      "olderRowCount": 557,
+      "newerRowCount": 557,
+      "added": 0,
+      "removed": 0,
+      "changed": 0,
+      "verdict": "NOT_OBSERVED_IN_SAMPLE"
+    },
+    {
+      "lawdCd": "26350",
+      "dealYmd": "202412",
+      "gapMinutes": 16.041083333333333,
+      "olderCapturedAt": "2026-09-01T14:42:38.989Z",
+      "newerCapturedAt": "2026-09-01T14:58:41.454Z",
+      "olderRowCount": 694,
+      "newerRowCount": 694,
+      "added": 0,
+      "removed": 0,
+      "changed": 0,
+      "verdict": "NOT_OBSERVED_IN_SAMPLE"
+    }
+  ]
+}

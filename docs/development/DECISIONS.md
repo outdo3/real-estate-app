@@ -266,3 +266,54 @@ nullable해지고 위험한 마이그레이션이 필요해진다.
 상태:
 
 채택
+
+---
+
+## 9. RENT TRADE HISTORY V1 PHASE B — identity/자연키 세부 정책
+
+날짜:
+2026-09-01
+
+결정:
+
+1. rent row에 aptSeq가 없으면(PHASE A 실측상 0건이지만 방어적으로) sale의
+   identityKey() "nd:{name}|{dong}" 이름 기반 폴백을 쓰지 않고 MISSING_APTSEQ로
+   분류해 저장 자체를 막는다(blocked). 이 STEP의 작업 지시가 전월세에 한해 명시적으로
+   요구한 정책이며, sale과 다른 정책이라는 점을 의도적으로 남긴다.
+
+2. floor는 매매와 동일하게 자연키 구성요소이면서 DB 컬럼은 nullable(Int?)로
+   유지하되, 정규화 단계(rent-history-logic.ts)에서 floor를 파싱할 수 없는 row는
+   MISSING_FLOOR로 분류해 절대 저장하지 않는다. Postgres unique 제약은 NULL을
+   서로 다른 값으로 취급(NULL != NULL)하므로, floor가 NULL인 채로 저장되는 row가
+   하나라도 있으면 동일 거래가 재동기화 때마다 새 row로 쌓여 idempotency가
+   깨진다 — 이 문제는 scripts/trade-history-logic.ts가 매매에서 이미 확인하고
+   해결한 것과 동일 클래스이므로, 스키마를 바꾸는 대신 정규화 레이어에서 동일하게
+   막는다.
+
+3. occurrenceIndex는 MOLIT 응답 배열의 등장 순서가 아니라, row 전체 필드의
+   결정적 직렬화 정렬 순서로 부여한다(rent-history-logic.ts의 § OCCURRENCE
+   DETERMINISM). 같은 데이터를 다른 순서로 다시 받아도(재동기화, 페이지 재정렬 등)
+   동일한 자연키 집합이 나와야 idempotent upsert가 안정적이기 때문이다.
+
+4. 대량 sync 시 API 호출 속도는 라이브 트래픽용 GLOBAL_MOLIT_CONCURRENCY(동시 6,
+   src/lib/molit-stats-helpers.ts)를 재사용하지 않고, scripts/backfill-trade-history.ts가
+   이미 실측으로 검증한 보수적 순차 fetcher(동시 1, 최소 간격 350ms, 지수 백오프)를
+   그대로 따른다. PHASE A §16은 원래 라이브 세마포어 재사용을 권고했지만, 그 권고보다
+   먼저 존재하는 sale backfill의 실측 결과(라이브 세마포어로는 대량 호출 시 실제
+   data.go.kr 스로틀이 걸림)가 더 구체적이고 검증된 근거이므로 이를 따른다.
+
+이유:
+
+전부 "idempotency와 identity 안전을 형식적 권고보다 우선한다"는 동일한 원칙에서
+나온 결정이다. 특히 2번과 3번은 새 테이블이라 지금 당장은 문제가 드러나지 않아도
+재동기화가 반복되는 순간 데이터가 조용히 부풀어 오르는 종류의 버그라 사전에
+차단한다.
+
+영향:
+
+MISSING_APTSEQ/MISSING_FLOOR로 분류된 row는 이번 PHASE 실측(3개 구 x 1개월,
+1,238건)에서 0건이었다 — 정책은 존재하되 현재 비용은 0에 가깝다.
+
+상태:
+
+채택

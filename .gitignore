@@ -70,6 +70,13 @@ scripts/_resync_cancellation_v2_results/
 # TRADE_DB_FIRST_V1 STEP F — 전국 incremental sync 실행 로그(재현 가능, 커밋 불필요. manifest는 별도로 커밋함)
 scripts/_incremental_sync_nationwide_results/
 
+# RENT_TRADE_HISTORY_V1 PHASE B — sync 실행 로그(재현 가능, 커밋 불필요. manifest는 별도로 커밋함)
+scripts/rent-trade-history/_sync_rent_history_results/
+
+# RENT_TRADE_HISTORY_V1 PHASE B — correction-experiment raw 스냅샷(재현 가능, 재실행 시 계속 쌓임.
+# diff 결과 요약(output-phase-b-correction-experiment.json)은 evidence로 별도 커밋함)
+scripts/rent-trade-history/_correction_experiment_snapshots/
+
 # BRAND STEP 57-A — 브랜드 원본(PSD급 고해상도 PNG) 로컬 보관 전용.
 # production에서 실제로 서빙하는 최적화 자산은 public/brand/에 별도로 커밋된다.
 brand-source/

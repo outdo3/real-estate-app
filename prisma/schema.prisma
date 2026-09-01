@@ -1281,3 +1281,78 @@ model ApartmentTradeHistory {
   @@index([lawdCd, exclusiveArea, dealDate])
   @@map("apartment_trade_histories")
 }
+
+// RENT_TRADE_HISTORY_V1 PHASE B — 전월세(RTMSDataSvcAptRent) 전용 테이블. sale의
+// ApartmentTradeHistory와 별도 테이블인 이유는 PHASE A(docs/development/
+// RENT_TRADE_HISTORY_V1_ARCHITECTURE.md §12)에 근거: 금액 필드가 2개(보증금+월세)이고
+// 취소/해제 개념이 source에 아예 없어 sale 전용 컬럼(dealCanceled 등)을 억지로
+// nullable화하지 않기 위함.
+model ApartmentRentHistory {
+  id Int @id @default(autoincrement())
+
+  source String @default("MOLIT_APT_RENT") @map("source")
+
+  lawdCd  String @map("lawd_cd")
+  dealYmd String @map("deal_ymd")
+
+  // Identity — trade-history-logic.ts의 identityKey()/groupKey()와 동일 정의를
+  // rent-history-logic.ts에 별도 복제해 사용한다(§ trade-history-logic.ts 헤더 주석과
+  // 동일한 도구 제약 — scripts/*.ts 확장자 없는 상호 import 불가).
+  aptSeq      String? @map("apt_seq") // PHASE A §10: 실측 샘플 100% 존재하지만 sale과 동일하게 방어적으로 nullable 유지
+  identityKey String  @map("identity_key") // aptSeq 있으면 "id:{aptSeq}", 없으면 "nd:{name}|{dong}"
+  dealType    String  @map("deal_type") // 'jeonse' | 'wolse' — monthlyRent===0이면 jeonse, 아니면 wolse(ingestion 시점에 1회 결정, 재계산 금지)
+  groupKeyStr String  @map("group_key") // identityKey::areaKey::dealType
+
+  aptName String  @map("apt_name")
+  dong    String  @map("dong")
+  jibun   String? @map("jibun")
+
+  // 전용면적(㎡), raw 그대로(반올림/평형 변환 금지 — Unit Master protection 원칙과 동일).
+  exclusiveArea Decimal @map("exclusive_area")
+
+  deposit     Int @map("deposit") // 만원 단위, 정수(float 금지). PHASE A §5: sale의 dealAmount와 동일 관례
+  monthlyRent Int @map("monthly_rent") // 만원 단위, jeonse는 항상 0(§4)
+
+  dealYear  Int      @map("deal_year")
+  dealMonth Int      @map("deal_month")
+  dealDay   Int      @map("deal_day")
+  dealDate  DateTime @map("deal_date") @db.Date
+
+  floor     Int? @map("floor")
+  buildYear Int? @map("build_year")
+
+  // PHASE A §8/§9 — 갱신계약(contractType='갱신') 전용 필드. 신규계약/수집 이전 데이터는
+  // 항상 null이며, 강제로 false/0/'신규'를 채우지 않는다(원본에 없는 값 생성 금지).
+  contractType    String?  @map("contract_type") // '신규' | '갱신' | null
+  contractTerm    String?  @map("contract_term") // free-text 계약기간, 예: "26.01~27.01"
+  preDeposit      Int?     @map("pre_deposit")
+  preMonthlyRent  Int?     @map("pre_monthly_rent")
+  useRenewalRight Boolean? @map("use_renewal_right") // PHASE A §12: null=미기재(UNKNOWN), true=사용 확인. source에 "미사용" 값이 없으므로 false는 절대 쓰지 않는다
+
+  // PHASE A §7 — 의도적으로 dealCanceled/isCanceled/canceledAt 필드를 두지 않는다.
+  // RTMSDataSvcAptRent 응답에는 취소/해제/등기 관련 필드가 전혀 존재하지 않음을
+  // 2,543건 실측으로 확인했다(등기일자/rgstDate/해제여부/cdealType/해제사유발생일/cdealDay
+  // 전부 부재). 있지도 않은 신뢰를 암시하는 컬럼(예: dealCanceled=false 고정값)을
+  // 만들지 않는다 — 이 테이블에서 "취소 제외" 개념은 존재하지 않는다.
+
+  // PHASE A §11 — 자연키(groupKey+deposit+monthlyRent+dealDate+floor)만으로는 153건의
+  // 실제 충돌이 존재(MOLIT가 공개 데이터에 호실 번호를 노출하지 않아 동일 층/면적/가격/
+  // 날짜의 서로 다른 호실이 실제로 존재). sale과 동일하게 occurrenceIndex로 병합 없이
+  // 구분한다(같은 lawdCd+dealYmd 응답 원본 등장 순서, 0부터).
+  occurrenceIndex Int @default(0) @map("occurrence_index")
+
+  sourceFetchedAt DateTime @default(now()) @map("source_fetched_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([groupKeyStr, deposit, monthlyRent, dealDate, floor, occurrenceIndex], name: "rent_natural_key")
+  @@index([aptSeq, exclusiveArea, dealDate])
+  @@index([lawdCd, dealDate])
+  @@index([identityKey, dealDate])
+  @@index([dealDate])
+  // PHASE A §14 — PERFORMANCE_V1.1-A의 교훈을 미리 반영: dashboard의 실제 조회 형태
+  // (지역 + jeonse/wolse + 기간)를 커버하는 복합 인덱스를 sale처럼 사고 터진 뒤가 아니라
+  // 처음부터 만든다.
+  @@index([lawdCd, dealType, dealDate])
+  @@map("apartment_rent_histories")
+}
