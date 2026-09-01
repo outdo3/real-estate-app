@@ -12821,3 +12821,73 @@ lint clean.
 상태: 완료.
 
 상세: `docs/development/EJIP_SCORE_V2_PHASE2_IMPLEMENTATION.md`
+
+
+## 2026-09-01
+
+### PERFORMANCE V1 — 출시 전 1차 체감속도 개선
+
+검색→상세→통계→지도 핵심 journey의 실제 체감속도를 실측하고, 출시
+전 큰 병목을 제거. 새 기능 없음, DB schema/migration 없음.
+
+작업:
+
+- **Score cold path 원인 규명+개선**: peer-universe 빌드 루프에서
+  3,401회 실행되던 `console.log`(adapter.ts) 제거로 해당 루프
+  1,370ms→~460ms(45%↓, controlled before/after 측정). V1의
+  `calculateApartmentScore()`가 매 요청마다(캐시 hit/miss 무관)
+  구(sggCd) 전체 cohort(마스터+위치+시세)를 캐시 없이 재조회하던
+  것(실측 800~950ms)을 기존 `getOrSetCache`로 30분 캐싱 —
+  Score API warm 응답 0.294s→0.09~0.16s(2~3배).
+- **새로 발견한 P0 병목 2건**(Score보다 훨씬 심각, 이전에 문서화된
+  적 없음):
+  - `area84`(84㎡ 순위) 부산 전체 조회: `queryTrades`가 16개 구
+    IN-list+exclusiveArea range+24개월 조합에서 3.4~6s(단일 구는
+    0.63s) — `ApartmentTradeHistory`에 이 조합을 커버하는 복합
+    인덱스가 없음. 인덱스 추가는 마이그레이션이 필요해 이번
+    STEP에서 적용하지 않고 권고만 기록(`PERFORMANCE_V1.md` §7,
+    승인 필요).
+  - `dashboard`(거래량) 부산 전체 조회: 전세/월세가 여전히
+    구×12개월 MOLIT 호출(16구×12개월=192건)이 필요해 최초 계산
+    20~30초 이상 — `TRADE_DB_FIRST_V1 STEP B-2`가 이미 문서화한
+    "rent MOLIT 병목"이 sido-wide 조합에서 훨씬 심각하게 드러난
+    것. 전월세 DB 구축은 이번 STEP 범위 밖(§21) — TTL만 완화.
+  - 두 경우 모두 스키마 없이 가능한 유일한 완화책으로 해당
+    캐시 키의 TTL만 5분→30분으로 늘림(재계산 빈도 감소, 근본 비용은
+    불변 — 정직하게 문서화).
+- **상세페이지 waterfall 감사**: 외부 regcode 프록시 호출을
+  `await`해서 `setLoading(false)`(전체화면 오버레이 해제)를 매번
+  ~300ms 늦추던 실제 blocking 버그 발견+수정(fire-and-forget 전환)
+  — `region` URL 파라미터가 없는 대부분의 진입 경로(검색 결과,
+  통계 링크 등)에서 매번 발생하던 불필요한 지연. 나머지 fetch는
+  이미 이전 STEP들에서 progressive/non-blocking으로 잘 구성돼 있음
+  확인(추가 수정 없음).
+- **검색/지도/번들 감사**: 검색 자동완성은 이미
+  debounce+cache+abort+perf 계측까지 갖춘 최적 상태 확인(수정
+  안 함). 지도 SDK가 다른 페이지로 새는지 실제 브라우저에서
+  확인 — 새지 않음, Home/Map 모두 JS ~155~160KB로 비슷한 수준.
+- **Cache stampede**: 기존 `getOrSetCache`가 이미 in-flight Promise
+  공유로 동시 cold 요청 중복 계산을 막고 있음 확인(신규 인프라
+  불필요).
+- Score 회귀 없음 재확인: peer-context/score-card-presenter 테스트
+  34/34, Phase 1.6 cross-check 30/30 mismatch 0(모든 fix 적용 후).
+
+서비스 기능 변경: 없음(순수 성능 개선 + 1건의 blocking-fetch
+버그 수정).
+
+DB 변경: 없음(read-only 조사만, 인덱스 추가는 미적용·승인 대기
+상태로 문서화).
+
+테스트/빌드: `node --experimental-strip-types --test` 34/34 pass,
+Phase 1.6 cross-check 30/30 match, `npx tsc --noEmit` 정확히 기존
+20건(신규 0), lint 신규 에러 0, `npm run build` 성공.
+
+알려진 제한사항: Vercel 실제 프로덕션에서 Score/area84가 로컬보다
+훨씬 느림(Score cold ~11.8s vs 로컬 ~1.5~2.9s) — 리전은 일치(icn1,
+Seoul DB와 동일)하므로 리전 문제는 아니고 Prisma+PgBouncer
+prepared-statement 재협상 비용으로 추정(확인만, 이번 STEP에서
+DATABASE_URL 등 프로덕션 설정 변경 없음).
+
+상태: 완료.
+
+상세: `docs/development/PERFORMANCE_V1.md`

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getOrSetCache } from '@/lib/server-cache';
 import type { CategoryResult, Confidence, FinalScoreResult, PeerPoolResult, RawLocationFeature, RawMasterInfo } from './types';
 import { MIN_TOTAL_COVERAGE, SCORE_VERSION } from './config';
 import { resolvePeerPoolLevels, type PeerCandidate } from './peer-groups';
@@ -52,27 +53,38 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
   const sigunguLabel = targetMaster.sigungu ?? '주변 지역';
   const umdName = targetMaster.umdName;
 
-  const cohortMasterRows = await prisma.apartmentMaster.findMany({
-    where: { sggCd: targetMaster.sggCd, aptSeq: { not: null } },
-    select: {
-      aptSeq: true,
-      sggCd: true,
-      sigungu: true,
-      umdName: true,
-      buildYear: true,
-      totalHouseholds: true,
-      parkingCount: true,
-      mainBuildingCount: true,
-      geocodeQuality: true,
-    },
-  });
-
-  const cohortAptSeqs = cohortMasterRows.map((r) => r.aptSeq!).filter(Boolean);
-
-  const [locationRows, marketRows] = await Promise.all([
-    prisma.apartmentLocationFeature.findMany({ where: { aptSeq: { in: cohortAptSeqs } } }),
-    prisma.apartmentMarketFeature.findMany({ where: { aptSeq: { in: cohortAptSeqs } } }),
-  ]);
+  // PERFORMANCE_V1 §21/§34 — 이 구(sggCd) cohort 3-query는 이전까지 캐시가
+  // 전혀 없어 같은 구의 단지를 조회할 때마다(V2 peer-universe 캐시 hit/miss와
+  // 무관하게 매번) 재조회됐다(실측 ~800~950ms). Registry/location/market은
+  // 배치 갱신 데이터라 분 단위로 바뀌지 않으므로, 기존 getOrSetCache를 그대로
+  // 재사용해 구 단위로 캐싱한다(새 캐시 인프라 없음, TTL 30분 — score-v2 peer
+  // universe의 1시간보다는 짧게 잡아 registry 갱신 반영 지연을 더 낮게 유지).
+  const { cohortMasterRows, locationRows, marketRows } = await getOrSetCache(
+    `score-v1-cohort:${targetMaster.sggCd}`,
+    30 * 60 * 1000,
+    async () => {
+      const rows = await prisma.apartmentMaster.findMany({
+        where: { sggCd: targetMaster.sggCd, aptSeq: { not: null } },
+        select: {
+          aptSeq: true,
+          sggCd: true,
+          sigungu: true,
+          umdName: true,
+          buildYear: true,
+          totalHouseholds: true,
+          parkingCount: true,
+          mainBuildingCount: true,
+          geocodeQuality: true,
+        },
+      });
+      const aptSeqs = rows.map((r) => r.aptSeq!).filter(Boolean);
+      const [locations, markets] = await Promise.all([
+        prisma.apartmentLocationFeature.findMany({ where: { aptSeq: { in: aptSeqs } } }),
+        prisma.apartmentMarketFeature.findMany({ where: { aptSeq: { in: aptSeqs } } }),
+      ]);
+      return { cohortMasterRows: rows, locationRows: locations, marketRows: markets };
+    }
+  );
 
   const masterByAptSeq = new Map<string, RawMasterInfo>(
     cohortMasterRows.map((r) => [

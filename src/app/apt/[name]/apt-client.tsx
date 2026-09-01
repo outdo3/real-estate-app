@@ -303,19 +303,23 @@ export default function ApartmentDetail() {
         if (urlRegion) {
           setRegionName(urlRegion);
         } else {
-          try {
-            const regRes = await fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${resolvedLawdCd}00000`);
-            if (cancelled) return;
-            if (regRes.ok) {
-              const regData = await regRes.json();
+          // PERFORMANCE_V1 §13/§14/§27 — regionName은 critical 데이터가 아니다
+          // (primaryAddress/heroRegionLabel이 이미 firstTrade?.dong으로 정상
+          // fallback한다). 예전엔 이 외부 regcode 프록시 호출을 await해서
+          // setLoading(false)(전체화면 "데이터를 수집 중입니다..." 오버레이 해제)를
+          // 매번 ~300ms씩 늦췄다 — region 쿼리 파라미터가 없는 대부분의 진입
+          // 경로(검색 결과, 통계 페이지 링크 등, 지도/AI검색만 region을 넘김)에서
+          // 실제로 발생하던 불필요한 serial 대기. fire-and-forget으로 바꿔
+          // pageReady를 막지 않고, 응답이 오면 조용히 더 정확한 표기로 갱신만 한다.
+          fetch(`https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes?regcode_pattern=${resolvedLawdCd}00000`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((regData) => {
               if (cancelled) return;
-              if (regData.regcodes && regData.regcodes.length > 0) {
+              if (regData?.regcodes && regData.regcodes.length > 0) {
                 setRegionName(regData.regcodes[0].name);
               }
-            }
-          } catch (e) {
-            console.error(e);
-          }
+            })
+            .catch((e) => console.error(e));
         }
       } catch (error) {
         console.error('Failed to fetch trades:', error);

@@ -100,7 +100,15 @@ export async function GET(request: Request) {
     }
 
     const cacheKey = isSidoAll ? `stats-dashboard-sido:${sidoCodeParam}` : `stats-dashboard:${lawdCd}`;
-    const data = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
+    // PERFORMANCE_V1 §21/§33 — sido-wide(전체 시/도) 요청은 매매(sale)만
+    // DB-first이고 전세/월세는 여전히 구×12개월 MOLIT 호출(부산 기준 16구
+    // ×12개월=192 task)이 필요해 cold 실측 17~20s까지 걸린다(rent DB가
+    // 없어 생기는 구조적 외부 API 병목 — rent DB 구축은 이번 STEP 범위
+    // 밖, §21). 단일 구 요청은 12개월(최대 12 task)뿐이라 이 병목이 없다.
+    // 스키마 변경 없이 가능한 완화책으로 sido-wide만 TTL을 5분→30분으로
+    // 늘려 이 비싼 재계산이 발생하는 빈도를 줄인다.
+    const ttlMs = isSidoAll ? 30 * 60 * 1000 : 5 * 60 * 1000;
+    const data = await getOrSetCache(cacheKey, ttlMs, async () => {
       const now = new Date();
 
       // ── 1) 최근 12개월 매매/전세: 그래프 + 핫이슈 + 갭투자 + 전세가율에 재사용 ──

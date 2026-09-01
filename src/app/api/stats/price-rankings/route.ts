@@ -312,8 +312,17 @@ export async function GET(request: Request) {
         // TRADE_DB_FIRST_V1 STEP B — 부산 전체(area84) DB-first 경로. MOLIT
         // 재조회 없음, 지역별 부분 실패(failedDistricts) 개념 자체가 없음(DB
         // read는 전체 성공 또는 예외 둘 중 하나 — try/catch가 바깥에서 처리).
+        // PERFORMANCE_V1 §33/§42 — 16개 구 전체를 lawdCd IN(...)으로 한 번에
+        // 조회하는 이 경로는 실측 3.4~6s(단일 구는 0.6s)로, exclusiveArea
+        // range를 걸치는 조합에 최적화된 복합 인덱스가 없어 생기는 구조적
+        // DB 비용이다(해결하려면 스키마 변경 필요 — 이번 STEP 승인 범위 밖,
+        // docs/development/PERFORMANCE_V1.md의 Index Recommendations 참고).
+        // 스키마 없이 가능한 유일한 완화책으로 TTL만 5분→30분으로 늘려 이
+        // 비싼 재계산 빈도를 줄인다(캐시 키/의미는 그대로, 데이터는 배치
+        // 갱신이라 30분 지연이 실질적 문제가 되지 않음 — Score peer
+        // universe의 1시간 TTL과 같은 원칙).
         const cacheKey = `stats-price-rankings-area84-db-sido:${sidoCodeParam}:${lawdCds.join(',')}`;
-        allTrades = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => fetchArea84TradesFromDb(lawdCds));
+        allTrades = await getOrSetCache(cacheKey, 30 * 60 * 1000, async () => fetchArea84TradesFromDb(lawdCds));
       } else if ((mode === 'decline' || mode === 'rising') && isBusanScopedRequest(null, sidoCodeParam, true)) {
         // TRADE_DB_FIRST_V1 STEP C-2 — 부산 전체(decline/rising) DB-first
         // 경로(단일 SQL pass, 최종 row 직접 반환). area84와 동일하게 부분
