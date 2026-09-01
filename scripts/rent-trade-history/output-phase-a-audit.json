@@ -1,0 +1,208 @@
+{
+  "generatedAt": "2026-09-01T12:31:30.952Z",
+  "endpoint": "http://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent",
+  "rawFieldKeys": [
+    "aptNm",
+    "aptSeq",
+    "buildYear",
+    "contractTerm",
+    "contractType",
+    "dealDay",
+    "dealMonth",
+    "dealYear",
+    "deposit",
+    "excluUseAr",
+    "floor",
+    "jibun",
+    "monthlyRent",
+    "preDeposit",
+    "preMonthlyRent",
+    "roadnm",
+    "roadnmbcd",
+    "roadnmbonbun",
+    "roadnmbubun",
+    "roadnmcd",
+    "roadnmseq",
+    "roadnmsggcd",
+    "sggCd",
+    "umdNm",
+    "useRRRight"
+  ],
+  "cancellationFieldsPresent": [],
+  "fieldCoverageByMonth": [
+    {
+      "month": "202601",
+      "n": 96,
+      "contractTypeFilled": 92,
+      "contractTypeValues": [
+        "신규",
+        "갱신"
+      ],
+      "useRRRightFilled": 12,
+      "preDepositFilled": 16,
+      "aptSeqMissing": 0
+    },
+    {
+      "month": "202506",
+      "n": 98,
+      "contractTypeFilled": 95,
+      "contractTypeValues": [
+        "갱신",
+        "신규"
+      ],
+      "useRRRightFilled": 7,
+      "preDepositFilled": 17,
+      "aptSeqMissing": 0
+    },
+    {
+      "month": "202412",
+      "n": 161,
+      "contractTypeFilled": 157,
+      "contractTypeValues": [
+        "신규",
+        "갱신"
+      ],
+      "useRRRightFilled": 6,
+      "preDepositFilled": 13,
+      "aptSeqMissing": 0
+    },
+    {
+      "month": "202312",
+      "n": 101,
+      "contractTypeFilled": 93,
+      "contractTypeValues": [
+        "신규",
+        "갱신"
+      ],
+      "useRRRightFilled": 2,
+      "preDepositFilled": 2,
+      "aptSeqMissing": 0
+    },
+    {
+      "month": "202112",
+      "n": 71,
+      "contractTypeFilled": 54,
+      "contractTypeValues": [
+        "갱신",
+        "신규"
+      ],
+      "useRRRightFilled": 2,
+      "preDepositFilled": 5,
+      "aptSeqMissing": 0
+    },
+    {
+      "month": "202006",
+      "n": 93,
+      "contractTypeFilled": 0,
+      "contractTypeValues": [],
+      "useRRRightFilled": 0,
+      "preDepositFilled": 0,
+      "aptSeqMissing": 0
+    },
+    {
+      "month": "201912",
+      "n": 67,
+      "contractTypeFilled": 0,
+      "contractTypeValues": [],
+      "useRRRightFilled": 0,
+      "preDepositFilled": 0,
+      "aptSeqMissing": 0
+    },
+    {
+      "month": "201812",
+      "n": 64,
+      "contractTypeFilled": 0,
+      "contractTypeValues": [],
+      "useRRRightFilled": 0,
+      "preDepositFilled": 0,
+      "aptSeqMissing": 0
+    }
+  ],
+  "identityByDistrict": [
+    {
+      "district": "서구",
+      "lawdCd": "26140",
+      "n": 96,
+      "aptSeqMissing": 0,
+      "uniqueAptSeq": 39,
+      "matched": 35,
+      "unmatched": 4
+    },
+    {
+      "district": "해운대구",
+      "lawdCd": "26350",
+      "n": 784,
+      "aptSeqMissing": 0,
+      "uniqueAptSeq": 181,
+      "matched": 171,
+      "unmatched": 10
+    },
+    {
+      "district": "부산진구",
+      "lawdCd": "26230",
+      "n": 868,
+      "aptSeqMissing": 0,
+      "uniqueAptSeq": 217,
+      "matched": 181,
+      "unmatched": 36
+    },
+    {
+      "district": "동래구",
+      "lawdCd": "26260",
+      "n": 480,
+      "aptSeqMissing": 0,
+      "uniqueAptSeq": 129,
+      "matched": 116,
+      "unmatched": 13
+    },
+    {
+      "district": "기장군",
+      "lawdCd": "26710",
+      "n": 315,
+      "aptSeqMissing": 0,
+      "uniqueAptSeq": 80,
+      "matched": 66,
+      "unmatched": 14
+    }
+  ],
+  "naturalKeyAudit": {
+    "candidate": "aptSeq+dealDate+exclusiveArea+floor+deposit+monthlyRent",
+    "totalItems": 2543,
+    "uniqueKeys": 2375,
+    "duplicateKeys": 153,
+    "sampleDuplicates": [
+      {
+        "key": "26140-66|2026-1-14|56.96|4|8,000|0",
+        "count": 2
+      },
+      {
+        "key": "26140-51|2026-1-10|84.74|3|25,000|0",
+        "count": 2
+      },
+      {
+        "key": "26140-1285|2026-1-10|74.44|25|36,000|0",
+        "count": 2
+      },
+      {
+        "key": "26140-1290|2026-1-14|84.9585|1|35,000|0",
+        "count": 2
+      },
+      {
+        "key": "26230-149|2026-1-29|84.38|7|3,000|75",
+        "count": 2
+      }
+    ],
+    "conclusion": "Genuine collisions exist (multiple identical-spec units in the same building, same floor/area/price/date) -- MOLIT does not expose unit/ho number publicly. Same class of issue the existing sale TradeHistory model already solves via occurrenceIndex."
+  },
+  "rentTypeAndEdgeCases": {
+    "totalItems": 2543,
+    "jeonseCount_monthlyRentZero": 1233,
+    "wolseCount_monthlyRentPositive": 1310,
+    "depositZeroCases_pureMonthlyRent": 6,
+    "bothZeroCases_shouldBeZero": 0,
+    "renewalContracts": 526,
+    "renewalsWithPreDepositFilled": 525,
+    "newContracts": 1974,
+    "newContractsWithPreDepositFilled_shouldBeZero": 0
+  }
+}

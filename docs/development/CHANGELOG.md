@@ -13019,3 +13019,78 @@ build` 성공.
 상태: 완료.
 
 상세: `docs/development/PERFORMANCE_V1_1_AREA84_SQL_PUSHDOWN.md`
+
+
+## 2026-09-01
+
+### RENT TRADE HISTORY V1 — PHASE A: 전월세 Source/Identity/Schema 감사
+
+PERFORMANCE_V1이 남긴 최대 구조적 병목(부산 전체 dashboard/volume
+20~30s+, 원인=전세/월세가 매매와 달리 DB-FIRST가 아니라 요청마다
+MOLIT 192회 호출)을 해결하기 위한 첫 단계. Production schema/
+migration/데이터 쓰기 전혀 없음(감사 전용). 실제 MOLIT 전월세
+API(`RTMSDataSvcAptRent`)에 직접 read-only 호출해 raw response를
+확인하고, 실제 ApartmentMaster와 대조해 identity/자연키/schema를
+설계.
+
+작업:
+
+- **실제 소스 확정**: `RTMSDataSvcAptRent`/`getRTMSDataSvcAptRent`(코드에서
+  직접 확인, 추측 아님). 서구/해운대/부산진/동래/기장 5개 구,
+  2,543건 실 데이터로 field dictionary 작성.
+- **중요 발견 — 취소(cancellation) 필드가 전혀 없음**: 매매 API의
+  등기일자/해제여부/해제사유발생일류 필드가 전월세 API 응답에는
+  단 하나도 존재하지 않음을 실측 확인. 기존 코드(`api-molit.ts`)가
+  전월세에도 매매와 동일한 `parseCancellationFields()`를 호출하고
+  있어, 모든 전월세 row가 "취소 아님이 검증됨"이 아니라 "애초에
+  판단 불가능한데 무조건 false"로 나오고 있었음(기존 코드 동작,
+  이번 STEP에서 수정하지 않음 — 감사 전용). 새 rent schema에는
+  근거 없는 dealCanceled 컬럼을 만들지 않기로 결정.
+- **전세/월세 분류 검증**: `monthlyRent===0`=전세/`>0`=월세, 실측
+  2,543건 전부 깨끗하게 이분(전세 1,233/월세 1,310), 양쪽 다 0인
+  무효 케이스 0건, deposit=0(순수 월세) 6건 실제 확인(신축 단지,
+  정상 데이터).
+- **갱신계약 필드 rollout 확정**: contractType/contractTerm/
+  useRRRight/preDeposit는 2018~2020년 데이터엔 전혀 없다가(0%)
+  2021년 이후 등장(76~98%) — 실측으로 확인(추측 아님). preDeposit는
+  실제 갱신계약의 99.8%(525/526)에서만 채워지고 신규계약은
+  0%(0/1974) — 갱신 전용 필드임을 상관관계로 증명.
+- **자연키 설계+충돌 실측**: aptSeq+날짜+면적+층+보증금+월세 키로
+  2,543건 중 153개 키 충돌 발견 — MOLIT가 호실(동/호)을 공개하지
+  않아 같은 층·면적·가격·날짜의 서로 다른 세대가 실제로 존재하기
+  때문(원인까지 확인). 기존 매매 TradeHistory가 이미 쓰고 있는
+  `occurrenceIndex` 패턴을 그대로 재사용하기로 결정.
+- **identity 커버리지**: aptSeq 5개 구 전부 100% 존재(0건 누락).
+  ApartmentMaster 매칭률은 82~94%(구별 상이) — 나머지는 존재하는
+  진짜 aptSeq이지만 아직 master에 없는 것으로, 다른 단지로
+  fallback하지 않고 "매칭 안 됨" 상태로 정직하게 보존하기로 결정.
+- **schema 후보 설계**: 매매와 별도 테이블(`apartment_rent_histories`)
+  권장(money semantics가 다르고 — 보증금+월세 2개 필드 vs 매매 1개,
+  취소 개념 자체가 없음 — 기존 855K row 매매 테이블에 영향 주는
+  마이그레이션 리스크 회피). 필드별 name/type/nullable/source/의미
+  전부 문서화, index 후보에 `PERFORMANCE_V1.1-A`의 교훈(누락된
+  복합 index)을 미리 반영(`lawdCd+dealType+dealDate`).
+- **dashboard 병목 정량화**: 부산 전체=16개 구×12개월=192회 rent
+  MOLIT 호출, 공유 동시성 제한 6 기준 최소 32 wave — 실측 20~30초와
+  정확히 부합하는 숫자로 확인.
+- Sync/completeness는 기존 매매 엔진(COMPLETE/EMPTY_VALID/FAILED/
+  INVALID, GLOBAL_MOLIT_CONCURRENCY=6)을 재사용하는 방향으로 설계,
+  correction policy(정정 시 overwrite/new-version/cancel+new)는
+  근거 데이터 없이 추측하지 않고 PHASE B의 재조회-대조 실험으로
+  미룸.
+
+서비스 기능 변경: 없음(감사 전용).
+
+DB 변경: **없음**(read-only 조사만. INSERT/UPDATE/DELETE 0, schema
+0, migration 0, 신규 테이블 0).
+
+테스트/빌드: 해당 없음(문서화 STEP, 코드 변경 없음).
+
+**PM 승인 필요 항목**(§28): 취소 추적 불가 상태로 출시할지, 82~94%
+매칭률의 UNMATCHED aptSeq를 그대로 저장할지, 백필 범위(24개월 vs
+전체 역사), 그리고 무엇보다 이 schema 자체의 최종 승인 — 이번
+STEP은 schema를 만들지 않고 감사+설계까지만 진행.
+
+상태: 완료(PHASE A). 다음: PHASE B(Schema + Sync Engine, 승인 필요).
+
+상세: `docs/development/RENT_TRADE_HISTORY_V1_ARCHITECTURE.md`
