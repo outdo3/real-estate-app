@@ -13950,3 +13950,58 @@ throttling 실측은 이번 환경에서 도구 부재로 미실시(생략 사�
 상태: 완료.
 
 상세: `docs/development/PERCEIVED_PERFORMANCE_V1.md`
+
+
+## 2026-09-03
+
+### ADMIN USER BEHAVIOR ANALYTICS V1 PHASE 1 — 기존 추적/이벤트/관리자 구조 감사
+
+관리자가 "누가 얼마나 들어오는지/어떤 단지를 보는지/어디서 이탈하는지"
+등을 실제로 파악할 수 있는지 확정하기 위한 감사·설계 전용 STEP. 구현
+없음. 백그라운드 조사(코드 레벨 아키텍처 감사) + 직접 실행한 READ-only
+production DB 쿼리(집계만, 개인 raw 데이터 미출력) 병행.
+
+핵심 발견: 이 앱에는 이미 실질적인 추적 기반이 존재한다 — 별도 Event
+테이블 없이 PageView 테이블에 `/__event__/<name>` 예약 네임스페이스로
+저장(allowlist 게이팅, 미등록 이벤트명은 DB에 아예 안 씀). heartbeat/
+leave는 PageView가 아닌 별도 ActiveSession 테이블만 갱신 — heartbeat가
+페이지뷰/세션 카운트를 오염시킬 위험은 없음(확인됨).
+
+`/admin/dashboard`가 이미 PageView 파생 사용량 지표(오늘 PV/UV,
+실시간 접속자, 30일 인기 단지, 인기 검색어+지역 키워드, 7일 이벤트
+브레이크다운)를 보여주고 있음을 확인 — "관리자가 전혀 파악 못한다"는
+작업 지시의 전제와 달리, 부분적이지만 실제 사용량 분석이 이미 라이브
+중임을 정정.
+
+Production 실측(READ-only, 이 DB는 2026-08-11부터 ~3주치): 총
+PageView 2,754건, distinct sessionId 24h/7d/30d = 16/100/294, 이벤트
+행 16건 vs 실제 pageview 2,738건(30일), userId 보유 비율 ~21%,
+SearchLog 총 39건.
+
+**가장 중요한 발견(자체 관측, 가설 아님)**: 최근 30일 인기 단지 1위가
+"대신롯데캐슬"(전체 단지 상세조회 584건 중 197건, ~34%)로 나타났는데,
+이는 바로 이번 세션 자체의 라이브 QA 테스트(지도 마커 클릭, 지도
+모달, 랭킹 이동 테스트 등을 localhost:3000에서 반복 실행)가 별도
+dev/staging DB 없이 동일 production DATABASE_URL에 기록되면서 생긴
+오염일 가능성이 매우 높음 — bot/QA/internal 트래픽을 구분할 필드가
+현재 스키마에 전혀 없다는 §34/§36의 우려가 가설이 아니라 이미 실제
+데이터에 반영돼 있음을 직접 증명. Phase 2에서 인기 단지 위젯을
+출시하려면 이 문제를 먼저 다뤄야 함.
+
+기타 확인된 gap: `compare_share` 이벤트는 allowlist에만 있고 실제
+호출부 0건(기존 코드 코멘트가 이미 인지). `next_action_click`
+payload가 `{complexId, aptName}`만 가져 action type(MAP/COMPARE/
+BUDGET 등) breakdown이 불가능. Finance Fit 이벤트는 TrackEventContext
+타입 자체가 금액 필드를 구조적으로 지원하지 않아 실수로도 샐 수 없음
+(설계로 보장됨, 컨벤션이 아니라).
+
+Privacy 분류: 대부분 SAFE(세션/이벤트 boolean·count류). SearchLog의
+AI검색 원문 저장(무삭제, 200자 절사만)은 LIMITED로 분류 — 기존
+admin이 이미 raw text가 아닌 groupBy 집계로만 노출하고 있는 것이
+올바른 방향이라 확인, Phase 2도 이 원칙 유지 권고.
+
+DB 변경: 없음(READ only, 집계 쿼리만). WRITE 0, schema 0, index 0.
+
+상태: 완료(감사·설계 전용, Phase 2 착수 전 PM 결정 항목 문서화).
+
+상세: `docs/development/ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE1.md`
