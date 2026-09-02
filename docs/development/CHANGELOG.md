@@ -13206,3 +13206,59 @@ Correction 정책은 16분 표본만 확보(장기 재실험 권장, PHASE D 이
 상태: 완료.
 
 상세: `docs/development/RENT_TRADE_HISTORY_V1_PHASE_B.md`
+
+
+## 2026-09-02
+
+### RENT TRADE HISTORY V1 — PHASE C: 부산 24개월 전월세 Production 백필
+
+PHASE B에서 검증된 sync engine을 변경 없이 그대로 사용해, 부산 16개 구
+전체 × 최근 완료된 24개월(202408~202607, PHASE B §19 `[M-25, M-2]`
+공식 그대로 — 진행 중인 202608/202609는 제외)을 production에 백필.
+
+작업:
+
+- **실행 전 384-cell(16구×24개월) 전체 dry-run sweep**(읽기 전용)으로
+  PHASE B의 ~158K행 추정치를 실측치로 교체: fetched=122,431,
+  wouldInsert=121,193, unchanged=1,238(PHASE B의 기존 검증행과 정확히
+  일치 — idempotency 판정이 즉시 정상 동작함을 확인).
+- **`--apply` 실행**: 384/384 cell 전부 COMPLETE, invalid 0, blocked
+  0, duplicateWithinBatch 0. 재시도 필요 없이 1차 실행으로 전부 해결.
+  소요 37분 37초.
+- **Identity**: aptSeq 100% 존재(0 blocked). 고유 aptSeq 기준 master
+  MATCHED 29,537 / UNMATCHED 3,538(10.7%, 구별 5.0~16.2%, 이상치
+  없음 — PHASE A/B의 82~94% 범위와 일치).
+- **중복/idempotency**: DB 전체 자연키 GROUP BY 중복 0건. 대표
+  32-cell(16구×2개월) 2차 apply 재실행 — insert 0/update 0/duplicate
+  0, DB row 수 122,431 불변 확인.
+- **QA**: money(deposit/monthlyRent 음수 0건), jeonse/wolse 분류
+  오류 0건, date 불일치 0건, floor NULL 0건, 30건 실계약 샘플 검토.
+- **실제 정정 관측 1건 발견**: 부산진구(26230) 202607이 PHASE B 검증
+  시점(9/1) 557건 → 이번 PHASE(9/2) 559건으로 2건 증가. 기존 557건은
+  내용 완전 동일(unchanged), 신규 2건만 순수 추가(wouldInsert) —
+  correction-safe upsert가 설계대로 정확히 분류. 은폐하지 않고 문서화.
+- **Storage**: table 31MB + index 30MB = 총 61MB(122,431행).
+- **Dashboard SQL preview**(feasibility 측정만, consumer 전환 없음):
+  region+dealType GROUP BY aggregate 119ms, raw materialization 없음
+  (PERFORMANCE V1.1-B 교훈 유지).
+- 기존 전월세 소비자(대시보드/상세/전세위험/갭투자/AI검색) 전혀
+  변경하지 않음 — 계속 MOLIT 실시간 조회.
+
+서비스 기능 변경: 없음(기존 테이블에 데이터만 추가, 아직 어떤 화면도
+이 DB를 읽지 않음).
+
+DB 변경: 있음(production, 스키마/마이그레이션 변경 없이 데이터
+121,193행 INSERT, 승인됨). UPDATE 0건, DELETE 0건.
+
+테스트/빌드: PHASE B 단위테스트 28개 전부 통과(재실행 확인),
+`npx tsc --noEmit`/`npm run lint`/`npm run build` 신규 에러·이슈 0건
+(기존 repo 전역 pre-existing 이슈와 무관함을 직접 확인).
+
+알려진 제한: correction 정책은 이번에도 짧은 구간(~11시간)만 재확인—
+장기(주/개월 단위) 재실험은 여전히 미완료. 미매칭 aptSeq(10.7%)는
+ApartmentMaster 커버리지 개선 전까지 상세페이지 연결 불가(기존 제한
+그대로).
+
+상태: 완료. PHASE D(대시보드/거래량 DB-first 전환) 준비 완료(READY).
+
+상세: `docs/development/RENT_TRADE_HISTORY_V1_PHASE_C_BACKFILL.md`
