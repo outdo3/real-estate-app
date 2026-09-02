@@ -152,6 +152,21 @@
   margin-top: 0.25rem;
 }
 
+.disclosurePanel {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: #eff6ff;
+  border-left: 3px solid var(--info-color);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.disclosurePanel strong {
+  color: var(--text-primary);
+}
+
 /* List Items */
 .checkList {
   list-style: none;

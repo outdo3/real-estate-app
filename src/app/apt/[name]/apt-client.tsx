@@ -650,25 +650,25 @@ export default function ApartmentDetail() {
             </tbody>
           </table>
         );
-      case '대출한도':
-        if (latestPriceNum === 0) return <div>최근 실거래가 정보가 없어 한도를 계산할 수 없습니다.</div>;
+      case 'LTV 기준 간편 추정':
+        if (latestPriceNum === 0) return <div>최근 실거래가 정보가 없어 추정할 수 없습니다.</div>;
         const ltv40 = Math.floor(latestPriceNum * 0.4 * 10) / 10;
         const ltv70 = Math.floor(latestPriceNum * 0.7 * 10) / 10;
         const ltv80 = Math.floor(latestPriceNum * 0.8 * 10) / 10;
         return (
           <div>
             <p style={{marginBottom: '1.5rem', fontSize: '1.1rem'}}>
-              해당 단지의 가장 <b>최근 실거래가 <span style={{color: 'var(--primary-color)', fontWeight: 800}}>{latestPrice}</span></b> 기준 예상 한도입니다.
+              해당 단지의 가장 <b>최근 실거래가 <span style={{color: 'var(--primary-color)', fontWeight: 800}}>{latestPrice}</span></b> 기준, LTV 비율만 단순 적용한 간편 추정입니다.
             </p>
             <ul style={{lineHeight: 2.2, fontSize: '1.05rem', backgroundColor: '#f8fafc', padding: '1.5rem', borderRadius: '8px', listStyle: 'none'}}>
-              <li>✅ <b>생애최초 (LTV 80%)</b>: 최대 <b>{ltv80}억</b> 대출 가능</li>
-              <li>✅ <b>무주택자 (LTV 70%)</b>: 최대 <b>{ltv70}억</b> 대출 가능</li>
-              <li>✅ <b>1주택자 (LTV 40%)</b>: 최대 <b>{ltv40}억</b> 대출 가능</li>
-              <li style={{color: 'var(--text-muted)'}}>❌ <b>다주택자 (규제지역)</b>: 주담대 불가</li>
+              <li>• <b>생애최초 (LTV 80% 가정)</b>: 간편 추정 최대 <b>{ltv80}억</b></li>
+              <li>• <b>무주택자 (LTV 70% 가정)</b>: 간편 추정 최대 <b>{ltv70}억</b></li>
+              <li>• <b>1주택자 (LTV 40% 가정)</b>: 간편 추정 최대 <b>{ltv40}억</b></li>
+              <li style={{color: 'var(--text-muted)'}}>다주택자 (규제지역): 주담대 불가</li>
             </ul>
-            <p style={{marginTop: '1.5rem', fontSize: '0.85rem', color: 'var(--text-muted)'}}>
-              * 위 계산은 LTV 비율만을 단순히 적용한 예상치이며, DSR 규제(소득 증빙) 및 은행별 조건에 따라 실제 대출 가능 금액은 크게 달라질 수 있습니다.
-            </p>
+            <div style={{marginTop: '1.5rem', padding: '0.85rem 1rem', background: '#eff6ff', borderLeft: '3px solid var(--info-color)', borderRadius: '6px', fontSize: '0.85rem', lineHeight: 1.6, color: 'var(--text-secondary)'}} role="note" aria-label="LTV 간편 추정 한계 안내">
+              ⓘ 위 값은 LTV 비율만 단순 적용한 간편 추정치이며, <b>실제 금융기관의 승인 가능 금액이 아닙니다.</b> 지역별 규제 여부, 실제 주택 보유 현황, DSR(소득 증빙), 은행별 심사 조건에 따라 실제 대출 가능 금액은 크게 달라질 수 있습니다.
+            </div>
           </div>
         );
       case '커뮤니티 시설':
@@ -1099,7 +1099,7 @@ export default function ApartmentDetail() {
           <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedTradeArea={selectedTradeArea} />
           
           <div className={styles.quickButtons} style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
-            <Button variant="secondary" size="sm" onClick={() => openModal('대출한도')} style={{ padding: '0.6rem', width: '100%', fontSize: '0.95rem' }}>이 집 사려면 얼마 필요할까?</Button>
+            <Button variant="secondary" size="sm" onClick={() => openModal('LTV 기준 간편 추정')} style={{ padding: '0.6rem', width: '100%', fontSize: '0.95rem' }}>이 집 사려면 얼마 필요할까?</Button>
             <div style={{ display: 'flex', gap: '0.6rem', width: '100%' }}>
               <Button variant="secondary" size="sm" onClick={() => openModal('지도')} style={{ flex: 1, padding: '0.6rem', fontSize: '0.95rem' }}>지도</Button>
               <Button variant="secondary" size="sm" onClick={() => openModal('로드뷰')} style={{ flex: 1, padding: '0.6rem', fontSize: '0.95rem' }}>로드뷰</Button>

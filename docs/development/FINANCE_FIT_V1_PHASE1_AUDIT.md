@@ -348,3 +348,28 @@ confidence, the affected metric should ship LIMITED/UNAVAILABLE rather than gues
 READ only this STEP (code/schema inspection only, no queries against live data were needed — the
 existing calculators are all pure client-side arithmetic with no DB dependency). WRITE: 0.
 Schema: 0. Migration: 0.
+
+---
+
+## Addendum — FINANCE TOOLS TRUST PATCH (2026-09-02)
+
+Follow-up STEP, label/disclosure hardening only (formulas unchanged). Full detail:
+`docs/development/FINANCE_TOOLS_TRUST_PATCH.md`.
+
+- DSR tool renamed "DSR 대출 가능 한도 추정" → "대출여력 간편추정"; result copy no longer says
+  "대출 가능"/"대출 한도" — now "간편 추정액"; disclosure added stating this is not real DSR.
+- 취득세 tool renamed "스마트 취득세 계산기" → "취득세 간편 추정"; disclosure added listing the
+  conditions the formula does not reflect (지역/면적/취득형태/생애최초 등).
+- LTV modal (`apt-client.tsx`) renamed "대출한도" → "LTV 기준 간편 추정" (this string is both the
+  switch-case key and the modal's visible `<h2>` title); "대출 가능" language removed from each
+  tier line; disclosure strengthened to explicitly state "실제 금융기관의 승인 가능 금액이
+  아닙니다."
+- **New finding during regression testing, not in the original Phase 1 audit**: the 취득세
+  ternary's `else` branch means the "무주택 (첫 매수)" dropdown option actually computed the same
+  12% rate as "3주택 이상" — the opposite of the first-time-buyer framing the option implies. This
+  is a materially wrong result, not just an oversimplification; the earlier Phase 1 audit's
+  characterization of this ("무주택 mirrors 1주택's rate") was itself incorrect. Per the trust
+  patch task's own STOP condition ("실제 공식과 UI의 의미를 안전하게 분리할 수 없음"), this was
+  escalated to the user rather than resolved by relabeling — user chose to remove the "무주택
+  (첫 매수)" option from the dropdown for this STEP (UI change, not a formula change; the ternary
+  itself is untouched). A short note now explains why the option isn't there.

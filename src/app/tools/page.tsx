@@ -50,32 +50,39 @@ export default function ToolsPage() {
           <div className={styles.toolsGrid}>
             <div className={styles.toolCard}>
               <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>💰 스마트 취득세 계산기</h2>
+                <h2 className={styles.cardTitle}>💰 취득세 간편 추정</h2>
               </div>
               <div className={styles.cardBody}>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>보유 주택 수</label>
                   <select className={styles.formSelect} value={houseCount} onChange={e => setHouseCount(e.target.value)}>
-                    <option value="무주택">무주택 (첫 매수)</option>
                     <option value="1주택">1주택 (갈아타기)</option>
                     <option value="2주택">2주택</option>
                     <option value="3주택 이상">3주택 이상</option>
                   </select>
+                  <p className={styles.resultSubtext} style={{ marginTop: '0.5rem' }}>
+                    생애최초(무주택) 감면 조건은 아직 정확히 반영하지 못해 옵션에서 제외했습니다.
+                  </p>
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>취득 가액 (원)</label>
                   <input type="number" className={styles.formInput} value={price} onChange={e => setPrice(e.target.value)} />
                 </div>
                 <div className={styles.resultBox}>
-                  <p className={styles.resultText}>👉 예상 취득세: {formatMoney(taxAmount)}</p>
-                  <p className={styles.resultSubtext}>적용 세율: {(taxRate * 100).toFixed(1)}% (지방교육세 등 포함 추정치)</p>
+                  <p className={styles.resultText}>👉 현재 입력조건 기준 예상 취득세: {formatMoney(taxAmount)}</p>
+                  <p className={styles.resultSubtext}>적용 세율: {(taxRate * 100).toFixed(1)}% (지방교육세 등 포함 간편 추정치)</p>
+                </div>
+                <div className={styles.disclosurePanel} role="note" aria-label="취득세 간편 추정 한계 안내">
+                  ⓘ 이 계산은 <strong>보유 주택 수와 취득가액</strong>만 반영한 간편 추정입니다.
+                  지역, 면적, 취득 형태(매매·증여·상속 등), 생애최초 감면·다주택 중과 등
+                  개인별 조건은 반영되지 않아 실제 세액과 다를 수 있습니다.
                 </div>
               </div>
             </div>
 
             <div className={styles.toolCard}>
               <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>🏦 DSR 대출 가능 한도 추정</h2>
+                <h2 className={styles.cardTitle}>🏦 대출여력 간편추정</h2>
               </div>
               <div className={styles.cardBody}>
                 <div className={styles.formGroup}>
@@ -83,8 +90,13 @@ export default function ToolsPage() {
                   <input type="number" className={styles.formInput} value={income} onChange={e => setIncome(e.target.value)} />
                 </div>
                 <div className={styles.resultBox}>
-                  <p className={styles.resultText}>👉 예상 대출 한도: 약 {formatMoney(dsrLimit)}</p>
-                  <p className={styles.resultSubtext}>DSR 40% 기준, 다른 부채가 없을 경우의 단순 시뮬레이션입니다.</p>
+                  <p className={styles.resultText}>👉 간편 추정액: 약 {formatMoney(dsrLimit)}</p>
+                  <p className={styles.resultSubtext}>연소득을 기준으로 단순 추정한 참고 값입니다.</p>
+                </div>
+                <div className={styles.disclosurePanel} role="note" aria-label="대출여력 간편추정 한계 안내">
+                  ⓘ 이 값은 <strong>실제 DSR 계산이 아닙니다.</strong> 실제 DSR은 기존 대출,
+                  금리, 상환기간, 상환방식 등 여러 조건을 함께 반영하며, 이 값은 금융기관의
+                  승인 가능 금액이 아닙니다.
                 </div>
               </div>
             </div>
