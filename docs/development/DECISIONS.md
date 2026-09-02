@@ -309,6 +309,47 @@ nullable해지고 위험한 마이그레이션이 필요해진다.
 재동기화가 반복되는 순간 데이터가 조용히 부풀어 오르는 종류의 버그라 사전에
 차단한다.
 
+## 10. RENT TRADE HISTORY V1 PHASE D — 검증범위는 고정 스냅샷, rolling으로 재정의하지 않는다
+
+날짜:
+2026-09-02
+
+결정:
+
+1. PHASE C가 검증한 부산 전월세 범위(202408~202607)는 코드 상수(`RENT_VERIFIED_FROM`/
+   `RENT_VERIFIED_TO`, `src/lib/rent-verified-range.ts`)로 고정한다. dashboard의
+   `last12Months`(항상 `now` 기준 rolling window)와 매 요청마다 교집합을 계산하되,
+   상수 자체를 "오늘 기준 최근 24개월"로 재계산하지 않는다. 시간이 흐르면 rolling
+   window 뒤쪽(현재월+직전월)이 이 고정범위 밖으로 밀려나 verified 비중이 점점
+   줄어드는 것을 의도적으로 허용한다 — 검증 안 된 기간을 DB complete로 가장하는
+   것보다, "커버리지가 서서히 줄어들다가 결국 0이 된다"는 쪽이 훨씬 안전하고
+   정직한 실패 방식이기 때문이다. 이 축소는 이번 STEP이 만든 버그가 아니라
+   incremental sync가 아직 없다는 구조적 사실의 정직한 반영이며, ADMIN OPS 같은
+   미래 소비처가 이 상수를 "24개월"로 재해석하면 안 된다는 경고를 코드 주석에
+   남긴다(PHASE C §34가 이미 요구한 원칙의 실제 구현).
+
+2. gapInvest/jeonseRate/volumeSummaryByPeriod(7d/30d/3m)가 row-level·day-level
+   데이터를 요구하므로, PHASE C가 미리 만들어둔 "region+dealType GROUP BY" SQL
+   aggregate 구조를 이번 PHASE의 실제 소비처로 배선하지 않는다. 사용되지 않는
+   aggregate 함수를 "나중에 필요할 수도 있으니" 남겨두지 않고 제거했다 — 이
+   프로젝트의 "가상의 미래 요구사항을 위해 설계하지 않는다" 원칙을 SQL 계층에도
+   동일하게 적용한 것이다. 대신 raw row 조회 자체의 속도를 최적화한다
+   (`findMany`→`select`→`$queryRaw`, PERFORMANCE_V1.1-A/B와 동일 접근).
+
+3. 부산 전체(sido-wide) cold 목표(≤1~1.5초)를 이번 PHASE에서 달성하지 못했다는
+   사실을 그대로 보고한다(실측 8.7초). 목표를 낮추거나, 측정 조건을 유리하게
+   바꾸거나, 부분 결과를 전체 성공처럼 포장하지 않는다 — 미달성의 근본 원인
+   (row-level 필요성 때문에 raw materialization을 완전히 없앨 수 없음)과 후속
+   옵션(incremental sync, 또는 volume 비교 로직의 SQL 재구조화)을 문서에 명시하고
+   PHASE E 후보로 남긴다.
+
+이유:
+
+세 결정 모두 "정확한 실패/제한을 감추지 않는다"는 이 프로젝트의 데이터 신뢰
+원칙(AGENTS.md 데이터 진실성 정책, CLAUDE.md #13)을 PHASE D의 구체적 상황
+(rolling window vs 고정 스냅샷, aggregate 불가능한 로직, 미달성 성능 목표)에
+적용한 것이다.
+
 영향:
 
 MISSING_APTSEQ/MISSING_FLOOR로 분류된 row는 이번 PHASE 실측(3개 구 x 1개월,

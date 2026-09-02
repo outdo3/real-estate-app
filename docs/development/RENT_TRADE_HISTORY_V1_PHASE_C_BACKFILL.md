@@ -112,7 +112,12 @@ Per-district unmatched rate ranged **5.0% (해운대구, best coverage) to 16.2%
 district is an outlier by an order of magnitude; the full spread is within PHASE A's already-known
 82–94% match range. No further investigation triggered.
 
-| lawdCd | 구/군 | rows | matched | unmatched | unmatched% |
+**Column note (PHASE D §36 clarification):** `matched`/`unmatched` below count **unique aptSeq**
+values seen in that district across all 24 months — not rows. They do not sum to `rows` (a district
+sums 24 months of repeated aptSeq occurrences into `rows`, but each distinct apartment counts once
+in `matched`/`unmatched` regardless of how many months/trades it appears in).
+
+| lawdCd | 구/군 | rows | unique aptSeq matched | unique aptSeq unmatched | unmatched% |
 |---|---|---|---|---|---|
 | 26110 | 중구 | 445 | 219 | 20 | 8.4% |
 | 26140 | 서구 | 2,826 | 771 | 141 | 15.5% |

@@ -9,17 +9,24 @@ import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey 
 import { resolvePriceRankingPeriod, type PriceRankingPeriodPreset } from '@/lib/price-ranking';
 import { previousPeriodRange } from '@/lib/regional-feed';
 import { queryTrades, type StoredTrade } from '@/lib/trade-history-read';
+import { splitVerifiedMonths, fetchRentMonthBucketsFromDb, type StoredRentTrade } from '@/lib/rent-history-read';
 
 // TRADE_DB_FIRST_V1 STEP B-2 — 거래량 dashboard(그래프+요약)의 매매(sale) 쪽만
-// 부산 요청에 한해 DB-first로 전환한다. 전세/월세는 TradeHistory DB에 데이터
-// 자체가 없어(dealType='sale'만 V1 범위) 기존 MOLIT 경로를 그대로 유지한다 —
-// "DB에 없으면 MOLIT 호출"이 아니라, 이 dealType은 애초에 이 분기를 타지 않는
-// 고정 라우팅이다(STEP B의 area84/yearly 전환과 동일 원칙). hotIssues/topPrices/
-// gapInvest/complexTrades 등은 개별 거래 row 단위 로직(정렬/그룹핑/짝짓기)이라
-// 순수 aggregate(COUNT/SUM 등)로 대체할 수 없다 — 12개월(무제한 지역과 달리
-// 시간 범위는 bounded) 원본 row를 그대로 가져와 기존 JS 로직(변경 없음)에
-// 넣는다. MOLIT-shape과 동일한 필드(price/info/dealAmount/aptSeq/dealCanceled 등)를
-// 만드는 어댑터만 새로 추가한다.
+// 부산 요청에 한해 DB-first로 전환했다. hotIssues/topPrices/gapInvest/complexTrades
+// 등은 개별 거래 row 단위 로직(정렬/그룹핑/짝짓기)이라 순수 aggregate(COUNT/SUM 등)로
+// 대체할 수 없다 — 12개월(무제한 지역과 달리 시간 범위는 bounded) 원본 row를 그대로
+// 가져와 기존 JS 로직(변경 없음)에 넣는다. MOLIT-shape과 동일한 필드(price/info/
+// dealAmount/aptSeq/dealCanceled 등)를 만드는 어댑터만 새로 추가한다.
+//
+// RENT_TRADE_HISTORY_V1 PHASE D — 전세/월세도 같은 원칙으로 부산 요청에 한해
+// DB-first 전환한다. 단, sale과 근본적으로 다른 제약이 하나 있다: sale은 2006-01~
+// 오늘까지 매일 갱신되는 nationwide incremental sync가 있어 "부산이면 항상 DB"가
+// 성립하지만, rent는 PHASE C가 만든 **고정된 과거 스냅샷**(202408~202607)뿐이고
+// 아직 이어지는 incremental sync가 없다. dashboard의 `last12Months`는 `now` 기준
+// rolling window라 시간이 흐를수록 window 뒤쪽(현재월 + 직전월, 통상 2개월)이
+// 이 스냅샷 밖으로 밀려난다 — splitVerifiedMonths()로 매 요청마다 검증범위 안/밖을
+// 나눠, 검증범위 안 월만 DB로, 밖 월은 기존 MOLIT 경로를 그대로 쓴다(§PHASE D
+// 16/17 partial-coverage 정책 — "검증 안 된 기간을 DB complete로 가장하지 않는다").
 const BUSAN_SIDO_CODE = '26';
 
 function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
@@ -46,6 +53,38 @@ function storedTradeToDashboardTrade(t: StoredTrade): any {
     dealDate: tradeDate,
     floorRaw: t.floor,
     lawdCd: t.lawdCd,
+  };
+}
+
+// RENT_TRADE_HISTORY_V1 PHASE D — sale의 storedTradeToDashboardTrade와 동일한 역할.
+// dealCanceled는 항상 false로 고정한다(새로 지어내는 개념이 아니다 — MOLIT rent API
+// 자체에 취소 필드가 없어, 기존 live-fetch 경로도 이미 모든 rent row에 대해 항상
+// dealCanceled=false를 만들어 왔다, PHASE A §7. DB row는 애초에 취소 컬럼 자체가
+// 없으므로(PHASE B §1) 이 adapter가 하는 일은 "취소 없음을 새로 판정"하는 게
+// 아니라 기존과 동일한 상수 shape을 맞추는 것뿐이다).
+function storedRentToDashboardTrade(r: StoredRentTrade): any {
+  const areaNum = Number(r.exclusiveArea);
+  const areaStr = `${areaNum}m²`;
+  const floorStr = r.floor != null ? `${r.floor}층` : '';
+  const tradeDate = r.dealDate.toISOString().slice(0, 10);
+  const priceStr =
+    r.monthlyRent > 0
+      ? `보 ${formatKoreanPrice(String(r.deposit))} / 월세 ${formatKoreanPrice(String(r.monthlyRent))}`
+      : `보 ${formatKoreanPrice(String(r.deposit))}`;
+  return {
+    name: r.aptName,
+    price: priceStr,
+    dealAmount: r.deposit,
+    monthlyRent: r.monthlyRent,
+    typeLabel: '전월세',
+    info: `${areaStr} • ${floorStr} • ${tradeDate}`,
+    dong: r.dong,
+    dealCanceled: false,
+    aptSeq: r.aptSeq,
+    excluUseArea: areaNum,
+    dealDate: tradeDate,
+    floorRaw: r.floor,
+    lawdCd: r.lawdCd,
   };
 }
 
@@ -123,31 +162,46 @@ export async function GET(request: Request) {
       let failedLawdCds: string[] = [];
 
       if (isSidoAll) {
-        // §19/§20 성능 — 부산 16개 구 × 12개월 × 2타입 = 384 task. 기존
-        // rankings sido-all과 동일한 공유 스로틀을 그대로 쓴다(새 동시성 풀 없음).
+        // §19/§20 성능 — 부산 16개 구 × 12개월 × 2타입 = 384 task 최대치였으나,
+        // PHASE D부터는 부산 요청의 rent verified 개월(현재 10/12)만큼 MOLIT task
+        // 자체가 안 만들어진다(아래 unverifiedRentMonths). 기존 rankings sido-all과
+        // 동일한 공유 스로틀을 그대로 쓴다(새 동시성 풀 없음).
         const districts = await getSigunguListForSido(sidoCodeParam!);
         const lawdCds = districts.map((d) => d.code.substring(0, 5));
         const isBusan = isBusanScopedRequest(null, sidoCodeParam, true);
+        // RENT_TRADE_HISTORY_V1 PHASE D — 부산 요청만 verified/unverified로 나눈다
+        // (비부산은 rent DB 자체가 없으므로 전부 unverified 취급 = 기존과 동일하게
+        // 전부 MOLIT).
+        const { verified: verifiedRentMonths, unverified: unverifiedRentMonths } = isBusan
+          ? splitVerifiedMonths(last12Months)
+          : { verified: [] as string[], unverified: last12Months };
         const tasks: MonthTask[] = [];
         for (const dLawdCd of lawdCds) {
           for (const ym of last12Months) {
             // 부산 매매는 DB에서 가져오므로 MOLIT apt task 자체를 만들지 않는다
-            // (호출 수 절반 절감, yearly.ts와 동일 원칙). 전세/월세는 DB에
-            // 없어(V1 범위) 부산이어도 여전히 rent MOLIT task가 필요하다.
+            // (호출 수 절반 절감, yearly.ts와 동일 원칙).
             if (!isBusan) tasks.push({ key: `${dLawdCd}|apt:${ym}`, lawdCd: dLawdCd, dealYmd: ym, type: 'apt' });
+          }
+          // rent는 verified 개월만 DB로 빠지고, unverified 개월(부산이 아니면 전체
+          // 12개월)만 MOLIT task를 만든다 — 검증 안 된 기간을 DB complete로
+          // 가장하지 않는다(PHASE D §16/§17).
+          for (const ym of unverifiedRentMonths) {
             tasks.push({ key: `${dLawdCd}|rent:${ym}`, lawdCd: dLawdCd, dealYmd: ym, type: 'rent' });
           }
         }
-        const [results, aptMonthlyFromDb] = await Promise.all([
+        const [results, aptMonthlyFromDb, rentBucketsFromDb] = await Promise.all([
           fetchMonthsThrottledWithStatus(tasks),
           isBusan ? fetchApt12MonthBucketsFromDb(lawdCds, last12Months) : Promise.resolve(null),
+          isBusan ? fetchRentMonthBucketsFromDb(lawdCds, verifiedRentMonths) : Promise.resolve(null),
         ]);
         const failedSet = new Set<string>();
         for (const dLawdCd of lawdCds) {
           for (const ym of last12Months) {
             // 부산 매매는 MOLIT을 호출하지 않으므로 실패 개념이 없다(DB 조회
             // 실패는 route 최상위 catch로 전체 실패 처리 — MOLIT처럼 구별
-            // partial degrade 대상 아님). rent 실패만 partial 판정에 반영.
+            // partial degrade 대상 아님). rent도 verified 개월은 동일 원칙 —
+            // task 자체가 없어 results[...]가 undefined이므로 아래 optional
+            // chaining이 자연히 false를 반환한다(부산 매매와 동일 처리).
             const aptFailed = !isBusan && results[`${dLawdCd}|apt:${ym}`]?.failed;
             if (aptFailed || results[`${dLawdCd}|rent:${ym}`]?.failed) failedSet.add(dLawdCd);
           }
@@ -162,12 +216,20 @@ export async function GET(request: Request) {
         aptMonthly = isBusan
           ? aptMonthlyFromDb!
           : last12Months.map((ym) => lawdCds.flatMap((d) => (results[`${d}|apt:${ym}`]?.items || []).map((t: any) => ({ ...t, lawdCd: d }))));
-        rentMonthly = last12Months.map((ym) => lawdCds.flatMap((d) => (results[`${d}|rent:${ym}`]?.items || []).map((t: any) => ({ ...t, lawdCd: d }))));
+        rentMonthly = last12Months.map((ym) => {
+          if (isBusan && verifiedRentMonths.includes(ym)) {
+            return (rentBucketsFromDb?.get(ym) || []).map(storedRentToDashboardTrade);
+          }
+          return lawdCds.flatMap((d) => (results[`${d}|rent:${ym}`]?.items || []).map((t: any) => ({ ...t, lawdCd: d })));
+        });
       } else {
         const isBusan = isBusanScopedRequest(lawdCd, null, false);
+        const { verified: verifiedRentMonths, unverified: unverifiedRentMonths } = isBusan
+          ? splitVerifiedMonths(last12Months)
+          : { verified: [] as string[], unverified: last12Months };
         const rollingTasks: MonthTask[] = [
           ...(isBusan ? [] : last12Months.map((dealYmd) => ({ key: `apt-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'apt' as const }))),
-          ...last12Months.map((dealYmd) => ({ key: `rent-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'rent' as const })),
+          ...unverifiedRentMonths.map((dealYmd) => ({ key: `rent-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'rent' as const })),
         ];
         // LAUNCH_TRUST_BLOCKERS_V1 — 예전에는 실패 여부를 버리는 fetchMonthsThrottled를
         // 써서, 단일 지역(구) 요청에서 MOLIT 호출이 실패한 달이 조용히 빈 배열이 되어
@@ -175,14 +237,20 @@ export async function GET(request: Request) {
         // fetchMonthsThrottledWithStatus로 바꿔 실패 여부를 유지하고, 부산(DB 조회,
         // 실패 시 상위 try/catch가 전체 요청을 실패 처리함)이 아닌 한 개라도 실패한
         // 달이 있으면 partial=true로 표시한다.
-        const [taskResults, aptMonthlyFromDb] = await Promise.all([
+        const [taskResults, aptMonthlyFromDb, rentBucketsFromDb] = await Promise.all([
           fetchMonthsThrottledWithStatus(rollingTasks),
           isBusan ? fetchApt12MonthBucketsFromDb([lawdCd!], last12Months) : Promise.resolve(null),
+          isBusan ? fetchRentMonthBucketsFromDb([lawdCd!], verifiedRentMonths) : Promise.resolve(null),
         ]);
         aptMonthly = isBusan
           ? aptMonthlyFromDb!
           : last12Months.map((dealYmd) => (taskResults[`apt-roll-${dealYmd}`]?.items || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
-        rentMonthly = last12Months.map((dealYmd) => (taskResults[`rent-roll-${dealYmd}`]?.items || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
+        rentMonthly = last12Months.map((dealYmd) => {
+          if (isBusan && verifiedRentMonths.includes(dealYmd)) {
+            return (rentBucketsFromDb?.get(dealYmd) || []).map(storedRentToDashboardTrade);
+          }
+          return (taskResults[`rent-roll-${dealYmd}`]?.items || []).map((t: any) => ({ ...t, lawdCd: lawdCd }));
+        });
         const anyTaskFailed = rollingTasks.some((task) => taskResults[task.key]?.failed);
         if (anyTaskFailed) {
           partial = true;

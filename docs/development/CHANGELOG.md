@@ -13262,3 +13262,62 @@ ApartmentMaster 커버리지 개선 전까지 상세페이지 연결 불가(기�
 상태: 완료. PHASE D(대시보드/거래량 DB-first 전환) 준비 완료(READY).
 
 상세: `docs/development/RENT_TRADE_HISTORY_V1_PHASE_C_BACKFILL.md`
+
+
+## 2026-09-02
+
+### RENT TRADE HISTORY V1 — PHASE D: 대시보드/거래량 전월세 DB-First 전환
+
+부산 dashboard(`/api/stats/dashboard`)의 전세/월세 데이터 경로를, PHASE C가 검증한
+범위(202408~202607) 안의 개월만 `apartment_rent_histories` DB로 전환. 매매는 기존
+DB-first 그대로. Schema/index/migration 변경 없음.
+
+작업:
+
+- **신규 파일**: `src/lib/rent-verified-range.ts`(순수 함수, PHASE C 스냅샷 경계
+  상수 + `splitVerifiedMonths()` — "오늘-24개월" 재계산 절대 금지), `src/lib/
+  rent-history-read.ts`(MOLIT import 없음, 단일 raw SQL 쿼리로 lawdCd(들)×월(들)
+  버킷팅, 검증범위 밖 월은 이중 방어로 절대 조회 안 함).
+- **핵심 제약 발견 및 반영**: dashboard의 `last12Months`는 `now` 기준 rolling
+  window라 PHASE C의 고정 스냅샷과 시간이 지날수록 어긋난다(현재 시점 기준
+  10/12개월만 verified, 최근 2개월은 여전히 MOLIT). "0 MOLIT 호출"은 verified
+  개월에 한해서만 정확한 주장이라고 명시.
+- **MOLIT 호출**: 부산 전체 192회(16구×12개월)→32회(16구×2 unverified개월),
+  단일구 12회→2회.
+- **A/B 검증**: 코드 변경 전/후 실제 dashboard JSON 오라클 캡처(부산 전체 +
+  서구/해운대/부산진/동래/기장, 1/3/6/12개월). 42개 필드 중 36개 완전 일치,
+  나머지 6개(전부 부산-전체 집계 레벨, 5개 표본구 전부 개별 일치)는 원인을
+  직접 재확인 — 최근 2개월(진행중/직전월)의 실시간 MOLIT 증가 + 검증완료
+  202607월 하나는 구버전 경로의 192-concurrent 부담에서 온 일시적 undercounting
+  (fresh 재조회로 live MOLIT=DB 정확히 일치 확인, DB 버그 아님).
+- **성능 최적화**: raw row 조회를 findMany(select 없음, 8.0s)→findMany(select,
+  3.86s)→$queryRaw(2.34s, 최종 채택, PERFORMANCE_V1.1-A/B와 동일 교훈 재적용).
+- **실측(before→after)**: 부산 전체 cold 36.2s→8.7s(4.2배), warm 330ms→224ms.
+  단일구(5개 표본) cold 1.0~3.4s→0.5~1.0s, warm 23~71ms→23~41ms.
+- **의도적으로 SQL aggregate 전용 경로를 만들지 않음**: gapInvest/jeonseRate/
+  volumeSummaryByPeriod(7d/30d/3m)가 실제로 row-level·day-level 데이터가
+  필요해(집계로 대체 불가) 미사용 aggregate 함수를 남기는 대신 제거 — 문서에
+  근거 기록.
+- 기존 rent consumer(상세페이지/전세위험/갭투자 자체 route/AI검색)는 전혀
+  변경하지 않음 — 회귀 확인(스크린샷+JSON 구조 확인).
+
+서비스 기능 변경: 없음(응답 shape 완전 동일, 데이터 출처만 부산 verified
+개월에 한해 DB로 전환).
+
+DB 변경: 없음(READ만, schema/index/migration 전부 0).
+
+테스트/빌드: 신규 단위테스트 7/7 통과, PHASE B 기존 28개 재실행 통과,
+`npx tsc --noEmit`/`npm run lint`/`npm run build` 이번 PHASE가 건드린 파일
+기준 신규 이슈 0건.
+
+알려진 제한: 검증범위(202408~202607)가 고정이라 rolling window가 매달
+전진하면서 verified 비중이 줄어든다(현재 10/12, 계속 감소, incremental
+sync 없으면 결국 0/12). 부산 전체 cold 목표(≤1~1.5s)는 gapInvest/
+jeonseRate/거래량 비교가 실제 row-level 데이터를 필요로 해 미달성(8.7s) —
+솔직하게 보고, 원인과 후속 옵션 문서화(incremental sync 또는 volume
+비교 로직 SQL 재구조화, 둘 다 이번 PHASE 범위 밖).
+
+상태: 완료(부분 성능목표 미달성, 원인 규명 및 문서화 완료).
+
+상세: `docs/development/RENT_TRADE_HISTORY_V1_PHASE_D_DB_FIRST.md`,
+`docs/development/PERFORMANCE_V1.md` §6 업데이트

@@ -119,6 +119,20 @@ This is the exact, previously-known bottleneck from `TRADE_DB_FIRST_V1 STEP B-2`
 
 **Full fix requires building a rent/jeonse TradeHistory DB table and backfill pipeline** — explicitly out of scope per the task's own §21 instruction ("이번 STEP에서 전월세 DB 구축까지 확장하지 않는다"). **Verdict: EXTERNAL_API_BOTTLENECK, confirmed, not resolved — requires a future approved STEP (rent DB backfill) to fully close.**
 
+**RESOLVED (partially) — RENT_TRADE_HISTORY_V1 PHASE D (2026-09-02):** the rent DB table and
+backfill this section called for now exist (`apartment_rent_histories`, PHASE B/C, 122,431 Busan
+rows, 202408–202607 verified). PHASE D routes Busan-wide dashboard rent requests to this DB for
+whichever of the rolling 12-month window's months fall inside that verified range — currently
+10/12 months; the trailing 2 months (current + reporting-lag month) still use the original MOLIT
+path since no ongoing incremental rent sync exists yet (unlike sale). Measured: Busan-wide cold
+36.2s → 8.7s (4.2x), warm 330ms → 224ms; single-district cold ~1–3.4s → 0.5–1.0s. The 192-call MOLIT
+burst dropped to 32 (2 unverified months × 16 districts). Full elimination and the ≤1–1.5s cold
+target require either a scheduled incremental rent sync (closing the 2-month gap permanently) or
+further SQL-side restructuring of `volumeSummaryByPeriod`'s day-level 7d/30d/3m comparisons — both
+deferred; see `RENT_TRADE_HISTORY_V1_PHASE_D_DB_FIRST.md` for the full analysis. **Verdict updated:
+EXTERNAL_API_BOTTLENECK → PARTIALLY_RESOLVED, remaining gap understood and documented, not silently
+dropped.**
+
 ---
 
 ## 7. Index Recommendation — Area84 Busan-Wide (NOT applied this STEP)
