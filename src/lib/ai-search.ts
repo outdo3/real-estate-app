@@ -2,6 +2,7 @@ import { callGeminiJSON, callGeminiText } from './gemini';
 import { fetchBuildingRegistryInfo, formatParking } from './apt-building-info';
 import { getUniqueAreaLabels, resolveAreaLabel } from './area-utils';
 import { REGION_DATA } from './regions';
+import { deriveCanonicalAptSeq } from './apt-name-match';
 
 export type AiIntent = 'condition_search' | 'regional_stats' | 'compare';
 export type SortIntent = 'recent' | 'price_asc' | 'price_desc';
@@ -404,6 +405,8 @@ export interface CompareComplexData {
   // DECISION_JOURNEY_V1 §6 — 상세 페이지로 안전하게 연결하려면 lawdCd(resolvedLawdCd)만으론
   // 부족하고 dong까지 있어야 동명 단지 오매칭을 피할 수 있다(AGENTS.md identity 원칙).
   dong: string;
+  // DECISION_JOURNEY_V1.1 — 단일 후보로 좁혀졌을 때만 채워진다(deriveCanonicalAptSeq).
+  aptSeq: string | null;
 }
 
 // "국민평형" 84㎡(전용 80~89㎡) 밴드 — 국토부 실거래 통계상 가장 거래가 많은 표준 구간.
@@ -422,6 +425,11 @@ async function fetchCompareTarget(name: string, lawdCd: string | null, requestUr
   const tradesJson = await tradesRes.json();
   const trades: any[] = Array.isArray(tradesJson.trades) ? tradesJson.trades : [];
   const latest = trades[0];
+
+  // DECISION_JOURNEY_V1.1 — trades는 이미 이 route가 name+dong 기준으로 검증한 거래만
+  // 담고 있으므로, 여기서 뽑은 aptSeq를 비교 결과의 상세 링크에 안전하게 재사용할 수
+  // 있다(apt-name-match.ts의 deriveCanonicalAptSeq 참고).
+  const canonicalAptSeq = deriveCanonicalAptSeq(trades);
 
   const dong = latest?.dong || '';
   const jibun = latest?.jibun || '';
@@ -495,6 +503,7 @@ async function fetchCompareTarget(name: string, lawdCd: string | null, requestUr
     areaOptions,
     resolvedLawdCd,
     dong,
+    aptSeq: canonicalAptSeq,
   };
 }
 

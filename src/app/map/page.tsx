@@ -632,7 +632,8 @@ export default function FullscreenMapPage() {
     const handleHoverLeave = () => setHoveredMarkerId((cur) => (cur === marker.id ? null : cur));
     const handleClick = () => {
       if (selectedMarkerId === marker.id) {
-        router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(marker.dong)}`);
+        const aptSeqParam = marker.aptSeq ? `&aptSeq=${encodeURIComponent(marker.aptSeq)}` : '';
+        router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(marker.dong)}${aptSeqParam}`);
       } else {
         setSelectedMarkerId(marker.id);
       }
@@ -1272,9 +1273,10 @@ export default function FullscreenMapPage() {
           </div>
           <button
             type="button"
-            onClick={() =>
-              router.push(`/apt/${encodeURIComponent(selectedMarker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(selectedMarker.dong)}`)
-            }
+            onClick={() => {
+              const aptSeqParam = selectedMarker.aptSeq ? `&aptSeq=${encodeURIComponent(selectedMarker.aptSeq)}` : '';
+              router.push(`/apt/${encodeURIComponent(selectedMarker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(selectedMarker.dong)}${aptSeqParam}`);
+            }}
             style={{ marginTop: '0.75rem', width: '100%', padding: '0.7rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
           >
             상세보기

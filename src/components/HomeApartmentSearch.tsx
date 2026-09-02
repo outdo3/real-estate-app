@@ -23,9 +23,14 @@ export default function HomeApartmentSearch() {
   const [verifying, setVerifying] = useState(false);
   const [connectFailed, setConnectFailed] = useState<string | null>(null);
 
-  const navigateToApt = (name: string, lawdCd?: string, dong?: string) => {
-    const query = lawdCd && dong ? `?lawdCd=${encodeURIComponent(lawdCd)}&dong=${encodeURIComponent(dong)}` : '';
-    router.push(`/apt/${encodeURIComponent(name)}${query}`);
+  const navigateToApt = (name: string, lawdCd?: string, dong?: string, aptSeq?: string | null) => {
+    if (!lawdCd || !dong) {
+      router.push(`/apt/${encodeURIComponent(name)}`);
+      return;
+    }
+    const qs = new URLSearchParams({ lawdCd, dong });
+    if (aptSeq) qs.set('aptSeq', aptSeq);
+    router.push(`/apt/${encodeURIComponent(name)}?${qs.toString()}`);
   };
 
   const handleSelect = (result: ApartmentSearchResult) => {
@@ -48,14 +53,14 @@ export default function HomeApartmentSearch() {
         .then((data: { hasTrades: boolean; hasUnitTypes: boolean }) => {
           setVerifying(false);
           if (data.hasTrades || data.hasUnitTypes) {
-            navigateToApt(result.name, result.lawdCd!, result.dong!);
+            navigateToApt(result.name, result.lawdCd!, result.dong!, result.aptSeq);
           } else {
             setConnectFailed(result.name);
           }
         })
         .catch(() => {
           setVerifying(false);
-          navigateToApt(result.name, result.lawdCd!, result.dong!);
+          navigateToApt(result.name, result.lawdCd!, result.dong!, result.aptSeq);
         });
     } else {
       navigateToApt(result.name);

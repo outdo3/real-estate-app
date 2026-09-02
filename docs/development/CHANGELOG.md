@@ -13558,3 +13558,56 @@ DB 변경: 없음(READ only). 신규 API: 없음(기존 route의 query 계약
 명시적으로 범위 밖).
 
 상세: `docs/development/DECISION_JOURNEY_V1.md`
+
+
+## 2026-09-02
+
+### DECISION JOURNEY V1.1 — Canonical Apartment Identity Hardening
+
+DECISION_JOURNEY_V1의 FINAL REPORT에서 확인된 gap(Detail의 NextAction
+identity가 lawdCd+dong+name뿐이고 aptSeq routing이 없음)을 좁혔다. UI
+재설계 아님 — 이미 연결된 journey에 aptSeq propagation만 강화.
+
+핵심: `/api/apt/[name]`이 이미 내부적으로 계산하던 aptSeq(strong
+identity 매칭용)를 응답에 처음으로 포함시킴(1줄 추가, 기존 필터링
+로직은 건드리지 않음). `deriveCanonicalAptSeq()`(apt-name-match.ts)
+가 이미 name+dong으로 검증된 거래에서 안전하게 canonical aptSeq
+하나만 뽑는다 — 후보가 2개 이상(동일 이름+동에 복수 aptSeq가 실제
+존재하는 MOLIT 특성)이면 임의로 고르지 않고 null(=기존 composite
+identity로 폴백)을 반환한다. incoming aptSeq(URL로 들어온 값)는
+이 검증된 후보 집합에 속할 때만 채택하고, 안 맞으면 신뢰하지 않는다
+— "약한 이름 기준으로 다른 apartment를 선택하지 않는다"를 코드
+레벨에서 보장.
+
+감사 결과: aptSeq가 이미 소스에 있었는데 URL/destination까지 못
+간 flow 6곳(Home 검색, Map 마커, Stats 랭킹뷰 5개 중 5개, Detail→
+Map, Detail→Compare, Compare→Detail, AI검색 비교→Detail)을 전부
+연결. Favorites는 DB unique key에 aptSeq 컬럼 자체가 없어(스키마
+변경 필요) 범위 밖으로 문서화만 하고 미변경. ConcentrationView/
+RegionChangeMapView도 데이터소스 자체에 aptSeq가 없어 미변경.
+
+실측 검증(dev 세션): Detail "지도에서 위치 보기" 클릭 →
+`/map?...&aptSeq=26140-1356&lat=...` 로 이동, 정확한 마커가 aptSeq
+exact match로 하이라이트됨. Detail "비슷한 단지와 비교" → prefillAptSeq
+포함된 링크로 이동 → Compare 페이지의 "상세보기" 링크도 동일
+aptSeq를 유지한 채 Detail로 되돌아옴(2-hop 왕복 확인).
+
+Identity: 전 구간 aptSeq > lawdCd+dong+정확한 이름 > 링크 없음
+우선순위, name-only/substring/first-match/same-dong fallback 0건.
+
+테스트: apt-name-match.test.ts에 deriveCanonicalAptSeq 7개(단일값
+채택/모호시 null/incoming 불일치시 무시 등) + registry.test.ts
+신규 4개, 기존 7개 포함 총 18개 전부 통과(`npx tsx --test`).
+
+DB 변경: 없음(READ only, schema/migration 0). 신규 API call: 0
+(기존에 이미 호출하던 `/api/apt/[name]` 응답에 필드만 추가).
+
+테스트/빌드: `npx tsc --noEmit`/`eslint` 이번 STEP 파일 대상 신규
+에러·경고 0(기존 2건은 diff 밖에서 확인, 줄번호만 밀림), `npm run
+build` 전체 성공.
+
+상태: 완료(9개 flow 감사, 6개 flow에서 실제 gap 발견·연결, 나머지는
+이미 정상이거나 스키마 제약으로 문서화만).
+
+상세: `docs/development/DECISION_JOURNEY_V1_1_IDENTITY.md`,
+`docs/development/DECISION_JOURNEY_V1.md` §16 addendum

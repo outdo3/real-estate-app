@@ -72,6 +72,8 @@ interface CompareComplexData {
   // DECISION_JOURNEY_V1 §6 — 상세 페이지 링크에 필요한 identity(name+lawdCd+dong).
   resolvedLawdCd?: string;
   dong?: string;
+  // DECISION_JOURNEY_V1.1 — 단일 후보로 좁혀졌을 때만 존재.
+  aptSeq?: string | null;
 }
 
 interface AiSearchResult {
@@ -436,6 +438,7 @@ function compareComplexDetailHref(c: CompareComplexData): string | null {
   if (!c.resolvedLawdCd) return null;
   const qs = new URLSearchParams({ lawdCd: c.resolvedLawdCd });
   if (c.dong) qs.set('dong', c.dong);
+  if (c.aptSeq) qs.set('aptSeq', c.aptSeq);
   return `/apt/${encodeURIComponent(c.name)}?${qs.toString()}`;
 }
 

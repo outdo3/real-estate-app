@@ -196,6 +196,7 @@ export default function PriceRankingView({
   const goToApt = (r: PriceRankingRow) => {
     const qs = new URLSearchParams({ lawdCd: r.lawdCd });
     if (r.dong) qs.set('dong', r.dong);
+    if (r.aptSeq) qs.set('aptSeq', r.aptSeq);
     router.push(`/apt/${encodeURIComponent(r.name)}?${qs.toString()}`);
   };
 

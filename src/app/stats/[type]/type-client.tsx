@@ -54,9 +54,9 @@ function CompareView({
 }: {
   lawdCd: string | null;
   maxComplexes: number;
-  initialComplex?: { name: string; lawdCd?: string; dong?: string };
+  initialComplex?: { name: string; lawdCd?: string; dong?: string; aptSeq?: string };
 }) {
-  const [selected, setSelected] = useState<{ name: string; lawdCd?: string; dong?: string }[]>([]);
+  const [selected, setSelected] = useState<{ name: string; lawdCd?: string; dong?: string; aptSeq?: string }[]>([]);
   const [series, setSeries] = useState<Record<string, { date: string; price: number }[]>>({});
   const [loading, setLoading] = useState(false);
 
@@ -75,7 +75,7 @@ function CompareView({
     // 검색 결과 자체의 lawdCd/dong을 써야 한다 — 상단 지역 필터의 lawdCd를 그대로 쓰면
     // 선택한 단지가 다른 구/동에 있을 때 동명 단지와 섞이거나(identity 오염) 조회 결과가
     // 아예 비어버린다(AGENTS.md "이름만으로 재식별 금지").
-    setSelected((prev) => [...prev, { name: result.name, lawdCd: result.lawdCd, dong: result.dong }]);
+    setSelected((prev) => [...prev, { name: result.name, lawdCd: result.lawdCd, dong: result.dong, aptSeq: result.aptSeq || undefined }]);
   };
   const removeComplex = (name: string) => {
     setSelected((prev) => prev.filter((s) => s.name !== name));
@@ -141,7 +141,7 @@ function CompareView({
           <div key={s.name} className={styles.compareSlot}>
             <span className={styles.compareColorDot} style={{ background: COMPARE_COLORS[i % COMPARE_COLORS.length] }} />
             <Link
-              href={`/apt/${encodeURIComponent(s.name)}?lawdCd=${s.lawdCd || lawdCd || ''}&dong=${encodeURIComponent(s.dong || '')}`}
+              href={`/apt/${encodeURIComponent(s.name)}?lawdCd=${s.lawdCd || lawdCd || ''}&dong=${encodeURIComponent(s.dong || '')}${s.aptSeq ? `&aptSeq=${encodeURIComponent(s.aptSeq)}` : ''}`}
               style={{ flex: 1, fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', textDecoration: 'none' }}
             >
               {s.name} <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>상세보기 ›</span>
@@ -368,6 +368,7 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
         name: prefillName,
         lawdCd: searchParams.get('prefillLawdCd') || undefined,
         dong: searchParams.get('prefillDong') || undefined,
+        aptSeq: searchParams.get('prefillAptSeq') || undefined,
       }
     : undefined;
 

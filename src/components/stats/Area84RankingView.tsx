@@ -134,6 +134,7 @@ export default function Area84RankingView({
   const goToApt = (r: Area84Row) => {
     const qs = new URLSearchParams({ lawdCd: r.lawdCd });
     if (r.dong) qs.set('dong', r.dong);
+    if (r.aptSeq) qs.set('aptSeq', r.aptSeq);
     router.push(`/apt/${encodeURIComponent(r.name)}?${qs.toString()}`);
   };
 

@@ -28,6 +28,7 @@ import NextActionSection from '@/components/decision-journey/NextActionSection';
 import { buildDetailMapUrl, buildDetailCompareUrl } from '@/lib/decision-journey/registry';
 import { geocodeAddressToCoords } from '@/lib/decision-journey/geocode-for-map';
 import type { NextAction } from '@/lib/decision-journey/types';
+import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
 import { pickDefaultTradeArea } from '@/lib/trade-area-selection';
 import { buildAptBrief } from '@/lib/apt-brief';
@@ -55,6 +56,7 @@ const InvestmentMetrics = dynamic(() => import('@/components/InvestmentMetrics')
 interface Trade {
   id: number;
   name?: string;
+  aptSeq?: string | null;
   tradeDate: string;
   price: number;
   priceStr: string;
@@ -145,6 +147,11 @@ export default function ApartmentDetail() {
   const [scoreResult, setScoreResult] = useState<ApartmentScoreApiResponse | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
 
+  // DECISION_JOURNEY_V1.1 — 지도/검색/통계/비교 등에서 넘어온 aptSeq가 있으면 읽어둔다.
+  // 이 값은 바로 신뢰하지 않고, 실제 name+dong 기준으로 검증된 trades의 aptSeq 후보군에
+  // 속할 때만 canonical identity로 채택한다(아래 deriveCanonicalAptSeq 호출부 참고).
+  const [incomingAptSeq, setIncomingAptSeq] = useState<string | null>(null);
+
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const queryAptName = searchParams.get('aptName');
@@ -161,6 +168,8 @@ export default function ApartmentDetail() {
     setLawdCdState(queryLawdCd || '11680');
     const queryDong = searchParams.get('dong');
     if (queryDong) setUrlDong(queryDong);
+    const queryAptSeq = searchParams.get('aptSeq');
+    if (queryAptSeq) setIncomingAptSeq(queryAptSeq);
   }, [params.name]);
 
   const formatKoreanPrice = (val: string) => {
@@ -442,6 +451,13 @@ export default function ApartmentDetail() {
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
   const addressReady = !loading && !!primaryAddress;
 
+  // DECISION_JOURNEY_V1.1 — trades는 이미 name+dong 기준으로 검증된 이 페이지의 단지
+  // 거래만 담고 있으므로(matchesTradeIdentity), 여기서 뽑히는 aptSeq는 안전하게 신뢰할
+  // 수 있는 canonical identity다. 후보가 2개 이상(동일 이름+동에 복수 aptSeq가 실제로
+  // 존재하는 MOLIT 등록 특성)이면 임의로 하나를 고르지 않고 null(=composite identity로
+  // fallback)을 반환한다 — "다른 단지로 잘못 연결되는 것보다 낫다".
+  const canonicalAptSeq = deriveCanonicalAptSeq(trades, incomingAptSeq);
+
   // DECISION_JOURNEY_V1 §9/§11 — 지도 딥링크는 lat/lng가 있어야만
   // parseMapStateFromSearchParams가 이를 공유링크로 인식한다(없으면 기본 지역으로
   // 열림). 상세 페이지엔 좌표가 없으므로 클릭 시점에 지오코딩한다.
@@ -455,6 +471,7 @@ export default function ApartmentDetail() {
         lawdCd: lawdCdState,
         dong: urlDong || undefined,
         name: displayName || aptName || undefined,
+        aptSeq: canonicalAptSeq || undefined,
         lat: coords?.lat,
         lng: coords?.lng,
       })
@@ -478,6 +495,7 @@ export default function ApartmentDetail() {
             name: displayName || aptName,
             lawdCd: lawdCdState,
             dong: urlDong || undefined,
+            aptSeq: canonicalAptSeq || undefined,
           }),
         },
       ]

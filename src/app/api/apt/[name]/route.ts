@@ -138,6 +138,11 @@ export async function GET(
           // (예: "금호어울림" vs "서대신금호어울림")와 무관하게, 상세페이지 상단 표기는
           // 항상 이 값으로 통일한다.
           name: item.name,
+          // DECISION_JOURNEY_V1.1 — 이 값은 matchesTradeIdentity가 이미 검증한(이름+동
+          // 기준 strong match) 거래에서 나온 것이므로, 클라이언트가 지도/비교 등 downstream
+          // 액션의 canonical identity로 안전하게 재사용할 수 있다(apt-name-match.ts의
+          // deriveCanonicalAptSeq 참고).
+          aptSeq: item.aptSeq || null,
           tradeDate: tradeDateStr,
           price: priceNum,
           priceStr: priceStr,

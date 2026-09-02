@@ -191,6 +191,7 @@ export default function TransactionFeedView({
   const goToApt = (t: FeedTradeRow) => {
     const qs = new URLSearchParams({ lawdCd: t.lawdCd });
     if (t.dong) qs.set('dong', t.dong);
+    if (t.aptSeq) qs.set('aptSeq', t.aptSeq);
     router.push(`/apt/${encodeURIComponent(t.name)}?${qs.toString()}`);
   };
 

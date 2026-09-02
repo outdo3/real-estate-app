@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aptNamesMatch, resolveStrongIdentityAptSeqs, matchesTradeIdentity } from './apt-name-match';
+import { aptNamesMatch, resolveStrongIdentityAptSeqs, matchesTradeIdentity, deriveCanonicalAptSeq } from './apt-name-match';
 
 // SEARCH_DETAIL_IDENTITY_HOTFIX_V2 — regression fixtures based on real production data
 // (부산 해운대구 우동, ApartmentTradeHistory 실측): "경동"(aptSeq 26350-2, 지번 974,
@@ -75,4 +75,37 @@ test('resolveStrongIdentityAptSeqs: dong이 없으면(레거시 name-only URL) �
   ];
   const seqs = resolveStrongIdentityAptSeqs(items, '해운대경동제이드');
   assert.deepEqual([...seqs], ['26350-2206']);
+});
+
+// DECISION_JOURNEY_V1.1 — deriveCanonicalAptSeq: 이미 name+dong으로 검증된 trades에서
+// downstream(지도/비교) 액션에 쓸 canonical aptSeq를 안전하게 뽑는다.
+
+test('deriveCanonicalAptSeq: 모든 거래가 같은 aptSeq 하나면 그 값을 반환한다', () => {
+  const trades = [{ aptSeq: '26350-2206' }, { aptSeq: '26350-2206' }, { aptSeq: null }];
+  assert.equal(deriveCanonicalAptSeq(trades), '26350-2206');
+});
+
+test('deriveCanonicalAptSeq: aptSeq가 서로 다른 2개 이상이면(동일 이름+동에 복수 등록) 임의로 고르지 않고 null을 반환한다', () => {
+  const trades = [{ aptSeq: '26350-2206' }, { aptSeq: '26350-2610' }];
+  assert.equal(deriveCanonicalAptSeq(trades), null);
+});
+
+test('deriveCanonicalAptSeq: aptSeq가 전혀 없으면 null(=composite identity로 폴백)을 반환한다', () => {
+  const trades = [{ aptSeq: null }, { aptSeq: undefined }];
+  assert.equal(deriveCanonicalAptSeq(trades), null);
+});
+
+test('deriveCanonicalAptSeq: incoming aptSeq가 trades의 candidate set에 있으면 그 값을 채택한다', () => {
+  const trades = [{ aptSeq: '26350-2206' }, { aptSeq: '26350-2610' }];
+  assert.equal(deriveCanonicalAptSeq(trades, '26350-2610'), '26350-2610');
+});
+
+test('deriveCanonicalAptSeq: incoming aptSeq가 trades의 candidate set에 없으면(불일치) 신뢰하지 않고, 단일 후보가 있으면 그걸 쓴다 — 약한 이름 기준으로 다른 apartment를 선택하지 않는다', () => {
+  const trades = [{ aptSeq: '26350-2206' }, { aptSeq: '26350-2206' }];
+  assert.equal(deriveCanonicalAptSeq(trades, '99999-9999'), '26350-2206');
+});
+
+test('deriveCanonicalAptSeq: incoming aptSeq가 불일치하고 후보도 모호하면(2개 이상) null을 반환한다', () => {
+  const trades = [{ aptSeq: '26350-2206' }, { aptSeq: '26350-2610' }];
+  assert.equal(deriveCanonicalAptSeq(trades, '99999-9999'), null);
 });

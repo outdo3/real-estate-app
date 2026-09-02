@@ -161,3 +161,27 @@ export function matchesTradeIdentity(
   }
   return aptNamesMatch(item.name, requestedAptName);
 }
+
+// DECISION_JOURNEY_V1.1 — 이미 name+dong으로 필터링된(=이 페이지가 보여주는 단지라고
+// 확신할 수 있는) 거래 목록에서, downstream(지도/비교) 액션에 쓸 canonical aptSeq
+// 하나를 안전하게 뽑아낸다. MOLIT 원본 특성상 같은 이름+동의 단지가 실제로 여러
+// aptSeq(예: 단지 분할/등록 이력)로 나뉘어 있는 경우가 있어(resolveStrongIdentityAptSeqs가
+// Set을 반환하는 이유), distinctSeqs가 2개 이상이면 어느 게 "그 단지"인지 임의로 고르지
+// 않는다 — "다른 단지로 잘못 연결되는 것보다 액션을 안 주는 게 낫다"는 원칙.
+//
+// incomingAptSeq(예: 지도/검색/비교에서 넘어온 URL의 aptSeq)는 오직 이 거래 목록이
+// 이미 독립적으로 확인한 candidate set에 속할 때만 채택한다 — URL 값을 무조건 신뢰해
+// 이름/동 기준과 다른 단지를 선택하는 일을 막기 위함이다(약한 이름 기준으로 다른
+// apartment를 선택하지 않는다).
+export function deriveCanonicalAptSeq(
+  trades: Array<{ aptSeq?: string | null }>,
+  incomingAptSeq?: string | null
+): string | null {
+  const distinctSeqs = new Set<string>();
+  for (const t of trades) {
+    if (t.aptSeq) distinctSeqs.add(t.aptSeq);
+  }
+  if (incomingAptSeq && distinctSeqs.has(incomingAptSeq)) return incomingAptSeq;
+  if (distinctSeqs.size === 1) return [...distinctSeqs][0];
+  return null;
+}

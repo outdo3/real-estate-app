@@ -13,6 +13,7 @@ export function buildDetailMapUrl(params: {
   lawdCd: string;
   dong?: string;
   name?: string;
+  aptSeq?: string;
   lat?: number;
   lng?: number;
 }): string {
@@ -21,6 +22,10 @@ export function buildDetailMapUrl(params: {
   qs.set('zoom', '4');
   if (params.dong) qs.set('dong', params.dong);
   if (params.name) qs.set('name', params.name);
+  // DECISION_JOURNEY_V1.1 — aptSeq를 넣어도 dong/name은 그대로 유지한다.
+  // parseMapStateFromSearchParams가 aptSeq를 우선 채택하고, aptSeq 매칭 마커가 없을
+  // 때도 dong/name이 남아있으면 기존 폴백 경로가 그대로 동작한다(§5).
+  if (params.aptSeq) qs.set('aptSeq', params.aptSeq);
   if (params.lat != null && params.lng != null) {
     qs.set('lat', String(params.lat));
     qs.set('lng', String(params.lng));
@@ -32,10 +37,12 @@ export function buildDetailCompareUrl(params: {
   name: string;
   lawdCd: string;
   dong?: string;
+  aptSeq?: string;
 }): string {
   const qs = new URLSearchParams();
   qs.set('prefillName', params.name);
   if (params.lawdCd) qs.set('prefillLawdCd', params.lawdCd);
   if (params.dong) qs.set('prefillDong', params.dong);
+  if (params.aptSeq) qs.set('prefillAptSeq', params.aptSeq);
   return `/stats/compare?${qs.toString()}`;
 }

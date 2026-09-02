@@ -93,6 +93,7 @@ export default function LargeComplexView({
   const goToApt = (item: ComplexItem) => {
     const qs = new URLSearchParams({ lawdCd: item.lawdCd || '' });
     if (item.dong) qs.set('dong', item.dong);
+    if (item.aptSeq) qs.set('aptSeq', item.aptSeq);
     router.push(`/apt/${encodeURIComponent(item.name)}?${qs.toString()}`);
   };
 

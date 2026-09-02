@@ -158,6 +158,7 @@ export default function GapInvestView({
   const goToApt = (r: ApartmentRow) => {
     const qs = new URLSearchParams({ lawdCd: r.lawdCd || lawdCd || '' });
     if (r.dong) qs.set('dong', r.dong);
+    if (r.aptSeq) qs.set('aptSeq', r.aptSeq);
     router.push(`/apt/${encodeURIComponent(r.name)}?${qs.toString()}`);
   };
 

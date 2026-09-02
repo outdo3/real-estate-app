@@ -200,3 +200,14 @@ breakdown was deliberately not added since the existing `TrackEventContext` shap
   V2 territory and needs its own explicitly-scoped approval per this task's STOP condition.
 - `COMPARE_V2` (full redesign, unifying the chart-based and table-based compare implementations)
   remains the natural longer-term consolidation, but was explicitly out of scope here.
+
+## 16. Addendum — Identity Hardening (2026-09-02, `DECISION_JOURNEY_V1.1`)
+
+The FINAL REPORT above noted Detail's NextActions used `lawdCd+dong+displayName/aptName` only, with
+no `aptSeq` routing. `DECISION_JOURNEY_V1.1` closed that gap: `/api/apt/[name]` now returns `aptSeq`
+per trade (it already computed this internally for identity matching, just never surfaced it), a new
+`deriveCanonicalAptSeq()` pure function (`src/lib/apt-name-match.ts`) safely derives a single
+canonical `aptSeq` only when unambiguous, and every flow that already had `aptSeq` in scope but
+dropped it (Home search, Map markers, 5 Stats ranking views, Compare, AI-search compare) now carries
+it through to `/apt/[name]?...&aptSeq=`. See `DECISION_JOURNEY_V1_1_IDENTITY.md` for the full
+before/after audit, the ambiguous-match safety design, and live verification evidence.
