@@ -219,6 +219,23 @@ verification query run against real production data during QA returned in well u
 every one of the 6 queries above, with no performance issue observed. A `[complexId, createdAt]`
 index remains a flagged-but-deferred Phase 1 recommendation if volume grows enough to need it.
 
+## 21.5 Production Verification (post-deploy, commit `d0ee7df`)
+
+Live-tested directly against `https://real-estate-app-park11.vercel.app` (not localhost) after
+deploy, using minimal, clearly-marked test traffic (single-use `/__phase2_qa_proof_*__` URLs, not
+real page paths, so they can never be mistaken for real usage or pollute any real page-type/
+apartment aggregation):
+
+1. `?__ejip_qa=1&proof=1` → address bar became `?proof=1` (trigger stripped), `sessionStorage`
+   flag set — confirms §3's URL-sharing-safety property on the real deployed site, not just dev.
+2. A `qaSuppressed: true` POST to `/api/log/view` returned
+   `{"success":true,"excluded":"QA_SUPPRESSED"}` — no row written.
+3. A `qaSuppressed: false` POST (same session) returned plain `{"success":true}` — proving normal
+   recording is unaffected by the presence of the exclusion gate; exactly one small, clearly-marked
+   verification row was written, not "대량" QA data (§51's own constraint).
+4. `GET /api/admin/behavior` while unauthenticated returned `401 로그인이 필요합니다.` — confirms
+   `requireAdmin()` gates the new route in production exactly as it gates the existing ones.
+
 ## 22. Deferred Work
 
 - `compare_complete` (real 2-apartment-comparison-finished event) — not built this STEP.
