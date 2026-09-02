@@ -19,8 +19,8 @@ interface Props {
 export default function NextActionSection({ title = '다음으로 확인해볼까요?', actions, aptName }: Props) {
   if (actions.length === 0) return null;
 
-  const handleClick = () => {
-    trackEvent('next_action_click', { aptName: aptName ?? undefined });
+  const handleClick = (actionType: NextAction['type']) => {
+    trackEvent('next_action_click', { aptName: aptName ?? undefined, actionType });
   };
 
   return (
@@ -36,7 +36,7 @@ export default function NextActionSection({ title = '다음으로 확인해볼�
             loading={action.loading}
             className={styles.actionBtn}
             onClick={(e) => {
-              handleClick();
+              handleClick(action.type);
               action.onClick?.();
             }}
           >

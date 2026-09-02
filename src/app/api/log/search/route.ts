@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth-helpers';
+import { classifyTraffic } from '@/lib/analytics/traffic-classification';
+import { redactSearchQuery } from '@/lib/analytics/search-redaction';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,10 +12,23 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const query: string = (body.query || '').toString().trim().slice(0, 200);
+    const rawQuery: string = (body.query || '').toString();
+    // ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2 §19-21 — redact 먼저, truncate는 그다음
+    // (순서를 바꾸면 200자 경계에서 전화번호/이메일이 잘려 노출될 수 있다).
+    const query: string = redactSearchQuery(rawQuery, 200);
     if (!query) return NextResponse.json({ success: false, error: 'query는 필수입니다.' }, { status: 400 });
 
     const user = await getCurrentUser().catch(() => null);
+
+    const exclusionReason = classifyTraffic({
+      userAgent: request.headers.get('user-agent'),
+      user: user as any,
+      qaSuppressed: body.qaSuppressed === true,
+    });
+    if (exclusionReason) {
+      return NextResponse.json({ success: true, excluded: exclusionReason });
+    }
+
     await prisma.searchLog.create({ data: { query, userId: user?.id ?? null } });
 
     return NextResponse.json({ success: true });

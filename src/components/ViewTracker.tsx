@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { getClientSessionId, getCurrentAptName } from '@/lib/live-presence';
+import { initQaSuppressionFromUrl, isQaSuppressed } from '@/lib/analytics/qa-suppression';
 
 // 30초 간격 하트비트 — 관리자 대시보드의 "실시간 접속자"가 이 간격을 전제로 한다
 // (presence-server.ts의 ONLINE_WINDOW_MS와 세트).
@@ -15,29 +16,37 @@ const HEARTBEAT_INTERVAL_MS = 30 * 1000;
 export default function ViewTracker() {
   const pathname = usePathname();
 
+  // ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2 §7 — 최초 마운트 시 1회, URL의 QA
+  // suppression 트리거를 확인하고 주소창에서 즉시 제거한다.
+  useEffect(() => {
+    initQaSuppressionFromUrl();
+  }, []);
+
   useEffect(() => {
     if (!pathname) return;
     // /apt/[name]은 apt-client.tsx가 실제로 매칭된 단지명(complexId)까지 포함한 더
     // 정확한 조회 로그를 직접 남긴다 — 여기서 또 남기면 단지명 없는 중복 로그가 쌓인다.
     if (pathname.startsWith('/apt/')) return;
+    if (isQaSuppressed()) return;
     const sessionId = getClientSessionId();
     if (!sessionId) return;
     fetch('/api/log/view', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: pathname, sessionId }),
+      body: JSON.stringify({ url: pathname, sessionId, qaSuppressed: isQaSuppressed() }),
       keepalive: true,
     }).catch(() => {});
   }, [pathname]);
 
   useEffect(() => {
     const sendHeartbeat = () => {
+      if (isQaSuppressed()) return;
       const sessionId = getClientSessionId();
       if (!sessionId) return;
       fetch('/api/log/heartbeat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, url: pathname, aptName: getCurrentAptName() }),
+        body: JSON.stringify({ sessionId, url: pathname, aptName: getCurrentAptName(), qaSuppressed: isQaSuppressed() }),
         keepalive: true,
       }).catch(() => {});
     };

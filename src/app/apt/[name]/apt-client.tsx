@@ -35,6 +35,7 @@ import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
 import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
+import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
 import { recordApartmentVisit } from '@/lib/recent-apartments';
 import { siteConfig } from '@/config/site';
 
@@ -575,12 +576,14 @@ export default function ApartmentDetail() {
       keepalive: true,
     }).catch(() => {});
 
-    fetch('/api/log/view', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: window.location.pathname, sessionId: getClientSessionId(), complexId, aptName: resolvedName }),
-      keepalive: true,
-    }).catch(() => {});
+    if (!isQaSuppressed()) {
+      fetch('/api/log/view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: window.location.pathname, sessionId: getClientSessionId(), complexId, aptName: resolvedName, qaSuppressed: false }),
+        keepalive: true,
+      }).catch(() => {});
+    }
 
     return () => {
       setCurrentAptName(null);

@@ -144,6 +144,9 @@ export default function MyPage() {
                   <Link href="/admin/dashboard" className={styles.linkCard}>
                     ⚙️ 관리자 대시보드
                   </Link>
+                  <Link href="/admin/behavior" className={styles.linkCard}>
+                    📊 사용자 행동 분석
+                  </Link>
                   <Link href="/admin/ops" className={styles.linkCard}>
                     데이터 운영 센터
                   </Link>

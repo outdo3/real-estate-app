@@ -25,10 +25,18 @@ function isAdminByEnvEmail(email: string | null | undefined): boolean {
   return !!adminEmail && !!email && email.toLowerCase() === adminEmail.toLowerCase();
 }
 
+// ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2 — requireAdmin()과 동일한 판정을
+// analytics 트래픽 제외 로직(src/lib/analytics/traffic-classification.ts)에서도
+// 그대로 재사용한다. 판정 로직을 두 곳에 따로 두면 나중에 한쪽만 바뀌어
+// admin 판정이 갈리는 위험이 있다.
+export function isAdminSessionUser(user: { role?: string | null; email?: string | null } | null | undefined): boolean {
+  if (!user) return false;
+  return user.role === 'ADMIN' || isAdminByEnvEmail(user.email);
+}
+
 export async function requireAdmin() {
   const user = await getCurrentUser();
   if (!user) return { error: '로그인이 필요합니다.' as const, status: 401 as const, user: null };
-  const isAdmin = user.role === 'ADMIN' || isAdminByEnvEmail((user as any).email);
-  if (!isAdmin) return { error: '관리자만 사용할 수 있습니다.' as const, status: 403 as const, user: null };
+  if (!isAdminSessionUser(user as any)) return { error: '관리자만 사용할 수 있습니다.' as const, status: 403 as const, user: null };
   return { error: null, status: 200 as const, user };
 }

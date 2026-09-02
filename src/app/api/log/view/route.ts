@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth-helpers';
 import { upsertActiveSession } from '@/lib/presence-server';
+import { classifyTraffic } from '@/lib/analytics/traffic-classification';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,17 @@ export async function POST(request: Request) {
     }
 
     const user = await getCurrentUser().catch(() => null);
+
+    // ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2 — bot/비운영환경/관리자 세션/QA suppression
+    // 트래픽은 PageView/ActiveSession 어디에도 쓰지 않는다.
+    const exclusionReason = classifyTraffic({
+      userAgent: request.headers.get('user-agent'),
+      user: user as any,
+      qaSuppressed: body.qaSuppressed === true,
+    });
+    if (exclusionReason) {
+      return NextResponse.json({ success: true, excluded: exclusionReason });
+    }
 
     await Promise.all([
       prisma.pageView.create({

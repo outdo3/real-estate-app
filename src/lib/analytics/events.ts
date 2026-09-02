@@ -41,6 +41,13 @@ export function isAnalyticsEventName(value: string): value is AnalyticsEventName
 
 export const ANALYTICS_EVENT_URL_PREFIX = '/__event__/';
 
-export function eventUrl(name: AnalyticsEventName): string {
-  return `${ANALYTICS_EVENT_URL_PREFIX}${name}`;
+// ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2 §15-17 — next_action_click만 actionType을
+// 갖는다. 스키마 변경 없이(새 컬럼 없이) 기존 `/__event__/<name>` URL 네임스페이스 안에
+// `?action=<NextActionType>` 쿼리로 인코딩한다. 서버(route.ts)가 NEXT_ACTION_TYPES
+// 배열로 다시 검증하므로, 클라이언트가 임의 문자열을 보내도 유효하지 않으면 무시되고
+// actionType 없는 일반 이벤트로만 기록된다(이벤트 자체를 드롭하지 않음).
+export function eventUrl(name: AnalyticsEventName, actionType?: string | null): string {
+  const base = `${ANALYTICS_EVENT_URL_PREFIX}${name}`;
+  if (actionType) return `${base}?action=${encodeURIComponent(actionType)}`;
+  return base;
 }

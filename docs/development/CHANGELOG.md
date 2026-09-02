@@ -14005,3 +14005,67 @@ DB 변경: 없음(READ only, 집계 쿼리만). WRITE 0, schema 0, index 0.
 상태: 완료(감사·설계 전용, Phase 2 착수 전 PM 결정 항목 문서화).
 
 상세: `docs/development/ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE1.md`
+
+
+## 2026-09-03
+
+### ADMIN USER BEHAVIOR ANALYTICS V1 PHASE 2 — 신뢰 가능한 행동 분석 대시보드 구현
+
+PHASE 1 감사에서 승인된 방향대로 기존 PageView+event 스키마를 그대로
+재사용해(신규 schema 없음) 신규 관리자 대시보드 `/admin/behavior` 구현.
+DB schema/migration/index 변경 0.
+
+**트래픽 오염 근본 해결(§4-9)**: bot/비운영환경(VERCEL_ENV≠production,
+로컬 dev+Vercel Preview 동시 커버)/관리자 세션/QA suppression 4가지
+신호를 `classifyTraffic()`으로 판정, 해당하면 PageView/ActiveSession/
+SearchLog 어디에도 쓰지 않는다(태깅 컬럼이 없어 쓰기 시점 필터가
+유일한 방법). dev 서버 실측으로 확인: `/api/log/view` 수동 호출이
+`{"success":true,"excluded":"NON_PRODUCTION"}`을 반환 — Phase 1이
+발견한 정확히 그 오염 경로(localhost QA)가 이제 실제로 차단됨을 직접
+증명.
+
+**QA suppression 메커니즘(§7)**: URL에 `?__ejip_qa=1`을 넣으면
+sessionStorage에 세션 한정 플래그를 설정하고 즉시 주소창에서 파라미터를
+제거한다 — 링크를 다른 사람과 공유해도 suppression이 전파되지 않음을
+실측 확인(`?__ejip_qa=1&foo=bar` → 주소창 `?foo=bar`로 즉시 정리).
+서버도 body의 qaSuppressed 플래그를 독립적으로 재검증(방어적 이중 게이트).
+
+**next_action_click actionType breakdown(§15-18)**: 새 DB 컬럼 없이
+기존 `/__event__/<name>` 네임스페이스 안에 `?action=<NextActionType>`
+쿼리로 인코딩. 서버가 실제 NextActionType 배열로 재검증(클라이언트
+임의 문자열 차단), 무효값은 이벤트 자체를 버리지 않고 actionType
+없이 기록. Phase 2 이전 기존 레코드는 "(미지정 — Phase 2 이전 기록)"
+으로 정직하게 별도 표시(실측: 기존 데이터 4건 정상 분류 확인).
+
+**SearchLog 개인정보 redaction(§19-21)**: 이메일/전화번호(010 모바일
++ 지역번호 형식 통합 정규식) 패턴을 normalize→redact→truncate 순서로
+처리(200자 경계에서 잘려 노출되는 것 방지, boundary 테스트로 증명).
+금액/아파트명은 PII가 아니므로 redaction 대상에서 명시적으로 제외.
+
+**인기 단지 집계 개선**: 기존 `/admin/dashboard`가 aptName만으로
+묶어 동명이인 단지가 섞일 위험이 있던 것과 달리, 새 대시보드는
+complexId(lawdCd|dong|name) 기준으로 묶어 그 위험을 제거(기존
+dashboard 쿼리 자체는 이번 스코프에서 건드리지 않음 — 무너뜨리지
+않기 위해 — 다만 이 격차는 문서에 정직하게 기록).
+
+**Funnel(§25-28)**: 방문→단지 상세 확인→비교/관심/자금계산 3단계,
+session count 기준(같은 세션이 같은 페이지 10번 봐도 1회). "Search
+전환율" 같은 실제로 측정 불가능한 인과관계 표현 사용 안 함. 실측
+7일 윈도우: 방문 97 → 상세 58(59.8%) → 결정행동 3(5.2%).
+
+Query architecture: 대시보드 1회 로드당 총 6개 쿼리(KPI+funnel을
+하나의 conditional aggregate 쿼리로 통합해 같은 테이블 중복 스캔
+방지), raw row materialization 없음(COUNT/GROUP BY만), 기존
+`/api/admin/dashboard`와 동일한 5분 캐시 TTL 재사용(새 숫자 발명 안 함).
+
+DB 변경: 없음(READ only, schema/migration/index 0). 신규 API: 1개
+(`/api/admin/behavior`, 기존 requireAdmin() 재사용, 신규 auth 없음).
+
+테스트/빌드: 신규 유닛테스트 24개(traffic-classification 6, search-
+redaction 10, events actionType 5, 기존 것 포함 총 79/79 통과),
+`npx tsc --noEmit`/`eslint` 신규 에러·경고 0, `npm run build` 전체
+성공(`/admin/behavior` 정적 생성 확인).
+
+상태: 완료.
+
+상세: `docs/development/ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2.md`
