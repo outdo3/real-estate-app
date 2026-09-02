@@ -147,6 +147,10 @@ export default function PriceRankingView({
   const [period, setPeriod] = useState('30d');
   const [sort, setSort] = useState(SORT_OPTIONS[mode][0].value);
   const [areaBand, setAreaBand] = useState<string>('all');
+  // PERCEIVED_PERFORMANCE_V1 §12 — router.push는 클릭 즉시 눈에 보이는 변화가
+  // 없어 "눌렸는지 모르겠다"는 인상을 준다. 클릭한 행만 즉시 흐리게 표시한다
+  // (전체 화면 스피너/과도한 애니메이션 아님).
+  const [navigatingKey, setNavigatingKey] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [allRows, setAllRows] = useState<PriceRankingRow[]>([]);
 
@@ -193,12 +197,18 @@ export default function PriceRankingView({
     return allRows.filter((r) => areaBandLabel(r.excluUseArea) === areaBand);
   }, [allRows, areaBand]);
 
-  const goToApt = (r: PriceRankingRow) => {
+  const buildAptHref = (r: PriceRankingRow) => {
     const qs = new URLSearchParams({ lawdCd: r.lawdCd });
     if (r.dong) qs.set('dong', r.dong);
     if (r.aptSeq) qs.set('aptSeq', r.aptSeq);
-    router.push(`/apt/${encodeURIComponent(r.name)}?${qs.toString()}`);
+    return `/apt/${encodeURIComponent(r.name)}?${qs.toString()}`;
   };
+  const goToApt = (r: PriceRankingRow) => {
+    setNavigatingKey(`${r.groupKey}-${r.currentDate}`);
+    router.push(buildAptHref(r));
+  };
+  // PERCEIVED_PERFORMANCE_V1 §16 — 사용자가 실제로 hover/touch한 행만 prefetch.
+  const prefetchApt = (r: PriceRankingRow) => router.prefetch(buildAptHref(r));
 
   // §26 — 시도 전체 결과는 구/군 + 동을 함께 표시(동 이름만으로는 여러 구에
   // 걸쳐 모호할 수 있음). 특정 구를 선택한 경우 동 이름만으로 충분하다.
@@ -275,7 +285,14 @@ export default function PriceRankingView({
 
           <ul className={styles.list}>
             {filteredRows.map((r, i) => (
-              <li key={`${r.groupKey}-${r.currentDate}-${i}`} className={styles.row} onClick={() => goToApt(r)}>
+              <li
+                key={`${r.groupKey}-${r.currentDate}-${i}`}
+                className={styles.row}
+                onClick={() => goToApt(r)}
+                onMouseEnter={() => prefetchApt(r)}
+                onTouchStart={() => prefetchApt(r)}
+                style={navigatingKey === `${r.groupKey}-${r.currentDate}` ? { opacity: 0.5 } : undefined}
+              >
                 <div className={styles.rowTop}>
                   <span className={styles.rank}>{i + 1}</span>
                   <div className={styles.rowInfo}>

@@ -8,7 +8,6 @@ import Header from '@/components/Header';
 import FullPageLoader from '@/components/FullPageLoader';
 import Button from '@/components/ui/Button';
 import styles from './detail.module.css';
-import KakaoMapEmbed from '@/components/KakaoMapEmbed';
 import AreaSelector from '@/components/AreaSelector';
 import KakaoShareButton from '@/components/KakaoShareButton';
 import FavoriteButton from '@/components/FavoriteButton';
@@ -52,6 +51,13 @@ const PriceTrendChart = dynamic(() => import('@/components/PriceTrendChart'), {
 const InvestmentMetrics = dynamic(() => import('@/components/InvestmentMetrics'), {
   ssr: false,
   loading: () => <ChartSkeleton height="8rem" />,
+});
+// PERCEIVED_PERFORMANCE_V1 §19 — KakaoMapEmbed(+Kakao Maps SDK 로딩 로직)는 지도/로드뷰
+// 모달을 실제로 열 때만 필요한데 정적 import돼 있어 상세페이지 초기 번들에 항상
+// 포함되고 있었다. 위 차트 컴포넌트들과 동일한 패턴으로 지연 로딩한다.
+const KakaoMapEmbed = dynamic(() => import('@/components/KakaoMapEmbed'), {
+  ssr: false,
+  loading: () => <ChartSkeleton height="400px" />,
 });
 
 interface Trade {

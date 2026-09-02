@@ -110,6 +110,8 @@ export default function Area84RankingView({
   const [period, setPeriod] = useState('12m');
   const [sort, setSort] = useState('price');
   const [offset, setOffset] = useState(0);
+  // PERCEIVED_PERFORMANCE_V1 §12 — 클릭한 행만 즉시 흐리게 표시.
+  const [navigatingKey, setNavigatingKey] = useState<string | null>(null);
   const [allRows, setAllRows] = useState<Area84Row[]>([]);
 
   useEffect(() => {
@@ -131,12 +133,18 @@ export default function Area84RankingView({
 
   const coverageLabel = data?.historicalHighCoverageLabel || '2년';
 
-  const goToApt = (r: Area84Row) => {
+  const buildAptHref = (r: Area84Row) => {
     const qs = new URLSearchParams({ lawdCd: r.lawdCd });
     if (r.dong) qs.set('dong', r.dong);
     if (r.aptSeq) qs.set('aptSeq', r.aptSeq);
-    router.push(`/apt/${encodeURIComponent(r.name)}?${qs.toString()}`);
+    return `/apt/${encodeURIComponent(r.name)}?${qs.toString()}`;
   };
+  const goToApt = (r: Area84Row) => {
+    setNavigatingKey(`${r.complexKey}-${r.groupKey}`);
+    router.push(buildAptHref(r));
+  };
+  // PERCEIVED_PERFORMANCE_V1 §16
+  const prefetchApt = (r: Area84Row) => router.prefetch(buildAptHref(r));
 
   const regionLabel = (r: Area84Row) => [r.sigunguName, r.dong].filter(Boolean).join(' ') || displayRegionName;
   const periodLabel = PERIOD_OPTIONS.find((p) => p.value === period)?.label || period;
@@ -190,7 +198,14 @@ export default function Area84RankingView({
 
           <ul className={styles.list}>
             {allRows.map((r, i) => (
-              <li key={`${r.complexKey}-${r.groupKey}-${i}`} className={styles.row} onClick={() => goToApt(r)}>
+              <li
+                key={`${r.complexKey}-${r.groupKey}-${i}`}
+                className={styles.row}
+                onClick={() => goToApt(r)}
+                onMouseEnter={() => prefetchApt(r)}
+                onTouchStart={() => prefetchApt(r)}
+                style={navigatingKey === `${r.complexKey}-${r.groupKey}` ? { opacity: 0.5 } : undefined}
+              >
                 <div className={styles.rowTop}>
                   <span className={styles.rank}>{i + 1}</span>
                   <div className={styles.rowInfo}>

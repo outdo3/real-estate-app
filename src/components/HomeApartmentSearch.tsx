@@ -45,6 +45,10 @@ export default function HomeApartmentSearch() {
     // It's an APARTMENT
     if (result.lawdCd && result.dong) {
       setVerifying(true);
+      // PERCEIVED_PERFORMANCE_V1 — verify 요청과 별개로, 도착지 라우트 shell을
+      // 병렬로 미리 받아둔다. verify가 실패해 이동하지 않아도 부작용 없음(prefetch는
+      // 네비게이션을 일으키지 않는다) — identity 검증 로직 자체는 그대로 유지.
+      router.prefetch(`/apt/${encodeURIComponent(result.name)}`);
       const aptSeqParam = result.aptSeq ? `&aptSeq=${encodeURIComponent(result.aptSeq)}` : '';
       fetch(
         `/api/apt/${encodeURIComponent(result.name)}/verify?dong=${encodeURIComponent(result.dong)}${aptSeqParam}`

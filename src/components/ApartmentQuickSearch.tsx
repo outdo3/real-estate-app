@@ -101,6 +101,9 @@ export default function ApartmentQuickSearch({ currentApt, onClose }: ApartmentQ
 
     if (result.lawdCd && result.dong) {
       setVerifying(true);
+      // PERCEIVED_PERFORMANCE_V1 — HomeApartmentSearch.tsx와 동일하게, verify와
+      // 별개로 도착지 라우트만 병렬로 미리 받아둔다(identity 검증 로직은 그대로).
+      router.prefetch(`/apt/${encodeURIComponent(result.name)}`);
       const aptSeqParam = result.aptSeq ? `&aptSeq=${encodeURIComponent(result.aptSeq)}` : '';
       fetch(`/api/apt/${encodeURIComponent(result.name)}/verify?dong=${encodeURIComponent(result.dong)}${aptSeqParam}`)
         .then(res => res.json())

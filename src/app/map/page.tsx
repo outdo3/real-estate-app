@@ -635,6 +635,10 @@ export default function FullscreenMapPage() {
         const aptSeqParam = marker.aptSeq ? `&aptSeq=${encodeURIComponent(marker.aptSeq)}` : '';
         router.push(`/apt/${encodeURIComponent(marker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(marker.dong)}${aptSeqParam}`);
       } else {
+        // PERCEIVED_PERFORMANCE_V1 §7 — 선택된 마커 하나만 라우트 shell을 미리
+        // 받아둔다(전체 마커 무차별 prefetch 아님). 실제 이동은 여전히 2번째
+        // 클릭(위 분기)에서만 일어난다.
+        router.prefetch(`/apt/${encodeURIComponent(marker.name)}`);
         setSelectedMarkerId(marker.id);
       }
     };

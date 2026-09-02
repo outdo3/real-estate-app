@@ -121,6 +121,8 @@ export default function GapInvestView({
   const { region, setRegion } = useRegion();
   const [period, setPeriod] = useState('3m');
   const [sort, setSort] = useState('count');
+  // PERCEIVED_PERFORMANCE_V1 §12 — 클릭한 행만 즉시 흐리게 표시.
+  const [navigatingKey, setNavigatingKey] = useState<string | null>(null);
 
   const params = lawdCd
     ? new URLSearchParams({ lawdCd, dong, period, sort })
@@ -155,12 +157,18 @@ export default function GapInvestView({
     });
   };
 
-  const goToApt = (r: ApartmentRow) => {
+  const buildAptHref = (r: ApartmentRow) => {
     const qs = new URLSearchParams({ lawdCd: r.lawdCd || lawdCd || '' });
     if (r.dong) qs.set('dong', r.dong);
     if (r.aptSeq) qs.set('aptSeq', r.aptSeq);
-    router.push(`/apt/${encodeURIComponent(r.name)}?${qs.toString()}`);
+    return `/apt/${encodeURIComponent(r.name)}?${qs.toString()}`;
   };
+  const goToApt = (r: ApartmentRow) => {
+    setNavigatingKey(r.groupKey);
+    router.push(buildAptHref(r));
+  };
+  // PERCEIVED_PERFORMANCE_V1 §16
+  const prefetchApt = (r: ApartmentRow) => router.prefetch(buildAptHref(r));
 
   const periodLabel = PERIOD_OPTIONS.find((p) => p.value === period)?.label || '';
 
@@ -280,7 +288,14 @@ export default function GapInvestView({
           ) : (
             <ul className={styles.aptList}>
               {data.apartmentRanking.map((r) => (
-                <li key={r.groupKey} className={styles.aptRow} onClick={() => goToApt(r)}>
+                <li
+                  key={r.groupKey}
+                  className={styles.aptRow}
+                  onClick={() => goToApt(r)}
+                  onMouseEnter={() => prefetchApt(r)}
+                  onTouchStart={() => prefetchApt(r)}
+                  style={navigatingKey === r.groupKey ? { opacity: 0.5 } : undefined}
+                >
                   <div className={styles.aptTop}>
                     <span className={styles.aptRank}>{r.rank}</span>
                     <div className={styles.aptInfo}>

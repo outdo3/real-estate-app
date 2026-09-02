@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { perfMark, perfMeasure } from '@/lib/perf-debug';
 
 export type SearchResultType = 'REGION' | 'APARTMENT';
@@ -45,6 +46,7 @@ export default function ApartmentAutocomplete({
   onQueryStateChange,
   biasLocation,
 }: ApartmentAutocompleteProps) {
+  const router = useRouter();
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -184,6 +186,17 @@ export default function ApartmentAutocomplete({
     return () => clearTimeout(timer);
   }, [keyword]);
 
+  // PERCEIVED_PERFORMANCE_V1 §5/§6 — 사용자가 실제로 hover/touch한 결과 하나만
+  // 라우트 shell을 미리 준비한다(전체 결과 무차별 prefetch 아님). 이 컴포넌트는
+  // 이름만 알고 identity 검증은 하지 않으므로, 검증 전 데이터를 미리 보여주는 것이
+  // 아니라 `/apt/[name]` 페이지의 JS 청크만 미리 받아두는 것 — 실제 단지 데이터는
+  // 여전히 실제 이동(및 각 호출부의 검증 로직) 이후에만 불러온다. 잘못 눌러도
+  // 부작용 없음(prefetch는 네비게이션을 일으키지 않음).
+  const handleHoverPrefetch = (item: any) => {
+    if (item.type !== 'APARTMENT') return;
+    router.prefetch(`/apt/${encodeURIComponent(item.name)}`);
+  };
+
   const handleSelect = async (item: any) => {
     setShowDropdown(false);
     suppressNextSearchRef.current = true;
@@ -320,8 +333,12 @@ export default function ApartmentAutocomplete({
                 borderRadius: '8px',
                 cursor: 'pointer',
               }}
-              onMouseOver={(e) => (e.currentTarget.style.background = '#f8fafc')}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = '#f8fafc';
+                handleHoverPrefetch(item);
+              }}
               onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+              onTouchStart={() => handleHoverPrefetch(item)}
             >
               <div style={{ fontWeight: 700, fontSize: '0.9rem', color: item.type === 'REGION' ? '#2563eb' : 'var(--text-primary)' }}>
                 {item.type === 'REGION' ? `📍 지역: ${item.name}` : item.name}

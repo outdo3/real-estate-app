@@ -13885,3 +13885,68 @@ DB 변경: 없음(READ 0, WRITE 0, schema 0). 신규 API: 0(모든 계산이
 상태: 완료.
 
 상세: `docs/development/FINANCE_FIT_V1_PHASE2A_IMPLEMENTATION.md`
+
+
+## 2026-09-02
+
+### PERCEIVED PERFORMANCE V1 — 체감속도 최적화(prefetch/progressive render/번들)
+
+API benchmark 숫자가 아니라 "클릭→즉시 반응→핵심 정보 먼저" 체감 흐름
+자체를 감사·개선. 2개 백그라운드 조사(전체 네비게이션 방식 감사,
+prefetch 기회 감사)로 시작 — 전체 repo에서 full page reload(window.
+location.href=, 내부 raw `<a href>`)는 0건 확인, 이미 100% client-side
+routing. 실제 공백은 좁고 구체적: map marker/stats ranking row/검색
+결과 대부분이 `<Link>`가 아닌 imperative `router.push`라 Next.js 기본
+prefetch가 전혀 안 걸리고 있었음(`grep prefetch=` 전체 repo 0건 —
+지금까지 한 번도 명시적으로 튜닝된 적 없음).
+
+구현: 실제 hover/touchstart/marker-선택 시점에만 targeted prefetch
+추가(전체 결과 무차별 prefetch 아님) — 검색 결과(ApartmentAutocomplete),
+Home/상세페이지 빠른검색(verify fetch와 병렬로, identity 검증 로직은
+그대로 유지), map marker(선택된 마커 1개만), stats 랭킹 3개 뷰
+(상승/하락/최고가/전세위험, 84㎡, 갭투자 — 작업 지시가 명시한 예시와
+1:1 대응). Compare/Detail의 기존 CTA 버튼들은 이미 next/link 기반이라
+자동 prefetch가 이미 적용되고 있었음을 코드로 확인(신규 작업 불필요).
+stats 랭킹 3개 뷰에는 클릭한 행만 즉시 반투명 처리하는 최소한의 클릭
+피드백도 추가(router.push 직후 아무 시각 변화가 없던 gap 해소).
+
+번들: KakaoMapEmbed(지도/로드뷰 모달 전용)가 정적 import돼 상세페이지
+방문 대부분(모달 안 여는 경우)에도 항상 초기 번들에 포함되고 있던 것을
+기존 PriceTrendChart/InvestmentMetrics와 동일한 dynamic(ssr:false)
+패턴으로 전환. 실측으로 지도 모달 정상 렌더 확인(회귀 없음).
+
+조사 후 의도적으로 손대지 않은 것: PriceTrendChart/InvestmentMetrics의
+동일 엔드포인트 재호출은 겉보기엔 중복이지만 실제로는 서로 다른
+period/type을 요청 중(InvestmentMetrics 코드의 기존 PRODUCTION QA
+P0-B 코멘트가 이 두 컴포넌트의 period mismatch 버그를 이미 한 번
+잡았던 이력을 증언) — 무리하게 합치면 같은 버그 계열 재발 위험이라
+"데이터 정확성을 희생해야 함" STOP 조건에 해당한다고 판단해 보류,
+Phase 2 후보로 명시. Compare V2의 bothLoading 게이팅도 검토 후 유지
+— tradeoff 엔진이 본질적으로 양쪽 데이터가 다 있어야 계산되므로 부분
+렌더링은 오히려 잘못된 비교를 보여줄 위험.
+
+Detail 페이지 자체의 progressive render 구조(TIER 1 스켈레톤,
+trades+info Promise.all 병렬 fetch, score 독립 fetch)는 이전 STEP에서
+이미 잘 구축돼 있음을 전체 코드 열람으로 확인 — 이번 STEP에서 추가
+재작성 없음.
+
+Production 측정(icn1, curl TTFB 3회): `/api/apt/[name]`(실거래)
+cold ~2.0s가 감사에서 확인된 가장 큰 숫자 — 이는 데이터 레이어
+지연 문제로 이전 PERFORMANCE_V1/V1.1 STEP의 영역이며 이번 STEP
+스코프(DB/schema 변경 없음) 밖. Prefetch는 JS 번들 다운로드
+구간만 줄여줄 뿐 API 지연 자체는 바꾸지 않음 — 정직하게 문서화.
+
+DB 변경: 없음(READ 0, WRITE 0, schema 0). 신규 API: 0.
+
+테스트/빌드: `npx tsc --noEmit`/`eslint` 신규 에러·경고 0(기존
+스크립트 오류/기존 훅 경고만 잔존), `npm run build` 전체 성공,
+기존 finance-fit+compare-v2 테스트 59/59 유지(회귀 없음).
+
+모바일 QA: 390px 실측(상세페이지 로드, map marker 선택→prefetch→
+이동, stats 랭킹 행 이동, KakaoMapEmbed 모달) — 전부 정상. 네트워크
+throttling 실측은 이번 환경에서 도구 부재로 미실시(생략 사실을
+정직하게 기록).
+
+상태: 완료.
+
+상세: `docs/development/PERCEIVED_PERFORMANCE_V1.md`
