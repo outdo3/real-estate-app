@@ -1,0 +1,221 @@
+.main {
+  min-height: 100vh;
+  padding-bottom: 80px; /* 하단 모바일 네비게이션 공간 확보 */
+}
+
+.intro {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #f0f0f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.cardTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0 0 1rem 0;
+}
+
+.refPrice {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.refDate {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.formGroup {
+  margin-bottom: 1.1rem;
+}
+
+.formGroup:last-child {
+  margin-bottom: 0;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.formLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.formInput {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.formInput:focus {
+  border-color: var(--primary-color);
+}
+
+.formInput[aria-invalid='true'] {
+  border-color: #ef4444;
+}
+
+.preview {
+  margin: 0.35rem 0 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  min-height: 1.1em;
+}
+
+.errorText {
+  margin: 0.35rem 0 0 0;
+  font-size: 0.8rem;
+  color: #dc2626;
+}
+
+.methodNote {
+  margin: 0.75rem 0 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.calculateBtn {
+  width: 100%;
+  padding: 1rem;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 1.05rem;
+  cursor: pointer;
+  margin-bottom: 1.25rem;
+}
+
+.calculateBtn:active {
+  opacity: 0.9;
+}
+
+.resultRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.65rem 0;
+  border-bottom: 1px dashed var(--border-color);
+  gap: 1rem;
+}
+
+.resultRow:last-of-type {
+  border-bottom: none;
+}
+
+.resultLabel {
+  font-weight: 700;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.resultValue {
+  font-weight: 800;
+  font-size: 1.1rem;
+  text-align: right;
+}
+
+.resultNote {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.cashGapBox {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: #eff6ff;
+  border-left: 3px solid var(--info-color);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.cashGapBox p {
+  margin: 0;
+}
+
+.stressRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.6rem 0;
+  border-bottom: 1px dashed var(--border-color);
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.stressRow:last-child {
+  border-bottom: none;
+}
+
+.stressDelta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.assumptionList {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.9;
+}
+
+.exclusionsPanel {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.exclusionsTitle {
+  font-size: 0.95rem;
+  font-weight: 800;
+  margin: 0 0 0.6rem 0;
+}
+
+.exclusionsPanel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+@media (max-width: 400px) {
+  .formRow {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

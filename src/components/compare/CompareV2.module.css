@@ -256,6 +256,12 @@
   flex: 1;
 }
 
+.nextActionGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 .maxHint {
   text-align: center;
   font-size: 0.78rem;

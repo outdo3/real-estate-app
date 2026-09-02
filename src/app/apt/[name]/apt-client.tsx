@@ -25,7 +25,8 @@ import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
 import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
 import NextActionSection from '@/components/decision-journey/NextActionSection';
-import { buildDetailMapUrl, buildDetailCompareUrl } from '@/lib/decision-journey/registry';
+import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } from '@/lib/decision-journey/registry';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import { geocodeAddressToCoords } from '@/lib/decision-journey/geocode-for-map';
 import type { NextAction } from '@/lib/decision-journey/types';
 import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
@@ -497,6 +498,20 @@ export default function ApartmentDetail() {
             dong: urlDong || undefined,
             aptSeq: canonicalAptSeq || undefined,
           }),
+        },
+        {
+          type: 'BUDGET',
+          label: '이 집 자금 계획 세우기',
+          priority: 'secondary',
+          href: buildDetailFinanceFitUrl({
+            name: displayName || aptName,
+            lawdCd: lawdCdState,
+            dong: urlDong || undefined,
+            aptSeq: canonicalAptSeq || undefined,
+            refPriceWon: heroTrade ? Math.round(heroTrade.price * 100000000) : undefined,
+            refTradeDate: heroTrade?.tradeDate,
+          }),
+          onClick: () => trackEvent('finance_fit_from_detail', { aptName: displayName || aptName }),
         },
       ]
     : [];

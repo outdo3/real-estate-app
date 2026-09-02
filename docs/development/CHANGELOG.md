@@ -13834,3 +13834,54 @@ DB 변경: 없음. 신규 API: 0. 신규 analytics event: 0.
 
 상세: `docs/development/FINANCE_TOOLS_TRUST_PATCH.md`,
 `docs/development/FINANCE_FIT_V1_PHASE1_AUDIT.md` addendum 업데이트
+
+
+## 2026-09-02
+
+### FINANCE FIT V1 PHASE 2A — 자금 계획 간편 계산기 구현
+
+FINANCE FIT V1 PHASE 1 감사 + FINANCE TOOLS TRUST PATCH 이후, 법/세제
+의존도가 낮고 정확하게 계산 가능한 항목만 골라 실제 기능으로 구현.
+취득세/LTV/DSR 정식 계산, 대출 승인 판정은 이번 스코프에 없음
+(공식 근거 미확인 상태로 남아있어 Phase 1의 권고대로 제외).
+
+신규 route `/finance-fit`(client-only, API 호출 0건 — 실측
+`read_network_requests`로 확인, 세션 공통 호출만 존재). 신규 모듈
+`src/lib/finance-fit/{types,amortization,brokerage,calculate,
+validation,format,url}.ts` — 원리금균등 월상환액(0% 금리 별도
+안전 처리), 중개보수 법정 상한(공인중개사법 시행규칙 별표 1,
+사용자가 이번 작업 지시에서 직접 제공한 표를 그대로 반영해 Phase 1의
+"공식 외부 근거 확인 필요" 항목 해소), 필요 자기자금(취득세 등
+기타 부대비용은 "별도" 명시), 금리 +1%p/+2%p 스트레스 테스트.
+테스트 38개(중개보수 10개 가격 구간 경계 전수 포함) 전부 통과,
+기존 compare-v2 21개와 합쳐 59/59 회귀 없음 확인.
+
+Detail 연동: Decision Journey V1부터 미사용 상태로 예약만 돼 있던
+`NextActionType`의 'BUDGET'을 처음으로 실제 연결 — "이 집 자금
+계획 세우기" 버튼, 이미 검증된 `canonicalAptSeq`와 `heroTrade`
+가격/날짜를 그대로 전달(별도 name 재검색 없음). Compare V2 연동:
+단지별 "자금 계산" 버튼 추가, 실측으로 동명 단지(롯데캐슬 2곳)
+비교 후 교차오염 없이 각자의 identity/참고가격이 정확히 넘어가는
+것 확인.
+
+URL 계약: identity + 공개 참고가격만 포함, 준비자금/대출액/금리
+등 사용자 재무 입력은 client state에만 존재하고 새로고침 시
+사라짐(자동 persistence 없음). analytics 이벤트 4개
+(finance_fit_start/calculate/from_detail/from_compare) 추가 —
+TrackEventContext가 구조적으로 aptName만 지원해 금액이 함께
+전송될 경로 자체가 없음.
+
+모바일 QA: 390px/360px 실측 — overflow 없음. 375px 독립 확인은
+이 환경의 resize_window 도구 한계(Trust Patch STEP에서도 동일하게
+기록됨)로 생략, 구조상 표준 미디어 쿼리라 대표성으로 간주.
+
+DB 변경: 없음(READ 0, WRITE 0, schema 0). 신규 API: 0(모든 계산이
+클라이언트 순수 함수).
+
+테스트/빌드: `npx tsc --noEmit`/`eslint` 신규 에러·경고 0(기존
+스크립트 오류/기존 훅 경고만 잔존), `npm run build` 전체 성공
+(`/finance-fit` 정적 생성 확인).
+
+상태: 완료.
+
+상세: `docs/development/FINANCE_FIT_V1_PHASE2A_IMPLEMENTATION.md`

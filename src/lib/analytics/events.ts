@@ -25,6 +25,12 @@ export const ANALYTICS_EVENT_NAMES = [
   'compare_remove',
   'compare_detail_click',
   'compare_share',
+  // FINANCE_FIT_V1_PHASE2A — 금액/금리 등 numeric payload는 절대 함께 보내지 않는다
+  // (trackEvent의 TrackEventContext 자체가 complexId/aptName만 지원해 구조적으로 막혀 있다).
+  'finance_fit_start',
+  'finance_fit_calculate',
+  'finance_fit_from_detail',
+  'finance_fit_from_compare',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

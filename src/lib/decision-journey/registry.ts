@@ -1,3 +1,5 @@
+import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
+
 // DECISION_JOURNEY_V1 §7 — 페이지별 Next Action URL을 만드는 순수 함수 모음.
 // 새 API/새 state를 만들지 않고, 이미 존재하는 route와 그 route가 이미 지원하는
 // query 계약만 재사용한다.
@@ -45,4 +47,26 @@ export function buildDetailCompareUrl(params: {
   if (params.dong) qs.set('aDong', params.dong);
   if (params.aptSeq) qs.set('aptSeq', params.aptSeq);
   return `/stats/compare?${qs.toString()}`;
+}
+
+// FINANCE_FIT_V1_PHASE2A §23 — src/lib/finance-fit/url.ts의 buildFinanceFitUrl을
+// 그대로 재사용한다(별도 계약을 새로 만들지 않음). refPriceWon은 heroTrade.price(억
+// 단위 float)를 원 단위 정수로 변환해서 넘긴다 — 이 값은 공개된 실거래가라 URL에
+// 넣어도 되지만(§25), 사용자가 직접 입력하는 준비자금/대출액은 여기 절대 포함하지 않는다.
+export function buildDetailFinanceFitUrl(params: {
+  name: string;
+  lawdCd: string;
+  dong?: string;
+  aptSeq?: string;
+  refPriceWon?: number;
+  refTradeDate?: string;
+}): string {
+  return buildFinanceFitUrl({
+    name: params.name,
+    lawdCd: params.lawdCd,
+    dong: params.dong || '',
+    aptSeq: params.aptSeq,
+    refPriceWon: params.refPriceWon,
+    refTradeDate: params.refTradeDate,
+  });
 }

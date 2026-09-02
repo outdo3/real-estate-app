@@ -15,6 +15,7 @@ import { fetchCompareApartment } from '@/lib/compare-v2/fetch';
 import { buildDifferences, buildTradeoffSummary, buildHeadlineDifferences } from '@/lib/compare-v2/difference';
 import { formatHeadlineBullet, scoreDomainSummary } from '@/lib/compare-v2/format';
 import { buildCompareUrl, parseCompareUrl, type CompareSlotSeed } from '@/lib/compare-v2/url';
+import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
 import styles from './CompareV2.module.css';
 
 interface SlotState {
@@ -206,12 +207,22 @@ export default function CompareV2() {
             {tradeoff && <TradeoffSection tradeoff={tradeoff} aName={both[0].displayName} bName={both[1].displayName} />}
 
             <div className={styles.nextActions}>
-              <Button variant="secondary" size="sm" href={buildDetailHref(both[0])} onClick={() => trackEvent('compare_detail_click', { aptName: both[0].displayName })}>
-                {both[0].displayName} 상세보기
-              </Button>
-              <Button variant="secondary" size="sm" href={buildDetailHref(both[1])} onClick={() => trackEvent('compare_detail_click', { aptName: both[1].displayName })}>
-                {both[1].displayName} 상세보기
-              </Button>
+              <div className={styles.nextActionGroup}>
+                <Button variant="secondary" size="sm" href={buildDetailHref(both[0])} onClick={() => trackEvent('compare_detail_click', { aptName: both[0].displayName })}>
+                  {both[0].displayName} 상세보기
+                </Button>
+                <Button variant="secondary" size="sm" href={buildFinanceFitHref(both[0])} onClick={() => trackEvent('finance_fit_from_compare', { aptName: both[0].displayName })}>
+                  자금 계산
+                </Button>
+              </div>
+              <div className={styles.nextActionGroup}>
+                <Button variant="secondary" size="sm" href={buildDetailHref(both[1])} onClick={() => trackEvent('compare_detail_click', { aptName: both[1].displayName })}>
+                  {both[1].displayName} 상세보기
+                </Button>
+                <Button variant="secondary" size="sm" href={buildFinanceFitHref(both[1])} onClick={() => trackEvent('finance_fit_from_compare', { aptName: both[1].displayName })}>
+                  자금 계산
+                </Button>
+              </div>
             </div>
           </>
         )}
@@ -228,6 +239,20 @@ function buildDetailHref(apt: CompareApartment): string {
   const qs = new URLSearchParams({ lawdCd: apt.identity.lawdCd, dong: apt.identity.dong });
   if (apt.identity.kind === 'aptSeq') qs.set('aptSeq', apt.identity.aptSeq);
   return `/apt/${encodeURIComponent(apt.displayName)}?${qs.toString()}`;
+}
+
+// FINANCE_FIT_V1_PHASE2A §24 — salePrice metric의 value는 apt-client.tsx의 heroTrade.price와
+// 동일하게 억 단위 float(같은 trades API 응답에서 나옴)이라 원 단위로 변환해서 넘긴다.
+function buildFinanceFitHref(apt: CompareApartment): string {
+  const priceMetric = apt.metrics.find((m) => m.key === 'salePrice');
+  return buildFinanceFitUrl({
+    name: apt.displayName,
+    lawdCd: apt.identity.lawdCd,
+    dong: apt.identity.dong,
+    aptSeq: apt.identity.kind === 'aptSeq' ? apt.identity.aptSeq : undefined,
+    refPriceWon: priceMetric?.value != null ? Math.round(priceMetric.value * 100_000_000) : undefined,
+    refTradeDate: priceMetric?.period?.from,
+  });
 }
 
 function findDiff(differences: CompareDifference[], key: string): CompareDifference | undefined {
