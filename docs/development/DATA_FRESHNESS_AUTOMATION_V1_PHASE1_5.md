@@ -198,6 +198,21 @@ should be extended with `status`/`range`/`cells`/`inserted`/`updated`/`blocked`/
 per this task's own §27 request — flagged for that STEP, not built prematurely without real data
 to populate it.
 
+## 17.5 Production Verification (post-deploy, commit `33826f0`)
+
+Live-tested directly against `https://real-estate-app-park11.vercel.app` (read-only, GET-only,
+per §32's explicit allowance):
+
+```
+sale-sync (no secret):     401
+rent-sync (no secret):     401
+sale-sync (wrong secret):  401
+```
+
+Confirms the fail-closed design holds in the real deployed environment, not just locally — both
+cron routes are genuinely unreachable for any actual sync invocation right now. No `sync --apply`
+or successful cron invocation was performed, per this STEP's own STOP conditions.
+
 ## 18. Activation Checklist
 
 1. Wire `scripts/incremental-sync-nationwide.ts`'s core logic into `/api/cron/sale-sync` (real
