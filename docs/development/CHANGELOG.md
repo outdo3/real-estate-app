@@ -13724,3 +13724,57 @@ DB 변경: 없음(READ only). 신규 API: 0(기존 trades+score 재사용).
 
 상세: `docs/development/COMPARE_V2_PHASE2_IMPLEMENTATION.md`,
 `docs/development/DECISION_JOURNEY_V1.md` §10 업데이트
+
+
+## 2026-09-02
+
+### FINANCE FIT V1 PHASE 1 — 금융 규칙/기존 도구/신뢰도 감사
+
+"이 집을 실제로 살 수 있는가?" 질문에 답하기 위한 Finance Fit 기능
+착수 전 감사. 대규모 UI 구현 없음 — 감사→규칙 인벤토리→기존 공식
+검증→신뢰도 분류→데이터 계약→Phase 2 계획만 수행.
+
+기존 도구 인벤토리: `/tools`(4탭: 세금·대출 계산기/안전계약
+체크/경·공매 비교/임장 노트) + `/apt/[name]` 상세페이지 LTV 모달.
+경·공매 탭의 가짜 예시 매물은 이미 이전 세션에서 수정됨(commit
+`35dfe75`, "가짜 데이터 > 데이터 없음 금지" 원칙 적용된 선례로
+재확인).
+
+핵심 발견:
+- 취득세 계산기(`tools/page.tsx`): 실계산이지만 지역/면적/
+  취득유형/가격 구간 누진 없이 주택수 3단계 플랫 세율만 적용,
+  "무주택(첫 매수)" UI 옵션이 실제로는 1주택과 동일 세율로 처리됨
+  — LIMITED.
+- "DSR" 추정(`tools/page.tsx`): `연소득 × 8` 플랫 배수 — 부채/
+  금리/기간/실제 DSR 비율(40%) 어느 것도 사용하지 않는 완전히
+  다른 계산을 DSR이라는 이름으로 표시 중 — UNSAFE(라벨링 문제,
+  P1로 PM 결정 필요).
+- LTV 모달(`apt-client.tsx`): 실거래가 기반, 거래 없음 케이스는
+  올바르게 가드하지만 40/70/80% 상수 자체는 지역/규제 분기 없는
+  무출처 하드코딩(`git log -S"ltv80"` 확인: 단일 도입 커밋,
+  후속 근거 코멘트 없음) — LIMITED.
+- 중개보수 계산기·원리금 상환(월 상환액) 공식: 저장소 전체에
+  전무 확인 — NOT_IMPLEMENTED, Phase 2 신규 구현 필요.
+- Detail의 `heroTrade`(필터 종속)와 Compare V2의 `selectPriceMetric`
+  (84㎡ 밴드 우선)이 서로 다른 참고가격 선정 규칙을 사용 중임을
+  확인 — Finance Fit이 어느 쪽 규칙을 상속할지 Phase 2에서 결정
+  필요.
+
+STOP 조건 검토: 즉시 노출 차단이 필요한 조건(#1)은 미해당으로
+판단 — 기존 도구 전부 "예상/추정/시뮬레이션" 문구로 이미 hedging
+되어 있고 승인/확정 표현은 없음. 대신 P1 PM 결정 항목으로 명시적
+플래그(DSR 라벨 교정이 가장 시급).
+
+데이터 계약 제안(미구현): `FinanceFitInput`/`FinanceFitResult`,
+Compare V2의 `ComparableIdentity` 재사용, 결과마다 CALCULATED/
+ESTIMATED/USER_INPUT/LIMITED/UNAVAILABLE confidence 필드 포함.
+
+공식 외부 근거 확인 필요(미검증 명시): 2026년 취득세 정확한
+구간별 세율표, 현재 LTV 규제 한도, 중개보수 법정 상한요율표,
+지역별 규제지역 여부 데이터셋(현재 스키마에 없음 확인).
+
+DB 변경: 없음(READ only, 코드/스키마 열람만). 신규 API: 0.
+
+상태: 완료(감사 전용, Phase 2 착수 전 PM 결정 항목 문서화).
+
+상세: `docs/development/FINANCE_FIT_V1_PHASE1_AUDIT.md`
