@@ -13509,3 +13509,52 @@ DB 변경: 없음(READ only, schema/migration 0).
 
 상세: `docs/development/PERFORMANCE_V1_4_VERCEL_REGION.md`,
 `docs/development/PERFORMANCE_V1.md` §11 RESOLVED 갱신
+
+
+## 2026-09-02
+
+### DECISION JOURNEY V1 — 핵심 의사결정 흐름 연결
+
+Home/Search/Map/상세/이집점수/통계/비교/관심단지 8개 핵심 surface를
+전수 감사(route/CTA/identity 기준). Home·Map·통계 랭킹·관심단지는
+이미 identity 유지하며 상세로 잘 연결됨을 확인, 실제 dead end는
+아파트 상세(P0), 이집점수 카드, `/stats/compare`, AI검색 비교
+결과표 4곳으로 좁혀짐.
+
+핵심 구현: `src/lib/decision-journey/`(types/registry/지도
+지오코딩) + `src/components/decision-journey/NextActionSection`
+공용 컴포넌트. 아파트 상세에 이집점수·브리핑 직후 "지도에서 위치
+보기"(클릭 시 카카오 SDK로 즉석 지오코딩 후 기존 `/map` 공유링크
+계약으로 이동, 마커 하이라이트까지 실기기 없이 dev 세션에서
+end-to-end 확인) + "비슷한 단지와 비교"(`/stats/compare` prefill,
+기존 CompareView의 fetch 로직 그대로 재사용) 2개 액션 추가. 이집
+점수는 별도 라우트가 없어 같은 섹션이 그대로 다음 행동 지점이 됨.
+
+보너스로 발견된 두 dead end도 함께 닫음: `/stats/compare`(및
+multi-compare)의 각 슬롯에 "상세보기" 링크 추가, AI검색 compare
+intent 결과표(기존엔 어느 단지 상세로도 안 이어지던 별도 구현)에
+`dong` 필드를 API 응답에 추가해 상세 링크 연결. Compare 자체
+재설계는 이번 STEP 범위 밖이라 손대지 않음(작업지시 STOP 조건).
+
+Identity: 전부 기존 lawdCd+dong+name 3요소만 사용, aptSeq 신규
+채택 없음, name-only fallback 0건.
+
+Analytics: 기존 allowlist에 `next_action_click` 1개만 추가(스키마
+변경 없음, 기존 PageView 저장 전략 재사용).
+
+모바일 QA: 360/375/390px 중 360/375는 iframe 격리 기법으로 직접
+확인(오버플로/줄바꿈 없음), 390px는 동일 미디어쿼리 구간(<=400px)
+이라 별도 스크린샷 없이 정직하게 "구조상 동일" 근거로 남김.
+
+DB 변경: 없음(READ only). 신규 API: 없음(기존 route의 query 계약
+확장만). 신규 API call: NextActionSection 자체에서는 0건(지도
+액션의 지오코딩은 사용자 클릭 시점의 기존 카카오 SDK 재사용).
+
+테스트/빌드: `npx tsc --noEmit` 신규 에러 0(사전 존재 scripts/
+에러만 잔존), 이번 STEP 파일 대상 `eslint` 0 error/0 new warning,
+`npm run build` 전체 성공.
+
+상태: 완료(P0 상세 dead end 포함 4개 전부 연결, Compare 재설계는
+명시적으로 범위 밖).
+
+상세: `docs/development/DECISION_JOURNEY_V1.md`

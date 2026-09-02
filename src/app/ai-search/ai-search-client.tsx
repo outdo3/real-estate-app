@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Header from '@/components/Header';
@@ -68,6 +69,9 @@ interface CompareComplexData {
   buildYear: string | null;
   facilities: string[];
   areaOptions: CompareAreaOption[];
+  // DECISION_JOURNEY_V1 §6 — 상세 페이지 링크에 필요한 identity(name+lawdCd+dong).
+  resolvedLawdCd?: string;
+  dong?: string;
 }
 
 interface AiSearchResult {
@@ -425,6 +429,16 @@ function AreaDropdown({ options, selectedArea, onChange }: { options: CompareAre
   );
 }
 
+// DECISION_JOURNEY_V1 §2 — AI 비교 결과 표는 지금까지 어느 단지 상세로도 연결되지
+// 않는 dead end였다. resolvedLawdCd가 없으면(구버전 캐시 응답 등) 링크를 만들지
+// 않는다 — 존재하지 않는/불확실한 identity로 잘못된 단지에 연결하지 않기 위함.
+function compareComplexDetailHref(c: CompareComplexData): string | null {
+  if (!c.resolvedLawdCd) return null;
+  const qs = new URLSearchParams({ lawdCd: c.resolvedLawdCd });
+  if (c.dong) qs.set('dong', c.dong);
+  return `/apt/${encodeURIComponent(c.name)}?${qs.toString()}`;
+}
+
 function CompareResult({ a, b }: { a: CompareComplexData; b: CompareComplexData }) {
   const [areaA, setAreaA] = useState(a.areaOptions[0]?.area || '');
   const [areaB, setAreaB] = useState(b.areaOptions[0]?.area || '');
@@ -444,13 +458,21 @@ function CompareResult({ a, b }: { a: CompareComplexData; b: CompareComplexData 
             <th></th>
             <th>
               <div className={styles.compareHeaderCell}>
-                <span>{a.name}</span>
+                {compareComplexDetailHref(a) ? (
+                  <Link href={compareComplexDetailHref(a)!} style={{ color: 'inherit', textDecoration: 'underline' }}>{a.name}</Link>
+                ) : (
+                  <span>{a.name}</span>
+                )}
                 <AreaDropdown options={a.areaOptions} selectedArea={areaA} onChange={setAreaA} />
               </div>
             </th>
             <th>
               <div className={styles.compareHeaderCell}>
-                <span>{b.name}</span>
+                {compareComplexDetailHref(b) ? (
+                  <Link href={compareComplexDetailHref(b)!} style={{ color: 'inherit', textDecoration: 'underline' }}>{b.name}</Link>
+                ) : (
+                  <span>{b.name}</span>
+                )}
                 <AreaDropdown options={b.areaOptions} selectedArea={areaB} onChange={setAreaB} />
               </div>
             </th>

@@ -401,6 +401,9 @@ export interface CompareComplexData {
   // 없으면 거래가 가장 많은 대표 평형)이다. 위 latestPrice/latestArea/tradeCount는 이
   // 기본 선택과 동일한 값이라 기존 코드(브리핑 요약 등)는 그대로 동작한다.
   areaOptions: CompareAreaOption[];
+  // DECISION_JOURNEY_V1 §6 — 상세 페이지로 안전하게 연결하려면 lawdCd(resolvedLawdCd)만으론
+  // 부족하고 dong까지 있어야 동명 단지 오매칭을 피할 수 있다(AGENTS.md identity 원칙).
+  dong: string;
 }
 
 // "국민평형" 84㎡(전용 80~89㎡) 밴드 — 국토부 실거래 통계상 가장 거래가 많은 표준 구간.
@@ -491,6 +494,7 @@ async function fetchCompareTarget(name: string, lawdCd: string | null, requestUr
     facilities: Array.isArray(facilitiesJson.facilities) ? facilitiesJson.facilities : [],
     areaOptions,
     resolvedLawdCd,
+    dong,
   };
 }
 

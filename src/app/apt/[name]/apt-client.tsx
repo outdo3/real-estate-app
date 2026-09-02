@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import Header from '@/components/Header';
@@ -24,6 +24,10 @@ import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
 import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
+import NextActionSection from '@/components/decision-journey/NextActionSection';
+import { buildDetailMapUrl, buildDetailCompareUrl } from '@/lib/decision-journey/registry';
+import { geocodeAddressToCoords } from '@/lib/decision-journey/geocode-for-map';
+import type { NextAction } from '@/lib/decision-journey/types';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
 import { pickDefaultTradeArea } from '@/lib/trade-area-selection';
 import { buildAptBrief } from '@/lib/apt-brief';
@@ -70,7 +74,9 @@ type InfraTab = '환경' | '교통' | '학군';
 
 export default function ApartmentDetail() {
   const params = useParams();
+  const router = useRouter();
   const [aptName, setAptName] = useState<string>('');
+  const [mapCtaLoading, setMapCtaLoading] = useState(false);
 
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -435,6 +441,47 @@ export default function ApartmentDetail() {
   const firstTrade = trades.length > 0 ? trades[0] : null;
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
   const addressReady = !loading && !!primaryAddress;
+
+  // DECISION_JOURNEY_V1 §9/§11 — 지도 딥링크는 lat/lng가 있어야만
+  // parseMapStateFromSearchParams가 이를 공유링크로 인식한다(없으면 기본 지역으로
+  // 열림). 상세 페이지엔 좌표가 없으므로 클릭 시점에 지오코딩한다.
+  const handleViewOnMap = async () => {
+    if (mapCtaLoading) return;
+    setMapCtaLoading(true);
+    const coords = await geocodeAddressToCoords(primaryAddress);
+    setMapCtaLoading(false);
+    router.push(
+      buildDetailMapUrl({
+        lawdCd: lawdCdState,
+        dong: urlDong || undefined,
+        name: displayName || aptName || undefined,
+        lat: coords?.lat,
+        lng: coords?.lng,
+      })
+    );
+  };
+
+  const nextActions: NextAction[] = addressReady
+    ? [
+        {
+          type: 'MAP',
+          label: '지도에서 위치 보기',
+          priority: 'primary',
+          onClick: handleViewOnMap,
+          loading: mapCtaLoading,
+        },
+        {
+          type: 'COMPARE',
+          label: '비슷한 단지와 비교',
+          priority: 'secondary',
+          href: buildDetailCompareUrl({
+            name: displayName || aptName,
+            lawdCd: lawdCdState,
+            dong: urlDong || undefined,
+          }),
+        },
+      ]
+    : [];
 
   // B1 Hero용 — primaryAddress(지오코딩에 쓰이는 "지역+단지명" 조합 문자열)는 건드리지
   // 않고, Hero에 표시할 "지역만" 값과 "준공·세대수" 요약 줄만 별도로 계산한다. 실제 값이
@@ -1015,6 +1062,14 @@ export default function ApartmentDetail() {
                   </div>
                 ) : null}
               </div>
+
+              {/* DECISION_JOURNEY_V1 §9 — 가격/점수/브리핑을 본 직후, 다음 행동(지도/비교)으로
+                  이어지는 공유 Next Action 섹션. */}
+              {nextActions.length > 0 && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <NextActionSection actions={nextActions} aptName={displayName || aptName} />
+                </div>
+              )}
 
               {/* ══════════ 2구역: TIER 2 (맥락과 자금) ══════════ */}
       <div className={`container ${styles.sectionBlock}`}>

@@ -1,0 +1,32 @@
+.wrap {
+  padding: 1rem 1.1rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+}
+
+.title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 0.7rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.actionBtn {
+  flex: 1 1 auto;
+  min-width: 140px;
+  justify-content: center;
+  min-height: 44px;
+}
+
+@media (max-width: 400px) {
+  .actionBtn {
+    min-width: 100%;
+  }
+}

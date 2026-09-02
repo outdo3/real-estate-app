@@ -14,6 +14,7 @@ export const ANALYTICS_EVENT_NAMES = [
   'favorite_remove',
   'share_success',
   'share_attempt',
+  'next_action_click',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

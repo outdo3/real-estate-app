@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -46,10 +47,27 @@ function ComingSoonCard({ title, reason }: { title: string; reason?: string }) {
 
 const COMPARE_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
-function CompareView({ lawdCd, maxComplexes }: { lawdCd: string | null; maxComplexes: number }) {
+function CompareView({
+  lawdCd,
+  maxComplexes,
+  initialComplex,
+}: {
+  lawdCd: string | null;
+  maxComplexes: number;
+  initialComplex?: { name: string; lawdCd?: string; dong?: string };
+}) {
   const [selected, setSelected] = useState<{ name: string; lawdCd?: string; dong?: string }[]>([]);
   const [series, setSeries] = useState<Record<string, { date: string; price: number }[]>>({});
   const [loading, setLoading] = useState(false);
+
+  // DECISION_JOURNEY_V1 §10 — 상세 페이지의 "비슷한 단지와 비교" 링크로 들어온 경우,
+  // 현재 보던 단지를 첫 슬롯에 자동으로 채운다. addComplex(ApartmentSearchResult 필요)
+  // 대신 selected를 직접 seed한다 — lat/lng/type 같은 가짜 값을 만들지 않기 위함이다.
+  // 마운트 시 1회만 적용되는 URL 기반 초기값이라 새 전역 상태가 아니다.
+  useEffect(() => {
+    if (!initialComplex) return;
+    setSelected((prev) => (prev.some((s) => s.name === initialComplex.name) ? prev : [...prev, initialComplex]));
+  }, []);
 
   const addComplex = (result: ApartmentSearchResult) => {
     if (selected.length >= maxComplexes) return;
@@ -122,7 +140,12 @@ function CompareView({ lawdCd, maxComplexes }: { lawdCd: string | null; maxCompl
         {selected.map((s, i) => (
           <div key={s.name} className={styles.compareSlot}>
             <span className={styles.compareColorDot} style={{ background: COMPARE_COLORS[i % COMPARE_COLORS.length] }} />
-            <span style={{ flex: 1, fontWeight: 700, fontSize: '0.9rem' }}>{s.name}</span>
+            <Link
+              href={`/apt/${encodeURIComponent(s.name)}?lawdCd=${s.lawdCd || lawdCd || ''}&dong=${encodeURIComponent(s.dong || '')}`}
+              style={{ flex: 1, fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', textDecoration: 'none' }}
+            >
+              {s.name} <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>상세보기 ›</span>
+            </Link>
             <button className={styles.compareRemoveBtn} onClick={() => removeComplex(s.name)} aria-label="제거">×</button>
           </div>
         ))}
@@ -337,6 +360,17 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
 
   const shareContext = buildStatsShareContext(item, region);
 
+  // DECISION_JOURNEY_V1 §10 — 상세 페이지 "비슷한 단지와 비교" 링크의 prefill 계약.
+  // CompareView 자체의 지역 선택(RegionContext) 로직과는 무관하게, 첫 슬롯만 채운다.
+  const prefillName = searchParams.get('prefillName');
+  const initialComplex = prefillName
+    ? {
+        name: prefillName,
+        lawdCd: searchParams.get('prefillLawdCd') || undefined,
+        dong: searchParams.get('prefillDong') || undefined,
+      }
+    : undefined;
+
   return (
     <div className={styles.main}>
       {/* [STATISTICS V2 §12] 상세 화면 헤더에는 emoji를 더 이상 붙이지 않는다
@@ -387,7 +421,7 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
         ) : slug === 'large-complex' ? (
           <LargeComplexView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'compare' ? (
-          <CompareView lawdCd={region.lawdCd} maxComplexes={2} />
+          <CompareView lawdCd={region.lawdCd} maxComplexes={2} initialComplex={initialComplex} />
         ) : slug === 'multi-compare' ? (
           <CompareView lawdCd={region.lawdCd} maxComplexes={5} />
         ) : slug === 'price-map' ? (
