@@ -192,7 +192,37 @@ DB/schema changes). The prefetch work in this STEP reduces how much of that wait
 spent on JS-bundle download by warming the route ahead of the click; it does not and cannot change
 the API's own latency.
 
-*(Post-push remeasurement pending — added as a follow-up note once this STEP's commit has deployed.)*
+**After** (measured post-deploy, commit `a765f2b`, 3 runs each):
+
+| Route | Cold | Warm (best of remaining runs) |
+|---|---|---|
+| `/` | 0.66s | 0.34s |
+| `/apt/[name]` shell | 0.68s | 0.36s |
+| `/api/apt/[name]` (trades) | 2.20s | 0.14s |
+| `/api/apt/[name]/score` | 0.91s | 0.25s |
+| `/stats/compare` shell | 0.26s | 0.15s |
+| `/stats/rising` shell | 0.19s | 0.14s |
+| `/map` | 0.33s | 0.10s |
+
+**Honest read of these numbers:** page-shell/API TTFB is essentially unchanged from baseline
+(within normal run-to-run variance) — expected, since this STEP touched zero server/API/data-layer
+code. The one number that looks dramatically better (trades API warm: 1.0s → 0.14s) is very likely
+ordinary cache-state variance between the two measurement sessions, not an effect of this STEP's
+work — attributing it to this STEP's changes would be the same kind of "cache-order bias" mistake
+flagged and corrected in the `ADMIN OPS V1.2` STEP's own history, so it is deliberately **not**
+claimed as a win here. What this STEP actually changes (route-shell prefetch timing, click-to-paint
+feel) is not something `curl` can measure at all — it only shows up in real browser interaction,
+which was verified qualitatively via live QA (§4, §8): map-marker and stats-ranking navigations
+visibly rendered content almost immediately after click during manual testing, consistent with the
+route already being warm from the hover/selection-time prefetch.
+
+**Direct production confirmation:** live-tested on the deployed production URL itself (not
+localhost) — hovering a row on `https://real-estate-app-park11.vercel.app/stats/rising` fired a
+real Next.js RSC prefetch request (`GET /apt/e편한세상송도더퍼스트비치?lawdCd=26140&dong=암남동&
+aptSeq=26140-1361&_rsc=...`, `read_network_requests`-confirmed) with the exact `lawdCd`/`dong`/
+`aptSeq` matching that specific row — not a blanket prefetch of every row, and not a wrong-identity
+prefetch. This is the strongest evidence in this doc: the feature was verified working on the real
+deployed site, not assumed from code or from local dev.
 
 ## 15. Mobile
 
