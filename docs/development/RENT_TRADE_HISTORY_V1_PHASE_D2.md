@@ -272,3 +272,14 @@ infra approval is obtained, closing the coverage-decay risk permanently; (b) a f
 performance PHASE targeting the sale `pyeong` batch lookup and/or `getSigunguListForSido` cold-cache
 cost, if Busan-wide cold time is still judged worth chasing after (a); (c) Vercel production
 measurement to confirm the local production-build numbers hold in the real deployed environment.
+
+**Update (2026-09-02) — `PERFORMANCE_V1.2`:** candidate (b) was pursued next. Found the sale
+`pyeong` batch lookup's real cost was specifically its `OR`-of-2,863-conditions name+dong query
+(not the lookup concept itself, which is genuinely needed) — fixed with a `VALUES`-join rewrite
+(3x faster, 0 mismatch, benefits all 8 consumers of the shared function). Also found and fixed a
+DB connection-pool cold-start problem (concurrent queries showed zero parallelism benefit until a
+warm-up was added). `getSigunguListForSido`'s cost was not separately pursued — it wasn't the
+dominant factor once the above two were fixed. See `PERFORMANCE_V1_2_DASHBOARD_SALE_SQL.md` for the
+full analysis, including the honest finding that Busan-wide end-to-end cold time is now dominated
+by external network variance (Supabase + MOLIT) rather than any further fixable code path. Candidate
+(c) — Vercel measurement — remains open.

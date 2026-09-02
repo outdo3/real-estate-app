@@ -400,3 +400,39 @@ MISSING_APTSEQ/MISSING_FLOOR로 분류된 row는 이번 PHASE 실측(3개 구 x 
 상태:
 
 채택
+
+## 12. PERFORMANCE V1.2 — 요청받은 아키텍처라도 실제 이득이 없으면 만들지 않는다
+
+날짜:
+2026-09-02
+
+결정:
+
+Task가 명시적으로 요청한 "sale dashboard/volume SQL aggregate pushdown"
+(rent PHASE D.2와 동일 패턴)을 실제로 만들지 않기로 결정했다. 소비처를
+재확인한 결과 topPrices/volumeRanking(12개월)/complexTrades/pyeong
+lookup이 전 12개월·전 구 row를 이미 필요로 해서, aggregate를 별도로
+만들어도 기존 row fetch를 없앨 수 없고(rent와 달리 sale은 좁힐 수 있는
+subset이 없음) 오히려 새 쿼리만 추가되는 순수 오버헤드였다. buildChartData
+전체(3개 dealType) 실측이 이미 5ms에 불과해 JS 계산 자체도 병목이 아니었다.
+
+이유:
+
+"요청받은 아키텍처를 그대로 구현한다"보다 "실측으로 검증된 이득이 있는
+것만 구현한다"를 우선했다 — task 작성자가 rent PHASE D.2의 성공 패턴을
+sale에도 적용해보자고 제안한 것은 합리적인 가설이었지만, 실제 소비처
+구조가 다르다는 것을 재확인 없이 그대로 구현했다면 성능 이득 없이
+복잡도만 늘렸을 것이다. 대신 같은 감사 과정에서 실제로 발견한 두 병목
+(pyeong OR 쿼리, DB 커넥션 풀 콜드스타트)을 고쳐 실질적 개선을
+전달했다.
+
+영향:
+
+sale 쪽에 새 SQL aggregate 함수가 없다 — 향후 sale의 row-level
+소비처(topPrices/volumeRanking/complexTrades/pyeong)가 실제로
+줄어들거나 재설계되면(예: 별도 API로 분리) 이 결정을 재검토할 근거가
+생긴다.
+
+상태:
+
+채택

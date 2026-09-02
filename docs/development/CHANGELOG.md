@@ -13384,3 +13384,53 @@ PHASE 후보로 문서화). Verified coverage는 incremental sync를 실제로
 
 상세: `docs/development/RENT_TRADE_HISTORY_V1_PHASE_D2.md`,
 `docs/development/PERFORMANCE_V1.md` §6 재업데이트, `DECISIONS.md` #10
+
+
+## 2026-09-02
+
+### PERFORMANCE V1.2 — 부산 Dashboard Sale SQL Pushdown 감사
+
+PHASE D.2 이후 남은 "sale row materialization"이 dashboard cold 병목이라는
+전제를 재감사 — 이미 PHASE D.2에서 고쳐져 있었음을 확인(6.2s→0.79s, raw
+SQL). Sale의 dashboard/volume 전용 SQL aggregate(rent와 동일 패턴)를
+만들 경우 실제 효과가 있는지 소비처별로 재확인한 결과, topPrices/
+volumeRanking(12개월)/complexTrades/pyeong lookup이 전 12개월·전 구
+row를 어차피 필요로 해 aggregate를 만들어도 기존 row fetch를 없앨 수
+없음을 확인 — 만들지 않기로 의도적으로 결정(문서화, 오버엔지니어링
+방지).
+
+대신 재감사 중 실제로 발견한 두 병목을 고쳤다:
+
+- **pyeong batch lookup의 name+dong OR 조건 쿼리**(2,863개 조건, 473~
+  879ms)를 `WHERE (name,dong) IN (VALUES...)` join으로 교체 — 3배
+  빠름(214~297ms), 실데이터 A/B 0건 불일치. 8개 route가 공유하는
+  함수라 전부 동일하게 혜택.
+- **DB 커넥션 풀 콜드스타트**: sale/rent-rows/rent-agg 3개 쿼리를
+  Promise.all로 "동시에" 쏴도 커넥션이 전부 콜드면 병렬 이득이
+  전혀 없음을 실측 확인(병렬 1,415ms ≈ 순차 1,400ms) — 요청 시작
+  시점에 `SELECT 1` 워밍업 3개를 추가해 실제 병렬 실행 회복(879ms,
+  격리 실측).
+
+부산 전체 cold 종단 실측은 3회 재시작 모두 큰 편차(3.7s/4.85s/5.48s)를
+보여 — 외부 네트워크(Supabase+MOLIT) 지연이 이번 STEP에서 고칠 수 있는
+범위를 넘어 지배적 요인임을 정직하게 보고(유리한 숫자만 골라 보고하지
+않음). 단일구 cold는 3회 모두 목표(≤1~1.5s) 유지(357~711ms).
+
+서비스 기능 변경: 없음(pyeong 값/식별 규칙 완전 동일, A/B 검증 완료).
+
+DB 변경: 없음(READ only, schema/index/migration 0).
+
+테스트/빌드: 기존 pyeong resolver 단위테스트 13개 전부 재통과, 8개
+소비 route 전부 regression 확인, `npx tsc --noEmit`/`npm run lint`/
+`npm run build` 신규 이슈 0건.
+
+알려진 제한: 부산 전체 cold 목표 여전히 미달성(원인이 이제 외부
+네트워크 변동성 — 코드로 더 고칠 여지가 제한적임을 확인). Vercel
+실측은 이번 STEP에서 수행하지 않음(후속 과제로 명시).
+
+상태: 완료(부분 — 검증된 안전한 개선 2건 적용, 종단 목표는 외부
+요인으로 미달성 원인 규명).
+
+상세: `docs/development/PERFORMANCE_V1_2_DASHBOARD_SALE_SQL.md`,
+`docs/development/PERFORMANCE_V1.md` 재업데이트,
+`docs/development/RENT_TRADE_HISTORY_V1_PHASE_D2.md` Next Step 연결

@@ -153,6 +153,26 @@ unrelated sale `pyeong` Unit Master batch lookup (~693ms, unchanged, no index ap
 PARTIALLY_RESOLVED → MOSTLY_RESOLVED (district-level fully passes; Busan-wide gap is no longer
 rent-side, root-caused and documented, not silently dropped).**
 
+**AUDITED FURTHER — PERFORMANCE V1.2 (2026-09-02):** re-audited the "sale row materialization"
+premise this section's own PHASE D.2 update named — found it was already fixed (PHASE D.2's raw
+SQL sale fetcher). Investigated building a full SQL-aggregate path for sale's dashboard/volume
+fields (mirroring rent's PHASE D.2 pattern) and found it would add queries without removing the
+existing row fetch — `topPrices`/`volumeRanking('12')`/`complexTrades`/pyeong lookup all need the
+full 12-month row set regardless, unlike rent where the row-level need was narrow. Documented as a
+deliberate non-implementation, not an oversight (`PERFORMANCE_V1_2_DASHBOARD_SALE_SQL.md` §3). Two
+different real bottlenecks were found and fixed instead: (1) `resolveTrustworthyPyeongBatch`'s
+name+dong lookup used a ~2,863-condition `OR` clause (473–879ms) — rewritten to a `VALUES`-join
+(214–297ms, 3x faster, 0/50 mismatch verified) — this function is shared by 8 routes, all benefit
+identically; (2) a DB connection-pool cold-start problem where 3 concurrent queries showed zero
+parallelism benefit (1,415ms parallel ≈ 1,400ms sequential) — fixed with a `warmupConnections()`
+helper (`src/lib/prisma.ts`) firing throwaway `SELECT 1`s alongside `getSigunguListForSido`,
+restoring genuine parallelism (879ms, isolated). End-to-end Busan-wide cold showed high run-to-run
+variance across 3 clean restarts (3.7s/4.85s/5.48s) dominated by external network latency (Supabase
++ MOLIT) rather than anything further fixable client-side — reported honestly rather than
+cherry-picked. District-level cold remained solidly within target (357–711ms) across all runs.
+**Verdict: MOSTLY_RESOLVED → PARTIAL (component-level fixes verified real and safe; end-to-end
+Busan-wide number is now dominated by external network variance, not a fixable code path).**
+
 ---
 
 ## 7. Index Recommendation — Area84 Busan-Wide (NOT applied this STEP)

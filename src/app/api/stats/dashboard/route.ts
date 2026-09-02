@@ -4,7 +4,7 @@ import { getOrSetCache } from '@/lib/server-cache';
 import { resolveLawdCd, isValidTrade, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { buildGapCandidates, normalizeAptName } from '@/lib/gap-invest-calc';
-import { prisma } from '@/lib/prisma';
+import { prisma, warmupConnections } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import { resolvePriceRankingPeriod, type PriceRankingPeriodPreset } from '@/lib/price-ranking';
 import { previousPeriodRange } from '@/lib/regional-feed';
@@ -204,7 +204,11 @@ export async function GET(request: Request) {
         // PHASE D/D.2부터는 부산 요청의 rent verified 개월만큼 MOLIT task 자체가
         // 안 만들어진다(아래 unverifiedRentMonths, 현재 11/12 verified). 기존
         // rankings sido-all과 동일한 공유 스로틀을 그대로 쓴다(새 동시성 풀 없음).
-        const districts = await getSigunguListForSido(sidoCodeParam!);
+        // PERFORMANCE_V1.2 — getSigunguListForSido(외부 네트워크 호출)와 겹쳐서
+        // DB 커넥션을 미리 몇 개 워밍업해둔다. 아래에서 sale/rent-rows/rent-agg
+        // 3개 DB 쿼리를 Promise.all로 "동시에" 쏘는데, 커넥션이 전부 콜드면 각자
+        // 새 연결을 맺어야 해 병렬 실행의 이득이 사라진다(prisma.ts 주석 참고).
+        const [districts] = await Promise.all([getSigunguListForSido(sidoCodeParam!), warmupConnections(3)]);
         const lawdCds = districts.map((d) => d.code.substring(0, 5));
         const isBusan = isBusanScopedRequest(null, sidoCodeParam, true);
         // RENT_TRADE_HISTORY_V1 PHASE D — 부산 요청만 verified/unverified로 나눈다
@@ -639,7 +643,6 @@ export async function GET(request: Request) {
       Object.values(complexTrades).forEach((list) =>
         list.sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime())
       );
-
       return {
         summary: {
           volume,

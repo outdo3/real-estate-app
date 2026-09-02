@@ -5,6 +5,12 @@
 // 또는 SUPPLY_AREA_DERIVED) canonicalExclusiveArea가 실거래 raw 전용면적과
 // "정확히" 일치할 때만 쓴다 — 근접값 병합/반올림 없음(84.7855 vs 84.9950
 // collision-safe). Unit Master가 없으면 null(호출부가 raw ㎡만 표시).
+//
+// PERFORMANCE_V1.2 — `Prisma`(타입/헬퍼 namespace, `@prisma/client` 패키지 자체)만
+// import한다 — 순환 import를 유발하는 것은 로컬 싱글턴 `./prisma`의 클라이언트
+// *인스턴스* import이지 이 패키지 import가 아니다(이 파일은 여전히 인스턴스를
+// 인자로만 받는다, 기존 원칙 유지).
+import { Prisma } from '@prisma/client';
 
 export interface UnitTypeCandidate {
   canonicalExclusiveArea: number;
@@ -136,6 +142,51 @@ export function resolveApartmentContextFromApartments(
   return result;
 }
 
+// PERFORMANCE_V1.2 — nameDongPairs를 Prisma의 `OR: [{name,dong}, ...]`로 넘기면
+// 수천 개 조건의 OR절이 생성되어(Busan-wide dashboard 실측: 2,863쌍 기준 473ms)
+// row-value IN(VALUES...) 한 번으로 바꾸면 동일 결과를 훨씬 빠르게 얻는다(같은
+// 조건 214ms, 45/45 row 완전 일치 검증 — PERFORMANCE_V1.1 계열과 동일한 "Prisma가
+// 생성하는 SQL 형태 자체가 느린 경우" 클래스). id만 먼저 raw SQL로 찾고, 실제
+// select/include는 기존과 동일하게 Prisma로(결과 row 수가 항상 작아 — 실측
+// 20~45건 — 이 단계는 원래도 느리지 않았다) 이어받는다. 두 함수(pyeong/context)가
+// 완전히 동일한 identity 규칙을 쓰므로 이 id-resolution만 공유한다.
+async function findApartmentIdsBySeq(prisma: any, aptSeqs: string[]): Promise<number[]> {
+  if (aptSeqs.length === 0) return [];
+  const rows: { id: number }[] = await prisma.$queryRaw`SELECT id FROM apartments WHERE apt_seq = ANY(${aptSeqs})`;
+  return rows.map((r) => r.id);
+}
+
+async function findApartmentIdsByNameDong(prisma: any, nameDongPairs: { name: string; dong: string }[]): Promise<number[]> {
+  if (nameDongPairs.length === 0) return [];
+  const pairsSql = Prisma.join(
+    nameDongPairs.map((p) => Prisma.sql`(${p.name}, ${p.dong})`),
+    ', '
+  );
+  const rows: { id: number }[] = await prisma.$queryRaw`SELECT id FROM apartments WHERE (name, dong) IN (${pairsSql})`;
+  return rows.map((r) => r.id);
+}
+
+function splitIdentityKeys(keys: Pick<PyeongLookupKey, 'aptSeq' | 'name' | 'dong'>[]): {
+  aptSeqs: string[];
+  nameDongPairs: { name: string; dong: string }[];
+} {
+  const aptSeqs = Array.from(new Set(keys.map((k) => k.aptSeq).filter((v): v is string => !!v)));
+  const nameDongPairs = Array.from(new Set(keys.map((k) => `${k.name}|${k.dong}`))).map((p) => {
+    const idx = p.indexOf('|');
+    return { name: p.slice(0, idx), dong: p.slice(idx + 1) };
+  });
+  return { aptSeqs, nameDongPairs };
+}
+
+async function findMatchingApartmentIds(prisma: any, keys: Pick<PyeongLookupKey, 'aptSeq' | 'name' | 'dong'>[]): Promise<number[]> {
+  const { aptSeqs, nameDongPairs } = splitIdentityKeys(keys);
+  const [seqIds, nameDongIds] = await Promise.all([
+    findApartmentIdsBySeq(prisma, aptSeqs),
+    findApartmentIdsByNameDong(prisma, nameDongPairs),
+  ]);
+  return Array.from(new Set([...seqIds, ...nameDongIds]));
+}
+
 // keys는 pyeong 조회와 달리 rawAreaM2가 의미 없다(단지 단위 정보라 면적 무관) —
 // 그래도 동일한 PyeongLookupKey 타입을 재사용해 (name, dong, aptSeq) identity만
 // 쓰고, batch 쿼리/캐시 키 중복을 피하기 위해 호출부가 이미 중복 제거된 키
@@ -146,23 +197,13 @@ export async function resolveApartmentContextBatch(
 ): Promise<Map<string, ApartmentContext>> {
   if (keys.length === 0) return new Map();
 
-  const aptSeqs = Array.from(new Set(keys.map((k) => k.aptSeq).filter((v): v is string => !!v)));
-  const nameDongPairs = Array.from(new Set(keys.map((k) => `${k.name}|${k.dong}`))).map((p) => {
-    const idx = p.indexOf('|');
-    return { name: p.slice(0, idx), dong: p.slice(idx + 1) };
-  });
-
+  const ids = await findMatchingApartmentIds(prisma, keys);
+  if (ids.length === 0) return new Map();
   const select = { id: true, aptSeq: true, name: true, dong: true, totalHouseholds: true, approvalDate: true };
-  const [bySeqRows, byNameDongRows] = await Promise.all([
-    aptSeqs.length > 0 ? prisma.apartment.findMany({ where: { aptSeq: { in: aptSeqs } }, select }) : Promise.resolve([]),
-    nameDongPairs.length > 0 ? prisma.apartment.findMany({ where: { OR: nameDongPairs }, select }) : Promise.resolve([]),
-  ]);
-
-  const merged = new Map<number, ApartmentWithContext>();
-  for (const a of [...bySeqRows, ...byNameDongRows]) merged.set(a.id, a);
+  const apartments = await prisma.apartment.findMany({ where: { id: { in: ids } }, select });
 
   const fullKeys: PyeongLookupKey[] = keys.map((k) => ({ ...k, rawAreaM2: 0 }));
-  return resolveApartmentContextFromApartments(fullKeys, Array.from(merged.values()));
+  return resolveApartmentContextFromApartments(fullKeys, apartments);
 }
 
 // prisma 인스턴스를 인자로 받아(순환 import 방지, 테스트 시 mock 주입 가능)
@@ -171,23 +212,9 @@ export async function resolveApartmentContextBatch(
 export async function resolveTrustworthyPyeongBatch(prisma: any, keys: PyeongLookupKey[]): Promise<Map<string, number>> {
   if (keys.length === 0) return new Map();
 
-  const aptSeqs = Array.from(new Set(keys.map((k) => k.aptSeq).filter((v): v is string => !!v)));
-  const nameDongPairs = Array.from(new Set(keys.map((k) => `${k.name}|${k.dong}`))).map((p) => {
-    const idx = p.indexOf('|');
-    return { name: p.slice(0, idx), dong: p.slice(idx + 1) };
-  });
+  const ids = await findMatchingApartmentIds(prisma, keys);
+  if (ids.length === 0) return new Map();
+  const apartments: ApartmentWithUnitTypes[] = await prisma.apartment.findMany({ where: { id: { in: ids } }, include: { unitTypes: true } });
 
-  const [bySeqRows, byNameDongRows] = await Promise.all([
-    aptSeqs.length > 0
-      ? prisma.apartment.findMany({ where: { aptSeq: { in: aptSeqs } }, include: { unitTypes: true } })
-      : Promise.resolve([]),
-    nameDongPairs.length > 0
-      ? prisma.apartment.findMany({ where: { OR: nameDongPairs }, include: { unitTypes: true } })
-      : Promise.resolve([]),
-  ]);
-
-  const merged = new Map<number, ApartmentWithUnitTypes>();
-  for (const a of [...bySeqRows, ...byNameDongRows]) merged.set(a.id, a);
-
-  return resolvePyeongFromApartments(keys, Array.from(merged.values()));
+  return resolvePyeongFromApartments(keys, apartments);
 }
