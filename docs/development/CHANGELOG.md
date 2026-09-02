@@ -13472,3 +13472,40 @@ DB 변경: 없음(READ only, 측정용 API 호출만).
 
 상세: `docs/development/PERFORMANCE_V1_3_VERCEL_REALITY_CHECK.md`,
 `docs/development/PERFORMANCE_V1.md` §11 리전 오판 정정
+
+
+## 2026-09-02
+
+### PERFORMANCE V1.4 — Vercel Function Region Alignment (사용자 승인, iad1 → icn1)
+
+PERFORMANCE_V1.3에서 발견된 리전 불일치(Vercel 함수 `iad1` vs DB
+`ap-northeast-2`)를 사용자 승인 하에 수정. Root `vercel.json`에
+`{"regions": ["icn1"]}` 추가(기존 vercel.json 없었음, merge 대상
+없음), 커밋(`35172b8`) 및 push로 production 재배포 트리거.
+
+배포 검증(추측 아님): `vercel inspect`로 신규 배포의 모든 Lambda
+함수가 `icn1`에서 빌드됨을 직접 확인, production alias가 신규
+배포를 가리킴을 확인, 실제 canonical URL의 `X-Vercel-Id`가
+`icn1::icn1::...`로 변경됨을 curl로 재확인(기존 `icn1::iad1::...`).
+
+실측(동일 12개 경로, 동일 스크립트로 재측정): 전 경로 개선.
+Search 5.36s→0.64s, 부산 dashboard cold 16.25s→2.90s, district
+dashboard cold 9.65s→0.53s, area84 cold 9.98s→1.44s(최초로 실제
+warm 상태 도달, 6~10s→0.29~0.39s), rise/decline/record-high 모두
+5s대→0.7s대. FAIL(>3s) 경로 0건(기존 6건에서), 남은 P1(2~3s)은
+부산 dashboard cold 1건 뿐이며 이는 리전과 무관한 별도 이슈(rent
+MOLIT 외부호출 잔여 미검증분)로 식별됨.
+
+회귀 확인: dashboard 데이터값(jeonseRate 등) 동일, auth provider
+정상, search/score/detail 응답 정상, 브라우저 렌더링 정상(상세
+페이지 ~13s→~2s, 데이터 동일).
+
+DB 변경: 없음(READ only, schema/migration 0).
+
+배포 실패/롤백: 없음 — 배포 성공, 회귀 0건으로 롤백 트리거 조건
+미충족.
+
+상태: 완료(적용+검증+실측 전부 완료, 리전 불일치 이슈 종결).
+
+상세: `docs/development/PERFORMANCE_V1_4_VERCEL_REGION.md`,
+`docs/development/PERFORMANCE_V1.md` §11 RESOLVED 갱신
