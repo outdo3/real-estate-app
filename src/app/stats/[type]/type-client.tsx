@@ -27,6 +27,7 @@ import VolumeChartCard from '@/components/stats/VolumeChartCard';
 import GapInvestView from '@/components/stats/GapInvestView';
 import SupplyView from '@/components/stats/SupplyView';
 import LargeComplexView from '@/components/stats/LargeComplexView';
+import CompareV2 from '@/components/compare/CompareV2';
 import styles from '../page.module.css';
 
 const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
@@ -47,27 +48,20 @@ function ComingSoonCard({ title, reason }: { title: string; reason?: string }) {
 
 const COMPARE_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
+// COMPARE_V2_PHASE2 — /stats/compare(2개)는 CompareV2로 이전됐다. 이 컴포넌트는
+// /stats/multi-compare(5개, chart-only) 전용으로만 남는다 — Phase 2 스코프(정확히
+// 2개 비교)에 들지 않아 건드리지 않는다("3+ compare 후속" 명시). initialComplex prefill
+// 지원은 compare slug에서만 쓰였고 그 slug가 CompareV2로 옮겨가며 도달 불가능해져 제거.
 function CompareView({
   lawdCd,
   maxComplexes,
-  initialComplex,
 }: {
   lawdCd: string | null;
   maxComplexes: number;
-  initialComplex?: { name: string; lawdCd?: string; dong?: string; aptSeq?: string };
 }) {
   const [selected, setSelected] = useState<{ name: string; lawdCd?: string; dong?: string; aptSeq?: string }[]>([]);
   const [series, setSeries] = useState<Record<string, { date: string; price: number }[]>>({});
   const [loading, setLoading] = useState(false);
-
-  // DECISION_JOURNEY_V1 §10 — 상세 페이지의 "비슷한 단지와 비교" 링크로 들어온 경우,
-  // 현재 보던 단지를 첫 슬롯에 자동으로 채운다. addComplex(ApartmentSearchResult 필요)
-  // 대신 selected를 직접 seed한다 — lat/lng/type 같은 가짜 값을 만들지 않기 위함이다.
-  // 마운트 시 1회만 적용되는 URL 기반 초기값이라 새 전역 상태가 아니다.
-  useEffect(() => {
-    if (!initialComplex) return;
-    setSelected((prev) => (prev.some((s) => s.name === initialComplex.name) ? prev : [...prev, initialComplex]));
-  }, []);
 
   const addComplex = (result: ApartmentSearchResult) => {
     if (selected.length >= maxComplexes) return;
@@ -358,19 +352,12 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
 
   if (!item) return null;
 
-  const shareContext = buildStatsShareContext(item, region);
+  // COMPARE_V2_PHASE2 — CompareV2는 자체 Header/ShareAction/region-free 진입을 갖는
+  // 독립 화면이라, 다른 slug들이 공유하는 아래 headerTop/RegionSelectModal 래퍼를
+  // 거치지 않는다(중복 Header 방지).
+  if (slug === 'compare') return <CompareV2 />;
 
-  // DECISION_JOURNEY_V1 §10 — 상세 페이지 "비슷한 단지와 비교" 링크의 prefill 계약.
-  // CompareView 자체의 지역 선택(RegionContext) 로직과는 무관하게, 첫 슬롯만 채운다.
-  const prefillName = searchParams.get('prefillName');
-  const initialComplex = prefillName
-    ? {
-        name: prefillName,
-        lawdCd: searchParams.get('prefillLawdCd') || undefined,
-        dong: searchParams.get('prefillDong') || undefined,
-        aptSeq: searchParams.get('prefillAptSeq') || undefined,
-      }
-    : undefined;
+  const shareContext = buildStatsShareContext(item, region);
 
   return (
     <div className={styles.main}>
@@ -421,8 +408,6 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
           <SupplyView />
         ) : slug === 'large-complex' ? (
           <LargeComplexView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
-        ) : slug === 'compare' ? (
-          <CompareView lawdCd={region.lawdCd} maxComplexes={2} initialComplex={initialComplex} />
         ) : slug === 'multi-compare' ? (
           <CompareView lawdCd={region.lawdCd} maxComplexes={5} />
         ) : slug === 'price-map' ? (

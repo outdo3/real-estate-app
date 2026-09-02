@@ -149,6 +149,13 @@ discoverability gap, not something this STEP's scope (connecting existing dead e
 fixing it would mean adding a new UI entry point, which edges toward the Compare redesign this STEP
 was explicitly told to avoid.
 
+**Update (2026-09-02, `COMPARE_V2_PHASE2`):** the Compare V2 redesign this STEP declined to do was
+subsequently scoped, approved, and implemented — see `docs/development/
+COMPARE_V2_ARCHITECTURE_AUDIT.md` (Phase 1) and `COMPARE_V2_PHASE2_IMPLEMENTATION.md` (Phase 2).
+`CompareResult` (the AI-search table referenced above) has since been retired as a rendering
+surface; the `dong` field added here now flows into a redirect to the new canonical `/stats/compare`
+UI instead of a standalone table.
+
 ## 11. Favorites
 
 No changes — `/my` already forwards favorites/recent-views to Detail with identity, and

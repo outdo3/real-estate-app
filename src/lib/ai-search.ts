@@ -410,8 +410,10 @@ export interface CompareComplexData {
 }
 
 // "국민평형" 84㎡(전용 80~89㎡) 밴드 — 국토부 실거래 통계상 가장 거래가 많은 표준 구간.
-const NATIONAL_STANDARD_AREA_MIN = 80;
-const NATIONAL_STANDARD_AREA_MAX = 89;
+// COMPARE_V2_PHASE2 — exported so the compare price-fairness logic reuses the same
+// national-standard band definition rather than redefining it.
+export const NATIONAL_STANDARD_AREA_MIN = 80;
+export const NATIONAL_STANDARD_AREA_MAX = 89;
 
 async function fetchCompareTarget(name: string, lawdCd: string | null, requestUrl: string): Promise<CompareComplexData & { resolvedLawdCd: string }> {
   // lawdCd가 없으면(질문 문장에 지역이 명시되지 않은 경우) 아예 쿼리에서 빼고 /api/apt/[name]가

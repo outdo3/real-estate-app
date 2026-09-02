@@ -1,0 +1,270 @@
+.page {
+  padding-bottom: 2rem;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0 0.5rem;
+}
+
+.topBarTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.slotRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.slotCard {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.75rem;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.slotHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.slotName {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slotName a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.slotRegion {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.removeBtn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border: none;
+  background: none;
+  color: var(--text-muted, #94a3b8);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.panelTitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 0.6rem;
+}
+
+.headlineList {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.priceRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.priceCol {
+  padding: 0.4rem 0;
+}
+
+.priceValue {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.priceDate {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 0.2rem;
+}
+
+.priceDiff {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+}
+
+.caution {
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--down-color, #ef4444);
+  margin-top: 0.35rem;
+}
+
+.domainRow {
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.domainLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.scoreBarWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.scoreBarTrack {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border-color);
+  overflow: hidden;
+}
+
+.scoreBarFill {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 4px;
+}
+
+.scoreValue {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 1.6rem;
+  text-align: right;
+}
+
+.scoreMissing {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.peerRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.metricTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.metricTable td {
+  padding: 0.45rem 0.3rem;
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.metricLabel {
+  text-align: left !important;
+  color: var(--text-secondary);
+  width: 34%;
+}
+
+/* 라벨은 값과 달리 잘리면 "무엇을 비교 중인지" 자체를 알 수 없게 된다 — 모바일
+   QA(360px)에서 ellipsis로 "지하철 최근..."처럼 잘리는 문제 발견. .metricTable td가
+   class+element 선택자라 .metricLabel 단독보다 우선하므로, 같은 조합으로 덮어써야
+   실제로 적용된다(값 칸은 그대로 nowrap/ellipsis 유지). */
+.metricTable td.metricLabel {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.favorCell {
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.tradeoffRow {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.4rem;
+  line-height: 1.5;
+}
+
+.tradeoffRow strong {
+  color: var(--text-primary);
+  margin-right: 0.4rem;
+}
+
+.nextActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.nextActions > * {
+  flex: 1;
+}
+
+.maxHint {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  padding: 0.5rem 0;
+}
+
+@media (max-width: 400px) {
+  .nextActions {
+    flex-direction: column;
+  }
+}

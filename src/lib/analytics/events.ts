@@ -15,6 +15,16 @@ export const ANALYTICS_EVENT_NAMES = [
   'share_success',
   'share_attempt',
   'next_action_click',
+  // COMPARE_V2_PHASE2 — share_success/share_attempt are already fired by ShareAction
+  // itself for any page (Compare included) via useSharePage.ts; compare_share is kept
+  // allowlisted per the Phase 2 spec's explicit ask but not separately wired this STEP
+  // (no onShare hook exists on ShareAction to attach it to without touching that shared
+  // component — see COMPARE_V2_PHASE2_IMPLEMENTATION.md limitations).
+  'compare_start',
+  'compare_add',
+  'compare_remove',
+  'compare_detail_click',
+  'compare_share',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

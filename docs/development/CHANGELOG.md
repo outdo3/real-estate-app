@@ -13667,3 +13667,60 @@ DB 변경: 없음(READ only, 샘플 쿼리 1건). 신규 API: 0.
 상태: 완료(감사·설계 전용, PM 승인 대기 항목 4건 문서화).
 
 상세: `docs/development/COMPARE_V2_ARCHITECTURE_AUDIT.md`
+
+
+## 2026-09-02
+
+### COMPARE V2 PHASE 2 — Unified 2-Complex Decision Compare 구현
+
+PHASE 1 감사·승인된 방향(CompareView를 canonical로 확장, CompareResult
+retire, 2개 단지·jeonse/거래량 제외)을 실제 구현. `/stats/compare`를
+name-keyed 구 CompareView에서 aptSeq-first 신규 CompareV2로 교체.
+`/stats/multi-compare`(5개, chart-only)는 3+ 비교 후속 스코프라 미변경.
+
+신규 모듈: `src/lib/compare-v2/{types,fetch,metrics,difference,
+format,url}.ts` + `src/components/compare/CompareV2.tsx`. 핵심
+설계: 단지당 API 정확히 2개(trades+score, 의존관계 없이 병렬) —
+당초 계획한 4개(2-tier)보다도 적음, score endpoint의 domain
+evidence에 세대수/준공/주차비율/지하철·버스거리/편의점count가
+이미 다 있어서 info/facilities 호출 자체가 불필요해짐. 실측
+확인(read_network_requests): 2단지 비교 시 정확히 4 request, 중복
+0.
+
+Difference Engine: 각 metric마다 comparable/direction/favors/
+context sentence 구조화, 전부 deterministic template(LLM 없음).
+context-only(가격/준공/세대수 등)는 차이가 커도 승패 판정 안 함.
+Trade-off는 A강점/B강점/비슷한 항목/확인 필요 4-bucket, win-tally
+없음.
+
+실측 A/B 검증(dev 서버, 스크린샷+네트워크 확인):
+- 동명 단지 충돌(롯데캐슬 2개 구) — 교차오염 0.
+- 데이터 극단 비대칭(1979년 2508세대 vs 2025년 신축 데이터 거의
+  없음) — "정보 없음"/"최근 거래 없음" 정직 표시, 자동 승리 없음.
+- Detail→Compare 단일 슬롯 seed 정상.
+- 모바일 360/375/390 — **실측으로 실버그 2건 발견·수정**:
+  (1) "확인된 없음"(예: 반경 내 지하철 없음) 표시 문자열이 고정폭
+  셀에서 잘림 → 축약, (2) CSS 특이도 문제로 metric 라벨까지
+  ellipsis로 잘리던 것 → 라벨 전용 선택자로 줄바꿈 허용 수정.
+- 개발 중 difference engine 버그 1건 발견·수정: "확인된 없음"
+  (CONFIRMED_ABSENT)을 MISSING과 동일 취급해 "확인 필요"로
+  잘못 분류하던 것 → "비슷한 항목"으로 정정.
+
+AI검색 compare intent: CompareResult 컴포넌트 자체는 제거, 대신
+이미 확인된 identity로 canonical Compare URL로 redirect. AI검색
+자체의 compare intent 분류 안정성(이번 Phase에서도 재현: 하드코딩
+추천 칩 문구조차 미분류)은 범위 밖으로 명시.
+
+테스트: 39개 전부 통과(신규 25개 — types/fetch/metrics/difference/
+url 커버).
+
+DB 변경: 없음(READ only). 신규 API: 0(기존 trades+score 재사용).
+
+테스트/빌드: `npx tsc --noEmit`/`eslint` 신규 에러·경고 0(기존
+1건은 diff 밖), `npm run build` 전체 성공.
+
+상태: 완료(승인된 Phase 2 스코프 전부 구현+실측 검증, production
+성능 측정은 배포 후 후속).
+
+상세: `docs/development/COMPARE_V2_PHASE2_IMPLEMENTATION.md`,
+`docs/development/DECISION_JOURNEY_V1.md` §10 업데이트

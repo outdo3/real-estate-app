@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Header from '@/components/Header';
 import FullPageLoader from '@/components/FullPageLoader';
 import ShareAction from '@/components/ShareAction';
+import InlineLoading from '@/components/ui/InlineLoading';
 import { useRegion } from '@/contexts/RegionContext';
 import styles from './ai-search-client.module.css';
 
@@ -94,16 +94,6 @@ const FOLLOWUP_SUGGESTIONS = [
   { icon: '⚖️', label: '대신더샵 vs 대신롯데캐슬 비교' },
 ];
 
-const COMPARE_ROWS: { key: keyof CompareComplexData; label: string }[] = [
-  { key: 'latestPrice', label: '최근 실거래가' },
-  { key: 'latestArea', label: '평형' },
-  { key: 'totalHouseholds', label: '세대수' },
-  { key: 'parking', label: '주차' },
-  { key: 'far', label: '용적률' },
-  { key: 'bcr', label: '건폐율' },
-  { key: 'buildYear', label: '준공' },
-];
-
 export default function AiSearchClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -120,6 +110,29 @@ export default function AiSearchClient() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AiSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // COMPARE_V2_PHASE2 §19/§23 — CompareResult(자체 렌더링 표)는 더 이상 유지하지
+  // 않는다(Phase 1 감사: 유일한 안정 진입점인 추천 칩조차 실측 재현으로 compare
+  // intent 분류에 실패함 — 이 분류 자체를 고치는 건 이번 STEP 범위 밖). intent가
+  // 실제로 compare로 분류되고 두 단지가 모두 확인된 드문 경우에는, 이미 확보된
+  // identity(name+resolvedLawdCd+dong+aptSeq)를 그대로 canonical Compare URL로
+  // 넘겨 리다이렉트한다 — name-only로 다시 검색시키지 않는다.
+  useEffect(() => {
+    if (!result || result.intent !== 'compare' || !result.complexA || !result.complexB) return;
+    const a = result.complexA;
+    const b = result.complexB;
+    if (!a.resolvedLawdCd || !b.resolvedLawdCd) return;
+    const qs = new URLSearchParams();
+    const seqs = [a.aptSeq, b.aptSeq].filter(Boolean) as string[];
+    if (seqs.length > 0) qs.set('aptSeq', seqs.join(','));
+    qs.set('aName', a.name);
+    qs.set('aLawdCd', a.resolvedLawdCd);
+    qs.set('aDong', a.dong || '');
+    qs.set('bName', b.name);
+    qs.set('bLawdCd', b.resolvedLawdCd);
+    qs.set('bDong', b.dong || '');
+    router.push(`/stats/compare?${qs.toString()}`);
+  }, [result, router]);
 
   useEffect(() => {
     const q = searchParams.get('q');
@@ -232,7 +245,7 @@ export default function AiSearchClient() {
               <RegionalStatsResult stats={result.stats} lawdCd={result.lawdCd || initialLawdCd} />
             )}
             {result.intent === 'compare' && result.complexA && result.complexB && (
-              <CompareResult a={result.complexA} b={result.complexB} />
+              <InlineLoading message="비교 화면으로 이동하는 중..." />
             )}
           </div>
         )}
@@ -391,124 +404,3 @@ function RegionalStatsResult({ stats, lawdCd }: { stats: RegionalStatsData; lawd
   );
 }
 
-// 값이 없거나(정보 없음) 동률이면 우열을 가리지 않는다 — 확인되지 않은 데이터로
-// 우열을 지어내지 않기 위함. 가격/평형/용적률/건폐율은 "더 크면 좋다"는 합의가 없어
-// 하이라이트 대상에서 제외하고, 세대수(클수록 대단지)·주차(세대당 대수가 넉넉할수록)·
-// 준공년도(최근일수록 신축)만 객관적으로 비교 가능한 지표로 본다.
-const HIGHLIGHTABLE_KEYS: Array<keyof CompareComplexData> = ['totalHouseholds', 'parking', 'buildYear'];
-
-const parseLeadingNumber = (raw: string | null): number | null => {
-  if (!raw) return null;
-  const match = raw.replace(/,/g, '').match(/[\d.]+/);
-  return match ? parseFloat(match[0]) : null;
-};
-
-function winnerFor(key: keyof CompareComplexData, a: CompareComplexData, b: CompareComplexData): 'a' | 'b' | null {
-  if (!HIGHLIGHTABLE_KEYS.includes(key)) return null;
-  const av = parseLeadingNumber(a[key] as string | null);
-  const bv = parseLeadingNumber(b[key] as string | null);
-  if (av == null || bv == null || av === bv) return null;
-  return av > bv ? 'a' : 'b';
-}
-
-// 비교 표에서 "최근 실거래가"/"평형" 두 행만 선택된 평형에 따라 값이 바뀐다. 나머지
-// (세대수/주차/용적률/건폐율/준공/커뮤니티시설)는 단지 단위 정보라 평형과 무관하다.
-function AreaDropdown({ options, selectedArea, onChange }: { options: CompareAreaOption[]; selectedArea: string; onChange: (area: string) => void }) {
-  if (options.length <= 1) return null;
-  return (
-    <select
-      value={selectedArea}
-      onChange={(e) => onChange(e.target.value)}
-      className={styles.areaDropdown}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {options.map((opt) => (
-        <option key={opt.area} value={opt.area}>
-          {opt.label} ({opt.tradeCount}건)
-        </option>
-      ))}
-    </select>
-  );
-}
-
-// DECISION_JOURNEY_V1 §2 — AI 비교 결과 표는 지금까지 어느 단지 상세로도 연결되지
-// 않는 dead end였다. resolvedLawdCd가 없으면(구버전 캐시 응답 등) 링크를 만들지
-// 않는다 — 존재하지 않는/불확실한 identity로 잘못된 단지에 연결하지 않기 위함.
-function compareComplexDetailHref(c: CompareComplexData): string | null {
-  if (!c.resolvedLawdCd) return null;
-  const qs = new URLSearchParams({ lawdCd: c.resolvedLawdCd });
-  if (c.dong) qs.set('dong', c.dong);
-  if (c.aptSeq) qs.set('aptSeq', c.aptSeq);
-  return `/apt/${encodeURIComponent(c.name)}?${qs.toString()}`;
-}
-
-function CompareResult({ a, b }: { a: CompareComplexData; b: CompareComplexData }) {
-  const [areaA, setAreaA] = useState(a.areaOptions[0]?.area || '');
-  const [areaB, setAreaB] = useState(b.areaOptions[0]?.area || '');
-  const selectedA = a.areaOptions.find((o) => o.area === areaA) || a.areaOptions[0];
-  const selectedB = b.areaOptions.find((o) => o.area === areaB) || b.areaOptions[0];
-
-  return (
-    <div className={styles.compareTableWrapper}>
-      <table className={styles.compareTable}>
-        <colgroup>
-          <col style={{ width: '28%' }} />
-          <col style={{ width: '36%' }} />
-          <col style={{ width: '36%' }} />
-        </colgroup>
-        <thead>
-          <tr>
-            <th></th>
-            <th>
-              <div className={styles.compareHeaderCell}>
-                {compareComplexDetailHref(a) ? (
-                  <Link href={compareComplexDetailHref(a)!} style={{ color: 'inherit', textDecoration: 'underline' }}>{a.name}</Link>
-                ) : (
-                  <span>{a.name}</span>
-                )}
-                <AreaDropdown options={a.areaOptions} selectedArea={areaA} onChange={setAreaA} />
-              </div>
-            </th>
-            <th>
-              <div className={styles.compareHeaderCell}>
-                {compareComplexDetailHref(b) ? (
-                  <Link href={compareComplexDetailHref(b)!} style={{ color: 'inherit', textDecoration: 'underline' }}>{b.name}</Link>
-                ) : (
-                  <span>{b.name}</span>
-                )}
-                <AreaDropdown options={b.areaOptions} selectedArea={areaB} onChange={setAreaB} />
-              </div>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td className={styles.compareRowLabel}>최근 실거래가</td>
-            <td>{selectedA?.latestPrice || '정보 없음'}</td>
-            <td>{selectedB?.latestPrice || '정보 없음'}</td>
-          </tr>
-          <tr>
-            <td className={styles.compareRowLabel}>평형</td>
-            <td>{selectedA?.latestArea || '정보 없음'}</td>
-            <td>{selectedB?.latestArea || '정보 없음'}</td>
-          </tr>
-          {COMPARE_ROWS.filter((row) => row.key !== 'latestPrice' && row.key !== 'latestArea').map((row) => {
-            const winner = winnerFor(row.key, a, b);
-            return (
-              <tr key={row.key}>
-                <td className={styles.compareRowLabel}>{row.label}</td>
-                <td className={winner === 'a' ? styles.winnerCell : undefined}>{(a[row.key] as string) || '정보 없음'}</td>
-                <td className={winner === 'b' ? styles.winnerCell : undefined}>{(b[row.key] as string) || '정보 없음'}</td>
-              </tr>
-            );
-          })}
-          <tr>
-            <td className={styles.compareRowLabel}>커뮤니티시설</td>
-            <td>{a.facilities.length > 0 ? a.facilities.join(', ') : '정보 없음'}</td>
-            <td>{b.facilities.length > 0 ? b.facilities.join(', ') : '정보 없음'}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}

@@ -5,9 +5,9 @@
 //     소비하는 lat/lng/zoom/lawdCd/dong/name 계약을 그대로 따른다. lat/lng가
 //     없으면 그 파서가 전체를 무시하고 기본 지역(서구)으로 열리므로, 호출부는
 //     가능하면 좌표를 지오코딩해서 넘겨야 한다(geocode-for-map.ts 참고).
-//   - /stats/compare: CompareView가 이미 가진 addComplex와 동일한 identity
-//     shape(name/lawdCd/dong)를 prefillName/prefillLawdCd/prefillDong 쿼리로
-//     전달한다 — CompareView 자체의 지역 선택/차트 로직은 건드리지 않는다.
+//   - /stats/compare: COMPARE_V2_PHASE2부터 CompareV2(src/components/compare/
+//     CompareV2.tsx)가 canonical — src/lib/compare-v2/url.ts의 aName/aLawdCd/
+//     aDong/aptSeq 계약을 그대로 재사용한다(별도 prefill 계약을 새로 만들지 않음).
 
 export function buildDetailMapUrl(params: {
   lawdCd: string;
@@ -40,9 +40,9 @@ export function buildDetailCompareUrl(params: {
   aptSeq?: string;
 }): string {
   const qs = new URLSearchParams();
-  qs.set('prefillName', params.name);
-  if (params.lawdCd) qs.set('prefillLawdCd', params.lawdCd);
-  if (params.dong) qs.set('prefillDong', params.dong);
-  if (params.aptSeq) qs.set('prefillAptSeq', params.aptSeq);
+  qs.set('aName', params.name);
+  if (params.lawdCd) qs.set('aLawdCd', params.lawdCd);
+  if (params.dong) qs.set('aDong', params.dong);
+  if (params.aptSeq) qs.set('aptSeq', params.aptSeq);
   return `/stats/compare?${qs.toString()}`;
 }
