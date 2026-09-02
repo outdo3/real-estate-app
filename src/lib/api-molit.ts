@@ -109,7 +109,37 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
 
     const itemsArray = Array.isArray(items) ? items : [items];
 
-    return itemsArray.map((item: any, index: number) => {
+    return mapMolitItems(itemsArray, type, lawdCd, dealYmd);
+
+  } catch (error: any) {
+    const maskedKey = API_KEY ? `${API_KEY.trim().substring(0, 5)}...${API_KEY.trim().substring(API_KEY.trim().length - 5)}` : 'none';
+    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${error.message}`);
+    // Instead of failing silently, return a special error object so the frontend can display it
+    return [{
+      id: `error-${type}-${lawdCd}-${dealYmd}`,
+      rank: 1,
+      name: `API 에러: ${error.message}`,
+      price: '에러',
+      priceChange: '',
+      changeType: 'new',
+      typeLabel: '에러',
+      info: `사용된 키 확인: ${maskedKey}`,
+      dong: '오류',
+      lat: null,
+      lng: null,
+    }];
+  }
+}
+
+// DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5 §3 — fetchMolitData()의 원본 raw-item→최종
+// 표시용 shape 매핑을 별도 함수로 뽑아낸 것뿐, 로직/출력은 한 글자도 바꾸지 않았다
+// (기존 fetchMolitData() 소비자 전원에게 완전히 동일한 값을 계속 반환한다). 목적은
+// 이 매핑을 대량 sync 전용 pagination fetcher(scripts/sale-molit-fetch.ts)에서도
+// 그대로 재사용해, "1페이지만 읽는 fetchMolitData"와 "전체 페이지를 읽는 대량 sync
+// fetcher"가 서로 다른 매핑 로직을 갖는(그래서 결과 shape이 미묘하게 달라질 위험이
+// 있는) 상황을 원천적으로 막기 위함이다.
+export function mapMolitItems(itemsArray: any[], type: DataType, lawdCd: string, dealYmd: string) {
+  return itemsArray.map((item: any, index: number) => {
       let priceStr = '';
       let dealAmount = 0;
       let monthlyRent = 0;
@@ -184,24 +214,5 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
         dealDate: tradeDate,
         floorRaw: floor || null,
       };
-    });
-
-  } catch (error: any) {
-    const maskedKey = API_KEY ? `${API_KEY.trim().substring(0, 5)}...${API_KEY.trim().substring(API_KEY.trim().length - 5)}` : 'none';
-    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${error.message}`);
-    // Instead of failing silently, return a special error object so the frontend can display it
-    return [{
-      id: `error-${type}-${lawdCd}-${dealYmd}`,
-      rank: 1,
-      name: `API 에러: ${error.message}`,
-      price: '에러',
-      priceChange: '', 
-      changeType: 'new',
-      typeLabel: '에러',
-      info: `사용된 키 확인: ${maskedKey}`,
-      dong: '오류',
-      lat: null, 
-      lng: null,
-    }];
-  }
+  });
 }

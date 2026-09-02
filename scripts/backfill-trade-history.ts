@@ -41,40 +41,28 @@ dotenv.config({ path: path.resolve(__dirname, '../.env'), quiet: true });
 dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 
 import { PrismaClient, Prisma } from '@prisma/client';
-import { fetchMolitData } from '../src/lib/api-molit';
 import { getSigunguListForSido } from '../src/lib/region-utils';
 import { normalizeMolitItemsToTradeRows, type TradeRowInput } from './trade-history-logic';
+import { fetchSaleRegionMonth } from './sale-molit-fetch';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// 대량 backfill 전용 보수적 fetcher(위 파일 헤더 RATE LIMIT 실측 근거). 동시 요청 1개,
-// 요청 사이 최소 간격, 스로틀 감지 시 지수 백오프(최대 5회, 최대 10초)로 재시도한다.
-const MIN_INTERVAL_MS = 350;
-let lastFetchAt = 0;
-
-// TRADE_CANCELLATION_RESYNC_V2 — export만 추가(로직 변경 없음). 24개월 cancellation
-// completeness resync 스크립트가 이 검증된 rate-limited fetcher를 재사용하기 위함
-// (같은 fetch/retry/backoff 로직을 새로 만들지 않음, §9 재발명 금지 원칙).
+// DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5 §3 — 내부 구현을 pagination-aware
+// fetchSaleRegionMonth()(sale-molit-fetch.ts)로 교체했다. 외부 시그니처
+// `{items, failed}`는 완전히 그대로 유지해, 이 함수를 재사용하는 3곳(이 파일의
+// backfill 본체, resync-cancellation-v2.ts, incremental-sync-nationwide.ts) 전부
+// 코드 변경 없이 그대로 동작한다. COMPLETE가 아닌 모든 경우(PARTIAL 포함 — 일부
+// 페이지는 성공했지만 totalCount만큼 다 모으지 못한 경우)를 failed:true로 취급한다
+// — 부분 수집분을 "완료"로 오판하는 대신, 기존 각 소비자가 이미 갖고 있는 "실패한
+// region-month는 다음 실행에서 재시도" 로직을 그대로 타게 한다(새 상태를 소비자마다
+// 추가로 처리하게 만들지 않는 가장 안전한 방법).
 export async function fetchOneRegionMonth(lawdCd: string, dealYmd: string): Promise<{ items: any[]; failed: boolean }> {
-  for (let attempt = 0; attempt <= 5; attempt++) {
-    const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastFetchAt));
-    if (wait > 0) await sleep(wait);
-    lastFetchAt = Date.now();
-
-    let result: any[];
-    try {
-      result = (await fetchMolitData({ lawdCd, dealYmd, type: 'apt' })) as any[];
-    } catch {
-      result = [];
-    }
-    const isErrorPlaceholder = result.length === 1 && result[0]?.typeLabel === '에러';
-    if (!isErrorPlaceholder) return { items: result, failed: false };
-
-    const isRateLimited = typeof result[0]?.name === 'string' && result[0].name.includes('초당 서비스 요청제한');
-    if (attempt === 5) break;
-    const backoffMs = isRateLimited ? Math.min(2000 * (attempt + 1), 10000) : 500 * (attempt + 1);
-    await sleep(backoffMs);
+  const result = await fetchSaleRegionMonth(lawdCd, dealYmd);
+  if (result.status === 'COMPLETE' || result.status === 'EMPTY_VALID') {
+    return { items: result.items, failed: false };
   }
+  // PARTIAL 또는 INVALID — 완전한 데이터가 아니므로 items를 비워 반환한다(부분 수집분을
+  // 실수로 신뢰하는 다운스트림 코드가 생기지 않도록).
   return { items: [], failed: true };
 }
 

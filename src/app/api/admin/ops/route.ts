@@ -7,6 +7,7 @@ import { getOrSetCache } from '@/lib/server-cache';
 import { getSidoList, getSigunguListForSido } from '@/lib/region-utils';
 import { HISTORICAL_LOOKBACK_MONTHS, historicalCoverageLabel } from '@/lib/price-ranking';
 import { summarizeManifest, computeOverallHealth, computeCancellationVerdict, OVERALL_STATUS_LABELS, type Manifest, type EvidenceType } from '@/lib/admin-ops-evidence';
+import { RENT_VERIFIED_FROM, RENT_VERIFIED_TO } from '@/lib/rent-verified-range';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ const BUSAN_16 = [
 
 const NATIONWIDE_MANIFEST_PATH = path.join(process.cwd(), 'data/trade-history/nationwide-sync-manifest.json');
 const CANCELLATION_24M_SNAPSHOT_PATH = path.join(process.cwd(), 'data/trade-history/cancellation-24m-verification-snapshot.json');
+const RENT_COVERAGE_MANIFEST_PATH = path.join(process.cwd(), 'data/rent-trade-history/coverage-manifest.json');
 
 type ManifestReadResult =
   | { status: 'ok'; manifest: Manifest }
@@ -77,6 +79,21 @@ function readCancellation24mSnapshot(): { status: 'ok'; data: Cancellation24mSna
   }
 }
 
+interface RentCoverageManifestFile {
+  legacyBootstrap: { from: string; to: string; source: string; bootstrappedAt: string };
+  cells: Record<string, { status: string }>;
+}
+
+function readRentCoverageManifest(): { status: 'ok'; manifest: RentCoverageManifestFile } | { status: 'missing' } | { status: 'unreadable' } {
+  if (!fs.existsSync(RENT_COVERAGE_MANIFEST_PATH)) return { status: 'missing' };
+  try {
+    return { status: 'ok', manifest: JSON.parse(fs.readFileSync(RENT_COVERAGE_MANIFEST_PATH, 'utf-8')) };
+  } catch (e) {
+    console.error('[admin/ops] rent coverage manifest 읽기 실패', e);
+    return { status: 'unreadable' };
+  }
+}
+
 // §13 하드코딩 금지 — RegionSelectModal/sync 엔진과 동일한 런타임 조회를 그대로
 // 재사용한다(§7 새 체계 금지와 동일 원칙).
 async function buildNationwideRegionModel() {
@@ -99,13 +116,19 @@ async function buildSummary() {
   // 부산 coverage(16/16)도 "목표 지역 수"가 아니라 "실제 row가 있는 지역 수"를
   // 라이브로 센다 — §2 "확인 불가능을 정상처럼" 금지 원칙상, 검증 없이 16/16을
   // 그냥 참으로 표시하지 않는다.
-  const [busanTotal, busanCanceled, aptSeqMissing, latestDealAgg, busanCoveredGroups, sejongTradeCount] = await Promise.all([
+  const [busanTotal, busanCanceled, aptSeqMissing, latestDealAgg, busanCoveredGroups, sejongTradeCount, rentBusanTotal, rentBusanCoveredGroups, rentLatestDealAgg] = await Promise.all([
     prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 } } }),
     prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, dealCanceled: true } }),
     prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, aptSeq: null } }),
     prisma.apartmentTradeHistory.aggregate({ where: { lawdCd: { in: BUSAN_16 } }, _max: { dealDate: true } }),
     prisma.apartmentTradeHistory.groupBy({ by: ['lawdCd'], where: { lawdCd: { in: BUSAN_16 } } }),
     prisma.apartmentTradeHistory.count({ where: { lawdCd: '36110' } }),
+    // DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5 §20 — Phase 1 감사에서 확인된 gap:
+    // /admin/ops에 rent freshness가 전혀 노출되지 않았다. sale과 같은 라이브 확인
+    // 방식(하드코딩 아님)으로 rent도 함께 노출한다.
+    prisma.apartmentRentHistory.count({ where: { lawdCd: { in: BUSAN_16 } } }),
+    prisma.apartmentRentHistory.groupBy({ by: ['lawdCd'], where: { lawdCd: { in: BUSAN_16 } } }),
+    prisma.apartmentRentHistory.aggregate({ where: { lawdCd: { in: BUSAN_16 } }, _max: { dealDate: true } }),
   ]);
 
   const nationwideManifestResult = readManifest(NATIONWIDE_MANIFEST_PATH);
@@ -148,6 +171,8 @@ async function buildSummary() {
   const allReasons = [...health.criticalReasons, ...health.warningReasons];
 
   const busanCoveredCount = busanCoveredGroups.length;
+  const rentBusanCoveredCount = rentBusanCoveredGroups.length;
+  const rentManifestResult = readRentCoverageManifest();
 
   return {
     overall: {
@@ -247,6 +272,20 @@ async function buildSummary() {
         verdict: 'NOT_VERIFIED' as const,
         note: '역대(2006년~) 전체 이력 취소 완전성은 검증되지 않음 — "역대" 표현 계속 금지',
       },
+    },
+    rentCoverage: {
+      evidenceType: 'LIVE' as EvidenceType,
+      checkedAt: nowIso,
+      busan: { covered: rentBusanCoveredCount, total: 16 },
+      totalRows: rentBusanTotal,
+      latestDealDate: rentLatestDealAgg._max.dealDate ? rentLatestDealAgg._max.dealDate.toISOString().slice(0, 10) : null,
+      verified: { from: RENT_VERIFIED_FROM, to: RENT_VERIFIED_TO },
+      legacyBootstrap: rentManifestResult.status === 'ok' ? rentManifestResult.manifest.legacyBootstrap : null,
+      manifestStatus: rentManifestResult.status,
+      // §20 명시 원칙 — Cron이 실제로 등록되지 않았으므로 절대 ACTIVE라고 표시하지
+      // 않는다. sale의 scheduler 표시와 동일한 정직성 기준.
+      scheduler: { value: 'OFF' as const, evidenceType: 'CONFIG' as EvidenceType, note: 'vercel.json/cron 부재 확인 — 아직 활성화하지 않은 의도된 상태. coverage manifest는 실제 --apply sync가 있을 때만 전진한다(수동 상수 편집 없음).' },
+      note: '취소(cancellation) 개념 없음 — MOLIT 전월세 API에 해당 필드가 존재하지 않는다(rent cancellation verified 같은 표현 금지).',
     },
     features: [
       { name: '84㎡ 국민평형', source: 'TradeHistory DB', busan: 'DB-FIRST 적용', trust: 'DB-FIRST 적용', evidenceType: 'CONFIG' as EvidenceType },

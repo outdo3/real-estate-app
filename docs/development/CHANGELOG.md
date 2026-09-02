@@ -14136,3 +14136,64 @@ index 0). Production sync APPLY 없음.
 상태: 완료(감사·dry-run 전용, Phase 2 활성화 전 PM 결정 항목 문서화).
 
 상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE1.md`
+
+
+## 2026-09-03
+
+### DATA FRESHNESS AUTOMATION V1 PHASE 1.5 — Cron 활성화 전 코드 준비 완료
+
+PHASE 1 감사에서 발견된 2개 pre-activation 차단 요소를 실제로 해결.
+Production APPLY 없음, Cron 등록 없음, Production DB write 0 —
+전부 dry-run/read-only/단위 테스트로만 검증(매 단계 후 git status로
+무변경 확인).
+
+**SALE pagination 수정**: `fetchMolitData()`(라이브 사용자 경로에서도
+쓰이므로 그 자체는 손대지 않음) 대신, rent가 이미 증명한 것과 동일한
+전용 paginated fetcher(`scripts/sale-molit-fetch.ts` +
+`sale-pagination-logic.ts`, totalCount 실검증)를 신설하고
+`fetchOneRegionMonth()`의 내부 구현만 교체(외부 시그니처 불변 —
+기존 3개 소비자 코드 무변경). PARTIAL(일부 페이지만 성공)은
+failed:true로 취급해 기존 재시도 로직을 그대로 활용. 수정 후
+Phase 1과 동일한 dry-run 재실행 → 완전히 동일한 결과(fetched=71,
+insert=23, FAILED=0, INVALID=0, SAFE_GATE=true) — 회귀 없음 확인.
+
+**RENT coverage P0 해결**: `RENT_VERIFIED_FROM/TO`를 사람이 편집하는
+리터럴 상수에서, `data/rent-trade-history/coverage-manifest.json`
+(신규, legacyBootstrap 202408~202608 그대로 계승·재검증 없이 명시적
+라벨링)을 읽어 자동 계산하는 값으로 전환. 16/16 구 전부 COMPLETE인
+연속된 달만큼만 자동 전진(15/16이면 정지), 현재월은 절대 포함 안 함
+(방어적 이중 가드), dry-run은 manifest를 절대 갱신하지 않는 순수
+결정 함수(`shouldRecordCoverageCell`) 별도 구현·테스트. 기존
+`rent-history-read.ts`는 import 이름이 그대로라 코드 변경 0 —
+기존 `.test.mjs` 12/12 그대로 통과(계산된 값이 이전 하드코딩 값과
+정확히 일치함을 회귀로 증명).
+
+**Admin Ops 확장**: `/admin/ops`에 RENT 섹션 신설(부산 16개 구
+라이브 확인, 자동 산출 검증범위, "OFF" scheduler 상태를 sale과
+동일한 정직성 기준으로 표시 — ACTIVE라고 절대 표시 안 함).
+
+**Cron route 준비(등록은 안 함)**: `/api/cron/sale-sync`,
+`/api/cron/rent-sync` 코드만 작성. `CRON_SECRET` 인증 게이트(Vercel
+공식 컨벤션, 6개 케이스 단위 테스트: no secret/wrong secret/correct
+secret 등)는 실제로 동작·검증됨. 이번 STEP은 Vercel 환경변수를
+추가하지 않았으므로 CRON_SECRET이 아직 설정 안 됨 → 두 라우트 모두
+현재 어떤 요청도 통과 불가(설계상 우발적 apply 불가능, dev 서버
+curl로 실측 401 확인). 실제 sync 엔진 연결은 정직하게 501 NOT_WIRED
+반환(가짜 성공 응답 없음) — CLI 스크립트를 Next.js Function으로
+옮기는 작업 자체를 Phase 2 activation 범위로 명시.
+
+`vercel.json`에 crons 항목 추가 없음(등록 안 함, 파일 직접 확인).
+
+DB 변경: 없음(READ only, INSERT/UPDATE/DELETE 0, schema/migration/
+index 0). Production sync APPLY 없음, Cron 등록 없음, Vercel 환경변수
+변경 없음.
+
+테스트/빌드: 신규 유닛테스트 31개(sale pagination 10, rent coverage
+advancement 9, rent coverage writer 6, cron auth 6) + 기존 18개
+(.mjs) 전부 통과, `npx tsc --noEmit`/`eslint` 신규 에러 0, `npm run
+build` 전체 성공(`/api/cron/sale-sync`, `/api/cron/rent-sync` 정적
+확인 포함).
+
+상태: 완료.
+
+상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5.md`

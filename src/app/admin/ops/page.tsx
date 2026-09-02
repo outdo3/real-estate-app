@@ -192,6 +192,30 @@ export default function AdminOpsPage() {
               </div>
             </section>
 
+            {/* 섹션 D-2 — Rent(전월세) Coverage */}
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <div className={styles.sectionTitle}>전월세(Rent) 데이터 최신성</div>
+                <EvidenceBadge type={d.rentCoverage.evidenceType} />
+              </div>
+              <div className={styles.sectionMeta}>확인 시점 {formatDateTime(d.rentCoverage.checkedAt)}</div>
+              <div className={styles.kvGrid}>
+                <div className={styles.kv}><span>부산 구·군(실데이터 존재)</span><b>{d.rentCoverage.busan.covered} / {d.rentCoverage.busan.total}</b></div>
+                <div className={styles.kv}><span>총 row</span><b>{d.rentCoverage.totalRows.toLocaleString('ko-KR')}</b></div>
+                <div className={styles.kv}><span>최신 거래일</span><b>{d.rentCoverage.latestDealDate ?? '정보 없음'}</b></div>
+                <div className={styles.kv}><span>검증 범위(자동 산출)</span><b>{d.rentCoverage.verified.from} ~ {d.rentCoverage.verified.to}</b></div>
+              </div>
+              <div className={styles.kvGrid}>
+                <div className={styles.kv}>
+                  <span>자동 수집(scheduler) <EvidenceBadge type={d.rentCoverage.scheduler.evidenceType} /></span>
+                  <b>{d.rentCoverage.scheduler.value}</b>
+                  <span className={styles.kvNote}>{d.rentCoverage.scheduler.note}</span>
+                </div>
+                <div className={styles.kv}><span>다음 예정 수집</span><b>자동 일정 없음</b></div>
+              </div>
+              <div className={styles.noteStrong}>{d.rentCoverage.note}</div>
+            </section>
+
             {/* 섹션 E — Cancellation */}
             <section className={styles.section}>
               <div className={styles.sectionHeader}>

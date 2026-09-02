@@ -1,0 +1,9 @@
+{
+  "legacyBootstrap": {
+    "from": "202408",
+    "to": "202608",
+    "source": "PHASE B/C/D manual backfill + incremental sync (real production evidence, see docs/development/RENT_TRADE_HISTORY_V1_ARCHITECTURE.md and the prior hardcoded RENT_VERIFIED_FROM/TO history in src/lib/rent-verified-range.ts). Bootstrapped as-is into this manifest by DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5 without re-verification (no Production APPLY performed this STEP) — this range carries the same trust basis it always had, not a new, stronger claim.",
+    "bootstrappedAt": "2026-09-03T00:00:00.000Z"
+  },
+  "cells": {}
+}
