@@ -13321,3 +13321,66 @@ jeonseRate/거래량 비교가 실제 row-level 데이터를 필요로 해 미�
 
 상세: `docs/development/RENT_TRADE_HISTORY_V1_PHASE_D_DB_FIRST.md`,
 `docs/development/PERFORMANCE_V1.md` §6 업데이트
+
+
+## 2026-09-02
+
+### RENT TRADE HISTORY V1 — PHASE D.2: Dashboard SQL Aggregate + 완료월 Incremental Sync
+
+PHASE D의 8.7초 cold 병목을 재감사한 결과, 실제 지배적 원인이 rent가 아니라
+**매매(sale) queryTrades()**였음을 발견(6.2초, 31,993 rows, Prisma findMany
+역직렬화 비용 — PERFORMANCE_V1.1-A와 동일 클래스, 이전에는 이 dashboard
+fetch에 적용된 적 없었음). 이를 고치고, rent의 chartDataByType/
+volumeSummaryByPeriod도 SQL aggregate로 완전히 옮기고, 202608 완료월을
+production sync했다.
+
+작업:
+
+- **매매 raw SQL fetcher 신규 추가**(`getRegionalSaleRowsRawFromDb`,
+  trade-history-read.ts) — 기존 queryTrades()는 다른 소비처(gap-invest
+  route 등)가 의존하므로 변경하지 않고, dashboard 전용 좁은 함수만 새로
+  추가(blast radius 0). Row-set parity 검증(31,993 ID 완전 일치) 후
+  6.2초→0.79초.
+- **전세/월세 aggregate 함수 신규**(`getRentMonthlyAggregateFromDb`,
+  `getRentPeriodComparisonFromDb`, rent-history-read.ts) — 부산 dashboard의
+  월별 거래량/평균가와 7일·30일·3개월 비교를 SQL GROUP BY/COUNT로 직접
+  계산(raw row materialization 없음). gapInvest/jeonseRate(최근 3개월만
+  row-level 매칭 필요)만 좁은 row fetch를 유지 — verified 전체(최대
+  24개월)가 아니라 "최근 3개월과 겹치는 verified 월"만(현재 2개월).
+- **202608 부산 16개 구 production sync**: pre-sweep 16/16 COMPLETE →
+  apply 2,889건 insert → 2차 apply(idempotency) insert 0/update 0/중복 0.
+  검증범위 202408~202607 → **202408~202608**로 확장(코드 상수+provenance
+  주석 갱신, rolling 재계산 아님).
+- **완료월 incremental sync CLI 신규**(`incremental-sync-completed-month.ts`)
+  — "직전 완료월" 규칙 + overlap=2(최근 2개월 재동기화, 늦게 들어오는
+  정정 흡수) + mutation 발견 시 정책 자동 확장 없이 로그만 남김. 검증범위
+  상수는 자동 갱신하지 않음(사람이 검토 후 수동 갱신 원칙 유지,
+  DECISIONS.md #10). Vercel Cron 등 실제 스케줄러 등록은 infra 승인 필요해
+  이번 STEP 범위 밖 — SCHEDULER_READY(CLI 준비 완료, 등록 안 함) 판정.
+- **A/B 검증**: 동일 DB 스냅샷에서 OLD(row-based) vs NEW(aggregate) 이중
+  계산 비교 — Busan 전체+5개 표본구, 144개 필드 비교 0건 불일치. 실제
+  live endpoint에서도 hybrid remainder 계산(DB 5,638건+미검증월 MOLIT
+  36건=5,674건) 정확히 일치 확인.
+- **실측(프로덕션 빌드 기준, dev 아님)**: 부산 전체 cold 8.7s→**4.67s**,
+  warm 224ms→**175ms**. 단일구(5개 표본) cold 388~594ms —
+  **목표(≤1~1.5s) 전부 달성**. 부산 전체는 목표 미달성이나 원인이 더 이상
+  rent가 아님을 명확히 규명(MOLIT 16콜 + 기존 sale pyeong batch lookup
+  693ms(무관, 미변경) + 프로세스당 1회 지역목록 캐시 웜업 386ms).
+
+서비스 기능 변경: 없음(응답 shape 완전 동일).
+
+DB 변경: 있음(202608 production sync, INSERT 2,889행만, schema/index/
+migration 0).
+
+테스트/빌드: 신규 단위테스트 4+ 추가, 기존 전월세 테스트 전부 재통과,
+`npx tsc --noEmit`/`npm run lint`/`npm run build` 이번 PHASE가 건드린
+파일 기준 신규 이슈 0건.
+
+알려진 제한: 부산 전체 cold 목표 여전히 미달성(원인은 rent 밖, 후속
+PHASE 후보로 문서화). Verified coverage는 incremental sync를 실제로
+스케줄링하지 않으면 매달 다시 줄어든다(CLI는 준비됐으나 자동 실행 안 함).
+
+상태: 완료(부분 성능목표 미달성이나 원인이 rent 범위 밖임을 규명).
+
+상세: `docs/development/RENT_TRADE_HISTORY_V1_PHASE_D2.md`,
+`docs/development/PERFORMANCE_V1.md` §6 재업데이트, `DECISIONS.md` #10

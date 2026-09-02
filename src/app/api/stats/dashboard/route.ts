@@ -8,8 +8,16 @@ import { prisma } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import { resolvePriceRankingPeriod, type PriceRankingPeriodPreset } from '@/lib/price-ranking';
 import { previousPeriodRange } from '@/lib/regional-feed';
-import { queryTrades, type StoredTrade } from '@/lib/trade-history-read';
-import { splitVerifiedMonths, fetchRentMonthBucketsFromDb, type StoredRentTrade } from '@/lib/rent-history-read';
+import { getRegionalSaleRowsRawFromDb, type StoredTrade } from '@/lib/trade-history-read';
+import {
+  splitVerifiedMonths,
+  fetchRentMonthBucketsFromDb,
+  getRentMonthlyAggregateFromDb,
+  getRentPeriodComparisonFromDb,
+  clipDateRangeToVerified,
+  type StoredRentTrade,
+  type RentMonthAggregate,
+} from '@/lib/rent-history-read';
 
 // TRADE_DB_FIRST_V1 STEP B-2 — 거래량 dashboard(그래프+요약)의 매매(sale) 쪽만
 // 부산 요청에 한해 DB-first로 전환했다. hotIssues/topPrices/gapInvest/complexTrades
@@ -21,12 +29,21 @@ import { splitVerifiedMonths, fetchRentMonthBucketsFromDb, type StoredRentTrade 
 // RENT_TRADE_HISTORY_V1 PHASE D — 전세/월세도 같은 원칙으로 부산 요청에 한해
 // DB-first 전환한다. 단, sale과 근본적으로 다른 제약이 하나 있다: sale은 2006-01~
 // 오늘까지 매일 갱신되는 nationwide incremental sync가 있어 "부산이면 항상 DB"가
-// 성립하지만, rent는 PHASE C가 만든 **고정된 과거 스냅샷**(202408~202607)뿐이고
-// 아직 이어지는 incremental sync가 없다. dashboard의 `last12Months`는 `now` 기준
-// rolling window라 시간이 흐를수록 window 뒤쪽(현재월 + 직전월, 통상 2개월)이
-// 이 스냅샷 밖으로 밀려난다 — splitVerifiedMonths()로 매 요청마다 검증범위 안/밖을
-// 나눠, 검증범위 안 월만 DB로, 밖 월은 기존 MOLIT 경로를 그대로 쓴다(§PHASE D
-// 16/17 partial-coverage 정책 — "검증 안 된 기간을 DB complete로 가장하지 않는다").
+// 성립하지만, rent는 completed-month sync로만 전진하는 **고정 스냅샷**(현재
+// 202408~202608)이고 rolling window처럼 매일 갱신되지 않는다. dashboard의
+// `last12Months`는 `now` 기준 rolling window라 시간이 흐를수록 window 뒤쪽(주로
+// 진행 중인 현재월)이 이 스냅샷 밖으로 밀려난다 — splitVerifiedMonths()로 매
+// 요청마다 검증범위 안/밖을 나눠, 검증범위 안 월만 DB로, 밖 월은 기존 MOLIT
+// 경로를 그대로 쓴다("검증 안 된 기간을 DB complete로 가장하지 않는다").
+//
+// RENT_TRADE_HISTORY_V1 PHASE D.2 — CONSUMER SEPARATION. Phase D는 verified 개월
+// 전체(최대 24개월)를 row로 통째로 옮겨 chartDataByType/volumeSummaryByPeriod까지
+// 계산했는데, 이 둘은 실제로는 row-level 매칭이 전혀 필요 없다(count/avg, day 단위
+// range COUNT뿐) — PERFORMANCE_V1.1-A/B가 이미 증명한 대로 SQL이 최종 값을 직접
+// 계산하게 바꾼다(getRentMonthlyAggregateFromDb/getRentPeriodComparisonFromDb).
+// gapInvest/jeonseRate만 apartment name+area row-level 매칭이 필요해 row를 계속
+// 옮기지만, "최근 3개월 슬라이스와 겹치는 verified 월"만 좁혀서 가져온다(최대
+// 24개월 대신 최대 2~3개월) — fetchRentMonthBucketsFromDb 호출 범위 축소.
 const BUSAN_SIDO_CODE = '26';
 
 function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
@@ -93,11 +110,18 @@ function storedRentToDashboardTrade(r: StoredRentTrade): any {
 // 배열 모양(12개 배열의 배열)에 의존하므로 그대로 맞춘다. lawdCd는 DB row
 // 자체가 이미 정확한 값을 갖고 있어(배치 조회) 기존 MOLIT 경로처럼 수동으로
 // 태그할 필요가 없다(오히려 더 정확 — 원본 row 자체의 값).
+//
+// PHASE D.2 §PERFORMANCE — queryTrades()(Prisma 모델 매핑 findMany) 대신
+// getRegionalSaleRowsRawFromDb(raw SQL)를 쓴다. 실측: 부산 12개월 31,993
+// row 기준 6.2초→수백 ms대(trade-history-read.ts 주석 참고) — dashboard
+// cold 병목의 더 큰 비중이 rent가 아니라 이 sale fetch였다는 것을 이번
+// 성능 감사 중 발견했다. queryTrades() 자체는 변경하지 않는다(다른
+// 소비처 영향 없음).
 async function fetchApt12MonthBucketsFromDb(lawdCds: string[], months: string[]): Promise<any[][]> {
   const fromYear = Number(months[0].slice(0, 4));
   const fromMonth = Number(months[0].slice(4, 6));
   const from = new Date(Date.UTC(fromYear, fromMonth - 1, 1));
-  const { trades } = await queryTrades({ lawdCd: lawdCds, from });
+  const trades = await getRegionalSaleRowsRawFromDb(lawdCds, from);
   const buckets = new Map<string, any[]>(months.map((m) => [m, []]));
   trades.forEach((t) => {
     const ym = t.dealDate.toISOString().slice(0, 7).replace('-', '');
@@ -138,13 +162,17 @@ export async function GET(request: Request) {
       }
     }
 
-    const cacheKey = isSidoAll ? `stats-dashboard-sido:${sidoCodeParam}` : `stats-dashboard:${lawdCd}`;
-    // PERFORMANCE_V1 §21/§33 — sido-wide(전체 시/도) 요청은 매매(sale)만
-    // DB-first이고 전세/월세는 여전히 구×12개월 MOLIT 호출(부산 기준 16구
-    // ×12개월=192 task)이 필요해 cold 실측 17~20s까지 걸린다(rent DB가
-    // 없어 생기는 구조적 외부 API 병목 — rent DB 구축은 이번 STEP 범위
-    // 밖, §21). 단일 구 요청은 12개월(최대 12 task)뿐이라 이 병목이 없다.
-    // 스키마 변경 없이 가능한 완화책으로 sido-wide만 TTL을 5분→30분으로
+    // RENT_TRADE_HISTORY_V1 PHASE D.2 §31 — rent source/routing이 Phase D(row-level
+    // 전체 fetch)에서 Phase D.2(aggregate 분리)로 바뀌면서 응답 계산 방식 자체가
+    // 달라졌다. 이 in-memory cache(server-cache.ts)는 프로세스 재시작마다 비므로
+    // 배포 시 자연히 새로 채워지지만, 혹시 모를 warm-인스턴스 재사용에 대비해
+    // key에 버전을 추가해 이전 코드가 만든 응답과 절대 섞이지 않게 한다(global
+    // cache flush infra 없이 가능한 최소 대응).
+    const cacheKey = isSidoAll ? `stats-dashboard-sido:v2:${sidoCodeParam}` : `stats-dashboard:v2:${lawdCd}`;
+    // PERFORMANCE_V1 §21/§33 / PHASE D / PHASE D.2 — sido-wide(전체 시/도) 요청은
+    // 매매(sale)+전세/월세 verified 개월 모두 DB-first다(Busan 한정). 검증범위
+    // 밖(주로 진행 중인 현재월 1개월)만 여전히 MOLIT 호출이 필요하다. 스키마
+    // 변경 없이 가능한 완화책으로 sido-wide만 TTL을 5분→30분으로
     // 늘려 이 비싼 재계산이 발생하는 빈도를 줄인다.
     const ttlMs = isSidoAll ? 30 * 60 * 1000 : 5 * 60 * 1000;
     const data = await getOrSetCache(cacheKey, ttlMs, async () => {
@@ -155,17 +183,27 @@ export async function GET(request: Request) {
         const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
         return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
       });
+      // PHASE D.2 §6 — gapInvest/jeonseRate는 "최근 3개월"만 본다(recentAptTrades/
+      // recentRentTrades, 아래). row-level DB fetch는 이 슬라이스와 겹치는 verified
+      // 월만 좁혀서 가져온다 — verified 전체(최대 24개월)를 다 옮기지 않는다.
+      const recentMonths = last12Months.slice(-3);
 
       let aptMonthly: any[][];
       let rentMonthly: any[][];
       let partial = false;
       let failedLawdCds: string[] = [];
+      // PHASE D.2 — chartDataByType/volumeSummaryByPeriod가 verified 개월에 한해
+      // aggregate 경로를 쓰기 위해, if/else 분기 밖에서도 필요한 값들을 밖으로 끌어둔다.
+      let isBusanFlag = false;
+      let rentLawdCds: string[] = [];
+      let verifiedRentMonthsFlag: string[] = [];
+      let rentMonthlyAggregate: Map<string, RentMonthAggregate> = new Map();
 
       if (isSidoAll) {
         // §19/§20 성능 — 부산 16개 구 × 12개월 × 2타입 = 384 task 최대치였으나,
-        // PHASE D부터는 부산 요청의 rent verified 개월(현재 10/12)만큼 MOLIT task
-        // 자체가 안 만들어진다(아래 unverifiedRentMonths). 기존 rankings sido-all과
-        // 동일한 공유 스로틀을 그대로 쓴다(새 동시성 풀 없음).
+        // PHASE D/D.2부터는 부산 요청의 rent verified 개월만큼 MOLIT task 자체가
+        // 안 만들어진다(아래 unverifiedRentMonths, 현재 11/12 verified). 기존
+        // rankings sido-all과 동일한 공유 스로틀을 그대로 쓴다(새 동시성 풀 없음).
         const districts = await getSigunguListForSido(sidoCodeParam!);
         const lawdCds = districts.map((d) => d.code.substring(0, 5));
         const isBusan = isBusanScopedRequest(null, sidoCodeParam, true);
@@ -175,6 +213,12 @@ export async function GET(request: Request) {
         const { verified: verifiedRentMonths, unverified: unverifiedRentMonths } = isBusan
           ? splitVerifiedMonths(last12Months)
           : { verified: [] as string[], unverified: last12Months };
+        // PHASE D.2 §6 — row-level(gapInvest/jeonseRate)용으로는 verified 중 최근
+        // 3개월 슬라이스와 겹치는 월만 좁혀서 DB에 묻는다.
+        const rowLevelVerifiedMonths = verifiedRentMonths.filter((m) => recentMonths.includes(m));
+        isBusanFlag = isBusan;
+        rentLawdCds = lawdCds;
+        verifiedRentMonthsFlag = verifiedRentMonths;
         const tasks: MonthTask[] = [];
         for (const dLawdCd of lawdCds) {
           for (const ym of last12Months) {
@@ -189,11 +233,13 @@ export async function GET(request: Request) {
             tasks.push({ key: `${dLawdCd}|rent:${ym}`, lawdCd: dLawdCd, dealYmd: ym, type: 'rent' });
           }
         }
-        const [results, aptMonthlyFromDb, rentBucketsFromDb] = await Promise.all([
+        const [results, aptMonthlyFromDb, rentBucketsFromDb, rentAggFromDb] = await Promise.all([
           fetchMonthsThrottledWithStatus(tasks),
           isBusan ? fetchApt12MonthBucketsFromDb(lawdCds, last12Months) : Promise.resolve(null),
-          isBusan ? fetchRentMonthBucketsFromDb(lawdCds, verifiedRentMonths) : Promise.resolve(null),
+          isBusan ? fetchRentMonthBucketsFromDb(lawdCds, rowLevelVerifiedMonths) : Promise.resolve(null),
+          isBusan ? getRentMonthlyAggregateFromDb(lawdCds, verifiedRentMonths) : Promise.resolve(null),
         ]);
+        if (rentAggFromDb) rentMonthlyAggregate = rentAggFromDb;
         const failedSet = new Set<string>();
         for (const dLawdCd of lawdCds) {
           for (const ym of last12Months) {
@@ -216,10 +262,14 @@ export async function GET(request: Request) {
         aptMonthly = isBusan
           ? aptMonthlyFromDb!
           : last12Months.map((ym) => lawdCds.flatMap((d) => (results[`${d}|apt:${ym}`]?.items || []).map((t: any) => ({ ...t, lawdCd: d }))));
+        // PHASE D.2 — verified이지만 row-level 슬라이스 밖인 달은 빈 배열이다(그 달의
+        // chart 집계는 rentMonthlyAggregate에서 온다, gapInvest/jeonseRate는 애초에
+        // 최근 3개월만 보므로 이 달의 row가 필요 없다).
         rentMonthly = last12Months.map((ym) => {
-          if (isBusan && verifiedRentMonths.includes(ym)) {
+          if (isBusan && rowLevelVerifiedMonths.includes(ym)) {
             return (rentBucketsFromDb?.get(ym) || []).map(storedRentToDashboardTrade);
           }
+          if (isBusan && verifiedRentMonths.includes(ym)) return [];
           return lawdCds.flatMap((d) => (results[`${d}|rent:${ym}`]?.items || []).map((t: any) => ({ ...t, lawdCd: d })));
         });
       } else {
@@ -227,6 +277,10 @@ export async function GET(request: Request) {
         const { verified: verifiedRentMonths, unverified: unverifiedRentMonths } = isBusan
           ? splitVerifiedMonths(last12Months)
           : { verified: [] as string[], unverified: last12Months };
+        const rowLevelVerifiedMonths = verifiedRentMonths.filter((m) => recentMonths.includes(m));
+        isBusanFlag = isBusan;
+        rentLawdCds = [lawdCd!];
+        verifiedRentMonthsFlag = verifiedRentMonths;
         const rollingTasks: MonthTask[] = [
           ...(isBusan ? [] : last12Months.map((dealYmd) => ({ key: `apt-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'apt' as const }))),
           ...unverifiedRentMonths.map((dealYmd) => ({ key: `rent-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'rent' as const })),
@@ -237,18 +291,21 @@ export async function GET(request: Request) {
         // fetchMonthsThrottledWithStatus로 바꿔 실패 여부를 유지하고, 부산(DB 조회,
         // 실패 시 상위 try/catch가 전체 요청을 실패 처리함)이 아닌 한 개라도 실패한
         // 달이 있으면 partial=true로 표시한다.
-        const [taskResults, aptMonthlyFromDb, rentBucketsFromDb] = await Promise.all([
+        const [taskResults, aptMonthlyFromDb, rentBucketsFromDb, rentAggFromDb] = await Promise.all([
           fetchMonthsThrottledWithStatus(rollingTasks),
           isBusan ? fetchApt12MonthBucketsFromDb([lawdCd!], last12Months) : Promise.resolve(null),
-          isBusan ? fetchRentMonthBucketsFromDb([lawdCd!], verifiedRentMonths) : Promise.resolve(null),
+          isBusan ? fetchRentMonthBucketsFromDb([lawdCd!], rowLevelVerifiedMonths) : Promise.resolve(null),
+          isBusan ? getRentMonthlyAggregateFromDb([lawdCd!], verifiedRentMonths) : Promise.resolve(null),
         ]);
+        if (rentAggFromDb) rentMonthlyAggregate = rentAggFromDb;
         aptMonthly = isBusan
           ? aptMonthlyFromDb!
           : last12Months.map((dealYmd) => (taskResults[`apt-roll-${dealYmd}`]?.items || []).map((t: any) => ({ ...t, lawdCd: lawdCd })));
         rentMonthly = last12Months.map((dealYmd) => {
-          if (isBusan && verifiedRentMonths.includes(dealYmd)) {
+          if (isBusan && rowLevelVerifiedMonths.includes(dealYmd)) {
             return (rentBucketsFromDb?.get(dealYmd) || []).map(storedRentToDashboardTrade);
           }
+          if (isBusan && verifiedRentMonths.includes(dealYmd)) return [];
           return (taskResults[`rent-roll-${dealYmd}`]?.items || []).map((t: any) => ({ ...t, lawdCd: lawdCd }));
         });
         const anyTaskFailed = rollingTasks.some((task) => taskResults[task.key]?.failed);
@@ -259,25 +316,23 @@ export async function GET(request: Request) {
       }
 
       const allAptTrades = aptMonthly.flat().filter(isValidTrade);
-      const allRentTrades = rentMonthly.flat().filter(isValidTrade);
       const recentAptTrades = aptMonthly.slice(-3).flat().filter(isValidTrade);
       const recentRentTrades = rentMonthly.slice(-3).flat().filter(isValidTrade);
 
       // ── STATISTICS V2.1-2 §13~§18 — 거래량 기간별 이전 기간 대비 비교 ──
       // "거래량이 많다"가 아니라 "이전 기간보다 얼마나 변했는지"가 핵심이다.
-      // 이미 받아둔 12개월치 trades 안에서만 계산한다(새 fetch 없음, §34
-      // 성능 원칙). 7일/30일/3개월만 지원한다 — 6개월/12개월까지 "직전 동일
-      // 기간"을 계산하려면 최대 24개월 lookback이 필요한데, 그러면 이미 받아둔
-      // 12개월 fetch 범위 경계에 걸쳐(특히 6개월 preset) 실제로는 존재하지만
-      // 아직 fetch 안 된 거래가 "0건"처럼 보이는 부정확한 비교가 생길 수 있어
-      // (§18 정확한 데이터 claim 우선), 안전하게 전체 기간 안에 여유가 있는
-      // preset만 제공한다. 장기 흐름(6개월~12개월)은 기존 월별 차트가 그대로
-      // 담당한다(§16, 이번 STEP에서 차트 재설계는 범위 밖).
+      // 7일/30일/3개월만 지원한다(§16, 차트 재설계는 범위 밖).
+      //
+      // RENT_TRADE_HISTORY_V1 PHASE D.2 §8/§9 — Phase D까지는 12개월치 rent row를
+      // 전부 옮겨와 JS에서 날짜 필터링했다(countInRange). day 단위 range COUNT는
+      // row-level 매칭이 필요 없는 순수 aggregate라 SQL로 직접 계산할 수 있다 —
+      // Busan verified 구간은 getRentPeriodComparisonFromDb(GROUP BY + FILTER,
+      // raw row materialization 없음)로, 검증범위 밖(현재 진행중인 월, 이미
+      // MOLIT로 받아둔 소량의 row)만 JS로 보충한다(hybrid, 이중 카운트 방지는
+      // clipDateRangeToVerified의 배타적 경계로 보장됨). 비부산은 rent DB 자체가
+      // 없으므로 기존 row 전체 기반 계산을 그대로 쓴다(동작 변경 없음).
       const VOLUME_COMPARISON_PRESETS: PriceRankingPeriodPreset[] = ['7d', '30d', '3m'];
       const verifiedApt = allAptTrades.filter((t: any) => !t.dealCanceled);
-      const verifiedRentAll = allRentTrades.filter((t: any) => !t.dealCanceled);
-      const verifiedJeonse = verifiedRentAll.filter((t: any) => !t.monthlyRent || t.monthlyRent === 0);
-      const verifiedWolse = verifiedRentAll.filter((t: any) => t.monthlyRent && t.monthlyRent > 0);
       const countInRange = (trades: any[], range: { from: string; to: string }) =>
         trades.filter((t: any) => t.dealDate >= range.from && t.dealDate <= range.to).length;
       const buildComparison = (trades: any[], current: { from: string; to: string }, previous: { from: string; to: string }) => {
@@ -287,26 +342,96 @@ export async function GET(request: Request) {
         const changePct = previousCount > 0 ? Math.round((changeCount / previousCount) * 1000) / 10 : null;
         return { currentCount, previousCount, changeCount, changePct };
       };
+      const mkComparison = (currentCount: number, previousCount: number) => {
+        const changeCount = currentCount - previousCount;
+        const changePct = previousCount > 0 ? Math.round((changeCount / previousCount) * 1000) / 10 : null;
+        return { currentCount, previousCount, changeCount, changePct };
+      };
+      const toUtcDateFromYmd = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
+      const addOneDayUtc = (d: Date) => new Date(d.getTime() + 24 * 60 * 60 * 1000);
+      // 검증범위 밖(진행 중인 현재월 등)의 remainder만 이미 가져온 MOLIT row에서 센다.
+      // clipDateRangeToVerified가 반환하는 clipped.to의 "다음 날"부터가 remainder
+      // 시작점이므로 DB가 이미 센 구간과 절대 겹치지 않는다(§ 이중 카운트 방지).
+      const countRentRemainderByType = (rows: any[], from: Date, to: Date) => {
+        const clipped = clipDateRangeToVerified(from, to);
+        const remainderFrom = clipped ? addOneDayUtc(clipped.to) : from;
+        if (remainderFrom > to) return { jeonse: 0, wolse: 0 };
+        const fromStr = remainderFrom.toISOString().slice(0, 10);
+        const toStr = to.toISOString().slice(0, 10);
+        let jeonse = 0;
+        let wolse = 0;
+        for (const t of rows) {
+          if (!isValidTrade(t)) continue;
+          if (t.dealDate < fromStr || t.dealDate > toStr) continue;
+          if (!t.monthlyRent || t.monthlyRent === 0) jeonse++;
+          else wolse++;
+        }
+        return { jeonse, wolse };
+      };
+
       const volumeSummaryByPeriod: Record<string, any> = {};
-      for (const preset of VOLUME_COMPARISON_PRESETS) {
-        const current = resolvePriceRankingPeriod(preset, now);
-        const previous = previousPeriodRange(current);
-        volumeSummaryByPeriod[preset] = {
-          period: current,
-          previousPeriod: previous,
-          sale: buildComparison(verifiedApt, current, previous),
-          jeonse: buildComparison(verifiedJeonse, current, previous),
-          wolse: buildComparison(verifiedWolse, current, previous),
-        };
+      if (isBusanFlag) {
+        // verified 개월(row-level 슬라이스 포함)은 SQL aggregate가 이미 정확히
+        // 세므로, 여기서는 진짜 unverified(MOLIT) 개월의 row만 remainder 계산에
+        // 쓴다 — verified-and-row-level 달의 row를 섞으면 이중 카운트가 된다.
+        const unverifiedRentRowsFlat = last12Months.flatMap((ym, i) => (verifiedRentMonthsFlag.includes(ym) ? [] : rentMonthly[i]));
+        for (const preset of VOLUME_COMPARISON_PRESETS) {
+          const current = resolvePriceRankingPeriod(preset, now);
+          const previous = previousPeriodRange(current);
+          const currentFromDate = toUtcDateFromYmd(current.from);
+          const currentToDate = toUtcDateFromYmd(current.to);
+          const previousFromDate = toUtcDateFromYmd(previous.from);
+          const previousToDate = toUtcDateFromYmd(previous.to);
+          const dbCounts = await getRentPeriodComparisonFromDb(
+            rentLawdCds,
+            { from: currentFromDate, to: currentToDate },
+            { from: previousFromDate, to: previousToDate }
+          );
+          const currentRemainder = countRentRemainderByType(unverifiedRentRowsFlat, currentFromDate, currentToDate);
+          const previousRemainder = countRentRemainderByType(unverifiedRentRowsFlat, previousFromDate, previousToDate);
+          volumeSummaryByPeriod[preset] = {
+            period: current,
+            previousPeriod: previous,
+            sale: buildComparison(verifiedApt, current, previous),
+            jeonse: mkComparison(dbCounts.current.jeonse + currentRemainder.jeonse, dbCounts.previous.jeonse + previousRemainder.jeonse),
+            wolse: mkComparison(dbCounts.current.wolse + currentRemainder.wolse, dbCounts.previous.wolse + previousRemainder.wolse),
+          };
+        }
+      } else {
+        // 비부산 — rent DB 자체가 없으므로 rentMonthly가 항상 전체 12개월 row로
+        // 채워져 있다(기존 Phase D 이전 동작과 완전히 동일, 변경 없음).
+        const allRentTrades = rentMonthly.flat().filter(isValidTrade);
+        const verifiedRentAll = allRentTrades.filter((t: any) => !t.dealCanceled);
+        const verifiedJeonse = verifiedRentAll.filter((t: any) => !t.monthlyRent || t.monthlyRent === 0);
+        const verifiedWolse = verifiedRentAll.filter((t: any) => t.monthlyRent && t.monthlyRent > 0);
+        for (const preset of VOLUME_COMPARISON_PRESETS) {
+          const current = resolvePriceRankingPeriod(preset, now);
+          const previous = previousPeriodRange(current);
+          volumeSummaryByPeriod[preset] = {
+            period: current,
+            previousPeriod: previous,
+            sale: buildComparison(verifiedApt, current, previous),
+            jeonse: buildComparison(verifiedJeonse, current, previous),
+            wolse: buildComparison(verifiedWolse, current, previous),
+          };
+        }
       }
 
       // ── 2) 월별 그래프 데이터: 거래유형(매매/전세/월세)별 거래량(막대) + 가격지수(꺾은선,
       // 최초 유효월=100 기준). 세 유형 모두 한 번에 계산해둬서 클라이언트가 칩을 눌러
-      // 유형을 바꿀 때마다 새로 API를 부를 필요가 없게 한다(월별 원본 거래는 이미 위에서
-      // apt/rent 둘 다 12개월치를 받아둔 상태 — rent는 monthlyRent 유무로 전세/월세를
-      // 구분한다: 0(또는 없음)이면 전세, 있으면 월세).
+      // 유형을 바꿀 때마다 새로 API를 부를 필요가 없게 한다.
+      //
+      // PHASE D.2 §8/§9 — Busan verified rent 개월은 rentMonthlyAggregate(SQL
+      // GROUP BY, row materialization 없음)에서 직접 count/avg를 읽는다. sale은
+      // 항상, rent의 unverified/비부산 개월은 그대로 rentMonthly[i] row 기반
+      // 계산을 쓴다(기존 로직 변경 없음).
       const buildChartData = (dealType: 'sale' | 'jeonse' | 'wolse') => {
         const monthlyAgg = last12Months.map((ym, i) => {
+          if (dealType !== 'sale' && isBusanFlag && verifiedRentMonthsFlag.includes(ym)) {
+            const agg = rentMonthlyAggregate.get(ym);
+            const typeAgg = dealType === 'jeonse' ? agg?.jeonse : agg?.wolse;
+            return { month: `${ym.substring(2, 4)}.${ym.substring(4, 6)}`, volume: typeAgg?.count ?? 0, avg: typeAgg?.avgDeposit ?? null };
+          }
           const aptTrades = aptMonthly[i].filter(isValidTrade);
           const rentTrades = rentMonthly[i].filter(isValidTrade);
           const selected =

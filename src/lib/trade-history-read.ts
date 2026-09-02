@@ -303,6 +303,35 @@ export async function queryTrades(input: TradeQueryInput): Promise<TradeQueryRes
   };
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// RENT_TRADE_HISTORY_V1 PHASE D.2 §PERFORMANCE — dashboard/route.ts의
+// fetchApt12MonthBucketsFromDb 전용 raw SQL fetcher. Phase D.2 성능 감사 중
+// 부산 12개월(31,993 rows) queryTrades() 호출 자체가 6.2초 걸려, 애초에 이번
+// STEP이 고치려던 rent 경로보다 dashboard cold 병목의 더 큰 비중을 차지하고
+// 있음을 실측으로 발견했다(PERFORMANCE_V1.1-A/B와 동일한 클래스의 문제 —
+// Prisma 모델 매핑 findMany의 row 역직렬화 비용, SQL 실행 자체는 빠름).
+// queryTrades()는 exclusiveArea 필터/limit/identity 등 이 좁은 용도에 필요
+// 없는 범용 안전장치를 갖고 있고 다른 여러 소비처(gap-invest 등)가 그 계약에
+// 의존하므로, 그 함수 자체를 바꾸지 않고 이 dashboard 전용 좁은 함수를 새로
+// 추가한다(blast radius 최소화 — 다른 어떤 소비처도 영향받지 않음, grep으로
+// 확인 가능: dashboard/route.ts만 이 함수를 import).
+//
+// queryTrades()가 `includeCanceled` 기본값 false로 만드는 것과 동일하게
+// `deal_canceled = false`를 SQL에서 직접 건다(§ 동작 동일성 — 취소 거래를
+// 조용히 포함시키는 회귀 방지).
+export async function getRegionalSaleRowsRawFromDb(lawdCds: string[], from: Date): Promise<StoredTrade[]> {
+  const rows = await prisma.$queryRaw<
+    { id: number; lawdCd: string; aptSeq: string | null; aptName: string; dong: string; exclusiveArea: string; dealAmount: number; dealDate: Date; floor: number | null; dealCanceled: boolean; buildYear: number | null; jibun: string | null }[]
+  >`
+    SELECT id, lawd_cd as "lawdCd", apt_seq as "aptSeq", apt_name as "aptName", dong,
+           exclusive_area::text as "exclusiveArea", deal_amount as "dealAmount", deal_date as "dealDate",
+           floor, deal_canceled as "dealCanceled", build_year as "buildYear", jibun
+    FROM apartment_trade_histories
+    WHERE lawd_cd = ANY(${lawdCds}) AND deal_type = 'sale' AND deal_canceled = false AND deal_date >= ${from}
+  `;
+  return rows;
+}
+
 export interface YearlySaleAggregateRow {
   year: number;
   count: number;

@@ -133,6 +133,26 @@ deferred; see `RENT_TRADE_HISTORY_V1_PHASE_D_DB_FIRST.md` for the full analysis.
 EXTERNAL_API_BOTTLENECK → PARTIALLY_RESOLVED, remaining gap understood and documented, not silently
 dropped.**
 
+**FURTHER RESOLVED — RENT_TRADE_HISTORY_V1 PHASE D.2 (2026-09-02):** re-profiling this exact
+bottleneck found PHASE D's own root-cause attribution was incomplete — the actual dominant cost in
+the 8.7s figure was **sale's `queryTrades()`** (6.2s for 31,993 Busan 12-month rows via Prisma's
+model-mapped `findMany`, the same `PERFORMANCE_V1.1-A` row-materialization class of problem,
+previously unfixed for this specific dashboard fetch), not rent. Fixed with a narrowly-scoped raw
+SQL fetcher (`getRegionalSaleRowsRawFromDb`, new function, `queryTrades()` itself untouched — 0
+blast radius to other consumers): 6.2s → 0.79s, row-set parity verified (identical 31,993 IDs).
+Separately, rent's `chartDataByType`/`volumeSummaryByPeriod` were moved off row materialization
+entirely onto SQL aggregate (`getRentMonthlyAggregateFromDb`/`getRentPeriodComparisonFromDb`) — the
+"further SQL-side restructuring" this section flagged as deferred is now done. A 202608 completed-
+month sync also shrank the remaining MOLIT-only window from 2 unverified months to 1. Combined
+measured (production build, not dev): Busan-wide cold 8.7s → **4.67s**, warm 224ms → **175ms**;
+single-district cold **388–594ms — now fully meets the ≤1–1.5s target**. Busan-wide cold still
+misses the target; remaining cost is 16 MOLIT calls for the 1 unverified month + a pre-existing,
+unrelated sale `pyeong` Unit Master batch lookup (~693ms, unchanged, no index approved this PHASE)
++ one-time per-process region-list cache warm-up (~386ms, amortizes to ~0). See
+`RENT_TRADE_HISTORY_V1_PHASE_D2.md` §13a for the full instrumented breakdown. **Verdict updated:
+PARTIALLY_RESOLVED → MOSTLY_RESOLVED (district-level fully passes; Busan-wide gap is no longer
+rent-side, root-caused and documented, not silently dropped).**
+
 ---
 
 ## 7. Index Recommendation — Area84 Busan-Wide (NOT applied this STEP)

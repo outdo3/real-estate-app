@@ -358,3 +358,45 @@ MISSING_APTSEQ/MISSING_FLOOR로 분류된 row는 이번 PHASE 실측(3개 구 x 
 상태:
 
 채택
+
+## 11. RENT TRADE HISTORY V1 PHASE D.2 — 공용 함수를 고치는 대신 좁은 새 함수를 추가한다 + 근거 없는 지연 대신 overlap resync
+
+날짜:
+2026-09-02
+
+결정:
+
+1. dashboard의 매매 fetch(`queryTrades()`, 6.2초/31,993행)가 실제 병목으로
+   드러났을 때, 이 함수를 직접 고치지 않고(gap-invest route 등 다른 소비처가
+   이미 이 함수의 계약에 의존) `getRegionalSaleRowsRawFromDb`라는 좁은 새
+   raw SQL 함수를 추가해 dashboard/route.ts만 이걸 쓰게 했다. blast radius를
+   최소화하는 쪽이 "이미 검증된 공용 함수를 건드려 다른 소비처를 회귀시킬
+   위험"보다 명백히 낫다고 판단했다 — 두 함수 모두 raw SQL이 필요할 만큼
+   느린 경로였다면, 향후 PHASE에서 공용 함수 자체를 재작성하는 결정을 별도로
+   내릴 수 있다(이번 PHASE에서는 안 함).
+
+2. completed-month incremental sync의 "최신 완료월" 판정에 근거 없는
+   grace-period 지연(예: "월말 후 30일 대기")을 넣지 않았다. 실측 근거
+   (PHASE C 11시간 관측 1건, 이번 PHASE 202608 즉시 재확인 0건)가 "지연이
+   필요하다"를 뒷받침하지 않았기 때문이다. 대신 매 실행마다 최근 2개월
+   (기본값)을 항상 재동기화하는 overlap 정책을 택했다 — 이미 idempotent한
+   sync engine이라 재확인 비용이 사실상 0(변화 없으면 write 자체가 없음)이므로,
+   "얼마나 기다려야 안전한가"라는 답할 수 없는 질문 대신 "매번 다시 확인한다"는
+   답할 수 있는 정책으로 대체했다.
+
+3. verified range 상수(`RENT_VERIFIED_FROM`/`TO`)는 이 incremental sync
+   스크립트가 자동으로 갱신하지 않는다(#10의 원칙을 스크립트 설계에도 그대로
+   적용) — 스크립트는 데이터만 채우고 completeness/mutation을 로그로 보고할
+   뿐, "검증됐다"는 선언은 사람이 결과를 확인한 뒤 별도로 한다.
+
+이유:
+
+1번은 "안전한 좁은 변경 vs 위험한 넓은 변경" 중 항상 안전한 쪽을 택한다는
+이 프로젝트의 일관된 태도(PHASE B의 sale-vs-rent 정책 분리, PHASE D의 rent
+전용 함수 신설과 동일 패턴)의 연장이다. 2번과 3번은 #10과 동일하게 "정확한
+불확실성을 감추지 않는다"는 원칙 — "완료월이 진짜 완료됐는지" 확신할 수
+없다는 사실 자체를 인정하고, 확신 대신 반복 확인으로 안전을 확보한다.
+
+상태:
+
+채택

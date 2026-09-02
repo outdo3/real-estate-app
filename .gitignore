@@ -73,6 +73,9 @@ scripts/_incremental_sync_nationwide_results/
 # RENT_TRADE_HISTORY_V1 PHASE B — sync 실행 로그(재현 가능, 커밋 불필요. manifest는 별도로 커밋함)
 scripts/rent-trade-history/_sync_rent_history_results/
 
+# RENT_TRADE_HISTORY_V1 PHASE D.2 — completed-month incremental sync 실행 로그(재현 가능, 커밋 불필요)
+scripts/rent-trade-history/_incremental_sync_results/
+
 # RENT_TRADE_HISTORY_V1 PHASE B — correction-experiment raw 스냅샷(재현 가능, 재실행 시 계속 쌓임.
 # diff 결과 요약(output-phase-b-correction-experiment.json)은 evidence로 별도 커밋함)
 scripts/rent-trade-history/_correction_experiment_snapshots/
