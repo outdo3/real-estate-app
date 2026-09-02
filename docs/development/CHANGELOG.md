@@ -13434,3 +13434,41 @@ DB 변경: 없음(READ only, schema/index/migration 0).
 상세: `docs/development/PERFORMANCE_V1_2_DASHBOARD_SALE_SQL.md`,
 `docs/development/PERFORMANCE_V1.md` 재업데이트,
 `docs/development/RENT_TRADE_HISTORY_V1_PHASE_D2.md` Next Step 연결
+
+
+## 2026-09-02
+
+### PERFORMANCE V1.3 — Vercel Production Reality Check (측정/원인분리 전용, 코드 변경 없음)
+
+로컬이 아닌 실제 Vercel production(`real-estate-app-park11.vercel.app`)
+기준으로 13개 핵심 경로의 cold/warm 성능을 실측. 코드는 전혀 변경하지
+않음(측정 STEP).
+
+핵심 발견: **Vercel 함수가 `iad1`(미국 동부, 버지니아)에서 실행되고
+있고, DB(Supabase)는 `ap-northeast-2`(서울)에 있다** — `vercel
+inspect`로 직접 확인(기존 PERFORMANCE_V1.md의 "region이 icn1로
+일치한다"는 기록은 X-Vercel-Id의 icn1:: prefix를 edge 위치로
+착각한 오판이었음, 이번에 정정). DB 쿼리마다 태평양 왕복 지연
+(~300~500ms)이 붙는 구조적 문제로, PHASE D.2/PERFORMANCE V1.2에서
+검증된 로컬 최적화들이 production에서 왜 기대만큼 반영되지 않는지의
+지배적 원인.
+
+실측: 부산 dashboard cold 16.25s(로컬 최악치 5.48s의 3배), area84는
+warm 상태에서도 매번 6~10s(로컬 warm 0.10s와 극명한 대조), 홈/맵/
+apt상세는 양호. 모바일 QA(360/375/390px) 레이아웃 이상 없음.
+
+이번 STEP에서 리전 불일치는 고치지 않음 — 실제 운영 트래픽에 즉시
+영향을 주는 배포 인프라 결정이라 코드 리뷰 성격의 안전한 되돌리기와는
+다르다고 판단해, 발견/근거/권고만 문서화하고 사용자 승인을 요청.
+
+서비스 기능 변경: 없음.
+
+DB 변경: 없음(READ only, 측정용 API 호출만).
+
+코드 변경: 없음(이번 STEP의 명시적 범위 제한).
+
+상태: 완료(측정/진단만, 최우선 후속 조치 명확히 식별 — Vercel 함수
+리전을 DB와 같은 리전으로 맞추는 것).
+
+상세: `docs/development/PERFORMANCE_V1_3_VERCEL_REALITY_CHECK.md`,
+`docs/development/PERFORMANCE_V1.md` §11 리전 오판 정정
