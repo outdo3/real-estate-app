@@ -187,12 +187,20 @@ deferred per scope.
 
 ## 14. Performance
 
-Local dev-server measurement only this phase (production/Vercel timing needs the code live first —
-see Next Step). Both API calls per complex fire in parallel with no dependency, and both
-complexes' calls fire together — so total network depth is 1 round trip regardless of complex
-count, matching the ≤1–1.5s target's spirit; a proper cold/warm curl-based measurement against
-production (matching the `PERFORMANCE_V1` series' own methodology) is the natural immediate
-follow-up once this ships.
+Measured against production (`real-estate-app-park11.vercel.app`, `icn1`) after this STEP's own
+push, using the same curl methodology as the `PERFORMANCE_V1` series (3 cold-like + repeat warm
+samples):
+
+| | cold | warm |
+|---|---|---|
+| `/stats/compare` page shell | 0.69s | 0.14–0.19s |
+| `/api/apt/[name]` (trades) | 1.40s | 0.13–0.32s |
+| `/api/apt/[name]/score` | 1.30s | 0.25–0.27s |
+
+Both API calls per complex fire in parallel with no dependency, and both complexes' calls fire
+together — so total network depth is 1 round trip regardless of complex count. Worst-case fully-
+cold 2-complex compare ≈ max(trades, score) ≈ **~1.4s**, at the edge of but within the task's own
+≤1.5s **PASS** threshold; warm (repeat view within cache TTL) ≈ **~0.3s**, comfortably **FAST**.
 
 ## 15. A/B Validation
 
@@ -229,7 +237,6 @@ underlying identity guarantee comes from `resolveStrongIdentityAptSeqs`/`matches
 
 - AI-search compare-intent classification reliability is unfixed (§12) — the redirect is correct
   but rarely triggered today.
-- Production/Vercel timing not yet measured (§14) — needs the code live.
 - 390px mobile verification (like prior phases) relies on the same CSS breakpoint bucket as
   360/375 rather than being independently screenshotted pixel-by-pixel at every panel.
 - The `parseLeadingNumber`-style string-parsing risk that existed in the old `CompareResult` is
