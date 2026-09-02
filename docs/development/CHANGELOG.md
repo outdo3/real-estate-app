@@ -13611,3 +13611,59 @@ build` 전체 성공.
 
 상세: `docs/development/DECISION_JOURNEY_V1_1_IDENTITY.md`,
 `docs/development/DECISION_JOURNEY_V1.md` §16 addendum
+
+
+## 2026-09-02
+
+### COMPARE V2 PHASE 1 — Unified Compare 아키텍처 감사(설계 전용, 코드 변경 없음)
+
+현재 분리된 두 비교 기능(chart 기반 `CompareView` /stats/compare·
+multi-compare, table 기반 AI검색 `CompareResult`)을 하나의 신뢰
+가능한 의사결정 도구로 통합하기 위한 PHASE 1 — audit/설계만,
+대규모 UI 구현 없음.
+
+3개 subagent 병렬 조사(Compare 구현 2개 전수 코드감사, Score V2
+category/peer/편향 감사, parking·교통·교육·생활·전세·거래량·
+Favorites 데이터소스 감사) + DB 실측 샘플(부산 400개 단지) +
+dev 서버 실측 2건.
+
+핵심 발견:
+- 두 구현이 보여주는 metric이 사실상 겹치지 않음(CompareView는
+  가격 추이 차트만, CompareResult는 세대수/주차/용적률 등 정적
+  8개 항목만 — 이집점수/전세/거래량은 어디에도 없음).
+- CompareView는 name을 내부 state key로 씀(aptSeq는 캡처만 하고
+  실제 조회에는 미사용). CompareResult는 리스트가 아니라 고정
+  2-prop이라 name-key 문제 자체는 없지만, LLM이 자유텍스트에서
+  단지명만 추출한 시점엔 identity가 전혀 없음.
+- **실측 재현된 identity 위험**: lawdCd/dong 없이 "현대"(표본 내
+  동명 단지 4곳) 조회 시 부산이 아닌 타 지역 동명 단지로 resolve
+  되어 거래 0건 반환 — "진짜 거래 없음"과 구분 불가능한 상태로
+  나타남.
+- **실측 재현된 AI검색 비교 진입 실패**: 하드코딩된 추천 칩
+  문구("대신더샵 vs 대신롯데캐슬 비교") 그대로 질의해도 2회 모두
+  compare intent로 분류되지 않음 — CompareResult의 유일한
+  안정적 진입점이 이번 세션에서 작동하지 않음을 확인.
+- Score V2는 이미 "단일 승자 선언 금지" 원칙을 3곳에서 독립적으로
+  문서화하고 있음(카드 자체의 disclaimer, 프로덕션에서 안 쓰는
+  isParetoSuperior() 테스트 유틸, EJIP_SCORE_V2_PRODUCT_FORMULA_
+  AUDIT.md의 가격-점수 상관관계 ρ=0.51 실측) — Compare에 그대로
+  적용.
+- 거래량(거래건수)은 세대수로 정규화하는 로직이 코드 전체에
+  전혀 없음 — 대단지가 크기만으로 "유동성 우수"처럼 보이는 구조적
+  위험 확인.
+
+권고 아키텍처: Option A(CompareView를 canonical로 확장) +
+CompareResult는 별도 렌더링 표면으로 유지하지 않고 canonical UI로
+redirect(단, AI검색 자체의 compare intent 분류 안정성은 이번
+Phase 범위 밖). 근거: CompareResult의 유일한 안정 진입점이 실측
+실패, CompareView가 이미 N개 단지·aptSeq·3개 안정 진입점을 보유.
+
+Data Contract 제안(미구현): ComparableIdentity(aptSeq 우선) +
+CompareApartment/CompareMetric/CompareDifference, 각 metric마다
+SAFE/LIMITED/UNSAFE/MISSING trust 태그 + period/area 명시.
+
+DB 변경: 없음(READ only, 샘플 쿼리 1건). 신규 API: 0.
+
+상태: 완료(감사·설계 전용, PM 승인 대기 항목 4건 문서화).
+
+상세: `docs/development/COMPARE_V2_ARCHITECTURE_AUDIT.md`
