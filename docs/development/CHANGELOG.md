@@ -14069,3 +14069,70 @@ redaction 10, events actionType 5, 기존 것 포함 총 79/79 통과),
 상태: 완료.
 
 상세: `docs/development/ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2.md`
+
+
+## 2026-09-03
+
+### DATA FRESHNESS AUTOMATION V1 PHASE 1 — 매매+전월세 자동 최신화 출시 전 감사
+
+Production Cron 활성화 전, SALE(전국 incremental sync engine, scheduler
+OFF)+RENT(부산 16구 verified coverage, incremental-sync-completed-month.ts
+존재, SCHEDULER_READY 마킹만) 자동화가 안전한지 최종 감사. 이번 PHASE는
+Production APPLY/Cron 활성화 금지 — AUDIT+DRY-RUN+READ-ONLY만 수행.
+
+2개 백그라운드 조사(SALE 아키텍처 전수 추적, RENT 아키텍처 전수 추적) +
+직접 실행한 READ-only DB freshness 쿼리 + 실제 dry-run 실행(Production
+DB write 0, git status로 매 실행 후 무변경 확인) 병행.
+
+**가장 중요한 발견— SALE MOLIT fetch pagination 부재, 실제 데이터로 증명**:
+`fetchOneRegionMonth`가 `numOfRows=1000` 고정, `pageNo`/`totalCount`
+검증 없음(RENT 파이프라인은 이미 이 문제를 발견하고 자체 수정했으나 SALE
+sync engine에는 포팅되지 않음). READ-only 쿼리로 실제 프로덕션 데이터에서
+정확히 1,000행인 (lawdCd, dealYmd) 셀 23개 발견 — 통계적으로 비현실적인
+우연의 일치이자 정확히 numOfRows 상한과 일치, 즉 이미 조용히 잘렸을
+가능성이 매우 높음. 전부 2020-11 이전(가장 최근 26350/202011) — 최근
+12개월 내 잘린 셀 0건, 현재 부산 최대 월별 밀도(~530행)도 상한 대비
+여유 있음. 결론: 부산 단독·현재 규모에서는 즉각적 위험 아니지만, incremental
+engine이 여전히 호출하는 동일 fetch 함수의 이미 증명된 버그이므로 급증
+또는 향후 전국 확장(서울/경기 대형구는 월 1,000건 초과 가능) 시 재발 위험
+— Phase 2 활성화 전 수정 권고.
+
+**RENT의 P0 확정**: `RENT_VERIFIED_FROM/TO`(rent-verified-range.ts)가
+하드코딩 상수이며 sync 스크립트가 의도적으로 자동 갱신하지 않음(리마인더만
+출력, 사람이 직접 파일 수정 필요) — 작업 지시 §28이 명시한 "hardcoded
+month 업데이트가 필요한 구조면 P0"에 정확히 해당. Cron만 켠다고 coverage
+decay 문제가 해결되지 않음 — 자동 갱신 메커니즘 구축 또는 수동 운영 수용
+중 하나를 Phase 2 활성화 전 결정 필요.
+
+**RENT UPDATE 경로 미검증**: 코드는 실제 upsert로 완전히 연결돼 있으나
+(hasContentDiff 9개 필드 비교) 지금까지 어떤 프로덕션 run에서도 실제
+발동한 적 없음(모든 로그 wouldUpdate=0) — 처음 실제 발동 시 PM review
+필요로 명시.
+
+**실제 dry-run 실행 결과**(Production DB write 0):
+- SALE(16개 구, overlapMonths=1): cells=17, fetched=71, insert=23(현재
+  DB가 live MOLIT보다 뒤처진 사례 재확인), FAILED=0, SAFE_GATE=true.
+- RENT(16개 구×2개월 overlap=32 cells): fetched=6797, wouldInsert=0,
+  wouldUpdate=0(이미 202608까지 수동 백필로 완전히 최신), failed=0.
+
+**16/16 구 매트릭스**: SALE/RENT 둘 다 전 구 최신 dealYmd=202608(현재월
+데이터 오판 경로 0건 확인).
+
+**Scheduler**: 현재 repo에 Vercel Cron 등록 0건(`vercel.json`에 crons
+키 없음), CRON_SECRET 컨벤션 0건 — 이 프로젝트 최초 cron이 될 것.
+Vercel Cron 권장(기존 icn1 region 자동 상속, 새 외부 서비스 도입 안 함).
+실측 dry-run 시간 기반 추정(SALE ~30s + RENT ~14s < 60s)으로 batching
+불필요 — 단 실제 Vercel plan(Hobby/Pro) 확인은 이전 STEP에서 미해결로
+남아있던 질문이라 이번에도 확정하지 못함(대시보드 확인 필요, blocker는
+아님).
+
+**Admin Ops**: SALE manifest는 이미 `/admin/ops`에 노출 중(lastSyncAt).
+RENT는 노출 0건 — Phase 2에서 기존 화면에 추가 필요(새 admin 시스템
+아님).
+
+DB 변경: 없음(READ only, INSERT/UPDATE/DELETE 0, schema/migration/
+index 0). Production sync APPLY 없음.
+
+상태: 완료(감사·dry-run 전용, Phase 2 활성화 전 PM 결정 항목 문서화).
+
+상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE1.md`
