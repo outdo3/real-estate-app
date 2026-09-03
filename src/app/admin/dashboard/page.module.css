@@ -305,6 +305,12 @@
 
 .errorMessage {
   color: var(--text-primary);
+  /* ADMIN_ACCESS_FIX_V1 후속 — 에러 로그 메시지는 공백 없는 긴 문자열(URL/스택/쿼리)이
+     들어올 수 있다. 줄바꿈 규칙이 없어 한 줄이 1002px까지 늘어났고, 그 폭이 부모 카드와
+     형제 요소까지 밀어내 360/375/390px에서 페이지 전체 가로 스크롤을 만들었다.
+     anywhere는 단어 중간에서도 끊어 min-content 폭을 실제로 줄여준다(break-word와 달리
+     내재 최소 폭 계산에 반영된다). */
+  overflow-wrap: anywhere;
 }
 
 .errorMeta {
