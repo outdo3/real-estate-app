@@ -14383,3 +14383,63 @@ DB 변경: 없음(schema/migration/index 0, 데이터 쓰기 0).
 로그인 계정이면 env 경로가 동작하지 않고 DB role 승격이 대안이다.
 
 상세: `docs/development/ADMIN_ACCESS_FIX_V1.md`
+
+## 2026-09-03
+
+### RENT 최초 감독 하 Production APPLY + /admin/dashboard 가로 overflow 수정
+
+**1) /admin/dashboard 가로 overflow 수정**: `.errorMessage`에 줄바꿈 규칙이 없어
+공백 없는 긴 에러 문자열이 한 줄 1002px로 렌더되고, 그 내재 폭이 부모 card(1044px)와
+형제 cardTitle/statRow까지 밀어내 페이지 전체 가로 스크롤을 만들었다(그래서 처음엔
+레이아웃 컨테이너가 원인처럼 보였다). `overflow-wrap: anywhere` 한 줄로 해결 —
+`break-word`가 아니라 `anywhere`인 이유는 min-content 폭 계산에 반영되는 쪽이
+`anywhere`이기 때문이다. 구조/레이아웃 변경 없음.
+
+production same-origin iframe 실측(before → after):
+360px 1059/345 → **345/345**, 375px 1059/360 → **360/360**,
+390px 1059/375 → **375/375**, desktop 1280px → **1265/1265**. 전부 overflow 없음,
+에러 메시지 20건 그대로 렌더(줄바꿈만 됨).
+
+**2) CRON_SECRET 회전(사용자 승인)**: 이전 단계에서 로컬 사본을 지웠고, Vercel은
+secret 값을 되돌려주지 않는다(`env pull`이 `[SENSITIVE]` placeholder를 씀 — 실측 확인).
+등록된 cron이 없고 소비처가 두 라우트뿐이라 blast radius 0임을 확인한 뒤 회전.
+env 개수 18 유지(다른 값 무변경). 재배포 `dpl_CcGBEUy2KzW26edZSR8F9Y9oA6Bv`(icn1).
+인증 재검증: secret 없음/오류/`?mode=apply` 전부 **401**.
+
+**3) RENT 최초 Production APPLY**(부산 16개 구 × 완료월 202607–202608, 32 cells):
+적용 직전 production dry-run 예측과 **정확히 일치** — fetched 6,887 / inserted **90** /
+updates **0** / mutation candidates **0** / blocked 0 / failed 0, status SUCCESS,
+11.7s, coverageRecorded 32.
+
+Post-write: rent 125,320 → **125,410**(+90), 부산 202607–08 6,797 → **6,887**(+90),
+**신규 row aptSeq NULL 0**, **기존 row mutation 0**(first-mutation guard 유지),
+trade 855,556 무변경, RENT coverage 0 → **32 cells**, SALE coverage 48 유지.
+적용 범위의 DB 건수(6,887)가 source fetched(6,887)와 정확히 일치 — source↔DB 완전 일치.
+신규 90건은 jeonse 36 / wolse 54. rent 취소 상태는 생성/추정하지 않음(source에 필드 없음).
+
+Completeness: 모든 COMPLETE cell이 `sourceTotalCount == fetchedCount`(위반 0).
+coverage는 완료월 202607/202608 × 16/16만 기록, **202609(현재월) cell 0** — §15 유지.
+
+**검증범위는 202408–202608 그대로이며 이것이 정상이다**: 적용한 두 달이 이미 legacy
+bootstrap 안에 있고, 다음 전진 후보 202609는 진행 중인 현재월이라 가드가 거부한다.
+rent coverage 전진은 202609가 완료월이 되는 **2026년 10월**에 처음 가능하다.
+
+Idempotency: 동일 scope 재검증에서 동일 6,887건 조회, insert 0 / update 0 /
+blocked 0 / failed 0. DB 카운터 완전 동일.
+
+**/admin/ops 실측(운영자 접근 가능해진 뒤 실제 확인)**: RENT — scheduler OFF,
+총 row 125,410, 동기화 coverage(DB) 32 cells COMPLETE, 검증범위 202408~202608,
+legacy bootstrap 표시, 취소필드 부재 안내 유지. SALE regression — scheduler OFF,
+coverage 48 cells COMPLETE 유지.
+
+Regression: /, /my, dashboard(시도·구), rankings 4종, transactions, apt 상세 전부 200.
+admin API 4종 success:true, admin 페이지 4종 정상 렌더(거부 메시지 없음).
+cron 라우트는 4가지 형태 모두 401 유지, 미로그인 /admin/* 307→/my 유지.
+
+DB 변경: RENT INSERT 90, RENT UPDATE 0, SALE write 0, DELETE 0,
+schema/migration/index 0.
+
+Cron 등록 없음. `vercel.json`은 `regions:["icn1"]` 그대로. Scheduler 계속 OFF —
+sale/rent 모두 수동 호출로만 실행된다.
+
+상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md` §24

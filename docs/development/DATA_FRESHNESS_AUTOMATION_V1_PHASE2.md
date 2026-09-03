@@ -1,7 +1,7 @@
 # DATA FRESHNESS AUTOMATION V1 — PHASE 2: Durable Coverage + Cron Wiring
 
-Status: **SALE ACTIVATED (manual/supervised); RENT still pending; cron schedule NOT registered.**
-See §23 for the first supervised production apply evidence (2026-09-03).
+Status: **SALE and RENT both applied under supervision; cron schedule NOT registered.**
+See §23 (sale) and §24 (rent) for the first production apply evidence (2026-09-03).
 Work start: `main` @ `acee1a6`, worktree preserved (pre-existing user files untouched).
 Cross-links: [Phase 1](./DATA_FRESHNESS_AUTOMATION_V1_PHASE1.md),
 [Phase 1.5](./DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5.md),
@@ -14,9 +14,10 @@ the secret.
 
 Sections 1–22 below describe the wiring work as it stood before activation, and several of them
 (§4 Environment, §5 Schedule) were written when `CRON_SECRET` was still unset and nothing was
-deployed. **§23 supersedes them** and records what is actually true now: the code is deployed,
-`CRON_SECRET` is configured, and the first supervised SALE production apply has run
-(377 inserts, 2 cancellation flips). RENT has still never been applied in production.
+deployed. **§23 and §24 supersede them** and record what is actually true now: the code is
+deployed, `CRON_SECRET` is configured, and both first supervised production applies have run —
+SALE (377 inserts, 2 cancellation flips) and RENT (90 inserts, 0 mutations). Neither runs on a
+schedule.
 
 ---
 
@@ -369,3 +370,102 @@ remains factually correct), but the endpoint's own response is **unobserved**.
 RENT production apply, cron registration (`vercel.json` `crons`), and flipping the `/admin/ops`
 scheduler indicator to ACTIVE. SALE is currently **manually triggered only** — there is no
 schedule, so it will not run again on its own.
+
+---
+
+## 24. First supervised RENT production apply (2026-09-03)
+
+Ran on `dpl_CcGBEUy2KzW26edZSR8F9Y9oA6Bv` (icn1, production alias).
+
+**Secret note.** The `CRON_SECRET` scratchpad copy was deleted at the end of the sale step, and
+Vercel **cannot return secret values** — `vercel env pull` writes `[SENSITIVE]` placeholders
+(verified: the extracted string was literally `[SENSITIVE]`). The secret was therefore rotated
+with user approval before this run. Blast radius was nil: its only consumers are the two cron
+routes and no cron is registered. Env count stayed 18, so nothing else was touched.
+
+### Predicted vs actual
+
+Prediction from a production dry-run taken immediately before the apply.
+
+| | Predicted | Actual |
+|---|---|---|
+| Range | 202607–202608 | 202607–202608 |
+| Cells | 32, all `COMPLETE` | identical |
+| Fetched | 6,887 | **6,887** |
+| Inserted | 90 | **90** |
+| Updates | 0 | **0** |
+| Mutation candidates (`needsReview`) | 0 | **0** |
+| Blocked / failed | 0 / 0 | **0 / 0** |
+| Duration | 11.1s | 11.7s |
+
+`status: SUCCESS`, `coverageRecorded: 32`.
+
+### Post-write verification
+
+| Metric | Pre | Post |
+|---|---|---|
+| `apartment_rent_histories` total | 125,320 | **125,410** (+90) |
+| Busan 202607–202608 | 6,797 | **6,887** (+90) |
+| rent rows with `aptSeq` NULL | 0 | **0** |
+| `apartment_trade_histories` | 855,556 | **855,556** (+0) |
+| RENT coverage cells | 0 | **32** |
+| SALE coverage cells | 48 | **48** (unchanged) |
+
+The scope count landed exactly on the source count — 6,887 rows in DB vs 6,887 fetched — so
+source and DB now match completely for the applied months. Inserted rows split
+jeonse 36 / wolse 54.
+
+Forensics on `createdAt` vs the run start timestamp:
+
+```
+inserted rows       : 90   (aptSeq NULL: 0)
+existing rows mutated: 0   <- first-mutation guard held
+```
+
+### Completeness, coverage and identity
+
+- Every `COMPLETE` cell satisfies `sourceTotalCount == fetchedCount` — **0** violations.
+- Coverage written: 16/16 districts for 202607 and 202608 = **32**, all `COMPLETE`.
+- **202609+ coverage cells = 0** — the current month was never recorded.
+- No rent cancellation state was created or inferred; the source has no such field.
+
+### Verified range — unchanged, and that is correct
+
+The range stayed **202408–202608**. Both applied months already sit inside the legacy bootstrap,
+and the next advance candidate (202609) is the in-progress current month, which the guard refuses.
+Rent coverage can first advance in **October 2026**, once 202609 is a completed month and all 16
+districts sync `COMPLETE`.
+
+### Idempotency
+
+Identical scope re-run: same 6,887 fetched, **0 inserted, 0 updated, 0 blocked, 0 failed**.
+
+### /admin/ops (now readable by the operator)
+
+Matches the database exactly — RENT: scheduler `OFF`, 총 row 125,410, 동기화 coverage(DB)
+**32 cells COMPLETE** (last verified 14:13), 검증 범위 202408–202608, legacy bootstrap shown, and
+the "source has no cancellation field" warning intact. SALE regression: scheduler `OFF`,
+coverage still **48 cells COMPLETE**.
+
+### Regression
+
+All 200: `/`, `/my`, dashboard (sido + district), rankings (area84/rise/decline/record-high),
+transactions, apartment detail. All four admin APIs return `success: true` and all four admin
+pages render for the admin session with no denial message. Cron routes remain **401** on all four
+shapes (with/without `?mode=apply`). Unauthenticated `/admin/*` still 307 → `/my`.
+
+### Admin dashboard overflow fix
+
+Fixed in the same session. `.errorMessage` had no wrapping rule, so a space-less error string
+rendered 1002px wide and dragged its parent card out with it. Measured on production via
+same-origin iframes, before → after:
+
+| Viewport | Before (`scrollWidth`/`clientWidth`) | After |
+|---|---|---|
+| 360px | 1059 / 345 — overflow | **345 / 345 — none** |
+| 375px | 1059 / 360 — overflow | **360 / 360 — none** |
+| 390px | 1059 / 375 — overflow | **375 / 375 — none** |
+| 1280px | — | **1265 / 1265 — none** |
+
+`overflow-wrap: anywhere` (not `break-word`, which is not taken into account when computing
+min-content width). All 20 error messages still render; no structural change.
