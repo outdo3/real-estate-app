@@ -14679,3 +14679,47 @@ Production DB 쓰기 0건. schema/migration/index 변경 0. Cron 무영향.
 
 **PM 판단 필요**: 3.9GB를 실제로 없애려면 `cacheComponents: true` + `'use cache: remote'`
 (플랫폼 유료 캐시) 승인이 필요하다.
+
+## 2026-09-03
+
+### SUPABASE EGRESS P1 CLEANUP V1 — 남은 안전한 낭비 2건 제거 + 1건 audit 후 미실행
+
+**1) search-alias-fallback — 전체 테이블 스캔 → bounding box (-99.96%)**
+80m 반경 질문에 답하려고 geocoded ApartmentMaster **전 행**을 읽어 JS haversine을
+돌리고 있었다. POI 주변 bounding box로 DB에서 먼저 좁히고, 최종 판정은 **기존과 동일한
+haversine**으로 한다.
+
+정확성이 이 변경의 전부다. 규칙이 "반경 80m 안에 정확히 1개면 채택, 0개/2개 이상이면
+모호하므로 거부"라서, box가 반경 안의 row를 하나라도 누락하면 "2개라 거부"여야 할
+상황이 "1개 → 채택"으로 바뀌어 **다른 단지를 자신 있게 반환**하게 된다. 그래서 box를
+넉넉히(margin 1.3배) 잡고, `geo-bounding-box.test.mjs`가 예시 하나가 아니라
+**360개 방위각 × 4개 위도 × 4개 반경**에서 superset 성질을 전수 검증한다.
+
+실측: **3,401행 / 700.3KB / 1009ms → 1.3행 / 0.28KB / 41ms** (행·바이트 -99.96%),
+테스트한 모든 POI에서 반경 내 결과 집합 **완전 동일**.
+
+Production 실증(이 폴백이 존재하는 바로 그 사례): `경동마리나` 검색 →
+canonical `name:"경동", aptSeq:"26350-2", lawdCd:26350, dong:우동` 반환,
+별칭은 `matchNote:"경동마리나아파트"`로만 표시. identity 규칙(canonical 값만 반환,
+모호하면 거부, name-only 매칭 추가 없음) 그대로.
+
+**2) admin/dashboard — client-side distinct → COUNT(DISTINCT) (68행 → 1행)**
+Prisma의 `distinct`는 **가져온 뒤** 중복을 제거하므로, 오늘 고유 세션 수를 세려고
+오늘 page_view 행을 전부 전송받고 있었다. 소비처는 `.length` 하나뿐이다.
+`page_views.session_id`가 NOT NULL이라 `COUNT(DISTINCT session_id)`와 정확히 동치임을
+스키마로 확인하고, 옛 경로와 값 비교로 재확인: **오늘 8=8, 30일 298=298**.
+전송 행수 오늘 68→1(30일 스케일이면 2,806→1). 옆에 있던 `activeSession.findMany`도
+select 없이 전체 컬럼을 받아 `.length`만 쓰고 있어 `count()`로 교체(0=0).
+
+**3) rankings/pyeong — audit 후 의도적으로 미변경**
+`resolveTrustworthyPyeongBatch`가 route cache 밖에 있는 것은 사실이지만, `apartments`
+테이블이 **71행 / P0 이후 전체 16.9KB**라 최악의 경우에도 옮기는 바이트가 미미하다.
+`getOrSetCache` 안으로 넣으면 캐시 저장 shape이 바뀌는데 그 자리 기존 주석이 캐시 오염
+위험을 명시하고 있고, 이득은 P1에서 "Vercel에서 거의 히트하지 않는다"고 측정된 그
+in-process 캐시에 달려 있다. 위험 대비 이득이 없어 **구현하지 않고 보고만** 한다.
+
+배포 `dpl_AJ3aCjd5dE5DMAcEp2T9Q7JX7DDa`, production alias, 전 function icn1.
+Regression: /, /my, /map, search(일반·별칭), transactions, dashboard,
+price-rankings 4종, rankings, apt 상세 전부 200. cron 401 유지. **Production DB 쓰기 0**.
+테스트 393/396(실패 3개 기존 무관), tsc src/ 0, build·lint 통과.
+schema/migration/index 변경 0, cache architecture 변경 0.
