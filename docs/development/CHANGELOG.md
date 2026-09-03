@@ -14443,3 +14443,53 @@ Cron 등록 없음. `vercel.json`은 `regions:["icn1"]` 그대로. Scheduler 계
 sale/rent 모두 수동 호출로만 실행된다.
 
 상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md` §24
+
+## 2026-09-03
+
+### ADMIN MOBILE RESPONSIVE FIX V1 — 관리자 화면 모바일 가로 스크롤 root cause 수정
+
+운영자가 Android 실기기에서 /admin/ops 가로 스크롤·우측 빈 영역·콘텐츠 잘림을
+보고했다. 직전의 `.errorMessage` 수정은 /admin/dashboard의 특정 문자열 하나만
+해결한 것이었고, 이번엔 admin 전체 layout을 전수 점검했다.
+
+**측정 방법 정정(중요)**: 처음 iframe 측정에서 /admin/ops가 PASS로 나왔으나,
+이는 데이터 로딩 중("불러오는 중입니다") 빈 화면을 잰 것이었다. 콘텐츠 렌더 완료를
+명시적으로 기다리도록 고친 뒤에야 실제 문제가 재현됐다 — **360px에서
+/admin/ops scrollWidth 469 vs clientWidth 345, /admin/behavior 519 vs 345**.
+
+**root cause(단일 원인)**: flex/grid 자식의 기본값 `min-width: auto` 때문에 자식이
+내용의 min-content 폭 아래로 줄어들지 못한다. 이 화면들에는 줄바꿈 지점이 없는 긴
+문자열이 실제로 들어온다 — provenance 경로
+`docs/development/TRADE_CANCELLATION_RESYNC_V2_24M.md (5723469)`, DB 인덱스명
+`apartment_trade_histories_group_key_deal_amount_deal_date_f_key` 등. 그 min-content
+폭이 `.kv → .kvGrid → .section → document`로 그대로 전파돼 문서 자체가 viewport보다
+넓어지고, 그래서 header까지 함께 밀렸다. 겉으로는 card/statRow 같은 레이아웃 컨테이너가
+범인처럼 보이지만 실제 원인은 그 안의 텍스트다.
+
+**수정**: 해당 flex/grid item에 `min-width: 0`(축소 허용) + `overflow-wrap: anywhere`
+(실제 줄바꿈)를 적용. 4개 admin stylesheet 모두에 동일 방어 적용(dashboard/users는
+현재 데이터로는 통과하지만 긴 검색어·단지명·이메일로 재발 가능).
+`body { overflow-x: hidden }`은 **쓰지 않았다** — 증상만 가리고 콘텐츠를 잘라낸다.
+ops의 표는 기존 `.tableWrap { overflow-x: auto }`를 그대로 유지해 표 내부에서만
+스크롤된다(page 전체를 밀지 않음). dashboard `.rankName`의 의도적
+nowrap+ellipsis 잘림도 그대로 유지된다(overflow-wrap이 nowrap을 덮지 못함).
+정보 삭제·숨김 없음, 컬럼 수/breakpoint 변경 없음.
+
+**Production 실측(배포 후, 4 page × 5 viewport = 20건 전부 PASS,
+scrollWidth ≤ clientWidth, 콘텐츠 렌더 확인됨)**:
+
+| page | 360 | 375 | 390 | 412 | 1280 |
+|---|---|---|---|---|---|
+| /admin/ops | 345/345 | 360/360 | 375/375 | 397/397 | 1265/1265 |
+| /admin/behavior | 345/345 | 360/360 | 375/375 | 397/397 | 1265/1265 |
+| /admin/dashboard | 345/345 | 360/360 | 375/375 | 397/397 | 1265/1265 |
+| /admin/users | 360/360 | 375/375 | 390/390 | 412/412 | 1280/1280 |
+
+배포: `dpl_Ep48EhQf2nLjUpPGt9hmZke1T8zZ`, production alias, 전 function **icn1**.
+
+Regression: SALE scheduler OFF·coverage 48 COMPLETE, RENT scheduler OFF·coverage
+32 COMPLETE, verified range 202408~202608, rent row 125,410 / trade 부산 855,424
+(전부 무변경), 취소필드 부재 안내 유지. 미로그인 /admin/* 307→/my, admin API 401,
+cron 라우트 401 유지. /, /my, /map, dashboard·rankings·transactions·apt 상세 전부 200.
+
+DB 변경: 없음(CSS 전용). Cron 등록 없음, `vercel.json` 무변경, scheduler 계속 OFF.
