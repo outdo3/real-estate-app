@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
+import { Shield } from 'lucide-react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import type { FavoriteInput } from '@/lib/favorites';
@@ -138,17 +139,14 @@ export default function MyPage() {
                 </div>
               </div>
 
-              {/* 관리자 대시보드 */}
-              {session.user.role === 'ADMIN' && (
+              {/* ADMIN_ACCESS_FIX_V1 §3 — 관리자 진입점은 하나로 모은다. 예전에는 여기에
+                  3개, 아래 "바로가기"에 회원관리 1개가 따로 흩어져 있었다. 이제 /admin/dashboard가
+                  관리자 메인이고 나머지 관리자 화면은 거기서 이동한다. 일반 사용자에게는
+                  이 블록 자체가 렌더되지 않는다(서버가 계산한 isAdmin 기준). */}
+              {session.user.isAdmin && (
                 <div className={styles.section}>
                   <Link href="/admin/dashboard" className={styles.linkCard}>
-                    ⚙️ 관리자 대시보드
-                  </Link>
-                  <Link href="/admin/behavior" className={styles.linkCard}>
-                    📊 사용자 행동 분석
-                  </Link>
-                  <Link href="/admin/ops" className={styles.linkCard}>
-                    데이터 운영 센터
+                    <Shield size={16} aria-hidden="true" /> 관리자
                   </Link>
                 </div>
               )}
@@ -238,11 +236,6 @@ export default function MyPage() {
                 <Link href="/community/write" className={styles.linkCard}>
                   ✏️ 새 글 작성하기
                 </Link>
-                {session.user.role === 'ADMIN' && (
-                  <Link href="/admin/users" className={styles.linkCard}>
-                    🛡️ 회원 관리 (관리자)
-                  </Link>
-                )}
               </div>
 
               <button className={styles.logoutBtn} onClick={() => signOut({ callbackUrl: '/' })}>

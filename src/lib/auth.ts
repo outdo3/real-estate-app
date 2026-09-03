@@ -4,6 +4,7 @@ import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import KakaoProvider from 'next-auth/providers/kakao';
 import GoogleProvider from 'next-auth/providers/google';
 import { prisma } from '@/lib/prisma';
+import { isAdminSessionUser } from '@/lib/admin-access';
 
 interface NaverProfile {
   resultcode: string;
@@ -96,6 +97,16 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = token.id as string;
         (session.user as any).role = token.role as string;
         (session.user as any).banned = token.banned as boolean;
+        // ADMIN_ACCESS_FIX_V1 — 관리자 여부를 **서버에서** 계산해 세션에 boolean 하나로만
+        // 실어 보낸다. 클라이언트에는 ADMIN_EMAIL 값이나 허용 목록이 절대 나가지 않는다.
+        // 화면(관리자 메뉴/페이지)은 이 값으로 UI를 결정하고, 실제 데이터 접근은 여전히
+        // 서버의 requireAdmin()과 proxy 가드가 지킨다 — 클라이언트 값만으로 권한을 주지
+        // 않는다. 세션 콜백은 매 요청 토큰에서 다시 계산되므로, ADMIN_EMAIL을 새로 설정하면
+        // 재로그인 없이도 즉시 반영된다(JWT의 role과 달리).
+        (session.user as any).isAdmin = isAdminSessionUser({
+          role: token.role as string | undefined,
+          email: (token.email as string | undefined) ?? session.user.email,
+        });
       }
       return session;
     },

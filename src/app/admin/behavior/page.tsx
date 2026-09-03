@@ -29,7 +29,10 @@ function num(n: number): string {
 // 강하게 표현하지 않는다. 카드 라벨/보조문구에서 "브라우저 세션 기준" 임을 항상 밝힌다.
 export default function AdminBehaviorPage() {
   const { data: session, status } = useSession();
-  const isAdmin = session?.user?.role === 'ADMIN';
+  // ADMIN_ACCESS_FIX_V1 — role만 보면 ADMIN_EMAIL로 부트스트랩된 운영자가 proxy/API는
+  // 통과하고도 이 화면에서만 non-admin으로 판정돼 데이터를 아예 요청하지 않았다.
+  // 서버가 계산해 세션에 실어준 isAdmin을 쓴다(실제 권한은 서버가 다시 검증).
+  const isAdmin = session?.user?.isAdmin === true;
   const [range, setRange] = useState<AnalyticsRange>('7d');
 
   const { data, isLoading, error: swrError } = useSWR(

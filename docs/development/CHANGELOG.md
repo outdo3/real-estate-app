@@ -14329,3 +14329,57 @@ schema/migration 변경, 전국 확장. **SALE은 현재 스케줄이 없어 수
 상태: SALE 활성화(수동/감독), RENT 대기.
 
 상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md` §23
+
+## 2026-09-03
+
+### ADMIN ACCESS FIX V1 — 운영자 관리자 접근 복구 + 관리자 진입 UX
+
+운영자가 `/admin/*`에 한 번도 진입하지 못하고 계속 홈으로 redirect되던 문제를
+근본 원인부터 해결. **독립적인 두 개의 결함**이 있었다.
+
+**원인 A — 관리자가 아무도 없다.** `src/proxy.ts`(Next 16 middleware,
+matcher `/admin/:path*`)는 `role==='ADMIN'` 또는 로그인 이메일이
+`ADMIN_EMAIL`과 일치할 때만 통과시킨다. Production 실측: 사용자 5명 전원
+role=USER, **ADMIN 0명**, 그리고 Vercel Production에 **ADMIN_EMAIL 미설정**.
+두 조건 모두 거짓이라 전원 홈으로 redirect — 최초 관리자가 없어 생긴 부트스트랩
+교착이었다(가드 자체의 버그가 아님).
+
+**원인 B — 페이지 판정이 API 판정과 달랐다.** `requireAdmin()`과 proxy는
+`role || ADMIN_EMAIL`인데 `src/app/admin/*/page.tsx`는 **role만** 봤다. 그래서
+ADMIN_EMAIL로 부트스트랩해도 proxy·API는 통과하고 페이지만 스스로를 non-admin으로
+판정 → SWR key가 null → 요청 자체를 안 보내고 "관리자만 접근할 수 있는 페이지입니다"만
+표시됐을 것이다(원인 A만 고쳤으면 여전히 빈 화면이었다).
+
+**해결**: 기존 `ADMIN_EMAIL` allowlist를 그대로 사용(schema 변경·DB 쓰기 없음).
+판정 로직을 `src/lib/admin-access.ts` 한 곳으로 모으고(순환 import 회피 + proxy
+런타임 안전), 세션 콜백이 서버에서 계산한 **boolean `isAdmin` 하나만** 세션에 실어
+보낸다 — 관리자 이메일 목록은 클라이언트 번들에 절대 나가지 않는다. 세션 콜백이 매
+요청 토큰에서 재계산하므로 ADMIN_EMAIL 설정 시 **재로그인 없이 즉시 반영**된다.
+
+**접근 UX**: 미로그인 → `/my`(기존 AuthGate가 로그인 모달 자동 오픈, 새 UI 없음),
+로그인+비관리자 → `/`(기존 유지 — 관리자 경로 존재 비노출 정책 보존), 관리자 → 정상 진입.
+
+**관리자 내비게이션**: `/my`에 이미 있던 관리자 메뉴가 두 곳에 흩어져 있어 중복 제작
+대신 정리 — 단일 "관리자" 진입점 → `/admin/dashboard`(관리자 메인)에서 운영 현황/
+사용자 행동/사용자 관리로 이동. 이모지는 프로젝트 UI 원칙대로 lucide 아이콘으로 교체,
+360px 모바일 기준 줄바꿈·44px 터치 타깃·디자인 토큰 사용.
+
+**/admin/ops 정합성**: sale sync 상태가 git-tracked 파일 manifest(과거 CLI QA 기록,
+3 cells)만 보여줘서 Phase 2의 377건 apply 이후에도 "아무 일 없음"처럼 보였다. sale·rent
+양쪽에 **DB 기반 실시간 coverage**를 추가하고 파일 숫자는 과거 기록임을 명시. 브라우저
+실측: SALE scheduler OFF + coverage 48 cells COMPLETE, RENT scheduler OFF + coverage
+0 cells + 검증범위 202408~202608 + 취소필드 부재 안내 유지. 새 schema 없음.
+
+테스트: admin 판정 유닛테스트 9개 신규(빈 문자열 ADMIN_EMAIL이 전원 통과시키지 않는지
+등 fail-closed 경계 포함) 전부 통과. 로컬 dev 서버에 NextAuth JWT를 발급해 실제 동작
+검증 — 미로그인 307→/my, 비관리자 307→/, ADMIN_EMAIL 일치 200(거부 메시지 없음),
+role=ADMIN 200, ADMIN_EMAIL 미설정 시 fail-closed. 전체 371개 중 368개 통과(실패 3개는
+기존 무관 실패). tsc src/ 에러 0, build 성공, 변경 파일 eslint 에러 0.
+
+DB 변경: 없음(schema/migration/index 0, 데이터 쓰기 0).
+
+**남은 운영자 작업**: Vercel Production에 `ADMIN_EMAIL`을 운영자 실제 로그인 이메일로
+설정. 주의 — Production 5명 중 이메일 보유자는 2명뿐이라, 이메일을 주지 않는 소셜
+로그인 계정이면 env 경로가 동작하지 않고 DB role 승격이 대안이다.
+
+상세: `docs/development/ADMIN_ACCESS_FIX_V1.md`

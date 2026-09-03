@@ -8,6 +8,9 @@ declare module 'next-auth' {
       id: string;
       role: 'GUEST' | 'USER' | 'VERIFIED' | 'ADMIN';
       banned: boolean;
+      // ADMIN_ACCESS_FIX_V1 — 서버에서 계산된 관리자 여부(role 승격 또는 ADMIN_EMAIL
+      // 부트스트랩). UI 노출 판단에만 쓰고, 실제 권한은 서버가 다시 검증한다.
+      isAdmin: boolean;
     } & DefaultSession['user'];
   }
 }

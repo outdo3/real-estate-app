@@ -51,7 +51,10 @@ function EvidenceBadge({ type }: { type: string }) {
 
 export default function AdminOpsPage() {
   const { data: session, status } = useSession();
-  const isAdmin = session?.user?.role === 'ADMIN';
+  // ADMIN_ACCESS_FIX_V1 — role만 보면 ADMIN_EMAIL로 부트스트랩된 운영자가 proxy/API는
+  // 통과하고도 이 화면에서만 non-admin으로 판정돼 데이터를 아예 요청하지 않았다.
+  // 서버가 계산해 세션에 실어준 isAdmin을 쓴다(실제 권한은 서버가 다시 검증).
+  const isAdmin = session?.user?.isAdmin === true;
 
   const { data, isLoading, error: swrError } = useSWR(
     isAdmin ? '/api/admin/ops' : null,
@@ -190,6 +193,21 @@ export default function AdminOpsPage() {
                 </div>
                 <div className={styles.kv}><span>다음 예정 수집</span><b>자동 일정 없음</b></div>
               </div>
+              {/* ADMIN_ACCESS_FIX_V1 §5 — 위 숫자들은 git-tracked 파일 manifest(과거 CLI QA
+                  실행 기록)이라, Cron 경로로 실제 적용된 결과는 여기에 반영되지 않는다.
+                  실제 적용 상태는 아래 DB coverage가 사실이다 — 둘을 나란히 보여주고 출처를
+                  분명히 밝혀, 파일 숫자가 최신 상태인 것처럼 오해하지 않게 한다. */}
+              <div className={styles.kvGrid}>
+                <div className={styles.kv}>
+                  <span>동기화 coverage(DB) <EvidenceBadge type={d.incrementalSync.coverageCells.evidenceType} /></span>
+                  <b>{d.incrementalSync.coverageCells.total}개 cell</b>
+                  <span className={styles.kvNote}>
+                    {d.incrementalSync.coverageCells.total === 0
+                      ? '아직 Cron 경로로 적용된 기록이 없다(위 숫자는 과거 CLI QA 실행 기록이다).'
+                      : `${Object.entries(d.incrementalSync.coverageCells.byStatus).map(([k, v]) => `${k} ${v}`).join(' · ')} · 최근 검증 ${formatDateTime(d.incrementalSync.coverageCells.latestVerifiedAt)}`}
+                  </span>
+                </div>
+              </div>
             </section>
 
             {/* 섹션 D-2 — Rent(전월세) Coverage */}
@@ -212,6 +230,23 @@ export default function AdminOpsPage() {
                   <span className={styles.kvNote}>{d.rentCoverage.scheduler.note}</span>
                 </div>
                 <div className={styles.kv}><span>다음 예정 수집</span><b>자동 일정 없음</b></div>
+              </div>
+              {/* ADMIN_ACCESS_FIX_V1 §5 — rent coverage도 파일이 아니라 DB가 사실이다. */}
+              <div className={styles.kvGrid}>
+                <div className={styles.kv}>
+                  <span>동기화 coverage(DB) <EvidenceBadge type={d.rentCoverage.coverageCells.evidenceType} /></span>
+                  <b>{d.rentCoverage.coverageCells.total}개 cell</b>
+                  <span className={styles.kvNote}>
+                    {d.rentCoverage.coverageCells.total === 0
+                      ? '아직 적용된 rent sync 기록이 없다 — 검증 범위는 아래 legacy bootstrap 기준이다.'
+                      : `${Object.entries(d.rentCoverage.coverageCells.byStatus).map(([k, v]) => `${k} ${v}`).join(' · ')} · 최근 검증 ${formatDateTime(d.rentCoverage.coverageCells.latestVerifiedAt)}`}
+                  </span>
+                </div>
+                <div className={styles.kv}>
+                  <span>legacy bootstrap</span>
+                  <b>{d.rentCoverage.legacyBootstrap ? `${d.rentCoverage.legacyBootstrap.from} ~ ${d.rentCoverage.legacyBootstrap.to}` : '정보 없음'}</b>
+                  <span className={styles.kvNote}>{d.rentCoverage.coverageCells.note}</span>
+                </div>
               </div>
               <div className={styles.noteStrong}>{d.rentCoverage.note}</div>
             </section>

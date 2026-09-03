@@ -16,23 +16,11 @@ export async function requireUser() {
   return { error: null, status: 200 as const, user };
 }
 
-// role이 아직 DB에서 ADMIN으로 승격되지 않은 상태에서도(예: 최초 관리자 부트스트랩)
-// 환경변수 ADMIN_EMAIL과 로그인 이메일이 일치하면 관리자로 취급한다 — role 컬럼 하나만
-// 신뢰 소스로 두면 배포 초기에 "아무도 ADMIN이 아니라 아무도 admin 화면에 못 들어가는"
-// 상황이 생긴다.
-function isAdminByEnvEmail(email: string | null | undefined): boolean {
-  const adminEmail = process.env.ADMIN_EMAIL;
-  return !!adminEmail && !!email && email.toLowerCase() === adminEmail.toLowerCase();
-}
-
-// ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2 — requireAdmin()과 동일한 판정을
-// analytics 트래픽 제외 로직(src/lib/analytics/traffic-classification.ts)에서도
-// 그대로 재사용한다. 판정 로직을 두 곳에 따로 두면 나중에 한쪽만 바뀌어
-// admin 판정이 갈리는 위험이 있다.
-export function isAdminSessionUser(user: { role?: string | null; email?: string | null } | null | undefined): boolean {
-  if (!user) return false;
-  return user.role === 'ADMIN' || isAdminByEnvEmail(user.email);
-}
+// ADMIN_ACCESS_FIX_V1 — 판정 로직 자체는 src/lib/admin-access.ts 한 곳에 있다(그 파일
+// 헤더에 왜 분리했는지 기록). 여기서는 기존 import 경로를 깨지 않도록 그대로 re-export만
+// 한다 — traffic-classification.ts 등 기존 소비처가 계속 이 모듈에서 가져다 쓴다.
+export { isAdminSessionUser } from './admin-access';
+import { isAdminSessionUser } from './admin-access';
 
 export async function requireAdmin() {
   const user = await getCurrentUser();

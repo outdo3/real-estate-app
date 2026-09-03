@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { BarChart3, Database, Users } from 'lucide-react';
 import useSWR from 'swr';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
@@ -31,7 +33,10 @@ function formatTime(iso: string) {
 
 export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
-  const isAdmin = session?.user?.role === 'ADMIN';
+  // ADMIN_ACCESS_FIX_V1 — role만 보면 ADMIN_EMAIL로 부트스트랩된 운영자가 proxy/API는
+  // 통과하고도 이 화면에서만 non-admin으로 판정돼 데이터를 아예 요청하지 않았다.
+  // 서버가 계산해 세션에 실어준 isAdmin을 쓴다(실제 권한은 서버가 다시 검증).
+  const isAdmin = session?.user?.isAdmin === true;
 
   const { data, isLoading, error: swrError } = useSWR(
     isAdmin ? '/api/admin/dashboard' : null,
@@ -90,6 +95,21 @@ export default function AdminDashboardPage() {
             <div className={styles.emptyState}>⚠️ {fetchError}</div>
           ) : d ? (
             <>
+              {/* ADMIN_ACCESS_FIX_V1 §3 — /admin/dashboard가 관리자 메인 진입점이다.
+                  다른 관리자 화면으로 가는 경로가 여기 없어서, 운영자가 URL을 직접
+                  입력하지 않으면 이동할 방법이 없었다. */}
+              <nav className={styles.adminNav} aria-label="관리자 메뉴">
+                <Link href="/admin/ops" className={styles.adminNavLink}>
+                  <Database size={16} aria-hidden="true" /> 운영 현황
+                </Link>
+                <Link href="/admin/behavior" className={styles.adminNavLink}>
+                  <BarChart3 size={16} aria-hidden="true" /> 사용자 행동
+                </Link>
+                <Link href="/admin/users" className={styles.adminNavLink}>
+                  <Users size={16} aria-hidden="true" /> 사용자 관리
+                </Link>
+              </nav>
+
               <div className={styles.grid}>
                 {/* 1. 트래픽 요약 */}
                 <div className={styles.card}>
