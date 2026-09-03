@@ -43,6 +43,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 import { PrismaClient, Prisma } from '@prisma/client';
 import { getSigunguListForSido } from '../src/lib/region-utils';
 import { normalizeMolitItemsToTradeRows, type TradeRowInput } from './trade-history-logic';
+import { buildCancellationUpdateFields } from './cancellation-write-guard';
 import { fetchSaleRegionMonth } from './sale-molit-fetch';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -191,9 +192,14 @@ async function upsertRows(rows: TradeRowInput[]): Promise<{ persisted: number }>
           update: {
             // §9 CORRECTION — 자연키 밖 필드만 갱신(취소 상태/등기일자/최근 확인 시각).
             // 자연키 자체(금액/일자/층/그룹)가 바뀌면 새 row로 취급한다(모델 주석 근거).
-            dealCanceled: row.dealCanceled,
-            cancelDate: row.cancelDate,
-            registryDate: row.registryDate,
+            //
+            // SALE_CANCELLATION_COVERAGE_V1 §8 FAIL-SAFE — 예전에는 여기서
+            // `dealCanceled: row.dealCanceled`를 무조건 써서 이미 보정된 true를 원천이
+            // false로 되돌릴 수 있었다(V1 §3에서 지적된 repo의 유일한 역전 경로).
+            // 이제 원천이 비취소면 cancellation 필드를 **생략**해 기존 값을 보존한다 —
+            // write-policy-logic의 `updateTrueToFalseSkipped` 정책과 같은 결과를 legacy
+            // upsert 경로에서도 구조적으로 보장한다.
+            ...buildCancellationUpdateFields(row),
             aptName: row.aptName, // 표기 오타 정정 등 사소한 갱신 허용(자연키 아님)
             jibun: row.jibun ?? undefined,
             buildYear: row.buildYear ?? undefined,

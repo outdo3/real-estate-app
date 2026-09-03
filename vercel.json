@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/rent-sync?mode=apply",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/sale-recheck?mode=apply",
+      "schedule": "0 23 * * *"
     }
   ]
 }

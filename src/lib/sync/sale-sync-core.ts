@@ -128,7 +128,12 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
   return summary;
 }
 
-async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: SyncMode, log: (line: string) => void): Promise<CellReport> {
+/**
+ * SALE_CANCELLATION_COVERAGE_V1 §4 — recheck sweep이 **이 함수를 그대로 재사용한다**.
+ * fetch/completeness/identity/write-policy 판정을 복제하지 않기 위해 export만 추가했고
+ * 본문은 변경하지 않았다(shared.ts §4 원칙: "두 경로가 서로 다른 판정 로직을 갖지 않는다").
+ */
+export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: SyncMode, log: (line: string) => void): Promise<CellReport> {
   const fetchResult = await fetchSaleRegionMonth(lawdCd, dealYmd);
   const base: CellReport = {
     lawdCd,

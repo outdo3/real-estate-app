@@ -233,6 +233,30 @@ export default function AdminOpsPage() {
                   </span>
                 </div>
               </div>
+              {/* SALE_CANCELLATION_COVERAGE_V1 §9 — daily overlap 바깥(4~12개월)의 late
+                  cancellation을 훑는 별도 sweep. daily sync와 같은 칸에 섞지 않는다. */}
+              <div className={styles.kvGrid}>
+                <div className={styles.kv}>
+                  <span>취소 recheck sweep <EvidenceBadge type={d.incrementalSync.recheckSweep.scheduler.evidenceType} /></span>
+                  <b>
+                    {d.incrementalSync.recheckSweep.scheduler.value}
+                    {d.incrementalSync.recheckSweep.scheduler.scheduleKst ? ` · ${d.incrementalSync.recheckSweep.scheduler.scheduleKst}` : ''}
+                  </b>
+                  <span className={styles.kvNote}>
+                    {`${d.incrementalSync.recheckSweep.bandMonthsBack.from}~${d.incrementalSync.recheckSweep.bandMonthsBack.to}개월 전 구간 · `}
+                    {d.incrementalSync.recheckSweep.note}
+                  </span>
+                </div>
+                <div className={styles.kv}>
+                  <span>sweep 마지막 실행 <EvidenceBadge type={d.incrementalSync.recheckSweep.evidenceType} /></span>
+                  <b>{formatDateTime(d.incrementalSync.recheckSweep.lastRunAt)}</b>
+                  <span className={styles.kvNote}>
+                    {d.incrementalSync.recheckSweep.lastRunId
+                      ? `runId ${d.incrementalSync.recheckSweep.lastRunId} · sweep이 마지막으로 검증한 cell ${d.incrementalSync.recheckSweep.cellsCoveredBySweep}개`
+                      : '아직 sweep이 coverage를 기록한 적이 없다.'}
+                  </span>
+                </div>
+              </div>
             </section>
 
             {/* 섹션 D-2 — Rent(전월세) Coverage */}

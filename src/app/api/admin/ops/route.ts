@@ -10,8 +10,9 @@ import { summarizeManifest, computeOverallHealth, computeCancellationVerdict, OV
 // DATA_FRESHNESS_AUTOMATION_V1_PHASE2 §23/§24 — 검증범위와 coverage는 이제 DB
 // (sync_coverage_cells)에서 온다. legacyBootstrap만 여전히 정적 파일에서 읽는다(런타임에
 // 변하지 않는 provenance라 durability 문제가 없다).
-import { getRentVerifiedRange, readLegacyBootstrap, summarizeCoverage } from '@/lib/sync-coverage';
+import { getRentVerifiedRange, readLegacyBootstrap, summarizeCoverage, summarizeSaleRunKinds } from '@/lib/sync-coverage';
 import { readCronRegistration } from '@/lib/cron-schedule';
+import { SALE_RECHECK_MAX_MONTHS_BACK, SALE_RECHECK_MIN_MONTHS_BACK } from '@/lib/sync/shared';
 
 export const dynamic = 'force-dynamic';
 
@@ -162,16 +163,19 @@ async function buildSummary() {
   const rentBusanCoveredCount = rentBusanCoveredGroups.length;
   // PHASE2 §23 — coverage는 파일이 아니라 DB에서 라이브로 읽는다. legacyBootstrap은
   // 정적 provenance라 여전히 파일 기준이다.
-  const [rentVerifiedRange, rentCoverageSummary, saleCoverageSummary] = await Promise.all([
+  const [rentVerifiedRange, rentCoverageSummary, saleCoverageSummary, saleRunKinds] = await Promise.all([
     getRentVerifiedRange(),
     summarizeCoverage('RENT'),
     summarizeCoverage('SALE'),
+    // SALE_CANCELLATION_COVERAGE_V1 §9 — daily sync와 recheck sweep을 같은 칸에 섞지 않는다.
+    summarizeSaleRunKinds(),
   ]);
   const rentLegacyBootstrap = readLegacyBootstrap();
   // CRON ACTIVATION §8 — scheduler 상태를 코드에 하드코딩하지 않고 배포된 vercel.json에서
   // 실제 등록 여부를 읽는다. 등록(SCHEDULED)과 "무인 실행 성공"은 분리해서 표시한다.
   const saleCron = readCronRegistration('/api/cron/sale-sync');
   const rentCron = readCronRegistration('/api/cron/rent-sync');
+  const saleRecheckCron = readCronRegistration('/api/cron/sale-recheck');
 
   return {
     overall: {
@@ -245,11 +249,28 @@ async function buildSummary() {
       },
       lastRun: {
         evidenceType: 'LIVE' as EvidenceType,
-        runId: saleCoverageSummary.latestRunId,
-        at: saleCoverageSummary.latestVerifiedAt,
-        note: 'coverage를 마지막으로 기록한 실행. 이 값이 갱신되지 않으면 예약된 실행이 실제로 적용되지 않은 것이다.',
+        // §9 — recheck sweep 실행은 제외한다. 섞으면 daily sync가 멈춰도 정상처럼 보인다.
+        runId: saleRunKinds.daily.runId,
+        at: saleRunKinds.daily.at,
+        note: 'daily sale-sync가 coverage를 마지막으로 기록한 실행(recheck sweep 제외). 이 값이 갱신되지 않으면 예약된 실행이 실제로 적용되지 않은 것이다.',
       },
       nextScheduledSync: { value: saleCron.scheduleKst, evidenceType: 'CONFIG' as EvidenceType },
+      // SALE_CANCELLATION_COVERAGE_V1 §9 — daily overlap(3개월) 바깥의 late cancellation을
+      // 훑는 별도 sweep. daily sync와 완전히 분리해서 표시한다.
+      recheckSweep: {
+        evidenceType: 'LIVE' as EvidenceType,
+        scheduler: {
+          value: saleRecheckCron.state,
+          evidenceType: 'CONFIG' as EvidenceType,
+          scheduleUtc: saleRecheckCron.scheduleUtc,
+          scheduleKst: saleRecheckCron.scheduleKst,
+        },
+        bandMonthsBack: { from: SALE_RECHECK_MAX_MONTHS_BACK, to: SALE_RECHECK_MIN_MONTHS_BACK },
+        lastRunId: saleRunKinds.recheck.runId,
+        lastRunAt: saleRunKinds.recheck.at,
+        cellsCoveredBySweep: saleRunKinds.recheck.cells,
+        note: `취소 지연 실측 p99 11.8개월. daily overlap 3개월이 못 덮는 ${SALE_RECHECK_MIN_MONTHS_BACK}~${SALE_RECHECK_MAX_MONTHS_BACK}개월 구간을 예산이 허용하는 만큼 "가장 오래 확인 안 된 셀부터" 매일 훑는다. 한 번에 band 전체를 돌지 않는 것이 정상이다.`,
+      },
     },
     cancellation: {
       lookbackMonths: HISTORICAL_LOOKBACK_MONTHS,

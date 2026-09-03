@@ -123,6 +123,42 @@ export async function recordCoverageCells(
   return { recorded };
 }
 
+/**
+ * SALE_CANCELLATION_COVERAGE_V1 §9 — SALE coverage를 쓰는 실행이 두 종류가 됐다.
+ *   - daily sale-sync   : runId `sale-<iso>`         (최신 3개월)
+ *   - recheck sweep     : runId `sale-recheck-<iso>` (4~12개월 late cancellation)
+ *
+ * `summarizeCoverage().latestRunId`는 "가장 최근에 coverage를 기록한 실행" 하나만
+ * 주므로, sweep이 도입되면 /admin/ops의 "sale 마지막 실행"이 조용히 sweep 실행으로
+ * 바뀌어 **daily sync가 멈춰도 정상처럼 보이게 된다**. 그 왜곡을 막기 위해 두 종류를
+ * 분리해서 읽는다. ADMIN_OPS_V1.2에서 배운 것과 같은 실수(다른 것을 같은 칸에 넣기)를
+ * 반복하지 않는다.
+ */
+const RECHECK_RUN_ID_PREFIX = 'sale-recheck-';
+
+export async function summarizeSaleRunKinds(): Promise<{
+  daily: { runId: string | null; at: string | null };
+  recheck: { runId: string | null; at: string | null; cells: number };
+}> {
+  const [daily, recheck, recheckCells] = await Promise.all([
+    prisma.syncCoverageCell.findFirst({
+      where: { dataset: 'SALE', NOT: { runId: { startsWith: RECHECK_RUN_ID_PREFIX } } },
+      orderBy: { verifiedAt: 'desc' },
+      select: { runId: true, verifiedAt: true },
+    }),
+    prisma.syncCoverageCell.findFirst({
+      where: { dataset: 'SALE', runId: { startsWith: RECHECK_RUN_ID_PREFIX } },
+      orderBy: { verifiedAt: 'desc' },
+      select: { runId: true, verifiedAt: true },
+    }),
+    prisma.syncCoverageCell.count({ where: { dataset: 'SALE', runId: { startsWith: RECHECK_RUN_ID_PREFIX } } }),
+  ]);
+  return {
+    daily: { runId: daily?.runId ?? null, at: daily?.verifiedAt ? daily.verifiedAt.toISOString() : null },
+    recheck: { runId: recheck?.runId ?? null, at: recheck?.verifiedAt ? recheck.verifiedAt.toISOString() : null, cells: recheckCells },
+  };
+}
+
 /** /admin/ops 표시용 — 특정 dataset의 coverage cell 요약(라이브). */
 export async function summarizeCoverage(dataset: SyncDatasetName): Promise<{
   totalCells: number;

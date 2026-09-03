@@ -109,6 +109,69 @@ export function newRunId(prefix: string): string {
 export const RENT_DEFAULT_OVERLAP_MONTHS = 2;
 export const SALE_DEFAULT_OVERLAP_MONTHS = 3;
 
+/**
+ * SALE_CANCELLATION_COVERAGE_V1 §3 — daily overlap(3개월)이 구조적으로 놓치는 구간.
+ *
+ * RECORD_HIGH_TRUST_V1 §6 실측(검증된 C구간 취소 4,727건, `cancelDate - dealDate`):
+ *   p50 0.7 / p75 1.8 / p90 3.1 / p95 4.4 / **p99 11.8** / max 20.6 개월.
+ * 즉 3개월 overlap은 p90까지만 덮고 **10.5%가 3개월 이후**에 취소된다. 그 10.5%는 어떤
+ * 정기 작업으로도 다시 확인되지 않아 부산 기준 연 ~250건씩 "취소됐지만 DB에는 유효"로
+ * 누적된다. p99를 덮으려면 12개월이 필요하다.
+ *
+ * band는 daily overlap **바로 바깥**에서 시작한다(3개월 전 ~ 12개월 전). 중복 fetch를
+ * 만들지 않으면서 12개월 전체를 두 경로가 나눠 덮는다:
+ *   fresh(daily)  : latestComplete-2 ~ 현재월
+ *   recheck(sweep): latestComplete-12 ~ latestComplete-3
+ */
+export const SALE_RECHECK_MIN_MONTHS_BACK = 3;
+export const SALE_RECHECK_MAX_MONTHS_BACK = 12;
+
+/**
+ * recheck band를 계산한다. 전부 `latestComplete` 이하이므로 **완료된 달만** 대상이며,
+ * 진행 중인 현재월은 어떤 경로로도 이 band에 들어올 수 없다.
+ */
+export function resolveSaleRecheckBand(
+  latestComplete: string,
+  subtract: (ym: string, n: number) => string,
+  opts: { minMonthsBack?: number; maxMonthsBack?: number } = {}
+): { from: string; to: string } {
+  const min = opts.minMonthsBack ?? SALE_RECHECK_MIN_MONTHS_BACK;
+  const max = opts.maxMonthsBack ?? SALE_RECHECK_MAX_MONTHS_BACK;
+  // min > max로 호출되면 빈 band가 되도록 그대로 둔다(monthsInRange가 빈 배열을 준다).
+  return { from: subtract(latestComplete, max), to: subtract(latestComplete, min) };
+}
+
+export interface RecheckCell {
+  lawdCd: string;
+  dealYmd: string;
+  /** 이 셀이 마지막으로 원천 대조된 시각(epoch ms). 기록이 없으면 undefined. */
+  lastVerifiedAtMs?: number;
+}
+
+/**
+ * SALE_CANCELLATION_COVERAGE_V1 §5 — **least-recently-verified-first** 정렬.
+ *
+ * 왜 day-of-year rotation이 아닌가: rotation은 셀 수/구 수가 바뀌거나 실행이 하루 걸러
+ * 실패하면 특정 셀이 조용히 굶는다(starvation). 반면 `sync_coverage_cells.verifiedAt`은
+ * 이미 durable하게 저장되고 있으므로, "가장 오래 확인 안 된 셀부터"를 그대로 쓰면
+ * 상태 저장 없이 균등 커버리지가 **자기 교정적으로** 보장된다. 실행이 며칠 밀려도
+ * 밀린 셀이 자동으로 맨 앞에 온다.
+ *
+ * 한 번도 검증된 적 없는 셀이 항상 최우선이다. 동률은 결정적으로 깬다(최신 달 우선 —
+ * 취소가 아직 더 들어올 여지가 큰 쪽, 그 다음 lawdCd 오름차순).
+ */
+export function orderRecheckCellsByStaleness(cells: RecheckCell[]): RecheckCell[] {
+  return [...cells].sort((a, b) => {
+    const av = a.lastVerifiedAtMs;
+    const bv = b.lastVerifiedAtMs;
+    if (av == null && bv != null) return -1;
+    if (av != null && bv == null) return 1;
+    if (av != null && bv != null && av !== bv) return av - bv;
+    if (a.dealYmd !== b.dealYmd) return a.dealYmd > b.dealYmd ? -1 : 1;
+    return a.lawdCd < b.lawdCd ? -1 : a.lawdCd > b.lawdCd ? 1 : 0;
+  });
+}
+
 export function currentCalendarMonth(now: Date): string {
   return `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 }
