@@ -14493,3 +14493,59 @@ Regression: SALE scheduler OFF·coverage 48 COMPLETE, RENT scheduler OFF·covera
 cron 라우트 401 유지. /, /my, /map, dashboard·rankings·transactions·apt 상세 전부 200.
 
 DB 변경: 없음(CSS 전용). Cron 등록 없음, `vercel.json` 무변경, scheduler 계속 OFF.
+
+## 2026-09-03
+
+### DATA FRESHNESS AUTOMATION V1 — CRON ACTIVATION (SALE/RENT 매일 자동 실행 등록)
+
+Vercel Cron 2건 등록으로 자동 실행을 활성화했다. 배포
+`dpl_3QqDGMt7acKPwYWvpf9n6y9cXoXF`, production alias, 전 function **icn1** 유지.
+
+스케줄(가정이 아니라 계산으로 검증 — `Date.UTC(...)`를 `Asia/Seoul`로 렌더, 한국은
+DST가 없어 1월 날짜로도 재확인):
+- SALE `0 19 * * *` UTC = **매일 04:00 KST** → `/api/cron/sale-sync?mode=apply`
+- RENT `0 20 * * *` UTC = **매일 05:00 KST** → `/api/cron/rent-sync?mode=apply`
+
+**플랜**: Vercel 대시보드가 "Cron jobs on Hobby have a flexible time window of
+1-hour"라고 표시 → 플랜은 **Hobby**(CLI에는 플랜 필드가 없어 이 경로로 확인). Hobby는
+cron 2개·1일 1회까지 허용하므로 현재 구성이 정확히 한도 안이다. 게다가 Vercel이 배포
+시점에 cron 한도를 검증하므로, 한도를 넘겼다면 조용히 활성화되는 대신 배포가 실패한다.
+
+**주의(Hobby 특성)**: 정확한 분이 아니라 **1시간 유동 window** 안에서 실행된다. 의도한
+sale→rent 1시간 간격이 최악의 경우 압축될 수 있다(sale 19:59, rent 20:00 UTC). sale 약
+34초 / rent 약 12초라 짧은 중첩 가능성이 있으며, 이는 module-global MOLIT rate limiter가
+인스턴스별이라는 기존 리스크와 연결된다.
+
+**인증**: 변경 없음, fail-closed 유지. `CRON_SECRET`이 설정돼 있으면 Vercel Cron이
+`Authorization: Bearer` 헤더를 자동 첨부하며, 이는 `src/lib/cron-auth.ts`가 처음부터
+전제한 메커니즘이다. 배포 후 실측: 헤더 없음/잘못된 secret/빈 bearer 전부 **401**,
+공개 요청으로 `?mode=apply` 호출해도 unauthorized. secret 리터럴은 git 전체 history,
+tracked files, vercel.json, client bundle에서 **0회**.
+
+대시보드에서 등록된 path에 **쿼리스트링이 그대로 유지**됨을 확인했다
+(`/api/cron/sale-sync?mode=apply`) — 이것이 남아 있던 미확인 지점이었다. 만약 제거됐다면
+cron이 dry-run으로 돌아 아무것도 쓰지 않는 "조용한 무동작"이 됐을 것이다.
+
+**관리자 화면이 거짓말하지 않도록 수정(가장 중요한 부분)**: scheduler 값이 API와 status
+tile 두 곳에 `OFF`로 **하드코딩**돼 있었고, cron 등록 후에도 계속 OFF라고 말했을 것이다.
+이제 배포된 `vercel.json`을 읽어(`readCronRegistration`) 판정하므로 cron을 제거하면 자동으로
+OFF로 돌아가고, 파일을 못 읽으면 정상으로 단정하지 않고 `UNKNOWN`을 표시한다.
+`vercel.json`이 ops 함수 번들에 traced됨을 `.nft.json`으로 확인.
+
+**등록과 성공을 섞지 않는다**: `SCHEDULED`는 "스케줄 등록됨"일 뿐이고, "마지막 실행"은
+coverage를 마지막으로 기록한 runId/시각을 별도 필드로 보여준다. 현재 두 값 모두 감독 하
+수동 apply(`sale-2026-09-03T03-43-00-962Z`, `rent-2026-09-03T05-13-02-161Z`)이며, 아직
+무인 실행 성공을 주장하지 않는다.
+
+데이터 상태 무변경: SALE coverage 48 COMPLETE, RENT coverage 32 COMPLETE, rent row
+125,410, 부산 trade row 855,424, verified range 202408–202608.
+**설정 중 Production DB 쓰기 0건.**
+
+첫 무인 실행: 활성화 시점 기준 약 12.7시간 뒤(SALE 09-04 04:00 KST)라 **관측 대기 중**.
+로컬 CRON_SECRET scratch 사본 삭제 완료(Vercel Production 값은 제거·회전하지 않음).
+
+테스트: cron 스케줄 판정 유닛테스트 8개 신규(UTC→KST 변환, 자정 넘김, 매일 형태가 아니면
+해석 거부, 쿼리스트링 path 매칭, 등록 없음=OFF) 전부 통과. 전체 379개 중 376개 통과
+(실패 3개는 기존 무관 실패). tsc src/ 에러 0, build 성공, 변경 파일 eslint 통과.
+
+상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md` §25

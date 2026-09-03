@@ -469,3 +469,75 @@ same-origin iframes, before → after:
 
 `overflow-wrap: anywhere` (not `break-word`, which is not taken into account when computing
 min-content width). All 20 error messages still render; no structural change.
+
+---
+
+## 25. Cron activation (2026-09-03)
+
+Deployed `dpl_3QqDGMt7acKPwYWvpf9n6y9cXoXF` (production alias, all functions `icn1`).
+
+### Schedule
+
+| Job | UTC | KST | Path |
+|---|---|---|---|
+| SALE | `0 19 * * *` | 매일 04:00 | `/api/cron/sale-sync?mode=apply` |
+| RENT | `0 20 * * *` | 매일 05:00 | `/api/cron/rent-sync?mode=apply` |
+
+The conversion was **computed, not assumed** — `Date.UTC(...19:00)` rendered in `Asia/Seoul`
+gives 04:00 the next day, re-checked against a January date since Korea has no DST.
+
+### Plan limits
+
+The Vercel dashboard states *"Cron jobs on Hobby have a flexible time window of 1-hour"*, which
+identifies the plan as **Hobby** (the CLI exposes no plan field). Hobby permits **2 cron jobs at
+once-daily frequency** — exactly what is registered, so the config is within limits. Independently,
+Vercel validates cron limits at deploy time, so an over-limit schedule would have failed the
+deployment rather than silently activating.
+
+**Consequence worth knowing:** Hobby fires within a **1-hour window**, not at the exact minute. The
+intended 1-hour sale→rent spacing can therefore compress — worst case sale at 19:59 UTC and rent at
+20:00 UTC. Sale runs ~34s and rent ~12s, so a brief overlap is possible. That matters only for the
+module-global MOLIT rate limiter (per-instance, so two concurrent functions do not share it).
+
+### Auth
+
+Unchanged and fail-closed. Vercel Cron supplies `Authorization: Bearer $CRON_SECRET` automatically
+because `CRON_SECRET` is set on the project — the mechanism `src/lib/cron-auth.ts` was written
+against. Post-deploy: no header → **401**, wrong secret → **401**, empty bearer → **401**, and a
+plain public request to `?mode=apply` returns `unauthorized`. The secret literal appears **0** times
+in git history, tracked files, `vercel.json`, and the client bundle.
+
+The dashboard confirms the registered paths **retain their query strings**
+(`/api/cron/sale-sync?mode=apply`), which was the open question — had they been stripped, the jobs
+would have run in dry-run and written nothing.
+
+### Admin display — the part that was most likely to lie
+
+Two places asserted `OFF` as a literal: the scheduler field in the API and the "자동 수집" status
+tile in the page. Both would have kept claiming OFF after registration. They now derive from the
+deployed `vercel.json` through `readCronRegistration()`, so the status self-corrects if a cron is
+removed, and an unreadable file reports `UNKNOWN` rather than assuming either direction.
+`vercel.json` is confirmed traced into the ops function bundle via `.nft.json`.
+
+Registration is deliberately **not** conflated with success:
+
+- `SCHEDULED` = a schedule exists.
+- A separate **last run** field shows the `runId` and timestamp of the run that last recorded
+  coverage.
+
+Live after deploy: SALE `SCHEDULED` / `0 19 * * *` / 매일 04:00 KST, last run
+`sale-2026-09-03T03-43-00-962Z`; RENT `SCHEDULED` / `0 20 * * *` / 매일 05:00 KST, last run
+`rent-2026-09-03T05-13-02-161Z`. Both last-run values are still the **supervised** applies — no
+unattended success is claimed, because none has happened yet.
+
+### Data state — unchanged by activation
+
+SALE coverage 48 `COMPLETE`, RENT coverage 32 `COMPLETE`, rent rows 125,410, Busan trade rows
+855,424, rent verified range 202408–202608. **0 production DB writes during setup.**
+
+### First unattended run — pending
+
+At activation time the next fires were ~12.7h away (SALE 2026-09-03 19:00 UTC / 09-04 04:00 KST;
+RENT 20:00 UTC / 05:00 KST), so no unattended run has been observed. The local `CRON_SECRET`
+scratch copy was deleted after registration; the Vercel Production variable was **not** removed or
+rotated.
