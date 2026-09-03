@@ -11,6 +11,7 @@ import { summarizeManifest, computeOverallHealth, computeCancellationVerdict, OV
 // (sync_coverage_cells)에서 온다. legacyBootstrap만 여전히 정적 파일에서 읽는다(런타임에
 // 변하지 않는 provenance라 durability 문제가 없다).
 import { getRentVerifiedRange, readLegacyBootstrap, summarizeCoverage } from '@/lib/sync-coverage';
+import { readCronRegistration } from '@/lib/cron-schedule';
 
 export const dynamic = 'force-dynamic';
 
@@ -167,6 +168,10 @@ async function buildSummary() {
     summarizeCoverage('SALE'),
   ]);
   const rentLegacyBootstrap = readLegacyBootstrap();
+  // CRON ACTIVATION §8 — scheduler 상태를 코드에 하드코딩하지 않고 배포된 vercel.json에서
+  // 실제 등록 여부를 읽는다. 등록(SCHEDULED)과 "무인 실행 성공"은 분리해서 표시한다.
+  const saleCron = readCronRegistration('/api/cron/sale-sync');
+  const rentCron = readCronRegistration('/api/cron/rent-sync');
 
   return {
     overall: {
@@ -226,8 +231,25 @@ async function buildSummary() {
         byStatus: saleCoverageSummary.byStatus,
         latestVerifiedAt: saleCoverageSummary.latestVerifiedAt,
       },
-      scheduler: { value: 'OFF' as const, evidenceType: 'CONFIG' as EvidenceType, note: 'vercel.json crons 미등록 — 아직 활성화하지 않은 의도된 상태' },
-      nextScheduledSync: { value: null, evidenceType: 'CONFIG' as EvidenceType },
+      scheduler: {
+        value: saleCron.state,
+        evidenceType: 'CONFIG' as EvidenceType,
+        scheduleUtc: saleCron.scheduleUtc,
+        scheduleKst: saleCron.scheduleKst,
+        note:
+          saleCron.state === 'SCHEDULED'
+            ? `vercel.json에 cron 등록됨(${saleCron.scheduleUtc} UTC = ${saleCron.scheduleKst ?? '해석 불가'}). 등록된 상태일 뿐, 무인 실행 성공을 뜻하지 않는다 — 마지막 실행은 아래 값으로 확인한다.`
+            : saleCron.state === 'OFF'
+              ? 'vercel.json crons 미등록 — 아직 활성화하지 않은 의도된 상태'
+              : 'vercel.json을 읽을 수 없어 등록 여부를 확인하지 못했다(정상으로 단정하지 않음)',
+      },
+      lastRun: {
+        evidenceType: 'LIVE' as EvidenceType,
+        runId: saleCoverageSummary.latestRunId,
+        at: saleCoverageSummary.latestVerifiedAt,
+        note: 'coverage를 마지막으로 기록한 실행. 이 값이 갱신되지 않으면 예약된 실행이 실제로 적용되지 않은 것이다.',
+      },
+      nextScheduledSync: { value: saleCron.scheduleKst, evidenceType: 'CONFIG' as EvidenceType },
     },
     cancellation: {
       lookbackMonths: HISTORICAL_LOOKBACK_MONTHS,
@@ -293,7 +315,24 @@ async function buildSummary() {
       },
       // §26 NO FAKE ACTIVATION — Cron이 실제로 등록/배포되지 않았으므로 절대 ACTIVE라고
       // 표시하지 않는다. sale의 scheduler 표시와 동일한 정직성 기준.
-      scheduler: { value: 'OFF' as const, evidenceType: 'CONFIG' as EvidenceType, note: 'vercel.json crons 미등록 — 아직 활성화하지 않은 의도된 상태. coverage는 실제 apply sync가 있을 때만 전진한다(dry-run은 절대 전진시키지 않음).' },
+      scheduler: {
+        value: rentCron.state,
+        evidenceType: 'CONFIG' as EvidenceType,
+        scheduleUtc: rentCron.scheduleUtc,
+        scheduleKst: rentCron.scheduleKst,
+        note:
+          rentCron.state === 'SCHEDULED'
+            ? `vercel.json에 cron 등록됨(${rentCron.scheduleUtc} UTC = ${rentCron.scheduleKst ?? '해석 불가'}). coverage는 실제 apply sync가 있을 때만 전진한다(dry-run은 절대 전진시키지 않음). 등록 != 무인 실행 성공.`
+            : rentCron.state === 'OFF'
+              ? 'vercel.json crons 미등록 — 아직 활성화하지 않은 의도된 상태. coverage는 실제 apply sync가 있을 때만 전진한다.'
+              : 'vercel.json을 읽을 수 없어 등록 여부를 확인하지 못했다(정상으로 단정하지 않음)',
+      },
+      lastRun: {
+        evidenceType: 'LIVE' as EvidenceType,
+        runId: rentCoverageSummary.latestRunId,
+        at: rentCoverageSummary.latestVerifiedAt,
+        note: 'coverage를 마지막으로 기록한 실행.',
+      },
       note: '취소(cancellation) 개념 없음 — MOLIT 전월세 API에 해당 필드가 존재하지 않는다(rent cancellation verified 같은 표현 금지).',
     },
     features: [

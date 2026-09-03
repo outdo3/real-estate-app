@@ -44,6 +44,13 @@ const EVIDENCE_LABELS: Record<string, string> = {
   UNKNOWN: '확인 불가',
 };
 
+// CRON ACTIVATION §8 — scheduler 상태 표기. 등록(SCHEDULED)과 실행 성공을 섞지 않는다.
+const SCHEDULER_LABELS: Record<string, string> = {
+  OFF: 'OFF',
+  SCHEDULED: '예약됨',
+  UNKNOWN: '확인 불가',
+};
+
 function EvidenceBadge({ type }: { type: string }) {
   const cls = type === 'LIVE' ? styles.evidenceLive : type === 'SNAPSHOT' ? styles.evidenceSnapshot : type === 'UNKNOWN' ? styles.evidenceUnknown : styles.evidenceConfig;
   return <span className={`${styles.evidenceBadge} ${cls}`}>{EVIDENCE_LABELS[type] || type}</span>;
@@ -121,7 +128,10 @@ export default function AdminOpsPage() {
               </div>
               <div className={styles.statusTile}>
                 <div className={styles.statusTileLabel}>자동 수집</div>
-                <StatusPill label="OFF" />
+                {/* CRON ACTIVATION §8 — 예전에는 "OFF"가 하드코딩돼 있었다(그때는 사실이었다).
+                    cron 등록 후에도 그대로면 화면이 거짓말을 하므로 실제 등록 상태를 쓴다.
+                    "예약됨"은 스케줄이 등록됐다는 뜻일 뿐 무인 실행 성공을 뜻하지 않는다. */}
+                <StatusPill label={SCHEDULER_LABELS[d.incrementalSync.scheduler.value] ?? d.incrementalSync.scheduler.value} />
               </div>
             </div>
 
@@ -191,7 +201,22 @@ export default function AdminOpsPage() {
                   <b>{d.incrementalSync.scheduler.value}</b>
                   <span className={styles.kvNote}>{d.incrementalSync.scheduler.note}</span>
                 </div>
-                <div className={styles.kv}><span>다음 예정 수집</span><b>자동 일정 없음</b></div>
+                <div className={styles.kv}>
+                  <span>다음 예정 수집</span>
+                  <b>{d.incrementalSync.nextScheduledSync.value ?? '자동 일정 없음'}</b>
+                  {d.incrementalSync.scheduler.scheduleUtc && (
+                    <span className={styles.kvNote}>{d.incrementalSync.scheduler.scheduleUtc} UTC</span>
+                  )}
+                </div>
+                {/* CRON ACTIVATION §8 — "등록됨"과 "실제로 돌았다"를 분리해서 보여준다. */}
+                <div className={styles.kv}>
+                  <span>마지막 실행(coverage 기록 기준) <EvidenceBadge type={d.incrementalSync.lastRun.evidenceType} /></span>
+                  <b>{formatDateTime(d.incrementalSync.lastRun.at)}</b>
+                  <span className={styles.kvNote}>
+                    {d.incrementalSync.lastRun.runId ? `runId ${d.incrementalSync.lastRun.runId} · ` : ''}
+                    {d.incrementalSync.lastRun.note}
+                  </span>
+                </div>
               </div>
               {/* ADMIN_ACCESS_FIX_V1 §5 — 위 숫자들은 git-tracked 파일 manifest(과거 CLI QA
                   실행 기록)이라, Cron 경로로 실제 적용된 결과는 여기에 반영되지 않는다.
@@ -229,7 +254,21 @@ export default function AdminOpsPage() {
                   <b>{d.rentCoverage.scheduler.value}</b>
                   <span className={styles.kvNote}>{d.rentCoverage.scheduler.note}</span>
                 </div>
-                <div className={styles.kv}><span>다음 예정 수집</span><b>자동 일정 없음</b></div>
+                <div className={styles.kv}>
+                  <span>다음 예정 수집</span>
+                  <b>{d.rentCoverage.scheduler.scheduleKst ?? '자동 일정 없음'}</b>
+                  {d.rentCoverage.scheduler.scheduleUtc && (
+                    <span className={styles.kvNote}>{d.rentCoverage.scheduler.scheduleUtc} UTC</span>
+                  )}
+                </div>
+                <div className={styles.kv}>
+                  <span>마지막 실행(coverage 기록 기준) <EvidenceBadge type={d.rentCoverage.lastRun.evidenceType} /></span>
+                  <b>{formatDateTime(d.rentCoverage.lastRun.at)}</b>
+                  <span className={styles.kvNote}>
+                    {d.rentCoverage.lastRun.runId ? `runId ${d.rentCoverage.lastRun.runId} · ` : ''}
+                    {d.rentCoverage.lastRun.note}
+                  </span>
+                </div>
               </div>
               {/* ADMIN_ACCESS_FIX_V1 §5 — rent coverage도 파일이 아니라 DB가 사실이다. */}
               <div className={styles.kvGrid}>

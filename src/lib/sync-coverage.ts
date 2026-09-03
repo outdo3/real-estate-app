@@ -128,10 +128,15 @@ export async function summarizeCoverage(dataset: SyncDatasetName): Promise<{
   totalCells: number;
   byStatus: Record<string, number>;
   latestVerifiedAt: string | null;
+  /** 가장 최근에 coverage를 기록한 실행의 runId — "마지막 실행"을 로그와 대조할 수 있게 한다.
+   * cron 등록 여부(SCHEDULED)와 분리해서 보여준다: 등록됐다는 사실이 성공적으로 돌았다는
+   * 뜻은 아니기 때문이다(§8). */
+  latestRunId: string | null;
 }> {
-  const [grouped, latest] = await Promise.all([
+  const [grouped, latest, latestCell] = await Promise.all([
     prisma.syncCoverageCell.groupBy({ by: ['status'], where: { dataset }, _count: { _all: true } }),
     prisma.syncCoverageCell.aggregate({ where: { dataset }, _max: { verifiedAt: true } }),
+    prisma.syncCoverageCell.findFirst({ where: { dataset }, orderBy: { verifiedAt: 'desc' }, select: { runId: true } }),
   ]);
   const byStatus: Record<string, number> = {};
   let totalCells = 0;
@@ -143,5 +148,6 @@ export async function summarizeCoverage(dataset: SyncDatasetName): Promise<{
     totalCells,
     byStatus,
     latestVerifiedAt: latest._max.verifiedAt ? latest._max.verifiedAt.toISOString() : null,
+    latestRunId: latestCell?.runId ?? null,
   };
 }
