@@ -14549,3 +14549,26 @@ coverage를 마지막으로 기록한 runId/시각을 별도 필드로 보여준
 (실패 3개는 기존 무관 실패). tsc src/ 에러 0, build 성공, 변경 파일 eslint 통과.
 
 상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md` §25
+
+## 2026-09-03
+
+### CRON SPACING SAFETY PATCH — RENT 06:00 KST로 이동(첫 무인 실행 전)
+
+Hobby는 cron을 정확한 분이 아니라 **1시간 유동 window** 안에서 실행한다. 기존
+SALE 19:00 / RENT 20:00 UTC는 window가 인접(19:00–20:00, 20:00–21:00)해서 최악의 경우
+sale 19:59, rent 20:00으로 약 1분 간격이 될 수 있었다. sale이 약 34초 걸리므로 짧은
+중첩이 가능했고, 두 job이 같은 MOLIT API를 쓰는데 350ms rate limiter가 인스턴스별이라
+동시 실행 시 요청률이 순간적으로 두 배가 된다.
+
+RENT를 `0 21 * * *`(06:00 KST)로 이동 → window가 19:00–20:00과 21:00–22:00이 되어
+**최소 60분 간격이 구조적으로 보장**된다(가능성이 낮은 게 아니라 불가능). 변환은 계산으로
+검증(겨울 날짜 포함, 한국은 DST 없음). SALE은 변경 없음.
+
+**첫 예약 실행 전에** 적용했으므로 최초 무인 실행부터 안전한 간격으로 돈다.
+배포 `dpl_DDRX8QSwkdKdB2MHjQRBePoVUTJY`, production alias, 전 function icn1.
+Vercel 대시보드에 갱신된 두 job(쿼리스트링 유지) 확인, `/admin/ops`도 자동으로 새 일정을
+표시 — scheduler 표시가 하드코딩이 아니라 배포된 vercel.json에서 파생됨이 재확인됐다.
+
+변경 파일: `vercel.json`(RENT 표현식 1줄) + `src/lib/cron-schedule.test.mjs`(실제 설정
+반영). Production DB 쓰기 **0건**, manual apply 없음, secret 변경 없음.
+첫 무인 실행은 여전히 관측 대기(SALE 09-04 04:00 KST, RENT 09-04 06:00 KST).

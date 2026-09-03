@@ -481,7 +481,10 @@ Deployed `dpl_3QqDGMt7acKPwYWvpf9n6y9cXoXF` (production alias, all functions `ic
 | Job | UTC | KST | Path |
 |---|---|---|---|
 | SALE | `0 19 * * *` | 매일 04:00 | `/api/cron/sale-sync?mode=apply` |
-| RENT | `0 20 * * *` | 매일 05:00 | `/api/cron/rent-sync?mode=apply` |
+| RENT | `0 21 * * *` | 매일 06:00 | `/api/cron/rent-sync?mode=apply` |
+
+> RENT was originally registered at `0 20 * * *` (05:00 KST) and moved to `0 21 * * *`
+> (06:00 KST) **before the first unattended run** — see §26.
 
 The conversion was **computed, not assumed** — `Date.UTC(...19:00)` rendered in `Asia/Seoul`
 gives 04:00 the next day, re-checked against a January date since Korea has no DST.
@@ -541,3 +544,32 @@ At activation time the next fires were ~12.7h away (SALE 2026-09-03 19:00 UTC / 
 RENT 20:00 UTC / 05:00 KST), so no unattended run has been observed. The local `CRON_SECRET`
 scratch copy was deleted after registration; the Vercel Production variable was **not** removed or
 rotated.
+
+---
+
+## 26. Cron spacing safety patch (2026-09-03, before the first unattended run)
+
+Hobby fires cron jobs within a **1-hour flexible window**, not at the exact minute. The original
+pair put those windows adjacent:
+
+| | window (UTC) | window (KST) |
+|---|---|---|
+| SALE `0 19 * * *` | 19:00–20:00 | 04:00–05:00 |
+| RENT `0 20 * * *` (old) | 20:00–21:00 | 05:00–06:00 |
+
+Worst case that is sale at 19:59 and rent at 20:00 — about a minute apart. Sale runs ~34s, so a
+brief overlap was possible. Both jobs call the same MOLIT API and the 350ms rate limiter is
+per-instance, so concurrent runs would have briefly doubled the request rate.
+
+RENT moved to `0 21 * * *` (06:00 KST), making the windows 19:00–20:00 and 21:00–22:00 — a
+**guaranteed ≥60 minute gap**, so overlap is structurally impossible rather than merely unlikely.
+Conversion verified by computation including a winter date (Korea has no DST). SALE unchanged.
+
+Applied **before** the first scheduled fire, so the very first automated execution already runs
+with the safe spacing. Deployed `dpl_DDRX8QSwkdKdB2MHjQRBePoVUTJY` (production alias, all
+functions `icn1`). Vercel dashboard shows the updated pair with query strings intact, and
+`/admin/ops` picked the new schedule up automatically — confirming the scheduler display is
+genuinely derived from the deployed `vercel.json` rather than hardcoded.
+
+Production DB writes during this patch: **0** (rent 125,410 / trade 855,556 / coverage 48 SALE +
+32 RENT, all unchanged). No manual apply, no secret change.
