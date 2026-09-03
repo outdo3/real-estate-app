@@ -17,6 +17,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 
 import { prisma } from '../src/lib/prisma';
 import { normalizeSearchKeyword } from '../src/lib/search-ranking';
+import { assertProductionDbAccessAllowed } from './_prod-db-guard';
 
 const BUSAN_LAWD_CODES = [
   '26110', '26140', '26170', '26200', '26230', '26260', '26290', '26320',
@@ -24,6 +25,9 @@ const BUSAN_LAWD_CODES = [
 ];
 
 async function main() {
+  // SUPABASE_EGRESS_P0_FIX_V1 §3 — 이 스크립트는 DIAGNOSTIC(QA/benchmark)이라
+  // Production DB에 대해서는 기본 차단된다(ALLOW_PROD_DB_READ=1로만 해제).
+  assertProductionDbAccessAllowed('DIAGNOSTIC', 'audit-recent-master-missing-16.ts');
   const now = new Date();
   const from24 = new Date(now.getTime() - 24 * 30 * 24 * 3600 * 1000);
   const from12 = new Date(now.getTime() - 12 * 30 * 24 * 3600 * 1000);

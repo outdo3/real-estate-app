@@ -15,6 +15,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 import { PrismaClient } from '@prisma/client';
 import { fetchMolitData } from '../src/lib/api-molit';
 import { getAllTimeHigh, getPreviousTrade, getTradeHistory } from '../src/lib/trade-history-read';
+import { assertProductionDbAccessAllowed } from './_prod-db-guard';
 
 const prisma = new PrismaClient();
 
@@ -97,6 +98,9 @@ async function crossCheckOne(apt: { aptSeq: string; aptName: string; dong: strin
 }
 
 async function main() {
+  // SUPABASE_EGRESS_P0_FIX_V1 §3 — 이 스크립트는 DIAGNOSTIC(QA/benchmark)이라
+  // Production DB에 대해서는 기본 차단된다(ALLOW_PROD_DB_READ=1로만 해제).
+  assertProductionDbAccessAllowed('DIAGNOSTIC', 'qa-trade-history.ts');
   const apts = await findRepresentativeApts();
   console.log(`대표 단지 후보 ${apts.length}건 발견`);
   for (const apt of apts) {

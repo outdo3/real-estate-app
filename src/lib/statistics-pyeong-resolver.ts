@@ -214,7 +214,26 @@ export async function resolveTrustworthyPyeongBatch(prisma: any, keys: PyeongLoo
 
   const ids = await findMatchingApartmentIds(prisma, keys);
   if (ids.length === 0) return new Map();
-  const apartments: ApartmentWithUnitTypes[] = await prisma.apartment.findMany({ where: { id: { in: ids } }, include: { unitTypes: true } });
+  // SUPABASE_EGRESS_P0_FIX_V1 — 예전에는 `include: { unitTypes: true }`라 Apartment의
+  // 모든 컬럼(특히 community_facilities JSON blob)과 ApartmentUnitType의 모든 컬럼을
+  // 통째로 실어 왔다. 실제로 읽는 건 아래 6개뿐이다(ApartmentWithUnitTypes 타입과 1:1,
+  // resolvePyeongFromApartments가 그 외 필드를 건드리지 않음). 이 함수는 /api/transactions,
+  // /api/stats/dashboard, /api/stats/rankings에서 **캐시 밖으로** 매 요청 호출되므로
+  // 여기서 줄이는 바이트가 그대로 요청마다 반복된다.
+  //
+  // 유지 필수: aptSeq/name/dong은 identity 매칭(다른 단지 오매칭 방지)의 근거이고,
+  // canonicalExclusiveArea는 Unit Master의 exact identity라 반올림/변형 금지 대상이다.
+  const apartments: ApartmentWithUnitTypes[] = await prisma.apartment.findMany({
+    where: { id: { in: ids } },
+    select: {
+      aptSeq: true,
+      name: true,
+      dong: true,
+      unitTypes: {
+        select: { canonicalExclusiveArea: true, representativePyeong: true, representativePyeongSource: true },
+      },
+    },
+  });
 
   return resolvePyeongFromApartments(keys, apartments);
 }

@@ -12,6 +12,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 
 import { prisma } from '../src/lib/prisma';
 import { queryTrades, TradeQueryValidationError } from '../src/lib/trade-history-read';
+import { assertProductionDbAccessAllowed } from './_prod-db-guard';
 
 let passCount = 0;
 let failCount = 0;
@@ -39,6 +40,9 @@ const BUSAN_LAWD_CODES = [
 ];
 
 async function main() {
+  // SUPABASE_EGRESS_P0_FIX_V1 §3 — 이 스크립트는 DIAGNOSTIC(QA/benchmark)이라
+  // Production DB에 대해서는 기본 차단된다(ALLOW_PROD_DB_READ=1로만 해제).
+  assertProductionDbAccessAllowed('DIAGNOSTIC', 'qa-trade-history-read-core.ts');
   console.log('TRADE_DB_FIRST_V1 STEP A — Read Core QA + Benchmark\n');
 
   // 실제 Production에서 거래가 많은 aptSeq 하나를 동적으로 찾는다(하드코딩 대신 —

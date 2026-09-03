@@ -16,6 +16,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 import { PrismaClient } from '@prisma/client';
 import { fetchMonthsThrottledWithStatus, type MonthTask } from '../src/lib/molit-stats-helpers';
 import { getSigunguListForSido } from '../src/lib/region-utils';
+import { assertProductionDbAccessAllowed } from './_prod-db-guard';
 
 const prisma = new PrismaClient();
 
@@ -110,6 +111,9 @@ async function scenario4_area84Input() {
 }
 
 async function main() {
+  // SUPABASE_EGRESS_P0_FIX_V1 §3 — 이 스크립트는 DIAGNOSTIC(QA/benchmark)이라
+  // Production DB에 대해서는 기본 차단된다(ALLOW_PROD_DB_READ=1로만 해제).
+  assertProductionDbAccessAllowed('DIAGNOSTIC', 'benchmark-trade-history.ts');
   await scenario1_aptHistory();
   await new Promise((r) => setTimeout(r, 2000));
   await scenario2_seoguRecent(12);

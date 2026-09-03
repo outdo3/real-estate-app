@@ -11,6 +11,7 @@ import { prisma } from '../src/lib/prisma';
 import { getArea84RowsFromDb } from '../src/lib/trade-history-read';
 import { queryTrades } from '../src/lib/trade-history-read';
 import { buildArea84RankingRows, resolvePriceRankingPeriod, HISTORICAL_LOOKBACK_MONTHS, dedupeTrades, type FeedTrade } from '../src/lib/price-ranking';
+import { assertProductionDbAccessAllowed } from './_prod-db-guard';
 
 const BUSAN_LAWD_CDS = ['26110', '26140', '26170', '26200', '26230', '26260', '26290', '26320', '26350', '26380', '26410', '26440', '26470', '26500', '26530', '26710'];
 
@@ -86,6 +87,10 @@ async function runCase(label: string, lawdCds: string[], period: { from: string;
 }
 
 async function main() {
+  // SUPABASE_EGRESS_P0_FIX_V1 §3 — DIAGNOSTIC. 이 스크립트는 부산 전역 24개월
+  // 84㎡ 밴드를 51 케이스 반복 조회해 감사에서 가장 무거운 Production read 중
+  // 하나로 확인됐다. Production DB 대상 실행은 ALLOW_PROD_DB_READ=1로만 허용.
+  assertProductionDbAccessAllowed('DIAGNOSTIC', 'verify-area84-sql-pushdown.ts');
   const now = new Date();
   const periods: Array<[string, ReturnType<typeof resolvePriceRankingPeriod>]> = [
     ['30d', resolvePriceRankingPeriod('30d', now)],

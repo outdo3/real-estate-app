@@ -42,6 +42,36 @@ export interface StoredTrade {
   jibun: string | null;
 }
 
+/**
+ * SUPABASE_EGRESS_P0_FIX_V1 — StoredTrade가 실제로 쓰는 12개 컬럼만 고른다.
+ *
+ * 이 목록은 아래 toStoredTrade()가 읽는 필드와 **정확히 1:1**이다(둘 중 하나만 바꾸면
+ * 타입 에러가 나도록 toStoredTrade의 제네릭 제약이 잡아준다). 모델에는 group_key,
+ * identity_key, raw_uid, source, deal_ymd, deal_type, deal_year/month/day, cancel_date,
+ * registry_date, occurrence_index, source_fetched_at, created_at, updated_at 등이 더
+ * 있지만 StoredTrade에도 API 응답에도 전혀 노출되지 않는다.
+ *
+ * 주의 — 아래 필드는 "안 쓰는 것 같아 보여도" 반드시 유지한다:
+ *   aptSeq       canonical identity(§AGENTS.md) — 상세/비교 링크가 이걸로 연결된다
+ *   dealCanceled 취소 의미론 — 호출부가 취소 거래를 구분하는 유일한 근거
+ *   exclusiveArea Decimal 원본(문자열 보존, 반올림 금지)
+ *   id           dedup/키
+ */
+const STORED_TRADE_SELECT = {
+  id: true,
+  lawdCd: true,
+  aptSeq: true,
+  aptName: true,
+  dong: true,
+  exclusiveArea: true,
+  dealAmount: true,
+  dealDate: true,
+  floor: true,
+  dealCanceled: true,
+  buildYear: true,
+  jibun: true,
+} as const;
+
 function toStoredTrade<
   T extends {
     id: number;
@@ -72,6 +102,7 @@ export async function getTradeHistory(identity: TradeIdentity, exclusiveArea: nu
     // 문자열로 넘겨 Decimal 파싱 경로를 타게 해 무손실 비교를 보장한다.
     where: { identityKey: idKey, exclusiveArea: String(exclusiveArea), dealType: 'sale', dealCanceled: false },
     orderBy: { dealDate: 'asc' },
+    select: STORED_TRADE_SELECT, // SUPABASE_EGRESS_P0_FIX_V1 — queryTrades와 동일 이유
   });
   return rows.map((r) => toStoredTrade(r));
 }
@@ -114,6 +145,7 @@ export async function getRegionalTrades(lawdCd: string, from: Date, to: Date): P
   const rows = await prisma.apartmentTradeHistory.findMany({
     where: { lawdCd, dealDate: { gte: from, lte: to } },
     orderBy: { dealDate: 'desc' },
+    select: STORED_TRADE_SELECT, // SUPABASE_EGRESS_P0_FIX_V1 — queryTrades와 동일 이유
   });
   return rows.map((r) => toStoredTrade(r));
 }
@@ -162,6 +194,20 @@ export interface TradeQueryInput {
   /** 지정 시 MAX_TRADE_QUERY_LIMIT으로 clamp. 지정하지 않으면 take 없음(전체 반환 —
    * aggregation 용도, §18). */
   limit?: number;
+  /**
+   * SUPABASE_EGRESS_P0_FIX_V1 — `meta.latestDealDate`를 계산할지 여부. 기본 true라
+   * 기존 호출부의 의미는 하나도 바뀌지 않는다.
+   *
+   * 이 값은 limit/정렬과 무관하게 정확한 MAX(dealDate)를 주기 위해 **동일 where로 두
+   * 번째 aggregate 쿼리**를 실행한다. 그런데 유일한 라이브 호출부(/api/transactions)는
+   * `const { trades } = await queryTrades(...)`로 meta를 아예 쓰지 않으면서도, 12개월
+   * 부산 구 단위 스캔을 매번 두 번 하게 만들고 있었다(감사에서 PROVEN).
+   * meta가 필요 없는 호출부는 false를 넘겨 그 중복 스캔을 없앤다.
+   *
+   * false로 주면 `meta.latestDealDate`는 "계산하지 않음"의 뜻으로 null이 된다 —
+   * "거래가 없음"과 혼동하지 않도록, 이 값을 쓰는 호출부는 절대 false를 주면 안 된다.
+   */
+  withLatestDealDate?: boolean;
 }
 
 export class TradeQueryValidationError extends Error {}
@@ -280,10 +326,23 @@ export interface TradeQueryResult {
  * 반환한다(§21 — 다른 단지/기간으로 대체하지 않음). */
 export async function queryTrades(input: TradeQueryInput): Promise<TradeQueryResult> {
   const built = buildTradeQuery(input);
+  const wantLatest = input.withLatestDealDate !== false; // 기본 true — 기존 의미 유지
 
   const [rows, latest] = await Promise.all([
-    prisma.apartmentTradeHistory.findMany({ where: built.where, orderBy: built.orderBy, take: built.take }),
-    prisma.apartmentTradeHistory.aggregate({ where: built.where, _max: { dealDate: true } }),
+    // SUPABASE_EGRESS_P0_FIX_V1 — select를 명시한다. 이 함수의 결과는 전부
+    // toStoredTrade()를 통과하므로 StoredTrade의 12개 필드 외에는 어디에서도 읽히지
+    // 않는데, 그동안 27개 컬럼 전체(group_key/identity_key/raw_uid/source_fetched_at/
+    // created_at/updated_at/deal_ymd/source/cancel_date/registry_date 등)를 실어
+    // 보내고 있었다. where/orderBy는 그대로라 반환 row 수·순서·의미는 동일하다.
+    prisma.apartmentTradeHistory.findMany({
+      where: built.where,
+      orderBy: built.orderBy,
+      take: built.take,
+      select: STORED_TRADE_SELECT,
+    }),
+    wantLatest
+      ? prisma.apartmentTradeHistory.aggregate({ where: built.where, _max: { dealDate: true } })
+      : Promise.resolve(null),
   ]);
 
   const trades = rows.map((r) => toStoredTrade(r));
@@ -297,7 +356,7 @@ export async function queryTrades(input: TradeQueryInput): Promise<TradeQueryRes
       returnedCount,
       limitApplied: built.take ?? null,
       possiblyTruncated: built.take !== undefined && returnedCount === built.take,
-      latestDealDate: latest._max.dealDate ? latest._max.dealDate.toISOString().slice(0, 10) : null,
+      latestDealDate: latest?._max.dealDate ? latest._max.dealDate.toISOString().slice(0, 10) : null,
       includeCanceled: built.includeCanceled,
     },
   };

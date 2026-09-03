@@ -22,7 +22,10 @@ const BUSAN_SIDO_CODE = '26';
 async function fetchApt12MonthsFromDb(lawdCd: string): Promise<any[]> {
   const from = new Date();
   from.setMonth(from.getMonth() - 12);
-  const { trades } = await queryTrades({ lawdCd, from });
+  // SUPABASE_EGRESS_P0_FIX_V1 — 이 호출부는 meta를 전혀 쓰지 않는다(구조분해가 trades만
+  // 꺼낸다). 기본값이면 동일 where로 MAX(dealDate) aggregate가 한 번 더 실행돼, 부산 구
+  // 단위 12개월 스캔을 매 요청마다 두 번 하게 된다 — 감사에서 PROVEN된 낭비라 끈다.
+  const { trades } = await queryTrades({ lawdCd, from, withLatestDealDate: false });
   return trades.map((t) => {
     const areaNum = Number(t.exclusiveArea);
     const tradeDate = t.dealDate.toISOString().slice(0, 10);
