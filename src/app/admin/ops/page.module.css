@@ -327,3 +327,28 @@
 .table tr:last-child td {
   border-bottom: none;
 }
+
+/* ADMIN_MOBILE_RESPONSIVE_FIX_V1 — document 가로 스크롤 root cause 수정.
+   flex/grid 자식은 기본이 min-width:auto라, 내용의 min-content 폭 아래로 줄어들지
+   못한다. 이 화면에는 줄바꿈 지점이 없는 긴 문자열이 실제로 들어온다 — 예:
+   "docs/development/TRADE_CANCELLATION_RESYNC_V2_24M.md (5723469)" 나 DB 인덱스명
+   "apartment_trade_histories_group_key_deal_amount_deal_date_f_key". 그 min-content
+   폭이 .kv -> .kvGrid -> .section -> document까지 그대로 전파돼 360px에서 문서 폭이
+   469px가 됐다(실측). 정보를 숨기지 않고, 축소를 허용(min-width:0)하고 실제로 줄바꿈
+   되게(overflow-wrap:anywhere) 한다. body에 overflow-x:hidden을 걸어 증상만 가리지
+   않는다 — 그러면 콘텐츠가 잘린다. */
+.statusGrid > *,
+.kvGrid > *,
+.detailBox > *,
+.detailRow > *,
+.statusTile,
+.kv,
+.detailRow {
+  min-width: 0;
+}
+
+.section,
+.statusTile,
+.overallBanner {
+  overflow-wrap: anywhere;
+}

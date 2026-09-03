@@ -360,3 +360,20 @@
   border-color: var(--primary-color);
   color: var(--primary-color);
 }
+
+/* ADMIN_MOBILE_RESPONSIVE_FIX_V1 — 이 페이지는 .errorMessage 수정 후 360~412px에서
+   통과하지만, 같은 root cause(flex/grid 자식 min-width:auto)를 데이터에 따라 다시 밟을
+   수 있다(긴 검색어/단지명/에러 문자열). 동일 방어를 명시적으로 적용한다. */
+.grid > *,
+.statRow > *,
+.sectionSplit > *,
+.rankRow > *,
+.pipelineRow > *,
+.card,
+.rankRow {
+  min-width: 0;
+}
+
+.card {
+  overflow-wrap: anywhere;
+}

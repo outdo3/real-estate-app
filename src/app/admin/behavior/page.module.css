@@ -257,3 +257,23 @@
   color: var(--text-muted);
   text-align: right;
 }
+
+/* ADMIN_MOBILE_RESPONSIVE_FIX_V1 — ops와 동일한 root cause(flex/grid 자식의
+   min-width:auto + 줄바꿈 불가 문자열). 360px에서 .card가 503px로 부풀어 문서 폭을
+   519px로 밀어냈다(실측). 카드 레이아웃 자체는 그대로 두고 축소·줄바꿈만 허용한다. */
+.grid > *,
+.kpiGrid > *,
+.rankRow > *,
+.statRow > *,
+.card,
+.cardWide,
+.kpiTile,
+.rankRow {
+  min-width: 0;
+}
+
+.card,
+.cardWide,
+.kpiTile {
+  overflow-wrap: anywhere;
+}
