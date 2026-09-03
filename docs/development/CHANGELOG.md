@@ -14723,3 +14723,165 @@ Regression: /, /my, /map, search(일반·별칭), transactions, dashboard,
 price-rankings 4종, rankings, apt 상세 전부 200. cron 401 유지. **Production DB 쓰기 0**.
 테스트 393/396(실패 3개 기존 무관), tsc src/ 0, build·lint 통과.
 schema/migration/index 변경 0, cache architecture 변경 0.
+
+## 2026-09-03
+
+### RECORD HIGH TRUST V1/V2 — 이력 취소 감사 + 1000-row cap 복구
+
+작업:
+
+- V1 감사(READ ONLY): MOLIT 원천이 2020-02 이전 취소 데이터를 제공하지 않음을 실측 확인
+  (2006~2019 표본 1,948건 중 취소 0건 vs 2020년 이후 4~7%). `cdealType` 필드 자체는
+  2006년 응답에도 존재하므로 "미지원"이 아니라 "값 부재" — "역대" 표현 금지 근거 확립
+- V1에서 1000-row pagination cap으로 실거래 8,446건 누락 발견(23개 셀)
+- V2 DRY-RUN: occurrenceIndex 안정성을 position 단위로 증명 — DB가 source 응답
+  position 0~999와 순서까지 동일하고 신규는 전부 1000 이상
+- V2 APPLY: 누락 8,446건 Production 복구
+
+서비스 기능 변경:
+
+없음 (복구 데이터는 전부 2006-11~2020-11이고 라이브 read path는 12~24개월로 제한)
+
+DB 변경:
+
+- apartment_trade_histories INSERT 8,446행 (23개 셀)
+- UPDATE 0 / DELETE 0 / schema 변경 없음 / index 변경 없음
+- 855,556 → 864,002행, DB 549MB → 553MB (+3.9MB)
+- 정확히 1000행인 셀: 23개 → 0개
+
+API 변경:
+
+없음
+
+테스트 결과:
+
+- 23/23 셀 post-count PASS (DB count == source totalCount)
+- 멱등성 재검증: would-insert 0 / would-update 0 / conflict 0 / duplicate 0
+- 전 필드 원천 대조(대표 3셀 전수): name/dong/jibun/area/buildYear/aptSeq 불일치 0
+- rolling 24개월 record-high 불변: 신규행 중 창 진입 0건, 응답 priorHigh 최소 2024-10-02
+- Production live regression: /, /ai-search, /map, /apt/*, /stats*, transactions,
+  dashboard, price-rankings 4종, search 전부 200
+- tsc: 신규 파일 오류 0 (기존 무관 스크립트 오류 24건은 FAIL_EXISTING_SCRIPT_ERRORS)
+
+알려진 문제:
+
+- 23셀 중 B구간 11셀의 기존 행 981건이 stale cancellation(DB=false / source=true) 상태.
+  이번 apply가 만든 문제가 아니며(신규 행 stale 0건) 승인 범위 밖이라 손대지 않음.
+  RECORD HIGH TRUST V3에서 처리 예정.
+
+상태:
+
+완료
+
+## 2026-09-03
+
+### RECORD HIGH TRUST V3 — 2020-02~2024-08 historical cancellation resync
+
+작업:
+
+- DRY-RUN: 부산 16개 구 × 2020-02~2024-08 = 880 cells 전수를 국토부 원천과 대조
+- APPLY: DB에 false로 남아 있던 실제 취소 거래 10,852건을 true로 보정
+
+서비스 기능 변경:
+
+없음 (rolling 24개월 record-high semantic diff 0 — 응답 19행/범위/첫 행 값 전부 동일)
+
+DB 변경:
+
+- apartment_trade_histories UPDATE 10,852행 (dealCanceled false→true, cancelDate,
+  registryDate = source 실제값)
+- INSERT 0 / DELETE 0 / schema 변경 없음 / index 변경 없음
+- row 수 864,002 불변 (UPDATE only). 크기 +3.9MB는 MVCC dead tuple(n_dead_tup 51,948),
+  신규 데이터 아님 — autovacuum이 회수
+- B구간 canceled 629 → 11,481 (177,981행 중 6.45%)
+
+API 변경:
+
+없음
+
+테스트 결과:
+
+- pre-apply 게이트: COMPLETE 880/880, INSERT candidates 0, reverse 0, mutation 0,
+  cancelDate 누락 0 — 전부 통과 후에만 write 시작
+- post-apply 재검증(880셀 전수 재조회): DB=false/source=true 0, DB=true/source=true 11,481,
+  reverse 0, source-only 0, DB-only 1(기존), other mismatch 0
+- 멱등성: would UPDATE 0 / INSERT 0 / DELETE 0
+- 장기 최고가 보정: 194개 group의 유효최고가가 실제로 하락(최대 -27.8억, 해운대 I PARK
+  70억→42.2억), 43개 group은 2020-02 이후 유효거래가 남지 않음
+- Production live regression: /, /map, /ai-search, /stats*, transactions, dashboard,
+  price-rankings, search 전부 200. 에러 0
+
+알려진 문제:
+
+- `26350/202104 현대아쿠아팰리스동백섬` 1건은 원천에서 사라진 거래(취소 아님). 사유 미확인이라
+  보존했고 DELETE 하지 않음
+- legacy `backfill-trade-history.ts` / `sync-trade-history.ts`의 true→false overwrite 가능성은
+  P1으로 유지. 되돌려질 수 있는 행이 629 → 11,481로 늘어 노출도는 증가(단 원천 un-cancel은
+  누적 209,000행 비교에서 0건 관측)
+
+상태:
+
+완료
+
+## 2026-09-04
+
+### SALE CANCELLATION COVERAGE V1 — 지연 취소 recheck sweep + legacy 역전 FAIL-SAFE
+
+작업:
+
+- 현행 감사: daily sale cron overlap 3개월 vs 실측 취소 지연 p99 11.8개월 →
+  3개월 이후 취소 10.5%가 어떤 정기 작업으로도 재확인되지 않는 구조임을 확정
+- 구조 비교 4안: overlap 3→12 확대는 16구 × 13개월 = 208 cells ≈ 112초로 60초 Function
+  한도를 구조적으로 초과 → 기각. 같은 cron에 회전 슬라이스를 얹는 안도 fresh 3개월
+  동기화가 잘릴 위험이 남아 기각. **별도 cron + 독립 예산** 채택
+- Vercel Hobby cron 제약 재확인: 개수 제한은 100개(초기 가정 2개는 오류), 실제 제약은
+  "하루 1회 + ±59분 정밀도" → **cron 개수 blocker 없음**
+- band = latestComplete-12 ~ latestComplete-3 (10개월 × 16구 = 160 cells).
+  fresh 범위와 겹치지도 사이를 비우지도 않음(단위 테스트로 강제)
+- 순회는 day-of-year 회전이 아니라 **least-recently-verified-first** —
+  `sync_coverage_cells.verifiedAt`을 그대로 써서 커서 저장·schema 변경 없이
+  starvation을 구조적으로 배제하고 실행 누락이 자기 교정되게 함
+- cell 처리는 `syncOneSaleCell`을 그대로 재사용 → identity/completeness/write-policy가
+  daily 경로와 100% 동일. false→true만 허용, true→false 차단 유지
+- legacy `upsertRows()`의 true→false overwrite 경로를 닫음(V3 P1 해소):
+  원천이 비취소면 cancellation 필드를 upsert update 절에서 **생략**해 역전을 구조적으로
+  불가능하게 함. `sync-trade-history.ts`도 같은 경로를 공유하므로 함께 닫힘
+- coverage 왜곡 1건 발견·수정: sweep 도입 시 `/admin/ops`의 sale "마지막 실행"이 조용히
+  sweep runId로 바뀌어 daily sync가 멈춰도 정상처럼 보였을 것 →
+  `summarizeSaleRunKinds()`로 두 실행을 분리 표시
+
+서비스 기능 변경:
+
+없음 (사용자 노출 화면·문구·계산식 변경 0. /admin/ops에 sweep 상태 2행 추가)
+
+DB 변경:
+
+- 이 STEP의 Production write **0건** (모든 실측 READ ONLY dry-run)
+- schema / migration / index 변경 **0건** — 기존 `sync_coverage_cells.verifiedAt` 재사용
+
+API 변경:
+
+- `/api/cron/sale-recheck` 신규 (CRON_SECRET fail-closed, mode 기본 dry-run)
+- `vercel.json` cron 1개 추가 `0 23 * * *`(08:00 KST) — sale 04:00 / rent 06:00과
+  최소 1시간 간격이라 중첩 불가
+
+테스트 결과:
+
+- band 전수 대조(160셀): COMPLETE 160/160, source rows 32,898,
+  **late cancellation 2건**(V2 resync 후 단 4일 만에 누적, 둘 다 지연 4.7개월 —
+  overlap 3개월 밖 / band 안), **reverse true→false 0건**, conflict·reviewRequired 0
+- sweep dry-run: SUCCESS, 53 cells / 43.1초(813ms/cell), coverageRecorded **0**,
+  band 한 바퀴 로컬 ~3일 / Vercel 실측 속도 기준 ~2일
+- 단위 테스트 20/20 + 6/6 PASS, lint PASS, build PASS
+- tsc: 변경 파일 오류 0 (기존 무관 스크립트 오류 24건은 FAIL_EXISTING_SCRIPT_ERRORS)
+
+알려진 문제:
+
+- 12개월 초과 취소 0.9%(max 20.6개월)는 여전히 미커버. band 상수만 올리면 확대 가능하나
+  한 바퀴 주기가 길어지는 trade-off
+- 부산 16개 구 한정(daily sync와 동일). 전국은 범위 밖
+- A구간(2006-01~2020-01)은 원천에 취소 데이터 부재로 영구 검증 불가 — "역대" 표현 금지 유지
+
+상태:
+
+완료
