@@ -14197,3 +14197,84 @@ build` 전체 성공(`/api/cron/sale-sync`, `/api/cron/rent-sync` 정적
 상태: 완료.
 
 상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5.md`
+
+## 2026-09-03
+
+### DATA FRESHNESS AUTOMATION V1 PHASE 2 — durable coverage 저장소 + cron 엔진 연결(활성화는 안 함)
+
+Phase 1.5가 남긴 activation 과제를 실제로 구현한 STEP. 다만 §24/§25의
+durability gate에서 **Phase 1.5 설계 자체가 Vercel에서 성립하지 않음**을
+먼저 실측으로 확인하고, 저장 구조를 바꾼 뒤 진행했다.
+
+**핵심 발견(가정 아님, 빌드 산출물 실측)**: "cron이 git-tracked JSON
+manifest를 써서 coverage를 전진시킨다"는 Phase 1.5 계획은 불가능하다.
+manifest는 **빌드 입력**이라 이를 읽는 함수마다 각자의 사본이 번들에
+복사된다(`.nft.json` 확인: admin/ops와 stats/dashboard는 각자 사본을
+갖고, cron 라우트는 아예 갖지 않음). 즉 cron 함수의 쓰기는 dashboard
+함수에서 영원히 보이지 않는다. 게다가 기존 `rent-verified-range.ts`는
+module load 시점에 값을 상수로 고정했다. 파일 기반 coverage는 구조적으로
+durable할 수 없음이 확정됐고, 사용자 승인을 받아 DB 저장소로 전환했다.
+
+**DB 변경(승인됨, 추가만)**: `sync_coverage_cells` 테이블 +
+`SyncDataset`/`SyncCellStatus` enum + unique/index 신규 생성
+(`20260903000000_sync_coverage_cells_v1`, `prisma migrate deploy`로
+적용). 기존 테이블 ALTER 0, 기존 데이터 UPDATE/DELETE 0. 적용 후 실측:
+신규 테이블 0행, `apartment_trade_histories` 855,179 /
+`apartment_rent_histories` 125,320 — 기존 데이터 무변경 확인.
+
+**P0 데이터 무결성 버그 수정**: rent sync가 `INVALID`만 걸러내고
+`PARTIAL`(잘린 다중 페이지 fetch) cell은 그대로 저장하고 있었다.
+occurrenceIndex가 배치 전체 feed 기준으로 매겨지므로, 잘린 feed는 같은
+실제 거래에 다른 자연키를 부여해 **나중에 완전 재동기화를 해도 병합되지
+않는 조용한 중복 row**를 만든다(unique constraint도 못 막음 — 키 자체가
+다르므로). `shouldPersistCellRows()`로 COMPLETE만 저장하도록 수정, CLI와
+신규 core 양쪽 적용.
+
+**EMPTY_VALID semantics 불일치 수정**: writer는 COMPLETE/EMPTY_VALID를
+기록하는데 reader는 COMPLETE만 인정해서, 전월세 거래가 진짜 0건인 구-월
+하나가 coverage를 영구히 멈추게 하는 잠재 버그가 있었다. 양쪽 다
+COMPLETE/EMPTY_VALID를 검증됨으로 인정하도록 통일(실제 sale dry-run에서
+EMPTY_VALID cell 3개 관측 — 가상의 위험이 아니었음).
+
+**read-path 리팩터링**: `RENT_VERIFIED_FROM/TO` module-load 상수 →
+`getRentVerifiedRange()` async 조회(5분 캐시). `rent-history-read.ts`(3),
+`stats/dashboard`(3), `admin/ops`(1) 호출부 전환. 프로덕션 DB 대상 실측
+결과 계산값이 리팩터링 전과 **정확히 동일**(202408–202608) — 사용자에게
+보이는 값 변화 0.
+
+**cron 엔진 연결**: `src/lib/sync/{shared,rent-sync-core,sale-sync-core}.ts`
+신규. CLI 진입점(dotenv/__dirname/argv/process.exit/fs logger/module-level
+PrismaClient)은 Function에서 못 쓰므로, **검증된 순수 모듈**(fetch/
+정규화/completeness/identity/write-policy)만 그대로 재사용하고
+오케스트레이션만 새로 작성(§4 — CLI와 Cron이 다른 판정 로직을 갖지 않음).
+sale scope는 전국(753 cells ≈ 10분)이 아니라 **부산 16개 구**로 한정.
+
+**안전장치**: dry-run 기본값(apply는 `?mode=apply` 명시 필요),
+`recordCoverageCells`가 dry-run을 다시 차단(이중), rent 첫 true mutation은
+자동 UPDATE 금지 + NEEDS_REVIEW + 해당 cell coverage 미기록,
+TimeBudget(50s)로 cell 경계에서 정지 후 PARTIAL_RUN, SUCCESS만 200
+(PARTIAL/NEEDS_REVIEW/PARTIAL_RUN=207, FAILED=500).
+
+**dry-run 실측(로컬, 실제 MOLIT + production DB read)**: rent 32/32 cells
+COMPLETE, fetched 6,887, would-insert 90, update 0, needsReview 0, 13.8s /
+sale 64/64 cells(COMPLETE 61, EMPTY_VALID 3), fetched 7,271, would-insert
+377, flips 2, 34.3s. **양쪽 모두 coverageRecorded=0**(dry-run이 coverage를
+전진시키지 않음을 라이브 증명). 실행 후 DB row 수 무변경 확인.
+
+서비스 기능 변경: 사용자 화면 동작 변화 없음(검증범위 값 동일). admin/ops만
+coverage를 파일이 아닌 DB에서 라이브로 표시하도록 변경.
+
+**하지 않은 것(미승인)**: production sale/rent apply, cron 등록/활성화,
+Vercel `CRON_SECRET` 설정, 배포, rent 실제 mutation UPDATE, DELETE.
+`vercel.json`은 `regions:["icn1"]` 그대로 유지. 스케줄러 표시 OFF 유지.
+
+테스트/빌드: 362개 중 359개 통과(실패 3개는 이 STEP과 무관한 기존 실패 —
+확장자 없는 상대 import 제약). `npx tsc --noEmit` src/ 에러 0(전체 24개는
+기존 20개 + 사용자 `tmp/` 스크립트 4개). `npm run build` 성공.
+변경 파일 eslint 통과. 참고: `rent-verified-range-advance.test.ts`는 이번에
+발견하기 전까지 import 오류로 **실행조차 안 되고 있었다** — `.test.mjs`로
+옮겨 실제로 돌게 고침.
+
+상태: PARTIAL(연결 완료·dry-run 검증 완료, 활성화는 승인 대기).
+
+상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md`

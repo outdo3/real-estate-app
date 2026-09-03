@@ -33,3 +33,22 @@ export function classifyRentCellCompleteness(input: CompletenessInput): RentCell
   if (input.anyLaterPageFailed || input.collectedCount < input.totalCount) return 'PARTIAL';
   return 'COMPLETE';
 }
+
+/**
+ * DATA_FRESHNESS_AUTOMATION_V1_PHASE2 §11/§12 — 이 cell의 row를 DB에 써도 되는가.
+ *
+ * 이전에는 sync 루프가 INVALID만 걸러내고(`continue`) PARTIAL은 그대로 통과시켜
+ * apply 모드에서 저장했다. PARTIAL 저장은 "몇 건 누락"으로 끝나지 않는다:
+ * occurrenceIndex는 (lawdCd, dealYmd) 배치의 **전체 feed**를 기준으로 결정론적으로
+ * 매겨지므로(rent-history-logic.ts의 정렬 후 카운터), 잘린 feed는 동일한 실제 거래에
+ * 다른 occurrenceIndex를 부여한다. 그 결과 자연키
+ * (groupKeyStr, deposit, monthlyRent, dealDate, floor, occurrenceIndex)가 달라져
+ * 나중에 완전한 재동기화를 해도 병합되지 않는 조용한 중복 row가 남는다 —
+ * unique constraint도 이 경우엔 방어막이 되지 못한다(키 자체가 다르므로).
+ *
+ * 따라서 "완전하게 확인된" cell만 쓴다. EMPTY_VALID는 애초에 쓸 row가 없다.
+ * PARTIAL/INVALID cell은 기록만 남기고 다음 실행에서 자연스럽게 재시도된다.
+ */
+export function shouldPersistCellRows(status: RentCellStatus): boolean {
+  return status === 'COMPLETE';
+}

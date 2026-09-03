@@ -11,6 +11,7 @@ import { previousPeriodRange } from '@/lib/regional-feed';
 import { getRegionalSaleRowsRawFromDb, type StoredTrade } from '@/lib/trade-history-read';
 import {
   splitVerifiedMonths,
+  getRentVerifiedRange,
   fetchRentMonthBucketsFromDb,
   getRentMonthlyAggregateFromDb,
   getRentPeriodComparisonFromDb,
@@ -188,6 +189,12 @@ export async function GET(request: Request) {
       // 월만 좁혀서 가져온다 — verified 전체(최대 24개월)를 다 옮기지 않는다.
       const recentMonths = last12Months.slice(-3);
 
+      // DATA_FRESHNESS_AUTOMATION_V1_PHASE2 §24 — 검증범위는 이제 DB coverage에서 온다
+      // (module load 시점 상수가 아니다). 한 요청 안에서 여러 번 쓰이므로 **한 번만**
+      // 조회해 아래 모든 판정에 같은 값을 쓴다 — 요청 처리 도중 범위가 달라져 verified/
+      // remainder 경계가 어긋나는(=이중 카운트/누락) 일이 생기지 않게 하기 위함이다.
+      const rentVerifiedRange = await getRentVerifiedRange();
+
       let aptMonthly: any[][];
       let rentMonthly: any[][];
       let partial = false;
@@ -215,7 +222,7 @@ export async function GET(request: Request) {
         // (비부산은 rent DB 자체가 없으므로 전부 unverified 취급 = 기존과 동일하게
         // 전부 MOLIT).
         const { verified: verifiedRentMonths, unverified: unverifiedRentMonths } = isBusan
-          ? splitVerifiedMonths(last12Months)
+          ? splitVerifiedMonths(last12Months, rentVerifiedRange)
           : { verified: [] as string[], unverified: last12Months };
         // PHASE D.2 §6 — row-level(gapInvest/jeonseRate)용으로는 verified 중 최근
         // 3개월 슬라이스와 겹치는 월만 좁혀서 DB에 묻는다.
@@ -279,7 +286,7 @@ export async function GET(request: Request) {
       } else {
         const isBusan = isBusanScopedRequest(lawdCd, null, false);
         const { verified: verifiedRentMonths, unverified: unverifiedRentMonths } = isBusan
-          ? splitVerifiedMonths(last12Months)
+          ? splitVerifiedMonths(last12Months, rentVerifiedRange)
           : { verified: [] as string[], unverified: last12Months };
         const rowLevelVerifiedMonths = verifiedRentMonths.filter((m) => recentMonths.includes(m));
         isBusanFlag = isBusan;
@@ -357,7 +364,7 @@ export async function GET(request: Request) {
       // clipDateRangeToVerified가 반환하는 clipped.to의 "다음 날"부터가 remainder
       // 시작점이므로 DB가 이미 센 구간과 절대 겹치지 않는다(§ 이중 카운트 방지).
       const countRentRemainderByType = (rows: any[], from: Date, to: Date) => {
-        const clipped = clipDateRangeToVerified(from, to);
+        const clipped = clipDateRangeToVerified(from, to, rentVerifiedRange);
         const remainderFrom = clipped ? addOneDayUtc(clipped.to) : from;
         if (remainderFrom > to) return { jeonse: 0, wolse: 0 };
         const fromStr = remainderFrom.toISOString().slice(0, 10);

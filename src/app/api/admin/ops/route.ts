@@ -7,7 +7,10 @@ import { getOrSetCache } from '@/lib/server-cache';
 import { getSidoList, getSigunguListForSido } from '@/lib/region-utils';
 import { HISTORICAL_LOOKBACK_MONTHS, historicalCoverageLabel } from '@/lib/price-ranking';
 import { summarizeManifest, computeOverallHealth, computeCancellationVerdict, OVERALL_STATUS_LABELS, type Manifest, type EvidenceType } from '@/lib/admin-ops-evidence';
-import { RENT_VERIFIED_FROM, RENT_VERIFIED_TO } from '@/lib/rent-verified-range';
+// DATA_FRESHNESS_AUTOMATION_V1_PHASE2 §23/§24 — 검증범위와 coverage는 이제 DB
+// (sync_coverage_cells)에서 온다. legacyBootstrap만 여전히 정적 파일에서 읽는다(런타임에
+// 변하지 않는 provenance라 durability 문제가 없다).
+import { getRentVerifiedRange, readLegacyBootstrap, summarizeCoverage } from '@/lib/sync-coverage';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +29,6 @@ const BUSAN_16 = [
 
 const NATIONWIDE_MANIFEST_PATH = path.join(process.cwd(), 'data/trade-history/nationwide-sync-manifest.json');
 const CANCELLATION_24M_SNAPSHOT_PATH = path.join(process.cwd(), 'data/trade-history/cancellation-24m-verification-snapshot.json');
-const RENT_COVERAGE_MANIFEST_PATH = path.join(process.cwd(), 'data/rent-trade-history/coverage-manifest.json');
 
 type ManifestReadResult =
   | { status: 'ok'; manifest: Manifest }
@@ -75,21 +77,6 @@ function readCancellation24mSnapshot(): { status: 'ok'; data: Cancellation24mSna
     return { status: 'ok', data: JSON.parse(fs.readFileSync(CANCELLATION_24M_SNAPSHOT_PATH, 'utf-8')) };
   } catch (e) {
     console.error('[admin/ops] 24개월 취소검증 snapshot 읽기 실패', e);
-    return { status: 'unreadable' };
-  }
-}
-
-interface RentCoverageManifestFile {
-  legacyBootstrap: { from: string; to: string; source: string; bootstrappedAt: string };
-  cells: Record<string, { status: string }>;
-}
-
-function readRentCoverageManifest(): { status: 'ok'; manifest: RentCoverageManifestFile } | { status: 'missing' } | { status: 'unreadable' } {
-  if (!fs.existsSync(RENT_COVERAGE_MANIFEST_PATH)) return { status: 'missing' };
-  try {
-    return { status: 'ok', manifest: JSON.parse(fs.readFileSync(RENT_COVERAGE_MANIFEST_PATH, 'utf-8')) };
-  } catch (e) {
-    console.error('[admin/ops] rent coverage manifest 읽기 실패', e);
     return { status: 'unreadable' };
   }
 }
@@ -172,7 +159,14 @@ async function buildSummary() {
 
   const busanCoveredCount = busanCoveredGroups.length;
   const rentBusanCoveredCount = rentBusanCoveredGroups.length;
-  const rentManifestResult = readRentCoverageManifest();
+  // PHASE2 §23 — coverage는 파일이 아니라 DB에서 라이브로 읽는다. legacyBootstrap은
+  // 정적 provenance라 여전히 파일 기준이다.
+  const [rentVerifiedRange, rentCoverageSummary, saleCoverageSummary] = await Promise.all([
+    getRentVerifiedRange(),
+    summarizeCoverage('RENT'),
+    summarizeCoverage('SALE'),
+  ]);
+  const rentLegacyBootstrap = readLegacyBootstrap();
 
   return {
     overall: {
@@ -225,7 +219,14 @@ async function buildSummary() {
       invalid: nationwideSummary?.invalid ?? 0,
       rowsInserted: nationwideSummary?.rowsInserted ?? 0,
       cancellationsUpdated: nationwideSummary?.cancellationsUpdated ?? 0,
-      scheduler: { value: 'OFF' as const, evidenceType: 'CONFIG' as EvidenceType, note: 'vercel.json/cron 부재 확인(STEP F) — 아직 활성화하지 않은 의도된 상태' },
+      // PHASE2 §23 — sale도 rent와 동일하게 DB coverage cell을 라이브로 노출한다.
+      coverageCells: {
+        evidenceType: 'LIVE' as EvidenceType,
+        total: saleCoverageSummary.totalCells,
+        byStatus: saleCoverageSummary.byStatus,
+        latestVerifiedAt: saleCoverageSummary.latestVerifiedAt,
+      },
+      scheduler: { value: 'OFF' as const, evidenceType: 'CONFIG' as EvidenceType, note: 'vercel.json crons 미등록 — 아직 활성화하지 않은 의도된 상태' },
       nextScheduledSync: { value: null, evidenceType: 'CONFIG' as EvidenceType },
     },
     cancellation: {
@@ -279,12 +280,20 @@ async function buildSummary() {
       busan: { covered: rentBusanCoveredCount, total: 16 },
       totalRows: rentBusanTotal,
       latestDealDate: rentLatestDealAgg._max.dealDate ? rentLatestDealAgg._max.dealDate.toISOString().slice(0, 10) : null,
-      verified: { from: RENT_VERIFIED_FROM, to: RENT_VERIFIED_TO },
-      legacyBootstrap: rentManifestResult.status === 'ok' ? rentManifestResult.manifest.legacyBootstrap : null,
-      manifestStatus: rentManifestResult.status,
-      // §20 명시 원칙 — Cron이 실제로 등록되지 않았으므로 절대 ACTIVE라고 표시하지
-      // 않는다. sale의 scheduler 표시와 동일한 정직성 기준.
-      scheduler: { value: 'OFF' as const, evidenceType: 'CONFIG' as EvidenceType, note: 'vercel.json/cron 부재 확인 — 아직 활성화하지 않은 의도된 상태. coverage manifest는 실제 --apply sync가 있을 때만 전진한다(수동 상수 편집 없음).' },
+      verified: rentVerifiedRange,
+      legacyBootstrap: rentLegacyBootstrap,
+      // PHASE2 §23 — coverage cell은 DB에 있고 라이브로 센다. 파일 manifest 상태를
+      // 더 이상 신뢰 근거로 쓰지 않는다(그 구조는 Vercel에서 durable하지 않았다).
+      coverageCells: {
+        evidenceType: 'LIVE' as EvidenceType,
+        total: rentCoverageSummary.totalCells,
+        byStatus: rentCoverageSummary.byStatus,
+        latestVerifiedAt: rentCoverageSummary.latestVerifiedAt,
+        note: 'COMPLETE/EMPTY_VALID만 verified로 인정한다(EMPTY_VALID = 신뢰할 수 있는 진짜 0건). PARTIAL/INVALID는 미검증이라 다음 실행에서 재시도된다.',
+      },
+      // §26 NO FAKE ACTIVATION — Cron이 실제로 등록/배포되지 않았으므로 절대 ACTIVE라고
+      // 표시하지 않는다. sale의 scheduler 표시와 동일한 정직성 기준.
+      scheduler: { value: 'OFF' as const, evidenceType: 'CONFIG' as EvidenceType, note: 'vercel.json crons 미등록 — 아직 활성화하지 않은 의도된 상태. coverage는 실제 apply sync가 있을 때만 전진한다(dry-run은 절대 전진시키지 않음).' },
       note: '취소(cancellation) 개념 없음 — MOLIT 전월세 API에 해당 필드가 존재하지 않는다(rent cancellation verified 같은 표현 금지).',
     },
     features: [

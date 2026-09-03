@@ -1356,3 +1356,60 @@ model ApartmentRentHistory {
   @@index([lawdCd, dealType, dealDate])
   @@map("apartment_rent_histories")
 }
+
+// DATA_FRESHNESS_AUTOMATION_V1_PHASE2 §24/§25 — 동기화 coverage 상태의 durable 저장소.
+//
+// 왜 새 테이블이 필요한가(Phase 2 감사 결과, docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md):
+// Phase 1.5는 coverage를 git-tracked JSON 파일(data/rent-trade-history/coverage-manifest.json)에
+// 기록하도록 설계했지만, Vercel에서는 그 파일이 **빌드 입력**이라 이를 읽는 함수마다 각자의
+// 사본이 번들에 복사된다(빌드 산출물 .nft.json으로 실측 확인). 즉 cron 함수가 파일을 써도
+// dashboard/admin 함수는 영원히 자기 사본만 본다. 게다가 rent-verified-range.ts는 module
+// load 시점에 값을 상수로 고정한다. 파일 기반 coverage는 구조적으로 durable할 수 없다.
+//
+// 이 테이블은 그 유일한 신뢰 출처다. 셀 하나 = (dataset, lawdCd, dealYmd) 하나.
+enum SyncDataset {
+  SALE
+  RENT
+}
+
+// rent-completeness-logic.ts / sale-pagination-logic.ts의 판정 결과와 1:1 대응한다.
+// PARTIAL/INVALID는 "아직 검증되지 않음"이며, 절대 COMPLETE처럼 취급하지 않는다(§11/§12).
+enum SyncCellStatus {
+  COMPLETE
+  EMPTY_VALID
+  PARTIAL
+  INVALID
+}
+
+model SyncCoverageCell {
+  id Int @id @default(autoincrement())
+
+  dataset SyncDataset @map("dataset")
+  lawdCd  String      @map("lawd_cd")
+  dealYmd String      @map("deal_ymd")
+
+  status SyncCellStatus @map("status")
+
+  // Provenance — 완전성 "주장"의 근거를 셀과 함께 보관한다. sourceTotalCount 없이
+  // COMPLETE를 주장할 수 없다(§11 completeness 검증: source totalCount vs fetched).
+  // 근거를 버리고 결론만 저장하면 ADMIN_OPS_V1.2에서 배운 실수를 반복하게 된다.
+  sourceTotalCount Int? @map("source_total_count")
+  fetchedCount     Int  @default(0) @map("fetched_count")
+  blockedCount     Int  @default(0) @map("blocked_count")
+  insertedCount    Int  @default(0) @map("inserted_count")
+  updatedCount     Int  @default(0) @map("updated_count")
+
+  // 어느 실행이 이 셀을 기록했는지 — 로그와 대조 가능하게 한다(§20 observability).
+  runId String @map("run_id")
+
+  // 이 셀이 실제로 검증된 시각(행 생성 시각이 아니라 검증 시각).
+  verifiedAt DateTime @map("verified_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([dataset, lawdCd, dealYmd], name: "sync_coverage_cell_key")
+  // coverage 전진 판정은 "특정 월에 대해 16개 구가 전부 COMPLETE인가"를 묻는다.
+  @@index([dataset, dealYmd, status])
+  @@map("sync_coverage_cells")
+}

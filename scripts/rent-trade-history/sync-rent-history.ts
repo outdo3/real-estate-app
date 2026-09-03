@@ -33,6 +33,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env.local'), quiet: true }
 import { PrismaClient, Prisma } from '@prisma/client';
 import { fetchRentRegionMonth } from './rent-molit-fetch';
 import { normalizeMolitRentItemsToRentRows, type RentRowInput } from './rent-history-logic';
+import { shouldPersistCellRows } from './rent-completeness-logic';
 
 export const prisma = new PrismaClient();
 
@@ -370,7 +371,15 @@ export async function runRentSyncJob(opts: RentSyncJobOptions, log: (line: strin
       let persisted = 0;
       let duplicateWithinBatch = 0;
 
-      if (fetchResult.status === 'EMPTY_VALID' || rows.length === 0) {
+      // DATA_FRESHNESS_AUTOMATION_V1_PHASE2 §11/§12 — 완전하게 확인된(COMPLETE) cell만
+      // 쓰기 경로로 보낸다. 이전에는 INVALID만 위에서 걸러지고 PARTIAL은 여기를 그대로
+      // 통과해 apply 모드에서 저장됐다 — 잘린 feed는 occurrenceIndex를 재번호해 복구
+      // 불가능한 중복 자연키를 만든다(shouldPersistCellRows 주석 참고). PARTIAL cell은
+      // 기록만 남기고 다음 실행에서 재시도된다.
+      if (!shouldPersistCellRows(fetchResult.status) || rows.length === 0) {
+        if (fetchResult.status === 'PARTIAL') {
+          log(`PARTIAL ${key} — 쓰기 건너뜀(fetched=${fetchResult.collectedCount} < totalCount=${fetchResult.totalCount ?? 'unknown'}); 다음 실행에서 재시도`);
+        }
         manifest[key] = { status: fetchResult.status, fetched: fetchResult.collectedCount, invalid: invalid.length, blockedMissingAptSeq, wouldInsert: 0, wouldUpdate: 0, unchanged: 0, persisted: 0, at: new Date().toISOString() };
       } else {
         const result = await classifyAndMaybeWrite(rows, lawdCd, dealYmd, opts.apply);

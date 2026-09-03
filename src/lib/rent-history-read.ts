@@ -17,10 +17,17 @@
 // fetchRentMonthBucketsFromDb(row-level path)를 계속 쓰지만, 호출부(dashboard/route.ts)가
 // 이제 "최근 3개월 슬라이스와 겹치는 verified 월"만 좁혀서 넘긴다 — 예전처럼 verified
 // 전체(최대 24개월)를 다 row로 옮기지 않는다.
+// DATA_FRESHNESS_AUTOMATION_V1_PHASE2 §24 — 검증범위는 더 이상 module load 시점에 고정되는
+// 상수가 아니다. Vercel에서 파일 기반 coverage가 durable할 수 없음이 실측으로 확인돼
+// (rent-verified-range.ts 헤더 참고) 이제 DB(sync_coverage_cells)에서 읽는다. 따라서 범위를
+// 쓰는 지점은 반드시 await로 조회한다 — 이 파일의 함수들은 원래 전부 async였으므로 호출
+// 계약은 그대로다.
 import { prisma } from './prisma';
-import { RENT_VERIFIED_FROM, RENT_VERIFIED_TO, clipDateRangeToVerified } from './rent-verified-range';
+import { clipDateRangeToVerified } from './rent-verified-range';
+import { getRentVerifiedRange } from './sync-coverage';
 
-export { RENT_VERIFIED_FROM, RENT_VERIFIED_TO, splitVerifiedMonths, verifiedToDateInclusive, verifiedFromDateInclusive, clipDateRangeToVerified } from './rent-verified-range';
+export { splitVerifiedMonths, verifiedToDateInclusive, verifiedFromDateInclusive, clipDateRangeToVerified } from './rent-verified-range';
+export { getRentVerifiedRange } from './sync-coverage';
 
 export interface StoredRentTrade {
   lawdCd: string;
@@ -57,7 +64,8 @@ function ymEndDate(ym: string): Date {
  * getRentPeriodComparisonFromDb를 쓴다. */
 export async function fetchRentMonthBucketsFromDb(lawdCds: string[], months: string[]): Promise<Map<string, StoredRentTrade[]>> {
   const buckets = new Map<string, StoredRentTrade[]>(months.map((m) => [m, []]));
-  const inRange = months.filter((m) => m >= RENT_VERIFIED_FROM && m <= RENT_VERIFIED_TO);
+  const range = await getRentVerifiedRange();
+  const inRange = months.filter((m) => m >= range.from && m <= range.to);
   if (inRange.length === 0 || lawdCds.length === 0) return buckets;
 
   const sorted = [...inRange].sort();
@@ -113,7 +121,8 @@ const ZERO_TYPE_AGG: RentMonthTypeAggregate = { count: 0, avgDeposit: null };
  * (0/null) — fetchRentMonthBucketsFromDb와 동일한 이중 안전장치. */
 export async function getRentMonthlyAggregateFromDb(lawdCds: string[], months: string[]): Promise<Map<string, RentMonthAggregate>> {
   const buckets = new Map<string, RentMonthAggregate>(months.map((m) => [m, { jeonse: { ...ZERO_TYPE_AGG }, wolse: { ...ZERO_TYPE_AGG } }]));
-  const inRange = months.filter((m) => m >= RENT_VERIFIED_FROM && m <= RENT_VERIFIED_TO);
+  const range = await getRentVerifiedRange();
+  const inRange = months.filter((m) => m >= range.from && m <= range.to);
   if (inRange.length === 0 || lawdCds.length === 0) return buckets;
 
   const sorted = [...inRange].sort();
@@ -161,8 +170,9 @@ export async function getRentPeriodComparisonFromDb(
   const result = { current: { ...ZERO_PERIOD_COUNTS }, previous: { ...ZERO_PERIOD_COUNTS } };
   if (lawdCds.length === 0) return result;
 
-  const clippedCurrent = clipDateRangeToVerified(currentRange.from, currentRange.to);
-  const clippedPrevious = clipDateRangeToVerified(previousRange.from, previousRange.to);
+  const range = await getRentVerifiedRange();
+  const clippedCurrent = clipDateRangeToVerified(currentRange.from, currentRange.to, range);
+  const clippedPrevious = clipDateRangeToVerified(previousRange.from, previousRange.to, range);
   if (!clippedCurrent && !clippedPrevious) return result;
 
   const curFrom = clippedCurrent?.from ?? NEVER_MATCH_DATE;
