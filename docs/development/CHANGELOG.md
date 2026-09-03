@@ -14572,3 +14572,62 @@ Vercel 대시보드에 갱신된 두 job(쿼리스트링 유지) 확인, `/admin
 변경 파일: `vercel.json`(RENT 표현식 1줄) + `src/lib/cron-schedule.test.mjs`(실제 설정
 반영). Production DB 쓰기 **0건**, manual apply 없음, secret 변경 없음.
 첫 무인 실행은 여전히 관측 대기(SALE 09-04 04:00 KST, RENT 09-04 06:00 KST).
+
+## 2026-09-03
+
+### SUPABASE EGRESS P0 FIX V1 — 감사에서 PROVEN된 낭비 3건만 수정
+
+데이터 삭제·인덱스 변경·schema 변경 없음. Production DB 쓰기 0건.
+
+**1) trade-history-read — 27개 컬럼 → 12개, 중복 쿼리 제거**
+`queryTrades`/`getTradeHistory`/`getRegionalTrades`의 결과는 전부
+`toStoredTrade()`를 통과하는데 그 함수가 읽는 필드는 12개뿐이다. 그런데
+`select`가 없어 사용되지 않는 15개 컬럼(group_key, identity_key, raw_uid, source,
+deal_ymd, deal_type, deal_year/month/day, cancel_date, registry_date,
+occurrence_index, source_fetched_at, created_at, updated_at)이 매 row마다 실려
+나갔다. `STORED_TRADE_SELECT` 상수 하나로 통일했고, `toStoredTrade`의 제네릭
+제약과 맞물려 있어 둘이 조용히 어긋날 수 없다.
+
+또 `queryTrades`는 동일 where로 `MAX(dealDate)` aggregate를 한 번 더 실행했는데,
+유일한 라이브 호출부인 `/api/transactions`는 `const { trades } = ...`로 meta를
+아예 쓰지 않으면서 매 요청 구 단위 12개월 스캔을 두 번 하고 있었다.
+`withLatestDealDate`(기본 true — 기존 호출부 의미 무변경)를 추가하고 그 호출부만
+opt-out 시켰다.
+
+Production 실측(lawdCd=26140, 12개월): **909행 동일**, payload **579.9KB →
+227.6KB(-60.8%)**, 쿼리 **2 → 1**, latency **313ms → 115ms**, 유지한 12개 필드
+전수 비교 **차이 0행**.
+
+유지 필수로 명시: `aptSeq`(canonical identity), `dealCanceled`(취소 의미론),
+`exclusiveArea`(Decimal 원본 문자열), `id`.
+
+**2) statistics-pyeong-resolver — include → explicit select**
+`include:{unitTypes:true}`가 Apartment 전 컬럼 + ApartmentUnitType 전 컬럼을
+가져왔지만 실제로 읽는 건 6개다. 이 함수는 `/api/transactions`,
+`/api/stats/dashboard`, `/api/stats/rankings`에서 **캐시 밖**으로 매 요청 호출된다.
+실측 **54.4KB → 16.9KB(-69.0%)**, 평형 관련 필드 **semantic diff 0**.
+정직한 단서: `community_facilities`는 현재 전 행 null이라 오늘의 절감은 나머지
+컬럼에서 나온 것이고, blob은 잠재적 비용이었다.
+
+**3) Production DB 가드 — 진단 스크립트 기본 차단**
+모든 `scripts/*.ts`가 루트 `.env`를 읽어 Production DATABASE_URL을 쓰는 구조가
+"855k행 전체를 43회 반환" 같은 실행의 원인이었다. `scripts/_prod-db-guard.ts`로
+분류 도입 — OPERATIONAL은 항상 통과(운영 sync 보호), DIAGNOSTIC/BACKFILL은
+Production 대상일 때만 `ALLOW_PROD_DB_READ=1`/`ALLOW_PROD_DB_WRITE=1` 없이는
+fail-closed(로컬 DB에서는 제한 없음). 감사가 지목한 무거운 5개에 적용.
+유닛테스트 10개(로컬/원격 판정, 운영 통과, `"1"` 외 값은 승인 불인정 등) 통과.
+실제 차단 동작을 Production DB 대상으로 확인(쿼리 0건 실행).
+
+**Cron 무영향 증명**: sale/rent Cron은 `src/lib/sync/**`(Next.js Function)에서
+돌고 `trade-history-read`·`statistics-pyeong-resolver`·가드 중 **무엇도 import하지
+않는다**(grep 확인). 운영 sync 스크립트에도 가드를 붙이지 않았다.
+
+배포 `dpl_AXq1AwXBAmvD4DswqDgoxX4Rc9cj`, production alias, 전 function icn1.
+Regression: `/api/transactions` 909행·22필드 계약 동일, dashboard(구/시도),
+price-rankings 4종, rankings, apt 상세 전부 200. cron 401 유지. DB 카운터 전부 무변경.
+
+테스트 389개 중 386개 통과(실패 3개는 기존 무관 실패), tsc src/ 에러 0,
+build 성공, 변경 파일 eslint 통과.
+
+남은 P1: score cohort의 in-process 캐시(45,225회 호출·~3.9GB, 최대 단일 원인),
+`search-alias-fallback`의 무필터 전체 로드, `/api/admin/dashboard` distinct findMany.
