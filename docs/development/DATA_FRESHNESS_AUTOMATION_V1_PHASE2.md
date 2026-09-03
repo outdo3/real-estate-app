@@ -1,23 +1,24 @@
 # DATA FRESHNESS AUTOMATION V1 — PHASE 2: Durable Coverage + Cron Wiring
 
-Status: **SALE and RENT both applied under supervision; cron schedule NOT registered.**
-See §23 (sale) and §24 (rent) for the first production apply evidence (2026-09-03).
+Status: **ACTIVATED — both crons registered and scheduled daily; first unattended run pending.**
+See §23 (sale apply), §24 (rent apply) and §25 (cron activation) for evidence (2026-09-03).
 Work start: `main` @ `acee1a6`, worktree preserved (pre-existing user files untouched).
 Cross-links: [Phase 1](./DATA_FRESHNESS_AUTOMATION_V1_PHASE1.md),
 [Phase 1.5](./DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5.md),
 [Rent architecture](./RENT_TRADE_HISTORY_V1_ARCHITECTURE.md),
 [Admin Ops V1.2](./ADMIN_OPS_V1_2_EVIDENCE_CORRECTION.md).
 
-Per §26 (NO FAKE ACTIVATION), the scheduler still reports `OFF` — because it *is* off. **No cron
-is registered**, so nothing runs on its own; SALE currently runs only when invoked manually with
-the secret.
+Per §26 (NO FAKE ACTIVATION), the scheduler now reports `SCHEDULED` — because a schedule really is
+registered — and that is deliberately **not** the same claim as "an unattended run succeeded". No
+unattended run has been observed yet; the separate "last run" field still shows the supervised
+applies.
 
 Sections 1–22 below describe the wiring work as it stood before activation, and several of them
-(§4 Environment, §5 Schedule) were written when `CRON_SECRET` was still unset and nothing was
-deployed. **§23 and §24 supersede them** and record what is actually true now: the code is
-deployed, `CRON_SECRET` is configured, and both first supervised production applies have run —
-SALE (377 inserts, 2 cancellation flips) and RENT (90 inserts, 0 mutations). Neither runs on a
-schedule.
+(§4 Environment, §5 Schedule) were written when `CRON_SECRET` was unset and nothing was deployed.
+**§23–§25 supersede them** and record what is actually true now: the code is deployed,
+`CRON_SECRET` is configured, both first supervised production applies have run — SALE (377
+inserts, 2 cancellation flips) and RENT (90 inserts, 0 mutations) — and both jobs are now
+registered to run daily.
 
 ---
 
@@ -101,9 +102,8 @@ throwaway secret: no header → **401**, wrong secret → **401**, correct secre
 
 ## 5. Schedule
 
-**Not registered.** `vercel.json` still contains only `{"regions": ["icn1"]}` and was not touched.
-Recommended when activation is approved (KST 04:00 sale / 05:00 rent on the 3rd → UTC 19:00/20:00
-on the 2nd): `"0 19 2 * *"` and `"0 20 2 * *"`, with `?mode=apply` on the path.
+> **Superseded by §25.** Both crons are now registered and run **daily** (not monthly as sketched
+> here): sale `0 19 * * *` UTC = 04:00 KST, rent `0 20 * * *` UTC = 05:00 KST.
 
 ## 6. Sale Policy
 
