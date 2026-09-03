@@ -7,6 +7,7 @@ import { recentMonths } from '@/lib/molit-months';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import { queryTrades } from '@/lib/trade-history-read';
 import { getOrSetCache } from '@/lib/server-cache';
+import { getMasterCoords } from '@/lib/master-coords-cache';
 
 // MAP_PERFORMANCE_V1 — 이 route가 지도(map/page.tsx)·분위지도(stats type-client.tsx)·
 // AI 검색 조건검색(ai-search.ts runConditionSearch) 3곳 모두에서 정확히 같은 모양
@@ -142,10 +143,10 @@ export async function GET(request: Request) {
       // source, Busan coverage 100%)를 갖고 있으므로 외부 API 호출 없이 단일 DB 쿼리로
       // 대체한다.
       if ((type === 'apt' || type === 'silv') && data.length > 0) {
-        const masters: MasterCoordRow[] = await prisma.apartmentMaster.findMany({
-          where: { sggCd: lawdCd },
-          select: { name: true, umdName: true, aptSeq: true, buildYear: true, latitude: true, longitude: true }
-        });
+        // SUPABASE_EGRESS_P1 — 이 조회는 select는 좁았지만 이 route의 getOrSetCache
+        // **바깥**이라 매 요청 실행됐고, 감사에서 sgg_cd 조회 45,225회/약 3.9GB의 한
+        // 축으로 확인됐다. 인스턴스 간 공유되는 캐시로 옮긴다(master-coords-cache.ts).
+        const masters: MasterCoordRow[] = await getMasterCoords(lawdCd);
 
         // 실측(연산동 26470, 207개 단지): dong+name 완전일치만으로 206건이 이미 매칭됐지만
         // Kakao 지오코딩은 그중 19건에서 실패했었다(오래된/소규모 단지, 지번 병기 표기 등) —
