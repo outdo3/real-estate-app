@@ -22,6 +22,7 @@
 //      그것도 키워드당 최대 1회만 카카오를 호출한다.
 
 import { prisma } from './prisma';
+import { boundingBoxFor, haversineMeters } from './geo-bounding-box';
 
 export interface AliasFallbackCandidate {
   id: number;
@@ -40,17 +41,6 @@ export interface AliasFallbackCandidate {
 
 const fallbackCache = new Map<string, AliasFallbackCandidate | null>();
 const RADIUS_METERS = 80;
-
-function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 export async function resolveApartmentViaKakaoAlias(keyword: string): Promise<AliasFallbackCandidate | null> {
   if (fallbackCache.has(keyword)) return fallbackCache.get(keyword)!;
@@ -83,21 +73,35 @@ export async function resolveApartmentViaKakaoAlias(keyword: string): Promise<Al
       return null;
     }
 
-    const masterRows = await prisma.apartmentMaster.findMany({
-      where: { latitude: { not: null }, longitude: { not: null } },
-      select: {
-        id: true, aptSeq: true, name: true, sggCd: true, umdName: true,
-        jibun: true, buildYear: true, totalHouseholds: true, latitude: true, longitude: true,
-      },
-    });
-
     for (const doc of aptDocs) {
       const poiLat = parseFloat(doc.y);
       const poiLng = parseFloat(doc.x);
       if (!Number.isFinite(poiLat) || !Number.isFinite(poiLng)) continue;
 
-      const withinRadius = masterRows.filter(
-        (m) => haversineMeters(poiLat, poiLng, m.latitude!, m.longitude!) <= RADIUS_METERS
+      // SUPABASE_EGRESS_P1_CLEANUP — 예전에는 geocoded ApartmentMaster **전체**(3,400여 행)를
+      // 읽어 JS에서 거리 계산을 했다. 반경이 80m인데 전국(부산 전역) 좌표를 다 가져오는
+      // 구조였다. 이제 POI 주변 bounding box로 DB에서 먼저 좁힌다.
+      //
+      // 판정 의미는 그대로다: box는 80m 원을 **완전히 포함하는 superset**이고(margin 포함,
+      // geo-bounding-box.test.mjs가 360개 방위각×여러 위도에서 검증), 최종 채택 여부는
+      // 아래에서 기존과 동일한 haversine ≤ 80m로 판단한다. box가 후보를 누락하면
+      // "2개라서 모호 → 거부"가 "1개 → 채택"으로 바뀌어 다른 단지를 반환할 수 있으므로,
+      // 넉넉한 쪽으로 잡았다.
+      const box = boundingBoxFor(poiLat, poiLng, RADIUS_METERS);
+      const nearbyRows = await prisma.apartmentMaster.findMany({
+        where: {
+          latitude: { gte: box.minLat, lte: box.maxLat },
+          longitude: { gte: box.minLng, lte: box.maxLng },
+        },
+        select: {
+          id: true, aptSeq: true, name: true, sggCd: true, umdName: true,
+          jibun: true, buildYear: true, totalHouseholds: true, latitude: true, longitude: true,
+        },
+      });
+
+      const withinRadius = nearbyRows.filter(
+        (m) => m.latitude != null && m.longitude != null &&
+          haversineMeters(poiLat, poiLng, m.latitude, m.longitude) <= RADIUS_METERS
       );
       if (withinRadius.length === 1) {
         const m = withinRadius[0];

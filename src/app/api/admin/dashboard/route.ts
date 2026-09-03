@@ -103,12 +103,18 @@ export async function GET() {
       prisma.pageView.count({
         where: { createdAt: { gte: today }, url: { not: { startsWith: ANALYTICS_EVENT_URL_PREFIX } } },
       }),
-      prisma.pageView.findMany({
-        where: { createdAt: { gte: today }, url: { not: { startsWith: ANALYTICS_EVENT_URL_PREFIX } } },
-        select: { sessionId: true },
-        distinct: ['sessionId'],
-      }),
-      prisma.activeSession.findMany({ where: { lastSeenAt: { gte: onlineThreshold } } }),
+      // SUPABASE_EGRESS_P1_CLEANUP — 예전에는 `findMany({ select:{sessionId}, distinct:['sessionId'] })`
+      // 였다. Prisma의 distinct는 **가져온 뒤 클라이언트에서** 중복을 제거하므로, 고유 세션 수를
+      // 세자고 오늘 page_view 행을 전부 전송받고 있었다. 소비처는 `.length` 하나뿐이라
+      // DB 집계(COUNT DISTINCT)로 바꾼다 — page_views.session_id는 NOT NULL이라
+      // COUNT(DISTINCT)와 Prisma distinct 개수가 정확히 같다(스키마 확인함).
+      prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(DISTINCT session_id) AS count
+        FROM page_views
+        WHERE created_at >= ${today} AND url NOT LIKE ${ANALYTICS_EVENT_URL_PREFIX + '%'}
+      `,
+      // 소비처가 `.length`뿐이라 전체 row를 받을 이유가 없다(select도 없어 모든 컬럼을 실어왔다).
+      prisma.activeSession.count({ where: { lastSeenAt: { gte: onlineThreshold } } }),
       prisma.activeSession.groupBy({
         by: ['currentAptName'],
         where: { lastSeenAt: { gte: onlineThreshold }, currentAptName: { not: null } },
@@ -175,8 +181,8 @@ export async function GET() {
       data: {
         traffic: {
           todayPageViews,
-          todayUniqueVisitors: todayUniqueSessions.length,
-          onlineNow: onlineSessions.length,
+          todayUniqueVisitors: Number(todayUniqueSessions[0]?.count ?? 0),
+          onlineNow: onlineSessions,
           todayNewUsers,
           totalUsers,
         },
