@@ -14631,3 +14631,51 @@ build 성공, 변경 파일 eslint 통과.
 
 남은 P1: score cohort의 in-process 캐시(45,225회 호출·~3.9GB, 최대 단일 원인),
 `search-alias-fallback`의 무필터 전체 로드, `/api/admin/dashboard` distinct findMany.
+
+## 2026-09-03
+
+### SUPABASE EGRESS P1 — Score cohort 공유 캐시 시도: 부분 성공 + STOP
+
+목표는 감사 최대 단일 Egress 원인(`apartment_masters WHERE sgg_cd=?`, 45,225회 /
+약 3.9GB)을 인스턴스 간 공유 캐시로 없애는 것이었다. **결론: 호출 횟수 감소는
+달성하지 못했고, 바이트 감소만 달성했다. 진짜 공유 캐시는 금지 항목을 요구해 STOP.**
+
+**메커니즘 조사(설치된 Next 16.3.0 문서 기준)**
+- `'use cache'`(plain): 문서가 명시적으로 **in-memory**라고 밝힘 → 이 문제를 못 고침.
+- `'use cache: remote'`: "durable caching shared across all server instances"로 정확히
+  필요한 것이지만 `cacheComponents: true`(앱 전역 아키텍처 플래그) + 원격 캐시 핸들러가
+  필요하고 문서상 "typically incurs platform fees" → **이번 STEP 금지사항**(신규 유료
+  서비스, 대규모 무관 변경)에 해당.
+- `unstable_cache`: "persist the result across requests and deployments"라 적혀 있어
+  채택했다.
+
+**실측 결과 — unstable_cache는 이 배포에서 캐시되지 않았다.**
+배포 후 같은 구(26140)로 8회 연속 Score 요청 → cohort 조회 **8회 그대로 발생**
+(pg_stat_statements 델타 location +8 / market +8). 20회 혼합 요청에서도 master +45.
+폴백 에러 로그 **0건**이라 예외가 아니라 순수 miss다. 즉 `cacheComponents` 비활성
+상태의 Next 16.3 배포에서 `unstable_cache`는 인스턴스 간 공유 캐시로 동작하지 않았다.
+
+**그럼에도 남긴 실효(측정)**: cohort 로딩 시 location/market을 `select` 없이 전체 컬럼
+읽던 것을 Score가 실제 쓰는 필드로 좁혔다 — location **24→15 컬럼**, market **15→4 컬럼**,
+cohort 1회당 **173.5KB → 75.8KB (-56.3%)**. 호출 횟수는 그대로다.
+
+**정확성 검증**: 캐시에 담기는 타입(RawMasterInfo/RawLocationFeature/RawMarketFeature)이
+string/number/null뿐이고 Date/Decimal이 없음을 확인한 뒤 좁혔다(Date였다면 직렬화로
+Score가 조용히 바뀔 수 있었다). 5개 구 샘플의 Score API 응답 전체 JSON을 배포 전/후
+비교 → **semantic diff 0**(score 37/47/62/56/53, confidence·categories·peerContext 포함
+완전 동일). Next 요청 컨텍스트 밖(스크립트 ~10개가 calculateApartmentScore를 직접 호출)
+에서도 폴백이 DB 직접 조회와 **동일한 데이터**를 반환함을 실행으로 확인.
+
+캐시 키에 sggCd가 들어가 다른 구 cohort 혼입은 구조적으로 불가능. TTL 30분(기존
+in-process 캐시와 동일 → 신선도 계약 무변경, worst-case stale 30분). 캐시 실패 시 항상
+DB 직접 조회로 폴백(다른 지역 fallback 금지).
+
+두 캐시 모듈 헤더에 **"현재 히트하지 않는다"는 측정 사실을 명시**해 두었다 — 나중에
+읽는 사람이 캐시되고 있다고 오해하지 않도록.
+
+배포 `dpl_HFRqoLW6QiuGQBwkVpEBXCb4iMFG`, production alias, 전 function icn1.
+Production DB 쓰기 0건. schema/migration/index 변경 0. Cron 무영향.
+테스트 386/389(실패 3개 기존 무관), tsc src/ 0, build·lint 통과.
+
+**PM 판단 필요**: 3.9GB를 실제로 없애려면 `cacheComponents: true` + `'use cache: remote'`
+(플랫폼 유료 캐시) 승인이 필요하다.
