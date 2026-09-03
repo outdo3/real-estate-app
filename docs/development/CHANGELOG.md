@@ -14278,3 +14278,54 @@ Vercel `CRON_SECRET` 설정, 배포, rent 실제 mutation UPDATE, DELETE.
 상태: PARTIAL(연결 완료·dry-run 검증 완료, 활성화는 승인 대기).
 
 상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md`
+
+## 2026-09-03
+
+### DATA FRESHNESS AUTOMATION V1 PHASE 2 — SALE 최초 감독 하 Production APPLY
+
+`8778a91` push → Vercel Production 배포(`dpl_6FCgbxUwTrkpQw7K8T8627nLJVh1`),
+`CRON_SECRET` 설정 후 재배포(`dpl_6PNxxpmaRDVZSLbZHR6TFLnGWyxm`, production
+alias 보유). 모든 Function region **icn1** 확인(`X-Vercel-Id: icn1::icn1::…`).
+
+인증 검증: 헤더 없음 → 401, 잘못된 secret → 401, 올바른 secret → 200이되
+**기본 mode가 dry-run**이라 인가 확인 자체가 apply를 유발하지 않음.
+`?mode=apply`도 secret 없으면 401.
+
+**SALE 최초 Production APPLY**(부산 16개 구, 3개월 overlap + 현재월 =
+202606–202609, 64 cells): 적용 직전 production dry-run 예측과 **정확히 일치** —
+fetched 7,271 / inserted **377** / cancellation flip **2** / blocked 0 / failed 0,
+status SUCCESS, 30.6s, coverageRecorded 48.
+
+Post-write 검증: trade 855,179 → 855,556(+377), 부산 4개월 scope 6,898 → 7,275
+(+377), rent 125,320 **무변경**, coverage cells 0 → 48.
+
+취소 건수가 +15로 나와 엔진 보고(update 2)와 달라 보였으나, `createdAt` 기준
+분해로 정확히 해소: 신규 INSERT 377건 중 **원본에서 이미 취소 상태였던 13건**
++ 기존 row flip **2건** = 15. 신규 row의 `aptSeq` NULL = **0**(identity 정책
+유지, 이름 fallback 없음).
+
+Completeness: 모든 COMPLETE cell이 `sourceTotalCount == fetchedCount`(위반 0).
+Coverage는 완료월(202606/07/08) × 16/16 = 48건만 기록, **현재월 202609는 동기화만
+하고 coverage 미기록**(49건 INSERT됨) — §15 유지. RENT coverage cell 0,
+rent verified range **202408–202608** 유지(SALE cell이 RENT 계산에 새지 않음).
+
+Idempotency: 동일 scope 재검증에서 동일 7,271건 조회, **insert 0 / update 0 /
+blocked 0 / failed 0**, DB 카운터 완전 동일.
+
+보안: secret 리터럴이 git 전체 history(-S), tracked files, docs/, src/·scripts/·
+prisma/, vercel.json, production logs에서 **모두 0회**. 로그는 START/셀별/DONE
+구조화 라인만 남고 secret·개인정보 없음, error/warn 0건.
+
+Regression: 부산 dashboard(시도/구), rankings(area84·rise·decline·record-high),
+transactions, apt 상세 전부 200.
+
+미관측: `/api/admin/ops`는 자동화 브라우저에 관리자 세션이 없어 응답을 직접 보지
+못함(자격증명 입력은 범위 밖). 입력값은 DB에서 직접 검증(SALE 48 cells COMPLETE,
+RENT range 202408–202608, cron 미등록이므로 scheduler OFF가 사실과 일치).
+
+하지 않은 것: RENT production apply, cron 등록, `vercel.json` crons 추가, DELETE,
+schema/migration 변경, 전국 확장. **SALE은 현재 스케줄이 없어 수동 호출로만 실행됨.**
+
+상태: SALE 활성화(수동/감독), RENT 대기.
+
+상세: `docs/development/DATA_FRESHNESS_AUTOMATION_V1_PHASE2.md` §23

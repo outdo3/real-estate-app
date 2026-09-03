@@ -1,16 +1,22 @@
 # DATA FRESHNESS AUTOMATION V1 — PHASE 2: Durable Coverage + Cron Wiring
 
-Status: **PARTIAL — wiring complete and proven by dry-run; activation deliberately NOT performed.**
+Status: **SALE ACTIVATED (manual/supervised); RENT still pending; cron schedule NOT registered.**
+See §23 for the first supervised production apply evidence (2026-09-03).
 Work start: `main` @ `acee1a6`, worktree preserved (pre-existing user files untouched).
 Cross-links: [Phase 1](./DATA_FRESHNESS_AUTOMATION_V1_PHASE1.md),
 [Phase 1.5](./DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5.md),
 [Rent architecture](./RENT_TRADE_HISTORY_V1_ARCHITECTURE.md),
 [Admin Ops V1.2](./ADMIN_OPS_V1_2_EVIDENCE_CORRECTION.md).
 
-Per §26 (NO FAKE ACTIVATION), the scheduler still reports `OFF` — because it *is* off. No
-`CRON_SECRET` is set in Production, no cron is registered, no deployment was made, and **zero
-production sync rows were written**. The only production database change this STEP is the
-approved additive `sync_coverage_cells` table.
+Per §26 (NO FAKE ACTIVATION), the scheduler still reports `OFF` — because it *is* off. **No cron
+is registered**, so nothing runs on its own; SALE currently runs only when invoked manually with
+the secret.
+
+Sections 1–22 below describe the wiring work as it stood before activation, and several of them
+(§4 Environment, §5 Schedule) were written when `CRON_SECRET` was still unset and nothing was
+deployed. **§23 supersedes them** and records what is actually true now: the code is deployed,
+`CRON_SECRET` is configured, and the first supervised SALE production apply has run
+(377 inserts, 2 cancellation flips). RENT has still never been applied in production.
 
 ---
 
@@ -89,8 +95,8 @@ throwaway secret: no header → **401**, wrong secret → **401**, correct secre
 
 ## 4. Environment
 
-`CRON_SECRET` is **not** set in Production — deliberately, since activation is not approved. This
-alone makes both routes unreachable for any sync invocation.
+> **Superseded by §23.** `CRON_SECRET` is now set in Vercel Production. (Written when it was
+> deliberately unset.)
 
 ## 5. Schedule
 
@@ -264,3 +270,102 @@ being truncated mid-write.
 - First production rent apply
 - Cron registration / activation (`vercel.json` crons, `CRON_SECRET` in Production)
 - First real rent mutation UPDATE
+
+---
+
+## 23. First supervised SALE production apply (2026-09-03)
+
+Deployed `8778a91`; `CRON_SECRET` set in Vercel Production (Production scope only, 48 bytes of
+`crypto.randomBytes` as base64url, piped via stdin so it never appeared on a command line);
+redeployed as `dpl_6PNxxpmaRDVZSLbZHR6TFLnGWyxm`, which carries the production alias.
+
+### Auth (production)
+
+| Case | Result |
+|---|---|
+| No header | **401** |
+| Wrong secret | **401** |
+| Correct secret, default mode | **200**, `mode: dry-run` — authorization proven without applying |
+
+`?mode=apply` without a valid secret is also 401. All responses carry `X-Vercel-Id: icn1::icn1::…`.
+
+### Predicted vs actual
+
+Prediction came from a production dry-run taken immediately before the apply — not from the
+earlier local run.
+
+| | Predicted | Actual |
+|---|---|---|
+| Range | 202606–202609 | 202606–202609 |
+| Cells | 64 (61 `COMPLETE`, 3 `EMPTY_VALID`) | identical |
+| Fetched | 7,271 | 7,271 |
+| Inserted | 377 | **377** |
+| Cancellation flips | 2 | **2** |
+| Blocked / failed | 0 / 0 | **0 / 0** |
+| Duration | ~33s | 30.6s |
+
+`status: SUCCESS`, `coverageRecorded: 48`.
+
+### Post-write verification
+
+| Metric | Pre | Post | Delta |
+|---|---|---|---|
+| `apartment_trade_histories` total | 855,179 | 855,556 | **+377** |
+| Busan, 4-month scope | 6,898 | 7,275 | **+377** |
+| Canceled in scope | 224 | 239 | +15 |
+| `apartment_rent_histories` | 125,320 | 125,320 | **0** |
+| `sync_coverage_cells` | 0 | 48 | +48 |
+
+The **+15 canceled** needed explaining, since the engine reported only 2 updates. Forensics
+resolved it exactly: of the 377 newly inserted rows, **13 were already canceled at source on
+insert**, plus the **2** genuine `false→true` flips on pre-existing rows — 13 + 2 = 15. Confirmed
+by splitting on `createdAt` vs the run start timestamp:
+
+```
+inserted rows      : 377   (of which canceled at source: 13, aptSeq NULL: 0)
+existing modified  : 2     (both now canceled)
+```
+
+`aptSeq NULL` on inserted rows = **0**, so the identity policy held with no name-based fallback.
+
+### Completeness and coverage
+
+- Every `COMPLETE` cell satisfies `sourceTotalCount == fetchedCount` — **0** violations.
+- Coverage written: 16/16 districts × 202606, 202607, 202608 = **48**, all `COMPLETE`.
+- **202609 (current month) coverage cells = 0** — §15 held: the current month was *synced*
+  (49 rows inserted) but never recorded as verified.
+- RENT coverage cells = **0**; rent untouched, and the rent verified range is still
+  **202408–202608** (SALE cells do not leak into the RENT computation — the query filters on
+  `dataset`).
+- Coverage `insertedCount` sums to 328; +49 current-month inserts (not coverage-recorded) = 377. ✓
+
+### Idempotency
+
+Re-running the identical scope fetched the same 7,271 source rows and produced
+**inserted 0, updated 0, blocked 0, failed 0**. DB counters after the re-check were byte-identical
+to the post-apply values, confirming the dry-run itself wrote nothing.
+
+### Security / observability
+
+The literal secret value appears **0** times in: git history (`git log --all -S`), tracked files,
+`docs/`, `src/`+`scripts/`+`prisma/`, `vercel.json`, and the fetched production logs. Logs contain
+structured `START` / per-cell / `DONE` lines with no secret and no personal data. No error- or
+warning-level entries.
+
+### Regression
+
+Post-apply, all Busan read routes returned 200: dashboard (`sidoCode=26`, `lawdCd=26140`),
+rankings (`area84`, `rise`, `decline`, `record-high`), `/api/transactions`, `/api/apt/대신롯데캐슬`.
+
+### Not observed
+
+`/api/admin/ops` could not be read — no admin session was available in the automation browser, and
+credential entry is out of scope. Its inputs were verified directly against the DB instead
+(48 SALE cells all `COMPLETE`; RENT range 202408–202608; no cron registered, so scheduler `OFF`
+remains factually correct), but the endpoint's own response is **unobserved**.
+
+### Still not done
+
+RENT production apply, cron registration (`vercel.json` `crons`), and flipping the `/admin/ops`
+scheduler indicator to ACTIVE. SALE is currently **manually triggered only** — there is no
+schedule, so it will not run again on its own.
