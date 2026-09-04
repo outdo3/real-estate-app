@@ -14,7 +14,12 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
 import { fetchSaleRegionMonth } from '../../../scripts/sale-molit-fetch';
 import { normalizeMolitItemsToTradeRows, type TradeRowInput } from '../../../scripts/trade-history-logic';
-import { classifyRow } from '../../../scripts/write-policy-logic';
+import {
+  buildRegistryOnlyUpdateFields,
+  classifyRow,
+  isRegistrySupplementUnambiguous,
+  occurrenceGroupKey,
+} from '../../../scripts/write-policy-logic';
 import { latestCompleteMonth, subtractMonths } from '../../../scripts/rent-trade-history/incremental-sync-completed-month-logic';
 import { recordCoverageCells, type CoverageCellRecord } from '../sync-coverage';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
@@ -102,8 +107,10 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
       updated: a.updated + r.updated,
       blocked: a.blocked + r.blocked,
       failed: a.failed + (r.status === 'INVALID' || r.status === 'PARTIAL' ? 1 : 0),
+      registryUpdated: a.registryUpdated + r.registryUpdated,
+      registryAmbiguousSkipped: a.registryAmbiguousSkipped + r.registryAmbiguousSkipped,
     }),
-    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0 }
+    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0, registryUpdated: 0, registryAmbiguousSkipped: 0 }
   );
 
   let status: SyncRunStatus = 'SUCCESS';
@@ -124,7 +131,11 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
     needsReview: [],
     reports,
   };
-  log(`DONE sale status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} blocked=${totals.blocked} failed=${totals.failed} coverageRecorded=${recorded} durationMs=${summary.durationMs}`);
+  log(
+    `DONE sale status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} ` +
+      `registryUpdated=${totals.registryUpdated} registryAmbiguousSkipped=${totals.registryAmbiguousSkipped} ` +
+      `blocked=${totals.blocked} failed=${totals.failed} coverageRecorded=${recorded} durationMs=${summary.durationMs}`
+  );
   return summary;
 }
 
@@ -141,6 +152,8 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     status: fetchResult.status,
     sourceTotalCount: fetchResult.totalCount,
     fetched: fetchResult.collectedCount,
+    registryUpdated: 0,
+    registryAmbiguousSkipped: 0,
     blocked: 0,
     inserted: 0,
     updated: 0,
@@ -160,7 +173,8 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
 
   const existing = await prisma.apartmentTradeHistory.findMany({
     where: { lawdCd, dealYmd },
-    select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, aptName: true, dong: true },
+    // TRADE_REGISTRY_DATA_V1.1 — registryDate는 self-heal 판정에 필수라 반드시 select한다.
+    select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, aptName: true, dong: true, registryDate: true },
   });
   const existingMap = new Map<string, (typeof existing)[number]>();
   for (const e of existing) {
@@ -168,8 +182,19 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     existingMap.set(naturalKeyStr({ groupKeyStr: e.groupKeyStr, dealAmount: e.dealAmount, dealDate: e.dealDate.toISOString().slice(0, 10), floor: e.floor, occurrenceIndex: e.occurrenceIndex }), e);
   }
 
+  // TRADE_REGISTRY_DATA_V1.1 §4 — 같은 자연키 그룹(occurrenceIndex 제외)의 형제 row를
+  // 미리 모아둔다. 형제들의 registryDate가 엇갈리면 순서 흔들림에 취약하므로 보충하지 않는다.
+  const siblingsByGroup = new Map<string, TradeRowInput[]>();
+  for (const row of rows) {
+    const key = occurrenceGroupKey(row);
+    const list = siblingsByGroup.get(key);
+    if (list) list.push(row);
+    else siblingsByGroup.set(key, [row]);
+  }
+
   const inserts: TradeRowInput[] = [];
   const flips: { id: number; row: TradeRowInput }[] = [];
+  const registrySupplements: { id: number; registryDate: string }[] = [];
   for (const row of rows) {
     const match = existingMap.get(naturalKeyStr(row));
     const kind = classifyRow(row, match);
@@ -178,7 +203,21 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     if (kind === 'insert') inserts.push(row);
     else if (kind === 'updateFalseToTrue' && match) flips.push({ id: match.id, row });
     else if (kind === 'reviewRequired' || kind === 'conflict') base.reviewCandidates++;
-    else base.unchanged++;
+    else if (kind === 'updateRegistryOnly' && match) {
+      // §4 OCCURRENCE SAFETY — 형제 registryDate가 전부 같을 때만 보충한다.
+      if (!isRegistrySupplementUnambiguous(siblingsByGroup.get(occurrenceGroupKey(row)) ?? [row])) {
+        base.registryAmbiguousSkipped++;
+        base.unchanged++;
+        continue;
+      }
+      // §3 WRITE CONTRACT — 분류와 독립적으로 전제를 다시 검사한다(이중 안전장치).
+      const data = buildRegistryOnlyUpdateFields(row, match);
+      if (!data) {
+        base.unchanged++;
+        continue;
+      }
+      registrySupplements.push({ id: match.id, registryDate: data.registryDate });
+    } else base.unchanged++;
   }
 
   if (mode === 'apply') {
@@ -229,11 +268,30 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
       );
       base.updated += chunk.length;
     }
+    // TRADE_REGISTRY_DATA_V1.1 §3 — 승인된 두 번째 UPDATE: registryDate NULL→value 보충.
+    // data에 registryDate 외 어떤 필드도 넣지 않는다(취소 필드/자연키/sourceFetchedAt 전부 제외)
+    // — 자연키와 취소 의미론에 손대지 않는다는 것이 이 write의 계약이다.
+    for (let i = 0; i < registrySupplements.length; i += CHUNK_SIZE) {
+      const chunk = registrySupplements.slice(i, i + CHUNK_SIZE);
+      await prisma.$transaction(
+        chunk.map((s) =>
+          prisma.apartmentTradeHistory.update({
+            where: { id: s.id },
+            data: { registryDate: s.registryDate },
+          })
+        )
+      );
+      base.registryUpdated += chunk.length;
+    }
   } else {
     base.inserted = inserts.length; // dry-run 예상치
     base.updated = flips.length;
+    base.registryUpdated = registrySupplements.length;
   }
 
-  log(`${fetchResult.status} ${lawdCd}:${dealYmd} fetched=${base.fetched} blocked=${base.blocked} inserted=${base.inserted} flips=${base.updated} review=${base.reviewCandidates}`);
+  log(
+    `${fetchResult.status} ${lawdCd}:${dealYmd} fetched=${base.fetched} blocked=${base.blocked} inserted=${base.inserted} ` +
+      `flips=${base.updated} registry=${base.registryUpdated} registryAmbiguous=${base.registryAmbiguousSkipped} review=${base.reviewCandidates}`
+  );
   return base;
 }

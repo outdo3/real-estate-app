@@ -118,7 +118,9 @@ async function main() {
 
       const existing = await prisma.apartmentTradeHistory.findMany({
         where: { lawdCd, dealYmd },
-        select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, aptName: true, dong: true, aptSeq: true },
+        // TRADE_REGISTRY_DATA_V1.1 — classifyRow가 registryDate를 요구한다(진단 전용 스크립트라
+        // 분류 결과만 읽고 write는 하지 않는다).
+        select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, aptName: true, dong: true, aptSeq: true, registryDate: true },
       });
       const map = new Map<string, (typeof existing)[number]>();
       for (const e of existing) {

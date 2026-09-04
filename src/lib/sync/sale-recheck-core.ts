@@ -153,8 +153,12 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
       updated: a.updated + r.updated,
       blocked: a.blocked + r.blocked,
       failed: a.failed + (r.status === 'INVALID' || r.status === 'PARTIAL' ? 1 : 0),
+      // TRADE_REGISTRY_DATA_V1.1 §7 — sweep도 같은 syncOneSaleCell을 쓰므로 self-heal이
+      // 4~12개월 구간에도 그대로 적용된다. 별도 API 호출/cron 추가 없음.
+      registryUpdated: a.registryUpdated + r.registryUpdated,
+      registryAmbiguousSkipped: a.registryAmbiguousSkipped + r.registryAmbiguousSkipped,
     }),
-    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0 }
+    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0, registryUpdated: 0, registryAmbiguousSkipped: 0 }
   );
 
   // §6 STATUS SEMANTICS — 이 sweep은 **설계상** 예산에 맞춰 band의 일부만 돌고 다음
@@ -185,7 +189,8 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
 
   log(
     `DONE sale-recheck status=${status} processed=${reports.length}/${cells.length} sweepComplete=${summary.sweepComplete} ` +
-      `inserted=${totals.inserted} flips=${totals.updated} blocked=${totals.blocked} failed=${totals.failed} ` +
+      `inserted=${totals.inserted} flips=${totals.updated} registryUpdated=${totals.registryUpdated} ` +
+      `registryAmbiguousSkipped=${totals.registryAmbiguousSkipped} blocked=${totals.blocked} failed=${totals.failed} ` +
       `coverageRecorded=${recorded} durationMs=${summary.durationMs}`
   );
   return summary;

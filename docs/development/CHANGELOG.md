@@ -14885,3 +14885,64 @@ API 변경:
 상태:
 
 완료
+
+## 2026-09-04
+
+### TRADE REGISTRY DATA V1.1 — registryDate self-heal write policy
+
+작업:
+
+- `classifyRow()`에 `updateRegistryOnly` 분류 추가 — 기존 활성 거래가 unchanged여도
+  DB `registryDate`가 NULL이고 원천에 값이 있으면 등기일자만 보충한다
+- 판정 우선순위 명시: conflict/review → false→true → true→false skip →
+  **registryDate 보충** → noop. 취소 판정이 언제나 앞선다
+- `buildRegistryOnlyUpdateFields()` — write contract를 분류와 독립적으로 재검사하는
+  이중 안전장치. `{ registryDate }` 단 하나의 필드만 반환한다
+- `isRegistrySupplementUnambiguous()` — 같은 자연키 그룹의 형제 occurrence가
+  서로 다른 등기일자를 가지면 보충하지 않고 건너뛴다(오매칭 방지)
+- `registryUpdated` / `registryAmbiguousSkipped`를 별도 metric으로 분리 —
+  취소 flip(`updated`)과 절대 합치지 않는다
+
+서비스 기능 변경:
+
+없음 (`registryDate`는 현재 제품 소비처 0건 — `/api/apt/[name]`은 live MOLIT에서
+직접 읽고 UI는 렌더링하지 않는다)
+
+DB 변경:
+
+- schema / migration / index 변경 **0건**
+- Production write **440건** — `registryDate` NULL→value 보충만. supervised apply 1회,
+  daily와 동일한 정상 scope(202606~202609 × 부산 16구 = 64셀). historical bulk backfill
+  아님
+
+API 변경:
+
+- 없음. daily sale-sync와 recheck sweep이 같은 `syncOneSaleCell`을 재사용하므로
+  새 정책이 두 경로에 자동 적용된다. 별도 API 호출 0 / 별도 cron 0 / vercel.json 변경 0
+
+테스트 결과:
+
+- dry-run: registry 후보 447(daily 440 + sweep 7), ambiguous skip 15, flips 0,
+  inserts 1, blocked 0. coverage cell 110 불변, `coverageRecorded` 0/0
+- **감사 예측과 정확히 일치** — 감사가 202606~202608 stale로 지목한 455건 =
+  dry-run daily 보충 440 + 모호 skip 15
+- supervised apply: registryUpdated **440**, flips **0**, inserts **0**, blocked 0.
+  NULL 활성 row 75,202→74,762(−440), 값 보유 31,787→32,227(+440),
+  취소 행 중 값 보유 0→**0**. 증가분이 update 수와 정확히 일치 = 덮어쓰기 0건 증명
+- post-apply: 최근 30분 기록 440건 전부 기존 행(created_at 08-29~09-03), 취소 필드 미기입,
+  전체 row 864,100 불변(insert/delete 0), aptSeq NULL 0, 자연키 중복 0
+- 단위 테스트 20/20 PASS(§9 A~H 전 케이스), 관련 sync 테스트 34/34 PASS
+- lint PASS, build PASS
+- tsc: 변경 파일 오류 **0** (기존 무관 스크립트/`tmp/` 오류 24건은 FAIL_EXISTING_SCRIPT_ERRORS,
+  변경 전 baseline과 동일)
+
+알려진 문제:
+
+- 2023-01~2025-07 backlog 약 68,400행은 그대로 남아 있다. recheck band가 12개월까지만
+  닿아 자기치유로는 도달하지 않는다 — 실제 소비처가 생길 때 별도 승인으로 판단
+- 계약 2023-01 이전 749,659행은 원천이 등기일자를 공개하지 않아 영구 복구 불가
+- `aptDong`은 여전히 미저장(schema 변경 범위 밖)
+
+상태:
+
+완료

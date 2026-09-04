@@ -38,7 +38,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 import { PrismaClient, Prisma } from '@prisma/client';
 import { fetchOneRegionMonth, monthsInRange, makeLogger } from './backfill-trade-history';
 import { normalizeMolitItemsToTradeRows, type TradeRowInput } from './trade-history-logic';
-import { classifyRow } from './write-policy-logic';
+import { classifyRow, type RowClassificationKind } from './write-policy-logic';
 
 export const prisma = new PrismaClient();
 
@@ -108,7 +108,9 @@ function parseArgs() {
 const CHUNK_SIZE = 500;
 
 interface RowClassification {
-  kind: 'noop' | 'insert' | 'updateFalseToTrue' | 'updateTrueToFalseSkipped' | 'conflict' | 'reviewRequired';
+  // 유니온을 여기서 다시 적지 않고 write-policy-logic의 정의를 그대로 쓴다 — 분류가
+  // 추가될 때마다 이 파일이 조용히 어긋나는 것을 막는다(TRADE_REGISTRY_DATA_V1.1에서 실제 발생).
+  kind: RowClassificationKind;
   fresh: TradeRowInput;
   existingId?: number;
 }
@@ -125,7 +127,10 @@ async function classifyAndWrite(
 ): Promise<{ insertCount: number; updateFalseToTrue: number; updateTrueToFalseSkipped: number; conflicts: number; reviewRequired: number }> {
   const existing = await prisma.apartmentTradeHistory.findMany({
     where: { lawdCd, dealYmd },
-    select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, aptName: true, dong: true },
+    // TRADE_REGISTRY_DATA_V1.1 — classifyRow가 registryDate를 요구한다(select 누락과 실제 NULL을
+    // 구분하기 위해 필수 필드). 이 스크립트는 취소 resync 전용이라 `updateRegistryOnly` 분류는
+    // 아래 필터에서 어느 쪽에도 잡히지 않아 **아무 것도 쓰지 않는다**(기존 'noop'과 동일 동작).
+    select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, aptName: true, dong: true, registryDate: true },
   });
   const existingMap = new Map<string, (typeof existing)[number]>();
   for (const e of existing) {

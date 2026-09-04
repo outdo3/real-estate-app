@@ -34,6 +34,11 @@ export interface CellReport {
   unchanged: number;
   /** 이 셀에서 발견된, 자동 적용이 금지된 변경 후보 수(rent first-mutation guard). */
   reviewCandidates: number;
+  /** TRADE_REGISTRY_DATA_V1.1 §5 — registryDate만 보충한 row 수.
+   * `updated`(취소 flip)와 **절대 합치지 않는다** — 서로 다른 사건이다. */
+  registryUpdated: number;
+  /** 형제 occurrence의 registryDate가 엇갈려 보충을 건너뛴 row 수(§4). */
+  registryAmbiguousSkipped: number;
 }
 
 export interface SyncSummary {
@@ -49,6 +54,9 @@ export interface SyncSummary {
   updated: number;
   blocked: number;
   failed: number;
+  /** TRADE_REGISTRY_DATA_V1.1 §5 — 취소 flip(`updated`)과 분리된 별도 metric. */
+  registryUpdated: number;
+  registryAmbiguousSkipped: number;
   coverageRecorded: number;
   durationMs: number;
   needsReview: ReviewItem[];

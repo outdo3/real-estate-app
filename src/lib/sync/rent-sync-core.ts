@@ -137,6 +137,11 @@ export async function runRentSync(opts: RentSyncOptions, log: (line: string) => 
     cells: totalCells,
     cellsProcessed: reports.length,
     ...totals,
+    // TRADE_REGISTRY_DATA_V1.1 — RENT은 등기/취소 개념이 원천에 아예 없다(PHASE A §7).
+    // registry self-heal은 RENT에 **적용되지 않으며**, 이 0은 "해당 없음"이지 "0건 보충"이
+    // 아니다. SyncSummary를 sale과 공유하기 때문에 형태상 필요한 값일 뿐이다.
+    registryUpdated: 0,
+    registryAmbiguousSkipped: 0,
     coverageRecorded: recorded,
     durationMs: budget.elapsedMs(),
     needsReview,
@@ -165,6 +170,9 @@ async function syncOneRentCell(
     updated: 0,
     unchanged: 0,
     reviewCandidates: 0,
+    // RENT에는 등기일자 필드가 존재하지 않는다 — 항상 0(해당 없음).
+    registryUpdated: 0,
+    registryAmbiguousSkipped: 0,
   };
 
   if (fetchResult.status === 'INVALID') {
