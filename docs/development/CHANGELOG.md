@@ -15147,3 +15147,84 @@ STEP 1 주장 정정:
 상태:
 
 master 적재 완료 · linkage 준비도 LIMITED (STEP 2.1 필요)
+
+### OFFICETEL V1 STEP 2.1 — source-driven master expansion
+
+작업:
+
+- master 판별 기준 전환: **MOLIT 오피스텔 전용 SALE/RENT API에 등장한 주소**를 primary
+  signal로, 건축물대장은 **판별이 아니라 metadata 보강** 역할로 재정의
+- 주소 universe 전 기간 전수 수집(SALE 2006-01~ / RENT 2011-01~ × 부산 16구 = 7,008셀)
+- 신규 후보 3,646 주소 건축물대장 보강 → `officetel_masters` **INSERT 3,606건**
+- 스크립트 3종 추가: source-universe / source-driven-expand / enrich-resume
+
+서비스 기능 변경:
+
+없음 (runtime 노출 0)
+
+DB 변경:
+
+- schema/migration **0**
+- `officetel_masters` **1,450 → 5,056** (INSERT 3,606 / UPDATE 0 / DELETE 0)
+- 기존 1,450 master 불변 검증: `updated_at > created_at + 2s` **0건**,
+  2시간 이전 생성 master **1,450건 잔존**, canonicalKey 중복 **0**
+- 타 테이블 불변: apartments 71 · aptTrade 864,100 · aptRent 125,469 · properties 0 ·
+  officetel trade/rent **0/0**
+
+전환 근거:
+
+- STEP 2 기준(`etcPurps LIKE '%오피스텔%'`)의 주소 MISS가 SALE 76.1% / RENT 75.0%
+- 원인: 건축물대장은 오피스텔을 대개 "업무시설"로만 적는다. MISS 표본 14/14가 표제부는
+  존재하나 용도 표기에 "오피스텔" 없음 — `경동윈츠타워오피스텔`조차
+  `etcPurps="업무시설,근린생활시설"`
+
+완전성 게이트:
+
+- universe 스윕 7,008셀 / 거래행 314,965 / 49.7분, **불완전 셀 0**
+- 건축물대장 보강 3,646/3,646, **불완전 0 / 중복 0 → GATE PASS**
+- registry 분류: A_SINGLE 3,606 · C_NO_TITLE 40 · B_MULTI_DONG 0 · D 0 · E 0
+
+identity 계약 확정 (MASTER vs TRADE linkage 분리):
+
+- MASTER: 건축물대장 dongNm이 명확하면 **동별 master 유지**, building-level 강제 병합 금지
+- TRADE linkage: 거래 원천에 동 필드가 없으므로 **주소 그룹에 master가 정확히 1건일 때만
+  연결**, 2건 이상이면 **UNRESOLVED 유지**(추측 연결 금지)
+- 수치로 확인: 최종 SALE 연결가능 3,539 > exact 2,532 — 차이 1,007건은 master가
+  dong-level이라 문자열 exact match는 안 되지만 주소 그룹에 하나뿐이라 안전 연결되는 경우
+
+linkage readiness (전 기간 실측):
+
+| | 주소그룹 연결가능 | 거래행 연결가능 | 다동 UNRESOLVED | MISS |
+| --- | ---: | ---: | ---: | ---: |
+| SALE | 23.3% → **98.4%** | 29.0% → **97.3%** | 2.0% | 0.7% |
+| RENT | 24.4% → **98.6%** | 33.5% → **97.8%** | 2.0% | 0.2% |
+
+**STEP 3 READY.**
+
+hhldCnt 정정(기록만, schema 변경 없음):
+
+- STEP 1의 "오피스텔 hhldCnt 항상 0"(3건 표본) **철회**
+- 전수 후보 1,456건 중 **874건(61.1%)이 hhldCnt > 0** — mixed-use 건물 가능성이 높다
+- 오피스텔 규모 표시는 **hoCnt 기준 유지**, hhldCnt를 "오피스텔 세대수"로 해석 금지
+
+resume 기록 (전체 재실행 없음):
+
+- 이전 실행이 외부에서 중지된 뒤 체크포인트에서 이어받았다
+- cached enrichment 3,200 / remaining 446 / **resumed API 481회 / 8.4분**
+- **source universe 재수집 0회**, **기존 enriched candidate 재호출 0회**
+- 신규 후보 집합(3,646)은 universe + 기존 master로부터 **API 0회로 결정적 재계산**
+
+테스트 결과:
+
+- 79/79 PASS · tsc 24건(baseline 동일, officetel 오류 0) · build PASS
+
+알려진 문제:
+
+- 다동 UNRESOLVED 2.0%는 원천에 동 필드가 없어 구조적으로 해소 불가 —
+  STEP 3에서 masterId NULL + canonicalKey 보존으로 적재
+- MISS 0.2~1.0%(표제부 자체가 없는 주소 40건 등)
+- STEP 2의 AMBIGUOUS 2건은 미적재 상태 유지
+
+상태:
+
+완료 — STEP 3 READY (SALE/RENT history 적재는 별도 승인)
