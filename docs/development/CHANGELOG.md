@@ -14946,3 +14946,60 @@ API 변경:
 상태:
 
 완료
+
+### SALE CANCELLATION SEMANTICS V1 — duplicate source representation audit (documentation closeout)
+
+작업:
+
+- `docs/development/SALE_CANCELLATION_SEMANTICS_V1.md` 신규 — 최종 감사 문서
+- `TRADE_HISTORY_DATA_V1.md` §6/§7에 **짧은 정정 각주 2개 추가**(본문 재작성 없음)
+
+서비스 기능 변경:
+
+없음
+
+DB 변경:
+
+없음 (전 과정 READ ONLY — Production write 0건, schema/migration/index 0건)
+
+API 변경:
+
+없음 (sync logic / query logic / cron / UI 전부 무변경)
+
+감사 결과 요약:
+
+- 원천이 취소를 두 형태로 내려준다: **TYPE A**(기존 1행이 `cdealType=O`로 변경) /
+  **TYPE B**(uncanceled + canceled 2행). 부산 2020-02 이후 전수 246,126행 기준
+  TYPE B **7,216 pair**(1,728개 단지 / 80개월 / 16개 구), 최근 24개월 2,767
+- 2행 그룹은 우연한 자연키 충돌이 아니다 — 독립성 검정상 TYPE B는 기대치의 **7.3배**,
+  TYPE D는 **0.08배**
+- **2행 생성 메커니즘은 원천만으로 판별 불가**(`source alone cannot disambiguate`).
+  시행규칙 제5조상 정정신청·변경신고는 in-place 절차라 새 행을 만들지 않으므로
+  "정정 재신고" 해석은 철회했다. 공식 근거 없음 → **외부 공식 문서 확인 필요**
+- 그러나 **2023년 이후 uncanceled 행은 일반 유효거래와 거의 동일한 비율로 등기 완료**
+  (2023 100% / 2024 100% / 2025 98.9%, 기준선 99.2~99.6%)이고
+  **canceled 행의 등기 완료는 0건**. 취소된 계약은 등기될 수 없으므로 uncanceled 행은
+  실거래다 → **현재 `deal_canceled=false` 필터 동작이 옳다**
+- `aptDong`은 호실 구분자가 아니라 **등기완료 표식**(공공데이터포털 공식 안내:
+  "소유권 이전등기 완료된 건에 한하여 동정보가 추가적으로 공개")
+- 2020~2022는 원천이 `registryDate`/`aptDong`을 공개하지 않아 **영구 UNVERIFIABLE**
+- 최악 가정 상한(TYPE B uncanceled가 전부 유령이었다면): record-high 24m **3.43%** /
+  장기 2.33%, 거래량 비중 3.14~4.36%, 부산 평균가 −0.74~−1.18%
+
+결정:
+
+- **옵션 E(unresolved 보존) 채택** — pair 병합/삭제/effective-canceled 처리 **금지**
+- Production 보정 **불필요**, schema 변경 **불필요**
+- 신뢰 판정: rolling 24m record-high **READY** / 2020-02 이후 long-term record-high
+  **LIMITED(영구)** / transaction list **READY** / 거래량·statistics **READY(24m)·LIMITED(2022 이전)** /
+  SALE cancellation coverage **FINAL PASS 유지**
+- `DATA_FRESHNESS_AUTOMATION_V1` · `SALE_CANCELLATION_COVERAGE_V1` 기존 FINAL PASS 판정 수정 없음
+
+알려진 문제:
+
+- 2행 생성 메커니즘의 공식 근거 미확보(국토부 기술문서 .hwp 미열람 / 담당 부서 질의 필요)
+- `aptDong` 미저장(additive schema 변경 — 별도 승인 대상)
+
+상태:
+
+완료 (PM 검수 PASS — NO PRODUCT FIX REQUIRED)

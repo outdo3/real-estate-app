@@ -67,6 +67,13 @@ MOLIT(국토교통부) 아파트 매매 실거래를 이집 DB에 영속 저장�
 
 **실측(§7 DUPLICATE AUDIT, 2026-08-29, 부산 서구 26140, 2026-05~07 raw 250건)**: `(identity+area+dealType+dealAmount+dealDate+floor)` 자연키 조합 243개 그룹 중 **7개(2.9%)가 실제로 2건씩** 존재했다(완전히 동일한 관측값을 가진 서로 다른 실거래). MOLIT에 이를 구분할 다른 raw 필드가 없다.
 
+> **[정정 각주 — 2026-09-04, `SALE_CANCELLATION_SEMANTICS_V1.md`]**
+> 위 문단의 두 전제는 **과도했다**. 후속 감사(부산 2020-02 이후 246,126행 전수 + 원천 재조회)에서 확인된 사실:
+> - 이 2행 구조의 다수는 "서로 다른 실거래"가 아니라 **uncanceled + canceled 쌍(TYPE B, 7,216 pair)** 이다. 위 250건 표본의 중복률 2.9%는 오늘 측정한 TYPE B 비율 3.14%와 사실상 같아, 당시 "서로 다른 실거래"로 분류한 그룹 상당수가 이 쌍이었을 가능성이 높다. 당시 감사는 그 7개 그룹의 `cdealType`을 확인하지 않았다.
+> - **"구분할 다른 raw 필드가 없다"는 사실이 아니다.** `cdealType`(해제여부) · `rgstDate`(등기일자, 2023-01 이후 계약부터 공개) · `aptDong`(2023+, 소유권 이전등기 완료 건에 한해 공개)이 두 행을 구분한다.
+>
+> 다만 **`occurrenceIndex` 설계와 아래 unique constraint는 그대로 유효하며, 변경하지 않는다.** 2행이 생기는 메커니즘은 원천만으로 판별 불가(`source alone cannot disambiguate`)이고, 2023년 이후 실측에서 uncanceled 행은 일반 유효거래와 거의 동일한 비율(98.9~100%)로 등기가 완료된 반면 canceled 행의 등기 완료는 **0건**이다. 따라서 **uncanceled 행을 유효거래로 유지하는 현재 동작이 옳으며, pair 병합·삭제·effective-canceled 처리는 금지**한다. 2020~2022 구간은 원천이 `registryDate`/`aptDong`을 공개하지 않아 **영구 UNVERIFIABLE**이다.
+
 **해결**: `occurrenceIndex`(같은 자연키 그룹 내 MOLIT 응답 원본 등장 순서, 0부터)를 최후 discriminator로 추가한다 — 두 행을 병합하지 않는다. 두 행은 이미 모든 관측 필드가 동일하므로, 재fetch마다 순서가 바뀌어도 저장값 자체는 항상 정확하다(§47 요구사항 충족).
 
 **Unique constraint**: `@@unique([groupKeyStr, dealAmount, dealDate, floor, occurrenceIndex], name: "trade_natural_key")`
@@ -81,6 +88,8 @@ MOLIT(국토교통부) 아파트 매매 실거래를 이집 DB에 영속 저장�
 | Raw fetched | 250건 |
 | 유니크 자연키 그룹 | 243개 |
 | 중복 그룹(2건) | 7개 (2.9%) |
+
+> **[정정 각주 — 2026-09-04]** 이 감사는 중복 그룹의 `cdealType`을 확인하지 않았다. 후속 전수 감사에서 이 형태의 다수가 **uncanceled + canceled 쌍**임이 확인됐다 — §6 정정 각주와 `SALE_CANCELLATION_SEMANTICS_V1.md` 참고.
 
 ## 8. Cancellation Contract
 
