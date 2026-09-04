@@ -1413,3 +1413,189 @@ model SyncCoverageCell {
   @@index([dataset, dealYmd, status])
   @@map("sync_coverage_cells")
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// OFFICETEL V1 STEP 1 — 오피스텔 전용 스키마 (additive only)
+//
+// docs/development/OFFICETEL_V1_IDENTITY_SCHEMA.md 참고.
+//
+// 왜 apartment_* 테이블을 확장하지 않는가:
+//   1. 아파트 계열은 aptSeq(source-provided canonical id) identity가 read/write 전
+//      경로에 박혀 있고, 최근 성능 작업(PERFORMANCE_V1.1-A/B)도 그 위에 서 있다.
+//   2. 오피스텔에는 canonical source id가 아예 없다(RTMSDataSvcOffiTradeDev 부재를
+//      실호출로 확인). 같은 테이블에 넣으면 aptSeq identity gate가 통째로 무력화된다.
+//   3. 기존 Property 스텁은 production 0행이라 지금 분리해도 이전 비용이 0이다.
+// -> 별도 테이블 + 코드 레이어 추상화가 가장 안전하다는 결론(감사 옵션 B).
+//
+// 기존 Property 모델은 이번 V1에서 그대로 두고 사용하지 않는다(삭제/수정/이전 금지).
+// ══════════════════════════════════════════════════════════════════════════
+
+/// 오피스텔 건물(+동) master. 아파트의 "단지"가 아니라 건물 단위다 —
+/// 한 지번에 가동/나동이 공존하는 사례를 실측했고(남구 대연동 62-14), 건축물대장
+/// 표제부도 그 지번에서 dongNm="나동"을 반환한다. 절대 한 건물로 합치지 않는다.
+model OfficetelMaster {
+  id Int @id @default(autoincrement())
+
+  /// src/lib/officetel/identity.ts의 buildOfficetelCanonicalKey() 결과.
+  /// format: OFFI:{sggCd}:{정규화 법정동}:{본번}-{부번}:{정규화 동|_}
+  /// 표시명(offiNm)은 키에 들어가지 않는다 — 부산 전체 동명 충돌 4.47% 실측.
+  canonicalKey String @unique @map("canonical_key")
+
+  sggCd                  String  @map("sgg_cd")
+  umdNm                  String  @map("umd_nm")
+  normalizedUmdNm        String  @map("normalized_umd_nm")
+  jibun                  String  @map("jibun")
+  normalizedJibun        String  @map("normalized_jibun")
+  /// 원천/건축물대장이 동을 명시한 경우에만 채운다. 없으면 null(추측 금지).
+  buildingDong           String? @map("building_dong")
+  normalizedBuildingDong String? @map("normalized_building_dong")
+
+  /// 표시/보조 검증 전용. identity 아님.
+  officetelName  String @map("officetel_name")
+  normalizedName String @map("normalized_name")
+
+  buildYear Int? @map("build_year")
+
+  // ── 건축물대장 표제부(getBrTitleInfo) 원본 ──────────────────────────────
+  // 아파트가 쓰는 총괄표제부(getBrRecapTitleInfo)는 오피스텔에서 0건이다(실측 3/3).
+  // 아래 값은 "건축물대장상" 사실이며, 실제 주거용 사용/세법상 주택 여부를 뜻하지 않는다.
+  buildingRegistryMainPurpose String?  @map("building_registry_main_purpose")
+  buildingRegistryEtcPurpose  String?  @map("building_registry_etc_purpose")
+  useApprovalDate             String?  @map("use_approval_date")
+  /// 규모는 호수(hoCnt) 기준. 오피스텔은 hhldCnt(세대수)가 항상 0이다(실측).
+  /// "세대수"라는 이름을 쓰지 않는다.
+  hoCnt                       Int?     @map("ho_cnt")
+  totalArea                   Decimal? @map("total_area")
+  buildingCoverageRatio       Float?   @map("building_coverage_ratio")
+  floorAreaRatio              Float?   @map("floor_area_ratio")
+  structureName               String?  @map("structure_name")
+  groundFloorCount            Int?     @map("ground_floor_count")
+  undergroundFloorCount       Int?     @map("underground_floor_count")
+  indoorMechanicalParking     Int?     @map("indoor_mechanical_parking")
+  indoorAutoParking           Int?     @map("indoor_auto_parking")
+  outdoorMechanicalParking    Int?     @map("outdoor_mechanical_parking")
+  outdoorAutoParking          Int?     @map("outdoor_auto_parking")
+  roadAddress                 String?  @map("road_address")
+
+  /// 안전한 official/기존 geocoding 경로로 확보된 경우에만 채운다. 추정 좌표 금지.
+  latitude  Float?
+  longitude Float?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  tradeHistories OfficetelTradeHistory[]
+  rentHistories  OfficetelRentHistory[]
+
+  // sggCd / sggCd+umd 조회는 이 인덱스의 prefix로 커버된다(중복 인덱스 금지).
+  @@index([sggCd, normalizedUmdNm, normalizedJibun])
+  /// 검색 보조 전용 — identity fallback이 아니다.
+  @@index([normalizedName])
+  @@map("officetel_masters")
+}
+
+/// 오피스텔 매매 실거래(RTMSDataSvcOffiTrade). 원천 행을 1:1로 보존한다.
+/// 원천에 없는 필드(rgstDate / aptDong / aptSeq / offiSeq)는 만들지 않는다 —
+/// 컬럼의 존재 자체가 없는 신뢰를 암시하기 때문이다.
+model OfficetelTradeHistory {
+  id     Int    @id @default(autoincrement())
+  source String @default("MOLIT_OFFI_TRADE") @map("source")
+
+  /// master resolve 실패 시 잘못 연결하느니 unresolved로 둔다. 그래서 nullable이고,
+  /// 자연키는 masterId가 아니라 canonicalKey(필수)에 기반한다.
+  officetelMasterId Int?             @map("officetel_master_id")
+  master            OfficetelMaster? @relation(fields: [officetelMasterId], references: [id], onDelete: SetNull)
+
+  canonicalKey String @map("canonical_key")
+
+  lawdCd  String @map("lawd_cd")
+  dealYmd String @map("deal_ymd")
+  umdNm   String @map("umd_nm")
+  jibun   String @map("jibun")
+  offiNm  String @map("offi_nm")
+
+  /// 원본 전용면적(제곱미터). 반올림/평 환산 금지 — 원천이 주는 유일한 면적이다.
+  exclusiveArea Decimal  @map("exclusive_area")
+  dealAmount    Int      @map("deal_amount")
+  dealYear      Int      @map("deal_year")
+  dealMonth     Int      @map("deal_month")
+  dealDay       Int      @map("deal_day")
+  dealDate      DateTime @map("deal_date") @db.Date
+  /// not-null 강제: Postgres unique는 NULL을 서로 다른 값으로 취급해 중복방지가 깨진다.
+  /// 층 파싱 불가 행은 적재하지 않고 invalid로 제외한다(값을 지어내지 않는다).
+  floor         Int      @map("floor")
+  buildYear     Int?     @map("build_year")
+
+  dealingGbn       String? @map("dealing_gbn")
+  buyerGbn         String? @map("buyer_gbn")
+  sellerGbn        String? @map("seller_gbn")
+  estateAgentSggNm String? @map("estate_agent_sgg_nm")
+
+  /// source cdealType=O 이면 true. 오피스텔은 rgstDate가 없어 아파트처럼 TYPE B의
+  /// uncanceled 행을 등기로 검증할 수 없다 -> cancellation 신뢰도는 LIMITED.
+  /// 그래도 원천을 1:1로 보존하며 병합/삭제/effective-canceled 처리를 하지 않는다.
+  dealCanceled Boolean @default(false) @map("deal_canceled")
+  cancelDate   String? @map("cancel_date")
+
+  /// 같은 자연키 그룹 내 원천 등장 순서(0부터). 실측 다행 그룹 3.01%.
+  occurrenceIndex Int @default(0) @map("occurrence_index")
+
+  sourceFetchedAt DateTime @default(now()) @map("source_fetched_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([canonicalKey, dealDate, exclusiveArea, dealAmount, floor, occurrenceIndex], name: "officetel_trade_natural_key")
+  @@index([canonicalKey, dealDate])
+  @@index([lawdCd, dealDate])
+  @@map("officetel_trade_histories")
+}
+
+/// 오피스텔 전월세 실거래(RTMSDataSvcOffiRent).
+///
+/// dealCanceled / cancelDate 컬럼을 의도적으로 두지 않는다. RTMSDataSvcOffiRent
+/// 응답에 취소 관련 필드가 전혀 없음을 7,591행 실측으로 확인했다. 이는 "취소가 없다"가
+/// 아니라 "원천이 취소 필드를 제공하지 않는다"는 뜻이다 — 있지도 않은 신뢰를 암시하는
+/// 컬럼(예: dealCanceled=false 고정값)을 만들지 않는다(아파트 RENT와 같은 원칙).
+model OfficetelRentHistory {
+  id     Int    @id @default(autoincrement())
+  source String @default("MOLIT_OFFI_RENT") @map("source")
+
+  officetelMasterId Int?             @map("officetel_master_id")
+  master            OfficetelMaster? @relation(fields: [officetelMasterId], references: [id], onDelete: SetNull)
+
+  canonicalKey String @map("canonical_key")
+
+  lawdCd  String @map("lawd_cd")
+  dealYmd String @map("deal_ymd")
+  umdNm   String @map("umd_nm")
+  jibun   String @map("jibun")
+  offiNm  String @map("offi_nm")
+
+  exclusiveArea Decimal  @map("exclusive_area")
+  deposit       Int      @map("deposit")
+  monthlyRent   Int      @map("monthly_rent")
+  dealYear      Int      @map("deal_year")
+  dealMonth     Int      @map("deal_month")
+  dealDay       Int      @map("deal_day")
+  dealDate      DateTime @map("deal_date") @db.Date
+  floor         Int      @map("floor")
+  buildYear     Int?     @map("build_year")
+
+  contractTerm   String?  @map("contract_term")
+  contractType   String?  @map("contract_type")
+  preDeposit     Int?     @map("pre_deposit")
+  preMonthlyRent Int?     @map("pre_monthly_rent")
+  /// source useRRRight. 미기재는 null(UNKNOWN) — 원천에 "미사용" 값이 없으므로 false를 쓰지 않는다.
+  useRenewalRight Boolean? @map("use_renewal_right")
+
+  occurrenceIndex Int @default(0) @map("occurrence_index")
+
+  sourceFetchedAt DateTime @default(now()) @map("source_fetched_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([canonicalKey, dealDate, exclusiveArea, deposit, monthlyRent, floor, occurrenceIndex], name: "officetel_rent_natural_key")
+  @@index([canonicalKey, dealDate])
+  @@index([lawdCd, dealDate])
+  @@map("officetel_rent_histories")
+}

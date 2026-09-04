@@ -69,6 +69,12 @@ export interface SaleRecheckSummary {
   inserted: number;
   /** 승인된 유일한 UPDATE — cancellation false→true flip 수. */
   updated: number;
+  /** TRADE_REGISTRY_DATA_V1.1 §5 — registryDate만 보충한 row 수.
+   * `updated`(취소 flip)와 절대 합치지 않는다. 런타임에서는 이미 `...totals`로 채워지고
+   * 있었는데 타입 선언에만 빠져 있었다(선언 누락 보정). */
+  registryUpdated: number;
+  /** 형제 occurrence의 registryDate가 엇갈려 보충을 건너뛴 row 수. */
+  registryAmbiguousSkipped: number;
   blocked: number;
   failed: number;
   coverageRecorded: number;

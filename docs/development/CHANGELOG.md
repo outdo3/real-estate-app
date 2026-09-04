@@ -15003,3 +15003,85 @@ API 변경:
 상태:
 
 완료 (PM 검수 PASS — NO PRODUCT FIX REQUIRED)
+
+### OFFICETEL V1 STEP 1 — identity contract + additive schema
+
+작업:
+
+- 오피스텔 canonical identity 계약 확정 및 순수 함수 구현
+  (`src/lib/officetel/identity.ts`) — canonicalKey format
+  `OFFI:{sggCd}:{정규화 법정동}:{본번}-{부번}:{정규화 동|_}`
+- 자연키 / occurrenceIndex 계약 (`src/lib/officetel/natural-key.ts`)
+- 신규 테이블 3개 추가: `officetel_masters` / `officetel_trade_histories` /
+  `officetel_rent_histories`
+- 생숙 확장 대비 최소 추상화(타입 선언만): `src/lib/property/contracts.ts`
+  — PropertyType / IdentityResolver / TransactionSourceAdapter /
+  PropertyDetailProvider / OFFICETEL_AREA_BANDS_SQM
+
+서비스 기능 변경:
+
+없음 (runtime 노출 0 — Search/Map/Detail/Stats/UI 어느 것도 건드리지 않았다)
+
+DB 변경:
+
+- **additive only.** CREATE TABLE 3 / CREATE INDEX 6 / CREATE UNIQUE INDEX 3 /
+  ALTER TABLE 2(**둘 다 신규 테이블 FK**)
+- **기존 테이블 ALTER 0 · DROP/DELETE/UPDATE/INSERT/RENAME 0 · CREATE TYPE 0**
+- FK는 `ON DELETE SET NULL` — 실거래 history를 cascade 삭제하지 않는다
+- 데이터 write **0건** — 신규 3 테이블 전부 row count 0
+- 기존 테이블 불변 확인: apartments 71 / apartment_trade_histories 864,100 /
+  apartment_rent_histories 125,469 / properties 0 / sync_coverage_cells 142
+  (전부 before == after)
+
+핵심 설계 근거(실측):
+
+- **오피스텔에는 canonical source id가 없다** — `RTMSDataSvcOffiTradeDev` 상세본이
+  존재하지 않음을 실호출로 확인(NO_OPENAPI_SERVICE_ERROR). aptSeq 등가물 부재
+- 부산 16구 × 3개월(SALE 724행 / RENT 7,591행) 실측: 한 지번에 이름 2개 이상
+  SALE 0.00% / RENT 0.06%, **부산 전체 동명 충돌 SALE 0.34% / RENT 4.47%**
+  → 주소는 강한 identity, 이름은 아니다. 이름은 display/보조 검증 전용
+- 한 지번에 복수 동 실재(남구 대연동 62-14 "가동"/"나동", 건축물대장 dongNm="나동")
+  → **단지가 아니라 건물(+동) 단위**. 절대 합치지 않는다
+- SALE 다행 그룹 3.01%, TYPE B(uncanceled+canceled) 9건 vs 독립 기대값 1.0
+  → 아파트 TYPE B 현상이 오피스텔에도 존재 → occurrenceIndex 유지, 병합/삭제 금지
+- **RENT 원천에 취소 필드 전무**(7,591행 실측) → `dealCanceled`/`cancelDate` 컬럼을
+  만들지 않았다. "취소 없음"이 아니라 "원천이 제공하지 않음"
+- 건축물대장: 총괄표제부 3/3 **0건**, 표제부 3/3 1건. `hhldCnt`는 항상 0이고
+  실제 규모는 **`hoCnt`(호수)** → 아파트 `hhldCnt` 로직 재사용 금지
+- 면적: 원천이 주는 것은 **전용면적 하나뿐**. SALE 중앙값 29.24㎡ / 84㎡대 2.76%
+  → 아파트 84㎡ 국민평형 로직 재사용 불가
+
+의미 정정:
+
+- 선행 감사의 "etcPurps에 오피스텔이 있으면 **주거용** 오피스텔을 official하게 판별
+  가능"이라는 표현을 철회. 확인 가능한 것은 **"건축물대장상 오피스텔 용도"** 까지다.
+  실제 주거용 사용 / 세법상 주거용 / 주택수 포함 / 주택법상 주택 / LTV·DSR / 취득세
+  유형은 **추론하지 않는다**. DB 필드명에도 근거 없는 의미를 넣지 않았다
+
+부수 수정:
+
+- `SaleRecheckSummary`에 `registryUpdated` / `registryAmbiguousSkipped` 타입 선언 보정.
+  직전 STEP(TRADE_REGISTRY_DATA_V1.1)에서 런타임은 이미 `...totals`로 채우고 있었으나
+  타입 선언에만 누락돼 있었다(당시 tsc가 해당 스크립트 생성 **이전**에 실행돼 놓쳤다)
+
+테스트 결과:
+
+- 오피스텔 identity/자연키 테스트 **23/23 PASS** (같은 주소 동일 키 / 같은 이름 다른 주소
+  분리 / 같은 지번 다른 동 분리 / 산 지번 UNRESOLVED / 이름 미포함 / 정규화 멱등 /
+  TYPE B occurrence 보존 / 전세·월세 구분 / 첫 match overwrite 금지)
+- 관련 sync 테스트 합계 **69/69 PASS**
+- tsc: **24건**(기존 스크립트·`tmp/` 한정) — 변경 전 baseline과 동일, 이번 변경 파일 오류 **0**
+- build **PASS(exit 0)**
+
+알려진 문제:
+
+- buildingDong을 나중에 확인하면 canonicalKey가 바뀔 수 있다. history가 canonicalKey(필수)
+  + masterId(nullable) 두 축이라 기존 행이 손상되지는 않으나, 재해석 절차는 STEP 2에서 설계
+- SALE cancellation 신뢰도 **LIMITED** — rgstDate가 없어 아파트처럼 TYPE B의 uncanceled
+  행을 등기로 검증할 수 없다 → **Record High 구현 금지** 유지
+- 기존 `Property` 모델은 0행 그대로 미사용 유지(삭제/수정/이전 금지). 그 unique key는
+  이름+법정동이라 동명 충돌 4.47% 실측과 충돌 — 별도 STEP에서 판단
+
+상태:
+
+완료 (데이터 INSERT / backfill / cron / UI 없음)
