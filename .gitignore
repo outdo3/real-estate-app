@@ -86,3 +86,6 @@ brand-source/
 
 # git worktree isolation (local dev only)
 .worktrees/
+
+# OFFICETEL V1 STEP 2 — 건축물대장 스윕 산출물(대용량, 재생성 가능)
+scripts/officetel/_officetel_master_results/

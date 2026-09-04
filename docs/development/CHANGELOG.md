@@ -15085,3 +15085,65 @@ DB 변경:
 상태:
 
 완료 (데이터 INSERT / backfill / cron / UI 없음)
+
+### OFFICETEL V1 STEP 2 — master build from building registry
+
+작업:
+
+- 건축물대장 표제부(`getBrTitleInfo`) 부산 254개 법정동 **전수 스윕** — 347,873건 스캔
+- `officetel_masters` **1,450건 적재**(INSERT only)
+- master 정규화/충돌/다동 판정 순수 함수를 `src/lib/officetel/identity.ts`에 통합
+  (buildMasterIdentity / classifyJibunGroup / classifyCollision / planMasterInserts 등)
+- 스크립트 4종 추가: master-source-audit / master-source-repair / master-apply / linkage-readiness
+
+서비스 기능 변경:
+
+없음 (runtime 노출 0 — Search/Map/Detail/UI 어느 것도 건드리지 않았다)
+
+DB 변경:
+
+- schema 변경 **0** / migration **0**
+- `officetel_masters` INSERT **1,450건**, UPDATE **0**, DELETE **0**
+- 기존 테이블 불변: apartments 71 · apartment_trade_histories 864,100 ·
+  apartment_rent_histories 125,469 · properties 0 · officetel trade/rent 0/0
+
+완전성 게이트(3회 시도 끝에 통과):
+
+- 1차(330ms, 재시도 없음): 254개 중 **176개 법정동 불완전**, 사하·수영 2개 구 통째 누락
+  → 후보 337건, **APPLY 금지**
+- 2차(500ms, 4회 백오프): 347,873건 스캔, 불완전 7개 잔존 → **APPLY 금지**
+- 3차(7개 표적 재수집, 1.1s, 8회 재시도): **7/7 COMPLETE → 불완전 0, 게이트 통과**
+- 원인은 원천의 간헐 EMPTY_BODY. 재시도 없던 스크립트가 한 페이지 실패로 법정동 전체를
+  버려 후보 집합이 조용히 불완전해졌다 → `got < total` short-read 검사 + incomplete 원장 추가
+
+검증 결과:
+
+- **duplicate canonicalKey 0** / unresolved 0 / malformed jibun 0 / 산 지번 0
+- AMBIGUOUS 2건(같은 지번·여러 건물·dongNm 없음)은 **적재 제외** — 원천이 구분 정보를
+  주지 않으므로 잘못된 master보다 없는 편이 안전
+- 다동 건물 정상 분리: 이안해운대 103/104/105동(hoCnt 93/72/90),
+  하모니타워마브러스 101/102동(362/254). same-jibun multi-dong 32지번/79행
+- MIXED_DONG(일부만 동명 있음) **0건**
+- 좌표 **전부 NULL** — 건축물대장이 좌표를 주지 않으며 추정하지 않는다
+- 부산 전체 동명 건물 52그룹 → 이름 단독 identity 금지 근거 재확인
+- 테스트 79/79 PASS, tsc 24건(baseline 동일, officetel 오류 0), build PASS
+
+STEP 1 주장 정정:
+
+- *"오피스텔은 hhldCnt가 항상 0"*(3건 표본 근거)은 **철회**. 1,456건 전수에서
+  **874건(61.1%)이 hhldCnt > 0** — 오피스텔+도시형생활주택 복합 건물이 많다.
+  규모 표시를 hoCnt로 하는 원칙은 유지
+
+알려진 문제 (STEP 3 진행 전 해결 필요):
+
+- **linkage 커버리지 부족**: 거래 원천 대비 master 주소 MISS가 SALE 59.0% / RENT 61.6%.
+  원인 규명 완료 — MISS 표본 14/14가 표제부는 존재하나 용도 표기에 "오피스텔" 단어가 없다
+  (`경동윈츠타워오피스텔`·`투모로우 오피스텔`조차 `etcPurps="업무시설,근린생활시설"`).
+  **`etcPurps LIKE '%오피스텔%'`는 오피스텔 판별 기준으로 부적합**
+- **다동 linkage 불가**: 거래 원천에 동(棟) 필드가 없어 거래 행은 항상 building-level 키만
+  생성 가능. 동 단위 master와 exact match 불가(SALE 18건 / RENT 162건, 약 2%)
+- AMBIGUOUS 2건은 영구 미적재
+
+상태:
+
+master 적재 완료 · linkage 준비도 LIMITED (STEP 2.1 필요)
