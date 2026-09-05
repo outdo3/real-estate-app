@@ -98,3 +98,7 @@ async function main() {
 }
 
 main();
+
+// 이 파일을 모듈로 만들어 top-level 식별자가 다른 스크립트와 충돌하지 않게 한다
+// (scripts/*.ts 중 import/export가 없는 파일들이 전역 스코프를 공유해 TS2451을 낸다).
+export {};
