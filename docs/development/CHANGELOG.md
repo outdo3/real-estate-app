@@ -15488,3 +15488,64 @@ QA에서 발견해 수정한 결함 3건:
 상태:
 
 완료
+
+
+## 2026-09-05
+
+### OFFICETEL V1 STEP 5A/5B — master 좌표 감사 및 Production 적재
+
+작업:
+
+- STEP 5A: READ ONLY 지오 신뢰 감사(소스/주소품질/샘플/교차검증/티어 설계)
+- scripts/officetel/step5b-coordinate-backfill.ts 신규 (1회 CLI, 기본 dry-run)
+- docs/development/OFFICETEL_V1_STEP5_GEO_COORDINATES.md 작성
+
+서비스 기능 변경:
+
+없음 (UI/API 변경 0). 좌표 데이터만 적재.
+
+DB 변경:
+
+schema/migration/index 변경 **0**. INSERT 0 / DELETE 0.
+officetel_masters UPDATE **정확히 5,048행**, latitude/longitude 두 컬럼만.
+
+| 티어 | 건수 | write |
+| --- | ---: | --- |
+| A VERIFIED (교차검증 ≤50m) | 5,007 | 적용 |
+| B STRONG | 41 | 적용 |
+| C REVIEW | 7 | 0 |
+| D UNRESOLVED | 1 | 0 |
+
+provider: Kakao Local search/address.json (도로명 우선 → 지번,
+region1=부산 + region2=sigungu 게이트). keyword.json/이름 지오코딩 미사용.
+
+적용 후 검증:
+
+- 좌표 보유 5,048 / 없음 8 / **반쪽만 채워진 행 0**
+- 좌표 범위 이상 0, 부산 경계 밖 **0** (lat 35.055~35.336, lng 128.853~129.285)
+- updated_at 갱신 행 5,048 = 적용 행 수 (초과 변경 없음)
+- 무관 테이블 전부 무변화
+
+좌표 의미론(5A 정정):
+
+좌표 공유 32그룹/79건. 그중 2그룹 4건은 지번이 다른데 도로명이 같아 공유,
+반대로 같은 지번인데 도로명이 달라 동별 좌표를 얻은 4건도 존재.
+SITE_LEVEL_COORDINATE 판정을 지번이 아니라 실제 좌표 기준으로 정정.
+동(棟) 단위 정밀도는 주장하지 않는다.
+
+테스트 결과:
+
+- npx tsc --noEmit: 24 errors 전부 기존 스크립트, STEP 5B 신규 0건
+- dry-run 티어 분포가 5A 감사와 완전 일치 (5007/41/7/1)
+- provider 오류 0, no-result 1
+
+알려진 문제:
+
+- 제외 8건은 위치 기능에서 "정보 없음" 처리 필요
+- SITE_LEVEL 79건은 부지 대표 좌표 — 거리/통근에서 표기 필요
+- 통근/거리 기능 미활성화(의도)
+- KakaoMapEmbed의 런타임 지오코딩을 오피스텔에 재사용 금지(감사만 수행)
+
+상태:
+
+완료 (배포 불필요 — 런타임 코드 무변경)
