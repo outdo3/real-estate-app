@@ -48,6 +48,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        {/* PERFORMANCE_V2.1 §12 — 카카오 지도 SDK/로컬 API는 검색창을 처음 쓰거나 지도를
+            열 때 반드시 붙는 도메인이다. DNS+TLS 핸드셰이크를 미리 끝내 두면 첫 사용에서
+            그 왕복이 사라진다. **SDK 자체를 미리 받지는 않는다**(무거운 스크립트를
+            전역 선로드하지 않는다는 §12 요구) — 연결만 미리 연다.
+            실제로 쓰이는 두 호스트만 연다: 지도 SDK(dapi)와 타일 서버(t1). */}
+        <link rel="preconnect" href="https://dapi.kakao.com" />
+        <link rel="preconnect" href="https://t1.daumcdn.net" crossOrigin="anonymous" />
+      </head>
       <body>
         <AppProviders>{children}</AppProviders>
       </body>

@@ -1,5 +1,17 @@
 import { NextResponse } from 'next/server';
 import { resolveNeisEduCode, addressMatchesRegion } from '@/lib/neis-sido-codes';
+import { getOrSetCache } from '@/lib/server-cache';
+
+// PERFORMANCE_V2.1 §5 — 이 라우트는 요청마다 외부 API를 약 7회 부른다:
+// NEIS 학교목록을 **시도 전체**로 페이지네이션 전량 조회(부산 기준 3페이지) +
+// Kakao 주소 지오코딩 1회 + 학원 카테고리 검색 최대 3회. 캐시가 전혀 없어
+// 실측 warm 지연이 **1,105ms**로, 프로젝트 목표(500ms)를 유일하게 넘고 있었다.
+//
+// 담는 값은 거래/가격 데이터가 아니라 **학교 명부와 학원 개수**다. 학교 명부는 학년도
+// 단위로, 학원 수는 그보다 느리게 바뀐다. 그래서 6시간 TTL이 진실성에 실질적 위험을
+// 주지 않는다 — 실거래 신선도 계약(PERFORMANCE_V2 가드레일)은 이 라우트와 무관하다.
+// 되돌리려면 이 상수만 바꾸면 된다.
+const SCHOOL_STATS_TTL_MS = 6 * 60 * 60 * 1000;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -10,6 +22,7 @@ export async function GET(request: Request) {
   const eduCode = resolveNeisEduCode(sido) || 'C10';
 
   try {
+    const data = await getOrSetCache(`school-stats:${region}`, SCHOOL_STATS_TTL_MS, async () => {
     // 1. NEIS 학교 데이터 페칭 (pSize와 무관하게 최대 500건까지만 반환되므로 페이지 순회로 전량 확보)
     let rawSchools: any[] = [];
 
@@ -113,16 +126,17 @@ export async function GET(request: Request) {
     // 총 학교 수는 반드시 초+중+고 합계로 산출 (실패 시 임의 숫자로 채우지 않고 0 그대로 반환)
     const finalTotalSchools = elemCount + midCount + highCount;
 
-    // 결과 조립
-    const data = {
-      totalSchools: finalTotalSchools,
-      elemCount: elemCount,
-      midCount: midCount,
-      highCount: highCount,
-      specRate: specRate,
-      academyLocation: academyLocation,
-      academyCount: academyCount
-    };
+      // 결과 조립
+      return {
+        totalSchools: finalTotalSchools,
+        elemCount: elemCount,
+        midCount: midCount,
+        highCount: highCount,
+        specRate: specRate,
+        academyLocation: academyLocation,
+        academyCount: academyCount
+      };
+    });
 
     return NextResponse.json({ success: true, data });
   } catch (error) {

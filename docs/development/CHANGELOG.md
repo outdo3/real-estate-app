@@ -15614,3 +15614,53 @@ P1 수정:
 상태:
 
 완료
+
+
+## 2026-09-05
+
+### PERFORMANCE V2.1 — 콜드 스타트 하드닝 / V2 콜드 결론 정정
+
+작업:
+
+- src/app/api/school/stats/route.ts 캐시 적용(getOrSetCache, 6시간)
+- src/app/layout.tsx에 Kakao 도메인 preconnect 2개 추가
+- docs/development/PERFORMANCE_V2.md에 V2.1 절 추가(측정 방법론·가드레일 포함)
+
+서비스 기능 변경:
+
+없음(응답 값 동일). 학교 통계 응답이 캐시에서 나온다.
+
+DB 변경:
+
+없음. schema/index/migration 0, Production write 0.
+
+V2 결론 정정:
+
+- V2는 no-store로 측정해 CDN을 우회했다. HOME은 실제로 정적+CDN HIT이며
+  기본 fetch로는 19~30ms다. V2가 보고한 콜드 986ms는 배포 직후 CDN MISS
+  한 번이고 일반 방문자의 체감이 아니다
+- "~570ms 플랫폼 floor"는 균일하지 않다. 미호출 라우트 첫 요청이
+  49ms~6,678ms로 흩어진다 — 람다 인스턴스 단위 부팅이며 고정 floor가 아니다
+
+수정:
+
+- /api/school/stats: 요청마다 외부 API 약 7회(NEIS 시도 전체 페이지네이션 +
+  Kakao 4회)를 캐시 없이 호출 → warm 1,105ms로 유일한 목표 초과였다.
+  6시간 캐시 적용, 로컬 실측 2,520ms → 23ms(지역별 키 분리 확인)
+- Kakao 도메인 preconnect(dapi.kakao.com, t1.daumcdn.net) — SDK 선로드는 하지 않음
+
+하지 않은 것(근거는 PERFORMANCE_V2.md §3):
+
+- /stats 정적 전환(지역 공유 메타데이터 기능을 35ms와 바꾸지 않음)
+- /api/stats/yearly TTL 연장(데이터 신선도 계약 변경)
+- /api/stats/yearly 전월세 DB 전환(부산 전 기간 커버리지 미검증 — 진실성 위험)
+
+테스트 결과:
+
+- .test.mjs 518개 중 515 PASS / 3 FAIL(기존 ERR_MODULE_NOT_FOUND)
+- npx tsc --noEmit 24 errors = baseline, 신규 0건
+- npm run build PASS
+
+상태:
+
+완료
