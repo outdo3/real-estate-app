@@ -551,3 +551,70 @@ STEP 3C에서 재확인 스윕을 만들어야 하는데, 그 전에 오피스�
 상태:
 
 채택
+
+
+## 2026-09-05
+
+### OFFICETEL STEP 4A — 이력 조회를 masterId가 아니라 canonicalKey+masterId 복합 조건으로 건다
+
+배경:
+
+`officetel_*_histories`에는 `officetel_master_id` 인덱스가 없다(pg_indexes
+실측). Postgres는 FK에 인덱스를 자동 생성하지 않으므로 `where masterId = X`
+만 걸면 226,291행 seq scan이 된다. 반면 `(canonical_key, deal_date)`
+인덱스는 존재한다.
+
+그런데 canonicalKey 단독 조회는 §10을 위반한다 — 같은 주소에 master가
+여러 개라 unresolved로 남은 행(SALE 2,368 / RENT 5,012)까지 딸려온다.
+
+결정:
+
+두 조건을 함께 건다. `canonicalKey`가 인덱스로 좁히고, `officetelMasterId`가
+정확성 게이트 역할을 한다. 인덱스를 추가하지 않았다.
+
+이유:
+
+인덱스 추가는 schema 변경이라 승인이 필요한데, 실측 결과 추가 없이도
+warm median 31~93ms가 나왔다. 필요하지 않은 스키마 변경을 승인받으러
+가는 것보다, 기존 인덱스를 정확히 쓰는 쪽이 낫다. 또한 masterId 조건은
+성능이 아니라 **보안 경계**로서 반드시 필요하므로, 인덱스가 생기더라도
+이 조건은 유지돼야 한다.
+
+master의 canonicalKey를 그대로 쓰지 않는 것도 같은 맥락이다 — master는
+동 단위 키를 가질 수 있지만 거래 행은 언제나 building-level 키다
+(EXACT 일치 65%). `buildOfficetelHistoryKey()`로 다시 만든다.
+
+영향:
+
+향후 master 기준 대량 집계(지역 랭킹 등)를 만들면 인덱스 필요성이
+다시 생긴다. 그때는 blocker로 보고하고 승인을 받는다.
+
+
+### OFFICETEL STEP 4A — 추이 데이터는 V1에서 원시 포인트만 제공한다
+
+배경:
+
+STEP 3A/3B 실측: 모든 필드가 동일한 SALE 형제 거래가 4,433묶음 11,069행
+(추가분 6,636행 = 7.48%) 존재한다. 원천이 이들을 구분할 정보를 주지
+않아 "중복 신고"인지 "같은 조건의 별개 계약"인지 판별할 수 없다.
+
+결정:
+
+평균/중앙값을 API가 계산해 돌려주지 않는다. 원시 거래 포인트와
+`sampleCount`/`total`, 그리고 `limitations` 문구를 함께 준다.
+
+이유:
+
+평균을 정본처럼 내보내면 소비처가 그 왜곡을 알 방법이 없다. 반대로
+원시 포인트 + 표본 수를 주면 소비처가 자기 맥락에 맞는 집계를
+선택하면서도 한계를 인지할 수 있다. 한계 문구를 응답에 담아 UI가
+문구를 지어내지 않게 했다.
+
+영향:
+
+STEP 4B UI가 차트를 그릴 때 집계를 직접 하게 된다. 그때 표본 수 병기가
+필수이며, 이 제약은 `meta.limitations`로 런타임에도 전달된다.
+
+상태:
+
+채택

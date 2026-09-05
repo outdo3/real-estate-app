@@ -15366,3 +15366,66 @@ STEP 3A 예측(추가 128~146 MB / 688~707 MB / 8.4~8.6%) **범위 안**.
 상태:
 
 완료 (배포 불필요 — 런타임 코드 무변경)
+
+
+## 2026-09-05
+
+### OFFICETEL V1 STEP 4A — 상세 READ API / 데이터 계약
+
+작업:
+
+- src/lib/officetel/detail-contract.ts 신규 (zero-import 순수 계약 모듈)
+- src/lib/officetel/detail-read.ts 신규 (읽기 전용 데이터 계층)
+- src/lib/officetel/identity.ts에 buildOfficetelHistoryKey() 추가
+- src/app/api/officetel/[id]/route.ts 신규
+- src/app/api/officetel/[id]/transactions/route.ts 신규
+- src/lib/officetel/detail-contract.test.mjs 신규 (17 케이스)
+- docs/development/OFFICETEL_V1_STEP4A_DETAIL_READ_API.md 작성
+
+서비스 기능 변경:
+
+읽기 전용 API 2개 추가. UI 변경 없음(STEP 4B 범위).
+
+DB 변경:
+
+없음. schema/index/migration 0, Production write 0.
+
+API 변경 (신규):
+
+- GET /api/officetel/[id]
+  master + 실제 전용면적 옵션 + 최근 요약 + dataQuality
+- GET /api/officetel/[id]/transactions?type=sale|rent&area=&limit=&offset=&includeCanceled=
+  원시 거래 목록 + meta(total/sampleCount/limitations)
+
+계약 요약:
+
+- identity: master id 또는 정확한 canonicalKey만. 이름/부분일치/근접 폴백 없음
+  → 해석 불가 400, 없음 404
+- 이력 조회는 canonicalKey AND officetelMasterId 복합 조건 — 같은 주소의
+  unresolved 행(SALE 2,368 / RENT 5,012)이 상세에 새지 않는다
+- 규모 단위는 호(hoCnt). hhldCnt는 저장하지 않으며 "세대수"로 라벨링하지 않는다
+- 전용면적만 제공. 평/공급면적 라벨을 만들지 않는다. 정확 값 필터만 허용
+- SALE 기본 조회는 취소 제외, includeCanceled=true로 감사 조회 가능
+- 행마다 cancellationCoverage(PROVIDED / NOT_PROVIDED_BY_SOURCE) 표시
+- RENT contractTerm/Type 결측은 null 유지, useRenewalRight는 true|null만
+- V1은 원시 거래 포인트만 — 평균/중앙값 미계산, limitations를 응답에 포함
+
+테스트 결과:
+
+- node --experimental-strip-types --test (officetel 3파일): 56/56 PASS
+- 실 Production 데이터 API 케이스 A~I: 39/39 assertion PASS
+  (SALE+RENT / SALE only / RENT only / 다중면적 / 취소 / 결측 /
+   unresolved 차단 / 404 / 느슨한 이름 해석 금지)
+- 성능(로컬 production 빌드): warm median 31~93ms, cold 53~302ms
+- npx tsc --noEmit: 24 errors 전부 기존 스크립트, STEP 4A 신규 0건
+- npm run build: PASS
+
+알려진 문제:
+
+- 오피스텔 검색/목록 진입 경로 없음 — 현재는 master id를 알아야 상세 조회 가능
+- master 좌표 0.00%로 지도/거리 기능 BLOCKED 유지
+- incremental re-sync 금지 유지(STEP 3B 결정)
+
+상태:
+
+완료

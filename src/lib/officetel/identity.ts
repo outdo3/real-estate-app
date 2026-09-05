@@ -127,6 +127,35 @@ export function buildOfficetelCanonicalKey(input: OfficetelIdentityInput): Canon
 }
 
 /**
+ * OFFICETEL_V1 STEP 4A §2 — master 하나에 연결된 **거래 이력 행의 canonicalKey**를 만든다.
+ *
+ * 왜 master.canonicalKey를 그대로 쓰면 안 되는가: master는 건축물대장 `dongNm`이 있으면
+ * 동 단위 키(`...:오피스텔동`)를 갖지만, 거래 원천에는 동 필드가 아예 없어 **거래 행은
+ * 언제나 building-level 키(`...:_`)** 다. STEP 3A 실측에서 EXACT 일치가 65%에 그친 이유가
+ * 정확히 이것이다(나머지 32%는 주소 그룹 단일 master 규칙으로 연결됐다).
+ *
+ * 그래서 이력을 조회할 때는 master의 주소 성분으로 building-level 키를 **다시 만들어야**
+ * 한다. STEP 3B 적재 후 전수 검증에서 연결된 행의 `canonical_key`가 이 값과 다른 경우는
+ * SALE/RENT 모두 0건임을 확인했다.
+ *
+ * **주의**: 이 키만으로 조회하면 같은 주소에 master가 여러 개라 unresolved로 남은 행까지
+ * 딸려온다(실측 SALE 2,368 / RENT 5,012행). 호출부는 반드시 `officetelMasterId`
+ * 조건을 함께 걸어야 한다 — 이 함수는 인덱스를 타기 위한 조회 힌트이지 권한 경계가 아니다.
+ */
+export function buildOfficetelHistoryKey(master: {
+  sggCd: string;
+  umdNm: string;
+  jibun: string;
+}): CanonicalKeyResult {
+  return buildOfficetelCanonicalKey({
+    sggCd: master.sggCd,
+    umdNm: master.umdNm,
+    jibun: master.jibun,
+    buildingDong: null,
+  });
+}
+
+/**
  * 표시명 정규화 — **검색 보조 전용이며 identity가 아니다**(§6).
  *
  * 공백 제거 + 후행 "오피스텔" 제거로 "쥬노벨 오피스텔" / "쥬노벨오피스텔"을 같은
