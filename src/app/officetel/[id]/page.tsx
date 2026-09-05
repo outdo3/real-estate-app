@@ -10,8 +10,8 @@
 // 그대로 호출한다.
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { parseOfficetelIdRef, officetelFallbackDisplayName } from '@/lib/officetel/detail-contract';
-import { getOfficetelDetail } from '@/lib/officetel/detail-read';
+import { parseOfficetelIdRef, officetelFallbackDisplayName, OFFICETEL_TX_PAGE_SIZE } from '@/lib/officetel/detail-contract';
+import { getOfficetelDetail, getOfficetelTransactions } from '@/lib/officetel/detail-read';
 import OfficetelDetailClient from '@/components/officetel/OfficetelDetailClient';
 
 export const dynamic = 'force-dynamic';
@@ -39,8 +39,24 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function OfficetelDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const data = await load(id);
+  const ref = parseOfficetelIdRef(decodeURIComponent(id));
+  const data = ref.kind === 'invalid' ? null : await getOfficetelDetail(ref);
   // §6 — 잘못된/없는 id는 명확한 NOT FOUND. 다른 오피스텔로 대체하지 않는다.
   if (!data) notFound();
-  return <OfficetelDetailClient detail={data} />;
+
+  // PERFORMANCE_V2 §3 — 첫 거래 목록을 서버에서 함께 내려 워터폴을 없앤다.
+  // 예전에는 SSR → HTML → hydrate → fetch(transactions) 순서라, 화면이 그려진 뒤에도
+  // 목록 자리가 한 번 더 비어 있었다. 기본 탭(거래가 있으면 매매, 없으면 전세)의 첫
+  // 페이지만 미리 담는다 — 탭/면적을 바꾸면 그때부터는 클라이언트가 API로 가져온다.
+  const defaultType = data.summary.sale.total > 0 ? 'sale' : 'rent';
+  const initial = await getOfficetelTransactions(ref, {
+    type: defaultType,
+    area: null,
+    limit: OFFICETEL_TX_PAGE_SIZE,
+    offset: 0,
+    includeCanceled: false,
+    rentType: defaultType === 'rent' ? 'jeonse' : null,
+  });
+
+  return <OfficetelDetailClient detail={data} initialTransactions={initial} />;
 }

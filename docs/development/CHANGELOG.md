@@ -15549,3 +15549,68 @@ SITE_LEVEL_COORDINATE 판정을 지번이 아니라 실제 좌표 기준으로 �
 상태:
 
 완료 (배포 불필요 — 런타임 코드 무변경)
+
+
+## 2026-09-05
+
+### PERFORMANCE V2 — 실사용자 여정 감사 + P0/P1 수정
+
+작업:
+
+- scripts/perf-journey-audit.ts 신규 (READ ONLY 여정 성능 감사, 무료)
+- src/lib/stats/feed-accumulator.ts 신규 (목록 누적 순수 로직 + 회귀 테스트 12)
+- src/components/stats/TransactionFeedView.tsx 수정 (P0 버그)
+- src/app/officetel/[id]/page.tsx + OfficetelDetailClient.tsx (워터폴 제거)
+- src/lib/officetel/detail-read.ts (콜드 커넥션 워밍업)
+- docs/development/PERFORMANCE_V2.md 작성
+
+서비스 기능 변경:
+
+거래량(/stats/feed) 필터 전환 시 하단 단지 목록이 사라지던 버그 수정.
+오피스텔 상세 첫 거래 목록이 SSR에 포함돼 hydrate 후 추가 왕복이 사라짐.
+
+DB 변경:
+
+없음. schema/index/migration 0, Production write 0.
+
+P0 수정 — 거래량 하단 목록 사라짐:
+
+목록을 SWR onSuccess에서 상태로 복사하고 있었는데, onSuccess는 실제
+fetch에서만 불린다. 전체 → 매매 → 전체처럼 캐시에 있는 키로 돌아오면
+호출되지 않아, data는 정상인데 목록만 빈 채로 남았다(상단 지표는
+data.summary에서 직접 읽어 정상 갱신 → 증상 일치).
+목록을 응답에서 파생시키고 페이지네이션만 쿼리 키와 함께 누적하도록 변경.
+전환 중에는 이전 목록을 stale로 유지해 깜빡임도 제거.
+
+검증(실제 클릭): 전체 56 → 매매 28 → 전체 56 → 전세 16 → 전체 56,
+매매 → 전세 → 전체 = 28 → 16 → 56. 해운대구에서도 200/100/200/140/200.
+
+P1 수정:
+
+- 오피스텔 상세 워터폴 제거: SSR HTML에 거래 50행 포함, hydrate 후
+  /transactions 호출 0회(이전 1회)
+- getOfficetelDetail에서 master 조회와 warmupConnections(2)를 겹쳐 실행
+- SSR/클라이언트 페이지 크기를 OFFICETEL_TX_PAGE_SIZE로 통일
+
+측정 결과:
+
+- warm은 전 구간 27~250ms로 목표(500ms) 안, 핵심 3초 초과 없음
+- 콜드는 1.2~1.5s이며 그 중 약 570ms가 서버리스 함수 초기화(앱 코드 밖)
+- 지도 마커 응답은 비압축 387.9KB이나 gzip 전송 30.8KB로 병목 아님
+
+테스트 결과:
+
+- feed-accumulator 회귀 12/12 PASS
+- 전체 .test.mjs 518개 중 515 PASS / 3 FAIL(기존 ERR_MODULE_NOT_FOUND)
+- npx tsc --noEmit 24 errors = baseline, 신규 0건
+- npm run build PASS
+- 모바일 360/375/390 overflow 0
+
+알려진 문제:
+
+- 서버리스 함수 초기화 ~570ms는 앱 코드로 제거 불가(호스팅 변경 금지)
+- officetel_master_id 인덱스 권고는 보류(현재 불필요, 대량 집계 시 재검토)
+
+상태:
+
+완료

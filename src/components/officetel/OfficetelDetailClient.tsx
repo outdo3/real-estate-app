@@ -9,7 +9,7 @@
 // 화면이 지어내는 값은 하나도 없다. 없는 값은 전부 "정보 없음"이다.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2 } from 'lucide-react';
-import { formatUseApprovalDate } from '@/lib/officetel/detail-contract';
+import { formatUseApprovalDate, OFFICETEL_TX_PAGE_SIZE } from '@/lib/officetel/detail-contract';
 import styles from './officetel-detail.module.css';
 
 type TxType = 'sale' | 'rent';
@@ -47,6 +47,8 @@ interface DetailProps {
     };
     dataQuality: { cancellation: { coverageFrom: string; note: string } };
   };
+  /** PERFORMANCE_V2 §3 — 서버가 미리 담아준 기본 탭의 첫 페이지(워터폴 제거용). */
+  initialTransactions?: { type: string; rows: any[]; meta: any } | null;
 }
 
 /** 만원 단위 정수를 한국식 금액 문자열로. 값을 만들지 않고 표기만 바꾼다.
@@ -65,11 +67,11 @@ const NONE = <span className={styles.infoMissing}>정보 없음</span>;
 const fmt = (v: number | null | undefined, suffix = '') =>
   v == null ? NONE : <>{typeof v === 'number' ? v.toLocaleString() : v}{suffix}</>;
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = OFFICETEL_TX_PAGE_SIZE;
 
-export default function OfficetelDetailClient({ detail }: DetailProps) {
+export default function OfficetelDetailClient({ detail, initialTransactions }: DetailProps) {
   const { master, areas, summary, dataQuality } = detail;
-  const [tab, setTab] = useState<Tab>(summary.sale.total > 0 ? 'sale' : 'jeonse');
+  const [tab, setTab] = useState<Tab>(detail.summary.sale.total > 0 ? 'sale' : 'jeonse');
   const [area, setArea] = useState<number | null>(null);
   // 응답을 **그 응답을 만든 쿼리 키와 함께** 들고 있는다.
   //
@@ -77,7 +79,13 @@ export default function OfficetelDetailClient({ detail }: DetailProps) {
   // 새 탭(전세) 렌더러로 들어가면 `r.deposit`이 undefined가 되고, 그 값을 포맷하다 예외가
   // 나면서 **페이지 전체가 빈 화면이 됐다**(QA에서 실제로 재현). 키가 다른 응답은 아예
   // 그리지 않는 것이 이 문제를 구조적으로 없애는 방법이다.
-  const [data, setData] = useState<{ key: string; rows: any[]; meta: any } | null>(null);
+  // 서버가 준 첫 페이지를 초기 상태로 심는다 — 첫 렌더에 목록이 이미 있어서
+  // hydrate 직후 한 번 더 비었다가 채워지는 왕복이 사라진다.
+  const initialTab: Tab = detail.summary.sale.total > 0 ? 'sale' : 'jeonse';
+  const initialKey = `${initialTab === 'sale' ? 'sale' : 'rent'}|${initialTab === 'sale' ? '' : 'jeonse'}||${PAGE_SIZE}`;
+  const [data, setData] = useState<{ key: string; rows: any[]; meta: any } | null>(
+    initialTransactions ? { key: initialKey, rows: initialTransactions.rows, meta: initialTransactions.meta } : null
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -117,7 +125,13 @@ export default function OfficetelDetailClient({ detail }: DetailProps) {
     }
   }, [master.id, txType, rentKind, area, limit, queryKey]);
 
-  useEffect(() => { load(); }, [load]);
+  // 서버가 준 첫 페이지와 현재 쿼리가 같으면 첫 렌더에서 재요청하지 않는다.
+  const skipFirstFetchRef = React.useRef(!!initialTransactions);
+  useEffect(() => {
+    if (skipFirstFetchRef.current && queryKey === initialKey) { skipFirstFetchRef.current = false; return; }
+    skipFirstFetchRef.current = false;
+    load();
+  }, [load, queryKey, initialKey]);
 
   // 현재 쿼리로 받은 응답일 때만 그린다. 키가 다르면 아직 로딩 중인 것으로 취급한다.
   const fresh = data && data.key === queryKey ? data : null;

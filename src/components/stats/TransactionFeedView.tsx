@@ -1,8 +1,17 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
+// PERFORMANCE_V2 §10 — 목록 누적은 순수 로직으로 분리했다(회귀 테스트 있음).
+import {
+  buildFeedQueryKey,
+  emptyFeedPages,
+  mergeFeedPage,
+  resolveVisibleFeed,
+  groupTradesByDate,
+  type FeedPages,
+} from '@/lib/stats/feed-accumulator';
 import { Calendar } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Empty from '@/components/ui/Empty';
@@ -146,14 +155,15 @@ export default function TransactionFeedView({
   const [preset, setPreset] = useState('7d');
   const [dealType, setDealType] = useState('');
   const [offset, setOffset] = useState(0);
-  const [allTrades, setAllTrades] = useState<FeedTradeRow[]>([]);
 
-  // STATISTICS REGION FILTER V2 §15 — 지역이 바뀌면(예: 서구 -> 부산 전체) 이전
-  // 지역의 누적 목록/페이지 위치를 그대로 들고 있으면 안 된다. period/dealType은
-  // 사용자가 이미 고른 값을 그대로 유지한다(§15 "가능한 한 유지").
+  // PERFORMANCE_V2 §10 — 누적본은 "그것을 만든 쿼리 키"와 함께 들고 다닌다.
+  const queryKey = buildFeedQueryKey({ lawdCd, sidoCode, dong, preset, dealType });
+  const [pages, setPages] = useState<FeedPages<FeedTradeRow>>(() => emptyFeedPages(queryKey));
+
+  // STATISTICS REGION FILTER V2 §15 — 지역이 바뀌면 페이지 위치를 처음으로 되돌린다.
+  // 누적본 자체는 queryKey가 갈라 주므로 여기서 비우지 않는다(전환 중 깜빡임 방지, §16).
   useEffect(() => {
     setOffset(0);
-    setAllTrades([]);
   }, [lawdCd, sidoCode, dong]);
 
   const params = lawdCd
@@ -164,23 +174,26 @@ export default function TransactionFeedView({
   const { data, isLoading, error } = useSWR<FeedResponse>(`/api/stats/feed?${params.toString()}`, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 60 * 1000,
-    onSuccess: (json) => {
-      if (json.status !== 'OK') return;
-      const flat = json.groups.flatMap((g) => g.trades);
-      setAllTrades((prev) => (offset === 0 ? flat : [...prev, ...flat]));
-    },
   });
+
+  // PERFORMANCE_V2 §10 — 목록을 SWR `onSuccess`로 상태에 복사하지 않는다.
+  // `onSuccess`는 **실제 fetch에서만** 불리므로, 전체 → 매매 → 전체 처럼 이미 캐시에 있는
+  // 키로 돌아오면 호출되지 않는다. 그러면 data는 정상인데 목록 상태만 빈 채로 남아
+  // "상단 지표는 바뀌는데 하단 단지 목록만 사라지는" 버그가 된다(사용자 보고 증상).
+  // 대신 현재 응답에서 파생시키고, 더보기 페이지만 offset별로 누적한다.
+  useEffect(() => {
+    if (!data || data.status !== 'OK') return;
+    const flat = data.groups.flatMap((g) => g.trades);
+    setPages((prev) => mergeFeedPage(prev, queryKey, offset, flat));
+  }, [data, queryKey, offset]);
 
   const handlePresetChange = (next: string) => {
     setPreset(next);
-    setDealType(dealType); // 유지
     setOffset(0);
-    setAllTrades([]);
   };
   const handleDealTypeChange = (next: string) => {
     setDealType(next);
     setOffset(0);
-    setAllTrades([]);
   };
 
   // STATISTICS REGION FILTER V2 — 시도 전체 집계에서는 거래마다 소속 구가 다를
@@ -195,17 +208,10 @@ export default function TransactionFeedView({
     router.push(`/apt/${encodeURIComponent(t.name)}?${qs.toString()}`);
   };
 
-  // 표시용 그룹은 누적된 allTrades를 다시 날짜별로 묶는다(더보기로 페이지가
-  // 늘어도 날짜 헤더가 중복되지 않게).
-  const displayGroups: { date: string; trades: FeedTradeRow[] }[] = [];
-  const groupMap = new Map<string, FeedTradeRow[]>();
-  for (const t of allTrades) {
-    if (!groupMap.has(t.dealDate)) groupMap.set(t.dealDate, []);
-    groupMap.get(t.dealDate)!.push(t);
-  }
-  Array.from(groupMap.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .forEach(([date, trades]) => displayGroups.push({ date, trades }));
+  // §16 — 필터/지역 전환 중에는 이전 목록을 그대로 두고 stale로만 표시한다.
+  // 목록이 잠깐 비었다가 다시 차는 깜빡임이 "느리다"는 체감의 큰 부분이었다.
+  const { trades: visibleTrades, isStale } = resolveVisibleFeed(pages, queryKey);
+  const displayGroups = useMemo(() => groupTradesByDate(visibleTrades), [visibleTrades]);
 
   return (
     <div className={styles.wrap}>
@@ -224,13 +230,13 @@ export default function TransactionFeedView({
         ))}
       </div>
 
-      {isLoading && offset === 0 ? (
+      {isLoading && offset === 0 && visibleTrades.length === 0 ? (
         <InlineLoading message="실거래 데이터를 불러오는 중입니다..." />
       ) : error || data?.status === 'ERROR' ? (
         <ErrorState variant="section" message={data?.message || '실거래 데이터를 불러오지 못했어요.'} />
       ) : data?.apiError ? (
         <ErrorState variant="section" message="국토교통부 실거래 API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요." />
-      ) : !data || data.summary.totalCount === 0 ? (
+      ) : !data || (!isStale && data.summary.totalCount === 0 && visibleTrades.length === 0) ? (
         <Empty variant="noData" title={`${displayRegionName}, ${PERIOD_OPTIONS.find((p) => p.preset === preset)?.label || ''} 기간 내 실거래가 없어요.`} description="다른 기간을 선택해보세요." showMascot={false} />
       ) : (
         <>

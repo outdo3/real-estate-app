@@ -18,7 +18,7 @@
 //     상세에 절대 새지 않는다
 // 이 STEP에서 인덱스를 추가하지 않았다(승인 필요). 필요해지면 blocker로 보고한다.
 import { Prisma } from '@prisma/client';
-import { prisma } from '../prisma';
+import { prisma, warmupConnections } from '../prisma';
 import { getOrSetCache } from '../server-cache';
 import { getUniqueAreaLabels } from '../area-utils';
 import { buildOfficetelHistoryKey } from './identity';
@@ -258,7 +258,11 @@ async function loadSummary(resolved: ResolvedOfficetel) {
 }
 
 export async function getOfficetelDetail(ref: OfficetelIdRef) {
-  const resolved = await resolveOfficetelMaster(ref);
+  // PERFORMANCE_V2 §4 — master 조회(1쿼리) 동안 커넥션 풀을 미리 데운다.
+  // 그 뒤에 area/summary 4개 쿼리가 한꺼번에 나가는데, 콜드 상태에서는 각 쿼리가
+  // 각자 TCP+TLS 핸드셰이크를 해 병렬 이득이 사라진다(PERFORMANCE_V1.2 실측 근거).
+  // master 조회가 그 겹칠 시간을 주므로 warm일 때 추가 비용이 없다.
+  const [resolved] = await Promise.all([resolveOfficetelMaster(ref), warmupConnections(2)]);
   if (!resolved) return null;
   const cacheKey = `officetel:detail:v1:${resolved.master.id}`;
   return getOrSetCache(cacheKey, CACHE_TTL_MS, async () => {

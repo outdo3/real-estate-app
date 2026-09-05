@@ -12,6 +12,9 @@
 
 /** 조회 상한 — 상세 한 화면이 전체 이력을 끌어오지 않게 한다(§12). */
 export const OFFICETEL_TX_DEFAULT_LIMIT = 50;
+/** PERFORMANCE_V2 §3 — 상세 화면 한 페이지 크기. 서버 SSR 프리로드와 클라이언트 더보기가
+ *  **같은 값**을 써야 첫 페이지 캐시 키와 `hasMore` 계산이 어긋나지 않는다. */
+export const OFFICETEL_TX_PAGE_SIZE = 20;
 export const OFFICETEL_TX_MAX_LIMIT = 500;
 
 /**
