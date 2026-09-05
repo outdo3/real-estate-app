@@ -10,6 +10,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { formatUseApprovalDate, OFFICETEL_TX_PAGE_SIZE } from '@/lib/officetel/detail-contract';
+import { officetelEmptyRowsLabel, type AttributionStatus } from '@/lib/officetel/attribution';
+import { getUniqueAreaLabels, resolveAreaLabel } from '@/lib/area-utils';
 import OfficetelLocationCard from './OfficetelLocationCard';
 import styles from './officetel-detail.module.css';
 
@@ -46,7 +48,17 @@ interface DetailProps {
         latestWolse: { dealDate: string; deposit: number; monthlyRent: number; exclusiveArea: number; floor: number } | null;
       };
     };
-    dataQuality: { cancellation: { coverageFrom: string; note: string } };
+    dataQuality: {
+      cancellation: { coverageFrom: string; note: string };
+      /** 연결 0건이 "거래 없음"인지 "동별 귀속 불가"인지 구분한다(FINAL QA). */
+      attribution?: {
+        status: AttributionStatus;
+        unlinkedSale: number;
+        unlinkedRent: number;
+        mastersAtAddress: number;
+        note: string | null;
+      };
+    };
   };
   /** PERFORMANCE_V2 §3 — 서버가 미리 담아준 기본 탭의 첫 페이지(워터폴 제거용). */
   initialTransactions?: { type: string; rows: any[]; meta: any } | null;
@@ -143,6 +155,29 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
   const showCancellationNote =
     txType === 'sale' && visibleRows.some((r) => r.cancellationCoverage === 'NOT_PROVIDED_BY_SOURCE');
 
+  // FINAL QA §8 — 페이지 전체가 **하나의** 면적 라벨 맵을 공유한다.
+  //
+  // 칩만 충돌 해소된 라벨(전용 31.69㎡)을 쓰고 거래행·요약은 원본 float를 그대로
+  // 찍어서(전용 31.6862㎡) 같은 면적이 화면 위치에 따라 다르게 보였다. 필터링에 쓰는
+  // 값은 여전히 원본 exclusiveArea 그대로다 — 표기만 통일한다.
+  const areaLabels = useMemo(() => {
+    const all = [
+      ...areas.sale.map((a) => a.exclusiveArea),
+      ...areas.rent.map((a) => a.exclusiveArea),
+      ...visibleRows.map((r) => Number(r.exclusiveArea)),
+      summary.sale.latest?.exclusiveArea,
+      summary.rent.latestJeonse?.exclusiveArea,
+      summary.rent.latestWolse?.exclusiveArea,
+    ].filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    return getUniqueAreaLabels(all);
+  }, [areas, visibleRows, summary]);
+  const areaLabel = (v: number | null | undefined) =>
+    typeof v === 'number' && Number.isFinite(v) ? resolveAreaLabel(v, areaLabels) : '정보 없음';
+
+  // §22 — 빈 목록이 "진짜 0"인지 "동별로 못 가른 것"인지 서버 판정을 그대로 쓴다.
+  const attribution = dataQuality.attribution;
+  const attributionStatus: AttributionStatus = attribution?.status ?? 'NO_TRANSACTIONS';
+
   const displayName = master.name ?? `${master.address.umdNm} ${master.address.jibun} 오피스텔`;
   const addressLine = [master.address.umdNm, master.address.jibun].filter(Boolean).join(' ');
 
@@ -185,7 +220,7 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
               <>
                 <div className={styles.summaryValue}>{won(summary.sale.latest.dealAmount)}</div>
                 <div className={styles.summaryMeta}>
-                  {summary.sale.latest.dealDate} · 전용 {summary.sale.latest.exclusiveArea}㎡ · {summary.sale.latest.floor}층
+                  {summary.sale.latest.dealDate} · 전용 {areaLabel(summary.sale.latest.exclusiveArea)} · {summary.sale.latest.floor}층
                 </div>
               </>
             ) : (
@@ -198,7 +233,7 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
               <>
                 <div className={styles.summaryValue}>{won(summary.rent.latestJeonse.deposit)}</div>
                 <div className={styles.summaryMeta}>
-                  {summary.rent.latestJeonse.dealDate} · 전용 {summary.rent.latestJeonse.exclusiveArea}㎡ · {summary.rent.latestJeonse.floor}층
+                  {summary.rent.latestJeonse.dealDate} · 전용 {areaLabel(summary.rent.latestJeonse.exclusiveArea)} · {summary.rent.latestJeonse.floor}층
                 </div>
               </>
             ) : (
@@ -213,7 +248,7 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
                   {won(summary.rent.latestWolse.deposit)} / {summary.rent.latestWolse.monthlyRent.toLocaleString()}만
                 </div>
                 <div className={styles.summaryMeta}>
-                  {summary.rent.latestWolse.dealDate} · 전용 {summary.rent.latestWolse.exclusiveArea}㎡ · {summary.rent.latestWolse.floor}층
+                  {summary.rent.latestWolse.dealDate} · 전용 {areaLabel(summary.rent.latestWolse.exclusiveArea)} · {summary.rent.latestWolse.floor}층
                 </div>
               </>
             ) : (
@@ -221,6 +256,14 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
             )}
           </div>
         </div>
+
+        {/* FINAL QA — 비어 있는 이유가 "거래 없음"이 아니라면 반드시 밝힌다.
+            건수까지 적어야 사용자가 "앱이 못 찾은 것"과 "실제로 없는 것"을 구분한다. */}
+        {attribution?.note && (
+          <div className={styles.note} style={{ marginTop: '0.85rem' }}>
+            {attribution.note}
+          </div>
+        )}
       </section>
 
       {/* ── §10~§13 거래 ───────────────────────────────────────── */}
@@ -259,7 +302,7 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
                 className={`${styles.chip} ${area === a.exclusiveArea ? styles.chipActive : ''}`}
                 onClick={() => setArea(a.exclusiveArea)}
               >
-                전용 {a.label}
+                전용 {areaLabel(a.exclusiveArea)}
               </button>
             ))}
           </div>
@@ -275,7 +318,7 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
 
         {!error && fresh && visibleRows.length === 0 && (
           <div className={styles.empty}>
-            {tab === 'sale' ? '매매 거래 없음' : tab === 'jeonse' ? '전세 거래 없음' : '월세 거래 없음'}
+            {officetelEmptyRowsLabel(tab, attributionStatus)}
           </div>
         )}
 
@@ -297,7 +340,7 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
                     <span className={styles.txDate}>{r.dealDate}</span>
                   </div>
                   <div className={styles.txMeta}>
-                    <span>전용 {r.exclusiveArea}㎡</span>
+                    <span>전용 {areaLabel(Number(r.exclusiveArea))}</span>
                     <span>{r.floor}층</span>
                   </div>
                   {tab !== 'sale' && (

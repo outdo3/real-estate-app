@@ -34,11 +34,38 @@ import {
   type OfficetelIdRef,
   type OfficetelTxQuery,
 } from './detail-contract';
+import { resolveAttribution, officetelAttributionNote, type Attribution } from './attribution';
 
 /** 상세 데이터는 하루 단위로도 거의 안 바뀐다. admin/ops와 같은 5분 TTL을 쓴다. */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 /** "최근"의 정의 — 요약 카운트에 쓰는 창(§7). */
 const RECENT_MONTHS = 12;
+
+/**
+ * FINAL QA — 연결된 거래가 0건일 때만, 같은 주소에 **귀속되지 않은** 거래가 있는지 본다.
+ *
+ * 거래가 있는 master(5,056 중 4,762)는 이 쿼리를 아예 타지 않으므로 상세 성능에
+ * 영향이 없다. 0건인 294개만 추가 쿼리 하나를 낸다.
+ */
+async function loadAttribution(resolved: ResolvedOfficetel, linkedSale: number, linkedRent: number) {
+  const m = resolved.master;
+  if (linkedSale + linkedRent > 0) {
+    return resolveAttribution({ linkedSale, linkedRent, unlinkedSale: 0, unlinkedRent: 0, mastersAtAddress: 1 });
+  }
+  const [row] = await prisma.$queryRaw<{ unlinked_sale: number; unlinked_rent: number; masters_at_address: number }[]>`
+    SELECT (SELECT COUNT(*) FROM officetel_trade_histories
+             WHERE officetel_master_id IS NULL AND lawd_cd = ${m.sggCd} AND umd_nm = ${m.umdNm} AND jibun = ${m.jibun})::int AS unlinked_sale,
+           (SELECT COUNT(*) FROM officetel_rent_histories
+             WHERE officetel_master_id IS NULL AND lawd_cd = ${m.sggCd} AND umd_nm = ${m.umdNm} AND jibun = ${m.jibun})::int AS unlinked_rent,
+           (SELECT COUNT(*) FROM officetel_masters
+             WHERE sgg_cd = ${m.sggCd} AND umd_nm = ${m.umdNm} AND jibun = ${m.jibun})::int AS masters_at_address`;
+  return resolveAttribution({
+    linkedSale, linkedRent,
+    unlinkedSale: row?.unlinked_sale ?? 0,
+    unlinkedRent: row?.unlinked_rent ?? 0,
+    mastersAtAddress: row?.masters_at_address ?? 1,
+  });
+}
 
 const MASTER_SELECT = {
   id: true, canonicalKey: true, officetelName: true,
@@ -268,6 +295,8 @@ export async function getOfficetelDetail(ref: OfficetelIdRef) {
   const cacheKey = `officetel:detail:v1:${resolved.master.id}`;
   return getOrSetCache(cacheKey, CACHE_TTL_MS, async () => {
     const [areas, summary] = await Promise.all([loadAreaOptions(resolved), loadSummary(resolved)]);
+    // 연결 0건인 경우에만 "정말 없는 것"과 "동별로 못 가른 것"을 구분한다.
+    const attribution: Attribution = await loadAttribution(resolved, summary.sale.total, summary.rent.total);
     return {
       master: toMasterPayload(resolved.master),
       /** 이력 조회에 실제로 쓰인 building-level 키. 디버깅/재현용으로 노출한다. */
@@ -277,6 +306,11 @@ export async function getOfficetelDetail(ref: OfficetelIdRef) {
       dataQuality: {
         /** 이 master에 연결된 이력만 반환한다. 같은 주소의 unresolved 행은 포함되지 않는다. */
         historyScope: 'LINKED_TO_THIS_MASTER_ONLY' as const,
+        /**
+         * 연결 0건이 "거래 없음"인지 "동별 귀속 불가"인지 화면이 구분할 수 있게 한다.
+         * 실패한 귀속을 결측으로 위장하지 않기 위한 계약이다.
+         */
+        attribution: { ...attribution, note: officetelAttributionNote(attribution) },
         cancellation: {
           coverageFrom: OFFICETEL_CANCELLATION_COVERAGE_FROM,
           note: `${OFFICETEL_CANCELLATION_COVERAGE_FROM} 이전 매매는 원천이 취소 여부를 제공하지 않는다. 그 구간의 "취소 아님"은 검증된 사실이 아니다.`,
