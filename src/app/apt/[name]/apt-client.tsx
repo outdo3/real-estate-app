@@ -644,7 +644,7 @@ export default function ApartmentDetail() {
           <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
             <p style={{marginBottom: '1rem'}}>📍 <b>{aptName}</b>의 위치입니다.</p>
             <div style={{flex: 1, minHeight: '400px', position: 'relative'}}>
-              <KakaoMapEmbed address={primaryAddress} jibunAddress={jibunAddress} type="map" />
+              <KakaoMapEmbed mode="address" address={primaryAddress} jibunAddress={jibunAddress} type="map" />
             </div>
           </div>
         );
@@ -653,7 +653,7 @@ export default function ApartmentDetail() {
           <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
             <p style={{marginBottom: '1rem'}}>👀 단지 주변 <b>로드뷰</b>입니다.</p>
             <div style={{flex: 1, minHeight: '400px', position: 'relative'}}>
-              <KakaoMapEmbed address={primaryAddress} jibunAddress={jibunAddress} type="roadview" />
+              <KakaoMapEmbed mode="address" address={primaryAddress} jibunAddress={jibunAddress} type="roadview" />
             </div>
           </div>
         );

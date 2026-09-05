@@ -115,7 +115,8 @@ export function toMasterPayload(r: MasterRow) {
       outdoorAuto: r.outdoorAutoParking,
       total: officetelParkingTotal(r),
     },
-    // 좌표는 실제로 있을 때만 준다. 현재 Production 보유율 0.00%라 사실상 항상 null이다.
+    // 좌표는 실제로 있을 때만 준다. STEP 5B 적재 이후 보유율 99.84%(5,048/5,056)이며,
+    // 남은 8개는 신뢰 티어 미달이라 의도적으로 비워 둔 것이다 — 추측으로 채우지 않는다.
     coordinates: r.latitude != null && r.longitude != null ? { latitude: r.latitude, longitude: r.longitude } : null,
   };
 }

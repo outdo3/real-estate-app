@@ -15708,3 +15708,56 @@ V2 결론 정정:
 상태:
 
 완료(감사만)
+
+
+### OFFICETEL V1 STEP 6 — 저장 좌표 지도 + 로드뷰 (2026-09-06)
+
+작업:
+
+- src/lib/kakao/maps-sdk.ts 신규 — SDK 로더 단일화(프로미스 캐시)
+- src/lib/kakao/map-embed-logic.ts 신규 — 좌표/주소 모드 판정 순수 모듈
+- src/lib/kakao/map-embed-logic.test.mjs 신규 — 회귀 10개
+- src/components/KakaoMapEmbed.tsx — mode 판별 유니온 + 지도/로드뷰 두 pane 유지
+- src/components/officetel/OfficetelLocationCard.tsx 신규 — 위치 카드
+- src/components/officetel/OfficetelDetailClient.tsx — 위치 카드 배치(실거래 다음)
+- src/components/officetel/officetel-detail.module.css — 위치 카드 스타일
+- src/app/apt/[name]/apt-client.tsx — 호출부에 mode="address" 명시(동작 동일)
+- src/lib/officetel/detail-read.ts — 좌표 보유율 주석 갱신(0.00% -> 99.84%)
+- docs/development/OFFICETEL_V1_STEP6_MAP_ROADVIEW.md 신규
+
+서비스 기능 변경:
+
+오피스텔 상세에 위치 카드가 생겼다. 지도가 카드 안에 직접 보이고, 같은 카드에서
+로드뷰로 전환하고 다시 돌아온다. DB/schema/index 변경 0, Production write 0.
+
+설계:
+
+- KakaoMapEmbed props를 판별 유니온으로 갈라 좌표 모드와 주소 모드를 타입 수준에서
+  분리. 좌표가 깨져도 주소로 폴백하지 않는다 — 폴백하면 두 모드가 조용히 섞이고
+  "지도가 틀렸는데 틀린 줄 모르는" 상태가 된다
+- 지도/로드뷰가 각자 컨테이너를 계속 들고 visibility만 바뀐다. 그래서 줌/중심이
+  보존되고, 주소 모드에서 전환 시 지오코딩이 다시 돌지 않으며, 파노 조회가
+  토글마다 반복되지 않는다(3회 왕복 = 조회 1회)
+- SDK 로더를 프로미스 캐시 한 곳으로 모음. 스크립트 src 문자열은 기존 것을 유지 —
+  라이브러리 목록을 바꾸면 같은 id를 쓰는 다른 9개 화면 로딩까지 바뀐다
+- 지연 로딩 첫 판정을 동기 getBoundingClientRect로 한다. IntersectionObserver
+  콜백은 렌더 파이프라인에 실려 오므로 탭이 렌더 중이 아니면 화면 안 요소에도
+  오지 않고 지도가 "불러오는 중"에 멈춘다(QA에서 재현). scroll/resize 보조 경로 병행
+
+검증(로컬 production 빌드 실측):
+
+- 좌표 모드 addressSearch 0회 / keywordSearch 0회 (network 캡처)
+- 3회 토글 후 SDK script 태그 1개, 로드뷰 파노 조회 1회
+- 줌 보존: 50m -> 30m -> 로드뷰 -> 지도 = 30m 유지
+- 거래 탭(전세) + 면적 칩이 토글 왕복 후 불변
+- 좌표 없는 master 8개: 지도 미표시 + SDK 미로드, 안내 문구만
+- 모바일 360/375/390 가로 overflow 0, 전환 버튼 44px
+- 아파트 회귀: address.json -> 지번 address.json -> keyword.json 체인 그대로 동작
+- 파노 없음 분기는 실제 좌표 23개 중 23개에 파노가 있어 자연 사례 없음 -> 원천 null을
+  주입해 UI 분기 검증
+- node --test 10/10, npx tsc --noEmit 신규 오류 0, npm run lint 0, npm run build 성공
+
+상태:
+
+READY(저장 좌표 지도/로드뷰) · LIMITED(SITE_LEVEL 정밀도 79건, 파노 제공 여부)
+NO DATA(좌표 미해결 8건) · DEFERRED(통근, 정밀 거리 스코어링, 티어 런타임 필터링)

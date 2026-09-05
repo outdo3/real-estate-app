@@ -4,12 +4,13 @@
 //
 // 정보 우선순위는 아파트 상세 순서를 그대로 베끼지 않는다(§8). 오피스텔은 장기 보유·
 // 임대수익 관점의 상품이라 "거래가 실제로 있는가 / 얼마인가"가 먼저고, 건물 스펙은 뒤다:
-//   거래 요약 → 매매/전세/월세 → 전용면적 → 추이 → 건물 정보 → 주차·규모 → 계약 → 데이터 안내
+//   거래 요약 → 매매/전세/월세 → 전용면적 → 추이 → 위치 → 건물 정보 → 주차·규모 → 데이터 안내
 //
 // 화면이 지어내는 값은 하나도 없다. 없는 값은 전부 "정보 없음"이다.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { formatUseApprovalDate, OFFICETEL_TX_PAGE_SIZE } from '@/lib/officetel/detail-contract';
+import OfficetelLocationCard from './OfficetelLocationCard';
 import styles from './officetel-detail.module.css';
 
 type TxType = 'sale' | 'rent';
@@ -326,6 +327,14 @@ export default function OfficetelDetailClient({ detail, initialTransactions }: D
           </div>
         )}
       </section>
+
+      {/* ── STEP 6 위치 ────────────────────────────────────────── */}
+      {/* 좌표는 STEP 5B가 적재한 master 좌표만 쓴다. 없으면 지도를 그리지 않는다. */}
+      <OfficetelLocationCard
+        coordinates={master.coordinates}
+        addressLine={addressLine}
+        roadAddress={master.address.roadAddress}
+      />
 
       {/* ── §16 건물 정보 ──────────────────────────────────────── */}
       <section className={styles.card}>
