@@ -35,10 +35,19 @@ export default function HomeApartmentSearch() {
 
   const handleSelect = (result: ApartmentSearchResult) => {
     setConnectFailed(null);
-    
+
     // If it's a REGION, go to map
     if (result.type === 'REGION') {
       router.push(`/map?lat=${result.lat}&lng=${result.lng}`);
+      return;
+    }
+
+    // OFFICETEL_V1 STEP 4B §2 — 오피스텔은 검색 결과가 이미 정확한 master id를 들고
+    // 온다. 아파트처럼 이름+동으로 실거래 연결을 다시 확인할 필요가 없다(그 확인은
+    // 이름 기반 재식별의 안전장치였다). 거래가 0건이어도 상세는 "거래 없음"을 정직하게
+    // 보여주므로, 여기서 막지 않고 그대로 이동한다.
+    if (result.type === 'OFFICETEL') {
+      if (result.officetelId) router.push(`/officetel/${result.officetelId}`);
       return;
     }
 
@@ -77,7 +86,8 @@ export default function HomeApartmentSearch() {
         <Search className={styles.searchBarIcon} strokeWidth={2} />
         <ApartmentAutocomplete
           onSelect={handleSelect}
-          placeholder="아파트 이름을 검색하세요"
+          includeOfficetel
+          placeholder="아파트 · 오피스텔 이름을 검색하세요"
           inputStyle={{
             border: 'none',
             borderRadius: '999px',

@@ -71,6 +71,37 @@ export function officetelDisplayName(raw: string | null | undefined): string | n
   return s === '' ? null : s;
 }
 
+/**
+ * STEP 4B §3 EMPTY-NAME POLICY — 표시명이 없는 master(실측 390건, 7.71%)의 **화면 표시용**
+ * 라벨. `전포동 897-0 오피스텔` 형태로, 실제로 저장돼 있는 주소 성분만 조합한다.
+ *
+ * 건물 이름을 지어내는 것이 아니다 — 원천에 이름이 없다는 사실을 그대로 두고, 사용자가
+ * 목록에서 항목을 구분할 수 있게 주소로 부른다. **DB에 절대 쓰지 않는다**(표시 전용).
+ * identity는 언제나 그 아래의 master id / canonicalKey다.
+ */
+export function officetelFallbackDisplayName(m: {
+  officetelName?: string | null;
+  umdNm?: string | null;
+  jibun?: string | null;
+}): string {
+  const real = officetelDisplayName(m.officetelName);
+  if (real) return real;
+  const parts = [(m.umdNm ?? '').trim(), (m.jibun ?? '').trim()].filter((s) => s !== '');
+  return parts.length > 0 ? `${parts.join(' ')} 오피스텔` : '오피스텔';
+}
+
+/**
+ * 사용승인일 표시 형식. 원천은 `YYYYMMDD` 문자열(예: `20051125`)로 저장돼 있다.
+ * **표기만** 바꾼다 — 값을 해석하거나 보정하지 않으며, 형식이 다르면 원본을 그대로 보여준다
+ * (모르는 형식을 억지로 날짜처럼 꾸미지 않는다).
+ */
+export function formatUseApprovalDate(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim();
+  if (s === '') return null;
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(s);
+  return m ? `${m[1]}.${m[2]}.${m[3]}` : s;
+}
+
 export class OfficetelQueryError extends Error {}
 
 export interface OfficetelTxQuery {
@@ -81,6 +112,14 @@ export interface OfficetelTxQuery {
   offset: number;
   /** SALE 전용. 기본 false — 가격/추이 표시에서 취소 거래를 제외한다(§4). */
   includeCanceled: boolean;
+  /**
+   * RENT 전용 — 전세/월세 중 하나만 받는다. null이면 둘 다.
+   *
+   * 왜 필요한가(STEP 4B QA 실측): 화면이 한 페이지를 받아 클라이언트에서 갈라 쓰면,
+   * 최근 20건이 전부 월세인 단지에서 **전세 탭이 "거래 없음"으로 보인다**(실제로는
+   * 전세 거래가 있는데도). 나누는 일은 페이지네이션 이전, 즉 서버가 해야 한다.
+   */
+  rentType: OfficetelRentType | null;
 }
 
 /**
@@ -118,7 +157,15 @@ export function parseOfficetelTxQuery(get: (k: string) => string | null): Office
     offset = Number(rawOffset);
   }
 
-  return { type: rawType, area, limit, offset, includeCanceled: get('includeCanceled') === 'true' };
+  const rawRent = (get('rentType') ?? '').trim().toLowerCase();
+  let rentType: OfficetelRentType | null = null;
+  if (rawRent !== '') {
+    if (rawRent !== 'jeonse' && rawRent !== 'wolse') throw new OfficetelQueryError("rentType은 'jeonse' 또는 'wolse'여야 합니다.");
+    if (rawType !== 'rent') throw new OfficetelQueryError('rentType은 type=rent 일 때만 사용할 수 있습니다.');
+    rentType = rawRent;
+  }
+
+  return { type: rawType, area, limit, offset, includeCanceled: get('includeCanceled') === 'true', rentType };
 }
 
 /**

@@ -15429,3 +15429,62 @@ API 변경 (신규):
 상태:
 
 완료
+
+
+## 2026-09-05
+
+### OFFICETEL V1 STEP 4B — 검색 진입 + 상세 UI
+
+작업:
+
+- src/lib/officetel/search-contract.ts / search-read.ts 신규 (검색 랭킹·조회)
+- src/app/api/search/route.ts에 officetels 키 추가(기존 경로 무변경)
+- src/components/ApartmentAutocomplete.tsx에 includeOfficetel opt-in 추가
+- src/components/HomeApartmentSearch.tsx가 오피스텔 선택을 /officetel/[id]로 이동
+- src/app/officetel/[id]/page.tsx + not-found.tsx 신규
+- src/components/officetel/OfficetelDetailClient.tsx + CSS module 신규
+- detail-contract.ts에 officetelFallbackDisplayName / formatUseApprovalDate /
+  rentType 쿼리 추가
+- docs/development/OFFICETEL_V1_STEP4B_SEARCH_AND_DETAIL_UI.md 작성
+
+서비스 기능 변경:
+
+오피스텔 사용자 여정 완성 — 검색 → 결과 → 상세 → 매매/전세/월세 → 면적 변경.
+아파트 검색/상세 동작은 변경 없음.
+
+DB 변경:
+
+없음. schema/index/migration 0, Production write 0.
+
+API 변경:
+
+- GET /api/search: 응답에 officetels 추가(기존 키 형태 무변경)
+- GET /api/officetel/[id]/transactions: rentType=jeonse|wolse 옵션 추가
+
+QA에서 발견해 수정한 결함 3건:
+
+1. STEP 4A loadSummary가 쿼리 9개를 동시 실행해 Supabase pooler를
+   EMAXCONNSESSION(pool_size 15)으로 고갈시켰다 → LATERAL join으로 9→2 축약
+2. RENT 한 페이지를 클라이언트에서 전세/월세로 갈라, 최근 20건이 전부
+   월세인 단지에서 전세 77건이 "거래 없음"으로 보였다 → 서버 필터로 이동
+3. 탭 전환 중 이전 탭 행이 렌더되어 won(undefined) 예외로 페이지 전체가
+   빈 화면이 됐다 → 응답을 쿼리 키와 함께 보관해 불일치 응답은 렌더 제외
+
+테스트 결과:
+
+- officetel 순수 로직 테스트 72/72 PASS
+- 실 Production 케이스 A~L 전부 PASS(unresolved 680행 0건 유출 포함)
+- 반응형 360/375/390/desktop 문서 overflow 0, 탭 터치 타깃 44px
+- 성능: 상세 SSR warm 37~58ms, 거래 API 43~86ms, 검색 API 52~90ms
+- npx tsc --noEmit 24 errors 전부 기존 스크립트, 신규 0건
+- npm run build PASS
+
+알려진 문제:
+
+- 최근 본 항목에 오피스텔 미지원(스키마 변경 필요 — 연기, DECISIONS 참고)
+- 지도/로드뷰 미구현(master 좌표 0.00%)
+- 지도/통계/상세 빠른검색에서는 아직 오피스텔이 검색되지 않음(opt-in 미적용)
+
+상태:
+
+완료

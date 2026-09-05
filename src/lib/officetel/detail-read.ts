@@ -167,61 +167,91 @@ async function loadSummary(resolved: ResolvedOfficetel) {
       rent: { total: 0, recentJeonseCount: 0, recentWolseCount: 0, latestJeonse: null, latestWolse: null },
     };
   }
-  const where = scopeWhere(resolved);
+  const key = resolved.historyKey;
+  const mid = resolved.master.id;
   const recentFrom = new Date();
   recentFrom.setUTCMonth(recentFrom.getUTCMonth() - RECENT_MONTHS);
 
-  const [saleTotal, saleCanceled, saleRecent, latestSale, rentTotal, recentJeonse, recentWolse, latestJeonse, latestWolse] =
-    await Promise.all([
-      prisma.officetelTradeHistory.count({ where }),
-      prisma.officetelTradeHistory.count({ where: { ...where, dealCanceled: true } }),
-      prisma.officetelTradeHistory.count({ where: { ...where, dealCanceled: false, dealDate: { gte: recentFrom } } }),
-      prisma.officetelTradeHistory.findFirst({
-        where: { ...where, dealCanceled: false },
-        orderBy: [{ dealDate: 'desc' }, { id: 'desc' }],
-        select: { dealDate: true, dealAmount: true, exclusiveArea: true, floor: true },
-      }),
-      prisma.officetelRentHistory.count({ where }),
-      prisma.officetelRentHistory.count({ where: { ...where, monthlyRent: 0, dealDate: { gte: recentFrom } } }),
-      prisma.officetelRentHistory.count({ where: { ...where, monthlyRent: { gt: 0 }, dealDate: { gte: recentFrom } } }),
-      prisma.officetelRentHistory.findFirst({
-        where: { ...where, monthlyRent: 0 },
-        orderBy: [{ dealDate: 'desc' }, { id: 'desc' }],
-        select: { dealDate: true, deposit: true, monthlyRent: true, exclusiveArea: true, floor: true },
-      }),
-      prisma.officetelRentHistory.findFirst({
-        where: { ...where, monthlyRent: { gt: 0 } },
-        orderBy: [{ dealDate: 'desc' }, { id: 'desc' }],
-        select: { dealDate: true, deposit: true, monthlyRent: true, exclusiveArea: true, floor: true },
-      }),
-    ]);
+  // STEP 4B — 요약을 **데이터셋당 SQL 한 번**으로 모은다.
+  //
+  // 처음에는 count/findFirst 9개를 Promise.all로 병렬 실행했는데, 상세 페이지를 연속으로
+  // 열자 Supabase pooler가 `EMAXCONNSESSION (pool_size: 15)`로 죽었다(실측). 한 페이지가
+  // 커넥션 9개를 동시에 잡으면 serverless에서 동시 요청 두세 개만으로 풀이 마른다.
+  // 집계와 최신 1건을 lateral join으로 합쳐 쿼리 수를 9 → 2로 줄였다.
+  // `(canonical_key, deal_date)` 인덱스를 그대로 타므로 비용도 늘지 않는다.
+  const [saleAgg, rentAgg] = await Promise.all([
+    prisma.$queryRaw<{
+      total: number; canceled: number; recent_count: number;
+      deal_date: Date | null; deal_amount: number | null; exclusive_area: Prisma.Decimal | null; floor: number | null;
+    }[]>`
+      WITH scoped AS (
+        SELECT * FROM officetel_trade_histories
+         WHERE canonical_key = ${key} AND officetel_master_id = ${mid}
+      )
+      SELECT (SELECT COUNT(*) FROM scoped)::int AS total,
+             (SELECT COUNT(*) FROM scoped WHERE deal_canceled)::int AS canceled,
+             (SELECT COUNT(*) FROM scoped WHERE NOT deal_canceled AND deal_date >= ${recentFrom})::int AS recent_count,
+             l.deal_date, l.deal_amount, l.exclusive_area, l.floor
+        FROM (SELECT 1) d
+        LEFT JOIN LATERAL (
+          SELECT deal_date, deal_amount, exclusive_area, floor FROM scoped
+           WHERE NOT deal_canceled ORDER BY deal_date DESC, id DESC LIMIT 1
+        ) l ON TRUE`,
+    prisma.$queryRaw<{
+      total: number; recent_jeonse: number; recent_wolse: number;
+      j_deal_date: Date | null; j_deposit: number | null; j_exclusive_area: Prisma.Decimal | null; j_floor: number | null;
+      w_deal_date: Date | null; w_deposit: number | null; w_monthly_rent: number | null; w_exclusive_area: Prisma.Decimal | null; w_floor: number | null;
+    }[]>`
+      WITH scoped AS (
+        SELECT * FROM officetel_rent_histories
+         WHERE canonical_key = ${key} AND officetel_master_id = ${mid}
+      )
+      SELECT (SELECT COUNT(*) FROM scoped)::int AS total,
+             (SELECT COUNT(*) FROM scoped WHERE monthly_rent = 0 AND deal_date >= ${recentFrom})::int AS recent_jeonse,
+             (SELECT COUNT(*) FROM scoped WHERE monthly_rent > 0 AND deal_date >= ${recentFrom})::int AS recent_wolse,
+             j.deal_date AS j_deal_date, j.deposit AS j_deposit, j.exclusive_area AS j_exclusive_area, j.floor AS j_floor,
+             w.deal_date AS w_deal_date, w.deposit AS w_deposit, w.monthly_rent AS w_monthly_rent,
+             w.exclusive_area AS w_exclusive_area, w.floor AS w_floor
+        FROM (SELECT 1) d
+        LEFT JOIN LATERAL (
+          SELECT deal_date, deposit, exclusive_area, floor FROM scoped
+           WHERE monthly_rent = 0 ORDER BY deal_date DESC, id DESC LIMIT 1
+        ) j ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT deal_date, deposit, monthly_rent, exclusive_area, floor FROM scoped
+           WHERE monthly_rent > 0 ORDER BY deal_date DESC, id DESC LIMIT 1
+        ) w ON TRUE`,
+  ]);
+
+  const s = saleAgg[0];
+  const r = rentAgg[0];
 
   return {
     sale: {
-      total: saleTotal,
-      canceled: saleCanceled,
-      recentCount: saleRecent,
+      total: s?.total ?? 0,
+      canceled: s?.canceled ?? 0,
+      recentCount: s?.recent_count ?? 0,
       recentMonths: RECENT_MONTHS,
-      latest: latestSale
+      latest: s?.deal_date
         ? {
-            dealDate: iso(latestSale.dealDate),
-            dealAmount: latestSale.dealAmount,
-            exclusiveArea: Number(latestSale.exclusiveArea),
-            floor: latestSale.floor,
-            cancellationCoverage: cancellationCoverageFor(iso(latestSale.dealDate)),
+            dealDate: iso(s.deal_date),
+            dealAmount: s.deal_amount as number,
+            exclusiveArea: Number(s.exclusive_area),
+            floor: s.floor as number,
+            cancellationCoverage: cancellationCoverageFor(iso(s.deal_date)),
           }
         : null,
     },
     rent: {
-      total: rentTotal,
-      recentJeonseCount: recentJeonse,
-      recentWolseCount: recentWolse,
+      total: r?.total ?? 0,
+      recentJeonseCount: r?.recent_jeonse ?? 0,
+      recentWolseCount: r?.recent_wolse ?? 0,
       recentMonths: RECENT_MONTHS,
-      latestJeonse: latestJeonse
-        ? { dealDate: iso(latestJeonse.dealDate), deposit: latestJeonse.deposit, exclusiveArea: Number(latestJeonse.exclusiveArea), floor: latestJeonse.floor }
+      latestJeonse: r?.j_deal_date
+        ? { dealDate: iso(r.j_deal_date), deposit: r.j_deposit as number, exclusiveArea: Number(r.j_exclusive_area), floor: r.j_floor as number }
         : null,
-      latestWolse: latestWolse
-        ? { dealDate: iso(latestWolse.dealDate), deposit: latestWolse.deposit, monthlyRent: latestWolse.monthlyRent, exclusiveArea: Number(latestWolse.exclusiveArea), floor: latestWolse.floor }
+      latestWolse: r?.w_deal_date
+        ? { dealDate: iso(r.w_deal_date), deposit: r.w_deposit as number, monthlyRent: r.w_monthly_rent as number, exclusiveArea: Number(r.w_exclusive_area), floor: r.w_floor as number }
         : null,
     },
   };
@@ -275,6 +305,10 @@ export async function getOfficetelTransactions(ref: OfficetelIdRef, q: Officetel
 
   const areaFilter = q.area ? { exclusiveArea: new Prisma.Decimal(q.area) } : {};
   const base = { ...scopeWhere(resolved), ...areaFilter };
+  // 전세/월세 분리는 페이지네이션 **이전**에 해야 한다 — 페이지를 받아 클라이언트에서
+  // 가르면 최근 N건이 한쪽으로 쏠린 단지에서 반대쪽 탭이 빈 목록으로 보인다(§10 QA 실측).
+  const rentKindFilter =
+    q.rentType === 'jeonse' ? { monthlyRent: 0 } : q.rentType === 'wolse' ? { monthlyRent: { gt: 0 } } : {};
 
   if (q.type === 'sale') {
     // §4 — 기본은 취소 제외. includeCanceled=true는 감사/디버그용 경로다.
@@ -329,10 +363,11 @@ export async function getOfficetelTransactions(ref: OfficetelIdRef, q: Officetel
     };
   }
 
+  const rentWhere = { ...base, ...rentKindFilter };
   const [total, rows] = await Promise.all([
-    prisma.officetelRentHistory.count({ where: base }),
+    prisma.officetelRentHistory.count({ where: rentWhere }),
     prisma.officetelRentHistory.findMany({
-      where: base,
+      where: rentWhere,
       orderBy: [{ dealDate: 'desc' }, { id: 'desc' }],
       skip: q.offset,
       take: q.limit,
@@ -368,7 +403,7 @@ export async function getOfficetelTransactions(ref: OfficetelIdRef, q: Officetel
     rows: mapped,
     meta: {
       total, limit: q.limit, offset: q.offset, hasMore: q.offset + mapped.length < total,
-      area: q.area, sampleCount: mapped.length,
+      area: q.area, rentType: q.rentType, sampleCount: mapped.length,
       contractTermMissing: mapped.filter((m) => m.contractTerm == null).length,
       contractTypeMissing: mapped.filter((m) => m.contractType == null).length,
       useRenewalRightUnknown: mapped.filter((m) => m.useRenewalRight == null).length,

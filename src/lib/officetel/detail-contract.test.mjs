@@ -8,6 +8,7 @@ import {
   OFFICETEL_TX_MAX_LIMIT,
   OfficetelQueryError,
   cancellationCoverageFor,
+  formatUseApprovalDate,
   classifyOfficetelRentType,
   officetelDisplayName,
   officetelParkingTotal,
@@ -117,10 +118,28 @@ test('빈 표시명(실측 390건)은 null로 접힌다', () => {
 });
 
 // ── §12 쿼리 계약 ───────────────────────────────────────────────────────
-test('기본값은 sale / 전체면적 / 기본 limit / 취소 제외', () => {
+test('기본값은 sale / 전체면적 / 기본 limit / 취소 제외 / rent 구분 없음', () => {
   assert.deepEqual(q({}), {
-    type: 'sale', area: null, limit: OFFICETEL_TX_DEFAULT_LIMIT, offset: 0, includeCanceled: false,
+    type: 'sale', area: null, limit: OFFICETEL_TX_DEFAULT_LIMIT, offset: 0, includeCanceled: false, rentType: null,
   });
+});
+
+test('rentType은 서버에서 전세/월세를 가른다(페이지네이션 이전)', () => {
+  assert.equal(q({ type: 'rent', rentType: 'jeonse' }).rentType, 'jeonse');
+  assert.equal(q({ type: 'rent', rentType: 'wolse' }).rentType, 'wolse');
+  assert.equal(q({ type: 'rent' }).rentType, null);
+});
+
+test('rentType은 sale과 함께 쓸 수 없고, 잘못된 값은 거절한다', () => {
+  assert.throws(() => q({ type: 'sale', rentType: 'jeonse' }), OfficetelQueryError);
+  assert.throws(() => q({ type: 'rent', rentType: 'monthly' }), OfficetelQueryError);
+});
+
+test('사용승인일은 표기만 바꾸고, 모르는 형식은 원본을 그대로 둔다', () => {
+  assert.equal(formatUseApprovalDate('20051125'), '2005.11.25');
+  assert.equal(formatUseApprovalDate(''), null);
+  assert.equal(formatUseApprovalDate(null), null);
+  assert.equal(formatUseApprovalDate('2005-11-25'), '2005-11-25');
 });
 
 test('CASE D — 정확한 전용면적만 받는다(근사/구간 없음)', () => {

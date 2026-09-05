@@ -4,11 +4,15 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { perfMark, perfMeasure } from '@/lib/perf-debug';
 
-export type SearchResultType = 'REGION' | 'APARTMENT';
+export type SearchResultType = 'REGION' | 'APARTMENT' | 'OFFICETEL';
 
 export interface ApartmentSearchResult {
   type: SearchResultType;
   name: string;
+  /** OFFICETEL 전용 — 정확한 identity. 이름으로 이동하지 않는다(STEP 4B §2). */
+  officetelId?: number;
+  canonicalKey?: string;
+  hoCnt?: number | null;
   address?: string;
   lat: number;
   lng: number;
@@ -32,6 +36,14 @@ interface ApartmentAutocompleteProps {
   inputStyle?: React.CSSProperties;
   onQueryStateChange?: (state: { keyword: string; hasResults: boolean }) => void;
   biasLocation?: { lat: number; lng: number };
+  /**
+   * OFFICETEL_V1 STEP 4B §1 — 오피스텔 결과를 목록에 포함할지. **기본 false**.
+   *
+   * opt-in으로 둔 이유: 이 컴포넌트는 홈/지도/통계/상세 빠른검색이 함께 쓰는데,
+   * 오피스텔 결과를 무조건 섞으면 그것을 처리하지 않는 소비처가 아파트 분기로
+   * 흘려보내 잘못된 이동을 만든다. 켠 쪽만 책임지고 처리한다(기존 경로 무회귀).
+   */
+  includeOfficetel?: boolean;
 }
 
 const SCRIPT_ID = 'kakao-map-script-main';
@@ -45,6 +57,7 @@ export default function ApartmentAutocomplete({
   inputStyle,
   onQueryStateChange,
   biasLocation,
+  includeOfficetel = false,
 }: ApartmentAutocompleteProps) {
   const router = useRouter();
   const [keyword, setKeyword] = useState('');
@@ -162,6 +175,10 @@ export default function ApartmentAutocomplete({
         if (data.apartments && data.apartments.length > 0) {
           combined = [...combined, ...data.apartments];
         }
+        // STEP 4B — 아파트 뒤에 붙인다. 기존 아파트 결과의 순서/개수는 건드리지 않는다.
+        if (includeOfficetel && data.officetels && data.officetels.length > 0) {
+          combined = [...combined, ...data.officetels];
+        }
         
         if (abortController.signal.aborted) return;
         
@@ -193,6 +210,11 @@ export default function ApartmentAutocomplete({
   // 여전히 실제 이동(및 각 호출부의 검증 로직) 이후에만 불러온다. 잘못 눌러도
   // 부작용 없음(prefetch는 네비게이션을 일으키지 않음).
   const handleHoverPrefetch = (item: any) => {
+    if (item.type === 'OFFICETEL') {
+      // 오피스텔은 identity가 이미 정확하므로 확정 경로를 그대로 prefetch한다.
+      if (item.officetelId) router.prefetch(`/officetel/${item.officetelId}`);
+      return;
+    }
     if (item.type !== 'APARTMENT') return;
     router.prefetch(`/apt/${encodeURIComponent(item.name)}`);
   };
@@ -200,8 +222,26 @@ export default function ApartmentAutocomplete({
   const handleSelect = async (item: any) => {
     setShowDropdown(false);
     suppressNextSearchRef.current = true;
-    setKeyword(item.name);
-    
+    setKeyword(item.type === 'OFFICETEL' ? item.displayName : item.name);
+
+    // STEP 4B §2 — 오피스텔은 정확한 identity를 그대로 넘긴다. 지오코딩/이름 재해석 없음.
+    if (item.type === 'OFFICETEL') {
+      onSelect({
+        type: 'OFFICETEL',
+        name: item.displayName,
+        address: [item.dong, item.jibun].filter(Boolean).join(' '),
+        lat: 0,
+        lng: 0,
+        dong: item.dong,
+        lawdCd: item.sggCd,
+        officetelId: item.officetelId,
+        canonicalKey: item.canonicalKey,
+        hoCnt: item.hoCnt,
+        completionYear: item.buildYear,
+      });
+      return;
+    }
+
     let lat = item.lat || 0;
     let lng = item.lng || 0;
 
@@ -240,7 +280,21 @@ export default function ApartmentAutocomplete({
 
   const renderEnrichmentLine = (item: any) => {
     if (item.type === 'REGION') return null;
-    
+
+    // STEP 4B §5 — 오피스텔은 규모를 **호**로 쓴다. 세대수를 쓰지 않는다.
+    if (item.type === 'OFFICETEL') {
+      const oParts = [
+        item.hoCnt ? `${item.hoCnt.toLocaleString()}호` : null,
+        item.buildYear ? `${item.buildYear}년 준공` : null,
+        item.buildingDong ? `${item.buildingDong}` : null,
+      ].filter(Boolean);
+      return oParts.length > 0 ? (
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{oParts.join(' · ')}</div>
+      ) : (
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>정보 없음</div>
+      );
+    }
+
     const parts = [
       item.totalHouseholds ? `${item.totalHouseholds}세대` : null,
       item.completionYear ? `${item.completionYear}년 준공` : null,
@@ -326,7 +380,7 @@ export default function ApartmentAutocomplete({
         >
           {results.map((item, i) => (
             <li
-              key={`${item.type}-${item.name}-${i}`}
+              key={`${item.type}-${item.officetelId ?? item.name}-${i}`}
               onClick={() => handleSelect(item)}
               style={{
                 padding: '0.6rem 0.75rem',
@@ -340,10 +394,24 @@ export default function ApartmentAutocomplete({
               onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
               onTouchStart={() => handleHoverPrefetch(item)}
             >
-              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: item.type === 'REGION' ? '#2563eb' : 'var(--text-primary)' }}>
-                {item.type === 'REGION' ? `📍 지역: ${item.name}` : item.name}
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: item.type === 'REGION' ? '#2563eb' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: 0 }}>
+                {/* §4 — 색만으로 구분하지 않는다. "오피스텔" 텍스트 배지를 항상 함께 보여준다. */}
+                {item.type === 'OFFICETEL' && (
+                  <span
+                    style={{
+                      flexShrink: 0, fontSize: '0.68rem', fontWeight: 800, letterSpacing: '-0.01em',
+                      color: '#0f766e', background: '#ccfbf1', border: '1px solid #99f6e4',
+                      borderRadius: '999px', padding: '0.1rem 0.4rem', lineHeight: 1.5,
+                    }}
+                  >
+                    오피스텔
+                  </span>
+                )}
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.type === 'REGION' ? `📍 지역: ${item.name}` : item.type === 'OFFICETEL' ? item.displayName : item.name}
+                </span>
               </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {item.type === 'REGION' ? `${item.sido} ${item.sigungu} ${item.dong}` : (item.jibun ? `${item.dong} ${item.jibun}` : item.dong)}
               </div>
               {renderEnrichmentLine(item)}

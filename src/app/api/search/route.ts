@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { resolveApartmentViaKakaoAlias } from '@/lib/search-alias-fallback';
 import { rankApartmentMatches, normalizeSearchKeyword } from '@/lib/search-ranking';
+// OFFICETEL_V1 STEP 4B §1/§2 — 기존 아파트 검색을 대체하지 않고 결과 종류만 추가한다.
+import { searchOfficetels, type OfficetelSearchResult } from '@/lib/officetel/search-read';
 
 // Define our result types
 export type RegionSearchResult = {
@@ -29,9 +31,13 @@ export type ApartmentSearchResult = {
   matchNote?: string | null;
 };
 
+export type { OfficetelSearchResult };
+
 export type UnifiedSearchResult = {
   regions: RegionSearchResult[];
   apartments: ApartmentSearchResult[];
+  /** OFFICETEL_V1 STEP 4B — 기존 소비처는 이 키를 무시해도 그대로 동작한다(추가만). */
+  officetels: OfficetelSearchResult[];
 };
 
 export async function GET(request: Request) {
@@ -39,14 +45,16 @@ export async function GET(request: Request) {
   const q = searchParams.get('q');
   
   if (!q || q.trim().length < 2) {
-    return NextResponse.json({ regions: [], apartments: [] });
+    return NextResponse.json({ regions: [], apartments: [], officetels: [] });
   }
 
   const keyword = q.trim();
   const normalizedKeyword = normalizeSearchKeyword(keyword);
 
-  // Run Region distinct and Apartment search in parallel
-  const [regionRows, rawApartments] = await Promise.all([
+  // Run Region distinct, Apartment and Officetel search in parallel.
+  // 오피스텔 쿼리는 5,056행 테이블 하나라 기존 두 쿼리와 나란히 돌려도 지연이 늘지 않는다.
+  // 실패해도 아파트/지역 결과를 죽이지 않는다 — 오피스텔만 빈 배열로 축소된다(§1 무회귀).
+  const [regionRows, rawApartments, officetels] = await Promise.all([
     prisma.apartmentMaster.findMany({
       where: {
         umdName: {
@@ -81,6 +89,10 @@ export async function GET(request: Request) {
         buildYear: true,
         totalHouseholds: true,
       }
+    }),
+    searchOfficetels(keyword).catch((e) => {
+      console.error('[search] officetel 검색 실패 — 아파트/지역 결과는 그대로 반환한다', e);
+      return [] as OfficetelSearchResult[];
     })
   ]);
 
@@ -154,5 +166,5 @@ export async function GET(request: Request) {
     };
   });
 
-  return NextResponse.json({ regions, apartments });
+  return NextResponse.json({ regions, apartments, officetels });
 }
