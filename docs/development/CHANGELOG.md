@@ -15761,3 +15761,63 @@ V2 결론 정정:
 
 READY(저장 좌표 지도/로드뷰) · LIMITED(SITE_LEVEL 정밀도 79건, 파노 제공 여부)
 NO DATA(좌표 미해결 8건) · DEFERRED(통근, 정밀 거리 스코어링, 티어 런타임 필터링)
+
+
+### OFFICETEL V1 FINAL QA — 부산 릴리스 준비도 (2026-09-06)
+
+작업:
+
+- src/lib/officetel/attribution.ts 신규 — 거래 귀속 3상태 판정(순수 모듈)
+- src/lib/officetel/attribution.test.mjs 신규 — 회귀 10개
+- src/lib/officetel/detail-read.ts — 연결 0건일 때만 귀속 조회 1회 추가
+- src/components/officetel/OfficetelDetailClient.tsx — 정직한 빈 상태 + 면적 표기 통일
+- docs/development/OFFICETEL_V1_FINAL_QA.md 신규
+
+서비스 기능 변경:
+
+P1 수정 — 다중 동 단지 상세가 "매매 거래 없음"이라고 표시했다. 이안해운대는 그
+주소에 1,350건이 실재한다. 같은 지번에 여러 동이 등록되면 원천이 동을 구분해
+주지 않아 STEP 3B가 어느 master에도 붙이지 않았고(교차 오염 0건으로 실측 확인),
+화면이 그 0을 "거래 없음"으로 읽었다. 이제 ATTRIBUTED / UNATTRIBUTED_AT_ADDRESS /
+NO_TRANSACTIONS 셋을 구분하고, 귀속 불가일 때 건수와 사유를 밝힌다. 29개 지번
+6,395건이 영향 범위다.
+
+P2 수정 — 칩은 충돌 해소 라벨(전용 31.686㎡), 거래행·요약은 원본 float(31.6862㎡)를
+찍어 같은 면적이 둘로 읽혔다. 페이지 전체가 단일 라벨 맵을 공유하게 했다. 서로
+다른 전용면적은 여전히 합쳐지지 않고(43.0498 vs 43.05는 4자리 유지), 필터링은
+원본 exact 값 그대로.
+
+DB/schema/migration/index 변경 0, Production write 0.
+
+감사 결과:
+
+- 식별자: canonicalKey null 0 / 중복 0 / malformed 0 / 부산외 0 / 자연키중복 0 /
+  이력-master 구·동 불일치 0
+- 연결률 97.66% (SALE 86,306/88,674, RENT 221,279/226,291)
+- 미연결 7,380행 = 다중 동 지번 6,395행(29곳) + master 없는 지번 985행(40곳)
+- 다중 master 지번에 연결된 행 0건 -> 거래 누출 구조적으로 불가능
+- 16개 구 전부 READY, BLOCKED 구 없음
+- 부속동 master 6건 확인(전포엘에이치 3, 개금동 2, 하이츠빌리지 1) — 거래 붙은 건
+  1건뿐이라 잘못된 값 노출 없음, 삭제/병합하지 않음
+
+검증(Production 실측):
+
+- 109 이안해운대: 귀속불가 안내 + 매매 680건·전월세 670건 표기, "거래 없음" 0회
+- 2 삼원빌(진짜 0): "전세 거래 없음" 유지
+- 2243: 칩·거래행 모두 전용 31.686㎡, 원본 float 노출 0
+- 검색 16케이스 전부 officetelId+canonicalKey 보유, 다중 동은 103동/102동으로 구분
+- 잘못된 id 4종 전부 404, raw null/undefined/NaN 노출 0, 가짜 평형 0
+- 탭 7회 연속 전환 무결, 모바일 360/375/390 문서 overflow 0
+- 아파트 회귀 정상(주소 지오코딩 체인 유지)
+- warm: search 221~402ms, detail 264~744ms, 추가 귀속 쿼리 비용 측정 불가 수준
+- node --test 20/20, npx tsc --noEmit 신규 오류 0, npm run build 성공
+
+판정:
+
+OFFICETEL V1 = LIMITED (부산 공개 가능). 릴리스 블로커 0건.
+LIMITED: 다중 동 거래 귀속 6,395건 · SITE_LEVEL 좌표 정밀도 79건 ·
+2020 이전 취소 검증. NO DATA: 좌표 미해결 8건 · master 없는 지번 985행.
+
+상태:
+
+완료
