@@ -15664,3 +15664,47 @@ V2 결론 정정:
 상태:
 
 완료
+
+
+## 2026-09-05
+
+### PERFORMANCE V2.2 — /api/stats/yearly 전월세 소스 감사 (READ ONLY, 판정 BLOCKED)
+
+작업:
+
+- scripts/rent-trade-history/v22-yearly-parity-audit.ts 신규 (원천 vs DB 파리티 감사)
+- docs/development/PERFORMANCE_V2.md에 V2.2 절 추가
+
+서비스 기능 변경:
+
+없음. 런타임 라우트/캐시 의미론 변경 0, Production write 0, schema/index 변경 0.
+
+감사 결과:
+
+- 6.7초 원인 확정: 부산 요청당 MOLIT rent task 153개
+  (2014~2025 144 + 2026 9). 동시성 6 + 슬롯당 200ms 게이트 → 하한 5.1초
+- 코드 주석의 "전월세는 DB에 아예 없다"는 낡았다. RENT_TRADE_HISTORY_V1이
+  apartment_rent_histories를 만들었다. 그러나 결론은 동일하며 이유가 다르다
+- RENT DB 커버리지: 202408~202608 (25개월/125,545행/16개 구).
+  202408 이전 0건. 실데이터와 coverage-manifest legacyBootstrap이 일치
+- yearly 요구 153개월 대비 커버리지 16.3%. 빈 구간 201401~202407(127개월)
+- 파리티(12셀): 구간 안 10셀 중 9셀 완전일치(건수·전세·월세·최고/최저/평균).
+  불일치 1건은 26350/202408에서 DB가 전세 1행 부족(-0.15%) — rent 재동기화
+  창이 최근 2개 완료월뿐이라 가장 오래된 달이 backfill 스냅샷에 얼어 있음
+- 의미론 차이 2건: (a) DB는 aptSeq 없는 행 차단(테스트 셀 영향 0),
+  (b) DB는 완료월만 보유 — yearly는 현재월 포함
+- 성능 모델: DB 집계 1개 구 31ms / 부산 전체 84~112ms, HashAggregate 12ms,
+  전부 shared buffer hit. 인덱스 추가 불필요. 전환 가능해지면 6.7s → 0.03s
+
+판정: D. BLOCKED
+
+전환하면 2014~2023년이 조용히 0건으로 표시된다(진실성 사고).
+부분 전환도 권하지 않는다 — MOLIT 127개월이 그대로 남아 이득이 16%뿐이고
+한 표에 신뢰 근거가 다른 행이 섞인다.
+
+해제 조건: RENT 백필을 2014-01까지 확장(Phase C 이월) + durable 완전성 증거
+확보 + 현재월 정책 정합 + 최고령 월의 지연 신고 반영 방침 결정.
+
+상태:
+
+완료(감사만)
