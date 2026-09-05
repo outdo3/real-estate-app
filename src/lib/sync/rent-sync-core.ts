@@ -12,6 +12,13 @@ import { prisma } from '../prisma';
 import { fetchRentRegionMonth } from '../../../scripts/rent-trade-history/rent-molit-fetch';
 import { normalizeMolitRentItemsToRentRows, type RentRowInput } from '../../../scripts/rent-trade-history/rent-history-logic';
 import { shouldPersistCellRows } from '../../../scripts/rent-trade-history/rent-completeness-logic';
+// RENT_OCCURRENCE_SAFETY_V1 §3 — Option E group insert guard. 판정은 순수 모듈에 있고
+// 여기서는 그 계획을 실행만 한다(§4 "판정 규칙을 복제하지 않는다").
+import {
+  RENT_COMPARE_FIELDS,
+  planRentCellWrites,
+  type RentCompareField,
+} from '../../../scripts/rent-trade-history/rent-group-guard-logic';
 import { latestCompleteMonth, subtractMonths } from '../../../scripts/rent-trade-history/incremental-sync-completed-month-logic';
 import { recordCoverageCells, type CoverageCellRecord } from '../sync-coverage';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
@@ -24,9 +31,19 @@ export { RENT_DEFAULT_OVERLAP_MONTHS } from './shared';
 const ESTIMATED_CELL_MS = 1500;
 
 // 자연키 밖 필드만 비교한다 — 기존 CLI의 COMPARE_FIELDS와 동일해야 한다(§4).
-const COMPARE_FIELDS = ['aptName', 'dong', 'jibun', 'buildYear', 'contractType', 'contractTerm', 'preDeposit', 'preMonthlyRent', 'useRenewalRight'] as const;
+// RENT_OCCURRENCE_SAFETY_V1 — 정의가 두 곳으로 갈라지지 않도록 rent-group-guard-logic.ts를
+// 단일 출처로 삼는다. 값/순서는 이전과 완전히 동일하다(이름만 재수출).
+const COMPARE_FIELDS = RENT_COMPARE_FIELDS;
 
+/** DB에서 읽어온 기존 row를 자연키 성분까지 포함해 비교 가능한 형태로 정규화한 것. */
 interface ExistingRentRow {
+  groupKeyStr: string;
+  deposit: number;
+  monthlyRent: number;
+  /** "YYYY-MM-DD" — Prisma Date를 정규화해서 담는다. */
+  dealDate: string;
+  floor: number | null;
+  occurrenceIndex: number;
   aptName: string;
   dong: string;
   jibun: string | null;
@@ -38,11 +55,7 @@ interface ExistingRentRow {
   useRenewalRight: boolean | null;
 }
 
-function naturalKeyStrOf(row: { groupKeyStr: string; deposit: number; monthlyRent: number; dealDate: string; floor: number; occurrenceIndex: number }): string {
-  return `${row.groupKeyStr}::${row.deposit}::${row.monthlyRent}::${row.dealDate}::${row.floor}::${row.occurrenceIndex}`;
-}
-
-type CompareField = (typeof COMPARE_FIELDS)[number];
+type CompareField = RentCompareField;
 
 /** 비교 대상 필드 하나를 읽는다. DB row(ExistingRentRow)와 정규화된 feed row(RentRowInput)는
  * 서로 다른 타입이지만 이 9개 필드의 이름/의미는 같다 — 그 교집합만 안전하게 꺼낸다. */
@@ -119,8 +132,11 @@ export async function runRentSync(opts: RentSyncOptions, log: (line: string) => 
       updated: a.updated + r.updated,
       blocked: a.blocked + r.blocked,
       failed: a.failed + (r.status === 'INVALID' || r.status === 'PARTIAL' ? 1 : 0),
+      // RENT_OCCURRENCE_SAFETY_V1 §5 — group guard가 보류한 INSERT 수. `blocked`
+      // (aptSeq 없어 정규화에서 걸러진 행)와 **절대 합치지 않는다** — 서로 다른 사건이다.
+      guardedInsertsSkipped: a.guardedInsertsSkipped + (r.guardedInsertsSkipped ?? 0),
     }),
-    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0 }
+    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0, guardedInsertsSkipped: 0 }
   );
 
   let status: SyncRunStatus = 'SUCCESS';
@@ -147,7 +163,11 @@ export async function runRentSync(opts: RentSyncOptions, log: (line: string) => 
     needsReview,
     reports,
   };
-  log(`DONE rent status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} blocked=${totals.blocked} failed=${totals.failed} coverageRecorded=${recorded} durationMs=${summary.durationMs}`);
+  log(
+    `DONE rent status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} ` +
+      `blocked=${totals.blocked} guardedInsertsSkipped=${totals.guardedInsertsSkipped} failed=${totals.failed} ` +
+      `coverageRecorded=${recorded} durationMs=${summary.durationMs}`
+  );
   return summary;
 }
 
@@ -173,6 +193,8 @@ async function syncOneRentCell(
     // RENT에는 등기일자 필드가 존재하지 않는다 — 항상 0(해당 없음).
     registryUpdated: 0,
     registryAmbiguousSkipped: 0,
+    // RENT_OCCURRENCE_SAFETY_V1 §5 — group guard가 보류한 INSERT 수.
+    guardedInsertsSkipped: 0,
   };
 
   if (fetchResult.status === 'INVALID') {
@@ -200,42 +222,39 @@ async function syncOneRentCell(
       preDeposit: true, preMonthlyRent: true, useRenewalRight: true,
     },
   });
-  const existingMap = new Map<string, ExistingRentRow>();
-  for (const e of existing) {
-    if (e.floor == null) continue;
-    existingMap.set(
-      naturalKeyStrOf({ groupKeyStr: e.groupKeyStr, deposit: e.deposit, monthlyRent: e.monthlyRent, dealDate: e.dealDate.toISOString().slice(0, 10), floor: e.floor, occurrenceIndex: e.occurrenceIndex }),
-      e
-    );
-  }
+  const existingRows: ExistingRentRow[] = existing.map((e) => ({ ...e, dealDate: e.dealDate.toISOString().slice(0, 10) }));
 
-  const toInsert: RentRowInput[] = [];
-  for (const row of rows) {
-    const match = existingMap.get(naturalKeyStrOf(row));
-    if (!match) {
-      toInsert.push(row);
-      continue;
-    }
-    // §13 RENT FIRST MUTATION GUARD — 기존 row의 내용이 달라졌다면 자동으로 덮어쓰지
-    // **않는다**. Production에서 rent row의 true mutation은 아직 한 번도 관측된 적이 없다.
-    // 첫 사례는 반드시 사람이 보고 정책을 정해야 한다 — 필드명과 전후 값만 보고한다
-    // (개인정보 없음).
-    const diffs = COMPARE_FIELDS.filter((f) => compareFieldValue(match, f) !== compareFieldValue(row, f));
-    if (diffs.length === 0) {
-      base.unchanged++;
-      continue;
-    }
-    base.reviewCandidates += diffs.length;
-    for (const f of diffs) {
+  // §13 RENT FIRST MUTATION GUARD — 기존 row의 내용이 달라졌다면 자동으로 덮어쓰지 **않는다**.
+  // 첫 사례는 반드시 사람이 보고 정책을 정해야 한다 — 필드명과 전후 값만 보고한다(개인정보 없음).
+  //
+  // RENT_OCCURRENCE_SAFETY_V1 §3/§5 — 여기에 Option E가 더해졌다: review candidate가 있는
+  // 자연 그룹은 **그 그룹의 INSERT까지** 함께 보류한다. 예전에는 UPDATE만 막고 INSERT를
+  // 그대로 진행해, 늦게 추가된 형제가 슬롯을 밀어낸 그룹에서 기존 행 내용의 복제본이
+  // 생기고 신규 행의 진짜 내용은 저장되지 않는 오염이 발생했다(2026-09-05 실측 2건).
+  const plan = planRentCellWrites(rows, existingRows);
+  const toInsert: RentRowInput[] = plan.inserts;
+  base.unchanged = plan.unchanged;
+  base.reviewCandidates = plan.reviewCandidateFieldCount;
+  base.guardedInsertsSkipped = plan.skippedInserts.length;
+
+  for (const diff of plan.reviewDiffs) {
+    for (const f of diff.fields) {
       needsReview.push({
         lawdCd,
         dealYmd,
-        identity: `aptSeq=${row.aptSeq} area=${row.exclusiveArea} deposit=${row.deposit} monthlyRent=${row.monthlyRent} dealDate=${row.dealDate} floor=${row.floor} occ=${row.occurrenceIndex}`,
+        identity: `aptSeq=${diff.row.aptSeq} area=${diff.row.exclusiveArea} deposit=${diff.row.deposit} monthlyRent=${diff.row.monthlyRent} dealDate=${diff.row.dealDate} floor=${diff.row.floor} occ=${diff.row.occurrenceIndex}`,
         field: f,
-        oldValue: compareFieldValue(match, f) == null ? null : String(compareFieldValue(match, f)),
-        newValue: compareFieldValue(row, f) == null ? null : String(compareFieldValue(row, f)),
+        oldValue: compareFieldValue(diff.match, f) == null ? null : String(compareFieldValue(diff.match, f)),
+        newValue: compareFieldValue(diff.row, f) == null ? null : String(compareFieldValue(diff.row, f)),
       });
     }
+  }
+  if (plan.guardedGroups.length > 0) {
+    log(
+      `GROUP_GUARD ${lawdCd}:${dealYmd} guardedGroups=${plan.guardedGroups.length} insertsSkipped=${plan.skippedInserts.length} — ` +
+        `review candidate가 있는 자연 그룹의 INSERT를 보류했다(사람 확인 전까지 이 셀은 coverage가 전진하지 않는다)`
+    );
+    for (const g of plan.guardedGroups) log(`GROUP_GUARD_DETAIL ${lawdCd}:${dealYmd} group=${g}`);
   }
 
   if (mode === 'apply' && toInsert.length > 0) {
@@ -278,6 +297,9 @@ async function syncOneRentCell(
     base.inserted = mode === 'apply' ? 0 : toInsert.length; // dry-run은 예상치
   }
 
-  log(`${fetchResult.status} ${lawdCd}:${dealYmd} fetched=${base.fetched} blocked=${base.blocked} inserted=${base.inserted} unchanged=${base.unchanged} review=${base.reviewCandidates}`);
+  log(
+    `${fetchResult.status} ${lawdCd}:${dealYmd} fetched=${base.fetched} blocked=${base.blocked} inserted=${base.inserted} ` +
+      `unchanged=${base.unchanged} review=${base.reviewCandidates} guardedInsertsSkipped=${base.guardedInsertsSkipped}`
+  );
   return base;
 }

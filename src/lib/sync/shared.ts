@@ -39,6 +39,10 @@ export interface CellReport {
   registryUpdated: number;
   /** 형제 occurrence의 registryDate가 엇갈려 보충을 건너뛴 row 수(§4). */
   registryAmbiguousSkipped: number;
+  /** RENT_OCCURRENCE_SAFETY_V1 §5 — Option E group guard가 보류한 INSERT 수(RENT 전용).
+   * `blocked`(aptSeq 없어 정규화 단계에서 걸러진 행)와 **절대 합치지 않는다** — 서로 다른
+   * 사건이다. SALE 경로에는 이 가드가 없어 항상 undefined다(0건이 아니라 "해당 없음"). */
+  guardedInsertsSkipped?: number;
 }
 
 export interface SyncSummary {
@@ -57,6 +61,8 @@ export interface SyncSummary {
   /** TRADE_REGISTRY_DATA_V1.1 §5 — 취소 flip(`updated`)과 분리된 별도 metric. */
   registryUpdated: number;
   registryAmbiguousSkipped: number;
+  /** RENT_OCCURRENCE_SAFETY_V1 §5 — group guard가 보류한 INSERT 총합(RENT 전용, CellReport 참고). */
+  guardedInsertsSkipped?: number;
   coverageRecorded: number;
   durationMs: number;
   needsReview: ReviewItem[];

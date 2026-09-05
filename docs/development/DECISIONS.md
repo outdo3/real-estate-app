@@ -436,3 +436,48 @@ sale 쪽에 새 SQL aggregate 함수가 없다 — 향후 sale의 row-level
 상태:
 
 채택
+
+
+## 2026-09-05
+
+### RENT late-sibling occurrenceIndex 오염 — Option E(가드)를 먼저, Option D(근본 해결)는 보류
+
+배경:
+
+apartment RENT sync에서 원천에 형제 행이 나중에 추가되고 그 행이 기존
+형제보다 앞으로 정렬되면, 기존 행의 occurrenceIndex 순위가 밀리는데도
+DB의 기존 행은 옛 슬롯 번호를 그대로 들고 있다. 그 결과 first-mutation
+guard가 UPDATE만 막고 INSERT는 그대로 진행되어, 기존 행 내용의 복제본이
+생기고 신규 행의 진짜 내용은 저장되지 않았다. 부산 RENT 전수 대조에서
+실제 오염 2건을 확정했다(오염 필드는 contractTerm 하나, 금액/날짜/층/
+면적/identity/행 수는 무손상).
+
+결정:
+
+자연키를 바꾸는 안(Option C)과 매칭을 multiset으로 재설계하는 안
+(Option D)을 두고, 이번에는 **Option E — review candidate가 있는 자연
+그룹의 INSERT까지 함께 보류**만 채택했다. Option D는 설계 노트로만
+남기고 별도 승인 STEP으로 미뤘다.
+
+이유:
+
+Option C는 서술 필드(contractTerm 등)를 키에 넣게 되는데, 원천이 그
+필드를 나중에 채우거나 정정하면 같은 거래가 새 키로 INSERT되어 **진짜
+중복**이 생긴다 — 지금 고치려는 오염(2행)보다 큰 위험을 새로 들인다.
+게다가 125,545행 재계산과 schema migration이 필요하다.
+
+Option D는 옳은 방향이지만 sync 매칭 로직 재작성이라 즉시 적용하기에는
+검증 범위가 크다. 반면 Option E는 스키마/자연키/기존 행/정규화 의미론을
+전혀 건드리지 않고 추가 오염을 즉시 0으로 만든다. "출혈을 먼저 멈추고,
+근본 수술은 승인받아 따로" 순서를 택했다.
+
+영향:
+
+가드가 걸린 그룹은 coverage가 전진하지 않아 그 셀이 사람 개입 전까지
+보류된다. 이는 의도된 동작이다 — 조용한 오염보다 멈춘 coverage가 낫다.
+다만 stall이 /admin/ops에서 WARNING으로 올라오지 않는 관측 공백이
+남아 있어, Option D와 함께 보완 대상이다.
+
+상태:
+
+채택 (Option D는 보류 — 별도 승인 필요)

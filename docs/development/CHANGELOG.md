@@ -15228,3 +15228,70 @@ resume 기록 (전체 재실행 없음):
 상태:
 
 완료 — STEP 3 READY (SALE/RENT history 적재는 별도 승인)
+
+
+## 2026-09-05
+
+### RENT_OCCURRENCE_SAFETY_V1 — 오염 2행 교정 + group INSERT guard
+
+작업:
+
+- 선행 감사(RENT_OCCURRENCE_STABILITY_V1)로 late-sibling occurrenceIndex
+  오염의 근본 원인 확정 — 새 형제가 앞으로 정렬되면 기존 행 슬롯이 밀리는데
+  UPDATE만 막히고 INSERT는 진행되어 복제본이 생기는 구조
+- 부산 RENT 전수(125,545행 / 25개월) 대조로 피해 범위 확정: 트리거 성립
+  11 클러스터 중 원천 재조회로 9개는 정상 확인, **실제 오염 2 클러스터 / 2행**
+- scripts/rent-trade-history/rent-group-guard-logic.ts 신규(zero-import 순수 모듈)
+- src/lib/sync/rent-sync-core.ts가 planRentCellWrites()를 호출하도록 변경
+  (판정 복제 없음, COMPARE_FIELDS 정의를 단일 출처로 통합)
+- docs/development/RENT_OCCURRENCE_SAFETY_V1.md 작성
+
+서비스 기능 변경:
+
+없음 (사용자 노출 UI/API 변경 없음)
+
+DB 변경:
+
+schema 변경 없음. 승인된 Production UPDATE **정확히 2행**(contractTerm 단일 필드):
+
+| id | 지역 | before | after |
+| ---: | --- | --- | --- |
+| 122550 | 26170 | 26.10~28.10 | 26.09~28.09 |
+| 35805 | 26260 | 27.09~29.09 | 26.09~28.09 |
+
+INSERT 0 / DELETE 0 / migration 0. 총 행수 125,545 무변화, 자연키 중복 0 유지,
+aptSeq NULL 0 유지.
+
+API 변경:
+
+없음. CellReport/SyncSummary에 optional `guardedInsertsSkipped` 추가(관측용,
+RENT 전용 — SALE은 undefined = 해당 없음).
+
+동작 변경:
+
+review candidate가 있는 자연 그룹은 UPDATE뿐 아니라 **INSERT도 함께 보류**한다.
+같은 셀의 무관한 깨끗한 그룹은 기존대로 진행한다(셀 전체를 막지 않는다).
+coverage 의미론은 변경 없음 — 기존대로 해당 셀의 coverage를 기록하지 않는다.
+
+테스트 결과:
+
+- 신규 rent-group-guard-logic.test.mjs 11 케이스 전부 PASS
+  (CASE 1 깨끗한 그룹 / CASE 2 앞으로 정렬 → 전면 보류 / CASE 3 뒤로 정렬 →
+  정상 INSERT / CASE 4 그룹 단위 격리 / CASE 5 동일내용 형제 보존·멱등)
+- .test.mjs 전체 473개 중 470 PASS / 3 FAIL — 3건 전부 기존
+  ERR_MODULE_NOT_FOUND, 신규 실패 0
+- npx tsc --noEmit: 변경 파일 오류 0건 (나머지는 FAIL_EXISTING_SCRIPT_ERRORS)
+- npx eslint(변경 파일): 0 problems
+- npm run build: PASS
+- 실셀 dry-run(READ ONLY): 26170:202608 76/76 unchanged, 26260:202607 280/280
+  unchanged, review 0 / inserts 0 / guarded 0 — stall 해소 확인
+
+알려진 문제:
+
+- Option E는 출혈 차단이며 근본 해결(Option D multiset reconciliation)은 보류
+- needsReview payload와 run status가 durable 저장되지 않음
+- /admin/ops가 coverage stall을 WARNING으로 올리지 않음
+
+상태:
+
+완료
