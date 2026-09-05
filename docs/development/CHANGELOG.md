@@ -15295,3 +15295,74 @@ coverage 의미론은 변경 없음 — 기존대로 해당 셀의 coverage를 �
 상태:
 
 완료
+
+
+## 2026-09-05
+
+### OFFICETEL V1 STEP 3B — 실거래 이력 최초 Production 적재 (314,965행)
+
+작업:
+
+- scripts/officetel/step3b-history-backfill.ts 신규 (로컬 CLI, --apply 없으면 dry-run)
+- STEP 3A NDJSON(원천 응답 순서 보존)을 원천으로 셀 단위 적재
+- 판정 로직은 STEP 1 계약 모듈을 그대로 호출(복제 없음):
+  identity.ts buildOfficetelCanonicalKey / natural-key.ts officetelSaleGroupKey,
+  officetelRentGroupKey, assignOccurrenceIndexes
+- docs/development/OFFICETEL_V1_STEP3B_HISTORY_BACKFILL.md 작성
+
+서비스 기능 변경:
+
+없음 (UI/API 변경 0 — 적재만)
+
+DB 변경:
+
+schema/migration/index 변경 **0**. INSERT only:
+
+| 테이블 | INSERT | UPDATE | DELETE |
+| --- | ---: | ---: | ---: |
+| officetel_trade_histories | **88,674** | 0 | 0 |
+| officetel_rent_histories | **226,291** | 0 | 0 |
+| 합계 | **314,965** | **0** | **0** |
+
+적재 셀 6,579 (SALE 3,617 + RENT 2,962) · 중복 skip 0 ·
+PARTIAL/INVALID/미완료 셀 **0** · 무관 테이블 영향 0.
+
+API 변경:
+
+없음.
+
+품질 실측 (Production):
+
+- linkage: SALE 86,306 (97.33%) / RENT 221,279 (97.79%) — 전체 307,585 (97.66%)
+- unresolved: SALE 2,368 (MULTI 1,779 + MISS 589) / RENT 5,012 (MULTI 4,616 + MISS 396)
+- canonicalKey 생성 100.00% / 자연키 중복 0 / floor NULL 0 / 면적·금액 파싱실패 0
+- SALE 취소 2,354행, cancelDate 형식 위반 0
+- RENT 전세 66,518 (29.39%) / 월세 159,773 (70.61%),
+  useRenewalRight true 2,303 / false 0 / null 223,988
+- identical sibling: SALE 4,433묶음 11,069행 / RENT 948묶음 1,953행 — 병합하지 않음
+- 취소 절벽 재확인: 2006~2019 57,555행 중 취소 **0** (원천 미제공, true zero 아님)
+
+용량:
+
+DB 560.1 MB → **702.0 MB** (+141.9 MB), 8 GB의 6.84% → **8.57%**.
+STEP 3A 예측(추가 128~146 MB / 688~707 MB / 8.4~8.6%) **범위 안**.
+
+테스트 결과:
+
+- npx tsc --noEmit: 24 errors 전부 기존 스크립트(FAIL_EXISTING_SCRIPT_ERRORS),
+  STEP 3B 신규 0건
+- officetel identity/master-normalize 테스트 39/39 PASS
+- dry-run → apply 대조 및 NDJSON oracle 대조 차이 0
+
+알려진 문제:
+
+- incremental re-sync 미구현(의도) — 오피스텔 occurrenceIndex는 도착 순서 기반이라
+  RENT_OCCURRENCE_SAFETY_V1과 같은 슬롯 밀림 위험이 있다. occurrence 계약 확정
+  전까지 어떤 셀도 재동기화하지 않는다
+- 지연 취소 93건(12개월 초과) 재확인 스윕 없음 — STEP 3C 후보
+- 26230|전포동|897-0 master 3건 정리 시 97행 linkable 전환(별도 승인 필요)
+- BLOCKED 유지: Record High / Score / Finance / Map 레이어 / 공급면적·평형
+
+상태:
+
+완료 (배포 불필요 — 런타임 코드 무변경)
