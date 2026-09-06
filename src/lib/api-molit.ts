@@ -73,6 +73,17 @@ function toMolitNameText(value: unknown): string {
   return '';
 }
 
+// MOLIT 호출 실패 메시지를 밖으로 내보내기 전에 비밀값을 지운다. fetch 실패 메시지에는
+// 요청 URL이 통째로 들어오는 경우가 있고, 그 URL에는 serviceKey(공공데이터 인증키)가
+// 그대로 들어있다. 이 메시지는 응답 apiError와 ErrorLog까지 흘러가므로 원본을 그대로
+// 흘리면 인증키가 외부에 노출된다.
+export function redactMolitFailureMessage(message: unknown): string {
+  const text = typeof message === 'string' && message.trim() !== '' ? message : '알 수 없는 오류';
+  return text
+    .replace(/serviceKey=[^&\s]*/gi, 'serviceKey=[redacted]')
+    .replace(/https?:\/\/\S+/gi, '[redacted-url]');
+}
+
 export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
   try {
     if (!API_KEY) {
@@ -96,6 +107,15 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     case 'villa':
       endpoint = 'http://apis.data.go.kr/1613000/RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade'; // 연립다세대 매매 (빌라)
       break;
+  }
+
+  // 알 수 없는 거래 유형이면 endpoint가 빈 문자열로 남아 "?serviceKey=..."라는 상대 URL이
+  // 만들어지고, fetch가 "Failed to parse URL from ?serviceKey=<키 전체>"라는 메시지로
+  // 실패한다 — 그 메시지가 그대로 에러 플레이스홀더/응답/로그로 흘러 서비스 키가 노출됐다
+  // (type은 쿼리스트링으로 외부에서 지정 가능하므로 실제 노출 경로였다). URL을 만들기
+  // 전에 명시적으로 막는다.
+  if (!endpoint) {
+    throw new Error('지원하지 않는 거래 유형입니다.');
   }
 
   const cleanKey = API_KEY.trim().replace(/['"]/g, '');
@@ -140,18 +160,22 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     return mapMolitItems(itemsArray, type, lawdCd, dealYmd);
 
   } catch (error: any) {
-    const maskedKey = API_KEY ? `${API_KEY.trim().substring(0, 5)}...${API_KEY.trim().substring(API_KEY.trim().length - 5)}` : 'none';
-    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${error.message}`);
+    // 이 메시지는 에러 플레이스홀더 → 라우트 응답(apiError) → 화면/ErrorLog까지 흘러간다.
+    // 실패 원인에 따라 요청 URL(=serviceKey 포함)이 그대로 들어있을 수 있으므로 반드시
+    // 마스킹한 뒤에만 밖으로 내보낸다. 키 일부를 진단용으로 붙이던 info 필드도 없앴다 —
+    // 비밀값 조각을 응답/로그에 남길 이유가 없다.
+    const safeMessage = redactMolitFailureMessage(error?.message);
+    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${safeMessage}`);
     // Instead of failing silently, return a special error object so the frontend can display it
     return [{
       id: `error-${type}-${lawdCd}-${dealYmd}`,
       rank: 1,
-      name: `API 에러: ${error.message}`,
+      name: `API 에러: ${safeMessage}`,
       price: '에러',
       priceChange: '',
       changeType: 'new',
       typeLabel: '에러',
-      info: `사용된 키 확인: ${maskedKey}`,
+      info: '공공데이터 API 호출 실패',
       dong: '오류',
       lat: null,
       lng: null,

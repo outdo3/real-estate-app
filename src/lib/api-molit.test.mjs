@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseCancellationFields, mapMolitItems, createMolitXmlParser } from './api-molit.ts';
+import { parseCancellationFields, mapMolitItems, createMolitXmlParser, redactMolitFailureMessage, fetchMolitData } from './api-molit.ts';
 import { resolveStrongIdentityAptSeqs } from './apt-name-match.ts';
 
 // TRADE_CANCELLATION_AUDIT_V1 — 실제 live MOLIT 응답은 영문 필드명(cdealType/cdealDay/
@@ -105,4 +105,42 @@ test('재현: 숫자 단지명이 섞인 MOLIT 원본 XML → mapMolitItems → 
   const items = mapMolitItems(rawItems, 'apt', '26350', '202609');
   const seqs = resolveStrongIdentityAptSeqs(items, '해운대경동제이드', '우동');
   assert.deepEqual([...seqs], ['26350-2206']);
+});
+
+// APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX 중 발견된 비밀값 노출 경로 회귀 방지.
+// type은 쿼리스트링으로 외부에서 지정 가능한데, 알 수 없는 값이면 endpoint가 빈 문자열이
+// 되어 "?serviceKey=<키>"라는 상대 URL이 만들어지고, fetch 실패 메시지("Failed to parse
+// URL from ?serviceKey=...")가 그대로 apiError/ErrorLog로 흘러 인증키가 노출됐다.
+
+test('redactMolitFailureMessage: serviceKey 값을 그대로 흘리지 않는다', () => {
+  const leaked = 'Failed to parse URL from ?serviceKey=AbCd%2FEfGh%3D%3D&LAWD_CD=26350&DEAL_YMD=202609';
+  const safe = redactMolitFailureMessage(leaked);
+  assert.ok(!safe.includes('AbCd'), '키 값이 남아 있으면 안 된다');
+  assert.ok(safe.includes('serviceKey=[redacted]'));
+  assert.ok(safe.includes('LAWD_CD=26350'), '진단에 필요한 나머지 정보는 유지한다');
+});
+
+test('redactMolitFailureMessage: 전체 URL이 들어와도 마스킹한다', () => {
+  const leaked = 'request to http://apis.data.go.kr/1613000/X?serviceKey=SECRETKEY&a=1 failed';
+  const safe = redactMolitFailureMessage(leaked);
+  assert.ok(!safe.includes('SECRETKEY'));
+});
+
+test('redactMolitFailureMessage: 비어 있거나 문자열이 아니면 일반 문구로 대체한다', () => {
+  assert.equal(redactMolitFailureMessage(undefined), '알 수 없는 오류');
+  assert.equal(redactMolitFailureMessage(''), '알 수 없는 오류');
+});
+
+test('fetchMolitData: 지원하지 않는 거래 유형은 URL을 만들기 전에 막고 키를 노출하지 않는다', async () => {
+  // 이 테스트 환경에는 .env가 로드되지 않아 키 부재 오류가 먼저 날 수도 있다. 어느 쪽이든
+  // 검증 대상은 같다: 에러 플레이스홀더 어디에도 serviceKey/키 조각이 남지 않는다.
+  const result = await fetchMolitData({ type: 'bogus-type', lawdCd: '26350', dealYmd: '202609' });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].typeLabel, '에러');
+  assert.ok(
+    ['API 에러: 지원하지 않는 거래 유형입니다.', 'API 에러: DATA_GO_KR_API_KEY is not defined in environment variables.'].includes(result[0].name),
+    `예상치 못한 실패 메시지: ${result[0].name}`
+  );
+  assert.ok(!result[0].name.includes('serviceKey'));
+  assert.equal(result[0].info, '공공데이터 API 호출 실패', '에러 플레이스홀더에 키 조각을 남기지 않는다');
 });

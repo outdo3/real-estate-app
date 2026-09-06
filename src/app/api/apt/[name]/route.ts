@@ -1,12 +1,37 @@
 import { NextResponse } from 'next/server';
-import { fetchMolitData } from '@/lib/api-molit';
+import type { DataType } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
 import { geocodeApartmentName } from '@/lib/geocode-apt';
-import { getOrSetCache } from '@/lib/server-cache';
+import { fetchMolitMonthCached } from '@/lib/molit-month-cache';
+import {
+  foldMonthResults,
+  resolveTradeApiError,
+  summarizeTradeCompleteness,
+  type MonthFetchOutcome,
+} from '@/lib/apt-trade-completeness';
 import { logServerError } from '@/lib/log-server-error';
 import { resolveStrongIdentityAptSeqs, matchesTradeIdentity } from '@/lib/apt-name-match';
 
 export const dynamic = 'force-dynamic';
+
+// APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX §ADMIN_LOGGING — 부분 실패는 요청당 한 줄만
+// 남긴다(월마다 남기면 120개월 요청 하나가 로그 폭풍이 된다). 같은 (type, lawdCd)에 대해
+// 5분 안에 반복되는 부분 실패도 한 번만 남긴다 — 스로틀링은 보통 연속으로 발생하므로
+// 그대로 두면 같은 사실이 수십 번 기록된다.
+const PARTIAL_LOG_THROTTLE_MS = 5 * 60 * 1000;
+const lastPartialLogAt = new Map<string, number>();
+
+function shouldLogPartialFailure(key: string, now: number): boolean {
+  const previous = lastPartialLogAt.get(key);
+  if (previous !== undefined && now - previous < PARTIAL_LOG_THROTTLE_MS) return false;
+  if (lastPartialLogAt.size > 500) {
+    for (const [k, at] of lastPartialLogAt) {
+      if (now - at >= PARTIAL_LOG_THROTTLE_MS) lastPartialLogAt.delete(k);
+    }
+  }
+  lastPartialLogAt.set(key, now);
+  return true;
+}
 
 export async function GET(
   request: Request,
@@ -74,30 +99,39 @@ export async function GET(
     }
 
     // 공공데이터 API 병렬 호출 (청크 단위로 분할하여 Rate Limit 및 Timeout 방지)
+    // 동시성/재시도 정책은 이번 STEP에서 의도적으로 바꾸지 않는다(§8) — 목적은 실패를
+    // 더 많이 성공시키는 게 아니라, 실패를 정직하게 표현하는 것이다.
     const chunkSize = 12; // 1년에 해당하는 12개월씩 끊어서 요청
-    let allTrades: any[] = [];
-    
+    // APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX — 월별 성공/실패를 버리지 않고 모은다.
+    // 이전에는 실패 월의 에러 플레이스홀더가 그대로 allTrades에 섞여 들어갔고, 단지명
+    // 필터에서 조용히 걸러진 뒤 "모든 월이 실패했을 때만" apiError가 켜졌다 — 즉 12개월
+    // 중 1개월만 실패하면 그 달의 거래가 통째로 빠진 채 정상 응답처럼 보였다.
+    const monthOutcomes: MonthFetchOutcome[] = [];
+
     for (let i = 0; i < months.length; i += chunkSize) {
       const chunk = months.slice(i, i + chunkSize);
       // 이 라우트는 export const dynamic = 'force-dynamic'이라 fetchMolitData 내부의
       // next:{revalidate:3600} 캐시가 무력화된다(force-dynamic은 모든 fetch를
       // cache:'no-store'로 강제) — lawdCd+월+거래유형 단위로 별도 TTL 캐시를 둬서 같은
       // 지역의 다른 단지를 조회할 때도 이미 받아온 월별 원본 데이터를 재사용한다(과거
-      // 실거래는 사실상 불변 데이터이므로 재조회할 이유가 없다).
-      const promises = chunk.map(dealYmd =>
-        getOrSetCache(`molit:${type}:${lawdCd}:${dealYmd}`, 3600 * 1000, () => fetchMolitData({ type: type as any, lawdCd, dealYmd })).catch(e => {
-          console.warn(`Failed to fetch for ${dealYmd}:`, e.message);
-          return []; // 에러 시 빈 배열 반환하여 전체 실패 방지
-        })
+      // 실거래는 사실상 불변 데이터이므로 재조회할 이유가 없다). 실패한 월은 이 캐시에
+      // 들어가지 않는다(molit-month-cache.ts) — 실패가 1시간 고착되던 경로를 끊는다.
+      const results = await Promise.all(
+        chunk.map(async (dealYmd) => ({
+          dealYmd,
+          ...(await fetchMolitMonthCached({ type: type as DataType, lawdCd, dealYmd })),
+        }))
       );
-      
-      const results = await Promise.all(promises);
-      results.forEach(monthlyData => {
-        if (Array.isArray(monthlyData)) {
-          allTrades = allTrades.concat(monthlyData);
-        }
-      });
+
+      monthOutcomes.push(...results);
     }
+
+    // 실패 월의 플레이스홀더는 거래 목록에 넣지 않고, 원본 실패 사유만 한 번 보존한다
+    // (전 월 실패일 때 기존 apiError 메시지로 그대로 쓴다). 순수 함수로 분리해 부분 실패
+    // 시나리오(A~E)를 결정적으로 테스트한다 — apt-trade-completeness.test.ts.
+    const folded = foldMonthResults(monthOutcomes);
+    const allTrades = folded.items;
+    const completeness = summarizeTradeCompleteness(folded.cells);
 
     // 이름만으로는 같은 lawdCd(구/군) 안에 있는 서로 다른 단지가 섞여 잡힐 수 있다 —
     // 예: "롯데캐슬"로 검색하면 "대신롯데캐슬"뿐 아니라 다른 동의 "OO롯데캐슬2차"까지
@@ -164,15 +198,40 @@ export async function GET(
 
     // 공공데이터 API 자체가 실패한 경우(키 누락/만료 등) 에러 플레이스홀더가 아파트명 필터에서
     // 걸러지면서 "거래 내역 없음"과 구분이 안 되므로, 매 월 전부 실패했는지 여부를 별도로 알려준다.
-    const errorMonths = allTrades.filter(item => item.typeLabel === '에러').length;
-    const apiError = months.length > 0 && errorMonths >= months.length
-      ? (allTrades.find(item => item.typeLabel === '에러')?.name.replace(/^API 에러: /, '') || '공공데이터 API 호출에 실패했습니다.')
-      : null;
+    // apiError의 의미(=요청한 모든 월이 실패)는 기존과 동일하게 유지한다 — 기존 소비자
+    // (apt-client, PriceTrendChart, QA 스크립트)의 동작을 바꾸지 않기 위함이다.
+    const apiError = resolveTradeApiError(completeness, folded.upstreamFailureMessage);
+
+    // 일부 월만 실패한 경우(partial)는 apiError로 승격하지 않되, 응답이 "완전한 집계"인
+    // 것처럼 보이게 두지도 않는다. 통계 라우트가 이미 쓰는 partial/failedDistricts 표현과
+    // 같은 의미의 필드를 추가한다(여기서는 셀 단위가 지역이 아니라 월이라 failedMonths).
+    if (completeness.partial && !completeness.allFailed) {
+      const throttleKey = `${type}:${lawdCd}`;
+      if (shouldLogPartialFailure(throttleKey, Date.now())) {
+        const shownMonths = completeness.failedMonths.slice(0, 12).join(',');
+        const overflow = completeness.failedMonths.length > 12 ? `+${completeness.failedMonths.length - 12}` : '';
+        logServerError(
+          `[MOLIT_PARTIAL] source=MOLIT type=${type} lawdCd=${lawdCd} dong=${dong || '-'} period=${period} `
+            + `months=${completeness.monthsRequested} ok=${completeness.monthsSucceeded} failed=${completeness.failedMonths.length} `
+            + `failedMonths=${shownMonths}${overflow} reason=${(folded.upstreamFailureMessage || 'unknown').slice(0, 120)}`,
+          '/api/apt/[name]'
+        ).catch(() => {});
+      }
+    }
 
     // 클라이언트가 URL에 lawdCd/dong을 안 넘긴 경우, 여기서 실제로 조회에 사용한(DB 조회,
     // 지오코딩 또는 기본값) 값을 함께 돌려줘서 화면의 지역명/이후 요청들이 같은 값으로
     // 맞춰지게 한다.
-    return NextResponse.json({ trades: filteredTrades, apiError, lawdCd, dong });
+    return NextResponse.json({
+      trades: filteredTrades,
+      apiError,
+      lawdCd,
+      dong,
+      partial: completeness.partial,
+      failedMonths: completeness.failedMonths,
+      monthsRequested: completeness.monthsRequested,
+      monthsSucceeded: completeness.monthsSucceeded,
+    });
   } catch (error) {
     console.error('Error fetching trade history:', error);
     // 이 라우트의 에러 로그에는 그동안 요청 정보가 전혀 없어서, 반복 발생한 오류

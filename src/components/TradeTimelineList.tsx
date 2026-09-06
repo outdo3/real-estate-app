@@ -15,20 +15,23 @@ interface TradeTimelineListProps {
   trades: TimelineTrade[];
   unitMaster?: DisplayUnit[] | null;
   loading: boolean;
-  apiError: string | null;
+  // APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX — 원본 오류 문자열이 아니라 이미 사용자용
+  // 으로 정리된 문구를 받는다(trade-read-state.ts). 전체 실패든 일부 기간 실패든, 이 값이
+  // 있으면 목록을 "완전한 결과"로 보여주지 않는다. 값이 없을 때만 "거래 없음"이라고 말한다.
+  incompleteMessage: string | null;
   visibleCount: number;
   onLoadMore: () => void;
   areaLabels?: Map<number, string>;
 }
 
-export default function TradeTimelineList({ trades, loading, apiError, visibleCount, onLoadMore, areaLabels, unitMaster }: TradeTimelineListProps) {
+export default function TradeTimelineList({ trades, loading, incompleteMessage, visibleCount, onLoadMore, areaLabels, unitMaster }: TradeTimelineListProps) {
   if (loading) {
     return <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>데이터를 불러오는 중입니다...</div>;
   }
   if (trades.length === 0) {
     return (
       <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-        {apiError ? `실거래가 데이터를 불러오지 못했습니다. (${apiError})` : '선택한 조건의 실거래가 없습니다.'}
+        {incompleteMessage ?? '선택한 조건의 실거래가 없습니다.'}
       </div>
     );
   }
@@ -37,6 +40,23 @@ export default function TradeTimelineList({ trades, loading, apiError, visibleCo
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {incompleteMessage && (
+        <div
+          role="status"
+          style={{
+            padding: '0.7rem 0.85rem',
+            marginBottom: '0.75rem',
+            borderRadius: '8px',
+            border: '1px solid #fcd34d',
+            backgroundColor: '#fffbeb',
+            color: '#92400e',
+            fontSize: '0.85rem',
+            lineHeight: 1.5,
+          }}
+        >
+          {incompleteMessage} 아래 목록은 불러온 기간만 반영한 결과입니다.
+        </div>
+      )}
       {visible.map((t, index) => {
         let areaLabel = resolveAreaLabel(parseFloat(t.area), areaLabels);
         if (unitMaster && unitMaster.length > 0) {

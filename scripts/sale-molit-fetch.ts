@@ -14,8 +14,7 @@
 //
 // rent-molit-fetch.ts와 동일한 pagination/retry 골격을 재사용(재발명 금지) — 동시 1,
 // 최소 간격 350ms, 스로틀 감지 시 지수 백오프.
-import { XMLParser } from 'fast-xml-parser';
-import { mapMolitItems } from '../src/lib/api-molit';
+import { createMolitXmlParser, mapMolitItems } from '../src/lib/api-molit';
 import { classifySaleCellCompleteness, type SaleCellStatus } from './sale-pagination-logic';
 
 const ENDPOINT = 'http://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev';
@@ -55,7 +54,11 @@ async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Pr
       signal: AbortSignal.timeout(10000),
     });
     const textData = await response.text();
-    const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: true });
+    // APT_DETAIL_NAME_TYPE_HOTFIX 후속 — fetchMolitData()와 동일한 파서를 쓴다.
+    // 단지명 태그만 숫자 변환을 끄는 설정이라 resultCode/totalCount/거래금액/면적 등
+    // 다른 필드의 파싱 결과는 완전히 동일하고(실데이터 11,879행 대조 확인), 숫자처럼
+    // 보이는 단지명의 원본 표기(예: 선행 0)만 그대로 보존된다.
+    const parser = createMolitXmlParser();
     const jsonObj = parser.parse(textData);
 
     const errMsg = jsonObj.OpenAPI_ServiceResponse?.cmmMsgHeader?.errMsg;

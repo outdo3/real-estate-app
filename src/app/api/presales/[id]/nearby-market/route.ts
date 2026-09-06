@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { findNearbyApartments, type NearbyApartmentItem } from '@/lib/nearby-apartments';
-import { fetchMolitData } from '@/lib/api-molit';
-import { getOrSetCache } from '@/lib/server-cache';
+import { fetchMolitMonthCached } from '@/lib/molit-month-cache';
 import { parsePresaleHouseType, isSimilarExclusiveArea, medianPrice } from '@/lib/presale-house-type';
 import { logServerError, buildErrorLogMessage } from '@/lib/log-server-error';
 
@@ -174,10 +173,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const fetchPromises: Promise<any[]>[] = [];
       for (const sggCd of distinctSggCd) {
         for (const dealYmd of newMonths) {
+          // APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX §CACHE_SAFETY — 캐시 키/TTL/반환
+          // 아이템은 이전과 동일하고(`molit:apt:{sggCd}:{dealYmd}`, 1시간), 달라지는 건
+          // "실패한 월은 캐시에 남기지 않는다"는 점뿐이다. 이 라우트와 /api/apt/[name]이
+          // 같은 캐시를 공유하므로, 여기서 실패를 캐시하면 상세 페이지의 그 월도 1시간
+          // 동안 실패로 고정된다(반대 방향도 마찬가지).
           fetchPromises.push(
-            getOrSetCache(`molit:apt:${sggCd}:${dealYmd}`, 3600 * 1000, () =>
-              fetchMolitData({ type: 'apt', lawdCd: sggCd, dealYmd })
-            ).catch(() => [])
+            fetchMolitMonthCached({ type: 'apt', lawdCd: sggCd, dealYmd }).then((result) => result.items)
           );
         }
       }

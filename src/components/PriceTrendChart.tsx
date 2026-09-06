@@ -148,7 +148,10 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeAr
         if (!response.ok) return { trades: [], error: TRADE_API_UNAVAILABLE_MESSAGE };
         const data = await response.json();
         const state = resolveTradeReadState<PriceTrendTrade>(true, data);
-        return { trades: state.trades, error: state.apiError };
+        // APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX — 전체 실패(apiError)뿐 아니라
+        // 일부 기간만 실패한 경우도 안내 대상이다. 이 화면은 이미 error가 있으면
+        // "일부 불러오지 못했습니다" 안내를 띄우므로, 그 자리에 그대로 연결한다.
+        return { trades: state.trades, error: state.incompleteMessage };
       } catch { return { trades: [], error: TRADE_API_UNAVAILABLE_MESSAGE }; }
     };
     Promise.all([fetchType('apt'), fetchType('rent')]).then(([sale, rent]) => {
@@ -254,9 +257,9 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeAr
 
   return <section className={styles.card} aria-label="매매 전세 시세 추이">
     <div className={styles.header}><div><h3 className={styles.title}>매매·전세 시세 추이</h3>{onSelectArea && <select className={styles.unitSelector} aria-label="차트 평형 선택" value={selectedTradeArea || '전체'} onChange={(event) => onSelectArea(event.target.value)}><option value="전체">평형 선택</option>{selectableAreas.map((area) => <option key={area} value={area}>{unitLabel(area)}</option>)}</select>}<p className={styles.area}>{selectedLabel} · 개별 실거래 기준</p></div><div className={styles.periods} aria-label="조회 기간">{(Object.keys(PERIODS) as Period[]).map((item) => <button key={item} type="button" className={styles.period} aria-pressed={period === item} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
-    {!loading && errors.length > 0 && <p className={styles.notice}>실거래가 데이터를 일부 불러오지 못했습니다. {errors[0]}</p>}
+    {!loading && errors.length > 0 && <p className={styles.notice}>{errors[0]}</p>}
     {!loading && !errors.length && (saleThin || rentThin) && <p className={styles.notice}>{saleThin && rentThin ? '선택 평형은 매매·전세 거래가 모두 적어 추이를 읽기 어렵습니다.' : saleThin ? '선택 평형은 매매 거래가 적어 추이를 읽기 어렵습니다.' : '선택 평형은 전세 거래가 적어 추이를 읽기 어렵습니다.'}</p>}
-    {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : needsAreaSelection ? <div className={styles.empty}>평형을 선택해 시세 추이를 확인하세요.</div> : !hasData && errors.length > 0 ? <div className={styles.empty}>실거래가 데이터를 불러오지 못했습니다.</div> : !hasData ? <div className={styles.empty}>선택한 평형의 최근 거래가 없습니다.</div> : <>
+    {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : needsAreaSelection ? <div className={styles.empty}>평형을 선택해 시세 추이를 확인하세요.</div> : !hasData && errors.length > 0 ? <div className={styles.empty}>{errors[0]}</div> : !hasData ? <div className={styles.empty}>선택한 평형의 최근 거래가 없습니다.</div> : <>
       <div className={styles.volumeLegend}><span>하단 막대: 같은 날짜의 실제 거래 수</span><span className={styles.volumeLegend}><i className={styles.volumeBar} style={{ background: SALE_COLOR }} />매매</span><span className={styles.volumeLegend}><i className={styles.volumeBar} style={{ background: RENT_COLOR }} />전세</span></div>
       <div className={styles.legend} role="group" aria-label="매매·전세 시세 표시 전환">
         <button type="button" className={styles.legendItem} aria-pressed={seriesVisible.sale} onClick={() => toggleSeries('sale')}>

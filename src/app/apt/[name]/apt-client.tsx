@@ -98,7 +98,9 @@ export default function ApartmentDetail() {
   // 때도 loading/infoLoading이 다시 true가 되는데, 그때마다 전체화면 오버레이가 뜨면
   // 화면이 계속 깜빡이는 느낌을 준다. 최초 1회 로딩이 끝난 뒤로는 기존 스켈레톤만 쓴다.
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  // APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX — 전체 실패뿐 아니라 "일부 기간만
+  // 불러오지 못한" 경우도 담는다. 값이 있으면 거래 목록을 완전한 결과로 보여주지 않는다.
+  const [tradeIncompleteMessage, setTradeIncompleteMessage] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [ledgerType, setLedgerType] = useState<'전유부' | '표제부'>('전유부');
   const [aptInfo, setAptInfo] = useState<Record<string, string> | null>(null);
@@ -278,7 +280,7 @@ export default function ApartmentDetail() {
               setSelectedTradeArea(defaultArea);
             }
           }
-          setApiError(tradeState.apiError);
+          setTradeIncompleteMessage(tradeState.incompleteMessage);
           if (data.lawdCd) resolvedLawdCd = data.lawdCd;
           // URL에 dong이 없었다면(위 dongQuery가 비어 실제로는 구 전체를 뒤진 응답이다) API가
           // DB 조회/지오코딩으로 찾아낸 dong을 신뢰한다(거래가 0건이어도 유효한 값). 이후 호출
@@ -311,7 +313,7 @@ export default function ApartmentDetail() {
         } else {
           const tradeState = resolveTradeReadState<Trade>(false);
           setTrades(tradeState.trades);
-          setApiError(tradeState.apiError);
+          setTradeIncompleteMessage(tradeState.incompleteMessage);
           if (!infoFetchedInline) {
             infoFetchedInline = true;
             fetchAptInfo('', resolvedDong, resolvedLawdCd);
@@ -348,7 +350,7 @@ export default function ApartmentDetail() {
         console.error('Failed to fetch trades:', error);
         if (!cancelled) {
           setTrades([]);
-          setApiError(TRADE_API_UNAVAILABLE_MESSAGE);
+          setTradeIncompleteMessage(TRADE_API_UNAVAILABLE_MESSAGE);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -1161,7 +1163,7 @@ export default function ApartmentDetail() {
               trades={filteredTrades}
               unitMaster={unitMaster}
               loading={loading}
-              apiError={apiError}
+              incompleteMessage={tradeIncompleteMessage}
               visibleCount={visibleCount}
               onLoadMore={() => setVisibleCount((v) => v + 15)}
               areaLabels={areaLabels}

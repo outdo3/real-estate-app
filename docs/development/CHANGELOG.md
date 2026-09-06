@@ -15880,3 +15880,75 @@ DB/schema/migration 변경 0, Production write 0, 외부 API 의존성 추가 0.
 상태:
 
 완료 (Production 배포 후 error_logs 신규 유입 관찰 필요)
+
+
+## 2026-09-06
+
+### APT DETAIL MOLIT PARTIAL FAILURE TRUST FIX
+
+작업:
+
+- src/lib/apt-trade-completeness.ts 신규 — 월 셀 3상태 판정(SUCCESS_WITH_DATA /
+  SUCCESS_EMPTY / FAILED) + 완전성 요약 + fold/apiError 계약(순수 함수)
+- src/lib/molit-month-cache.ts 신규 — MOLIT 월 조회+캐시 단일 진입점,
+  실패 월은 캐시하지 않음(키/TTL은 기존과 동일)
+- src/lib/server-cache.ts — getOrSetCache에 shouldCache 옵션 추가(미지정 시 기존 동작)
+- src/app/api/apt/[name]/route.ts — 월별 성공/실패 집계, partial/failedMonths/
+  monthsRequested/monthsSucceeded 응답 추가, 부분 실패 요약 로깅(요청당 1줄, 5분 억제)
+- src/app/api/presales/[id]/nearby-market/route.ts — 같은 캐시 헬퍼 사용(상호 오염 차단)
+- src/lib/trade-read-state.ts — incompleteMessage 신규(전체 실패/부분 실패 문구 분리)
+- src/components/TradeTimelineList.tsx / PriceTrendChart.tsx /
+  src/app/apt/[name]/apt-client.tsx — 부분 실패를 목록 위 배너로 정직하게 노출,
+  원본 오류 문자열 노출 제거
+- src/lib/api-molit.ts — 비밀값 노출 차단(§아래), scripts/sale-molit-fetch.ts 파서 통일
+- 테스트 5파일 신규/보강, docs/development/APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX.md
+
+서비스 기능 변경:
+
+/api/apt/[name]은 요청 하나가 최대 120개 월 셀을 조회해 합치는데, 그중 일부만 실패하면
+성공한 월만 조용히 합쳐 정상 응답으로 내려주고 그 결과가 1시간 캐시에 들어갔다. 실측으로
+같은 단지가 로컬 17건 / 부분 실패 Production 7건으로 갈렸다. 이제 월 셀마다
+SUCCESS_WITH_DATA / SUCCESS_EMPTY / FAILED를 구분하고, 한 달이라도 실패하면 응답에
+partial=true와 failedMonths를 실어 "완전한 집계"로 제시하지 않는다. 화면은
+"일부 기간의 거래 정보를 불러오지 못했습니다. 잠시 후 다시 확인해주세요."를 목록 위에
+띄우고, 거래가 0건이어도 "거래 없음"이라고 말하지 않는다.
+
+핵심 불변식: SUCCESS_EMPTY != FAILED. 정상 응답으로 확인된 진짜 무거래 월은 그대로
+완전한 셀로 세고(무거래를 오류로 보이게 하지 않는다), 실패 월만 실패로 센다.
+
+apiError의 의미(=요청한 모든 월이 실패)는 기존 그대로 유지해 기존 소비자 동작을 바꾸지
+않았다. 실패 월의 에러 플레이스홀더는 이제 거래 목록 계산에서 완전히 제외된다.
+
+캐시: 실패한 월은 더 이상 캐시되지 않아 다음 요청이 즉시 회복할 수 있고, 이미 캐시된
+정상 결과는 이후 일시적 실패로 덮이지 않는다. getOrSetCache의 기본 동작은 그대로라
+다른 라우트의 캐시 의미는 바뀌지 않았다.
+
+동시성/재시도 정책은 의도적으로 변경하지 않았다(목표는 실패를 더 성공시키는 게 아니라
+정직하게 표현하는 것). 감사 결과 상세 라우트(청크 12 동시, 재시도 0)가 통계 라우트의
+전역 세마포어(동시 6, 재시도 1)를 쓰지 않아 동시 최대 18까지 갈 수 있다는 점은 별도
+STEP 후보로 남긴다.
+
+보안(P0, 부수 발견 및 수정):
+
+?type=<알 수 없는 값>으로 요청하면 endpoint가 빈 문자열이 되어 "?serviceKey=<인증키
+전체>"라는 상대 URL이 만들어지고, fetch 실패 메시지가 그대로 apiError/화면/ErrorLog까지
+흘러 공공데이터 인증키가 노출됐다(type은 외부에서 지정 가능 = 실제 노출 경로). URL 생성
+전에 차단하고, 실패 메시지의 serviceKey/URL을 마스킹하며, 에러 플레이스홀더에 넣던 키
+조각(앞5+뒤5)도 제거했다. 저장된 error_logs에 키 포함 행은 0건(READ ONLY 확인).
+
+DB/schema/migration 변경 0, Production write 0, MOLIT 동시성 증가 0.
+
+검증:
+
+- 신규/보강 테스트 포함 136/136 PASS (결정적, Production 스로틀링 의존 없음):
+  전체 성공 / 성공-0건 / 부분 실패(11+1, 6+6) / 전체 실패 / 부분 실패 미캐시 /
+  정상 캐시 미오염 / 이후 성공 회복 / 숫자형 단지명 / identity 회귀 / 비밀값 마스킹
+- npx tsc --noEmit src 오류 0, npm run lint exit 0, npm run build 성공
+- 로컬 프로덕션 빌드 실호출: 해운대경동제이드 17건(partial=false, 36/36),
+  경동 93건(aptSeq 26350-2 단독, identity 분리 유지), 존재하지 않는 단지 0건이
+  apiError=null·partial=false로 유지(진짜 0건 오분류 없음), type=bogus 응답에
+  serviceKey 문자열 없음
+
+상태:
+
+완료
