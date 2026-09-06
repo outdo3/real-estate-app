@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aptNamesMatch, resolveStrongIdentityAptSeqs, matchesTradeIdentity, deriveCanonicalAptSeq } from './apt-name-match';
+import { normalizeAptName, aptNamesMatch, resolveStrongIdentityAptSeqs, matchesTradeIdentity, deriveCanonicalAptSeq } from './apt-name-match';
 
 // SEARCH_DETAIL_IDENTITY_HOTFIX_V2 — regression fixtures based on real production data
 // (부산 해운대구 우동, ApartmentTradeHistory 실측): "경동"(aptSeq 26350-2, 지번 974,
@@ -75,6 +75,46 @@ test('resolveStrongIdentityAptSeqs: dong이 없으면(레거시 name-only URL) �
   ];
   const seqs = resolveStrongIdentityAptSeqs(items, '해운대경동제이드');
   assert.deepEqual([...seqs], ['26350-2206']);
+});
+
+// APT_DETAIL_NAME_TYPE_HOTFIX — /api/apt/[name]의 "raw.replace is not a function"
+// (프로덕션 minify 빌드에서는 "e.replace is not a function") 재발 방지.
+// 실제 스택: normalizeAptName ← resolveStrongIdentityAptSeqs(=normalizeAptName(item.name))
+// 이며, item.name이 truthy 비문자열(MOLIT 원본에서 숫자로 파싱된 단지명)일 때 터졌다.
+// 여기서의 원칙: 크래시하지 않되, 식별 불가 값이 "매칭 성공"으로 바뀌어서는 안 된다.
+
+test('normalizeAptName: 비문자열(숫자 등)이 들어와도 크래시하지 않고 빈 문자열(=식별 불가)을 반환한다', () => {
+  assert.equal(normalizeAptName(101 as unknown as string), '');
+  assert.equal(normalizeAptName({ '@_xsi:nil': 'true' } as unknown as string), '');
+  assert.equal(normalizeAptName(null as unknown as string), '');
+});
+
+test('normalizeAptName: 정상 문자열 정규화 동작은 그대로다(회귀 확인)', () => {
+  assert.equal(normalizeAptName('LG메트로시티3차아파트 134동'), 'LG메트로시티3차');
+  assert.equal(normalizeAptName('해운대 경동제이드'), '해운대경동제이드');
+});
+
+test('resolveStrongIdentityAptSeqs: 비문자열 이름 항목이 섞여도 크래시하지 않고 그 항목을 식별로 인정하지 않는다', () => {
+  const items = [
+    { name: 101 as unknown as string, dong: '우동', aptSeq: '26350-9999' },
+    { name: '해운대경동제이드', dong: '우동', aptSeq: '26350-2206' },
+  ];
+  const seqs = resolveStrongIdentityAptSeqs(items, '해운대경동제이드', '우동');
+  assert.deepEqual([...seqs], ['26350-2206']);
+});
+
+test('resolveStrongIdentityAptSeqs: 요청 이름이 비어 있으면(정규화 결과 공백) 어떤 aptSeq도 exact로 인정하지 않는다', () => {
+  const items = [
+    { name: 101 as unknown as string, dong: '우동', aptSeq: '26350-9999' },
+    { name: '해운대경동제이드', dong: '우동', aptSeq: '26350-2206' },
+  ];
+  assert.equal(resolveStrongIdentityAptSeqs(items, '', '우동').size, 0);
+  assert.equal(resolveStrongIdentityAptSeqs(items, '   ', '우동').size, 0);
+});
+
+test('aptNamesMatch/matchesTradeIdentity: 비문자열 이름은 크래시 없이 "매칭 안 됨"으로 처리한다(오매칭 금지)', () => {
+  assert.equal(aptNamesMatch(101 as unknown as string, '해운대경동제이드'), false);
+  assert.equal(matchesTradeIdentity({ name: 101 as unknown as string, aptSeq: '26350-9999' }, '해운대경동제이드', new Set<string>()), false);
 });
 
 // DECISION_JOURNEY_V1.1 — deriveCanonicalAptSeq: 이미 name+dong으로 검증된 trades에서

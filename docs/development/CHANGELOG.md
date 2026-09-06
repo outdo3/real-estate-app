@@ -15821,3 +15821,62 @@ LIMITED: 다중 동 거래 귀속 6,395건 · SITE_LEVEL 좌표 정밀도 79건 
 상태:
 
 완료
+
+
+## 2026-09-06
+
+### APT DETAIL SERVER ERROR AUDIT — `/api/apt/[name]` "replace is not a function"
+
+작업:
+
+- src/lib/api-molit.ts — createMolitXmlParser() 신규(단지명 태그만 숫자 변환 제외),
+  mapMolitItems()의 name을 형제 필드와 같은 문자열 계약으로 통일 + 비문자열 원본 warn
+- src/lib/apt-name-match.ts — normalizeAptName 비문자열 가드,
+  resolveStrongIdentityAptSeqs 빈 요청 이름 가드
+- src/app/api/apt/[name]/route.ts — 에러 로그에 요청 경로+쿼리 컨텍스트 기록
+- src/lib/api-molit.test.mjs / src/lib/apt-name-match.test.ts — 재현·회귀 10개 추가
+- docs/development/APT_DETAIL_NAME_TYPE_HOTFIX.md 신규
+
+서비스 기능 변경:
+
+관리자 에러 로그에 14건 쌓여 있던 `raw.replace is not a function` /
+`e.replace is not a function`(같은 오류의 dev·minify 표기 차이, Vercel Production
+포함)을 수정했다. 원인은 `normalizeAptName(item.name)`에 truthy 비문자열이 들어온
+것이고, 그 값은 XMLParser(parseTagValue: true)가 "숫자처럼 보이는 단지명 태그"를
+number로 바꿔버렸는데 mapMolitItems()의 name만 유일하게 문자열 정규화를 거치지
+않아서 생겼다(dong/buildYear/jibun/aptSeq는 전부 .toString() 처리됨). 스택의
+청크 오프셋(3161/4263)을 실제 빌드 산출물과 바이트 단위로 대조해 확정했다.
+
+이 라우트는 요청 단지 하나가 아니라 lawdCd 전체의 최근 N개월 거래를 훑기 때문에,
+해당 구·월에 그런 행이 하나만 있어도 어떤 단지를 열든 500이 났다.
+
+파서 레벨에서 이름 태그의 숫자 변환만 끄고(선행 0 손실도 함께 해결), 매퍼에서
+name 문자열을 보장하되 객체 shape은 가짜 이름("[object Object]")을 만들지 않고
+기존 '이름 없음'으로 둔다. 식별 로직은 크래시만 막고 매칭을 넓히지 않는다 —
+빈 정규화 이름이 exact identity로 승격되는 경로는 오히려 차단했다.
+
+DB/schema/migration 변경 0, Production write 0, 외부 API 의존성 추가 0.
+
+감사 결과:
+
+- error_logs 24행 중 14행이 이 오류(raw 11건 / e 3건), 전부 url=/api/apt/[name]
+- 2026-09-02T07:31:03Z 1건은 /var/task/... 스택 = Vercel Production 실발생
+- 부산 매매 이력 864,202행(18개 구·군, 200601~202609) distinct 이름 4,431개를
+  실제 파서에 통과시켜 비문자열 변환 0건 — 부산 전역 배제
+- MOLIT 라이브 재조회로 26140/26470/26530 apt 120개월 52,890행, rent 24,306행,
+  11680(라우트 기본 폴백) 120개월 35,571행 전부 0건 — 재현 셀은 그 밖의 지역·월
+- 기존 에러 로그에 요청 URL이 없어 사후 특정 불가 -> 이번에 로깅 보강
+
+검증:
+
+- 실데이터 파리티: 기존 파서 vs 신규 파서로 mapMolitItems() 결과 전 필드 대조,
+  26140/26470/26530 × apt·rent × 12개월 11,879행 완전 동일(차이 0)
+- 로컬 프로덕션 빌드 실호출: 대신해모로센트럴 113건 / 해운대경동제이드 17건
+  (26350-2206 단독) / 경동 93건(26350-2 단독) — identity 혼입 0
+- 신규 회귀 10개 포함 30/30 PASS, 인접 테스트 44/44 PASS
+- npx tsc --noEmit src 오류 0(그 외는 기존 script/tmp 오류), npm run lint exit 0,
+  npm run build 성공
+
+상태:
+
+완료 (Production 배포 후 error_logs 신규 유입 관찰 필요)

@@ -42,6 +42,37 @@ export function parseCancellationFields(item: any): { registryDate: string; deal
   return { registryDate, dealCanceled, cancelDate };
 }
 
+// APT_DETAIL_NAME_TYPE_HOTFIX — MOLIT 응답에서 "단지명"을 담는 태그들. 이 값들은 원본
+// 계약상 텍스트(식별자)이지, 숫자가 아니다.
+const MOLIT_NAME_TAGS = new Set(['aptNm', 'offiNm', 'mhouseNm', '아파트', '단지', '단지명', '연립다세대']);
+
+// XMLParser의 parseTagValue(기본 true)는 "숫자처럼 보이는" 태그 텍스트를 number로 바꾼다.
+// 거래금액/면적/년월일처럼 실제로 숫자인 필드에는 그게 맞지만, 단지명에 적용되면
+// (1) 이름이 number가 되어 문자열 연산에서 터지고(실측: /api/apt/[name]의
+// "raw.replace is not a function"), (2) "0101" 같은 표기의 선행 0이 사라져 원본 식별
+// 표기가 훼손된다. tagValueProcessor가 undefined를 반환하면 fast-xml-parser는 원본
+// 문자열을 그대로(trim만 적용) 쓰므로, 이름 태그에만 숫자 변환을 끈다 — 다른 필드는
+// val을 그대로 돌려줘 기존 파싱 결과(타입 포함)를 한 글자도 바꾸지 않는다.
+export function createMolitXmlParser() {
+  return new XMLParser({
+    ignoreAttributes: false,
+    parseTagValue: true,
+    tagValueProcessor: (tagName: string, tagValue: string) =>
+      MOLIT_NAME_TAGS.has(tagName) ? undefined : tagValue,
+  });
+}
+
+// 단지명 원본값을 "사용 가능한 이름 문자열"로만 통과시킨다. 숫자로 파싱된 값은 원본
+// 텍스트가 숫자였다는 뜻이므로 그대로 문자열화하고(형제 필드 dong/jibun/buildYear가
+// 이미 .toString()으로 다루는 것과 동일한 계약), 객체/배열처럼 예상 못한 shape은
+// 이름을 지어내지 않고 "없음"으로 취급한다("[object Object]" 같은 가짜 이름 금지).
+function toMolitNameText(value: unknown): string {
+  if (typeof value === 'string') return value.trim() === '' ? '' : value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'bigint') return String(value);
+  return '';
+}
+
 export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
   try {
     if (!API_KEY) {
@@ -85,11 +116,8 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     
     const textData = await response.text();
     
-    const parser = new XMLParser({
-      ignoreAttributes: false,
-      parseTagValue: true,
-    });
-    
+    const parser = createMolitXmlParser();
+
     const jsonObj = parser.parse(textData);
     
     // Check for OpenAPI error first
@@ -179,7 +207,21 @@ export function mapMolitItems(itemsArray: any[], type: DataType, lawdCd: string,
       // ApartmentMaster 연결에 사용한다. 없으면 null(기존 소비자에 영향 없는 optional 필드).
       const aptSeq = item.aptSeq != null ? String(item.aptSeq).trim() : null;
 
-      const name = item.아파트 || item.aptNm || item.단지 || item.단지명 || item.offiNm || item.연립다세대 || item.mhouseNm || '이름 없음';
+      // APT_DETAIL_NAME_TYPE_HOTFIX — 후보 우선순위(기존과 동일)는 유지하되, 각 후보를
+      // toMolitNameText()로 통과시켜 name이 항상 문자열이 되게 한다. 이 매퍼는
+      // fetchMolitData 외에 자체 XMLParser를 쓰는 대량 sync fetcher도 호출하므로
+      // (scripts/sale-molit-fetch.ts), 파서 설정과 별개로 여기서도 계약을 지킨다.
+      const nameCandidates = [item.아파트, item.aptNm, item.단지, item.단지명, item.offiNm, item.연립다세대, item.mhouseNm];
+      const name = nameCandidates.map(toMolitNameText).find((candidate) => candidate !== '') ?? '이름 없음';
+      // 어떤 원본 셀에서 비문자열 단지명이 실제로 오는지 알 수 있는 유일한 지점이다.
+      // (이 오류를 처음 조사할 때 로그에 요청/원본 정보가 전혀 없어 재현 지역을 특정하지
+      // 못했다.) 정상 데이터에서는 한 번도 찍히지 않는다 — 찍히면 그 셀이 재현 조건이다.
+      const nonStringCandidate = nameCandidates.find((candidate) => candidate != null && typeof candidate !== 'string');
+      if (nonStringCandidate !== undefined) {
+        console.warn(
+          `[molit] 단지명이 문자열이 아님(${typeof nonStringCandidate}) type=${type} lawdCd=${lawdCd} dealYmd=${dealYmd} aptSeq=${item.aptSeq ?? '-'} umdNm=${item.umdNm ?? '-'} jibun=${item.jibun ?? '-'} value=${JSON.stringify(nonStringCandidate)}`
+        );
+      }
       const floor = item.층 || item.floor || '';
       const dong = (item.법정동 || item.umdNm || '').toString().trim();
       const buildYear = (item.건축년도 || item.buildYear || '').toString().trim();

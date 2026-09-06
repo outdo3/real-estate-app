@@ -25,7 +25,14 @@ const CHASU_PATTERN = /\d+차/;
 const BRAND_ALIASES: [string, string][] = [['LG', '엘지']];
 
 export function normalizeAptName(raw: string): string {
-  if (!raw) return '';
+  // APT_DETAIL_NAME_TYPE_HOTFIX — 타입 계약은 그대로 string이지만, 이 함수가 실제로
+  // 받는 값 중 하나는 MOLIT 원본에서 온 any 타입 필드(item.name)다. 원본 XML의 단지명이
+  // 숫자로만 이루어져 있으면 파서가 number로 바꿔버려 여기서 TypeError가 났다(실측:
+  // /api/apt/[name]의 "raw.replace is not a function"). 원천은 api-molit.ts에서
+  // 고쳤고, 여기서는 "식별 불가"로만 처리한다 — 빈 문자열은 aptNamesMatch/
+  // resolveStrongIdentityAptSeqs 어디에서도 매칭 성공이 되지 않으므로(각 호출부에
+  // 빈 값 가드 있음) 오매칭 위험 없이 크래시만 막는다.
+  if (typeof raw !== 'string' || !raw) return '';
   let s = raw.replace(BUILDING_SUFFIX_PATTERN, '');
   s = s.replace(/\s+/g, '');
   s = s.replace(/아파트$/, '');
@@ -135,6 +142,10 @@ export function resolveStrongIdentityAptSeqs(
   dong?: string
 ): Set<string> {
   const requestedNorm = normalizeAptName(requestedAptName);
+  // 요청 이름이 비어 있거나 정규화 불가면 exact match라는 개념 자체가 성립하지 않는다.
+  // 이 가드가 없으면 정규화 결과가 빈 문자열인 항목(=식별 불가 이름)이 빈 requestedNorm과
+  // 같다고 판정되어 엉뚱한 aptSeq가 strong identity로 승격될 수 있다.
+  if (!requestedNorm) return new Set<string>();
   const scoped = dong ? items.filter((item) => item.dong === dong) : items;
   const seqs = new Set<string>();
   for (const item of scoped) {

@@ -175,7 +175,19 @@ export async function GET(
     return NextResponse.json({ trades: filteredTrades, apiError, lawdCd, dong });
   } catch (error) {
     console.error('Error fetching trade history:', error);
-    logServerError((error as Error)?.message || 'apt trades route error', '/api/apt/[name]', (error as Error)?.stack).catch(() => {});
+    // 이 라우트의 에러 로그에는 그동안 요청 정보가 전혀 없어서, 반복 발생한 오류
+    // ("raw.replace is not a function")가 어떤 단지/지역/기간에서 재현되는지 사후에
+    // 특정할 수 없었다. 경로+쿼리(단지명/lawdCd/dong/type/period)만 함께 남긴다.
+    let requestContext = '';
+    try {
+      const requestUrl = new URL(request.url);
+      requestContext = ` [${decodeURIComponent(requestUrl.pathname)}${requestUrl.search}]`;
+    } catch { /* URL 파싱 실패 시 컨텍스트 없이 기존과 동일하게 기록한다 */ }
+    logServerError(
+      `${(error as Error)?.message || 'apt trades route error'}${requestContext}`,
+      '/api/apt/[name]',
+      (error as Error)?.stack
+    ).catch(() => {});
     return NextResponse.json({ error: 'Failed to fetch trade history' }, { status: 500 });
   }
 }

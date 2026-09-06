@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseCancellationFields } from './api-molit.ts';
+import { parseCancellationFields, mapMolitItems, createMolitXmlParser } from './api-molit.ts';
+import { resolveStrongIdentityAptSeqs } from './apt-name-match.ts';
 
 // TRADE_CANCELLATION_AUDIT_V1 — 실제 live MOLIT 응답은 영문 필드명(cdealType/cdealDay/
 // rgstDate)만 내려준다(2026-08-30 실측, 부산 3개구 12개월 13,716건 스캔). 과거 코드는
@@ -47,4 +48,61 @@ test('cdealType에 공백이 섞여도(원본 오염 대비) trim 후 정확히 
   const item = { cdealType: ' O ' };
   const result = parseCancellationFields(item);
   assert.equal(result.dealCanceled, true);
+});
+
+// APT_DETAIL_NAME_TYPE_HOTFIX — /api/apt/[name]에서 반복 발생하던
+// "raw.replace is not a function"("e.replace is not a function"의 minify 이전 이름)의
+// 재현 테스트. 원인은 XMLParser(parseTagValue: true)가 "숫자로만 이루어진 단지명"
+// 태그 텍스트를 number로 변환하는데, mapMolitItems()의 name만 유일하게
+// 문자열 정규화(.toString()) 없이 그대로 통과시킨 것이다(dong/buildYear/jibun 등
+// 형제 필드는 전부 .toString().trim() 처리됨).
+
+test('createMolitXmlParser: 단지명 태그는 숫자처럼 보여도 원본 텍스트 문자열 그대로 보존한다(선행 0 포함)', () => {
+  const xml = '<response><body><items><item>'
+    + '<aptNm>0101</aptNm><umdNm>서대신동3가</umdNm><excluUseAr>84.99</excluUseAr>'
+    + '<dealYear>2026</dealYear><dealAmount>65,000</dealAmount><aptSeq>26140-1361</aptSeq>'
+    + '</item></items></body></response>';
+  const item = createMolitXmlParser().parse(xml).response.body.items.item;
+  assert.equal(typeof item.aptNm, 'string');
+  assert.equal(item.aptNm, '0101', '단지명은 숫자로 변환되면 안 된다(선행 0 손실 금지)');
+  // 이름 외 필드의 파싱 타입은 기존과 완전히 동일해야 한다(회귀 금지).
+  assert.equal(typeof item.excluUseAr, 'number');
+  assert.equal(item.excluUseAr, 84.99);
+  assert.equal(typeof item.dealYear, 'number');
+  assert.equal(item.dealAmount, '65,000');
+  assert.equal(item.aptSeq, '26140-1361');
+  assert.equal(item.umdNm, '서대신동3가');
+});
+
+test('mapMolitItems: aptNm이 number로 들어와도 name은 항상 문자열이다(형제 필드와 같은 계약)', () => {
+  const [mapped] = mapMolitItems(
+    [{ aptNm: 101, umdNm: '우동', jibun: 763, buildYear: 2012, excluUseAr: 84.99, dealAmount: '65,000', dealYear: 2026, dealMonth: 9, dealDay: 1, aptSeq: '26350-2206' }],
+    'apt',
+    '26350',
+    '202609'
+  );
+  assert.equal(typeof mapped.name, 'string');
+  assert.equal(mapped.name, '101');
+});
+
+test('mapMolitItems: 예상 못한 shape(객체 등)의 단지명은 이름을 지어내지 않고 "이름 없음"으로 둔다', () => {
+  const [mapped] = mapMolitItems([{ aptNm: { '@_xsi:nil': 'true' }, umdNm: '우동' }], 'apt', '26350', '202609');
+  assert.equal(typeof mapped.name, 'string');
+  assert.equal(mapped.name, '이름 없음');
+});
+
+test('mapMolitItems: 정상 문자열 단지명은 그대로 보존한다(회귀 확인)', () => {
+  const [mapped] = mapMolitItems([{ aptNm: '해운대경동제이드', umdNm: '우동' }], 'apt', '26350', '202609');
+  assert.equal(mapped.name, '해운대경동제이드');
+});
+
+test('재현: 숫자 단지명이 섞인 MOLIT 원본 XML → mapMolitItems → resolveStrongIdentityAptSeqs가 크래시 없이 정상 단지만 식별한다', () => {
+  const xml = '<response><header><resultCode>00</resultCode></header><body><items>'
+    + '<item><aptNm>101</aptNm><umdNm>우동</umdNm><aptSeq>26350-9999</aptSeq><excluUseAr>59.9</excluUseAr><dealAmount>30,000</dealAmount><dealYear>2026</dealYear><dealMonth>9</dealMonth><dealDay>1</dealDay></item>'
+    + '<item><aptNm>해운대경동제이드</aptNm><umdNm>우동</umdNm><aptSeq>26350-2206</aptSeq><excluUseAr>84.99</excluUseAr><dealAmount>65,000</dealAmount><dealYear>2026</dealYear><dealMonth>9</dealMonth><dealDay>2</dealDay></item>'
+    + '</items></body></response>';
+  const rawItems = createMolitXmlParser().parse(xml).response.body.items.item;
+  const items = mapMolitItems(rawItems, 'apt', '26350', '202609');
+  const seqs = resolveStrongIdentityAptSeqs(items, '해운대경동제이드', '우동');
+  assert.deepEqual([...seqs], ['26350-2206']);
 });
