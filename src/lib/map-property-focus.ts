@@ -1,4 +1,5 @@
-// MAP_UX_V2 — 지도의 **매물 종류 포커스 모드**와 **확대 단계별 밀도 규칙**의 순수 로직.
+// MAP_LAYER_TOGGLE_V1 — 지도의 **매물 종류 레이어 토글**과 **확대 단계별 밀도 규칙**의
+// 순수 로직(이전 이름: MAP_UX_V2 포커스 모드).
 //
 // page.tsx에서 분리한 이유는 OFFICETEL_MAP_LAYER_V1의 map-marker-contract와 같다:
 // React state/Kakao SDK 없이 단위 테스트할 수 있어야 하고, "어떤 규칙으로 무엇을 숨겼는가"가
@@ -6,39 +7,55 @@
 //
 // 이 파일은 zero-import를 유지한다(strip-types 테스트 러너 제약).
 
-/** 지도에서 서로 배타적으로 보여주는 매물 종류. 다른 레이어(학교 등)는 여기 없다. */
+/** 지도에서 독립적으로 켜고 끌 수 있는 매물 종류. 다른 레이어(학교 등)는 여기 없다. */
 export type PropertyTypeLayer = 'apt' | 'officetel';
 
+export interface PropertyLayerState {
+  apt: boolean;
+  officetel: boolean;
+}
+
 /**
- * §4 FOCUS MODE — 아파트와 오피스텔은 **동시에 켜지지 않는다**.
+ * §2 INDEPENDENT TOGGLE — 아파트와 오피스텔은 **서로 독립적으로** 켜고 끈다.
  *
- * V1에서는 둘 다 독립 토글이라 함께 켤 수 있었고, 부산진구 서면 360px 실측에서 마커가
- * 화면 면적의 80%를 덮어 지도 자체를 읽을 수 없었다. 지도는 "가진 정보를 전부 얹는 면"이
- * 아니라 위치를 찾는 면이다.
+ * MAP_UX_V2는 둘을 배타적(포커스 모드)으로 묶었다. 그때의 목적은 밀도였는데, 밀도는
+ * 확대 단계별 규칙과 묶음 마커로 이미 해결됐다 — 배타성까지 유지하면 "둘 다 보고 싶다"는
+ * 정당한 요구를 막을 뿐이다. 학교/재개발 레이어와 같은 모델로 되돌린다.
  *
- * 이미 활성인 종류를 다시 누르면 **그대로 유지한다**(끄지 않는다). 끄면 어느 매물도 없는
- * 빈 지도가 남는데, 그건 사용자가 의도한 상태가 아니다 — 항상 정확히 하나가 켜져 있다.
+ * 네 조합이 모두 유효하다: 아파트만 / 오피스텔만 / 둘 다 / 둘 다 끔(빈 지도).
+ * **빈 지도를 막는 로직을 두지 않는다** — 사용자가 의도적으로 끈 상태다(§3/§14).
  */
-export function applyPropertyTypeFocus<L extends Record<string, boolean>>(
+export function togglePropertyLayer<L extends Record<string, boolean>>(layers: L, key: PropertyTypeLayer): L {
+  return { ...layers, [key]: !layers[key] };
+}
+
+/**
+ * §9 SEARCH — 검색으로 고른 결과의 레이어는 **반드시 켠다**. 다만 반대편 종류는
+ * 건드리지 않는다(끄지 않는다). 고른 결과가 안 보이는 상태로 끝나지 않으면서,
+ * 사용자가 켜둔 다른 레이어를 임의로 없애지도 않는다.
+ */
+export function ensurePropertyLayerVisible<L extends Record<string, boolean>>(
   layers: L,
-  focus: PropertyTypeLayer
+  key: PropertyTypeLayer
 ): L {
-  // 다른 레이어(school/redevelopment/auction/livingLodging)는 건드리지 않는다 —
-  // 포커스 규칙은 아파트·오피스텔 두 종류 사이에만 적용된다(§4).
-  return { ...layers, apt: focus === 'apt', officetel: focus === 'officetel' };
+  return layers[key] ? layers : { ...layers, [key]: true };
 }
 
-/** 현재 레이어 상태에서 활성 매물 종류를 읽는다. 항상 정확히 하나가 켜져 있다. */
-export function currentPropertyFocus(layers: { apt: boolean; officetel: boolean }): PropertyTypeLayer {
-  return layers.officetel ? 'officetel' : 'apt';
+/** 두 매물 종류가 동시에 켜져 있는가(= 혼합 모드). 밀도 예산이 달라진다(§6). */
+export function isMixedPropertyMode(layers: PropertyLayerState): boolean {
+  return layers.apt && layers.officetel;
+}
+
+/** 매물 레이어가 하나도 켜져 있지 않은가(§14 — 기본 지도만 보여주는 정상 상태). */
+export function hasNoPropertyLayer(layers: PropertyLayerState): boolean {
+  return !layers.apt && !layers.officetel;
 }
 
 /**
- * §5 SEARCH OVERRIDE — 검색으로 고른 결과의 종류가 곧 포커스가 된다.
- * 오피스텔을 골랐는데 레이어가 꺼져 있어 아무것도 안 보이는 일이 없어야 한다.
- * REGION 등 매물이 아닌 결과는 현재 포커스를 바꾸지 않는다(null).
+ * §9 — 검색 결과 종류를 레이어 키로 옮긴다. REGION 등 매물이 아닌 결과는 null이며
+ * 어떤 레이어도 켜지 않는다.
  */
-export function focusForSearchResult(type: string): PropertyTypeLayer | null {
+export function propertyLayerForSearchResult(type: string): PropertyTypeLayer | null {
   if (type === 'APARTMENT') return 'apt';
   if (type === 'OFFICETEL') return 'officetel';
   return null;
@@ -47,13 +64,24 @@ export function focusForSearchResult(type: string): PropertyTypeLayer | null {
 // ── §6 확대 단계별 밀도 ────────────────────────────────────────────────────────
 //
 // 카카오맵 레벨은 **숫자가 작을수록 확대**다(1이 가장 가까움). 지도 기본 진입 레벨은 4.
-// 아래 임계값은 추측이 아니라 Production 실측에서 나왔다:
-//   - 부산진구 서면 / 레벨 3 / 360px: 마커 67개, 화면 면적의 80.0%를 덮음 → FAIL
-//   - 부산 서구  / 레벨 4 / 360px: 마커 36개, 34.7~35.7%
-// 즉 문제는 "레벨 3에서 개별 이름 칩을 전부 펼치는 것"과 "두 종류를 겹쳐 그리는 것"이었다.
+// 아래 임계값은 추측이 아니라 Production 실측에서 나왔다(부산진구 서면 / 360px):
+//   - 레벨 3, 두 종류를 낱개+이름으로 전부 그림: 마커 67개 / 화면 면적 80.0% → FAIL
+//   - 레벨 3, 아파트 단독: 9개 / 15.2%
+//   - 레벨 3, 오피스텔 단독(아이콘 칩): 63개 / 25.4%
+// 단독 두 값을 그냥 더하면 ~40%로 §6의 선호 목표(<=40%) 경계에 걸린다. 그래서 혼합
+// 모드에서는 **오피스텔 쪽 예산만 한 단계 더 조인다**(아래 MIXED_* 상수).
 
 /** 이 레벨보다 축소되면 개별 마커 대신 묶음 마커만 그린다(아파트·오피스텔 공통). */
 export const INDIVIDUAL_MARKER_MAX_LEVEL = 3;
+
+/**
+ * 혼합 모드에서 **오피스텔**의 낱개 한계. 한 단계 더 조인다.
+ *
+ * 왜 오피스텔만 조이는가: 이 확대 단계의 오피스텔 칩은 아이콘만 있고(이름도 가격도 없음)
+ * 아파트 칩은 가격을 담고 있다. MAP_UX_V2에서 세운 원칙 그대로 — 두 종류가 화면을
+ * 나눠 써야 하면 **정보가 적은 쪽을 먼저 묶는다**. 아파트 가격 칩은 그대로 남는다.
+ */
+export const MIXED_OFFICETEL_INDIVIDUAL_MAX_LEVEL = 2;
 
 /**
  * 오피스텔 칩에 **이름을 붙이는** 확대 한계.
@@ -65,9 +93,12 @@ export const INDIVIDUAL_MARKER_MAX_LEVEL = 3;
  */
 export const OFFICETEL_NAME_MAX_LEVEL = 2;
 
+/** 혼합 모드에서는 이름도 한 단계 더 조인다(같은 이유 — 라벨 폭이 밀도의 주범이다). */
+export const MIXED_OFFICETEL_NAME_MAX_LEVEL = 1;
+
 /** 이 확대 단계에서 오피스텔 칩에 이름을 표시하는가. */
-export function showsOfficetelName(zoomLevel: number): boolean {
-  return zoomLevel <= OFFICETEL_NAME_MAX_LEVEL;
+export function showsOfficetelName(zoomLevel: number, mixed = false): boolean {
+  return zoomLevel <= (mixed ? MIXED_OFFICETEL_NAME_MAX_LEVEL : OFFICETEL_NAME_MAX_LEVEL);
 }
 
 /** 오피스텔 마커를 아예 그리지 않는 축소 한계. 데이터가 시군구 단위라 그보다 넓은 화면에서는
@@ -79,13 +110,37 @@ export type MarkerDensityMode = 'individual' | 'grouped' | 'hidden';
 /**
  * 이 확대 단계에서 해당 레이어를 어떻게 그릴지 결정한다.
  *
- * - `individual`: 낱개 마커(아파트=가격 칩, 오피스텔=이름 칩)
+ * - `individual`: 낱개 마커(아파트=가격 칩, 오피스텔=아이콘/이름 칩)
  * - `grouped`: 묶음 마커 하나(개수 표시). 누르면 확대된다.
  * - `hidden`: 그리지 않는다(안내 문구로 대체)
+ *
+ * `mixed`가 참이면 두 종류가 화면을 나눠 쓰는 상태이므로 오피스텔 예산을 한 단계 조인다.
+ * 단독 모드의 동작은 바뀌지 않는다(§6 — 단독 모드를 불필요하게 나쁘게 만들지 않는다).
  */
-export function markerDensityMode(layer: PropertyTypeLayer, zoomLevel: number): MarkerDensityMode {
+export function markerDensityMode(
+  layer: PropertyTypeLayer,
+  zoomLevel: number,
+  mixed = false
+): MarkerDensityMode {
   if (layer === 'officetel' && zoomLevel > OFFICETEL_MAX_ZOOM_LEVEL) return 'hidden';
-  return zoomLevel <= INDIVIDUAL_MARKER_MAX_LEVEL ? 'individual' : 'grouped';
+  const threshold =
+    mixed && layer === 'officetel' ? MIXED_OFFICETEL_INDIVIDUAL_MAX_LEVEL : INDIVIDUAL_MARKER_MAX_LEVEL;
+  return zoomLevel <= threshold ? 'individual' : 'grouped';
+}
+
+/**
+ * §8 MIXED OVERLAP — 혼합 모드에서 아파트 마커와 오피스텔 마커가 화면상 같은 지점에
+ * 놓이면 서로를 가린다. 두 종류를 **합성 마커로 합치지 않고**(identity 병합 금지),
+ * 오피스텔 오버레이만 화면에서 조금 내려 그린다.
+ *
+ * 아파트 칩은 yAnchor=1(점 위에 말풍선), 오피스텔은 yAnchor=0.5(점 중앙)라 이미 서로
+ * 다른 위치에 놓이지만, 좁은 화면에서는 그 차이가 충분하지 않다. 좌표/식별자/클릭
+ * 대상은 전혀 바뀌지 않는다 — CSS 위치만 이동한다.
+ */
+export const MIXED_OFFICETEL_OFFSET_Y = 16;
+
+export function mixedOverlapOffsetY(mixed: boolean): number {
+  return mixed ? MIXED_OFFICETEL_OFFSET_Y : 0;
 }
 
 // ── §8 동일 좌표 다중 master ──────────────────────────────────────────────────

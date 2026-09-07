@@ -33,15 +33,19 @@ import {
 // MAP_UX_V2 — 포커스 모드/확대 밀도/동일 좌표 그룹핑의 순수 규칙.
 import {
   INDIVIDUAL_MARKER_MAX_LEVEL,
+  MIXED_OFFICETEL_INDIVIDUAL_MAX_LEVEL,
   OFFICETEL_MAX_ZOOM_LEVEL,
-  applyPropertyTypeFocus,
-  currentPropertyFocus,
+  ensurePropertyLayerVisible,
   findExactOfficetelMarker,
-  focusForSearchResult,
   groupByExactCoordinate,
+  hasNoPropertyLayer,
   hasUsableHandoffCoords,
+  isMixedPropertyMode,
   markerDensityMode,
+  mixedOverlapOffsetY,
+  propertyLayerForSearchResult,
   showsOfficetelName,
+  togglePropertyLayer,
   type PropertyTypeLayer,
 } from '@/lib/map-property-focus';
 import { Building2, Home } from 'lucide-react';
@@ -420,22 +424,11 @@ export default function FullscreenMapPage() {
   // 실제로 확정된 lawdCd(역지오코딩 결과 또는 검색/공유가 알려준 값). 초기 추정값
   // ('26140')과 구분해야, 레이어를 켤 때 엉뚱한 구의 오피스텔을 불러오지 않는다.
   const resolvedLawdCdRef = useRef<string | null>(readInitialMapStateFromUrl()?.lawdCd ?? null);
-  const isDetailed = zoomLevel <= DETAIL_ZOOM_LEVEL;
-  // MAP_UX_V2 §6/§9 — 확대 단계별 밀도. 두 레이어가 **같은 규칙**(map-property-focus)을
-  // 쓴다: 레벨 3 이하만 낱개 마커, 그보다 축소되면 묶음 마커 하나로 그린다. V1에서
-  // 아파트는 축소해도 개별 가격 칩을 전부 그려서, 부산진구 서면 360px 실측 기준 마커가
-  // 화면의 80%를 덮었다.
-  const aptDensity = markerDensityMode('apt', zoomLevel);
-  const officetelDensity = markerDensityMode('officetel', zoomLevel);
-  const isOfficetelDetailed = officetelDensity === 'individual';
-  // "낱개로 그린다"와 "이름을 쓴다"는 다른 결정이다(실측: 레벨 3에서 낱개 63개는
-  // 감당되지만 이름표를 붙이면 화면의 71%를 덮는다). 이름은 한 단계 더 확대해야 나온다.
-  const officetelNamed = showsOfficetelName(zoomLevel);
-  const chipLayout = aptDensity === 'individual'
-    ? (isDetailed ? CHIP_LAYOUT.detailed : CHIP_LAYOUT.compact)
-    : APT_GROUP_CHIP;
-  const officetelChipLayout = officetelNamed ? OFFICETEL_CHIP_LAYOUT.detailed : OFFICETEL_CHIP_LAYOUT.compact;
   const [isLoadingData, setIsLoadingData] = useState(true);
+  // MAP_LAYER_TOGGLE_V1 §13 — 아파트도 오피스텔과 같은 3상태를 갖는다. 예전에는 실패를
+  // console.error로만 삼켜서, 조회 실패와 "이 범위에 아파트가 없음"이 화면에서 구분되지
+  // 않았다(FAILED != EMPTY). 혼합 모드에서 한쪽만 실패하는 경우가 생기며 더 중요해졌다.
+  const [aptStatus, setAptStatus] = useState<OfficetelLayerStatus>('idle');
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
@@ -456,8 +449,27 @@ export default function FullscreenMapPage() {
     auction: false,
     school: false,
   });
-  // MAP_UX_V2 §4 — 아파트/오피스텔은 배타적이다. 항상 정확히 하나가 켜져 있다.
-  const propertyFocus: PropertyTypeLayer = currentPropertyFocus(layers);
+  const isDetailed = zoomLevel <= DETAIL_ZOOM_LEVEL;
+  // MAP_UX_V2 §6/§9 — 확대 단계별 밀도. 두 레이어가 **같은 규칙**(map-property-focus)을
+  // 쓴다: 레벨 3 이하만 낱개 마커, 그보다 축소되면 묶음 마커 하나로 그린다. V1에서
+  // 아파트는 축소해도 개별 가격 칩을 전부 그려서, 부산진구 서면 360px 실측 기준 마커가
+  // 화면의 80%를 덮었다.
+  // MAP_LAYER_TOGGLE_V1 §6 — 두 종류가 동시에 켜져 있으면 화면을 나눠 쓰므로 오피스텔
+  // 밀도 예산을 한 단계 조인다. 단독 모드의 동작은 그대로다.
+  const mixedMode = isMixedPropertyMode(layers);
+  const aptDensity = markerDensityMode('apt', zoomLevel, mixedMode);
+  const officetelDensity = markerDensityMode('officetel', zoomLevel, mixedMode);
+  const isOfficetelDetailed = officetelDensity === 'individual';
+  // "낱개로 그린다"와 "이름을 쓴다"는 다른 결정이다(실측: 레벨 3에서 낱개 63개는
+  // 감당되지만 이름표를 붙이면 화면의 71%를 덮는다). 이름은 한 단계 더 확대해야 나온다.
+  const officetelNamed = showsOfficetelName(zoomLevel, mixedMode);
+  // §8 — 혼합 모드에서 아파트/오피스텔 마커가 같은 지점에 겹치지 않도록 오피스텔
+  // 오버레이만 화면에서 조금 내린다(좌표·식별자·클릭 대상은 그대로).
+  const officetelOverlapDy = mixedOverlapOffsetY(mixedMode);
+  const chipLayout = aptDensity === 'individual'
+    ? (isDetailed ? CHIP_LAYOUT.detailed : CHIP_LAYOUT.compact)
+    : APT_GROUP_CHIP;
+  const officetelChipLayout = officetelNamed ? OFFICETEL_CHIP_LAYOUT.detailed : OFFICETEL_CHIP_LAYOUT.compact;
   const mapRef = useRef<any>(null);
 
   // MAP UI POLISH V1 §7~10 — 검색+공유 상단 바(top)와 우측 세로 레이어 토글(right)을
@@ -606,6 +618,7 @@ export default function FullscreenMapPage() {
       if (cached && isMarkerCacheFresh(cached.ts, Date.now(), MARKER_CACHE_TTL_MS)) {
         setAptMarkers(cached.markers);
         setIsLoadingData(false);
+        setAptStatus('ready');
         perfMeasure('map: click→surrounding markers ready', 'map:m0-click');
         return;
       }
@@ -618,7 +631,7 @@ export default function FullscreenMapPage() {
           fetch(`/api/community/recent-activity`).catch(() => null),
         ]);
         const data = await res.json();
-        if (!Array.isArray(data)) return;
+        if (!Array.isArray(data)) throw new Error('apt markers payload invalid');
         // §14 STALE BOUNDS REQUEST PROTECTION — 이 요청을 보낸 뒤 더 최신 요청이 발급됐으면
         // (사용자가 그 사이 다른 지역으로 다시 이동) 이 응답으로 화면을 덮어쓰지 않는다.
         if (isStaleMarkerResponse(mySeq, requestSeqRef.current)) return;
@@ -665,12 +678,18 @@ export default function FullscreenMapPage() {
 
         markerCacheRef.current.set(lawdCd, { markers, ts: Date.now() });
         setAptMarkers(markers);
+        setAptStatus('ready');
         // §12 M6 — 주변 마커 전체 dataset 준비 완료(M0 클릭 흐름에서 호출된 경우에만
         // 의미 있음 — 드래그/현재위치 등 다른 호출부에서도 공유되는 mark라 클릭 흐름이
         // 아닐 때는 이 measure가 실패해도(시작 mark 없음) 무해하게 무시된다).
         perfMeasure('map: click→surrounding markers ready', 'map:m0-click');
       } catch (error) {
         console.error('Failed to fetch apt markers:', error);
+        // §13 FAILED != EMPTY — 실패를 빈 목록으로 위장하지 않는다. 이전 지역의 마커를
+        // 남겨두지도 않는다(§11 stale marker leakage 금지).
+        if (isStaleMarkerResponse(mySeq, requestSeqRef.current)) return;
+        setAptMarkers([]);
+        setAptStatus('error');
       } finally {
         if (!isStaleMarkerResponse(mySeq, requestSeqRef.current)) setIsLoadingData(false);
       }
@@ -684,6 +703,7 @@ export default function FullscreenMapPage() {
     const lawdCd = await resolveLawdCd(lat, lng);
     if (!lawdCd) {
       setIsLoadingData(false);
+      setAptStatus('error');
       return;
     }
     await loadForLawdCd(lawdCd);
@@ -764,32 +784,41 @@ export default function FullscreenMapPage() {
 
   // lawdCd가 필요한 레이어(아파트/오피스텔)가 여러 개 켜져 있어도 역지오코딩은 한 번만
   // 한다 — 같은 좌표로 두 번 왕복하면 §19 성능 목표를 스스로 깎는다.
-  // MAP_UX_V2 §4 — 매물 종류는 항상 하나뿐이므로 어느 쪽을 새로 고칠지 `focus`로 명시
-  // 받는다. 기본값은 현재 포커스지만, 검색 핸드오프처럼 **같은 커밋 안에서 포커스를 막
-  // 바꾼** 호출부는 아직 갱신되지 않은 layers 클로저를 읽으면 안 되므로 원하는 값을
-  // 직접 넘긴다(stale closure로 엉뚱한 레이어를 조회하는 것을 구조적으로 막는다).
+  // MAP_LAYER_TOGGLE_V1 §2/§19 — 어느 매물 레이어를 새로 고칠지 명시적으로 받는다.
+  // 기본값은 현재 layers지만, 검색 핸드오프처럼 **같은 커밋 안에서 레이어를 막 켠**
+  // 호출부는 아직 갱신되지 않은 layers 클로저를 읽으면 안 되므로 원하는 값을 직접
+  // 넘긴다(stale closure로 엉뚱한 레이어를 조회하는 것을 구조적으로 막는다).
+  // 꺼져 있는 종류는 조회하지 않는다 — pan/zoom마다 불필요한 요청을 내지 않는다(§19).
   const refreshActiveLayers = async (
     lat: number,
     lng: number,
     knownLawdCd?: string,
-    focus: PropertyTypeLayer = propertyFocus
+    want: { apt: boolean; officetel: boolean } = { apt: layers.apt, officetel: layers.officetel }
   ) => {
     if (layers.school) fetchSchoolMarkers(lat, lng);
-    // 아파트가 포커스가 아니면 아파트 로딩 표시를 켜둔 채 두지 않는다.
-    if (focus !== 'apt') setIsLoadingData(false);
-    if (focus === 'officetel') setOfficetelStatus('loading'); // 즉시 시각 피드백(§15)
+    // 꺼진 레이어의 로딩 표시를 켜둔 채 두지 않는다.
+    if (!want.apt) {
+      setIsLoadingData(false);
+      setAptStatus('idle');
+    }
+    if (want.apt) setAptStatus('loading');
+    if (want.officetel) setOfficetelStatus('loading'); // 즉시 시각 피드백(§12)
+    // §14 — 두 종류가 모두 꺼져 있으면 지역 조회조차 하지 않는다(기본 지도만).
+    if (!want.apt && !want.officetel) return;
 
     const lawdCd = knownLawdCd ?? (await resolveLawdCd(lat, lng));
     if (!lawdCd) {
       setIsLoadingData(false);
-      if (focus === 'officetel') setOfficetelStatus('error');
+      if (want.apt) setAptStatus('error');
+      if (want.officetel) setOfficetelStatus('error');
       return;
     }
     resolvedLawdCdRef.current = lawdCd;
     // 아파트 레이어가 꺼져 있어도 현재 지역은 알고 있어야 한다(학교 링크/공유 파라미터).
     setCurrentLawdCd(lawdCd);
-    if (focus === 'apt') fetchAptMarkers(lat, lng, lawdCd);
-    else fetchOfficetelMarkers(lawdCd);
+    // §13 — 두 조회는 서로 독립이다. 한쪽이 실패해도 다른 쪽은 그대로 쓸 수 있다.
+    if (want.apt) fetchAptMarkers(lat, lng, lawdCd);
+    if (want.officetel) fetchOfficetelMarkers(lawdCd);
   };
 
   // aptMarkers를 현재 지도 줌/중심 기준 화면 픽셀 좌표로 투영해서 서로 가까운 칩끼리
@@ -892,7 +921,9 @@ export default function FullscreenMapPage() {
   // 역지오코딩 경로를 그대로 탄다(회귀 없음).
   useEffect(() => {
     if (!isMapReady) return;
-    setIsLoadingData(true);
+    // §14 — 매물 레이어가 하나도 켜져 있지 않으면 로딩 표시도 조회도 하지 않는다.
+    if (hasNoPropertyLayer(layers)) return;
+    if (layers.apt) setIsLoadingData(true);
     refreshActiveLayers(center.lat, center.lng, initialShareLawdCdRef.current ?? undefined);
   }, [isMapReady]);
 
@@ -1304,56 +1335,83 @@ export default function FullscreenMapPage() {
   // 두 번 호출하기 때문에, 레이어를 한 번 켤 때마다 같은 요청이 두 번 나간다(실측:
   // /api/officetel/markers 가 토글 1회에 4번 호출되고 그중 2건이 DB 커넥션 경합으로
   // 503). 상태 갱신과 부수효과를 분리한다 — 아파트/학교 레이어에도 같은 문제가 있었다.
-  // MAP_UX_V2 §4 FOCUS MODE — 아파트/오피스텔은 배타적으로 전환된다. 이미 활성인 쪽을
-  // 다시 눌러도 끄지 않는다(끄면 어느 매물도 없는 빈 지도가 남는다). 나머지 레이어
-  // (학교/재개발/경공매/생숙)는 기존 독립 토글 그대로다.
-  const focusPropertyType = (focus: PropertyTypeLayer) => {
-    if (propertyFocus === focus) return;
-    setLayers((prev) => applyPropertyTypeFocus(prev, focus));
-    // 전환하는 순간 반대편 종류의 선택/카드를 즉시 정리한다 — 꺼진 레이어의 카드가
-    // 남아 있으면 지금 보고 있는 것과 다른 종류를 설명하게 된다(§15).
-    if (focus === 'apt') {
-      officetelSeqRef.current += 1;
-      setOfficetelMarkers([]);
-      setOfficetelClusters([]);
-      setOfficetelClusteredFrom(null);
-      setOfficetelStatus('idle');
-      setOfficetelExcluded(0);
-      setOfficetelHiddenByCap(0);
-      setSelectedOfficetelId(null);
-      setHoveredOfficetelId(null);
-      setOfficetelGroupList(null);
-      fetchAptMarkers(center.lat, center.lng, resolvedLawdCdRef.current ?? undefined);
-      return;
-    }
+  // MAP_LAYER_TOGGLE_V1 §2 — 아파트/오피스텔은 학교/재개발과 마찬가지로 **독립 토글**이다.
+  // MAP_UX_V2의 배타적 포커스 모드를 걷어냈다: 밀도는 확대 단계 규칙과 묶음 마커로 이미
+  // 해결됐고, 배타성까지 유지하면 "둘 다 보고 싶다"는 정당한 요구를 막을 뿐이다.
+  // 네 조합이 모두 유효하며, 둘 다 끈 상태(기본 지도만)도 정상이다(§3/§14).
 
-    requestSeqRef.current += 1;
+  /** 오피스텔 레이어의 화면 상태를 전부 비운다(끄기/전환 시 공통). */
+  const clearOfficetelLayer = () => {
+    officetelSeqRef.current += 1; // 진행 중이던 응답 무효화(§11)
+    setOfficetelMarkers([]);
+    setOfficetelClusters([]);
+    setOfficetelClusteredFrom(null);
+    setOfficetelStatus('idle');
+    setOfficetelExcluded(0);
+    setOfficetelHiddenByCap(0);
+    setSelectedOfficetelId(null);
+    setHoveredOfficetelId(null);
+    setOfficetelGroupList(null);
+    setPendingOfficetelId(null);
+    setOfficetelHandoffNotice(null);
+  };
+
+  /** 아파트 레이어의 화면 상태를 전부 비운다. */
+  const clearAptLayer = () => {
+    requestSeqRef.current += 1; // 진행 중이던 응답 무효화(§11)
+    setAptMarkers([]);
+    setAptClusters([]);
+    setClusterNudges(new Map());
+    setAptStatus('idle');
+    setIsLoadingData(false);
     setSelectedMarkerId(null);
     setHoveredMarkerId(null);
     setPendingSelectedApt(null);
     setPendingRestoreIdentity(null);
-    setIsLoadingData(false);
-    setOfficetelStatus('loading'); // §15 — 네트워크보다 먼저 시각 피드백
+  };
+
+  /** 오피스텔 레이어를 켜고 현재 지역 마커를 채운다(이미 켜져 있으면 조회만). */
+  const loadOfficetelForCurrentArea = () => {
+    setOfficetelStatus('loading'); // 네트워크보다 먼저 시각 피드백(§12)
     const known = resolvedLawdCdRef.current;
     if (known) {
       fetchOfficetelMarkers(known);
+      return;
+    }
+    resolveLawdCd(center.lat, center.lng).then((lawdCd) => {
+      if (!lawdCd) {
+        setOfficetelStatus('error');
+        return;
+      }
+      resolvedLawdCdRef.current = lawdCd;
+      setCurrentLawdCd(lawdCd);
+      fetchOfficetelMarkers(lawdCd);
+    });
+  };
+
+  const togglePropertyType = (key: PropertyTypeLayer) => {
+    const turningOn = !layers[key];
+    setLayers((prev) => togglePropertyLayer(prev, key));
+
+    if (!turningOn) {
+      // 끄면 그 레이어의 마커·선택·카드를 즉시 정리한다. 반대편은 건드리지 않는다.
+      if (key === 'apt') clearAptLayer();
+      else clearOfficetelLayer();
+      return;
+    }
+
+    if (key === 'apt') {
+      setAptStatus('loading');
+      setIsLoadingData(true);
+      fetchAptMarkers(center.lat, center.lng, resolvedLawdCdRef.current ?? undefined);
     } else {
-      resolveLawdCd(center.lat, center.lng).then((lawdCd) => {
-        if (!lawdCd) {
-          setOfficetelStatus('error');
-          return;
-        }
-        resolvedLawdCdRef.current = lawdCd;
-        setCurrentLawdCd(lawdCd);
-        fetchOfficetelMarkers(lawdCd);
-      });
+      loadOfficetelForCurrentArea();
     }
   };
 
   const toggleLayer = (key: LayerKey) => {
-    // 매물 종류는 토글이 아니라 포커스 전환이다.
     if (key === 'apt' || key === 'officetel') {
-      focusPropertyType(key);
+      togglePropertyType(key);
       return;
     }
 
@@ -1369,26 +1427,19 @@ export default function FullscreenMapPage() {
   // 함께 갱신한다 — panTo만 호출하면 다음 setCenter 호출 없는 리렌더에서는 문제 없지만,
   // 이후 다른 흐름이 center state를 참조할 때 최신 위치와 어긋나는 것을 방지). 선택한 단지가
   // 있는 지역의 마커도 함께 새로 불러온다.
-  // MAP_UX_V2 §5/§12 — 검색 결과는 매물 종류까지 넘겨받는다. 고른 종류가 곧 포커스가
-  // 되므로, 오피스텔을 골랐는데 레이어가 꺼져 있어 아무것도 안 보이는 일이 없다.
+  // MAP_LAYER_TOGGLE_V1 §9 — 검색으로 고른 종류의 레이어는 **반드시 켠다**. 다만 반대편
+  // 종류는 그대로 둔다(끄지 않는다). 예: 아파트만 켠 상태에서 오피스텔을 검색하면
+  // 아파트 ON + 오피스텔 ON이 되고, 고른 오피스텔이 정확히 선택된다.
   const handleSearchSelect = (result: ApartmentSearchResult) => {
-    const focus = focusForSearchResult(result.type);
-    if (focus === 'officetel') {
+    const layerKey = propertyLayerForSearchResult(result.type);
+    if (layerKey === 'officetel') {
       handleOfficetelSearchSelect(result);
       return;
     }
-    if (focus === 'apt' && propertyFocus !== 'apt') {
-      // 아파트를 골랐으면 아파트 포커스로 되돌린다. 아래 refreshActiveLayers가 이
-      // 커밋의 layers를 읽으므로, 여기서는 state만 바꾸고 조회는 knownLawdCd로 직접 건다.
-      setLayers((prev) => applyPropertyTypeFocus(prev, 'apt'));
-      officetelSeqRef.current += 1;
-      setOfficetelMarkers([]);
-      setOfficetelClusters([]);
-      setOfficetelClusteredFrom(null);
-      setOfficetelStatus('idle');
-      setSelectedOfficetelId(null);
-      setHoveredOfficetelId(null);
-      setOfficetelGroupList(null);
+    if (layerKey === 'apt' && !layers.apt) {
+      // 아파트 레이어가 꺼져 있었으면 켠다. 아래 handleApartmentSelect가 조회할 레이어를
+      // 명시적으로 넘기므로, 아직 갱신되지 않은 layers 클로저를 읽는 문제가 없다.
+      setLayers((prev) => ensurePropertyLayerVisible(prev, 'apt'));
     }
     handleApartmentSelect(result);
   };
@@ -1405,14 +1456,14 @@ export default function FullscreenMapPage() {
     const officetelId = result.officetelId;
     if (!officetelId) return; // identity가 없으면 아무것도 하지 않는다(추측 금지).
 
-    // §5 SEARCH OVERRIDE — 고른 종류가 곧 포커스다.
-    setLayers((prev) => applyPropertyTypeFocus(prev, 'officetel'));
-    requestSeqRef.current += 1; // 진행 중이던 아파트 응답 무효화(§14)
+    // §9 — 오피스텔 레이어를 켠다. **아파트 레이어는 건드리지 않는다**(켜져 있었다면
+    // 그대로 켜진 채 남는다). §10 — 선택은 오피스텔 쪽으로 옮기므로 아파트 선택/카드만
+    // 닫아 두 카드가 동시에 뜨는 것을 막는다(레이어를 끄는 것과는 다르다).
+    setLayers((prev) => ensurePropertyLayerVisible(prev, 'officetel'));
     setSelectedMarkerId(null);
     setHoveredMarkerId(null);
     setPendingSelectedApt(null);
     setPendingRestoreIdentity(null);
-    setIsLoadingData(false);
     setSelectedOfficetelId(null);
     setHoveredOfficetelId(null);
     setOfficetelGroupList(null);
@@ -1431,18 +1482,25 @@ export default function FullscreenMapPage() {
       const map = mapRef.current;
       const anchor = new window.kakao.maps.LatLng(latLng.lat, latLng.lng);
       map.panTo(anchor);
-      // 낱개 마커가 보이는 단계까지 확대해서 내려놓는다 — 묶음 배지만 뜨면 "내가 고른
-      // 그 오피스텔"을 화면에서 확인할 수 없다(§6 밀도 규칙과 일관되게 레벨 3 사용).
-      if (map.getLevel() > INDIVIDUAL_MARKER_MAX_LEVEL) {
-        map.setLevel(INDIVIDUAL_MARKER_MAX_LEVEL, { anchor });
-        setZoomLevel(INDIVIDUAL_MARKER_MAX_LEVEL);
+      // §10 — 낱개 마커가 보이는 단계까지 확대해서 내려놓는다. 묶음 배지만 뜨면 "내가
+      // 고른 그 오피스텔"을 화면에서 확인할 수 없다. 혼합 모드는 오피스텔 낱개 한계가
+      // 한 단계 더 조여 있으므로(§6) 그 값을 써야 한다 — 레벨 3으로 고정하면 혼합
+      // 모드에서 고른 결과가 배지 뒤에 숨는다.
+      const targetLevel = layers.apt ? MIXED_OFFICETEL_INDIVIDUAL_MAX_LEVEL : INDIVIDUAL_MARKER_MAX_LEVEL;
+      if (map.getLevel() > targetLevel) {
+        map.setLevel(targetLevel, { anchor });
+        setZoomLevel(targetLevel);
       }
     }
 
     // 도착할 마커 중 이 id와 정확히 일치하는 것만 선택한다(아래 effect).
     setPendingOfficetelId(officetelId);
     setOfficetelStatus('loading');
-    refreshActiveLayers(latLng.lat, latLng.lng, result.lawdCd || undefined, 'officetel');
+    // §9 — 오피스텔은 반드시 조회하고, 아파트는 **현재 상태 그대로** 유지한다.
+    refreshActiveLayers(latLng.lat, latLng.lng, result.lawdCd || undefined, {
+      apt: layers.apt,
+      officetel: true,
+    });
   };
 
   const handleApartmentSelect = (result: ApartmentSearchResult) => {
@@ -1490,12 +1548,12 @@ export default function FullscreenMapPage() {
     // 자체 역지오코딩을 다시 하지 않게 한다(중복 요청 축소, 결과는 동일).
     // 아파트를 고른 경우 포커스를 명시해, 방금 setLayers한 값이 아직 반영되지 않은
     // 클로저 때문에 오피스텔을 조회하는 일이 없게 한다(§5/§14).
-    refreshActiveLayers(
-      latLng.lat,
-      latLng.lng,
-      result.lawdCd || undefined,
-      result.type === 'APARTMENT' ? 'apt' : propertyFocus
-    );
+    refreshActiveLayers(latLng.lat, latLng.lng, result.lawdCd || undefined, {
+      // 아파트를 골랐으면 아파트는 반드시 조회한다(방금 켰을 수 있다). 오피스텔은
+      // 현재 상태 그대로 — 검색이 다른 종류를 임의로 끄지 않는다(§9).
+      apt: result.type === 'APARTMENT' ? true : layers.apt,
+      officetel: layers.officetel,
+    });
 
     if (result.type === 'APARTMENT') {
       const id = result.aptSeq || `${result.dong}-${result.name}`;
@@ -1589,11 +1647,28 @@ export default function FullscreenMapPage() {
   // 활성 칩에는 작은 건물 아이콘도 함께 붙인다.
   const layerActiveBg = (key: LayerKey) => (key === 'officetel' ? OFFI.fill : 'var(--primary-color)');
 
-  // §15 — 지도 하단 상태 문구. "매물"이라는 말은 쓰지 않는다(이 마커들은 매물 인벤토리가
-  // 아니다). 포커스 모드라 한 번에 한 종류만 로딩되므로 문구가 모호해지지 않는다.
+  // §12 — 지도 하단 상태 문구. "매물"이라는 말은 쓰지 않는다(이 마커들은 매물 인벤토리가
+  // 아니다). 두 종류를 동시에 켤 수 있으므로 세 경우를 모두 구분한다.
   const aptLoading = layers.apt && isLoadingData;
   const officetelLoading = layers.officetel && officetelStatus === 'loading';
-  const loadingMessage = officetelLoading ? '주변 오피스텔을 불러오는 중...' : '주변 아파트를 불러오는 중...';
+  const loadingMessage =
+    aptLoading && officetelLoading
+      ? '주변 부동산 정보를 불러오는 중...'
+      : officetelLoading
+        ? '주변 오피스텔을 불러오는 중...'
+        : '주변 아파트를 불러오는 중...';
+
+  // §13 — 아파트도 실패(FAILED)와 진짜 0건(ZERO)을 구분한다. 혼합 모드에서 한쪽만
+  // 실패하면 그 레이어만 실패로 말하고, 성공한 레이어는 그대로 쓸 수 있어야 한다.
+  const aptNotice: { text: string; tone: 'info' | 'error' } | null = (() => {
+    if (!layers.apt) return null;
+    if (aptStatus === 'error') return { text: '아파트 정보를 불러오지 못했습니다.', tone: 'error' };
+    if (aptStatus !== 'ready') return null;
+    if (aptMarkers.length === 0) {
+      return { text: '현재 지도 범위에 표시할 아파트가 없습니다.', tone: 'info' };
+    }
+    return null;
+  })();
 
   // §14 — 실패(FAILED)와 진짜 0건(ZERO)을 절대 같은 문구로 접지 않는다.
   const officetelNotice: { text: string; tone: 'info' | 'error' } | null = (() => {
@@ -1707,13 +1782,10 @@ export default function FullscreenMapPage() {
       {/* 우측 세로 카테고리 플로팅 바: 예전에는 상단을 가로로 가리던 걸 오른쪽 세로 알약
           칩으로 옮겨서 검색창/지도 상단이 안 가려지게 한다. rightControlRef는 이 영역을
           right safe-zone으로 측정하는 기준이다(§7/§10). */}
-      {/* MAP_UX_V2 §17 — 터치 타깃을 44px로 올린다(실측 33px). 칩이 커진 만큼 세로
-          간격을 줄여 컨트롤 열 전체 높이가 크게 늘지 않게 하고, 지도를 더 가리지 않는다.
-          아파트/오피스텔은 서로 배타적이므로 라디오 의미(aria-checked)로 노출한다 —
-          나머지는 기존대로 독립 토글(aria-pressed)이다. */}
+      {/* 터치 타깃 44px(MAP_UX_V2 §17). MAP_LAYER_TOGGLE_V1 §4 — 여섯 칩이 모두
+          독립 토글이므로 접근성 의미도 aria-pressed 하나로 통일한다. */}
       <div ref={rightControlRef} style={{ position: 'absolute', right: '12px', top: '64px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
         {LAYER_ORDER.map((key) => {
-          const isPropertyType = key === 'apt' || key === 'officetel';
           const active = layers[key];
           return (
             <button
@@ -1736,9 +1808,10 @@ export default function FullscreenMapPage() {
                 justifyContent: 'center',
                 gap: '4px',
               }}
-              role={isPropertyType ? 'radio' : undefined}
-              aria-checked={isPropertyType ? active : undefined}
-              aria-pressed={isPropertyType ? undefined : active}
+              // §4 — 매물 레이어도 이제 배타 그룹이 아니라 독립 토글이다.
+              // role="radio" / aria-checked(배타)를 쓰지 않고 프로젝트의 기존 관례인
+              // aria-pressed로 통일한다.
+              aria-pressed={active}
             >
               {key === 'officetel' && <Building2 size={13} aria-hidden="true" style={{ flexShrink: 0 }} />}
               {key === 'apt' && <Home size={13} aria-hidden="true" style={{ flexShrink: 0 }} />}
@@ -1803,6 +1876,21 @@ export default function FullscreenMapPage() {
       {/* 아파트 레이어가 아직 로딩 중이어도 오피스텔 안내는 가리지 않는다 — 두 배너는
           같은 세로 스택 안에 쌓이므로 겹치지 않고, 아파트 조회가 느린 구(12개월 실거래)
           에서 오피스텔 상태만 오래 숨겨지는 문제를 막는다. */}
+      {!aptLoading && aptNotice && (
+        <div
+          style={{
+            padding: '0.55rem 1rem', borderRadius: '12px',
+            background: aptNotice.tone === 'error' ? 'rgba(185,28,28,0.94)' : 'rgba(21,94,63,0.94)',
+            color: 'white', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)', maxWidth: '100%',
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          {aptNotice.text}
+        </div>
+      )}
+
       {!officetelLoading && officetelNotice && (
         <div
           style={{
@@ -1983,7 +2071,10 @@ export default function FullscreenMapPage() {
             3) 단일 master → 낱개 칩(확대 상태에서만 이름 표시).
             어느 경우에도 데이터를 합치지 않는다 — 선택은 언제나 개별 master다. */}
         {layers.officetel && officetelClusters.map((cluster) => {
-          const nudge = officetelNudges.get(cluster.id) ?? { dx: 0, dy: 0 };
+          const baseNudge = officetelNudges.get(cluster.id) ?? { dx: 0, dy: 0 };
+          // §8 MIXED OVERLAP — 혼합 모드에서만 오피스텔 오버레이를 살짝 내려 아파트
+          // 말풍선과 같은 지점에 겹치지 않게 한다(단독 모드에서는 0px = 기존 그대로).
+          const nudge = { dx: baseNudge.dx, dy: baseNudge.dy + officetelOverlapDy };
           const clusterSelected = cluster.markers.some((g) =>
             g.members.some((m) => m.id === activeOfficetelId)
           );
@@ -2012,21 +2103,46 @@ export default function FullscreenMapPage() {
           const renderGroup = (group: OfficetelCoordGroup, offset: { dx: number; dy: number }, key: string, z: number) => {
             // 2) 같은 좌표에 여러 master — 확대해도 갈라지지 않으므로 목록으로 푼다(§8).
             if (group.members.length > 1) {
-              const groupSelected = group.members.some((m) => m.id === activeOfficetelId);
+              const picked = group.members.find((m) => m.id === activeOfficetelId) ?? null;
+              const rest = picked ? group.members.filter((m) => m.id !== picked.id) : group.members;
               return (
-                <CustomOverlayMap key={key} position={{ lat: group.lat, lng: group.lng }} yAnchor={0.5} zIndex={groupSelected ? 9998 : z}>
-                  <OfficetelGroupBadge
-                    count={group.members.length}
-                    label={`같은 위치의 오피스텔 ${group.members.length}곳, 목록 열기`}
-                    offset={offset}
-                    stacked
-                    onActivate={() => {
-                      setOfficetelGroupList(group.members);
-                      setSelectedOfficetelId(null);
-                      setSelectedMarkerId(null);
-                      setPendingSelectedApt(null);
-                    }}
-                  />
+                <CustomOverlayMap key={key} position={{ lat: group.lat, lng: group.lng }} yAnchor={0.5} zIndex={picked ? 9998 : z}>
+                  <div style={{ position: 'relative' }}>
+                    {/* §10 — 선택된 identity 하나만 묶음에서 **일시적으로 꺼내** 낱개 칩으로
+                        그린다. 검색으로 고른 오피스텔이 묶음 배지 뒤에 숨지 않게 하기 위한
+                        표시 처리이며, 나머지 형제들은 옆의 배지로 그대로 선택할 수 있다. */}
+                    {picked && (
+                      <div style={{ position: 'absolute', left: offset.dx, top: offset.dy, transform: 'translate(-50%, -50%)', zIndex: 2 }}>
+                        {renderOfficetelChip(picked, true)}
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: offset.dx + (picked ? officetelChipLayout.width / 2 + 20 : 0),
+                        top: offset.dy,
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: 1,
+                      }}
+                    >
+                      <OfficetelGroupBadge
+                        count={rest.length}
+                        label={
+                          picked
+                            ? `같은 위치의 다른 오피스텔 ${rest.length}곳, 목록 열기`
+                            : `같은 위치의 오피스텔 ${rest.length}곳, 목록 열기`
+                        }
+                        offset={{ dx: 0, dy: 0 }}
+                        stacked
+                        onActivate={() => {
+                          setOfficetelGroupList(group.members);
+                          setSelectedOfficetelId(null);
+                          setSelectedMarkerId(null);
+                          setPendingSelectedApt(null);
+                        }}
+                      />
+                    </div>
+                  </div>
                 </CustomOverlayMap>
               );
             }
