@@ -110,13 +110,9 @@ export function officetelMarkerAddressLine(m: {
  */
 export const OFFICETEL_RENDER_CAP = 400;
 
-/**
- * §7/§19 — 이 확대 단계보다 축소하면 오피스텔 마커를 그리지 않는다. 부산진구(845건)처럼
- * 밀집한 구에서 시 전체 축소 상태로 수백 개 칩을 펼치면 서로 완전히 겹쳐 아무것도 고를 수
- * 없게 되고 DOM도 불필요하게 커진다 — "안 보이는 마커"를 만드는 대신 확대를 안내한다.
- * (카카오맵 레벨은 숫자가 작을수록 확대. 지도 기본 진입 레벨은 4라 기본 상태에선 항상 보인다.)
- */
-export const OFFICETEL_MAX_ZOOM_LEVEL = 6;
+// MAP_UX_V2 — 확대 단계 임계값(OFFICETEL_MAX_ZOOM_LEVEL 등)은 아파트와 공유하는
+// 밀도 규칙이라 src/lib/map-property-focus.ts로 옮겼다. 상수를 두 곳에 두면 한쪽만
+// 고쳐졌을 때 두 레이어의 기준이 조용히 갈라진다.
 
 /** 오피스텔 레이어의 화면 상태 — FAILED와 ZERO를 절대 같은 값으로 접지 않는다(§14). */
 export type OfficetelLayerStatus = 'idle' | 'loading' | 'ready' | 'error';

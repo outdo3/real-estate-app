@@ -25,13 +25,26 @@ import {
 } from '@/lib/map-control-safe-zone';
 // OFFICETEL_MAP_LAYER_V1 — 오피스텔 레이어의 순수 계약(좌표 유효성/identity/상한).
 import {
-  OFFICETEL_MAX_ZOOM_LEVEL,
   OFFICETEL_RENDER_CAP,
   officetelMarkerAddressLine,
   type OfficetelLayerStatus,
   type OfficetelMapMarker,
 } from '@/lib/officetel/map-marker-contract';
-import { Building2 } from 'lucide-react';
+// MAP_UX_V2 — 포커스 모드/확대 밀도/동일 좌표 그룹핑의 순수 규칙.
+import {
+  INDIVIDUAL_MARKER_MAX_LEVEL,
+  OFFICETEL_MAX_ZOOM_LEVEL,
+  applyPropertyTypeFocus,
+  currentPropertyFocus,
+  findExactOfficetelMarker,
+  focusForSearchResult,
+  groupByExactCoordinate,
+  hasUsableHandoffCoords,
+  markerDensityMode,
+  showsOfficetelName,
+  type PropertyTypeLayer,
+} from '@/lib/map-property-focus';
+import { Building2, Home } from 'lucide-react';
 import FullPageLoader from '@/components/FullPageLoader';
 import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
@@ -91,14 +104,25 @@ const OFFICETEL_CHIP_LAYOUT = {
   compact: { width: 34, height: 30, gap: 3, clusterRadius: 30 },
   detailed: { width: 112, height: 30, gap: 5, clusterRadius: 62 },
 };
+
+// MAP_UX_V2 §3 — 매물 종류 색 체계. 아파트는 기존 이집 Green 그대로, 오피스텔은
+// teal(#0f766e)에서 **파랑**으로 옮긴다 — V1의 teal이 초록과 너무 가까워 작은 모바일
+// 화면에서 종류가 구분되지 않는다는 실사용 피드백을 받았다. 색만으로 구분하지 않도록
+// 건물 아이콘/모양/가격 유무(§3 접근성)도 함께 다르게 유지한다.
+const OFFI = {
+  line: '#1d4ed8',      // 기본 외곽선/아이콘
+  lineStrong: '#1e3a8a', // 선택 시 외곽선
+  fill: '#1d4ed8',      // 선택 시 배경
+  soft: '#dbeafe',      // 연한 배경
+  ring: '0 0 0 6px rgba(29, 78, 216, 0.20), 0 6px 14px rgba(0,0,0,0.18)',
+  banner: 'rgba(30, 64, 175, 0.94)',
+};
+
+// §9 — 아파트 묶음 마커(축소 상태). 아파트는 초록 계열을 그대로 쓴다.
+const APT_GROUP_CHIP = { width: 40, height: 28, gap: 3, clusterRadius: 34 };
 // 뷰포트 밖 마커는 그리지 않는다(§19 DOM 상한). 여유분을 둬서 살짝 패닝했을 때
 // 마커가 뒤늦게 튀어나오는 느낌을 줄인다.
 const OFFICETEL_VIEWPORT_MARGIN_PX = 160;
-// 오피스텔 마스터는 아파트 단지보다 훨씬 촘촘하다(서구 한 구에만 284개, 부산진구 845개).
-// 아파트와 같은 기준(레벨 4)에서 이름 칩을 펼치면 화면이 이름표로 뒤덮여 지도 자체가
-// 안 보인다(실측). 이름은 충분히 확대했을 때만 펼치고, 그 전에는 작은 아이콘 배지로
-// "여기에 오피스텔이 있다"만 알린다.
-const OFFICETEL_DETAIL_ZOOM_LEVEL = 3;
 
 const LEVEL_COLOR: Record<SchoolMarker['level'], string> = {
   초: '#3b82f6',
@@ -144,6 +168,15 @@ interface PixelCluster<T extends PixelClusterable> {
   lat: number;
   lng: number;
   markers: T[];
+}
+
+// MAP_UX_V2 §8 — 좌표가 완전히 같은 오피스텔 master들의 **표시 전용** 묶음.
+// 데이터는 합쳐지지 않는다: members 각각이 자기 officetelId/canonicalKey를 유지한다.
+interface OfficetelCoordGroup {
+  id: string;
+  lat: number;
+  lng: number;
+  members: OfficetelMapMarker[];
 }
 
 function clusterMarkersByPixels<T extends PixelClusterable>(
@@ -195,6 +228,64 @@ function clusterMarkersByPixels<T extends PixelClusterable>(
   return { clusters, nudges, visibleCount };
 }
 
+// MAP_UX_V2 §7/§8 — 오피스텔 묶음 배지. 두 쓰임이 있다:
+//  - 화면에서 겹친 여러 좌표(확대로 풀림)
+//  - 같은 좌표의 여러 master(확대로 풀리지 않음 → 목록으로 풂, `stacked`)
+// 어느 쪽도 특정 건물을 대표하지 않는다. 개수만 말하고 선택은 사용자가 한다.
+// 모듈 레벨 컴포넌트로 둔 이유: 렌더 도중 호출되는 헬퍼 함수에 콜백을 인자로 넘기면
+// 그 콜백이 ref(mapRef)를 읽는다는 이유로 react-hooks/refs 규칙에 걸린다. JSX 컴포넌트의
+// prop으로 넘기는 것은 정상적인 이벤트 핸들러 전달이다.
+function OfficetelGroupBadge({
+  count,
+  label,
+  offset,
+  onActivate,
+  stacked = false,
+}: {
+  count: number;
+  label: string;
+  offset: { dx: number; dy: number };
+  onActivate: () => void;
+  stacked?: boolean;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      title={label}
+      onClick={onActivate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onActivate();
+        }
+      }}
+      className={mapMarkerStyles.markerChip}
+      style={{
+        transform: `translate(${offset.dx}px, ${offset.dy}px)`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '3px',
+        padding: '4px 9px 4px 6px',
+        borderRadius: '999px',
+        background: 'white',
+        border: `2px solid ${OFFI.line}`,
+        // 같은 좌표에 쌓인 그룹은 겹쳐진 카드처럼 보이게 해서, 확대하면 풀리는 클러스터와
+        // 시각적으로 구분한다(색만으로 구분하지 않는다).
+        boxShadow: stacked
+          ? `2px 2px 0 -1px white, 3px 3px 0 -1px ${OFFI.line}, 0 2px 5px rgba(0,0,0,0.12)`
+          : '0 2px 5px rgba(0,0,0,0.12)',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Building2 size={13} color={OFFI.line} strokeWidth={2.5} aria-hidden="true" />
+      <span style={{ fontSize: '0.72rem', fontWeight: 800, color: OFFI.line }}>{count}</span>
+    </div>
+  );
+}
+
 export default function FullscreenMapPage() {
   const router = useRouter();
 
@@ -204,7 +295,7 @@ export default function FullscreenMapPage() {
   // OFFICETEL_MAP_LAYER_V1 — 오피스텔 레이어. 아파트 state를 재사용하지 않고 완전히
   // 분리한다(§23: 아파트 마커/식별자/카드가 이 STEP으로 인해 달라지면 안 된다).
   const [officetelMarkers, setOfficetelMarkers] = useState<OfficetelMapMarker[]>([]);
-  const [officetelClusters, setOfficetelClusters] = useState<PixelCluster<OfficetelMapMarker>[]>([]);
+  const [officetelClusters, setOfficetelClusters] = useState<PixelCluster<OfficetelCoordGroup>[]>([]);
   // 클러스터가 **어느 마커 목록으로부터** 계산됐는지. 데이터가 막 도착한 프레임에서
   // (클러스터 재계산은 커밋 후 effect에서 일어난다) "표시할 오피스텔이 없습니다"가
   // 한 프레임 번쩍이는 것을 막는다 — 아직 계산 전인 상태와 진짜 0건을 구분한다.
@@ -216,6 +307,14 @@ export default function FullscreenMapPage() {
   const [officetelHiddenByCap, setOfficetelHiddenByCap] = useState(0);
   const [selectedOfficetelId, setSelectedOfficetelId] = useState<string | null>(null);
   const [hoveredOfficetelId, setHoveredOfficetelId] = useState<string | null>(null);
+  // MAP_UX_V2 §12 — 검색으로 고른 오피스텔의 **정확한 master id**. 마커가 도착하면 이
+  // id와 정확히 일치하는 것만 선택한다(이름/근접 좌표/첫 마커 금지). 못 찾으면 조용히
+  // 포기한다 — 다른 오피스텔을 대신 선택하지 않는다.
+  const [pendingOfficetelId, setPendingOfficetelId] = useState<number | null>(null);
+  // §8 — 같은 좌표를 공유하는 master들을 눌렀을 때 뜨는 선택 목록(표시 전용 그룹).
+  const [officetelGroupList, setOfficetelGroupList] = useState<OfficetelMapMarker[] | null>(null);
+  // 좌표가 없어 지도로 데려갈 수 없는 검색 결과를 고른 경우의 안내.
+  const [officetelHandoffNotice, setOfficetelHandoffNotice] = useState<string | null>(null);
   // 초기 진입 시 마커가 너무 빽빽하게 겹쳐 보이는 문제(레벨 6은 화면 안에 너무 넓은
   // 지역이 들어와 단지 밀집 지역에서 칩이 서로 겹침) — 레벨 4로 1~2단계 더 확대해
   // 시작하면 DETAIL_ZOOM_LEVEL(4) 기준 상세 카드 모드로 시작해 칩 간격이 넉넉해진다.
@@ -253,6 +352,20 @@ export default function FullscreenMapPage() {
     () => (activeOfficetelId ? officetelMarkers.find((m) => m.id === activeOfficetelId) ?? null : null),
     [activeOfficetelId, officetelMarkers]
   );
+
+  // MAP_UX_V2 §12/§14 — 검색 핸드오프의 마지막 단계. 마커가 실제로 도착한 뒤
+  // (officetelStatus === 'ready') **정확히 일치하는 id**를 한 번만 찾는다. 로딩 중에
+  // 판단하면 아직 비어 있는 배열을 "못 찾음"으로 오판한다. 못 찾으면 다른 마커로
+  // 대체하지 않고 그대로 포기한다.
+  useEffect(() => {
+    if (pendingOfficetelId == null) return;
+    if (officetelStatus === 'loading') return;
+    if (officetelStatus === 'ready') {
+      const match = findExactOfficetelMarker(officetelMarkers, pendingOfficetelId);
+      if (match) setSelectedOfficetelId(match.id);
+    }
+    setPendingOfficetelId(null);
+  }, [pendingOfficetelId, officetelStatus, officetelMarkers]);
 
   // 진짜 마커 데이터가 도착해 같은 id를 이미 포함하면 임시 마커는 더 이상 필요 없다 —
   // 화면 렌더는 이미 resolveSelectedMarker 쪽을 우선하지만(위), pending 상태 자체도
@@ -308,9 +421,20 @@ export default function FullscreenMapPage() {
   // ('26140')과 구분해야, 레이어를 켤 때 엉뚱한 구의 오피스텔을 불러오지 않는다.
   const resolvedLawdCdRef = useRef<string | null>(readInitialMapStateFromUrl()?.lawdCd ?? null);
   const isDetailed = zoomLevel <= DETAIL_ZOOM_LEVEL;
-  const chipLayout = isDetailed ? CHIP_LAYOUT.detailed : CHIP_LAYOUT.compact;
-  const isOfficetelDetailed = zoomLevel <= OFFICETEL_DETAIL_ZOOM_LEVEL;
-  const officetelChipLayout = isOfficetelDetailed ? OFFICETEL_CHIP_LAYOUT.detailed : OFFICETEL_CHIP_LAYOUT.compact;
+  // MAP_UX_V2 §6/§9 — 확대 단계별 밀도. 두 레이어가 **같은 규칙**(map-property-focus)을
+  // 쓴다: 레벨 3 이하만 낱개 마커, 그보다 축소되면 묶음 마커 하나로 그린다. V1에서
+  // 아파트는 축소해도 개별 가격 칩을 전부 그려서, 부산진구 서면 360px 실측 기준 마커가
+  // 화면의 80%를 덮었다.
+  const aptDensity = markerDensityMode('apt', zoomLevel);
+  const officetelDensity = markerDensityMode('officetel', zoomLevel);
+  const isOfficetelDetailed = officetelDensity === 'individual';
+  // "낱개로 그린다"와 "이름을 쓴다"는 다른 결정이다(실측: 레벨 3에서 낱개 63개는
+  // 감당되지만 이름표를 붙이면 화면의 71%를 덮는다). 이름은 한 단계 더 확대해야 나온다.
+  const officetelNamed = showsOfficetelName(zoomLevel);
+  const chipLayout = aptDensity === 'individual'
+    ? (isDetailed ? CHIP_LAYOUT.detailed : CHIP_LAYOUT.compact)
+    : APT_GROUP_CHIP;
+  const officetelChipLayout = officetelNamed ? OFFICETEL_CHIP_LAYOUT.detailed : OFFICETEL_CHIP_LAYOUT.compact;
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
@@ -332,6 +456,8 @@ export default function FullscreenMapPage() {
     auction: false,
     school: false,
   });
+  // MAP_UX_V2 §4 — 아파트/오피스텔은 배타적이다. 항상 정확히 하나가 켜져 있다.
+  const propertyFocus: PropertyTypeLayer = currentPropertyFocus(layers);
   const mapRef = useRef<any>(null);
 
   // MAP UI POLISH V1 §7~10 — 검색+공유 상단 바(top)와 우측 세로 레이어 토글(right)을
@@ -638,24 +764,32 @@ export default function FullscreenMapPage() {
 
   // lawdCd가 필요한 레이어(아파트/오피스텔)가 여러 개 켜져 있어도 역지오코딩은 한 번만
   // 한다 — 같은 좌표로 두 번 왕복하면 §19 성능 목표를 스스로 깎는다.
-  const refreshActiveLayers = async (lat: number, lng: number, knownLawdCd?: string) => {
+  // MAP_UX_V2 §4 — 매물 종류는 항상 하나뿐이므로 어느 쪽을 새로 고칠지 `focus`로 명시
+  // 받는다. 기본값은 현재 포커스지만, 검색 핸드오프처럼 **같은 커밋 안에서 포커스를 막
+  // 바꾼** 호출부는 아직 갱신되지 않은 layers 클로저를 읽으면 안 되므로 원하는 값을
+  // 직접 넘긴다(stale closure로 엉뚱한 레이어를 조회하는 것을 구조적으로 막는다).
+  const refreshActiveLayers = async (
+    lat: number,
+    lng: number,
+    knownLawdCd?: string,
+    focus: PropertyTypeLayer = propertyFocus
+  ) => {
     if (layers.school) fetchSchoolMarkers(lat, lng);
-    // 아파트 레이어가 꺼져 있으면 아파트 로딩 표시를 켜둔 채 두지 않는다.
-    if (!layers.apt) setIsLoadingData(false);
-    if (!layers.apt && !layers.officetel) return;
+    // 아파트가 포커스가 아니면 아파트 로딩 표시를 켜둔 채 두지 않는다.
+    if (focus !== 'apt') setIsLoadingData(false);
+    if (focus === 'officetel') setOfficetelStatus('loading'); // 즉시 시각 피드백(§15)
 
-    if (layers.officetel) setOfficetelStatus('loading'); // 즉시 시각 피드백(§13)
     const lawdCd = knownLawdCd ?? (await resolveLawdCd(lat, lng));
     if (!lawdCd) {
       setIsLoadingData(false);
-      if (layers.officetel) setOfficetelStatus('error');
+      if (focus === 'officetel') setOfficetelStatus('error');
       return;
     }
     resolvedLawdCdRef.current = lawdCd;
     // 아파트 레이어가 꺼져 있어도 현재 지역은 알고 있어야 한다(학교 링크/공유 파라미터).
     setCurrentLawdCd(lawdCd);
-    if (layers.apt) fetchAptMarkers(lat, lng, lawdCd);
-    if (layers.officetel) fetchOfficetelMarkers(lawdCd);
+    if (focus === 'apt') fetchAptMarkers(lat, lng, lawdCd);
+    else fetchOfficetelMarkers(lawdCd);
   };
 
   // aptMarkers를 현재 지도 줌/중심 기준 화면 픽셀 좌표로 투영해서 서로 가까운 칩끼리
@@ -689,9 +823,13 @@ export default function FullscreenMapPage() {
       setOfficetelHiddenByCap(0);
     } else {
       const rect = mapViewportRef.current?.getBoundingClientRect();
+      // MAP_UX_V2 §8 — 픽셀 클러스터링 **이전에** 좌표가 완전히 같은 master들을 하나의
+      // 표시 그룹으로 접는다. 확대해도 절대 갈라지지 않는 겹침을 부채꼴로 펼쳐봐야
+      // 서로를 가릴 뿐이다. 그룹은 표시 단위일 뿐이고 멤버는 각자의 identity를 유지한다.
+      const coordGroups = groupByExactCoordinate(officetelMarkers);
       const offi = clusterMarkersByPixels(
         projection,
-        officetelMarkers,
+        coordGroups,
         officetelChipLayout,
         safeZoneRects,
         rect
@@ -702,19 +840,25 @@ export default function FullscreenMapPage() {
       // 상한은 실제로 만들어지는 오버레이 수를 기준으로 센다: 축소 상태에서는 묶음
       // 배지 하나가 오버레이 하나(그룹 안 개수와 무관), 확대 상태에서는 칩 하나가
       // 오버레이 하나다. 화면에 알리는 수는 어느 경우든 "못 본 오피스텔 수"다.
+      const mastersIn = (c: PixelCluster<OfficetelCoordGroup>) =>
+        c.markers.reduce((s, g) => s + g.members.length, 0);
       let rendered = 0;
-      let shownMarkers = 0;
-      const capped: PixelCluster<OfficetelMapMarker>[] = [];
+      let shownMasters = 0;
+      let visibleMasters = 0;
+      const capped: PixelCluster<OfficetelCoordGroup>[] = [];
       for (const c of offi.clusters) {
+        visibleMasters += mastersIn(c);
+        // 확대 상태에서는 좌표 그룹 하나가 오버레이 하나(그룹 자체가 묶음 마커로 그려짐),
+        // 축소 상태에서는 픽셀 클러스터 하나가 오버레이 하나다.
         const overlayCost = isOfficetelDetailed ? c.markers.length : 1;
-        if (rendered + overlayCost > OFFICETEL_RENDER_CAP) break;
+        if (rendered + overlayCost > OFFICETEL_RENDER_CAP) continue;
         capped.push(c);
         rendered += overlayCost;
-        shownMarkers += c.markers.length;
+        shownMasters += mastersIn(c);
       }
       setOfficetelClusters(capped);
       setOfficetelNudges(offi.nudges);
-      setOfficetelHiddenByCap(Math.max(0, offi.visibleCount - shownMarkers));
+      setOfficetelHiddenByCap(Math.max(0, visibleMasters - shownMasters));
     }
   };
 
@@ -980,11 +1124,11 @@ export default function FullscreenMapPage() {
     );
   };
 
-  // OFFICETEL_MAP_LAYER_V1 §7 — 오피스텔 마커 칩. 아파트 칩과 **색(teal)·모양·내용**이
-  // 모두 다르다: 아파트는 초록 계열 + 가격/면적, 오피스텔은 teal + 건물 아이콘 + 이름이며
-  // 가격을 표시하지 않는다(V1은 LOCATION + PROPERTY TYPE + IDENTITY만 — 지어낸 시세나
-  // 마커 장식용 대표가격을 만들지 않는다). 색만으로 구분하지 않도록(§6 접근성) 확대
-  // 상태에서는 "오피스텔" 텍스트 배지를, 축소 상태에서는 건물 아이콘 형태를 함께 쓴다.
+  // 오피스텔 마커 칩. 아파트 칩과 **색·모양·내용**이 모두 다르다: 아파트는 초록 +
+  // 가격/면적(둥근 말풍선), 오피스텔은 **파랑** + 건물 아이콘 + 이름(각진 사각)이며
+  // 가격을 표시하지 않는다(지어낸 시세나 마커 장식용 대표가격을 만들지 않는다).
+  // MAP_UX_V2 §3 — V1의 teal은 이집 Green과 너무 가까워 모바일에서 종류가 구분되지
+  // 않았다. 파랑으로 옮기고, 색 외에도 아이콘/모양/가격 유무로 구분되게 유지한다.
   const renderOfficetelChip = (marker: OfficetelMapMarker, selected: boolean) => {
     const handleClick = () => {
       if (selectedOfficetelId === marker.id) {
@@ -1017,10 +1161,10 @@ export default function FullscreenMapPage() {
       title: marker.displayName,
     };
     const ring = selected
-      ? '0 0 0 6px rgba(13, 148, 136, 0.20), 0 6px 14px rgba(0,0,0,0.18)'
+      ? OFFI.ring
       : '0 2px 5px rgba(0,0,0,0.12)';
 
-    if (!isOfficetelDetailed) {
+    if (!officetelNamed) {
       return (
         <div
           {...common}
@@ -1029,8 +1173,8 @@ export default function FullscreenMapPage() {
             width: 30,
             height: 30,
             borderRadius: '8px',
-            background: selected ? '#0d9488' : 'white',
-            border: `2px solid ${selected ? '#134e4a' : '#0f766e'}`,
+            background: selected ? OFFI.fill : 'white',
+            border: `2px solid ${selected ? OFFI.lineStrong : OFFI.line}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1040,7 +1184,7 @@ export default function FullscreenMapPage() {
             transition: 'transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease',
           }}
         >
-          <Building2 size={16} color={selected ? 'white' : '#0f766e'} strokeWidth={2.5} aria-hidden="true" />
+          <Building2 size={16} color={selected ? 'white' : OFFI.line} strokeWidth={2.5} aria-hidden="true" />
         </div>
       );
     }
@@ -1056,8 +1200,8 @@ export default function FullscreenMapPage() {
           maxWidth: 132,
           padding: '3px 8px 3px 5px',
           borderRadius: '8px',
-          background: selected ? '#0d9488' : 'white',
-          border: `2px solid ${selected ? '#134e4a' : '#0f766e'}`,
+          background: selected ? OFFI.fill : 'white',
+          border: `2px solid ${selected ? OFFI.lineStrong : OFFI.line}`,
           boxShadow: ring,
           cursor: 'pointer',
           transform: selected ? 'scale(1.06)' : 'scale(1)',
@@ -1070,7 +1214,7 @@ export default function FullscreenMapPage() {
             width: 18,
             height: 18,
             borderRadius: '5px',
-            background: selected ? 'rgba(255,255,255,0.22)' : '#0f766e',
+            background: selected ? 'rgba(255,255,255,0.22)' : OFFI.line,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1082,7 +1226,7 @@ export default function FullscreenMapPage() {
           style={{
             fontSize: '0.7rem',
             fontWeight: 700,
-            color: selected ? 'white' : '#0f766e',
+            color: selected ? 'white' : OFFI.line,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -1096,7 +1240,7 @@ export default function FullscreenMapPage() {
 
   // 묶음 배지를 눌렀을 때 그 지점을 기준으로 한 단계 확대한다. 데이터를 바꾸지 않고
   // 화면만 확대하므로, 확대 후에는 같은 master들이 낱개 칩으로 펼쳐진다.
-  const zoomIntoOfficetelCluster = (lat: number, lng: number) => {
+  const zoomIntoCluster = (lat: number, lng: number) => {
     const map = mapRef.current;
     if (!map || !window.kakao?.maps) return;
     const anchor = new window.kakao.maps.LatLng(lat, lng);
@@ -1160,40 +1304,16 @@ export default function FullscreenMapPage() {
   // 두 번 호출하기 때문에, 레이어를 한 번 켤 때마다 같은 요청이 두 번 나간다(실측:
   // /api/officetel/markers 가 토글 1회에 4번 호출되고 그중 2건이 DB 커넥션 경합으로
   // 503). 상태 갱신과 부수효과를 분리한다 — 아파트/학교 레이어에도 같은 문제가 있었다.
-  const toggleLayer = (key: LayerKey) => {
-    const turningOn = !layers[key];
-    setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
-
-    if (turningOn) {
-      // 이번에 새로 켠 레이어라면 현재 중심 기준으로 즉시 데이터를 채운다.
-      if (key === 'apt') fetchAptMarkers(center.lat, center.lng);
-      if (key === 'school') fetchSchoolMarkers(center.lat, center.lng);
-      if (key === 'officetel') {
-        // §13 — 네트워크/역지오코딩을 기다리기 전에 먼저 로딩 상태를 켠다(즉시 피드백).
-        setOfficetelStatus('loading');
-        const known = resolvedLawdCdRef.current;
-        if (known) {
-          fetchOfficetelMarkers(known);
-        } else {
-          // 아직 이 화면의 lawdCd가 확정된 적이 없을 때만 역지오코딩 1회.
-          resolveLawdCd(center.lat, center.lng).then((lawdCd) => {
-            if (!lawdCd) {
-              setOfficetelStatus('error');
-              return;
-            }
-            resolvedLawdCdRef.current = lawdCd;
-            setCurrentLawdCd(lawdCd);
-            fetchOfficetelMarkers(lawdCd);
-          });
-        }
-      }
-      return;
-    }
-
-    if (key === 'officetel') {
-      // 레이어를 끄면 선택/hover 상태와 마커를 함께 정리한다 — 다시 켰을 때 이전
-      // 세션의 선택이 되살아나거나(§15) 꺼진 레이어의 카드가 남지 않게 한다.
-      officetelSeqRef.current += 1; // 진행 중이던 응답 무효화
+  // MAP_UX_V2 §4 FOCUS MODE — 아파트/오피스텔은 배타적으로 전환된다. 이미 활성인 쪽을
+  // 다시 눌러도 끄지 않는다(끄면 어느 매물도 없는 빈 지도가 남는다). 나머지 레이어
+  // (학교/재개발/경공매/생숙)는 기존 독립 토글 그대로다.
+  const focusPropertyType = (focus: PropertyTypeLayer) => {
+    if (propertyFocus === focus) return;
+    setLayers((prev) => applyPropertyTypeFocus(prev, focus));
+    // 전환하는 순간 반대편 종류의 선택/카드를 즉시 정리한다 — 꺼진 레이어의 카드가
+    // 남아 있으면 지금 보고 있는 것과 다른 종류를 설명하게 된다(§15).
+    if (focus === 'apt') {
+      officetelSeqRef.current += 1;
       setOfficetelMarkers([]);
       setOfficetelClusters([]);
       setOfficetelClusteredFrom(null);
@@ -1202,7 +1322,46 @@ export default function FullscreenMapPage() {
       setOfficetelHiddenByCap(0);
       setSelectedOfficetelId(null);
       setHoveredOfficetelId(null);
+      setOfficetelGroupList(null);
+      fetchAptMarkers(center.lat, center.lng, resolvedLawdCdRef.current ?? undefined);
+      return;
     }
+
+    requestSeqRef.current += 1;
+    setSelectedMarkerId(null);
+    setHoveredMarkerId(null);
+    setPendingSelectedApt(null);
+    setPendingRestoreIdentity(null);
+    setIsLoadingData(false);
+    setOfficetelStatus('loading'); // §15 — 네트워크보다 먼저 시각 피드백
+    const known = resolvedLawdCdRef.current;
+    if (known) {
+      fetchOfficetelMarkers(known);
+    } else {
+      resolveLawdCd(center.lat, center.lng).then((lawdCd) => {
+        if (!lawdCd) {
+          setOfficetelStatus('error');
+          return;
+        }
+        resolvedLawdCdRef.current = lawdCd;
+        setCurrentLawdCd(lawdCd);
+        fetchOfficetelMarkers(lawdCd);
+      });
+    }
+  };
+
+  const toggleLayer = (key: LayerKey) => {
+    // 매물 종류는 토글이 아니라 포커스 전환이다.
+    if (key === 'apt' || key === 'officetel') {
+      focusPropertyType(key);
+      return;
+    }
+
+    const turningOn = !layers[key];
+    setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+
+    // 이번에 새로 켠 레이어라면 현재 중심 기준으로 즉시 데이터를 채운다.
+    if (turningOn && key === 'school') fetchSchoolMarkers(center.lat, center.lng);
   };
 
   // 아파트 자동완성에서 단지를 선택하면 실제 kakao.maps.Map 인스턴스의 panTo로 부드럽게
@@ -1210,6 +1369,82 @@ export default function FullscreenMapPage() {
   // 함께 갱신한다 — panTo만 호출하면 다음 setCenter 호출 없는 리렌더에서는 문제 없지만,
   // 이후 다른 흐름이 center state를 참조할 때 최신 위치와 어긋나는 것을 방지). 선택한 단지가
   // 있는 지역의 마커도 함께 새로 불러온다.
+  // MAP_UX_V2 §5/§12 — 검색 결과는 매물 종류까지 넘겨받는다. 고른 종류가 곧 포커스가
+  // 되므로, 오피스텔을 골랐는데 레이어가 꺼져 있어 아무것도 안 보이는 일이 없다.
+  const handleSearchSelect = (result: ApartmentSearchResult) => {
+    const focus = focusForSearchResult(result.type);
+    if (focus === 'officetel') {
+      handleOfficetelSearchSelect(result);
+      return;
+    }
+    if (focus === 'apt' && propertyFocus !== 'apt') {
+      // 아파트를 골랐으면 아파트 포커스로 되돌린다. 아래 refreshActiveLayers가 이
+      // 커밋의 layers를 읽으므로, 여기서는 state만 바꾸고 조회는 knownLawdCd로 직접 건다.
+      setLayers((prev) => applyPropertyTypeFocus(prev, 'apt'));
+      officetelSeqRef.current += 1;
+      setOfficetelMarkers([]);
+      setOfficetelClusters([]);
+      setOfficetelClusteredFrom(null);
+      setOfficetelStatus('idle');
+      setSelectedOfficetelId(null);
+      setHoveredOfficetelId(null);
+      setOfficetelGroupList(null);
+    }
+    handleApartmentSelect(result);
+  };
+
+  /**
+   * MAP_UX_V2 §12 — 오피스텔 검색 → 지도 핸드오프.
+   *
+   * 이름/부분주소/최근접 좌표/첫 마커로 매칭하지 않는다. 검색 결과가 이미 들고 온
+   * **정확한 officetelId**를 보관해두고, 그 구의 마커가 도착했을 때 그 id와 정확히
+   * 일치하는 마커만 선택한다. 좌표는 master에 저장된 값만 쓰며(런타임 지오코딩 금지),
+   * 좌표가 없는 master(부산 8건)는 지도로 이동하지 않고 그 사실을 알린다.
+   */
+  const handleOfficetelSearchSelect = (result: ApartmentSearchResult) => {
+    const officetelId = result.officetelId;
+    if (!officetelId) return; // identity가 없으면 아무것도 하지 않는다(추측 금지).
+
+    // §5 SEARCH OVERRIDE — 고른 종류가 곧 포커스다.
+    setLayers((prev) => applyPropertyTypeFocus(prev, 'officetel'));
+    requestSeqRef.current += 1; // 진행 중이던 아파트 응답 무효화(§14)
+    setSelectedMarkerId(null);
+    setHoveredMarkerId(null);
+    setPendingSelectedApt(null);
+    setPendingRestoreIdentity(null);
+    setIsLoadingData(false);
+    setSelectedOfficetelId(null);
+    setHoveredOfficetelId(null);
+    setOfficetelGroupList(null);
+
+    if (!hasUsableHandoffCoords(result)) {
+      // 좌표 미해결 master — 지도로 데려갈 수 없다는 사실을 정직하게 말한다.
+      setOfficetelStatus('idle');
+      setOfficetelHandoffNotice(`${result.name}은(는) 위치 정보가 없어 지도에 표시할 수 없습니다.`);
+      return;
+    }
+    setOfficetelHandoffNotice(null);
+
+    const latLng = { lat: result.lat, lng: result.lng };
+    setCenter(latLng);
+    if (mapRef.current && window.kakao?.maps) {
+      const map = mapRef.current;
+      const anchor = new window.kakao.maps.LatLng(latLng.lat, latLng.lng);
+      map.panTo(anchor);
+      // 낱개 마커가 보이는 단계까지 확대해서 내려놓는다 — 묶음 배지만 뜨면 "내가 고른
+      // 그 오피스텔"을 화면에서 확인할 수 없다(§6 밀도 규칙과 일관되게 레벨 3 사용).
+      if (map.getLevel() > INDIVIDUAL_MARKER_MAX_LEVEL) {
+        map.setLevel(INDIVIDUAL_MARKER_MAX_LEVEL, { anchor });
+        setZoomLevel(INDIVIDUAL_MARKER_MAX_LEVEL);
+      }
+    }
+
+    // 도착할 마커 중 이 id와 정확히 일치하는 것만 선택한다(아래 effect).
+    setPendingOfficetelId(officetelId);
+    setOfficetelStatus('loading');
+    refreshActiveLayers(latLng.lat, latLng.lng, result.lawdCd || undefined, 'officetel');
+  };
+
   const handleApartmentSelect = (result: ApartmentSearchResult) => {
     perfMark('map:m0-click'); // §12 M0
     const latLng = { lat: result.lat, lng: result.lng };
@@ -1218,8 +1453,12 @@ export default function FullscreenMapPage() {
       const anchor = new window.kakao.maps.LatLng(latLng.lat, latLng.lng);
       const map = mapRef.current;
       map.panTo(anchor);
-      if (map.getLevel() > 3) {
-        map.setLevel(3, { anchor });
+      // MAP_UX_V2 §6 — 낱개 마커가 보이는 단계까지 확대해서 내려놓는다. 예전에는 3을
+      // 그대로 적었는데, 이제 밀도 임계값이 한 곳(map-property-focus)에 있으므로 그
+      // 상수를 쓴다 — 임계값이 바뀌어도 "고른 단지가 배지 뒤에 숨는" 일이 없다.
+      if (map.getLevel() > INDIVIDUAL_MARKER_MAX_LEVEL) {
+        map.setLevel(INDIVIDUAL_MARKER_MAX_LEVEL, { anchor });
+        setZoomLevel(INDIVIDUAL_MARKER_MAX_LEVEL);
       }
       // MAP UI POLISH V1 §11/§12 — 검색으로 선택한 단지를 정중앙에 놓으면(panTo) 그
       // 지점이 상단/우측 control safe-zone과 겹칠 수 있다(좁은 뷰포트, 클러스터 격자
@@ -1249,7 +1488,14 @@ export default function FullscreenMapPage() {
     }
     // §16 — 검색 결과가 이미 lawdCd를 알고 있으면 이를 그대로 넘겨 마커 재조회 경로가
     // 자체 역지오코딩을 다시 하지 않게 한다(중복 요청 축소, 결과는 동일).
-    refreshActiveLayers(latLng.lat, latLng.lng, result.lawdCd || undefined);
+    // 아파트를 고른 경우 포커스를 명시해, 방금 setLayers한 값이 아직 반영되지 않은
+    // 클로저 때문에 오피스텔을 조회하는 일이 없게 한다(§5/§14).
+    refreshActiveLayers(
+      latLng.lat,
+      latLng.lng,
+      result.lawdCd || undefined,
+      result.type === 'APARTMENT' ? 'apt' : propertyFocus
+    );
 
     if (result.type === 'APARTMENT') {
       const id = result.aptSeq || `${result.dong}-${result.name}`;
@@ -1317,8 +1563,11 @@ export default function FullscreenMapPage() {
   }
 
   // 요청된 순서: 단지 / 오피스텔 / 생숙 / 재개발 / 경·공매 / 학교
+  // MAP_UX_V2 §2 — "단지"는 무엇을 뜻하는지 모호했다(아파트 단지? 오피스텔 단지?).
+  // 화면 라벨만 "아파트"로 바꾸고 내부 state 키(apt)는 그대로 둔다. 향후 용어 체계는
+  // 아파트 / 오피스텔 / 생활형숙박시설 / 전체이며, 뒤의 둘은 이 STEP 범위가 아니다.
   const LAYER_LABEL: Record<LayerKey, string> = {
-    apt: '단지',
+    apt: '아파트',
     officetel: '오피스텔',
     livingLodging: '생숙',
     redevelopment: '재개발',
@@ -1338,20 +1587,18 @@ export default function FullscreenMapPage() {
 
   // §6 — 오피스텔 레이어는 teal, 아파트는 기존 이집 Green. 색만으로 구분하지 않도록
   // 활성 칩에는 작은 건물 아이콘도 함께 붙인다.
-  const layerActiveBg = (key: LayerKey) => (key === 'officetel' ? '#0d9488' : 'var(--primary-color)');
+  const layerActiveBg = (key: LayerKey) => (key === 'officetel' ? OFFI.fill : 'var(--primary-color)');
 
-  // §12/§13/§14 — 지도 하단 상태 문구. "매물"이라는 말은 쓰지 않는다(이 마커들은 매물
-  // 인벤토리가 아니다). 어떤 레이어가 로딩 중인지에 따라 문구가 달라진다.
+  // §15 — 지도 하단 상태 문구. "매물"이라는 말은 쓰지 않는다(이 마커들은 매물 인벤토리가
+  // 아니다). 포커스 모드라 한 번에 한 종류만 로딩되므로 문구가 모호해지지 않는다.
   const aptLoading = layers.apt && isLoadingData;
   const officetelLoading = layers.officetel && officetelStatus === 'loading';
-  const loadingMessage = aptLoading && officetelLoading
-    ? '주변 부동산 정보를 불러오는 중...'
-    : officetelLoading
-      ? '주변 오피스텔을 불러오는 중...'
-      : '주변 아파트를 불러오는 중...';
+  const loadingMessage = officetelLoading ? '주변 오피스텔을 불러오는 중...' : '주변 아파트를 불러오는 중...';
 
   // §14 — 실패(FAILED)와 진짜 0건(ZERO)을 절대 같은 문구로 접지 않는다.
   const officetelNotice: { text: string; tone: 'info' | 'error' } | null = (() => {
+    // §12 — 좌표가 없어 지도로 데려갈 수 없는 검색 결과를 골랐을 때의 안내가 최우선이다.
+    if (officetelHandoffNotice) return { text: officetelHandoffNotice, tone: 'info' };
     if (!layers.officetel) return null;
     if (officetelStatus === 'error') return { text: '오피스텔 정보를 불러오지 못했습니다.', tone: 'error' };
     if (officetelStatus !== 'ready') return null;
@@ -1402,7 +1649,15 @@ export default function FullscreenMapPage() {
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <ApartmentAutocomplete onSelect={handleApartmentSelect} placeholder="🔍 아파트, 오피스텔 단지명 검색..." />
+            {/* MAP_UX_V2 §12 — includeOfficetel을 켠다. 예전에는 이 프롭이 빠져 있어
+                기본값 false가 적용됐고, placeholder는 "아파트, 오피스텔"이라고 약속하면서
+                실제로는 오피스텔 결과가 목록에 아예 나오지 않았다(핸드오프 미완의 1차 원인).
+                아래 handleSearchSelect가 OFFICETEL 분기를 정확 identity로 처리한다. */}
+            <ApartmentAutocomplete
+              onSelect={handleSearchSelect}
+              includeOfficetel
+              placeholder="🔍 아파트, 오피스텔 단지명 검색..."
+            />
           </div>
           <button
             onClick={async () => {
@@ -1452,34 +1707,45 @@ export default function FullscreenMapPage() {
       {/* 우측 세로 카테고리 플로팅 바: 예전에는 상단을 가로로 가리던 걸 오른쪽 세로 알약
           칩으로 옮겨서 검색창/지도 상단이 안 가려지게 한다. rightControlRef는 이 영역을
           right safe-zone으로 측정하는 기준이다(§7/§10). */}
-      <div ref={rightControlRef} style={{ position: 'absolute', right: '12px', top: '64px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {LAYER_ORDER.map((key) => (
-          <button
-            key={key}
-            onClick={() => toggleLayer(key)}
-            style={{
-              padding: '0.55rem 1rem',
-              borderRadius: '99px',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              background: layers[key] ? layerActiveBg(key) : 'rgba(255,255,255,0.95)',
-              color: layers[key] ? 'white' : 'var(--text-secondary)',
-              whiteSpace: 'nowrap',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-            aria-pressed={layers[key]}
-          >
-            {key === 'officetel' && (
-              <Building2 size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
-            )}
-            {LAYER_LABEL[key]}
-          </button>
-        ))}
+      {/* MAP_UX_V2 §17 — 터치 타깃을 44px로 올린다(실측 33px). 칩이 커진 만큼 세로
+          간격을 줄여 컨트롤 열 전체 높이가 크게 늘지 않게 하고, 지도를 더 가리지 않는다.
+          아파트/오피스텔은 서로 배타적이므로 라디오 의미(aria-checked)로 노출한다 —
+          나머지는 기존대로 독립 토글(aria-pressed)이다. */}
+      <div ref={rightControlRef} style={{ position: 'absolute', right: '12px', top: '64px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        {LAYER_ORDER.map((key) => {
+          const isPropertyType = key === 'apt' || key === 'officetel';
+          const active = layers[key];
+          return (
+            <button
+              key={key}
+              onClick={() => toggleLayer(key)}
+              style={{
+                minHeight: 44,
+                padding: '0 1rem',
+                borderRadius: '99px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                background: active ? layerActiveBg(key) : 'rgba(255,255,255,0.95)',
+                color: active ? 'white' : 'var(--text-secondary)',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+              }}
+              role={isPropertyType ? 'radio' : undefined}
+              aria-checked={isPropertyType ? active : undefined}
+              aria-pressed={isPropertyType ? undefined : active}
+            >
+              {key === 'officetel' && <Building2 size={13} aria-hidden="true" style={{ flexShrink: 0 }} />}
+              {key === 'apt' && <Home size={13} aria-hidden="true" style={{ flexShrink: 0 }} />}
+              {LAYER_LABEL[key]}
+            </button>
+          );
+        })}
       </div>
 
       {/* 아직 데이터 연동이 안 된 레이어를 켰을 때: 지어낸 마커 대신 정직하게 준비중 안내 */}
@@ -1524,7 +1790,7 @@ export default function FullscreenMapPage() {
             style={{
               display: 'inline-block', width: '14px', height: '14px', borderRadius: '50%',
               border: '2px solid rgba(0,0,0,0.15)',
-              borderTopColor: officetelLoading && !aptLoading ? '#0d9488' : 'var(--primary-color)',
+              borderTopColor: officetelLoading ? OFFI.line : 'var(--primary-color)',
             }}
             aria-hidden="true"
           />
@@ -1541,7 +1807,7 @@ export default function FullscreenMapPage() {
         <div
           style={{
             padding: '0.55rem 1rem', borderRadius: '12px',
-            background: officetelNotice.tone === 'error' ? 'rgba(185,28,28,0.94)' : 'rgba(15,118,110,0.94)',
+            background: officetelNotice.tone === 'error' ? 'rgba(185,28,28,0.94)' : OFFI.banner,
             color: 'white', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center',
             boxShadow: '0 4px 12px rgba(0,0,0,0.2)', maxWidth: '100%',
           }}
@@ -1573,6 +1839,8 @@ export default function FullscreenMapPage() {
           setPendingSelectedApt(null);
           setPendingRestoreIdentity(null);
           setSelectedOfficetelId(null);
+          setOfficetelGroupList(null);
+          setOfficetelHandoffNotice(null);
         }}
       >
         {layers.apt && aptClusters.map((cluster) => {
@@ -1589,6 +1857,56 @@ export default function FullscreenMapPage() {
             // MAP UI POLISH V1 §7/§8 — control safe-zone과 겹치면 클러스터 전체를
             // 화면상에서만 밀어낸다(lat/lng는 그대로, 클릭/식별자 영향 없음).
             const nudge = clusterNudges.get(cluster.id) ?? { dx: 0, dy: 0 };
+
+            // MAP_UX_V2 §9 — 축소 상태(레벨 4 이상)에서는 겹친 단지들을 격자로 펼치지
+            // 않고 **개수 배지 하나**로 그린다. 이 단계에서 가격 칩을 전부 펼치면 서로
+            // 겹쳐 어차피 읽을 수 없고 지도까지 덮는다(실측: 서면 360px 80% 피복).
+            // 누르면 한 단계 확대되어 그 자리에서 개별 가격 칩으로 풀린다 —
+            // 거래 데이터/가격 의미/식별자/상세 경로는 전혀 바뀌지 않는다.
+            if (aptDensity !== 'individual') {
+              return (
+                <CustomOverlayMap
+                  key={cluster.id}
+                  position={{ lat: cluster.lat, lng: cluster.lng }}
+                  yAnchor={0.5}
+                  zIndex={clusterSelected ? 9999 : 1}
+                >
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`아파트 ${cluster.markers.length}곳, 확대해서 보기`}
+                    title={`아파트 ${cluster.markers.length}곳`}
+                    onClick={() => zoomIntoCluster(cluster.lat, cluster.lng)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        zoomIntoCluster(cluster.lat, cluster.lng);
+                      }
+                    }}
+                    className={mapMarkerStyles.markerChip}
+                    style={{
+                      transform: `translate(${nudge.dx}px, ${nudge.dy}px)`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      padding: '4px 9px',
+                      borderRadius: '999px',
+                      background: 'white',
+                      border: '2px solid var(--primary-color)',
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.12)',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Home size={12} color="var(--primary-hover)" strokeWidth={2.5} aria-hidden="true" />
+                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--primary-hover)' }}>
+                      {cluster.markers.length}
+                    </span>
+                  </div>
+                </CustomOverlayMap>
+              );
+            }
+
             return (
               <CustomOverlayMap
                 key={cluster.id}
@@ -1658,20 +1976,22 @@ export default function FullscreenMapPage() {
           </CustomOverlayMap>
         )}
 
-        {/* OFFICETEL_MAP_LAYER_V1 §7/§10 — 아파트와 **동일한 클러스터 격자 전개**를 쓴다.
-            좌표가 완전히 같은 master들(부산 32그룹/79건 실측)은 거리 0이라 같은 그룹으로
-            묶이고, 그 그룹이 격자로 벌어지면서 각자 선택 가능한 칩으로 남는다 — 좌표가
-            같다고 하나로 합치거나 한 건물이 다른 건물을 대표하게 만들지 않는다. */}
+        {/* MAP_UX_V2 §7/§8 — 오피스텔은 세 가지 형태로만 그려진다:
+            1) 픽셀 클러스터(여러 좌표가 화면에서 겹침) → 개수 배지. 누르면 확대.
+            2) 좌표 그룹(같은 좌표에 여러 master) → 개수 배지. 누르면 **선택 목록**.
+               확대해도 갈라지지 않는 겹침이므로 확대가 아니라 목록으로 푼다.
+            3) 단일 master → 낱개 칩(확대 상태에서만 이름 표시).
+            어느 경우에도 데이터를 합치지 않는다 — 선택은 언제나 개별 master다. */}
         {layers.officetel && officetelClusters.map((cluster) => {
           const nudge = officetelNudges.get(cluster.id) ?? { dx: 0, dy: 0 };
-          const clusterSelected = cluster.markers.some((m) => m.id === activeOfficetelId);
+          const clusterSelected = cluster.markers.some((g) =>
+            g.members.some((m) => m.id === activeOfficetelId)
+          );
+          const clusterMasters = cluster.markers.reduce((s, g) => s + g.members.length, 0);
 
-          // 축소 상태에서 겹친 그룹은 **묶음 배지 하나**로 그린다. 이 확대 단계에서는
-          // 칩에 이름이 없어(아이콘만) 낱개로 펼쳐봐야 정보가 늘지 않는 반면, 부산진구
-          // (845곳)·서구(284곳)처럼 밀집한 구에서는 오버레이 DOM만 수백 개가 되어 지도가
-          // 실제로 멎는다(실측). 배지를 누르면 한 단계 확대해 그 자리에서 낱개로 펼친다 —
-          // 다른 건물을 대표하게 만들지 않고, 선택은 언제나 개별 master로만 일어난다(§10).
-          if (!isOfficetelDetailed && cluster.markers.length > 1) {
+          // 1) 화면에서 겹친 여러 좌표 → 확대로 푼다.
+          const spreadsIntoIndividuals = isOfficetelDetailed;
+          if (!spreadsIntoIndividuals && clusterMasters > 1) {
             return (
               <CustomOverlayMap
                 key={cluster.id}
@@ -1679,95 +1999,73 @@ export default function FullscreenMapPage() {
                 yAnchor={0.5}
                 zIndex={clusterSelected ? 9998 : 1}
               >
-                <div
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`오피스텔 ${cluster.markers.length}곳, 확대해서 보기`}
-                  title={`오피스텔 ${cluster.markers.length}곳`}
-                  onClick={() => zoomIntoOfficetelCluster(cluster.lat, cluster.lng)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      zoomIntoOfficetelCluster(cluster.lat, cluster.lng);
-                    }
-                  }}
-                  className={mapMarkerStyles.markerChip}
-                  style={{
-                    transform: `translate(${nudge.dx}px, ${nudge.dy}px)`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '3px',
-                    padding: '3px 8px 3px 5px',
-                    borderRadius: '999px',
-                    background: 'white',
-                    border: '2px solid #0f766e',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.12)',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <Building2 size={13} color="#0f766e" strokeWidth={2.5} aria-hidden="true" />
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0f766e' }}>
-                    {cluster.markers.length}
-                  </span>
-                </div>
+                <OfficetelGroupBadge
+                  count={clusterMasters}
+                  label={`오피스텔 ${clusterMasters}곳, 확대해서 보기`}
+                  offset={nudge}
+                  onActivate={() => zoomIntoCluster(cluster.lat, cluster.lng)}
+                />
               </CustomOverlayMap>
             );
           }
 
+          const renderGroup = (group: OfficetelCoordGroup, offset: { dx: number; dy: number }, key: string, z: number) => {
+            // 2) 같은 좌표에 여러 master — 확대해도 갈라지지 않으므로 목록으로 푼다(§8).
+            if (group.members.length > 1) {
+              const groupSelected = group.members.some((m) => m.id === activeOfficetelId);
+              return (
+                <CustomOverlayMap key={key} position={{ lat: group.lat, lng: group.lng }} yAnchor={0.5} zIndex={groupSelected ? 9998 : z}>
+                  <OfficetelGroupBadge
+                    count={group.members.length}
+                    label={`같은 위치의 오피스텔 ${group.members.length}곳, 목록 열기`}
+                    offset={offset}
+                    stacked
+                    onActivate={() => {
+                      setOfficetelGroupList(group.members);
+                      setSelectedOfficetelId(null);
+                      setSelectedMarkerId(null);
+                      setPendingSelectedApt(null);
+                    }}
+                  />
+                </CustomOverlayMap>
+              );
+            }
+            // 3) 단일 master.
+            const marker = group.members[0];
+            const selected = marker.id === activeOfficetelId;
+            return (
+              <CustomOverlayMap key={key} position={{ lat: group.lat, lng: group.lng }} yAnchor={0.5} zIndex={selected ? 9998 : z}>
+                <div style={{ transform: `translate(${offset.dx}px, ${offset.dy}px)` }}>
+                  {renderOfficetelChip(marker, selected)}
+                </div>
+              </CustomOverlayMap>
+            );
+          };
+
+          // 확대 상태에서 여러 좌표가 한 클러스터에 있으면 격자로 벌려 각각 그린다.
           if (cluster.markers.length > 1) {
             const cols = Math.ceil(Math.sqrt(cluster.markers.length));
             const rows = Math.ceil(cluster.markers.length / cols);
             return (
-              <CustomOverlayMap
-                key={cluster.id}
-                position={{ lat: cluster.lat, lng: cluster.lng }}
-                yAnchor={0.5}
-                zIndex={clusterSelected ? 9998 : 1}
-              >
-                <div style={{ position: 'relative' }}>
-                  {cluster.markers.map((marker, i) => {
-                    const col = i % cols;
-                    const row = Math.floor(i / cols);
-                    const offsetX =
-                      (col - (cols - 1) / 2) * (officetelChipLayout.width + officetelChipLayout.gap) + nudge.dx;
-                    const offsetY =
-                      (row - (rows - 1) / 2) * (officetelChipLayout.height + officetelChipLayout.gap) + nudge.dy;
-                    const selected = marker.id === activeOfficetelId;
-                    return (
-                      <div
-                        key={marker.id}
-                        style={{
-                          position: 'absolute',
-                          left: offsetX,
-                          top: offsetY,
-                          transform: 'translate(-50%, -50%)',
-                          zIndex: selected ? 9998 : i,
-                        }}
-                      >
-                        {renderOfficetelChip(marker, selected)}
-                      </div>
-                    );
-                  })}
-                </div>
-              </CustomOverlayMap>
+              <React.Fragment key={cluster.id}>
+                {cluster.markers.map((group, i) => {
+                  const col = i % cols;
+                  const row = Math.floor(i / cols);
+                  return renderGroup(
+                    group,
+                    {
+                      dx: (col - (cols - 1) / 2) * (officetelChipLayout.width + officetelChipLayout.gap) + nudge.dx,
+                      dy: (row - (rows - 1) / 2) * (officetelChipLayout.height + officetelChipLayout.gap) + nudge.dy,
+                    },
+                    `${cluster.id}:${group.id}`,
+                    i
+                  );
+                })}
+              </React.Fragment>
             );
           }
 
-          const marker = cluster.markers[0];
-          const selected = marker.id === activeOfficetelId;
-          return (
-            <CustomOverlayMap
-              key={marker.id}
-              position={{ lat: marker.lat, lng: marker.lng }}
-              yAnchor={0.5}
-              zIndex={selected ? 9998 : 1}
-            >
-              <div style={{ transform: `translate(${nudge.dx}px, ${nudge.dy}px)` }}>
-                {renderOfficetelChip(marker, selected)}
-              </div>
-            </CustomOverlayMap>
-          );
+          return renderGroup(cluster.markers[0], nudge, cluster.id, 1);
         })}
 
         {layers.school && schoolMarkers.map((school) => (
@@ -1804,7 +2102,76 @@ export default function FullscreenMapPage() {
       {/* OFFICETEL_MAP_LAYER_V1 §8 — 오피스텔 마커 클릭 카드. 실제 master 값만 쓴다:
           표시명(빈 이름은 "법정동 지번 오피스텔") / 주소 / 규모(호). 세대수·대표평형·
           시세·추정가·역대 최고가는 **표시하지 않는다**(원천에 없거나 BLOCKED). */}
-      {selectedOfficetel && (
+      {/* MAP_UX_V2 §8 — 같은 좌표에 등록된 오피스텔들의 선택 목록. 지도에서는 절대
+          분리할 수 없는 겹침이므로 목록으로 고르게 한다. 각 항목은 자기 master id를
+          그대로 들고 있고, 어느 항목도 다른 항목을 대표하지 않는다. */}
+      {officetelGroupList && (
+        <div
+          style={{
+            position: 'fixed', bottom: '60px', left: 0, right: 0, zIndex: 1002,
+            background: 'white', borderTop: '1px solid var(--border-color)',
+            boxShadow: '0 -4px 16px rgba(0,0,0,0.12)', padding: '1rem',
+            borderRadius: '16px 16px 0 0', maxHeight: '52vh', overflowY: 'auto',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+            <div style={{ minWidth: 0 }}>
+              <span
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  background: OFFI.soft, color: OFFI.line, borderRadius: '6px',
+                  padding: '2px 6px', fontSize: '0.68rem', fontWeight: 800,
+                }}
+              >
+                <Building2 size={11} aria-hidden="true" />
+                오피스텔 {officetelGroupList.length}곳
+              </span>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
+                {officetelMarkerAddressLine(officetelGroupList[0]) ?? '같은 위치'}
+                {' · 같은 위치에 등록된 건물입니다.'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOfficetelGroupList(null)}
+              aria-label="닫기"
+              style={{ minWidth: 44, minHeight: 44, padding: '0.4rem', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.1rem', cursor: 'pointer', flexShrink: 0 }}
+            >
+              ✕
+            </button>
+          </div>
+          <ul style={{ listStyle: 'none', margin: '0.75rem 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {officetelGroupList.map((m) => (
+              <li key={m.id}>
+                <button
+                  type="button"
+                  // §8/§12 — 항목마다 정확한 master id로만 이동한다.
+                  onClick={() => router.push(`/officetel/${m.officetelId}`)}
+                  style={{
+                    width: '100%', minHeight: 44, display: 'flex', alignItems: 'center',
+                    justifyContent: 'space-between', gap: '0.5rem', textAlign: 'left',
+                    padding: '0.5rem 0.75rem', borderRadius: '10px', cursor: 'pointer',
+                    background: 'white', border: `1px solid ${OFFI.soft}`,
+                  }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.displayName}
+                    </span>
+                    <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {m.buildingDong ? `${m.buildingDong} · ` : ''}
+                      {typeof m.hoCnt === 'number' && m.hoCnt > 0 ? `${m.hoCnt.toLocaleString()}호` : '규모 정보 없음'}
+                    </span>
+                  </span>
+                  <span style={{ flexShrink: 0, fontSize: '0.78rem', fontWeight: 700, color: OFFI.line }}>상세보기</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {!officetelGroupList && selectedOfficetel && (
         <div
           style={{
             position: 'fixed',
@@ -1824,7 +2191,7 @@ export default function FullscreenMapPage() {
               <span
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '4px',
-                  background: '#ccfbf1', color: '#0f766e', borderRadius: '6px',
+                  background: OFFI.soft, color: OFFI.line, borderRadius: '6px',
                   padding: '2px 6px', fontSize: '0.68rem', fontWeight: 800,
                 }}
               >
@@ -1872,14 +2239,14 @@ export default function FullscreenMapPage() {
             // §9 — 정확한 master id로만 이동한다.
             onClick={() => router.push(`/officetel/${selectedOfficetel.officetelId}`)}
             // §17 — 모바일 터치 타깃 44px 확보(실측: 0.7rem 패딩만으로는 38px였다).
-            style={{ marginTop: '0.75rem', width: '100%', minHeight: 44, padding: '0.7rem', background: '#0d9488', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+            style={{ marginTop: '0.75rem', width: '100%', minHeight: 44, padding: '0.7rem', background: OFFI.fill, color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
           >
             상세보기
           </button>
         </div>
       )}
 
-      {!selectedOfficetel && selectedMarker && (
+      {!officetelGroupList && !selectedOfficetel && selectedMarker && (
         <div
           style={{
             position: 'fixed',

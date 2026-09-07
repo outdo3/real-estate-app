@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   OFFICETEL_MARKER_ID_PREFIX,
-  OFFICETEL_MAX_ZOOM_LEVEL,
   OFFICETEL_RENDER_CAP,
   OfficetelMarkerQueryError,
   buildOfficetelMapMarker,
@@ -102,8 +101,7 @@ test('동일 좌표를 공유하는 master들은 각자의 identity를 유지한
   assert.notEqual(a.canonicalKey, b.canonicalKey);
 });
 
-test('렌더 상한/확대 임계값은 화면이 참조할 수 있게 계약으로 노출된다', () => {
+test('렌더 상한은 화면이 참조할 수 있게 계약으로 노출된다', () => {
   assert.equal(typeof OFFICETEL_RENDER_CAP, 'number');
   assert.ok(OFFICETEL_RENDER_CAP > 0);
-  assert.equal(typeof OFFICETEL_MAX_ZOOM_LEVEL, 'number');
 });

@@ -27,6 +27,13 @@ export interface OfficetelSearchResult {
   hoCnt: number | null;
   buildYear: number | null;
   useApprovalDate: string | null;
+  /**
+   * MAP_UX_V2 §12 — 지도 핸드오프용 **저장된** 좌표. 없으면 null이며, 그때는 지도가
+   * 이동하지 않는다(런타임 지오코딩으로 채우지 않는다 — 검증되지 않은 좌표를 검증된
+   * 것과 나란히 놓지 않는다는 OFFICETEL V1 결정 그대로).
+   */
+  latitude: number | null;
+  longitude: number | null;
 }
 
 const SEARCH_LIMIT = 8;
@@ -76,6 +83,9 @@ export async function searchOfficetels(keyword: string): Promise<OfficetelSearch
       id: true, canonicalKey: true, officetelName: true, normalizedName: true,
       sggCd: true, umdNm: true, normalizedUmdNm: true, jibun: true, normalizedJibun: true,
       buildingDong: true, roadAddress: true, hoCnt: true, buildYear: true, useApprovalDate: true,
+      // MAP_UX_V2 §12 — 지도 핸드오프가 이름/주소로 좌표를 다시 찾지 않도록 검색 결과가
+      // 저장 좌표를 그대로 들고 간다(추가 왕복 없음, 랭킹에는 쓰지 않는다).
+      latitude: true, longitude: true,
     },
     // 5,056행 전체 테이블이라 take 없이 받아 티어 랭킹 후 상위 N만 응답한다
     // (아파트 검색이 take:50에서 exact match가 잘려나가던 문제를 이미 겪었다).
@@ -95,5 +105,7 @@ export async function searchOfficetels(keyword: string): Promise<OfficetelSearch
     hoCnt: m.hoCnt,
     buildYear: m.buildYear,
     useApprovalDate: m.useApprovalDate,
+    latitude: m.latitude ?? null,
+    longitude: m.longitude ?? null,
   }));
 }

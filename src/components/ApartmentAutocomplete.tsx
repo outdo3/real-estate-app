@@ -230,8 +230,13 @@ export default function ApartmentAutocomplete({
         type: 'OFFICETEL',
         name: item.displayName,
         address: [item.dong, item.jibun].filter(Boolean).join(' '),
-        lat: 0,
-        lng: 0,
+        // MAP_UX_V2 §12 — 예전에는 여기서 항상 0,0을 넘겨서 지도 소비처가 오피스텔로
+        // 이동할 방법이 없었다(핸드오프 미완의 직접 원인). 이제 검색 결과가 실어온
+        // **저장 좌표**를 그대로 전달한다. 좌표가 없는 master(부산 8건)는 0,0으로
+        // 남고, 소비처는 그것을 "이동할 수 없음"으로 판단해야 한다 — 지오코딩으로
+        // 채우지 않는다.
+        lat: typeof item.latitude === 'number' ? item.latitude : 0,
+        lng: typeof item.longitude === 'number' ? item.longitude : 0,
         dong: item.dong,
         lawdCd: item.sggCd,
         officetelId: item.officetelId,
