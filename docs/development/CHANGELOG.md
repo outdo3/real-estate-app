@@ -15952,3 +15952,89 @@ DB/schema/migration 변경 0, Production write 0, MOLIT 동시성 증가 0.
 상태:
 
 완료
+
+
+## 2026-09-07
+
+### OFFICETEL_MAP_LAYER_V1 — 메인 지도 부산 오피스텔 레이어
+
+작업:
+
+- src/lib/officetel/map-marker-contract.ts — 지도 마커 순수 계약(lawdCd 파싱, 좌표
+  유효성, 마커 id 접두사, 주소 한 줄, 렌더 상한/확대 임계값)
+- src/lib/officetel/map-marker-contract.test.mjs — 위 계약 테스트 8개
+- src/lib/officetel/map-marker-read.ts — 시군구 단위 master READ(거래 이력 조인 없음)
+- src/app/api/officetel/markers/route.ts — 읽기 전용 마커 라우트(신규)
+- src/app/map/page.tsx — 오피스텔 레이어(state/fetch/클러스터/칩/카드/문구),
+  클러스터링 제네릭화, 레이어 토글 부수효과 분리, 지도 level 바인딩, 하단 배너 스택
+- scripts/officetel/map-layer-coverage.ts, scripts/officetel/map-layer-qa-cases.ts
+  — 커버리지·QA 케이스 실측(READ ONLY)
+- docs/development/OFFICETEL_MAP_LAYER_V1.md
+
+서비스 기능 변경:
+
+/map에서 "오피스텔 실거래 데이터는 아직 연동 준비 중입니다." 안내가 사라지고, 오피스텔
+레이어가 실제 마커를 그린다. 원천은 OFFICETEL V1에서 적재한 officetel_masters의 저장
+좌표뿐이며 런타임 지오코딩은 0회다. 마커 → 기본정보 카드(표시명/주소/규모 N호) →
+/officetel/{master id} 정확 이동까지 여정이 이어진다.
+
+부산 16개 구 전체에서 동작한다. 마커 5,048 / master 5,056 / 좌표 미해결 8건 제외(실측).
+좌표가 없는 8건은 지도에 올리지 않으며 그 수를 응답과 화면 문구에 남긴다 — 상세 페이지는
+그대로 사용 가능하다.
+
+확대 단계별로 표현이 다르다: 레벨 ≤3은 이름 칩(겹친 그룹은 격자로 벌려 낱개 선택),
+레벨 4~6은 아이콘/개수 배지(누르면 한 단계 확대), 레벨 7 이상은 그리지 않고 확대를
+안내한다. 오피스텔 마스터는 아파트 단지보다 훨씬 촘촘해(부산진구 845, 서구 284) 아파트와
+같은 기준으로 이름 칩을 펼치면 화면이 이름표로 뒤덮인다(실측).
+
+동일 좌표를 공유하는 master 79건(32그룹, 최대 5개)은 합치지 않는다. 확대하면 각각의
+칩으로 벌어지고 각자 자기 master id로 이동한다(실측: 사하구 퀸즈타운W 사하 5개 → 클릭한
+칩이 /officetel/811).
+
+문구: "매물"을 쓰지 않는다. 로딩은 활성 레이어에 따라 "주변 아파트/오피스텔/부동산 정보를
+불러오는 중"으로 갈린다. 조회 실패는 "오피스텔 정보를 불러오지 못했습니다."이고 절대
+"오피스텔이 없습니다"로 접지 않는다(FAILED != ZERO).
+
+부수 발견 및 수정:
+
+1. 레이어 토글 1회에 마커 요청이 중복 발사됐다 — setLayers 업데이터 함수 안에서 fetch를
+   하고 있었고, React는 업데이터를 순수 함수로 보고 개발 모드에서 두 번 호출한다(실측:
+   토글 1회에 /api/officetel/markers 4회, 그중 2건 503). 상태 갱신과 부수효과를 분리했다.
+   같은 문제가 있던 아파트/학교 레이어에도 함께 적용된다. 수정 후 토글 1회 = 요청 1회.
+2. <KakaoMap level={4}>가 하드코딩이라 공유 링크의 zoom이 state에만 반영되고 실제 지도는
+   항상 레벨 4로 떴다. 확대 단계로 표시를 판단하는 오피스텔 레이어가 이 불일치에
+   걸리므로 level={zoomLevel}로 묶었다(공유 링크 zoom 복원도 함께 동작).
+3. 준비중/로딩 배너가 각각 bottom:76px 절대배치라 동시에 뜨면 완전히 겹쳤다 — 세로 스택.
+4. 마커가 막 도착한 프레임에서 "표시할 오피스텔이 없습니다"가 한 프레임 뜰 수 있었다 —
+   어느 마커 목록으로 클러스터를 계산했는지 기록해 계산 전 상태와 진짜 0건을 구분한다.
+
+DB 변경:
+
+없음. 스키마/마이그레이션/인덱스 변경 0, Production write 0.
+
+API 변경:
+
+GET /api/officetel/markers?lawdCd=NNNNN (신규, 읽기 전용)
+- { success, data: { lawdCd, markers[], masterCount, excludedNoCoordinate } }
+- 마커: id / officetelId / canonicalKey / displayName / lat / lng / dong / jibun /
+  buildingDong / roadAddress / hoCnt / propertyType. 거래 이력·가격은 담지 않는다.
+- Cache-Control: public, s-maxage=600, stale-while-revalidate=3600
+- 실패는 500 그대로(빈 배열 위장 금지)
+
+기존 라우트 변경 없음.
+
+검증:
+
+- node --experimental-strip-types --test (officetel/map 8파일): 58/58 PASS
+- npx tsc --noEmit: src 신규 오류 0 (저장소 전체는 FAIL_EXISTING_SCRIPT_ERRORS)
+- npx eslint (변경 6파일): 0 problems
+- npm run build: 성공, /api/officetel/markers 라우트 매니페스트 확인
+- 16개 구 READ 계층 실측: marker 5,048 / master 5,056 / excluded 8 / 불일치 구 0,
+  구별 쿼리 21~101ms, badGeo 0, id·canonicalKey 전부 유일
+- 브라우저 실측(dev): 토글 1회 = 요청 1회(405ms), 좌표 공유 5개 낱개 선택,
+  빈 이름 폴백("동대신동3가 202-… 오피스텔") 표시, 확대 안내/조회 실패 배너 구분,
+  360/375/390 가로 오버플로 0
+
+상태:
+
+완료
