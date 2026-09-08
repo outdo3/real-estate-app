@@ -7,8 +7,6 @@ import {
   resolveDerivedMetricTrust,
   resolveObservedMetricTrust,
   TRADE_DERIVED_SUPPRESSED_MESSAGE,
-  TRADE_API_UNAVAILABLE_MESSAGE,
-  TRADE_PARTIAL_MESSAGE,
   type TradeReadState,
 } from '@/lib/trade-read-state';
 
@@ -110,16 +108,6 @@ export default function InvestmentMetrics({ aptName, lawdCd, dong, selectedTrade
   const rentObservedTrust = resolveObservedMetricTrust(rentState);
   const combinedTrust = resolveDerivedMetricTrust(saleState, rentState);
 
-  // 전체 실패와 일부 실패는 문구를 구분한다(§7). 두 계열 중 하나라도 전체 실패면
-  // 그 사실이 더 강한 상태라 우선한다.
-  const incompleteNotice = !loading
-    ? (saleState?.apiError || rentState?.apiError)
-      ? TRADE_API_UNAVAILABLE_MESSAGE
-      : (saleState?.partial || rentState?.partial)
-        ? TRADE_PARTIAL_MESSAGE
-        : null
-    : null;
-
   const cardStyle: React.CSSProperties = {
     padding: '0.55rem 0.75rem',
     borderRadius: '8px',
@@ -193,43 +181,35 @@ export default function InvestmentMetrics({ aptName, lawdCd, dong, selectedTrade
     return <span style={{ fontSize: '0.95rem', fontWeight: strong, color: 'var(--primary-color)' }}>{value}</span>;
   };
 
+  // MOLIT_PARTIAL_TRUST_V2.1 §3 — 여기에 별도 안내 배너를 두지 않는다.
+  //
+  // 실측(Production, 360~1280px): 상세 페이지에 같은 문장("일부 기간의 거래 정보를
+  // 불러오지 못했습니다...")이 세 번 쌓였다 — PriceTrendChart 카드 안, 이 컴포넌트 아래,
+  // 그리고 실거래 타임라인 위. 앞의 둘은 각자 자기 섹션(차트/목록)을 설명하는 기존
+  // 문구이고, 이 컴포넌트가 추가한 세 번째만 중복이었다.
+  //
+  // 지우고도 정보가 사라지지 않는 이유: 원본이 불완전하면 결합 계산값(전세가율/갭)이
+  // 항상 SUPPRESSED가 되어 두 카드가 이유를 직접 말하고("일부 기간의 데이터가 없어
+  // 현재 계산할 수 없습니다."), 관측값 카드에는 "일부 기간 미반영" 단서가 붙는다.
+  // 즉 이 블록은 스스로를 이미 설명한다.
   return (
-    <div style={{ marginTop: '0.85rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem' }}>
-        <div style={cardStyle}>
-          <span style={labelStyle}>매매가</span>
-          {renderObserved(latestSale ? latestSale.priceStr : null, saleObservedTrust)}
-        </div>
-        <div style={cardStyle}>
-          <span style={labelStyle}>전세가</span>
-          {renderObserved(matchedRent ? matchedRent.priceStr : null, rentObservedTrust)}
-        </div>
-        <div style={cardStyle}>
-          <span style={labelStyle}>전세가율</span>
-          {renderCombined(jeonseRate !== null ? `${jeonseRate.toFixed(1)}%` : null)}
-        </div>
-        <div style={highlightCardStyle}>
-          <span style={labelStyle}>필요 갭 금액</span>
-          {renderCombined(gap !== null ? `${gap.toFixed(1)}억` : null, 800)}
-        </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem', marginTop: '0.85rem' }}>
+      <div style={cardStyle}>
+        <span style={labelStyle}>매매가</span>
+        {renderObserved(latestSale ? latestSale.priceStr : null, saleObservedTrust)}
       </div>
-      {incompleteNotice && (
-        <div
-          style={{
-            marginTop: '0.5rem',
-            padding: '0.55rem 0.7rem',
-            borderRadius: '8px',
-            background: '#fffbeb',
-            border: '1px solid #fde68a',
-            color: '#92400e',
-            fontSize: '0.72rem',
-            lineHeight: 1.45,
-            wordBreak: 'keep-all',
-          }}
-        >
-          {incompleteNotice}
-        </div>
-      )}
+      <div style={cardStyle}>
+        <span style={labelStyle}>전세가</span>
+        {renderObserved(matchedRent ? matchedRent.priceStr : null, rentObservedTrust)}
+      </div>
+      <div style={cardStyle}>
+        <span style={labelStyle}>전세가율</span>
+        {renderCombined(jeonseRate !== null ? `${jeonseRate.toFixed(1)}%` : null)}
+      </div>
+      <div style={highlightCardStyle}>
+        <span style={labelStyle}>필요 갭 금액</span>
+        {renderCombined(gap !== null ? `${gap.toFixed(1)}억` : null, 800)}
+      </div>
     </div>
   );
 }

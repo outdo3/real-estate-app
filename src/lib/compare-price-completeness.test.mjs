@@ -97,6 +97,52 @@ test('difference 엔진이 한쪽만 불완전한 비교에 주의 문구를 붙
   );
 });
 
+// MOLIT_PARTIAL_TRUST_V2.1 §5 — Production 실측에서 발견한 회귀.
+// 면적 불일치 등으로 비교가 이미 접힌 분기에서도 각 단지의 값은 화면에 그대로 뜨는데,
+// 그 분기들이 caution: null을 반환해 불완전 사실이 통째로 사라졌다.
+test('비교가 접힌 분기에서도 불완전 경고가 사라지지 않는다', () => {
+  const source = read('lib/compare-v2/difference.ts');
+
+  // buildDifference의 모든 return에 caution이 실려야 한다 — caution: null이 남아 있으면
+  // 그 분기에서 불완전 사실이 유실된다.
+  const body = source.slice(source.indexOf('export function buildDifference'));
+  const nullCautions = body.match(/caution: null/g) || [];
+  assert.equal(
+    nullCautions.length,
+    0,
+    `buildDifference에 caution: null 반환 분기가 ${nullCautions.length}개 남아 있다 — 불완전 경고가 유실된다`
+  );
+
+  // 조기 반환 분기 4개(데이터 없음 / 양쪽 null / 한쪽 null / 면적 불일치)가 모두
+  // incompleteCaution을 싣는지 확인한다.
+  const carried = body.match(/caution: incompleteCaution/g) || [];
+  assert.ok(
+    carried.length >= 4,
+    `조기 반환 분기 중 ${4 - carried.length}개가 불완전 경고를 싣지 않는다`
+  );
+
+  // 계산은 반드시 첫 분기보다 먼저 이뤄져야 한다.
+  const declIdx = body.indexOf('const incompleteCaution = incompleteSourceCaution(a, b)');
+  const firstReturnIdx = body.indexOf('return {');
+  assert.ok(declIdx > -1 && declIdx < firstReturnIdx, '불완전 경고를 첫 반환 이전에 계산해야 한다');
+});
+
+test('InvestmentMetrics는 자체 안내 배너를 두지 않는다(상세 페이지 경고 중복 방지)', () => {
+  const source = read('components/InvestmentMetrics.tsx');
+  // 실측: 배너를 두면 상세 페이지에 같은 문장이 3번(차트/여기/타임라인) 쌓였다.
+  assert.ok(
+    !source.includes('TRADE_PARTIAL_MESSAGE'),
+    'InvestmentMetrics가 페이지 수준 안내 문구를 다시 렌더링하면 경고가 중복된다'
+  );
+  assert.ok(
+    !source.includes('TRADE_API_UNAVAILABLE_MESSAGE'),
+    'InvestmentMetrics가 페이지 수준 실패 문구를 다시 렌더링하면 경고가 중복된다'
+  );
+  // 대신 카드 자체가 이유를 말해야 한다.
+  assert.ok(source.includes('TRADE_DERIVED_SUPPRESSED_MESSAGE'), '억제 카드 문구가 사라지면 안 된다');
+  assert.ok(source.includes('일부 기간 미반영'), '관측값 단서가 사라지면 안 된다');
+});
+
 test('multi-compare 차트가 계열별 불완전 여부를 추적하고 표시한다', () => {
   const source = read('app/stats/[type]/type-client.tsx');
   assert.ok(source.includes('incompleteNames'), '계열별 불완전 상태를 추적하지 않는다');

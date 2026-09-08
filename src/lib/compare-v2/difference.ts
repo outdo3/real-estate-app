@@ -75,6 +75,14 @@ function incompleteSourceCaution(a: CompareMetric, b: CompareMetric): string | n
 export function buildDifference(a: CompareMetric, b: CompareMetric): CompareDifference {
   const base = { metricKey: a.key, label: a.label };
 
+  // MOLIT_PARTIAL_TRUST_V2.1 §5 — 불완전 원본 경고는 "비교 가능한 경우"에만 붙이면 안 된다.
+  // 비교가 다른 이유로 이미 접힌 분기(데이터 없음/한쪽만 없음/면적 불일치)에서도 각 단지의
+  // 값 자체는 화면에 그대로 표시되기 때문이다. 실측(Production, A만 부분 실패 + 면적 불일치):
+  // "면적이 달라 직접 비교하기 어렵습니다."만 뜨고 불완전 사실은 어디에도 안 나왔다 —
+  // 사용자는 6억 5,000만이라는 값을 완전한 데이터로 읽게 된다. 그래서 맨 앞에서 한 번
+  // 계산해 모든 반환 경로에 싣는다.
+  const incompleteCaution = incompleteSourceCaution(a, b);
+
   // MISSING(진짜 수집 실패/알 수 없음)은 절대 자동 승패로 이어지지 않는다 — 비교 불가.
   // "확인된 없음"(예: 반경 내 지하철역 없음이 확인된 경우, trust는 SAFE/LIMITED인 채로
   // value만 null)은 MISSING과 다르다 — 둘 다 확인된 없음이면 "비슷함"으로, 한쪽만
@@ -84,21 +92,21 @@ export function buildDifference(a: CompareMetric, b: CompareMetric): CompareDiff
     return {
       ...base, a, b, direction: a.direction, comparable: false,
       reason: '데이터 없음', differenceValue: null, differenceDisplay: null, favors: null,
-      contextSentence: null, caution: null,
+      contextSentence: null, caution: incompleteCaution,
     };
   }
   if (a.value == null && b.value == null) {
     return {
       ...base, a, b, direction: a.direction, comparable: true,
       reason: undefined, differenceValue: null, differenceDisplay: null, favors: null,
-      contextSentence: null, caution: null,
+      contextSentence: null, caution: incompleteCaution,
     };
   }
   if (a.value == null || b.value == null) {
     return {
       ...base, a, b, direction: a.direction, comparable: false,
       reason: '한쪽은 확인된 데이터가 없어 직접 비교하기 어렵습니다.', differenceValue: null, differenceDisplay: null, favors: null,
-      contextSentence: null, caution: null,
+      contextSentence: null, caution: incompleteCaution,
     };
   }
 
@@ -107,7 +115,7 @@ export function buildDifference(a: CompareMetric, b: CompareMetric): CompareDiff
     return {
       ...base, a, b, direction: a.direction, comparable: false,
       reason: '면적이 달라 직접 비교하기 어렵습니다.', differenceValue: null, differenceDisplay: null, favors: null,
-      contextSentence: null, caution: null,
+      contextSentence: null, caution: incompleteCaution,
     };
   }
 
@@ -123,7 +131,6 @@ export function buildDifference(a: CompareMetric, b: CompareMetric): CompareDiff
 
   // 불완전 원본 경고를 먼저 세운다 — 기준 거래일 차이보다 "그 값이 최신인지조차 확실하지
   // 않다"가 더 근본적인 주의사항이다. 둘 다 해당하면 이어 붙여 둘 다 보이게 한다.
-  const incompleteCaution = incompleteSourceCaution(a, b);
   const recencyCaution = priceRecencyCaution(a, b);
   const caution = [incompleteCaution, recencyCaution].filter(Boolean).join(' ') || null;
 
