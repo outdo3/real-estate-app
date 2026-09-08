@@ -16,6 +16,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
+import { resolveTradeReadState } from '@/lib/trade-read-state';
 import { getStatsMenuItem } from '../statsMenu';
 import { buildStatsShareContext, statsRegionShareLabel } from './shareContext';
 import TransactionFeedView from '@/components/stats/TransactionFeedView';
@@ -61,6 +62,11 @@ function CompareView({
 }) {
   const [selected, setSelected] = useState<{ name: string; lawdCd?: string; dong?: string; aptSeq?: string }[]>([]);
   const [series, setSeries] = useState<Record<string, { date: string; price: number }[]>>({});
+  // MOLIT_PARTIAL_TRUST_V2 §4/§12 — 여러 단지의 시세선을 한 차트에 겹쳐 그리는 화면이라,
+  // 어떤 계열이 완전하고 어떤 계열이 일부 기간을 못 불러왔는지 구분하지 않으면 서로
+  // 완전성이 다른 데이터를 같은 자격으로 비교하게 된다(예: 한 단지만 3개월이 빠져
+  // 그 구간 선이 낮게/평평하게 그려짐). 계열별 불완전 여부를 따로 들고 있는다.
+  const [incompleteNames, setIncompleteNames] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
 
   const addComplex = (result: ApartmentSearchResult) => {
@@ -78,6 +84,11 @@ function CompareView({
       delete next[name];
       return next;
     });
+    setIncompleteNames((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -90,18 +101,29 @@ function CompareView({
         const params = new URLSearchParams({ lawdCd: s.lawdCd || lawdCd, type: 'apt', period: '36' });
         if (s.dong) params.set('dong', s.dong);
         return fetch(`/api/apt/${encodeURIComponent(s.name)}?${params.toString()}`)
-          .then((res) => res.json())
-          .then((data) => ({
-            name: s.name,
-            points: (data.trades || [])
-              .map((t: any) => ({ date: t.tradeDate, price: t.price }))
-              .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-          }));
+          .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+          .then(({ ok, data }) => {
+            // 상세/투자지표와 같은 공유 완전성 계약을 쓴다(§6) — 여기서 별도 규칙을
+            // 만들면 화면마다 "완전함"의 뜻이 달라진다.
+            const state = resolveTradeReadState<any>(ok, data);
+            return {
+              name: s.name,
+              incomplete: state.partial || !!state.apiError,
+              points: state.trades
+                .map((t: any) => ({ date: t.tradeDate, price: t.price }))
+                .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+            };
+          });
       })
     ).then((results) => {
       setSeries((prev) => {
         const next = { ...prev };
         results.forEach((r) => { next[r.name] = r.points; });
+        return next;
+      });
+      setIncompleteNames((prev) => {
+        const next = { ...prev };
+        results.forEach((r) => { next[r.name] = r.incomplete; });
         return next;
       });
       setLoading(false);
@@ -110,6 +132,9 @@ function CompareView({
       setLoading(false);
     });
   }, [selected, lawdCd, series]);
+
+  // 선택된 순서 그대로, 실제로 불완전한 계열의 표시명만 모은다.
+  const incompleteSeriesNames = selected.filter((s) => incompleteNames[s.name]).map((s) => s.name);
 
   // STATISTICS REGION FILTER V2 §26 — 단지 비교는 특정 시/군/구 스코프의 단지
   // 자동완성 검색이 전제라, "시도 전체"에서는 어느 구의 단지를 검색해야 할지
@@ -153,6 +178,17 @@ function CompareView({
           </div>
         )}
       </div>
+      {/* §4/§12 — 불완전한 계열이 하나라도 있으면, 완전한 계열과 나란히 그려지기 전에
+          어느 단지가 불완전한지 명시한다. 선 자체를 지우지 않는 이유는 그 거래들이
+          실제로 일어난 사실이기 때문이고, 아무 표시 없이 두지 않는 이유는 그 선이
+          "완전한 시세 이력"으로 읽히기 때문이다. */}
+      {incompleteSeriesNames.length > 0 && !loading && (
+        <div className={styles.compareIncompleteNotice}>
+          {incompleteSeriesNames.join(', ')} — 일부 기간의 거래 정보를 불러오지 못했습니다.
+          아래 그래프에서 해당 단지는 불러온 기간만 반영된 결과라, 다른 단지와 완전히 같은
+          기준의 비교가 아닙니다.
+        </div>
+      )}
       <div className={styles.panelBody} style={{ height: '360px' }}>
         {selected.length === 0 ? (
           <Empty variant="noData" title={`비교할 단지를 ${maxComplexes === 2 ? '2곳' : '2곳 이상'} 검색해서 추가해주세요.`} showMascot={false} />
@@ -167,7 +203,18 @@ function CompareView({
               <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
               <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '13px' }} />
               {selected.map((s, i) => (
-                <Line key={s.name} data={series[s.name] || []} dataKey="price" name={s.name} stroke={COMPARE_COLORS[i % COMPARE_COLORS.length]} strokeWidth={2.5} dot={{ r: 2 }} connectNulls />
+                <Line
+                  key={s.name}
+                  data={series[s.name] || []}
+                  dataKey="price"
+                  /* 범례/툴팁에서도 불완전 계열임을 알 수 있게 라벨에 표시한다 — 점선 같은
+                     새 시각 문법을 만들지 않고(§12) 기존 텍스트 라벨만 확장한다. */
+                  name={incompleteNames[s.name] ? `${s.name} (일부 기간 미반영)` : s.name}
+                  stroke={COMPARE_COLORS[i % COMPARE_COLORS.length]}
+                  strokeWidth={2.5}
+                  dot={{ r: 2 }}
+                  connectNulls
+                />
               ))}
             </LineChart>
           </ResponsiveContainer>

@@ -16209,3 +16209,78 @@ API 변경:
 상태:
 
 완료
+
+## 2026-09-08
+
+### MOLIT PARTIAL TRUST V2 — 파생 지표/비교 화면 부분 실패 전파 + 보안 회귀
+
+작업:
+
+`/api/apt/[name]`이 이미 내려주던 partial/failedMonths/monthsRequested/monthsSucceeded를
+실제로 읽지 않던 소비자 5곳을 찾아 완전성 계약에 연결했다. 원본 라우트에서 끝나 있던
+"FAILED != ZERO"를 사용자 눈에 보이는 마지막 지점까지 밀어 넣는 작업이다.
+
+- 공유 계약(lib/trade-read-state.ts) 확장: 완전성 메타데이터 3필드 추가,
+  관측값/결합계산값을 나눠 판정하는 resolveObservedMetricTrust / resolveDerivedMetricTrust 추가.
+  기존 4필드(trades/apiError/partial/incompleteMessage)의 값과 의미는 불변.
+- InvestmentMetrics: 전세가율/갭은 원본이 불완전하면 억제, 매매가/전세가는 값 유지 +
+  단서. fetch 실패를 빈 배열로 뭉개 "데이터 부족"으로 보이던 경로도 함께 제거.
+- /stats/multi-compare: 계열별 불완전 여부를 추적해 안내 배너 + 범례 표시.
+- /stats/compare(CompareV2): 불완전 원본이면 가격 지표 trust를 낮추고, 어느 단지가
+  불완전한지 밝히는 주의 문구를 붙인다. 불완전한데 거래가 없으면 "최근 거래 없음"이라고
+  말하지 않는다.
+- /stats/large-complex: 라우트가 월별 실패를 세어 partial/failedDistricts를 응답에 싣고
+  화면이 기존 partialBanner로 표시. 경고 범위를 "최근 매매" 칸으로 한정(순위/세대수는 완전).
+- ai-search 비교: 브리핑 입력에 불완전 표시. 조회 실패로 인한 0건이 지역 제약을 풀고
+  이름만으로 재검색하던 identity 위험 경로도 함께 차단.
+
+부수 발견 및 수정 (보안):
+
+- app/api/ledger/route.ts가 catch에서 error.message를 응답 body로 그대로 반환하고 있었다.
+  이 라우트의 요청 URL에는 serviceKey가 들어 있어, fetch/파싱 실패 시 인증키가 클라이언트
+  까지 나갈 수 있는 실제 유출 경로였다(api-molit.ts에서 이미 막아둔 것과 같은 형태가
+  남아 있었음). 응답에는 고정 문구만, 로그는 마스킹 경유로 변경.
+- lib/molit-month-cache.ts의 catch 로그, lib/apt-building-info.ts의 원본 error 객체 로깅도
+  같은 이유로 정리.
+
+서비스 기능 변경:
+
+완전한 데이터 경로는 값/표시 모두 이전과 동일하다. 불완전할 때만 억제·단서·배너가 추가된다.
+
+DB 변경:
+
+없음. 스키마/마이그레이션 0, Production write 0.
+
+API 변경:
+
+/api/stats/large-complex 응답에 partial/failedDistricts 추가(additive, 기존 필드 불변).
+/api/apt/[name] 응답 계약은 변경 없음.
+
+검증:
+
+- node --test --experimental-strip-types "src/lib/*.test.mjs": 289 tests / 288 PASS / 1 FAIL
+  (유일한 실패 trade-history-read.test.mjs는 `Cannot find module .../lib/prisma` — 러너가
+  @/ 별칭을 해석하지 못하는 기존 이슈. 수정 전 HEAD에서도 동일 실패, 이번 변경과 무관)
+- 신규 테스트: trade-read-state 22/22, molit-credential-safety 8/8,
+  compare-price-completeness 12/12, api-molit 25/25 PASS
+- npx tsc --noEmit: src 신규 오류 0 (저장소 전체 24건은 FAIL_EXISTING_SCRIPT_ERRORS —
+  scripts/ 20, tmp/ 4, 기존과 동일)
+- npx eslint src: 0 errors, 5 warnings (전부 기존 unused eslint-disable)
+- npm run build: 성공
+- 로컬 실측: 완전 매매 60/60 trades=237, 완전 전월세 60/60 trades=446,
+  검증된 0건 60/60 trades=0(부분 경고 없음), 전체 실패(type=bogus) ok=0/6 apiError +
+  응답에 serviceKey/URL 없음, large-complex partial=false
+- 페이지 200 확인: / /map /stats /stats/multi-compare /stats/compare /stats/large-complex
+  /apt/대신푸르지오2차 /officetel/2413
+
+한계(정직하게 기록):
+
+- 자연 발생 partial을 QA 시점에 재현하지 못했다. 세션 초반 1회 관측(36개월 중 202312
+  초당 제한 실패)했으나 QA 시점 MOLIT는 정상이었고, §16에 따라 인위적 실패를 유발하지
+  않았다. partial 경로는 단위 테스트(혼합 원천 매트릭스 A~F)로 결정적으로 고정했다.
+- 360/375/390px 시각 QA를 브라우저로 수행하지 못했다(이 환경에 브라우저 자동화 없음).
+  레이아웃은 코드 수준 검토만 했다.
+
+상태:
+
+완료

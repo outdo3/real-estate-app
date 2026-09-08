@@ -20,6 +20,20 @@
   display: none;
 }
 
+/* MOLIT_PARTIAL_TRUST_V2 §4 — 다른 통계 화면(Area84RankingView 등)의 partialBanner와
+   동일한 배색/여백. 긴 한글 문장이 360px에서 어절 단위로 접히게 keep-all. */
+.partialBanner {
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  word-break: keep-all;
+  margin-bottom: 0.6rem;
+}
+
 .chip {
   flex: 0 0 auto;
   padding: 0.4rem 0.75rem;

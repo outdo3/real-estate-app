@@ -3,6 +3,7 @@ import { fetchBuildingRegistryInfo, formatParking } from './apt-building-info';
 import { getUniqueAreaLabels, resolveAreaLabel } from './area-utils';
 import { REGION_DATA } from './regions';
 import { deriveCanonicalAptSeq } from './apt-name-match';
+import { resolveTradeReadState } from './trade-read-state';
 
 export type AiIntent = 'condition_search' | 'regional_stats' | 'compare';
 export type SortIntent = 'recent' | 'price_asc' | 'price_desc';
@@ -407,6 +408,11 @@ export interface CompareComplexData {
   dong: string;
   // DECISION_JOURNEY_V1.1 — 단일 후보로 좁혀졌을 때만 채워진다(deriveCanonicalAptSeq).
   aptSeq: string | null;
+  // MOLIT_PARTIAL_TRUST_V2 §2 — 이 단지의 실거래 조회에서 일부(또는 전부) 기간을
+  // 불러오지 못했는지. tradeCount/latestPrice가 이 플래그와 함께 해석되어야 한다:
+  // 불완전하면 tradeCount는 하한값이지 실제 거래 건수가 아니고, latestPrice도 실제
+  // 최신 거래가 아닐 수 있다.
+  tradesIncomplete: boolean;
 }
 
 // "국민평형" 84㎡(전용 80~89㎡) 밴드 — 국토부 실거래 통계상 가장 거래가 많은 표준 구간.
@@ -425,7 +431,10 @@ async function fetchCompareTarget(name: string, lawdCd: string | null, requestUr
   const tradesUrl = new URL(`/api/apt/${encodeURIComponent(name)}?type=apt&period=12${lawdCdQuery}`, requestUrl);
   const tradesRes = await fetch(tradesUrl);
   const tradesJson = await tradesRes.json();
-  const trades: any[] = Array.isArray(tradesJson.trades) ? tradesJson.trades : [];
+  // MOLIT_PARTIAL_TRUST_V2 §6 — 화면 쪽과 같은 공유 완전성 계약을 서버 경로에서도 쓴다.
+  const tradeState = resolveTradeReadState<any>(tradesRes.ok, tradesJson);
+  const trades: any[] = tradeState.trades;
+  const tradesIncomplete = tradeState.partial || !!tradeState.apiError;
   const latest = trades[0];
 
   // DECISION_JOURNEY_V1.1 — trades는 이미 이 route가 name+dong 기준으로 검증한 거래만
@@ -506,6 +515,7 @@ async function fetchCompareTarget(name: string, lawdCd: string | null, requestUr
     resolvedLawdCd,
     dong,
     aptSeq: canonicalAptSeq,
+    tradesIncomplete,
   };
 }
 
@@ -528,7 +538,11 @@ export async function runCompare(
   // 경우) B도 독립적으로 지오코딩한다.
   const a = await fetchCompareTarget(targetA, null, requestUrl);
   let b = await fetchCompareTarget(targetB, a.resolvedLawdCd || null, requestUrl);
-  if (b.tradeCount === 0 && a.resolvedLawdCd) {
+  // MOLIT_PARTIAL_TRUST_V2 §2/§9 — "그 지역엔 진짜 없다"는 판단은 조회가 완전히 성공한
+  // 0건일 때만 성립한다. 조회가 일부/전부 실패해서 0건이 된 경우까지 지역 제약을 풀고
+  // 이름만으로 다시 찾으면(AGENTS.md "이름만으로 재식별 금지"), 스로틀링 한 번 때문에
+  // 엉뚱한 동명 타 지역 단지가 비교 대상으로 바뀔 수 있다.
+  if (b.tradeCount === 0 && !b.tradesIncomplete && a.resolvedLawdCd) {
     b = await fetchCompareTarget(targetB, null, requestUrl);
   }
   return [a, b];

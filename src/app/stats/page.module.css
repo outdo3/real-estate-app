@@ -699,6 +699,21 @@
   flex-shrink: 0;
 }
 
+/* MOLIT_PARTIAL_TRUST_V2 §4/§12 — 다른 통계 화면의 partialBanner와 같은 배색/톤을
+   그대로 쓴다(새 경고 시각언어를 만들지 않는다). 긴 한글 문장이 360px에서 어절 단위로
+   접히도록 keep-all + 넉넉한 line-height. */
+.compareIncompleteNotice {
+  margin: 0 1rem 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
 .compareRemoveBtn {
   flex-shrink: 0;
   background: none;

@@ -56,6 +56,22 @@ function priceRecencyCaution(a: CompareMetric, b: CompareMetric): string | null 
   return null;
 }
 
+// MOLIT_PARTIAL_TRUST_V2 §4 — 한쪽(또는 양쪽)의 원본이 불완전하면 두 값을 같은 완전성의
+// 데이터로 나란히 제시하지 않는다. 비교를 통째로 없애면 사용자가 얻을 수 있는 정보까지
+// 사라지므로, 어느 쪽이 불완전한지 밝히는 문구를 반드시 함께 낸다("안전한 최소 UI").
+function incompleteSourceCaution(a: CompareMetric, b: CompareMetric): string | null {
+  if (a.sourceIncomplete && b.sourceIncomplete) {
+    return '두 단지 모두 일부 기간의 거래 정보를 불러오지 못해, 완전한 비교가 아닙니다.';
+  }
+  if (a.sourceIncomplete) {
+    return '첫 번째 단지는 일부 기간의 거래 정보를 불러오지 못해, 완전한 비교가 아닙니다.';
+  }
+  if (b.sourceIncomplete) {
+    return '두 번째 단지는 일부 기간의 거래 정보를 불러오지 못해, 완전한 비교가 아닙니다.';
+  }
+  return null;
+}
+
 export function buildDifference(a: CompareMetric, b: CompareMetric): CompareDifference {
   const base = { metricKey: a.key, label: a.label };
 
@@ -105,7 +121,11 @@ export function buildDifference(a: CompareMetric, b: CompareMetric): CompareDiff
     favors = a.direction === 'higher-better' ? (aIsMore ? 'a' : 'b') : (aIsMore ? 'b' : 'a');
   }
 
-  const caution = priceRecencyCaution(a, b);
+  // 불완전 원본 경고를 먼저 세운다 — 기준 거래일 차이보다 "그 값이 최신인지조차 확실하지
+  // 않다"가 더 근본적인 주의사항이다. 둘 다 해당하면 이어 붙여 둘 다 보이게 한다.
+  const incompleteCaution = incompleteSourceCaution(a, b);
+  const recencyCaution = priceRecencyCaution(a, b);
+  const caution = [incompleteCaution, recencyCaution].filter(Boolean).join(' ') || null;
 
   const contextSentence =
     meaningful && differenceDisplay

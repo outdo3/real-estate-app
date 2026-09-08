@@ -209,10 +209,18 @@ export async function POST(request: Request) {
       // 않는다(runCompare/fetchCompareTarget이 각 단지명을 스스로 지오코딩하게 둔다).
       const compareLawdCd = regionExplicit ? lawdCd : null;
       const [a, b] = await runCompare(targetA, targetB, compareLawdCd, request.url);
+      // MOLIT_PARTIAL_TRUST_V2 §2 — 브리핑에 넘기는 요약은 "실제로 조회된 사실"만 담아야
+      // 한다(이 함수의 기존 원칙). 실거래 조회가 일부 실패한 단지의 가격을 아무 단서 없이
+      // 넘기면 브리핑이 그것을 확정된 최신 시세로 서술한다. 위 regional_stats가 partial을
+      // 다루는 방식과 같은 규칙을 비교 경로에도 적용한다.
       const summary = [a, b]
         .map(
-          (c) =>
-            `${c.name}: 최근 실거래 ${c.latestPrice || '정보 없음'}(${c.latestArea || '-'}), 세대수 ${c.totalHouseholds || '정보 없음'}, ${c.parking || '주차 정보 없음'}, 용적률 ${c.far || '정보 없음'}, 건폐율 ${c.bcr || '정보 없음'}, 준공 ${c.buildYear || '정보 없음'}, 커뮤니티시설 ${c.facilities.length > 0 ? c.facilities.join(', ') : '정보 없음'}`
+          (c) => {
+            const price = c.tradesIncomplete
+              ? `최근 실거래 ${c.latestPrice ? `${c.latestPrice}(${c.latestArea || '-'})` : '정보 없음'} — 일부 기간의 거래 정보를 불러오지 못해 최신 거래가 아닐 수 있음(가격 비교 단정 금지)`
+              : `최근 실거래 ${c.latestPrice || '정보 없음'}(${c.latestArea || '-'})`;
+            return `${c.name}: ${price}, 세대수 ${c.totalHouseholds || '정보 없음'}, ${c.parking || '주차 정보 없음'}, 용적률 ${c.far || '정보 없음'}, 건폐율 ${c.bcr || '정보 없음'}, 준공 ${c.buildYear || '정보 없음'}, 커뮤니티시설 ${c.facilities.length > 0 ? c.facilities.join(', ') : '정보 없음'}`;
+          }
         )
         .join(' | ');
       const briefing = await generateBriefing('compare', summary);

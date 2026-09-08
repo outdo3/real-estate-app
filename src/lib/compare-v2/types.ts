@@ -24,6 +24,11 @@ export interface CompareMetric {
   trust: MetricTrust;
   direction: MetricDirection;
   confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
+  // MOLIT_PARTIAL_TRUST_V2 §4/§6 — 이 지표의 원본(실거래 조회)이 일부 기간을 불러오지
+  // 못한 상태에서 계산됐음을 나타낸다. trust만으로는 "면적이 달라서 LIMITED"인지
+  // "원본이 불완전해서 LIMITED"인지 구분할 수 없어, 비교 문구를 정확히 고르기 위해
+  // 별도 optional 플래그로 남긴다(값이 없으면 기존과 동일한 완전 데이터 경로).
+  sourceIncomplete?: boolean;
 }
 
 export interface ScoreDomainView {

@@ -3,6 +3,7 @@
 // aptSeq independently of the trades call) — see COMPARE_V2_ARCHITECTURE_AUDIT.md §21.
 // No new API routes; both are the exact endpoints Detail already calls.
 import { deriveCanonicalAptSeq } from '../apt-name-match';
+import { resolveTradeReadState } from '../trade-read-state';
 import type { CompareApartment, ComparableIdentity } from './types';
 import { selectPriceMetric, buildFactMetrics, buildLocationMetrics, buildScore, domainEvidence } from './metrics';
 
@@ -26,8 +27,14 @@ export async function fetchCompareApartment(query: CompareApartmentQuery): Promi
 
   const tradesJson = tradesSettled.status === 'fulfilled' ? tradesSettled.value : null;
   const scoreJson = scoreSettled.status === 'fulfilled' ? scoreSettled.value : null;
-  const trades: Array<{ name: string; dong: string; aptSeq?: string | null; [k: string]: unknown }> =
-    Array.isArray(tradesJson?.trades) ? tradesJson.trades : [];
+  // MOLIT_PARTIAL_TRUST_V2 §6 — 상세/차트/투자지표와 같은 공유 완전성 계약을 쓴다.
+  // tradesSettled가 rejected면 responseOk=false로 들어가 apiError 상태가 된다.
+  const tradeState = resolveTradeReadState<{ name: string; dong: string; aptSeq?: string | null; [k: string]: unknown }>(
+    tradesSettled.status === 'fulfilled' && !!tradesJson,
+    tradesJson
+  );
+  const trades = tradeState.trades;
+  const tradesIncomplete = tradeState.partial || !!tradeState.apiError;
 
   const resolvedLawdCd: string = tradesJson?.lawdCd || lawdCd;
   const resolvedDong: string = trades[0]?.dong || tradesJson?.dong || dong;
@@ -40,7 +47,7 @@ export async function fetchCompareApartment(query: CompareApartmentQuery): Promi
     ? { kind: 'aptSeq', aptSeq: canonicalAptSeq, lawdCd: resolvedLawdCd, dong: resolvedDong, name: displayName }
     : { kind: 'composite', lawdCd: resolvedLawdCd, dong: resolvedDong, name: displayName };
 
-  const priceMetric = selectPriceMetric(trades as any);
+  const priceMetric = selectPriceMetric(trades as any, tradesIncomplete);
   const factMetrics = buildFactMetrics(domainEvidence(scoreJson, 'complex'));
   const locationMetrics = buildLocationMetrics(
     domainEvidence(scoreJson, 'transport'),

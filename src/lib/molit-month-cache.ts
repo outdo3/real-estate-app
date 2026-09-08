@@ -8,7 +8,7 @@
 //
 // 캐시 키 형식은 기존과 100% 동일하게 유지한다(`molit:{type}:{lawdCd}:{dealYmd}`) —
 // 두 라우트가 같은 원본 월 데이터를 계속 공유해야 하므로 키를 바꾸면 안 된다.
-import { fetchMolitData, type DataType } from '@/lib/api-molit';
+import { fetchMolitData, redactMolitFailureMessage, type DataType } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
 import { classifyMolitMonthResult, type MolitMonthStatus } from '@/lib/apt-trade-completeness';
 
@@ -55,7 +55,10 @@ export async function fetchMolitMonthCached(
   } catch (e) {
     // fetchMolitData는 보통 throw하지 않지만(플레이스홀더 반환), 예외가 나면 0건으로
     // 낙관하지 않고 명시적 실패로 돌려준다.
-    console.warn(`[molit] 월 조회 예외 type=${type} lawdCd=${lawdCd} dealYmd=${dealYmd}: ${(e as Error)?.message}`);
+    // MOLIT_PARTIAL_TRUST_V2 §1 — 이 예외 메시지는 fetch 실패 시 요청 URL(=serviceKey
+    // 포함)을 그대로 담을 수 있는 유일하게 남아 있던 비마스킹 경로였다. 라우트 응답으로
+    // 나가지는 않지만 서버 로그에 인증키를 남기는 것 역시 금지 대상이라 동일하게 지운다.
+    console.warn(`[molit] 월 조회 예외 type=${type} lawdCd=${lawdCd} dealYmd=${dealYmd}: ${redactMolitFailureMessage((e as Error)?.message)}`);
     return { items: [], status: 'FAILED' };
   }
 }

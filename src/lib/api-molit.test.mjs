@@ -131,6 +131,52 @@ test('redactMolitFailureMessage: 비어 있거나 문자열이 아니면 일반 
   assert.equal(redactMolitFailureMessage(''), '알 수 없는 오류');
 });
 
+// ── MOLIT_PARTIAL_TRUST_V2 §17 — 보안 회귀 (fixture 키만 사용) ────────────────
+
+const FIXTURE_KEY_RAW = 'FixtureServiceKey1234567890abcdefABCDEF';
+const FIXTURE_KEY_ENCODED = 'Fixture%2FService%2BKey%3D%3D';
+
+test('보안: URL 인코딩된 인증키 조각이 응답/로그로 되돌아오지 않는다', () => {
+  const leaked = `TypeError: fetch failed for https://apis.data.go.kr/1613000/X?serviceKey=${FIXTURE_KEY_ENCODED}&LAWD_CD=26350`;
+  const safe = redactMolitFailureMessage(leaked);
+  assert.ok(!safe.includes('Fixture%2FService'), '인코딩된 키 조각이 남으면 안 된다');
+  assert.ok(!safe.includes('%3D%3D'));
+  assert.ok(!safe.includes(FIXTURE_KEY_ENCODED));
+});
+
+test('보안: XML 파싱 실패 메시지가 원본 URL을 물고 와도 키가 지워진다', () => {
+  // 파싱 실패 경로는 응답 본문 조각 + 요청 URL을 함께 담는 형태가 관측된다.
+  const leaked = `Failed to parse XML from http://apis.data.go.kr/1613000/Y?serviceKey=${FIXTURE_KEY_RAW}&DEAL_YMD=202609 : Unexpected close tag`;
+  const safe = redactMolitFailureMessage(leaked);
+  assert.ok(!safe.includes(FIXTURE_KEY_RAW));
+  assert.ok(!safe.includes('serviceKey=Fixture'));
+});
+
+test('보안: 상대 URL 형태("?serviceKey=...")의 fetch 오류도 마스킹된다', () => {
+  const leaked = `Failed to parse URL from ?serviceKey=${FIXTURE_KEY_RAW}&LAWD_CD=26350&DEAL_YMD=202609`;
+  const safe = redactMolitFailureMessage(leaked);
+  assert.ok(!safe.includes(FIXTURE_KEY_RAW));
+  assert.ok(safe.includes('serviceKey=[redacted]'));
+});
+
+test('보안: 키가 여러 번 등장해도 전부 지운다', () => {
+  const leaked = `retry1 https://a?serviceKey=${FIXTURE_KEY_RAW} then retry2 https://b?serviceKey=${FIXTURE_KEY_RAW}`;
+  const safe = redactMolitFailureMessage(leaked);
+  assert.ok(!safe.includes(FIXTURE_KEY_RAW), '첫 번째만 지우고 나머지를 흘리면 안 된다');
+});
+
+test('보안: 지원하지 않는 거래 유형(외부 지정 가능)이 키 노출 경로가 되지 않는다', async () => {
+  // type은 쿼리스트링으로 외부에서 지정 가능하므로 실제 노출 경로였다. 어떤 값이 와도
+  // 에러 플레이스홀더의 모든 문자열 필드에 serviceKey/키 조각이 없어야 한다.
+  for (const bogusType of ['bogus-type', '', '../etc', 'apt2']) {
+    const result = await fetchMolitData({ type: bogusType, lawdCd: '26350', dealYmd: '202609' });
+    assert.equal(result.length, 1);
+    const serialized = JSON.stringify(result[0]);
+    assert.ok(!serialized.includes('serviceKey='), `type=${bogusType}에서 serviceKey가 노출됐다`);
+    assert.ok(!serialized.includes('apis.data.go.kr'), `type=${bogusType}에서 요청 URL이 노출됐다`);
+  }
+});
+
 test('fetchMolitData: 지원하지 않는 거래 유형은 URL을 만들기 전에 막고 키를 노출하지 않는다', async () => {
   // 이 테스트 환경에는 .env가 로드되지 않아 키 부재 오류가 먼저 날 수도 있다. 어느 쪽이든
   // 검증 대상은 같다: 에러 플레이스홀더 어디에도 serviceKey/키 조각이 남지 않는다.

@@ -193,7 +193,16 @@ export async function fetchBuildingRegistryInfo(
     // 시도한다 — 자세한 안전조건은 fetchBrTitleInfoFallback 주석 참고.
     return await fetchBrTitleInfoFallback(cleanKey, lawdCd, bjdongCd, bun, ji);
   } catch (e) {
-    console.warn('Public API building registry failed', e);
+    // MOLIT_PARTIAL_TRUST_V2 §1 — 예전에는 error 객체를 통째로 찍었다. 이 함수의 요청
+    // URL에는 serviceKey가 들어 있고, fetch 실패 메시지/스택에는 그 URL이 그대로 담길 수
+    // 있어 서버 로그에 인증키가 남는 경로였다. 진단에 필요한 건 "무엇이 실패했는가"이지
+    // 원본 메시지가 아니므로 오류 종류만 남긴다.
+    //
+    // 여기서 공유 마스킹 함수(api-molit.ts의 redactMolitFailureMessage)를 import하지
+    // 않는 이유: 이 모듈은 의도적으로 의존성이 없어야 순수 파서 단위 테스트
+    // (apt-building-info.test.mjs)가 그대로 실행된다. 원본 메시지를 아예 쓰지 않으면
+    // 마스킹 자체가 필요 없다.
+    console.warn('Public API building registry failed:', (e as Error)?.name || 'UnknownError');
     return null;
   }
 }

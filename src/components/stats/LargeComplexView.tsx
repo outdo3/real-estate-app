@@ -37,6 +37,10 @@ interface LargeComplexResponse {
   total?: number;
   items?: ComplexItem[];
   pagination?: { offset: number; limit: number; total: number; hasMore: boolean };
+  // MOLIT_PARTIAL_TRUST_V2 §4 — "최근 매매" 칸의 원천(MOLIT 월별 조회)이 일부 실패했는지.
+  // 세대수/입주연도/주차 등 DB 기반 값은 이 플래그와 무관하게 완전하다.
+  partial?: boolean;
+  failedDistricts?: string[];
 }
 
 const HOUSEHOLD_FILTERS = [
@@ -123,6 +127,15 @@ export default function LargeComplexView({
           </button>
         ))}
       </div>
+
+      {/* 순위/세대수는 DB 기반이라 완전하다 — 불완전한 건 "최근 매매" 칸뿐이므로
+          경고 문구도 딱 그 범위만 말한다(과잉 경고 금지). */}
+      {data?.partial && (
+        <div className={styles.partialBanner}>
+          일부 지역({data.failedDistricts?.length ?? 0}곳)의 실거래 정보를 불러오지 못해,
+          아래 목록의 &apos;최근 매매&apos;가 비어 있을 수 있어요. 순위와 세대수는 정상입니다.
+        </div>
+      )}
 
       {isLoading && offset === 0 ? (
         <InlineLoading message={`${displayRegionName} 대단지 데이터를 불러오고 있어요...`} />

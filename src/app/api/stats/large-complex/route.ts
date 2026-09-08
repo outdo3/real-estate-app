@@ -87,6 +87,11 @@ export async function GET(request: Request) {
 
     // PERF — 구 단위로 개별 캐시한다(5분 TTL, 기존 stats 라우트 관례 재사용). 페이지가
     // 바뀌어도(같은 구가 다시 등장하면) MOLIT 재조회 없이 캐시를 공유한다.
+    // MOLIT_PARTIAL_TRUST_V2 §4 — fetchMonthsThrottledWithStatus는 월별 실패 여부를
+    // 이미 알려주는데 이 라우트가 그걸 버리고 있었다. 그 결과 스로틀링으로 실패한 달의
+    // 거래가 통째로 빠져도 화면에는 "최근 매매" 칸이 그냥 비어 보였다 — 실패를 무거래로
+    // 위장하는 경로다. 어느 구에서 몇 개 월이 실패했는지 집계해 응답에 싣는다.
+    const failedDistricts: string[] = [];
     if (distinctLawdCds.length > 0) {
       const perDistrict = await Promise.all(
         distinctLawdCds.map((lawdCd) =>
@@ -94,7 +99,14 @@ export async function GET(request: Request) {
             const tasks: MonthTask[] = months.map((m) => ({ key: m, lawdCd, dealYmd: m, type: 'apt' as const }));
             const results = await fetchMonthsThrottledWithStatus(tasks);
             const byAptSeq = new Map<string, { dealAmount: number; dealDate: string }>();
+            let failedMonths = 0;
             for (const m of months) {
+              // 실패한 달을 "그 달 거래 0건"으로 접지 않는다. 성공했지만 거래가 없는 달
+              // (SUCCESS_EMPTY)은 여전히 정상이고 failedMonths를 올리지 않는다.
+              if (results[m]?.failed) {
+                failedMonths += 1;
+                continue;
+              }
               const items = results[m]?.items || [];
               for (const item of items) {
                 if (!item || item.typeLabel === '에러' || item.dealCanceled || !(item.dealAmount > 0)) continue;
@@ -106,12 +118,17 @@ export async function GET(request: Request) {
                 }
               }
             }
-            return Array.from(byAptSeq.entries());
+            // 캐시에는 불완전성 표시까지 함께 넣는다 — 5분 TTL 안에 재사용될 때도
+            // partial이 완전한 결과로 둔갑하지 않게 한다(§10 "PARTIAL은 complete로
+            // 취급되지 않는다"). 실패 결과를 아예 캐시하지 않으면 스로틀링 중에 MOLIT
+            // 재호출이 폭증하므로, 캐시하되 정직하게 표시하는 쪽을 택한다.
+            return { entries: Array.from(byAptSeq.entries()), lawdCd, failedMonths };
           })
         )
       );
-      for (const entries of perDistrict) {
-        for (const [seq, trade] of entries) recentTradeByAptSeq.set(seq, trade);
+      for (const district of perDistrict) {
+        for (const [seq, trade] of district.entries) recentTradeByAptSeq.set(seq, trade);
+        if (district.failedMonths > 0) failedDistricts.push(district.lawdCd);
       }
     }
 
@@ -159,6 +176,11 @@ export async function GET(request: Request) {
       items,
       pagination: { offset, limit, total, hasMore: offset + limit < total },
       recentTradeWindowMonths: RECENT_TRADE_MONTHS,
+      // 다른 통계 라우트(rankings/dashboard/feed 등)와 같은 이름·같은 의미의 필드다.
+      // 세대수/입주연도 등 DB 기반 값은 이 플래그와 무관하게 완전하다 — partial이
+      // 가리키는 것은 "최근 매매" 칸뿐이라는 점을 화면 문구에서 구분한다.
+      partial: failedDistricts.length > 0,
+      failedDistricts,
     });
   } catch (error) {
     console.error('Failed to load large complex ranking:', error);

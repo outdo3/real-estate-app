@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { redactMolitFailureMessage } from '@/lib/api-molit';
 
 const API_KEY = process.env.DATA_GO_KR_API_KEY;
 const API_BASE = 'http://apis.data.go.kr/1613000/BldRgstHubService';
@@ -101,7 +102,8 @@ export async function GET(request: Request) {
           matchedItem.useAprDay = tMatch.useAprDay;
         }
       } catch(e) {
-        console.error('Title fetch failed during expos request', e);
+        // 표제부 URL에도 serviceKey가 들어 있으므로 로그에도 원본 메시지를 남기지 않는다.
+        console.error('Title fetch failed during expos request', redactMolitFailureMessage((e as Error)?.message));
       }
     } else {
       matchedItem = itemArray[0];
@@ -119,7 +121,12 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ data: matchedItem });
   } catch (error: any) {
-    console.error('Ledger API Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // MOLIT_PARTIAL_TRUST_V2 §1 — 이 라우트의 요청 URL에는 serviceKey가 그대로 들어간다.
+    // fetch/JSON 파싱 실패 메시지에는 그 URL이 통째로 담길 수 있는데, 예전에는 error.message를
+    // 응답 body로 그대로 돌려줘서 인증키가 클라이언트까지 노출될 수 있었다(api-molit.ts에서
+    // 이미 막아둔 것과 정확히 같은 경로가 여기 남아 있었다). 로그는 마스킹해서 남기고,
+    // 응답에는 원본 메시지를 아예 싣지 않는다.
+    console.error('Ledger API Error:', redactMolitFailureMessage(error?.message));
+    return NextResponse.json({ error: '건축물대장 조회에 실패했습니다.' }, { status: 500 });
   }
 }
