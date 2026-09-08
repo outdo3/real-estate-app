@@ -340,7 +340,14 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
   return (
     <div className={styles.panel}>
       <div className={styles.panelHeader}>
-        <SectionHeader title="평당가 분위 지도" description="최근 12개월 · 5분위 색상(낮음→높음: 파랑-초록-노랑-주황-빨강, 브랜드 그린과 무관한 별도 5단계 배색)" />
+        {/* 분위 색을 내린 상태에서 설명만 "5분위 색상 …"으로 남으면, 있지도 않은 색을
+            약속하는 문장이 배너 바로 위에 놓여 서로 모순된다. */}
+        <SectionHeader
+          title="평당가 분위 지도"
+          description={incomplete
+            ? '최근 12개월 · 거래 위치만 표시'
+            : '최근 12개월 · 5분위 색상(낮음→높음: 파랑-초록-노랑-주황-빨강, 브랜드 그린과 무관한 별도 5단계 배색)'}
+        />
       </div>
       {/* §5/§6 — 원본이 불완전하면 분위 범례 자체를 내린다. 색이 없는데 범례만 남으면
           "색이 있는데 못 읽는 것"처럼 보인다. 대신 왜 색이 없는지 한 번만 설명한다.

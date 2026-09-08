@@ -16350,3 +16350,82 @@ API 변경:
 상태:
 
 완료
+
+### TRANSACTIONS API TRUST V1 — /api/transactions 조용한 과소집계 차단
+
+작업:
+
+`/api/transactions`가 원본 조회 일부 실패 시 조용히 과소집계할 수 있는지 감사했다.
+결론: **가능했다(YES)**.
+
+이 라우트는 저장소에서 유일하게 bare array를 내려주던 곳이라 "요청한 기간 중 몇 개월을
+실제로 읽었는가"를 담을 자리가 없었다. 비부산 지역은 12개월치 MOLIT를 게이팅 없이 동시
+호출하는데, fetchMolitData는 실패해도 throw하지 않고 에러 플레이스홀더 1행을 반환한다.
+그 행이 응답 배열에 그대로 실려 나갔고 소비자는 좌표/평형이 없다는 이유로 조용히
+걸러냈다 — N개월 실패가 N개월 무거래와 화면상 완전히 동일했다.
+
+분위 지도에서 특히 치명적이다: 분위는 "불러온 것들 사이의 상대 순위"라 거래가 빠지면
+5등분 경계가 이동해 같은 단지가 다른 색으로 칠해진다. 색이 그 화면의 결론이다.
+
+- 라우트: /api/apt/[name]가 이미 쓰는 판정 함수(classifyMolitMonthResult /
+  foldMonthResults / summarizeTradeCompleteness)를 그대로 재사용해 월별 성공/실패를
+  보존하고, 가짜 에러 행을 제거하고, envelope
+  { transactions, partial, failedMonths, monthsRequested, monthsSucceeded }로 내려준다.
+  부산 DB 경로는 단일 쿼리(성공 아니면 예외)라 항상 완전으로 보고한다.
+- 소비자 3곳 모두 공유 리더 resolveTransactionsReadState를 쓴다. 이 리더는 예전 bare
+  array도 계속 받아들여 배포 중 버전이 어긋나도 화면이 깨지지 않는다.
+- 분위 지도: 불완전하면 분위 색을 중립 회색 하나로 대체하고 범례를 안내로 교체한다.
+  마커는 남긴다(실제 거래다 — 신뢰할 수 없는 건 "몇 분위인가"이지 거래 사실이 아니다).
+  실패 단위가 "월"이라 구 전체에 똑같이 영향을 주고, 어떤 단지가 빠졌는지 알 수 없으므로
+  마커 개별 제외는 불가능하다 → 구 전체를 불완전으로 표시한다.
+- 지도: 기존 aptNotice 체계로 안내. 60초 마커 캐시에 partial을 함께 저장한다 —
+  플래그 없이 markers만 캐시하면 캐시 히트에서 불완전이 완전으로 되살아난다.
+- AI 조건검색: 빈 목록의 이유(조회 실패/부분 실패/진짜 없음)를 구분하고, 부분 실패면
+  브리핑 입력에 "전부라고 단정 금지"를 넘긴다.
+
+부수 수정(보안):
+
+catch가 원본 error 객체를 통째로 로그에 찍고 있었다(이 라우트는 MOLIT과 DB를 모두
+거친다). 공유 마스킹 함수를 통과시킨다. 응답 body는 원래부터 고정 문구라 유출 경로가
+아니었고, 에러 플레이스홀더가 응답에서 아예 제거되어 더 안전해졌다.
+
+서비스 기능 변경:
+
+완전한 데이터 경로는 값/색상/표시 모두 이전과 동일하다. 불완전할 때만 분위 색 억제와
+안내가 추가된다. 응답 형태가 배열 → envelope으로 바뀌었으나 리더가 양쪽을 받는다.
+
+DB 변경:
+
+없음.
+
+API 변경:
+
+/api/transactions 응답이 bare array → { transactions, partial, failedMonths,
+monthsRequested, monthsSucceeded } envelope. 소비자 3곳 모두 함께 갱신했고,
+공유 리더가 예전 배열 형태도 계속 받아들인다.
+
+검증:
+
+- node --test --experimental-strip-types "src/lib/*.test.mjs": 309 tests / 308 PASS / 1 FAIL
+  (기존 trade-history-read.test.mjs 러너 이슈, HEAD에서도 동일)
+- 신규 transactions-read-state.test.mjs 18/18 PASS
+  (A~F 월 실패 매트릭스, 검증된 0건 vs 전부 실패, 회복, envelope/배열 호환, 캐시 안전)
+- npx tsc --noEmit: src 신규 오류 0 (기존 24건 유지)
+- npx eslint src: 0 errors, 5 warnings (기존)
+- npm run build: 성공
+- 로컬 실측: 부산 DB cold 1507ms/warm 270ms, 비부산 MOLIT cold 1383ms/warm 1025ms
+  (새 외부 호출 0, 새 DB 쿼리 0, 동시성 변경 0)
+- Production 시각 QA(360/375/390/767/959/1280): 분위 지도 불완전 = 색 1종(중립 회색),
+  범례 숨김, 안내 1회, overflow 없음 / 완전 = 5분위 색 전부, 범례 표시, 안내 0회.
+  지도 불완전 = 안내 1회 / 완전 = 0회.
+
+남은 위험:
+
+경로 B는 next:{revalidate:3600}을 쓰는데 MOLIT 스로틀링이 HTTP 200 + 에러 XML로 오므로
+그 응답이 1시간 캐시될 수 있다. 이제 partial=true로 정직하게 표시되지만 회복이 최대
+1시간 지연될 수 있다. /api/apt/[name]가 force-dynamic + fetchMolitMonthCached로 이미
+해결한 문제이며, egress/성능 영향이 있어 별도 STEP이 맞다.
+
+상태:
+
+완료
