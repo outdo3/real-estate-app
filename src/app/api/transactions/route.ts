@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchMolitData, formatKoreanPrice, DataType } from '@/lib/api-molit';
+import { fetchMolitData, formatKoreanPrice, redactMolitFailureMessage, DataType } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
 import { buildMasterCoordIndex, resolveApartmentCoords, type MasterCoordRow } from '@/lib/map-marker-coords';
 import { aptNamesMatch } from '@/lib/apt-name-match';
@@ -8,6 +8,12 @@ import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey 
 import { queryTrades } from '@/lib/trade-history-read';
 import { getOrSetCache } from '@/lib/server-cache';
 import { getMasterCoords } from '@/lib/master-coords-cache';
+import {
+  classifyMolitMonthResult,
+  foldMonthResults,
+  summarizeTradeCompleteness,
+  type MonthFetchOutcome,
+} from '@/lib/apt-trade-completeness';
 
 // MAP_PERFORMANCE_V1 — 이 route가 지도(map/page.tsx)·분위지도(stats type-client.tsx)·
 // AI 검색 조건검색(ai-search.ts runConditionSearch) 3곳 모두에서 정확히 같은 모양
@@ -77,10 +83,17 @@ export async function GET(request: Request) {
 
       let data: any[];
       let usedDbFirst = false;
+      // TRANSACTIONS_API_TRUST_V1 — 이 응답이 "요청한 기간 전체를 실제로 읽은 결과"인지
+      // 소비자가 알 수 있어야 한다. DB 경로는 단일 쿼리라 성공 아니면 throw(=500)이므로
+      // 부분 상태가 없다. MOLIT 경로만 월 단위로 부분 실패할 수 있다.
+      let completeness = { partial: false, failedMonths: [] as string[], monthsRequested: 0, monthsSucceeded: 0 };
 
       if (isDbFirstEligible) {
         data = await getOrSetCache(`transactions-apt-12mo-db:${lawdCd}`, 30 * 60 * 1000, () => fetchApt12MonthsFromDb(lawdCd));
         usedDbFirst = true;
+        // DB 경로: 12개월 창을 한 번의 쿼리로 읽는다. 실패는 예외로 드러나므로 여기까지
+        // 왔다는 것은 그 창을 온전히 읽었다는 뜻이다(행이 0건이어도 "검증된 0건").
+        completeness = { partial: false, failedMonths: [], monthsRequested: 12, monthsSucceeded: 12 };
       } else {
         // loadMore=0 -> offset=0 (last 3 months)
         // loadMore=1 -> offset=3 (previous 3 months)
@@ -89,9 +102,29 @@ export async function GET(request: Request) {
           : recentMonths(3, loadMore * 3);
 
         // 공공데이터 API 병렬 호출 (속도 개선)
+        // fetchMolitData는 실패해도 throw하지 않고 typeLabel:'에러' 플레이스홀더 1건을
+        // 반환한다. 예전에는 그 플레이스홀더가 그대로 data에 섞여 응답으로 나갔고, 좌표/
+        // 평형이 없다는 이유로 소비자에서 조용히 걸러져 "그 달은 원래 거래가 없었다"와
+        // 구분되지 않았다 — 12개 월을 동시에 호출하는 경로라(초당 제한에 걸리기 쉽다)
+        // 실제로 일어날 수 있는 과소집계였다. /api/apt/[name]가 이미 쓰는 판정 함수를
+        // 그대로 재사용해 월별 성공/실패를 보존한다(새 의미 만들지 않음).
         const promises = months.map(dealYmd => fetchMolitData({ lawdCd, dealYmd, type }));
         const results = await Promise.all(promises);
-        data = results.flat();
+        const outcomes: MonthFetchOutcome[] = months.map((dealYmd, i) => ({
+          dealYmd,
+          items: results[i],
+          status: classifyMolitMonthResult(results[i]),
+        }));
+        // 실패 월의 플레이스홀더는 거래 배열에 넣지 않는다(가짜 행 제거).
+        const folded = foldMonthResults(outcomes);
+        data = folded.items;
+        const summary = summarizeTradeCompleteness(folded.cells);
+        completeness = {
+          partial: summary.partial,
+          failedMonths: summary.failedMonths,
+          monthsRequested: summary.monthsRequested,
+          monthsSucceeded: summary.monthsSucceeded,
+        };
       }
 
       if (dong && dong !== 'all') {
@@ -162,15 +195,23 @@ export async function GET(request: Request) {
         });
       }
 
-      return NextResponse.json(data);
+      // TRANSACTIONS_API_TRUST_V1 — bare array였던 응답을 envelope으로 바꾼다. 완전성을
+      // 담을 자리가 없어서 부분 실패를 말할 방법 자체가 없었다. 소비자는 공유 리더
+      // (resolveTransactionsReadState)를 쓰며, 그 리더는 배열도 계속 받아들이므로
+      // 배포 중 버전이 잠시 어긋나도 화면이 깨지지 않는다.
+      return NextResponse.json({ transactions: data, ...completeness });
     }
 
     // 2. 파라미터가 없으면 기존 DB 데이터(TOP 5) 반환
     const transactions: any[] = [];
 
-    return NextResponse.json(transactions);
+    return NextResponse.json({ transactions, partial: false, failedMonths: [], monthsRequested: 0, monthsSucceeded: 0 });
   } catch (error) {
-    console.error('Failed to fetch transactions:', error);
+    // TRANSACTIONS_API_TRUST_V1 §9 — 응답 body는 원래부터 고정 문구라 유출 경로가 아니다.
+    // 로그만 원본 error 객체를 통째로 찍고 있었는데, 이 라우트는 MOLIT 호출과 DB 조회를
+    // 모두 거치므로 실패 메시지에 요청 URL/접속 정보가 담길 수 있다. 다른 공공데이터
+    // 경로와 동일하게 공유 마스킹 함수를 통과시킨다.
+    console.error('Failed to fetch transactions:', redactMolitFailureMessage((error as Error)?.message));
     return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
   }
 }

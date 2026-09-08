@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     let payload: Record<string, unknown>;
 
     if (classification.intent === 'condition_search') {
-      const complexes = await runConditionSearch(
+      const conditionResult = await runConditionSearch(
         lawdCd,
         {
           maxPriceEok: classification.maxPriceEok,
@@ -144,11 +144,18 @@ export async function POST(request: Request) {
         request.url,
         { complexName: complexNameHint, sortBy }
       );
+      const complexes = conditionResult.complexes;
 
       if (complexes.length === 0) {
-        const notFoundMessage = complexNameHint
-          ? '해당하는 아파트 단지를 찾지 못했습니다. 검색어를 확인해주세요.'
-          : '조건에 맞는 단지를 찾지 못했습니다.';
+        // TRANSACTIONS_API_TRUST_V1 — 빈 목록의 이유를 구분한다. 조회가 실패했거나 일부
+        // 기간을 못 읽었으면 "조건에 맞는 단지가 없다"고 단정할 수 없다(§13 zero/no-data).
+        const notFoundMessage = conditionResult.unavailable
+          ? '실거래 정보를 불러오지 못해 조건에 맞는 단지를 확인할 수 없습니다.'
+          : conditionResult.partial
+            ? '일부 기간의 거래 정보를 불러오지 못해 조건에 맞는 단지를 확인할 수 없습니다.'
+            : complexNameHint
+              ? '해당하는 아파트 단지를 찾지 못했습니다. 검색어를 확인해주세요.'
+              : '조건에 맞는 단지를 찾지 못했습니다.';
         const briefing = await generateBriefing('condition_search', notFoundMessage);
         payload = { intent: 'condition_search', briefing, complexes: [], lawdCd };
       } else {
@@ -164,6 +171,12 @@ export async function POST(request: Request) {
           })
           .join(' / ');
 
+        // 부분 실패면 이 목록이 "조건에 맞는 전부"가 아니다 — 브리핑이 완결된 목록처럼
+        // 서술하지 않도록 요약 입력에 그 사실을 함께 넘긴다(regional_stats와 같은 규칙).
+        const summaryWithTrust = conditionResult.partial
+          ? `${summary} / 주의: 일부 기간의 거래 정보를 불러오지 못해 이 목록이 조건에 맞는 단지 전부가 아닐 수 있음(전부라고 단정 금지)`
+          : summary;
+
         // 명시적 정렬/특정 단지 검색이 아닌 "일반 조건 브라우징"일 때만 "세대수 많은
         // 대표 대단지 목록" 안내 문장을 붙인다 — 세대수 내림차순이 실제 기본 정렬이므로.
         let leadInSentence: string | undefined;
@@ -177,7 +190,7 @@ export async function POST(request: Request) {
           leadInSentence = [regionLabel, priceLabel].filter(Boolean).join(' ') + ' 단지 중 세대수가 많은 대표 대단지 목록입니다.';
         }
 
-        const briefing = await generateBriefing('condition_search', summary, {
+        const briefing = await generateBriefing('condition_search', summaryWithTrust, {
           requireSchoolMention: classification.nearElementarySchool,
           leadInSentence,
           fallbackComplexes: complexes.slice(0, 5).map((c) => ({ name: c.name, totalHouseholds: c.totalHouseholds, price: c.price })),

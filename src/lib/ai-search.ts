@@ -3,7 +3,7 @@ import { fetchBuildingRegistryInfo, formatParking } from './apt-building-info';
 import { getUniqueAreaLabels, resolveAreaLabel } from './area-utils';
 import { REGION_DATA } from './regions';
 import { deriveCanonicalAptSeq } from './apt-name-match';
-import { resolveTradeReadState } from './trade-read-state';
+import { resolveTradeReadState, resolveTransactionsReadState } from './trade-read-state';
 
 export type AiIntent = 'condition_search' | 'regional_stats' | 'compare';
 export type SortIntent = 'recent' | 'price_asc' | 'price_desc';
@@ -181,6 +181,17 @@ export interface NearestSchoolInfo {
   distanceM: number;
 }
 
+// TRANSACTIONS_API_TRUST_V1 — 조건검색 결과는 "조건에 맞는 단지 전부"로 읽힌다.
+// 원본 실거래 조회가 일부 실패하면 목록이 실제보다 짧아지므로, 목록만 돌려주면
+// 호출부가 그 사실을 알 수 없다.
+export interface ConditionSearchResult {
+  complexes: ConditionSearchComplex[];
+  /** 일부 기간을 못 읽어 목록이 실제보다 짧을 수 있다. */
+  partial: boolean;
+  /** 실거래 조회 자체가 실패했다(=빈 목록이 "조건에 맞는 단지 없음"이 아니다). */
+  unavailable: boolean;
+}
+
 export interface ConditionSearchComplex {
   name: string;
   dong: string;
@@ -237,11 +248,17 @@ export async function runConditionSearch(
   conditions: Pick<Classification, 'maxPriceEok' | 'minParkingPerHousehold' | 'minTotalHouseholds' | 'newBuildOnly' | 'nearElementarySchool'>,
   requestUrl: string,
   options?: { complexName?: string | null; sortBy?: SortIntent | null }
-): Promise<ConditionSearchComplex[]> {
+): Promise<ConditionSearchResult> {
   const txUrl = new URL(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`, requestUrl);
   const res = await fetch(txUrl);
-  const trades = await res.json();
-  if (!Array.isArray(trades)) return [];
+  // TRANSACTIONS_API_TRUST_V1 — 배열/envelope 양쪽을 받는 공유 리더를 쓴다.
+  // 조건검색 결과는 "이 조건에 맞는 단지 목록"이라 부분 실패면 목록이 실제보다 짧아진다.
+  // 그 사실을 호출부가 알 수 있게 반환값에 함께 싣는다(모듈 전역 변수로 두면 동시
+  // 요청끼리 서로의 상태를 덮어쓴다).
+  const txState = resolveTransactionsReadState<any>(res.ok, await res.json());
+  if (txState.apiError) return { complexes: [], partial: false, unavailable: true };
+  const trades = txState.trades;
+  const partial = txState.partial;
 
   // 단지(dong+name)별 최신 거래 1건만 남긴다 — /map 페이지와 동일한 dedup 방식.
   const byComplex = new Map<string, any>();
@@ -334,7 +351,7 @@ export async function runConditionSearch(
     filtered = [...filtered].sort((a, b) => (b.totalHouseholds ?? -1) - (a.totalHouseholds ?? -1));
   }
 
-  return filtered.slice(0, 10);
+  return { complexes: filtered.slice(0, 10), partial, unavailable: false };
 }
 
 // ── 지역 통계 ──

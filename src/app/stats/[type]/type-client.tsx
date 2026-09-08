@@ -16,7 +16,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
-import { resolveTradeReadState } from '@/lib/trade-read-state';
+import { resolveTradeReadState, resolveTransactionsReadState } from '@/lib/trade-read-state';
 import { getStatsMenuItem } from '../statsMenu';
 import { buildStatsShareContext, statsRegionShareLabel } from './shareContext';
 import TransactionFeedView from '@/components/stats/TransactionFeedView';
@@ -235,6 +235,11 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
   // "표시할 좌표 데이터가 없습니다"(no-data)와 구분이 안 됐다. 실패 여부를 별도로
   // 추적해 에러와 진짜 0건을 다른 화면으로 보여준다.
   const [apiError, setApiError] = useState(false);
+  // TRANSACTIONS_API_TRUST_V1 §5 — 분위(quintile)는 "불러온 것들 사이의 상대 순위"다.
+  // 한 달이라도 못 읽으면 그 달의 거래가 통째로 빠지면서 5등분 경계 자체가 이동하고,
+  // 같은 단지가 다른 색으로 칠해진다. 색이 이 화면의 결론이므로, 원본이 불완전하면
+  // 분위 색을 그대로 보여줄 수 없다.
+  const [incomplete, setIncomplete] = useState(false);
   const [KakaoMap, setKakaoMap] = useState<any>(null);
 
   useEffect(() => {
@@ -272,20 +277,26 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
     if (!lawdCd) return;
     setLoading(true);
     setApiError(false);
+    setIncomplete(false);
     fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`)
-      .then((res) => res.json())
-      .then((data: any) => {
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
         // LAUNCH_TRUST_BLOCKERS_V1 — /api/transactions는 실패 시 예외를 던지지
         // 않고 { error: ... }(배열이 아닌 객체)를 200/500으로 반환한다. 이전에는
         // Array.isArray 체크만 하고 그냥 빈 배열([])로 취급해, API 실패가 "이
         // 지역엔 거래가 없다"는 진짜 0건과 구분 없이 같은 화면(no-data)으로
         // 보였다.
-        if (!Array.isArray(data)) {
+        // TRANSACTIONS_API_TRUST_V1 — 그 판정을 공유 리더로 옮긴다. 실패/부분 실패/
+        // 검증된 0건이 각각 다른 상태로 구분된다(배열 응답도 계속 받아들인다).
+        const state = resolveTransactionsReadState<any>(ok, json);
+        if (state.apiError) {
           setApiError(true);
           setMarkers([]);
           setLoading(false);
           return;
         }
+        setIncomplete(state.partial);
+        const data = state.trades;
         const byComplex: Record<string, any> = {};
         data.forEach((t) => {
           if (!t.lat || !t.lng || !t.pyung || t.pyung <= 0) return;
@@ -331,14 +342,26 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
       <div className={styles.panelHeader}>
         <SectionHeader title="평당가 분위 지도" description="최근 12개월 · 5분위 색상(낮음→높음: 파랑-초록-노랑-주황-빨강, 브랜드 그린과 무관한 별도 5단계 배색)" />
       </div>
-      <div style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 1.25rem', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-        {['1분위(낮음)', '2분위', '3분위', '4분위', '5분위(높음)'].map((label, i) => (
-          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: 10, height: 10, borderRadius: '50%', background: QUINTILE_COLORS[i], display: 'inline-block' }} />
-            {label}
-          </span>
-        ))}
-      </div>
+      {/* §5/§6 — 원본이 불완전하면 분위 범례 자체를 내린다. 색이 없는데 범례만 남으면
+          "색이 있는데 못 읽는 것"처럼 보인다. 대신 왜 색이 없는지 한 번만 설명한다.
+          이 화면은 한 번에 시/군/구 하나만 그리고, 실패 단위는 "월"이라 그 구 전체에
+          똑같이 영향을 준다 — 어떤 단지가 빠졌는지 알 수 없으므로 마커를 개별로
+          제외하는 것은 불가능하다. 그래서 지도 전체를 불완전으로 표시한다. */}
+      {incomplete ? (
+        <div className={styles.compareIncompleteNotice}>
+          일부 기간의 거래 정보를 불러오지 못해, 평당가 분위(1~5분위)를 계산할 수 없습니다.
+          아래 지도는 불러온 거래의 위치만 표시하며, 색으로 가격 수준을 나타내지 않습니다.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 1.25rem', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+          {['1분위(낮음)', '2분위', '3분위', '4분위', '5분위(높음)'].map((label, i) => (
+            <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: QUINTILE_COLORS[i], display: 'inline-block' }} />
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
       <div style={{ height: '500px', position: 'relative' }}>
         {!apiKey || !isMapReady || !KakaoMap ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><InlineLoading message="지도를 불러오는 중입니다..." /></div>
@@ -359,10 +382,16 @@ function PriceMapView({ lawdCd }: { lawdCd: string | null }) {
             {markers.map((m) => (
               <KakaoMap.CustomOverlayMap key={m.id} position={{ lat: m.lat, lng: m.lng }} yAnchor={0.5}>
                 <div
+                  /* 불완전할 때도 개별 거래 가격은 실제 관측치라 툴팁에 그대로 남긴다 —
+                     신뢰할 수 없는 것은 "이 단지가 이 지역에서 몇 분위인가"라는 상대
+                     판단이지, 그 단지가 그 값에 거래됐다는 사실이 아니다. */
                   title={`${m.name} · 평당 ${m.pricePerPyung.toLocaleString('ko-KR')}만원`}
                   style={{
                     width: '14px', height: '14px', borderRadius: '50%',
-                    background: QUINTILE_COLORS[m.tier], border: '2px solid white',
+                    // 분위 색은 완전한 데이터에서만 쓴다. 불완전하면 순위를 주장하지 않는
+                    // 중립 회색으로 그린다(마커를 지우면 실제 거래까지 사라진다).
+                    background: incomplete ? '#94a3b8' : QUINTILE_COLORS[m.tier],
+                    border: '2px solid white',
                     boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
                   }}
                 />

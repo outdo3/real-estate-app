@@ -10,6 +10,7 @@ import { perfMark, perfMeasure } from '@/lib/perf-debug';
 import type { AptMarker, AptCluster } from '@/lib/map-selected-marker';
 import { buildPendingSelectedApt, resolveSelectedMarker, isPendingStillNeeded } from '@/lib/map-selected-marker';
 import { isStaleMarkerResponse, isMarkerCacheFresh } from '@/lib/map-marker-fetch-guard';
+import { resolveTransactionsReadState } from '@/lib/trade-read-state';
 import { formatMarkerPriceAreaLine, formatMarkerAreaLabel } from '@/lib/map-marker-format';
 import {
   buildMapShareParams,
@@ -413,7 +414,10 @@ export default function FullscreenMapPage() {
   // 네트워크 재요청 없이 즉시 반영하는 exact-key 캐시도 함께 둔다(ApartmentAutocomplete의
   // cacheRef와 동일 관례). 실거래 데이터라 무기한 캐시는 위험해 TTL을 짧게 둔다.
   const requestSeqRef = useRef(0);
-  const markerCacheRef = useRef<Map<string, { markers: AptMarker[]; ts: number }>>(new Map());
+  // TRANSACTIONS_API_TRUST_V1 §7 — 부분 실패 여부를 markers와 **같이** 캐시한다.
+  // 플래그를 빼고 markers만 캐시하면 60초 안의 캐시 히트에서 불완전한 결과가 완전한
+  // 결과로 되살아난다(PARTIAL이 COMPLETE로 둔갑하는 정확히 그 경로).
+  const markerCacheRef = useRef<Map<string, { markers: AptMarker[]; partial: boolean; ts: number }>>(new Map());
   const MARKER_CACHE_TTL_MS = 60_000;
   // 오피스텔도 같은 관례(순번 + exact-key TTL 캐시)를 각자 별도로 갖는다 — 두 레이어의
   // 응답이 서로의 stale 판정을 오염시키지 않게 하기 위해 ref를 공유하지 않는다.
@@ -429,6 +433,10 @@ export default function FullscreenMapPage() {
   // console.error로만 삼켜서, 조회 실패와 "이 범위에 아파트가 없음"이 화면에서 구분되지
   // 않았다(FAILED != EMPTY). 혼합 모드에서 한쪽만 실패하는 경우가 생기며 더 중요해졌다.
   const [aptStatus, setAptStatus] = useState<OfficetelLayerStatus>('idle');
+  // TRANSACTIONS_API_TRUST_V1 — 일부 기간을 못 읽었으면 마커가 실제보다 적을 수 있다.
+  // OfficetelLayerStatus는 오피스텔 지도 계약과 공유하는 타입이라 건드리지 않고,
+  // 아파트 레이어 전용 플래그를 따로 둔다.
+  const [aptPartial, setAptPartial] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
@@ -617,6 +625,7 @@ export default function FullscreenMapPage() {
       const cached = markerCacheRef.current.get(lawdCd);
       if (cached && isMarkerCacheFresh(cached.ts, Date.now(), MARKER_CACHE_TTL_MS)) {
         setAptMarkers(cached.markers);
+        setAptPartial(cached.partial);
         setIsLoadingData(false);
         setAptStatus('ready');
         perfMeasure('map: click→surrounding markers ready', 'map:m0-click');
@@ -630,8 +639,11 @@ export default function FullscreenMapPage() {
           fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`),
           fetch(`/api/community/recent-activity`).catch(() => null),
         ]);
-        const data = await res.json();
-        if (!Array.isArray(data)) throw new Error('apt markers payload invalid');
+        // TRANSACTIONS_API_TRUST_V1 — 공유 리더로 실패/부분 실패/검증된 0건을 구분한다.
+        // (배열 응답도 그대로 받아들이므로 배포 중 버전이 어긋나도 깨지지 않는다.)
+        const txState = resolveTransactionsReadState<any>(res.ok, await res.json());
+        if (txState.apiError) throw new Error('apt markers payload invalid');
+        const data = txState.trades;
         // §14 STALE BOUNDS REQUEST PROTECTION — 이 요청을 보낸 뒤 더 최신 요청이 발급됐으면
         // (사용자가 그 사이 다른 지역으로 다시 이동) 이 응답으로 화면을 덮어쓰지 않는다.
         if (isStaleMarkerResponse(mySeq, requestSeqRef.current)) return;
@@ -676,8 +688,9 @@ export default function FullscreenMapPage() {
           hasNewPost: (recentActivity[item.name] || 0) > 0,
         }));
 
-        markerCacheRef.current.set(lawdCd, { markers, ts: Date.now() });
+        markerCacheRef.current.set(lawdCd, { markers, partial: txState.partial, ts: Date.now() });
         setAptMarkers(markers);
+        setAptPartial(txState.partial);
         setAptStatus('ready');
         // §12 M6 — 주변 마커 전체 dataset 준비 완료(M0 클릭 흐름에서 호출된 경우에만
         // 의미 있음 — 드래그/현재위치 등 다른 호출부에서도 공유되는 mark라 클릭 흐름이
@@ -1664,6 +1677,12 @@ export default function FullscreenMapPage() {
     if (!layers.apt) return null;
     if (aptStatus === 'error') return { text: '아파트 정보를 불러오지 못했습니다.', tone: 'error' };
     if (aptStatus !== 'ready') return null;
+    // TRANSACTIONS_API_TRUST_V1 — 부분 실패는 전체 실패도, 진짜 0건도 아니다. 마커가
+    // 0건이면 "없다"가 아니라 "못 불러왔다"에 가깝고, 마커가 있어도 실제보다 적을 수
+    // 있으므로 두 경우 모두 부분 실패를 먼저 말한다.
+    if (aptPartial) {
+      return { text: '일부 거래 정보를 불러오지 못해 아파트가 실제보다 적게 표시될 수 있습니다.', tone: 'info' };
+    }
     if (aptMarkers.length === 0) {
       return { text: '현재 지도 범위에 표시할 아파트가 없습니다.', tone: 'info' };
     }

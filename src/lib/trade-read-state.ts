@@ -114,3 +114,76 @@ export function resolveObservedMetricTrust(
 ): DerivedMetricTrust {
   return isAnySourceIncomplete(...states) ? 'QUALIFIED' : 'SAFE';
 }
+
+// ── TRANSACTIONS_API_TRUST_V1 — /api/transactions 완전성 계약 ─────────────────
+//
+// /api/transactions는 이 저장소에서 유일하게 **거래 배열을 그대로(bare array)** 내려주던
+// 라우트였다. 그래서 "몇 개 월을 실제로 읽었는가"를 담을 자리 자체가 없었고, 실패한 달의
+// 에러 플레이스홀더가 배열에 섞여 들어간 뒤 소비자(좌표/평형이 없어서)에서 조용히 걸러져
+// 결과가 그냥 적어 보였다 — FAILED가 ZERO로 접히는 전형적인 경로다.
+//
+// 응답을 envelope으로 바꾸되, 소비자는 **배열과 envelope 둘 다** 받을 수 있게 한다.
+// 배포 중 서버/클라이언트 버전이 잠시 어긋나도(구 서버 + 신 클라이언트, 또는 그 반대)
+// 화면이 깨지지 않도록 하기 위함이다. 배열이 오면 "예전 계약 = 완전"으로 읽는다.
+
+/** 서버가 내려주는 envelope. 필드 이름/의미는 /api/apt/[name]와 동일하게 맞춘다. */
+export interface TransactionsReadPayload<T> {
+  transactions?: T[];
+  partial?: boolean;
+  failedMonths?: string[];
+  monthsRequested?: number;
+  monthsSucceeded?: number;
+}
+
+export function resolveTransactionsReadState<T>(
+  responseOk: boolean,
+  payload: unknown,
+): TradeReadState<T> {
+  if (!responseOk || payload == null) {
+    return {
+      trades: [], apiError: TRADE_API_UNAVAILABLE_MESSAGE, partial: false,
+      incompleteMessage: TRADE_API_UNAVAILABLE_MESSAGE,
+      failedMonths: [], monthsRequested: 0, monthsSucceeded: 0,
+    };
+  }
+
+  // 예전 계약(bare array) — 완전한 결과로 읽는다. 이 형태에는 부분 실패를 표현할
+  // 자리가 없었으므로 "완전"이 예전 동작과 동일한 해석이다.
+  if (Array.isArray(payload)) {
+    return {
+      trades: payload as T[], apiError: null, partial: false, incompleteMessage: null,
+      failedMonths: [], monthsRequested: 0, monthsSucceeded: 0,
+    };
+  }
+
+  if (typeof payload !== 'object') {
+    return {
+      trades: [], apiError: TRADE_API_UNAVAILABLE_MESSAGE, partial: false,
+      incompleteMessage: TRADE_API_UNAVAILABLE_MESSAGE,
+      failedMonths: [], monthsRequested: 0, monthsSucceeded: 0,
+    };
+  }
+
+  const envelope = payload as TransactionsReadPayload<T> & { error?: unknown };
+
+  // 라우트가 실패할 때 내려주는 { error } 형태. 배열이 아니라는 이유만으로 빈 목록으로
+  // 접지 않는다.
+  if (!Array.isArray(envelope.transactions)) {
+    return {
+      trades: [], apiError: TRADE_API_UNAVAILABLE_MESSAGE, partial: false,
+      incompleteMessage: TRADE_API_UNAVAILABLE_MESSAGE,
+      failedMonths: [], monthsRequested: 0, monthsSucceeded: 0,
+    };
+  }
+
+  const partial = !!envelope.partial;
+  return {
+    trades: envelope.transactions,
+    apiError: null,
+    partial,
+    incompleteMessage: partial ? TRADE_PARTIAL_MESSAGE : null,
+    failedMonths: Array.isArray(envelope.failedMonths) ? envelope.failedMonths : [],
+    monthsRequested: typeof envelope.monthsRequested === 'number' ? envelope.monthsRequested : 0,
+    monthsSucceeded: typeof envelope.monthsSucceeded === 'number' ? envelope.monthsSucceeded : 0,
+  };
+}
