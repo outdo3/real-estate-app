@@ -648,6 +648,23 @@ export default function FullscreenMapPage() {
       });
     });
 
+  // PERCEIVED_PERFORMANCE_V2_2 §3 — 마커 응답 **원시 payload**만 미리 받아두는 캐시.
+  // 상태를 전혀 건드리지 않으므로 렌더 순서에 영향이 없고, 실제 조회 시점에 이 프로미스를
+  // 그대로 재사용해 네트워크 왕복을 앞당긴다. 실패는 여기서 삼키지 않고 그대로 넘겨
+  // 기존 실패 처리(FAILED != EMPTY)가 판단하게 한다.
+  const aptPrefetchRef = useRef<Map<string, Promise<{ ok: boolean; body: unknown }>>>(new Map());
+  const prefetchAptPayload = (lawdCd: string): Promise<{ ok: boolean; body: unknown }> => {
+    const hit = aptPrefetchRef.current.get(lawdCd);
+    if (hit) return hit;
+    const p = fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12&fields=marker`)
+      .then(async (r) => ({ ok: r.ok, body: r.ok ? await r.json() : null }))
+      .catch(() => ({ ok: false, body: null }));
+    aptPrefetchRef.current.set(lawdCd, p);
+    // 오래된 응답을 재사용하지 않도록 짧게만 붙잡는다(지역 재방문은 markerCacheRef가 담당).
+    setTimeout(() => aptPrefetchRef.current.delete(lawdCd), 15000);
+    return p;
+  };
+
   const fetchAptMarkers = async (lat: number, lng: number, knownLawdCd?: string) => {
     const loadForLawdCd = async (lawdCd: string) => {
       setCurrentLawdCd(lawdCd);
@@ -669,18 +686,20 @@ export default function FullscreenMapPage() {
       try {
         // 실거래 마커 데이터와 "최근 24시간 내 커뮤니티 글이 있는 단지" 집계는 서로
         // 무관한 조회라 Promise.all로 병렬 처리한다.
-        const [res, activityRes] = await Promise.all([
+        const [payload, activityRes] = await Promise.all([
           // PERCEIVED_PERFORMANCE_V2_DATAFLOW §8 — fields=marker는 이 페이지의 dedup
           // 규칙(좌표 없음/취소 건 제외 후 단지별 최신 1건)을 서버에서 그대로 재현한
           // 슬림 응답이다. 아래 dedup 루프는 그대로 두어 계약이 바뀌어도(구 배포 응답이
           // 섞여도) 결과가 같도록 한다 — 이미 걸러진 목록에 같은 필터를 다시 적용해도
           // 결과는 동일하다(멱등).
-          fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12&fields=marker`),
+          // PERCEIVED_PERFORMANCE_V2_2 §3 — 마운트 때 이미 쏴둔 요청이 있으면 그 프로미스를
+          // 그대로 쓴다(같은 URL을 두 번 받지 않는다).
+          prefetchAptPayload(lawdCd),
           fetch(`/api/community/recent-activity`).catch(() => null),
         ]);
         // TRANSACTIONS_API_TRUST_V1 — 공유 리더로 실패/부분 실패/검증된 0건을 구분한다.
         // (배열 응답도 그대로 받아들이므로 배포 중 버전이 어긋나도 깨지지 않는다.)
-        const txState = resolveTransactionsReadState<any>(res.ok, await res.json());
+        const txState = resolveTransactionsReadState<any>(payload.ok, payload.body);
         if (txState.apiError) throw new Error('apt markers payload invalid');
         const data = txState.trades;
         // §14 STALE BOUNDS REQUEST PROTECTION — 이 요청을 보낸 뒤 더 최신 요청이 발급됐으면
@@ -987,25 +1006,22 @@ export default function FullscreenMapPage() {
   // 직접 진입(파라미터 없음)은 **건드리지 않는다** — 그 경로의 지역은 GPS/IP로 정해지는
   // center에 달려 있어서, 일찍 쏘면 지오로케이션이 도착하기 전의 기본 center로 엉뚱한
   // 구를 조회할 수 있다. 속도를 위해 지역 정확도를 흔들지 않는다.
-  const initialFetchStartedRef = useRef(false);
+  //
+  // 처음엔 여기서 곧바로 fetchAptMarkers()를 호출해 마커를 state에 넣어봤는데, 그게
+  // **더 느렸다**(실측: 첫 마커 2,190ms -> 3,254ms). 이유는 네트워크가 아니라 렌더
+  // 순서였다 — 지도가 마운트되는 첫 커밋에 이미 마커 데이터가 들어 있으면 지도 인스턴스
+  // 생성/타일 로드와 오버레이 렌더가 한 커밋에 겹친다(타일 완료 2,730ms → 첫 마커
+  // 3,404ms로 밀림). 그래서 조기 단계에서는 **응답만 받아두고 state는 건드리지 않는다.**
+  // 렌더 순서는 예전과 100% 동일하고, 네트워크만 앞당겨진다.
   useEffect(() => {
     const lawdCd = initialShareLawdCdRef.current;
-    if (!lawdCd || initialFetchStartedRef.current) return;
-    if (hasNoPropertyLayer(layers)) return;
-    initialFetchStartedRef.current = true;
-    if (layers.apt) {
-      setIsLoadingData(true);
-      setAptStatus('loading');
-      fetchAptMarkers(center.lat, center.lng, lawdCd);
-    }
-    if (layers.officetel) fetchOfficetelMarkers(lawdCd);
-    // 마운트 1회. center/layers는 이 진입에서 URL로 이미 확정돼 있다.
+    if (!lawdCd || hasNoPropertyLayer(layers) || !layers.apt) return;
+    prefetchAptPayload(lawdCd);
+    // 마운트 1회. lawdCd는 이 진입에서 URL로 이미 확정돼 있다.
   }, []);
 
   useEffect(() => {
     if (!isMapReady) return;
-    // 위 §3 경로가 이미 시작했으면 같은 조회를 두 번 하지 않는다.
-    if (initialFetchStartedRef.current) return;
     // §14 — 매물 레이어가 하나도 켜져 있지 않으면 로딩 표시도 조회도 하지 않는다.
     if (hasNoPropertyLayer(layers)) return;
     if (layers.apt) setIsLoadingData(true);
