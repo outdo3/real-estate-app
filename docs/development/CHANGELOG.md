@@ -16605,3 +16605,66 @@ API 변경:
 상태:
 
 완료.
+
+## 2026-09-10
+
+### PERCEIVED PERFORMANCE V2.2 — MAP INIT PIPELINE
+
+상세 문서: docs/development/PERCEIVED_PERFORMANCE_V2_2_MAP_INIT.md
+
+작업:
+
+지도 초기화의 직렬 의존을 끊었다. DB/schema 변경 없음.
+
+- 먼저 측정했다(추정 금지). BEFORE 파이프라인(직접 진입, 390, n=4): FCP 608ms →
+  sdk.js 요청 1,133ms → 다운로드 완료 1,258ms → SDK ready 1,488ms →
+  coord2RegionCode 2,034~2,146ms → 마커 요청 2,229ms → 사용가능 2,772ms.
+  다운로드 자체는 125ms뿐이고, 1,133ms는 전부 "hydration 후 로더 effect가 돌 때까지"의
+  대기였다. SDK ready 이후 741ms는 지도 인스턴스 생성 + Kakao 역지오코딩 왕복이다.
+- 변경 1: /map 라우트 전용 layout이 sdk.js를 <link rel="preload">로 미리 받는다.
+  URL은 로더와 같은 함수(kakaoMapsSdkUrl)로 만들어 두 번 받지 않는다. preload는 실행하지
+  않으므로 초기화 순서/중복 방지는 loadKakaoMapsSdk가 그대로 통제한다.
+- 변경 2: URL이 이미 lawdCd를 아는 진입(공유/복원)에서 마커 응답을 마운트 즉시 받아둔다.
+  **상태는 건드리지 않는다** — 처음엔 곧바로 state에 넣었더니 첫 마커가 2,198ms →
+  3,254ms로 오히려 느려졌다(지도 마운트 첫 커밋에 인스턴스 생성·타일 로드·오버레이 렌더가
+  겹침, 타일 완료 2,730ms → 첫 마커 3,404ms). payload만 prefetch하도록 바꿔 렌더 순서를
+  변경 전과 동일하게 되돌렸다.
+- 직접 진입(파라미터 없음)은 의도적으로 그대로 뒀다. 그 경로의 지역은 GPS/IP로 정해지는
+  center에 달려 있어 일찍 쏘면 엉뚱한 구를 조회할 수 있다.
+
+서비스 기능 변경:
+
+표시 값/문구 그대로. 지도가 더 빨리 뜬다.
+
+DB 변경:
+
+없음.
+
+API 변경:
+
+없음.
+
+검증(Production 실측, 4G/4x CPU, 390):
+
+- 직접 진입: sdk.js 요청 1,133 → 198ms, SDK ready 1,488 → 1,291ms,
+  첫 마커 2,208 → 2,069ms, 사용가능 2,772 → 2,424ms
+- 복원 진입: sdk.js 요청 1,138 → 180ms, 마커 요청 2,038 → 1,105ms,
+  SDK ready → 마커 요청 +546ms → **-264ms**(요청이 SDK보다 먼저 출발)
+- 구×폭 12조합 전부 regionCalls=0, gap -230~-317ms
+- 사용가능: 중구 2,240~2,322ms(목표 충족) / 해운대 2,791~3,237ms(경계) /
+  부산진구 3,003~3,613ms(미충족 — 남은 비용은 네트워크가 아니라 마커 렌더 약 2.4초)
+- 중복 SDK 로드 없음: resourceTiming 1건, initiator=link(preload) 재사용
+- 회귀 QA 전 폭 PASS: 지도 복원(history.length 2 유지), 오피스텔 1/0/0,
+  마커→상세 canonical identity, addressSearch 0회
+- CLS 감사(수정 안 함): 합계 0.1751(감사 V1 0.367에서 하락), 최대 shift 0.1127@9.1s는
+  원인 요소 미특정이라 별도 STEP 권장
+- npx tsc --noEmit: src 0건(기존 24건) / eslint 0 errors / build 성공 / 테스트 27/27
+
+남은 위험:
+
+- 지도 사용가능 시간의 남은 대부분은 마커 클러스터링·오버레이 렌더다(밀집 구 약 2.4초).
+- 버스 TAGO cold worst-case ~7.7초는 그대로이며 DB/schema 승인이 필요한 별도 STEP이다.
+
+상태:
+
+완료.
