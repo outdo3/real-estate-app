@@ -971,8 +971,41 @@ export default function FullscreenMapPage() {
   // (initialShareLawdCdRef) 그 lawdCd를 그대로 써서 역지오코딩 왕복과 그로 인한
   // lawdCd 불일치 위험을 건너뛴다 — 일반 진입은 기존과 동일하게 undefined를 넘겨
   // 역지오코딩 경로를 그대로 탄다(회귀 없음).
+  // ── PERCEIVED_PERFORMANCE_V2_2 §3 — 마커 조회를 SDK와 병렬로 시작한다 ────────────
+  //
+  // 마커 데이터는 **우리 HTTP API**라 Kakao SDK도 지도 인스턴스도 필요 없다. 그런데
+  // 아래 초기 로드는 `isMapReady`를 기다렸고, 그 뒤 다시 좌표→lawdCd 역지오코딩
+  // (coord2RegionCode, Kakao 왕복)까지 기다렸다. BEFORE 실측(직접 진입, n=4):
+  //   SDK ready 1,488ms → coord2RegionCode 2,034~2,146ms → 마커 요청 2,229ms
+  //   = SDK ready 이후에만 741ms를 더 기다렸다.
+  //
+  // URL이 이미 lawdCd를 알려주는 진입(공유 링크 / V2.1 복원)에서는 그 기다림이 전부
+  // 불필요하다. 지역을 이미 알고 있으므로 역지오코딩도 필요 없고, 지오로케이션 effect도
+  // 이 경우 早期 return하므로(§9-b) center가 나중에 바뀌어 다른 구를 조회하게 될
+  // 위험도 구조적으로 없다. 그래서 이 경로만 마운트 즉시 조회를 시작한다.
+  //
+  // 직접 진입(파라미터 없음)은 **건드리지 않는다** — 그 경로의 지역은 GPS/IP로 정해지는
+  // center에 달려 있어서, 일찍 쏘면 지오로케이션이 도착하기 전의 기본 center로 엉뚱한
+  // 구를 조회할 수 있다. 속도를 위해 지역 정확도를 흔들지 않는다.
+  const initialFetchStartedRef = useRef(false);
+  useEffect(() => {
+    const lawdCd = initialShareLawdCdRef.current;
+    if (!lawdCd || initialFetchStartedRef.current) return;
+    if (hasNoPropertyLayer(layers)) return;
+    initialFetchStartedRef.current = true;
+    if (layers.apt) {
+      setIsLoadingData(true);
+      setAptStatus('loading');
+      fetchAptMarkers(center.lat, center.lng, lawdCd);
+    }
+    if (layers.officetel) fetchOfficetelMarkers(lawdCd);
+    // 마운트 1회. center/layers는 이 진입에서 URL로 이미 확정돼 있다.
+  }, []);
+
   useEffect(() => {
     if (!isMapReady) return;
+    // 위 §3 경로가 이미 시작했으면 같은 조회를 두 번 하지 않는다.
+    if (initialFetchStartedRef.current) return;
     // §14 — 매물 레이어가 하나도 켜져 있지 않으면 로딩 표시도 조회도 하지 않는다.
     if (hasNoPropertyLayer(layers)) return;
     if (layers.apt) setIsLoadingData(true);

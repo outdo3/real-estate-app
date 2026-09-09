@@ -15,6 +15,23 @@ const SCRIPT_ID = 'kakao-map-script-main';
 const SDK_LIBRARIES = 'services,clusterer';
 const LOAD_TIMEOUT_MS = 10000;
 
+/**
+ * PERCEIVED_PERFORMANCE_V2_2 §5 — 로더가 주입할 스크립트 URL을 만드는 **단일 지점**.
+ *
+ * `/map` 라우트가 이 URL로 `<link rel="preload" as="script">`를 HTML에 심어, 브라우저가
+ * hydration을 기다리지 않고 HTML 파싱 중에 SDK를 내려받기 시작하게 한다. 실측(배포 전,
+ * n=4): 스크립트 요청이 1,133ms에야 시작됐는데 그건 이 로더가 effect 안에서 호출되기
+ * 때문이다(=hydration 이후). 다운로드 자체는 125ms밖에 안 걸린다(preconnect 덕).
+ *
+ * preload와 실제 주입 URL이 **한 글자라도 다르면 브라우저가 두 번 받는다.** 그래서
+ * 양쪽이 반드시 이 함수를 쓴다. 키가 없으면 null — preload를 심지 않는다.
+ */
+export function kakaoMapsSdkUrl(): string | null {
+  const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+  if (!apiKey) return null;
+  return `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=${SDK_LIBRARIES}&autoload=false`;
+}
+
 /** 실패 원인을 사람이 읽을 문구로 바꾸기 위한 안정적인 코드. */
 export type KakaoSdkErrorCode =
   | 'KAKAO_SDK_NO_WINDOW'
@@ -75,14 +92,15 @@ export function loadKakaoMapsSdk(): Promise<void> {
 
     let script = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
     if (!script) {
-      const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
-      if (!apiKey) {
+      const src = kakaoMapsSdkUrl();
+      if (!src) {
         done(new Error('KAKAO_SDK_NO_KEY'));
         return;
       }
       script = document.createElement('script');
       script.id = SCRIPT_ID;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=${SDK_LIBRARIES}&autoload=false`;
+      // preload와 **완전히 동일한** URL이어야 브라우저가 받아둔 것을 재사용한다.
+      script.src = src;
       script.async = true;
       script.addEventListener('load', onScriptLoad);
       script.addEventListener('error', () => done(new Error('KAKAO_SDK_SCRIPT_ERROR')));
