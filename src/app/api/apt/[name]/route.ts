@@ -235,22 +235,31 @@ export async function GET(
     //
     // 좌표 조회가 실패해도 거래 응답 자체는 그대로 나간다 — 좌표는 부가 정보이고,
     // 이것 때문에 실거래가 안 보이면 안 된다.
-    const incomingAptSeq = searchParams.get('aptSeq');
-    const canonicalAptSeq = deriveCanonicalAptSeq(filteredTrades, incomingAptSeq);
-    let coordinate = null;
-    try {
-      const resolved = await resolveCanonicalCoords(prisma, {
-        aptSeq: canonicalAptSeq,
-        lawdCd,
-        dong,
-        name: filteredTrades[0]?.name || aptName,
-      });
-      coordinate = resolved.status === 'RESOLVED'
-        ? resolved.coordinate
-        : { status: 'NO_COORDINATE' as const, reason: resolved.reason };
-    } catch (e) {
-      console.warn('canonical coordinate lookup failed', e);
-      coordinate = { status: 'NO_COORDINATE' as const, reason: 'NO_MASTER' as const };
+    //
+    // §6 — opt-in인 이유: 이 라우트는 상세페이지 한 번에 여러 번 호출된다(parent 1회 +
+    // 차트/투자지표의 공유 60개월 창 2회). 좌표를 실제로 쓰는 건 parent 하나뿐인데
+    // 무조건 조회하면 ApartmentMaster 조회가 호출 수만큼 배로 늘어난다. 파라미터를
+    // 보낸 요청에만 조회한다 — 값이 생기는 조건은 그대로이고 소비자는 parent 하나뿐이라
+    // 화면 동작은 바뀌지 않는다.
+    const wantsCoordinate = searchParams.get('withCoordinate') === '1';
+    let coordinate: unknown = null;
+    if (wantsCoordinate) {
+      const incomingAptSeq = searchParams.get('aptSeq');
+      const canonicalAptSeq = deriveCanonicalAptSeq(filteredTrades, incomingAptSeq);
+      try {
+        const resolved = await resolveCanonicalCoords(prisma, {
+          aptSeq: canonicalAptSeq,
+          lawdCd,
+          dong,
+          name: filteredTrades[0]?.name || aptName,
+        });
+        coordinate = resolved.status === 'RESOLVED'
+          ? resolved.coordinate
+          : { status: 'NO_COORDINATE' as const, reason: resolved.reason };
+      } catch (e) {
+        console.warn('canonical coordinate lookup failed', e);
+        coordinate = { status: 'NO_COORDINATE' as const, reason: 'NO_MASTER' as const };
+      }
     }
 
     return NextResponse.json({
@@ -258,7 +267,7 @@ export async function GET(
       apiError,
       lawdCd,
       dong,
-      coordinate,
+      ...(wantsCoordinate ? { coordinate } : {}),
       partial: completeness.partial,
       failedMonths: completeness.failedMonths,
       monthsRequested: completeness.monthsRequested,

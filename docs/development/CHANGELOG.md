@@ -16429,3 +16429,80 @@ monthsRequested, monthsSucceeded } envelope. 소비자 3곳 모두 함께 갱신
 상태:
 
 완료
+
+## 2026-09-09
+
+### PERCEIVED PERFORMANCE V2 — COORDINATE / DATAFLOW
+
+상세 문서: docs/development/PERCEIVED_PERFORMANCE_V2_DATAFLOW.md
+
+작업:
+
+상세페이지의 위치(좌표)와 실거래 데이터가 흐르는 방식을 바꿨다. 감사 V1의
+P0-1 / P1-5 / P1-6 / P1-7 / P1-10을 구조적으로 처리한다.
+
+- 좌표: 서버(/api/apt/[name])가 검증된 identity(aptSeq 우선, 없으면 sggCd+umdName+
+  정규화 단지명 완전일치)로 ApartmentMaster 좌표를 한 번 해석해 응답에 싣고, 화면의
+  위치 소비자 9개가 그 하나를 공유한다. 새 파일 src/lib/apt-canonical-coords.ts.
+- 제거한 경로: "지역명 + 단지명" 지오코딩(실측 10/10 실패)과 그 실패 시의
+  ps.keywordSearch 첫 결과 채택. 후자는 이름만으로 다른 단지를 집을 수 있는 구조라
+  성능이 아니라 정확성 문제였다. BusAccessCard는 이제 Kakao SDK를 import하지 않는다.
+- 좌표가 없으면 "위치 정보를 확인할 수 없습니다"를 표시하고 주소 모드로 폴백하지 않는다.
+- 좌표는 단지의 속성이므로 한 번 확정되면 매매/전월세·기간 토글로 지워지지 않는다.
+- 실거래: 겹치는 5회 조회(period=12 ⊂ 36 ⊂ 60)를 3회로 합쳤다. PriceTrendChart와
+  InvestmentMetrics가 60개월 창 하나를 공유하고, 1년/3년 view는 그 응답에서 파생한다.
+  parent(period=12)는 critical path라 그대로 뒀다.
+- 파생 시 완전성(partial/failedMonths/monthsRequested/monthsSucceeded)을 그 창 기준으로
+  다시 계산한다(failedMonths가 YYYYMM 목록이라 정확한 교집합 연산). 실패 달이 창 밖이면
+  partial로 만들지 않고, 창 안이면 반드시 남기며, 창의 모든 달이 실패하면 apiError다.
+- 재방문 캐시(5분 TTL, 모듈 메모리): 완전하게 성공한 응답만 캐시한다. 실패도 부분 실패도
+  캐시하지 않아 FAILED가 ZERO로 굳지 않는다. 서버의 MOLIT 월 캐시(1시간)보다 짧아
+  새로운 staleness를 만들지 않는다. 브라우저 저장소를 쓰지 않는다.
+- 지도 마커: /api/transactions에 fields=marker opt-in 슬림 응답을 추가했다.
+  /map의 dedup 규칙을 서버에서 그대로 재현하며, 다른 소비자 2곳의 응답은 바뀌지 않는다.
+
+서비스 기능 변경:
+
+표시되는 값과 문구는 그대로다. 좌표를 못 찾는 경우에만 각 카드가 "위치 정보를 확인할 수
+없습니다"를 표시한다(예전에는 이름 검색 결과를 대신 썼다). 시세추이 기간 전환이
+네트워크 요청 없이 즉시 반영된다.
+
+DB 변경:
+
+없음. 새 좌표 조회는 기존 ApartmentMaster 컬럼에 대한 read-only 조회다.
+
+API 변경:
+
+- GET /api/apt/[name]에 withCoordinate=1 opt-in 추가. 붙이면 응답에 coordinate가 실린다
+  (없으면 필드 자체가 없다 — 기존 소비자 영향 없음).
+- GET /api/transactions에 fields=marker opt-in 추가. 기본 응답은 바뀌지 않는다.
+
+검증:
+
+- npx tsc --noEmit: src 0건 (기존 scripts/tmp 24건 유지, FAIL_EXISTING_SCRIPT_ERRORS)
+- npx eslint <변경 파일>: 0 errors (warning 1건은 8059dcf에서도 재현되는 기존 값)
+- npm run build: 성공
+- npx tsx --test src/lib/detail-trade-window.test.ts: 14/14 PASS
+- 상세 실거래 요청 5 → 3건, 디코딩 456,002B → 246,892B (-45.9%)
+- 시세추이 기간 전환 3회: 6건 → 0건
+- 재진입(클라이언트 라우팅): 전체 API 12 → 7건, 실거래 5 → 0건
+- 마커 payload: 해운대구 1,942,705B → 63,661B (-96.7%), 부산진구 -95.7%, 중구 -77.4%.
+  서버 marker 결과와 클라 dedup 결과가 순서·값·navigation identity까지 완전 일치
+  (missing 0 / extra 0)
+- 버스 클라이언트 사전 지연(n=8): median 601ms → 24ms, worst 1,428ms → 182ms.
+  지오코딩 호출 여정당 9회 → 0회
+- 반응형 QA 360/375/390/430/1280: overflow 없음, 차트/투자지표/버스 카드 정상,
+  작은 터치 타깃 수는 BEFORE와 동일(기존값)
+
+남은 위험:
+
+- localhost는 Kakao JS SDK 도메인 미등록(401)이라 Kakao 의존 항목(지하철 POI,
+  지도/로드뷰 모달, /map 마커 end-to-end, 오피스텔 레이어 토글)을 로컬 브라우저로
+  판정하지 못했다. 배포 후 Production 검증이 필요하다. 마커 payload는 API 레벨에서
+  완전 검증했다.
+- 버스 worst-case는 이제 거의 전부 TAGO 상류 지연이다(로컬 실측 18.0초). durable
+  캐시는 DB/schema 변경이라 별도 승인 STEP이 맞다.
+
+상태:
+
+구현/측정/문서 완료. Production 검증 대기.

@@ -9,6 +9,7 @@ import {
   TRADE_DERIVED_SUPPRESSED_MESSAGE,
   type TradeReadState,
 } from '@/lib/trade-read-state';
+import { fetchDetailTrades } from '@/lib/detail-trade-cache';
 
 interface InvestmentMetricsProps {
   aptName: string;
@@ -66,15 +67,20 @@ export default function InvestmentMetrics({ aptName, lawdCd, dong, selectedTrade
     setSaleState(null);
     setRentState(null);
 
-    const dongQuery = dong ? `&dong=${encodeURIComponent(dong)}` : '';
     // 예전에는 실패(!res.ok/throw)도 빈 배열로 뭉개져 "데이터 부족"(=진짜 거래 없음)과
     // 구분되지 않았다. 상세/차트가 이미 쓰는 공유 완전성 계약(resolveTradeReadState)을
     // 그대로 써서 실패·부분실패·진짜 0건을 서로 다른 상태로 남긴다(§6 단일 계약).
+    //
+    // PERCEIVED_PERFORMANCE_V2_DATAFLOW §6 — 요청 자체는 공유 진입점을 거친다.
+    // PriceTrendChart도 같은 aptName/lawdCd/dong으로 같은 60개월 창을 요청하므로
+    // (METRICS_PERIOD_MONTHS는 원래부터 60이었다) 두 컴포넌트의 요청 4건이 2건으로
+    // 합쳐진다. 조회 기간도 결과도 예전과 동일하다 — 합쳐지는 건 전송뿐이다.
     const fetchType = async (type: 'apt' | 'rent'): Promise<TradeReadState<SimpleTrade>> => {
       try {
-        const res = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}&period=${METRICS_PERIOD_MONTHS}${dongQuery}`);
-        const data = res.ok ? await res.json() : null;
-        return resolveTradeReadState<SimpleTrade>(res.ok, data);
+        const { ok, payload } = await fetchDetailTrades({
+          aptName, type, period: METRICS_PERIOD_MONTHS, lawdCd, dong,
+        });
+        return resolveTradeReadState<SimpleTrade>(ok, ok ? (payload as never) : null);
       } catch (e) {
         return resolveTradeReadState<SimpleTrade>(false, null);
       }

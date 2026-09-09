@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -26,6 +26,7 @@ import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } fr
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import type { NextAction } from '@/lib/decision-journey/types';
 import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
+import { fetchDetailTrades } from '@/lib/detail-trade-cache';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
 import { pickDefaultTradeArea } from '@/lib/trade-area-selection';
 import { buildAptBrief } from '@/lib/apt-brief';
@@ -161,6 +162,18 @@ export default function ApartmentDetail() {
   // 좌표 조회가 끝났는지(성공/실패 무관). 이게 true가 되기 전에는 하위 패널이
   // "위치 확인 중" 상태를 유지해 '없음'으로 단정하지 않는다.
   const [coordResolved, setCoordResolved] = useState(false);
+  // §2 — 좌표는 **단지의 속성**이지 조회 조건(매매/전월세·기간)의 속성이 아니다.
+  // 한 번 확정되면 이후 응답이 좌표를 못 실어와도 지우지 않는다: 그러지 않으면
+  // 사용자가 전월세 탭으로 토글했을 때(그 계열에 거래가 없어 identity가 약해지면)
+  // 이미 떠 있던 교통/주거환경 카드가 통째로 "위치 정보를 확인할 수 없습니다"로
+  // 사라졌다가 되돌아온다. 다른 단지로 이동하면 페이지가 새로 마운트되므로 이
+  // "한 번 확정되면 유지"는 단지 경계를 넘지 않는다.
+  const resolvedCoordRef = useRef<{ lat: number; lng: number } | null>(null);
+  const adoptCoordinate = useCallback((next: { lat: number; lng: number } | null) => {
+    if (next) resolvedCoordRef.current = next;
+    setCanonicalCoord(resolvedCoordRef.current);
+    setCoordResolved(true);
+  }, []);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -253,19 +266,33 @@ export default function ApartmentDetail() {
         // URL에 lawdCd가 없으면(지도 마커, 커뮤니티 글 링크 등 지역코드를 안 넘기는 진입
         // 경로) 아예 파라미터를 안 보내고, API가 DB에 저장된 실제 지역을 찾아 응답에 함께
         // 돌려주는 lawdCd를 신뢰한다 — 여기서 하드코딩된 기본 지역으로 미리 단정하지 않는다.
-        const lawdCdQuery = urlLawdCd ? `&lawdCd=${urlLawdCd}` : '';
+        // (buildDetailTradeUrl이 빈 값을 파라미터에서 그대로 빼준다.)
         // dong이 있으면 반드시 실거래가 조회에도 넘긴다 — 없으면 "롯데캐슬", "푸르지오"처럼
         // 같은 구 안에 있는 다른 동의 동일 브랜드 단지 실거래가 이름만으로 부분일치되어
         // 함께 섞여 나오는 문제가 있다(API 쪽에서 dong이 오면 정확히 그 동으로만 좁힌다).
-        const dongQuery = urlDongParam ? `&dong=${encodeURIComponent(urlDongParam)}` : '';
-        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?type=${typeParam}&period=${periodParam}${lawdCdQuery}${dongQuery}`);
+        // PERCEIVED_PERFORMANCE_V2_DATAFLOW §6/§7 — 공유 진입점을 쓴다. 같은 키의
+        // 요청이 이미 떠 있으면 합쳐지고(§6), TTL 안의 **완전한** 성공 응답이 있으면
+        // forward/재방문에서 네트워크를 타지 않는다(§7). 실패·부분 실패는 캐시되지
+        // 않으므로 불완전한 응답이 굳어질 여지가 없다(detail-trade-cache.ts 참고).
+        // withCoordinate=1은 이 parent 요청 하나만 보낸다 — §2 좌표의 유일한 소비자다.
+        const { ok: responseOk, payload } = await fetchDetailTrades({
+          aptName,
+          type: typeParam,
+          period: periodParam,
+          lawdCd: urlLawdCd,
+          dong: urlDongParam,
+          // §2/§6 — 좌표가 이미 확정됐으면 다시 요청하지 않는다. 매매/전월세·기간
+          // 토글로 이 요청이 다시 나가더라도 ApartmentMaster 조회는 단지당 한 번이다.
+          // (아직 못 찾았으면 다음 요청에서 다시 시도할 기회를 남긴다.)
+          withCoordinate: !resolvedCoordRef.current,
+        });
         if (cancelled) return;
 
         let resolvedLawdCd = urlLawdCd || '11680';
         let resolvedDong = urlDongParam || '';
 
-        if (response.ok) {
-          const data = await response.json();
+        if (responseOk) {
+          const data = payload as any;
           if (cancelled) return;
           const tradeState = resolveTradeReadState<Trade>(true, data);
           const fetchedTrades = tradeState.trades;
@@ -276,12 +303,11 @@ export default function ApartmentDetail() {
             | { lat?: number; lng?: number; status?: string }
             | null
             | undefined;
-          setCanonicalCoord(
+          adoptCoordinate(
             coord && typeof coord.lat === 'number' && typeof coord.lng === 'number'
               ? { lat: coord.lat, lng: coord.lng }
               : null
           );
-          setCoordResolved(true);
           // Default selectedTradeArea: raw trade-area identity only, never a Unit
           // Master canonicalExclusiveArea. Prioritizes an 84㎡-range exact raw area,
           // then its most recent transaction (see pickDefaultTradeArea contract).
@@ -326,8 +352,7 @@ export default function ApartmentDetail() {
           const tradeState = resolveTradeReadState<Trade>(false);
           setTrades(tradeState.trades);
           setTradeIncompleteMessage(tradeState.incompleteMessage);
-          setCanonicalCoord(null);
-          setCoordResolved(true);
+          adoptCoordinate(null);
           if (!infoFetchedInline) {
             infoFetchedInline = true;
             fetchAptInfo('', resolvedDong, resolvedLawdCd);
@@ -365,8 +390,7 @@ export default function ApartmentDetail() {
         if (!cancelled) {
           setTrades([]);
           setTradeIncompleteMessage(TRADE_API_UNAVAILABLE_MESSAGE);
-          setCanonicalCoord(null);
-          setCoordResolved(true);
+          adoptCoordinate(null);
         }
       } finally {
         if (!cancelled) setLoading(false);

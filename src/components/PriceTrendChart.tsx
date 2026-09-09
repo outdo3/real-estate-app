@@ -6,7 +6,9 @@ import { buildPriceTrendPoints, filterTradesForArea, formatTrendDate, latestTrad
 import { buildTransactionAreaOptions } from '@/lib/trade-area-selection';
 import { toggleSeriesVisibility, type SeriesVisibility } from '@/lib/series-visibility';
 import { findNearestIndex, type IndexedPosition } from '@/lib/chart-crosshair';
-import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
+import { resolveTradeReadState, type TradeReadState } from '@/lib/trade-read-state';
+import { fetchDetailTrades } from '@/lib/detail-trade-cache';
+import { narrowTradeWindow } from '@/lib/detail-trade-window';
 import styles from './PriceTrendChart.module.css';
 import type { DisplayUnit } from '@/lib/area-utils';
 
@@ -19,13 +21,21 @@ type Period = '1년' | '3년' | '5년';
 type TradeRead = { trades: PriceTrendTrade[]; error: string | null };
 
 const PERIODS: Record<Period, number> = { '1년': 12, '3년': 36, '5년': 60 };
+// PERCEIVED_PERFORMANCE_V2_DATAFLOW §6 — 기간 선택과 무관하게 **가장 넓은 창 한 번만**
+// 조회하고, 좁은 기간은 그 응답에서 파생한다(narrowTradeWindow가 완전성까지 그 창
+// 기준으로 다시 계산한다). 감사 V1 P1-6의 "period=12 ⊂ 36 ⊂ 60 중복 5회"가 여기서
+// 사라지고, 1년/3년/5년 전환은 네트워크 요청 0건이 된다(예전엔 전환마다 2건).
+// 60은 이 컴포넌트가 이미 제공하던 최대 기간이라 새로 넓히는 것이 아니다.
+const SOURCE_PERIOD_MONTHS = PERIODS['5년'];
 const SALE_COLOR = '#07865a';
 const RENT_COLOR = '#3152d6';
 const MIN_TREND_POINTS = 2;
 
 export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeArea, selectedTradeAreaLabel, unitMaster, onSelectArea }: PriceTrendChartProps) {
-  const [saleRead, setSaleRead] = useState<TradeRead | null>(null);
-  const [rentRead, setRentRead] = useState<TradeRead | null>(null);
+  // §6 — state는 **60개월 원본**을 담는다. 화면에 쓰는 값은 아래에서 선택 기간으로
+  // 좁힌 파생값이다(saleRead/rentRead).
+  const [saleSource, setSaleSource] = useState<TradeReadState<PriceTrendTrade> | null>(null);
+  const [rentSource, setRentSource] = useState<TradeReadState<PriceTrendTrade> | null>(null);
   const [period, setPeriod] = useState<Period>('3년');
   // PRODUCTION QA P0-C — explicit series display control, replacing the previously
   // decorative (non-interactive) legend. Volume bars keep their existing meaning
@@ -137,31 +147,48 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeAr
     };
   }, []);
 
+  // §6 — period가 의존성에서 빠졌다. 기간 전환은 이제 아래 파생 memo만 다시 돌린다.
   useEffect(() => {
     if (!aptName || !lawdCd) return;
     let cancelled = false;
-    setSaleRead(null); setRentRead(null);
-    const dongQuery = dong ? `&dong=${encodeURIComponent(dong)}` : '';
-    const fetchType = async (type: 'apt' | 'rent'): Promise<TradeRead> => {
+    setSaleSource(null); setRentSource(null);
+    const fetchType = async (type: 'apt' | 'rent'): Promise<TradeReadState<PriceTrendTrade>> => {
       try {
-        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}?lawdCd=${lawdCd}&type=${type}&period=${PERIODS[period]}${dongQuery}`);
-        if (!response.ok) return { trades: [], error: TRADE_API_UNAVAILABLE_MESSAGE };
-        const data = await response.json();
-        const state = resolveTradeReadState<PriceTrendTrade>(true, data);
-        // APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX — 전체 실패(apiError)뿐 아니라
-        // 일부 기간만 실패한 경우도 안내 대상이다. 이 화면은 이미 error가 있으면
-        // "일부 불러오지 못했습니다" 안내를 띄우므로, 그 자리에 그대로 연결한다.
-        return { trades: state.trades, error: state.incompleteMessage };
-      } catch { return { trades: [], error: TRADE_API_UNAVAILABLE_MESSAGE }; }
+        // 공유 진입점 — InvestmentMetrics도 같은 키(같은 aptName/lawdCd/dong, 60개월)로
+        // 요청하므로 두 컴포넌트의 요청이 하나로 합쳐진다(§6).
+        const { ok, payload } = await fetchDetailTrades({
+          aptName, type, period: SOURCE_PERIOD_MONTHS, lawdCd, dong,
+        });
+        if (!ok) return resolveTradeReadState<PriceTrendTrade>(false, null);
+        return resolveTradeReadState<PriceTrendTrade>(true, payload as never);
+      } catch { return resolveTradeReadState<PriceTrendTrade>(false, null); }
     };
     Promise.all([fetchType('apt'), fetchType('rent')]).then(([sale, rent]) => {
       if (!cancelled) {
-        setSaleRead(sale);
-        setRentRead({ ...rent, trades: rent.trades.filter((trade) => (trade.monthlyRent ?? 0) === 0) });
+        setSaleSource(sale);
+        setRentSource({ ...rent, trades: rent.trades.filter((trade) => (trade.monthlyRent ?? 0) === 0) });
       }
     });
     return () => { cancelled = true; };
-  }, [aptName, lawdCd, period, dong]);
+  }, [aptName, lawdCd, dong]);
+
+  // §6 — 선택 기간으로 좁힌 view. narrowTradeWindow가 거래뿐 아니라 완전성
+  // (partial/failedMonths/monthsRequested/monthsSucceeded)까지 그 창 기준으로 다시
+  // 계산하므로, "60개월 중 실패한 달"이 1년 view에 잘못 붙거나 반대로 묻히지 않는다.
+  //
+  // APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX — 전체 실패(apiError)뿐 아니라 일부
+  // 기간만 실패한 경우도 안내 대상이다. 이 화면은 이미 error가 있으면 "일부 불러오지
+  // 못했습니다" 안내를 띄우므로, 그 자리에 그대로 연결한다(예전과 동일한 문구/자리).
+  const saleRead = useMemo<TradeRead | null>(() => {
+    if (!saleSource) return null;
+    const narrowed = narrowTradeWindow(saleSource, SOURCE_PERIOD_MONTHS, PERIODS[period]);
+    return { trades: narrowed.trades, error: narrowed.incompleteMessage };
+  }, [saleSource, period]);
+  const rentRead = useMemo<TradeRead | null>(() => {
+    if (!rentSource) return null;
+    const narrowed = narrowTradeWindow(rentSource, SOURCE_PERIOD_MONTHS, PERIODS[period]);
+    return { trades: narrowed.trades, error: narrowed.incompleteMessage };
+  }, [rentSource, period]);
 
   const loading = saleRead === null || rentRead === null;
   const needsAreaSelection = !selectedTradeArea || selectedTradeArea === '전체';
