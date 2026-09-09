@@ -40,7 +40,7 @@ function DeliveryBadges() {
 // 정보라 사용자 지적대로 "주거환경"으로 옮긴다. 컴포넌트(KakaoPlaces)는 그대로
 // 재사용하고 어느 탭에서 렌더링되는지만 바꿨다(회귀 위험 최소화, 로직 변경 없음).
 // 기존에 "병원·공원" 한 카드로 묶여 있던 걸 여기서는 의료/녹지 성격이 달라 분리했다.
-export default function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps) {
+function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
       <div style={cardStyle}>
@@ -100,3 +100,9 @@ export default function LivingEnvironmentPanel({ address, ready }: LivingEnviron
     </div>
   );
 }
+
+// PERCEIVED_PERFORMANCE_V2 §7 — props가 전부 원시값(address: string, ready: boolean)이라
+// 얇은 비교로 충분하다. 상위(상세페이지)가 다른 이유로 리렌더될 때 이 패널의 6개
+// KakaoPlaces 서브트리를 다시 렌더하지 않게 한다(무분별한 memo가 아니라, 감사 V1에서
+// 이 트리의 렌더 비용이 실측된 지점에만 적용).
+export default React.memo(LivingEnvironmentPanel);

@@ -88,11 +88,19 @@ export default function ApartmentScoreCard({ result, loading }: ApartmentScoreCa
   const [expanded, setExpanded] = useState(false);
 
   if (loading) {
+    // PERCEIVED_PERFORMANCE_V2 §6 — 실제 카드와 같은 높이를 미리 확보한다(.cardLoading).
+    // 예약된 공간이 빈 상자로 보이지 않도록, 완성된 카드의 골격(제목 → 점수 → 요약 →
+    // 4개 도메인 행 → 비교 섹션)과 같은 순서/개수로 스켈레톤 줄을 배치한다.
     return (
-      <div className={styles.card}>
+      <div className={`${styles.card} ${styles.cardLoading}`} aria-busy="true">
         <div className={styles.skeletonLine} style={{ width: '35%', height: '1rem' }} />
         <div className={styles.skeletonLine} style={{ width: '20%', height: '2.5rem', marginTop: '0.5rem' }} />
         <div className={styles.skeletonLine} style={{ width: '90%', height: '2.5rem', marginTop: '0.75rem' }} />
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className={styles.skeletonLine} style={{ width: i % 2 === 0 ? '80%' : '70%', height: '2.25rem', marginTop: '0.75rem' }} />
+        ))}
+        <div className={styles.skeletonLine} style={{ width: '45%', height: '1rem', marginTop: '1.25rem' }} />
+        <div className={styles.skeletonLine} style={{ width: '85%', height: '1.75rem', marginTop: '0.5rem' }} />
       </div>
     );
   }

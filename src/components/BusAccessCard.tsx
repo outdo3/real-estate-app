@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatEta } from './KakaoPlaces';
+import { loadKakaoMapsSdk } from '@/lib/kakao/maps-sdk';
+import { kakaoSdkErrorMessage } from '@/lib/kakao/map-embed-logic';
 import styles from '@/app/apt/[name]/detail.module.css';
 
 interface Props {
@@ -110,41 +112,25 @@ export default function BusAccessCard({ address }: Props) {
       });
     };
 
-    const loadAndRun = () => {
-      window.kakao.maps.load(() => {
-        setTimeout(run, 100);
-      });
-    };
-
-    if (window.kakao && window.kakao.maps) {
-      loadAndRun();
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const scriptId = 'kakao-map-script-main';
-    let script = document.getElementById(scriptId) as HTMLScriptElement;
-
-    if (!script) {
-      const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
-      if (!apiKey) {
-        setError('지도 API 키가 설정되지 않았습니다.');
+    // PERCEIVED_PERFORMANCE_V2 §2/§5 — 예전에는 이 컴포넌트가 스크립트 주입/로드 판정을
+    // 직접 복제하고, 마지막에 `setTimeout(run, 100)`으로 100ms를 그냥 흘려보냈다.
+    // 그 100ms는 어떤 준비 상태도 기다리지 않는 순수한 여유값이었다(카카오 SDK는
+    // `kakao.maps.load()` 콜백 시점에 `libraries=services`까지 준비를 보장한다).
+    // 공용 로더(단일 프로미스 캐시)로 옮겨 임의 지연을 없애고, 같은 페이지의 다른
+    // 카드가 이미 SDK를 받아왔다면 네트워크·대기 없이 즉시 이어서 실행한다.
+    loadKakaoMapsSdk()
+      .then(() => {
+        if (cancelled) return;
+        run();
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(kakaoSdkErrorMessage(e));
         setLoading(false);
-        return () => {
-          cancelled = true;
-        };
-      }
-      script = document.createElement('script');
-      script.id = scriptId;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer,drawing&autoload=false`;
-      document.head.appendChild(script);
-    }
+      });
 
-    script.addEventListener('load', loadAndRun);
     return () => {
       cancelled = true;
-      script.removeEventListener('load', loadAndRun);
     };
   }, [address]);
 

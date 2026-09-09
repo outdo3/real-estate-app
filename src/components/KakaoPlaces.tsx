@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { loadKakaoMapsSdk } from '@/lib/kakao/maps-sdk';
+import { kakaoSdkErrorMessage } from '@/lib/kakao/map-embed-logic';
 import styles from '@/app/apt/[name]/detail.module.css';
 
 // 카카오 로컬 카테고리 코드 중 이 컴포넌트에서 실제로 사용하는 7종.
@@ -186,44 +188,25 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
       });
     };
 
-    const loadKakaoPlaces = () => {
-      window.kakao.maps.load(() => {
-        setTimeout(renderPlaces, 100);
+    // PERCEIVED_PERFORMANCE_V2 §2/§5 — 이 컴포넌트는 상세페이지 한 화면에 6~9개가
+    // 동시에 마운트된다. 각 인스턴스가 스크립트 로드 판정을 따로 하고 마지막에
+    // `setTimeout(renderPlaces, 100)`으로 100ms를 흘려보내고 있었다(어떤 준비 상태도
+    // 기다리지 않는 순수 여유값). 공용 로더(프로미스 1개 캐시)로 옮겨 임의 지연을
+    // 없애고, 두 번째 인스턴스부터는 대기 없이 즉시 실행되게 한다.
+    loadKakaoMapsSdk()
+      .then(() => {
+        if (cancelled) return;
+        renderPlaces();
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(kakaoSdkErrorMessage(e));
+        setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
     };
-
-    if (window.kakao && window.kakao.maps) {
-      loadKakaoPlaces();
-      return () => {
-        cancelled = true;
-      };
-    } else {
-      const scriptId = 'kakao-map-script-main';
-      let script = document.getElementById(scriptId) as HTMLScriptElement;
-
-      if (!script) {
-        const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
-        if (!apiKey) {
-          console.error('[KakaoPlaces] NEXT_PUBLIC_KAKAO_MAP_API_KEY 환경변수가 없습니다.');
-          setError('지도 API 키가 설정되지 않았습니다.');
-          setLoading(false);
-          return () => {
-            cancelled = true;
-          };
-        }
-        script = document.createElement('script');
-        script.id = scriptId;
-        script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer,drawing&autoload=false`;
-        document.head.appendChild(script);
-      }
-
-      script.addEventListener('load', loadKakaoPlaces);
-
-      return () => {
-        cancelled = true;
-        script.removeEventListener('load', loadKakaoPlaces);
-      };
-    }
   }, [address, categoriesKey, keywordsKey, limit]);
 
   // UX QA — 옆에 나란히 붙는 BusAccessCard와 로딩 시 시각적으로 어긋나 보이지 않도록

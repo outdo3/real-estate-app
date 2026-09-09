@@ -13,15 +13,13 @@ import KakaoShareButton from '@/components/KakaoShareButton';
 import FavoriteButton from '@/components/FavoriteButton';
 import AptSpecGrid from '@/components/AptSpecGrid';
 import TradeTimelineList from '@/components/TradeTimelineList';
-import LivingEnvironmentPanel from '@/components/LivingEnvironmentPanel';
-import NeighborhoodInfoPanel from '@/components/NeighborhoodInfoPanel';
-import EducationPanel from '@/components/EducationPanel';
 import CommunityPreview from '@/components/CommunityPreview';
 import StickyActionBar from '@/components/StickyActionBar';
 import AdContainer from '@/components/AdContainer';
 import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
+import InfraTabSection from '@/components/apt/InfraTabSection';
 import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
 import NextActionSection from '@/components/decision-journey/NextActionSection';
 import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } from '@/lib/decision-journey/registry';
@@ -80,8 +78,6 @@ interface Trade {
   cancelDate?: string;
 }
 
-type InfraTab = '환경' | '교통' | '학군';
-
 export default function ApartmentDetail() {
   const params = useParams();
   const router = useRouter();
@@ -134,14 +130,10 @@ export default function ApartmentDetail() {
   const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
   const [saleFilter, setSaleFilter] = useState<'all' | 'sale' | 'rent'>('all');
   const [visibleCount, setVisibleCount] = useState<number>(15);
-  const [infraTab, setInfraTab] = useState<InfraTab>('환경');
-  // UX QA — 탭을 조건부 렌더(unmount/remount)하면 환경↔교통↔학군을 오갈 때마다
-  // KakaoPlaces/BusAccessCard/SchoolDistrictPanel이 매번 새로 geocode+API를 호출했다
-  // (버스는 TAGO 캐시가 없는 좌표에서 최초 호출이 수 초 걸림 — 재호출할수록 그 지연을
-  // 반복 체감). 한 번 연 탭은 계속 마운트해두고 display만 토글해 재방문 시 재호출을
-  // 없앤다 — 처음 열 때까지는 그대로 지연 렌더(마운트 안 됨)라 방문한 적 없는 탭 때문에
-  // API 호출이 늘지는 않는다.
-  const [visitedInfraTabs, setVisitedInfraTabs] = useState<Set<InfraTab>>(new Set(['환경']));
+  // PERCEIVED_PERFORMANCE_V2 §7 — infraTab/visitedInfraTabs 상태는
+  // components/apt/InfraTabSection.tsx로 옮겼다. 여기에 두면 탭 클릭 한 번이
+  // 이 컴포넌트(1,200여 줄) 전체를 다시 렌더한다. "한 번 연 탭은 계속 마운트"라는
+  // 기존 UX QA 결론은 그 컴포넌트에 그대로 옮겨져 있다(재진입 재조회 0건 유지).
   // APT DETAIL QA/IA v1 §6/§10 — 기본 단위는 기존 UX 그대로 ㎡ 유지. localStorage로
   // 가볍게 기억만 하고(세션/서버 저장 아님), 과도한 persistence는 두지 않는다.
   const [areaUnit, setAreaUnit] = useState<AreaUnit>('㎡');
@@ -1181,37 +1173,16 @@ export default function ApartmentDetail() {
       <div className={`container ${styles.sectionBlock}`}>
         <h2 className={styles.zoneTitle}>단지 주변 생활정보</h2>
         <div className={styles.panel}>
-          <div className={styles.infraTabBar}>
-            {(['환경', '교통', '학군'] as InfraTab[]).map((tab) => (
-              <button
-                key={tab}
-                className={`${styles.infraTabBtn} ${infraTab === tab ? styles.infraTabBtnActive : ''}`}
-                onClick={() => {
-                  setInfraTab(tab);
-                  setVisitedInfraTabs((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
-                }}
-              >
-                <span className={styles.infraTabIcon}>{tab === '환경' ? '🏡' : tab === '교통' ? '🚇' : '🏫'}</span>
-                <span className={styles.infraTabLabel}>{tab === '환경' ? '주거환경' : tab === '교통' ? '교통·편의' : '학군'}</span>
-              </button>
-            ))}
-          </div>
-
-          {visitedInfraTabs.has('환경') && (
-            <div style={{ display: infraTab === '환경' ? 'block' : 'none' }}>
-              <LivingEnvironmentPanel address={primaryAddress} ready={addressReady} />
-            </div>
-          )}
-          {visitedInfraTabs.has('교통') && (
-            <div style={{ display: infraTab === '교통' ? 'block' : 'none' }}>
-              <NeighborhoodInfoPanel address={primaryAddress} ready={addressReady} />
-            </div>
-          )}
-          {visitedInfraTabs.has('학군') && (
-            <div style={{ display: infraTab === '학군' ? 'block' : 'none' }}>
-              <EducationPanel aptName={aptName} lawdCd={lawdCdState} dong={urlDong} ready={addressReady} />
-            </div>
-          )}
+          {/* PERCEIVED_PERFORMANCE_V2 §7 — 탭 상태를 이 하위 컴포넌트로 내렸다.
+              탭 클릭이 상세페이지 전체를 다시 렌더하지 않게 하기 위함이며, 탭 UI와
+              "한 번 연 탭은 계속 마운트" 동작은 그대로 옮겨왔다(재진입 재조회 0건 유지). */}
+          <InfraTabSection
+            primaryAddress={primaryAddress}
+            addressReady={addressReady}
+            aptName={aptName}
+            lawdCd={lawdCdState}
+            dong={urlDong}
+          />
         </div>
       </div>
 

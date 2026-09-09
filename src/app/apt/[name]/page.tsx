@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { siteConfig, buildOpenGraph } from '@/config/site';
+import KakaoPreconnect from '@/components/KakaoPreconnect';
 import ApartmentDetailClient from './apt-client';
 
 type Props = {
@@ -20,5 +21,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default function ApartmentDetail() {
-  return <ApartmentDetailClient />;
+  return (
+    <>
+      {/* PERCEIVED_PERFORMANCE_V2 §4 — 주거환경/교통 카드가 Kakao SDK와 Local API를
+          쓰므로 연결을 미리 열어둔다. 지도 타일(mts.daumcdn.net)은 지도 모달을 열기
+          전까지 필요 없어 여기서는 열지 않는다. */}
+      <KakaoPreconnect />
+      <ApartmentDetailClient />
+    </>
+  );
 }

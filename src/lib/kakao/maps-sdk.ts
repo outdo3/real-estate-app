@@ -14,7 +14,6 @@
 const SCRIPT_ID = 'kakao-map-script-main';
 const SDK_LIBRARIES = 'services,clusterer';
 const LOAD_TIMEOUT_MS = 10000;
-const POLL_INTERVAL_MS = 100;
 
 /** 실패 원인을 사람이 읽을 문구로 바꾸기 위한 안정적인 코드. */
 export type KakaoSdkErrorCode =
@@ -39,14 +38,12 @@ export function loadKakaoMapsSdk(): Promise<void> {
     }
 
     let settled = false;
-    let poll: ReturnType<typeof setInterval> | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    // 어느 경로로 끝나든 타이머/폴링을 반드시 정리한다(§12 리스너 누수 방지).
+    // 어느 경로로 끝나든 타이머를 반드시 정리한다(§12 리스너 누수 방지).
     const done = (err?: Error) => {
       if (settled) return;
       settled = true;
-      if (poll) clearInterval(poll);
       if (timer) clearTimeout(timer);
       if (err) reject(err);
       else resolve();
@@ -62,6 +59,20 @@ export function loadKakaoMapsSdk(): Promise<void> {
       return;
     }
 
+    // PERCEIVED_PERFORMANCE_V2 §5 — 예전에는 여기서 100ms 간격 setInterval로
+    // `kakao.maps.load`가 생겼는지 확인했다. 폴링은 준비 완료와 감지 사이에 평균
+    // 반주기(50ms), 최악 한 주기(100ms)의 고정 지연을 만든다. 스크립트 태그의 `load`
+    // 이벤트는 그 지연 없이 정확한 시점을 알려주므로 폴링을 걷어낸다.
+    //
+    // 이미 로드가 끝난 경우는 위의 동기 검사(`typeof window.kakao?.maps?.load`)가
+    // 잡아낸다 — SDK 스크립트는 실행되는 즉시 `window.kakao`를 채우므로 "load는
+    // 끝났는데 window.kakao가 아직 없는" 중간 상태가 존재하지 않는다. 따라서
+    // 동기 검사 + load 이벤트 두 가지로 모든 정상 경로가 덮인다.
+    const onScriptLoad = () => {
+      if (typeof window.kakao?.maps?.load === 'function') runLoad();
+      else done(new Error('KAKAO_SDK_SCRIPT_ERROR'));
+    };
+
     let script = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
     if (!script) {
       const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
@@ -73,22 +84,17 @@ export function loadKakaoMapsSdk(): Promise<void> {
       script.id = SCRIPT_ID;
       script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=${SDK_LIBRARIES}&autoload=false`;
       script.async = true;
+      script.addEventListener('load', onScriptLoad);
       script.addEventListener('error', () => done(new Error('KAKAO_SDK_SCRIPT_ERROR')));
       document.head.appendChild(script);
     } else {
       // 다른 컴포넌트가 이미 주입해 둔 태그를 재사용한다. 두 번 넣지 않는다.
+      script.addEventListener('load', onScriptLoad);
       script.addEventListener('error', () => done(new Error('KAKAO_SDK_SCRIPT_ERROR')));
     }
 
-    poll = setInterval(() => {
-      if (typeof window.kakao?.maps?.load === 'function') {
-        if (poll) clearInterval(poll);
-        poll = null;
-        runLoad();
-      }
-    }, POLL_INTERVAL_MS);
-
     // 도메인 미등록 등으로 영영 로드되지 않는 경우 무한 대기를 막는다.
+    // (폴링을 없앤 뒤에도 이 타임아웃은 그대로 최후의 안전장치로 남는다.)
     timer = setTimeout(() => done(new Error('KAKAO_SDK_TIMEOUT')), LOAD_TIMEOUT_MS);
   });
 

@@ -36,7 +36,7 @@ const subSectionTitleStyle: React.CSSProperties = {
 // 3구역의 교통 정보(대중교통/광역교통) — 카카오 로컬 실제 POI 검색 결과만 사용한다(KTX는
 // 전용 카테고리 코드가 없어 키워드 검색). 도보/차량 시간은 KakaoPlaces가 실측 직선거리로
 // 계산하는 근사치를 그대로 재사용한다.
-export default function NeighborhoodInfoPanel({ address, ready }: NeighborhoodInfoPanelProps) {
+function NeighborhoodInfoPanel({ address, ready }: NeighborhoodInfoPanelProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem' }}>
       <div style={cardStyle}>
@@ -73,3 +73,6 @@ export default function NeighborhoodInfoPanel({ address, ready }: NeighborhoodIn
     </div>
   );
 }
+
+// PERCEIVED_PERFORMANCE_V2 §7 — LivingEnvironmentPanel과 같은 이유(원시 props만 받는다).
+export default React.memo(NeighborhoodInfoPanel);

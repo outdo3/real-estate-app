@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import { perfMark, perfMeasure } from '@/lib/perf-debug';
+import { loadKakaoMapsSdk } from '@/lib/kakao/maps-sdk';
 // AptMarker/AptCluster 타입과 selected-marker fast-path 판정 로직은
 // src/lib/map-selected-marker.ts로 분리해 부작용 없이 단위 테스트한다(§26).
 import type { AptMarker, AptCluster } from '@/lib/map-selected-marker';
@@ -51,6 +52,7 @@ import {
 } from '@/lib/map-property-focus';
 import { Building2, Home } from 'lucide-react';
 import FullPageLoader from '@/components/FullPageLoader';
+import KakaoPreconnect from '@/components/KakaoPreconnect';
 import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
 import ShareAction from '@/components/ShareAction';
@@ -520,57 +522,39 @@ export default function FullscreenMapPage() {
     setPendingRestoreIdentity(null);
   }, [pendingRestoreIdentity, isLoadingData, aptMarkers]);
 
+  // PERCEIVED_PERFORMANCE_V2 §5 — SDK 준비 판정을 공용 로더(src/lib/kakao/maps-sdk.ts)
+  // 하나로 모은다.
+  //
+  // 예전 구현은 이 파일에서 스크립트를 직접 주입하고 `setInterval(…, 200)`으로 준비
+  // 여부를 폴링했다. 폴링은 "준비된 시점"과 "감지한 시점" 사이에 평균 100ms·최악
+  // 200ms의 고정 지연을 만드는데, 그 지연이 뒤따르는 전 과정(역지오코딩 → 마커 조회 →
+  // 클러스터 계산)을 통째로 뒤로 민다. 공용 로더는 스크립트 `load` 이벤트로 정확한
+  // 시점에 resolve하며, 프로미스를 캐시하므로 상세→지도→로드뷰처럼 오가는 경로에서
+  // SDK를 다시 기다리지 않는다(중복 초기화도 구조적으로 불가능해진다).
+  //
+  // 실패 문구는 기존 것을 그대로 유지한다 — 광고차단/사내망으로 dapi.kakao.com이
+  // 막히는 실제 사례를 사용자에게 계속 정확히 알려야 한다(무한 로더 금지).
   useEffect(() => {
     if (!apiKey) return;
+    let cancelled = false;
 
-    const scriptId = 'kakao-map-script-main';
-    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
-
-    if (!script) {
-      script = document.createElement('script');
-      script.id = scriptId;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services,clusterer&autoload=false`;
-      script.async = true;
-      document.head.appendChild(script);
-    }
-
-    // 광고차단 확장 프로그램이나 특정 통신사/사내망이 dapi.kakao.com 스크립트 자체를
-    // 막는 경우가 실제로 있다 — 이전에는 그러면 아래 폴링이 영원히 실패 상태로 남아
-    // 사용자에게 아무 신호 없이 "지도 데이터를 불러오는 중입니다..."에서 페이지가
-    // 멈춘 것처럼 보였다. 스크립트 자체의 로드 실패를 즉시 감지하고, 혹시 그 신호를
-    // 놓치는 경우를 대비해 폴링에도 타임아웃을 둬서 반드시 사용자에게 원인을 알린다.
-    const handleScriptError = () => {
-      setMapLoadError('카카오맵 스크립트를 불러오지 못했습니다. 광고 차단 확장 프로그램이나 네트워크(사내망/통신사) 설정이 dapi.kakao.com 접속을 막고 있을 수 있습니다.');
-    };
-    script.addEventListener('error', handleScriptError);
-
-    const checkKakao = setInterval(() => {
-      if (window.kakao && window.kakao.maps && window.kakao.maps.services) {
-        clearInterval(checkKakao);
+    loadKakaoMapsSdk()
+      .then(() => {
+        if (cancelled) return;
         setIsMapReady(true);
-      } else if (window.kakao && window.kakao.maps) {
-        // In case load wasn't called by page.tsx
-        clearInterval(checkKakao);
-        window.kakao.maps.load(() => {
-          setIsMapReady(true);
-        });
-      }
-    }, 200);
-
-    const timeout = setTimeout(() => {
-      clearInterval(checkKakao);
-      setIsMapReady((ready) => {
-        if (!ready) {
-          setMapLoadError('지도를 불러오는 데 시간이 너무 오래 걸립니다. 네트워크 상태를 확인하거나 광고 차단 확장 프로그램을 꺼보세요.');
-        }
-        return ready;
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const code = err instanceof Error ? err.message : String(err);
+        setMapLoadError(
+          code === 'KAKAO_SDK_SCRIPT_ERROR'
+            ? '카카오맵 스크립트를 불러오지 못했습니다. 광고 차단 확장 프로그램이나 네트워크(사내망/통신사) 설정이 dapi.kakao.com 접속을 막고 있을 수 있습니다.'
+            : '지도를 불러오는 데 시간이 너무 오래 걸립니다. 네트워크 상태를 확인하거나 광고 차단 확장 프로그램을 꺼보세요.'
+        );
       });
-    }, 10000);
 
     return () => {
-      clearInterval(checkKakao);
-      clearTimeout(timeout);
-      script?.removeEventListener('error', handleScriptError);
+      cancelled = true;
     };
   }, [apiKey]);
 
@@ -1723,6 +1707,9 @@ export default function FullscreenMapPage() {
 
   return (
     <div ref={mapViewportRef} style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+      {/* PERCEIVED_PERFORMANCE_V2 §4 — 이 화면은 SDK/Local(dapi)과 타일(mts.daumcdn.net)을
+          모두 반드시 쓴다. 두 호스트의 핸드셰이크를 미리 끝내둔다. */}
+      <KakaoPreconnect withTiles />
       {/* MAP UI POLISH V1 §5 — 검색바(+내 위치)는 흰 알약 하나로 묶고, 공유 버튼은 그
           옆에 완전히 독립된 원형 버튼으로 분리한다("검색바 내부에 넣지 않음"). 이 바깥
           row 전체(topControlRowRef)를 top safe-zone 측정 기준으로 쓴다 — 검색 결과

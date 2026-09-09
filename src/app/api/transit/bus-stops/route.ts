@@ -32,6 +32,32 @@ interface TagoRouteRaw {
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 정류소 위치는 자주 바뀌지 않는다
 const ROUTES_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 노선 구성도 자주 바뀌지 않는다
 
+// PERCEIVED_PERFORMANCE_V2 §3 — CDN(공유) 캐시 정책.
+//
+// 왜 필요한가: 위 getOrSetCache는 `src/lib/server-cache.ts`의 모듈 전역 Map이라
+// **서버리스 인스턴스 하나의 수명 동안만** 유효하다. 실측(감사 V1 §4.5)에서 TAGO
+// cold는 1,426 / 3,226 / 3,769 / 7,901ms, warm은 50~82ms였다 — 인스턴스가 재활용되거나
+// 요청이 다른 인스턴스로 가면 사용자는 다시 cold를 만난다. 즉 "6시간 TTL"은 실제로
+// "6시간 또는 이 인스턴스가 죽을 때까지 중 짧은 쪽"이었다.
+//
+// 이 응답은 CDN 공유 캐시에 담기에 적합하다:
+//   - 캐시 키는 URL 전체이고, 결과에 영향을 주는 파라미터는 lat/lng 둘뿐이다
+//     (아래 GET은 그 외 어떤 입력도 읽지 않는다) → 위치 간 오염이 구조적으로 불가능하다.
+//   - 사용자별 데이터가 전혀 없다. 쿠키/세션/인증을 읽지 않는다.
+//   - 내용은 공공데이터(정류소 위치·경유 노선)이며 개인정보가 아니다.
+//
+// TTL 6시간(21600s)은 위 in-memory TTL과 **같은 값·같은 근거**를 쓴다(정류소 위치와
+// 노선 구성은 자주 바뀌지 않는다). 새로운 신선도 기준을 임의로 만들지 않았다.
+// stale-while-revalidate 24시간은 TTL이 지난 직후 한 명이 cold를 뒤집어쓰는 것을 막는다
+// — 이 데이터는 시세/실거래가 아니라 정류소 위치라서 잠깐 이전 값이 나가도 의미가
+// 훼손되지 않는다.
+const SUCCESS_CACHE_CONTROL = 'public, s-maxage=21600, stale-while-revalidate=86400';
+
+// 실패/불완전 응답은 **절대 공유 캐시에 담지 않는다**. 담기면 한 번의 TAGO 장애가
+// 6시간 동안 모든 사용자에게 박제된다(같은 이유로 in-memory 캐시도 노선 조회 실패를
+// 정류소 캐시와 분리해 두었다 — 아래 §노선 조회 주석 참고).
+const NO_STORE_CACHE_CONTROL = 'no-store';
+
 function buildServiceKey(): string {
   const rawKey = process.env.DATA_GO_KR_API_KEY || '';
   if (!rawKey) throw new Error('DATA_GO_KR_API_KEY not configured');
@@ -116,7 +142,10 @@ export async function GET(request: Request) {
   const lng = parseFloat(searchParams.get('lng') || '');
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return NextResponse.json({ success: false, error: 'lat/lng required' }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: 'lat/lng required' },
+      { status: 400, headers: { 'Cache-Control': NO_STORE_CACHE_CONTROL } }
+    );
   }
 
   const cacheKey = `bus-stops:${lat.toFixed(4)}:${lng.toFixed(4)}`;
@@ -182,9 +211,27 @@ export async function GET(request: Request) {
       nearestBusStop: data.nearestBusStop ? { ...data.nearestBusStop, routes } : null,
     };
 
-    return NextResponse.json({ success: true, data: responseData });
+    // PERCEIVED_PERFORMANCE_V2 §3 — "완전히 성공한 응답"만 공유 캐시에 담는다.
+    //
+    // 정류소가 있는데 routes === null 이면 노선 조회가 실패한 것이다(정류장 자체는
+    // 정상). 그 부분 실패 상태를 CDN에 6시간 박제하면, TAGO가 복구된 뒤에도 사용자는
+    // 계속 노선 없는 화면을 보게 된다 — in-memory 캐시가 이미 같은 이유로 노선 실패를
+    // 캐시하지 않는데(getOrSetCache는 throw 시 아무것도 담지 않는다) CDN이 그 원칙을
+    // 무력화해서는 안 된다.
+    //
+    // totalCount === 0(반경 내 정류소 없음)은 실패가 아니라 **검증된 진짜 0건**이므로
+    // 정상적으로 캐시한다 — E-JIP 데이터 원칙상 성공적인 0은 "없음"이 맞다.
+    const isFullySuccessful = data.nearestBusStop === null || routes !== null;
+
+    return NextResponse.json(
+      { success: true, data: responseData },
+      { headers: { 'Cache-Control': isFullySuccessful ? SUCCESS_CACHE_CONTROL : NO_STORE_CACHE_CONTROL } }
+    );
   } catch (error) {
     console.error('TAGO bus-stops lookup failed', error);
-    return NextResponse.json({ success: false, error: 'bus stop lookup failed' }, { status: 502 });
+    return NextResponse.json(
+      { success: false, error: 'bus stop lookup failed' },
+      { status: 502, headers: { 'Cache-Control': NO_STORE_CACHE_CONTROL } }
+    );
   }
 }
