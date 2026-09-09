@@ -2,8 +2,10 @@ import React from 'react';
 import KakaoPlaces from './KakaoPlaces';
 
 interface LivingEnvironmentPanelProps {
-  address: string;
-  ready: boolean; // 단지 위치(address) 확정 전에는 검색을 시작하지 않는다
+  // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2 — 주소 문자열 대신 canonical 좌표를 받는다.
+  // 카드 6개가 같은 좌표 하나를 공유하므로 지오코딩이 한 번도 일어나지 않는다.
+  coords: { lat: number; lng: number } | null;
+  ready: boolean; // 단지 좌표 확정 전에는 검색을 시작하지 않는다
 }
 
 const cardStyle: React.CSSProperties = {
@@ -40,13 +42,13 @@ function DeliveryBadges() {
 // 정보라 사용자 지적대로 "주거환경"으로 옮긴다. 컴포넌트(KakaoPlaces)는 그대로
 // 재사용하고 어느 탭에서 렌더링되는지만 바꿨다(회귀 위험 최소화, 로직 변경 없음).
 // 기존에 "병원·공원" 한 카드로 묶여 있던 걸 여기서는 의료/녹지 성격이 달라 분리했다.
-function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps) {
+function LivingEnvironmentPanel({ coords, ready }: LivingEnvironmentPanelProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem' }}>
       <div style={cardStyle}>
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🛒 대형마트</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={['MT1']} limit={NEW_CATEGORY_LIMIT} />
+          <KakaoPlaces coords={coords} categories={['MT1']} limit={NEW_CATEGORY_LIMIT} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}
@@ -54,7 +56,7 @@ function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps)
       <div style={cardStyle}>
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🏪 편의점</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={['CS2']} limit={NEW_CATEGORY_LIMIT} />
+          <KakaoPlaces coords={coords} categories={['CS2']} limit={NEW_CATEGORY_LIMIT} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}
@@ -62,7 +64,7 @@ function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps)
       <div style={cardStyle}>
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>💊 약국</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={['PM9']} limit={NEW_CATEGORY_LIMIT} />
+          <KakaoPlaces coords={coords} categories={['PM9']} limit={NEW_CATEGORY_LIMIT} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}
@@ -72,7 +74,7 @@ function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps)
             시설을 함께 지칭한다 — 실제로는 어린이집/유치원이 섞여서 나온다. */}
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🧸 어린이집·유치원</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={['PS3']} limit={NEW_CATEGORY_LIMIT} />
+          <KakaoPlaces coords={coords} categories={['PS3']} limit={NEW_CATEGORY_LIMIT} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}
@@ -80,7 +82,7 @@ function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps)
       <div style={cardStyle}>
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🌳 공원</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={[]} keywords={['공원']} limit={NEW_CATEGORY_LIMIT} />
+          <KakaoPlaces coords={coords} categories={[]} keywords={['공원']} limit={NEW_CATEGORY_LIMIT} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}
@@ -88,7 +90,7 @@ function LivingEnvironmentPanel({ address, ready }: LivingEnvironmentPanelProps)
       <div style={cardStyle}>
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🏥 병원</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={['HP8']} limit={NEW_CATEGORY_LIMIT} />
+          <KakaoPlaces coords={coords} categories={['HP8']} limit={NEW_CATEGORY_LIMIT} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}

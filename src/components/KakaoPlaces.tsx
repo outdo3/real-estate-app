@@ -13,7 +13,11 @@ import styles from '@/app/apt/[name]/detail.module.css';
 type KakaoCategoryCode = 'SC4' | 'SW8' | 'HP8' | 'MT1' | 'CS2' | 'PM9' | 'PS3';
 
 interface Props {
-  address: string;
+  // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2/§3/§4 — 이 컴포넌트는 더 이상 주소를
+  // 지오코딩하지 않는다. 상위가 서버에서 받은 canonical 좌표(ApartmentMaster) 하나를
+  // 그대로 내려준다. null이면 "위치 확인 불가"를 정직하게 표시하고 아무 검색도 하지
+  // 않는다(예전의 keywordSearch 첫 결과 채택은 제거됐다 — 이름 기반 재식별 위험).
+  coords: { lat: number; lng: number } | null;
   // 카카오 로컬 카테고리 코드. 여러 개를 넘기면 각각 검색 후 거리순으로 병합한다.
   categories: KakaoCategoryCode[];
   // 카테고리 코드가 없는 장소(공원, KTX역 등)는 키워드 검색으로 보완한다. 카테고리 결과와
@@ -80,13 +84,18 @@ export const formatEta = (distance: number) => {
   return `직선 ${distance}m`;
 };
 
-export default function KakaoPlaces({ address, categories, keywords = [], limit = 5, lawdCd }: Props) {
+export default function KakaoPlaces({ coords, categories, keywords = [], limit = 5, lawdCd }: Props) {
   const [places, setPlaces] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   const categoriesKey = categories.join(',');
   const keywordsKey = keywords.join(',');
+  // §5 — 의존성을 좌표 **원시값**으로 고정한다. 예전 deps는 "지역명 + 단지명" 문자열이라
+  // regionName이 뒤늦게 도착해 라벨만 바뀌어도 effect 전체가 다시 돌았다(같은 주소를
+  // 18회 지오코딩한 직접 원인). 좌표는 canonical 값이라 라벨 변화에 흔들리지 않는다.
+  const lat = coords?.lat ?? null;
+  const lng = coords?.lng ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -96,9 +105,14 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
     setError('');
     setPlaces([]);
 
+    if (lat == null || lng == null) {
+      setError('위치 정보를 확인할 수 없습니다.');
+      setLoading(false);
+      return () => { cancelled = true; };
+    }
+
     const renderPlaces = () => {
       if (cancelled) return;
-      const geocoder = new window.kakao.maps.services.Geocoder();
       const ps = new window.kakao.maps.services.Places();
 
       const searchOneCategory = (category: KakaoCategoryCode, coords: any) =>
@@ -168,24 +182,9 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
         setLoading(false);
       };
 
-      geocoder.addressSearch(address, (result: any, status: any) => {
-        if (cancelled) return;
-        if (status === window.kakao.maps.services.Status.OK) {
-          const coords = new window.kakao.maps.LatLng(result[0].y, result[0].x);
-          searchPlaces(coords);
-        } else {
-          ps.keywordSearch(address, (res: any, status2: any) => {
-            if (cancelled) return;
-            if (status2 === window.kakao.maps.services.Status.OK) {
-               const coords = new window.kakao.maps.LatLng(res[0].y, res[0].x);
-               searchPlaces(coords);
-            } else {
-              setError('위치를 찾을 수 없어 주변 인프라를 검색할 수 없습니다.');
-              setLoading(false);
-            }
-          });
-        }
-      });
+      // 저장된 좌표가 곧 authority다 — Geocoder를 만들지도 않는다.
+      // (lat/lng은 effect 진입부에서 null 가드를 이미 통과했다.)
+      searchPlaces(new window.kakao.maps.LatLng(lat, lng));
     };
 
     // PERCEIVED_PERFORMANCE_V2 §2/§5 — 이 컴포넌트는 상세페이지 한 화면에 6~9개가
@@ -207,7 +206,7 @@ export default function KakaoPlaces({ address, categories, keywords = [], limit 
     return () => {
       cancelled = true;
     };
-  }, [address, categoriesKey, keywordsKey, limit]);
+  }, [lat, lng, categoriesKey, keywordsKey, limit]);
 
   // UX QA — 옆에 나란히 붙는 BusAccessCard와 로딩 시 시각적으로 어긋나 보이지 않도록
   // 같은 skeleton 스타일을 쓴다.

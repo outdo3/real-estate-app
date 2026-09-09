@@ -620,7 +620,12 @@ export default function FullscreenMapPage() {
         // 실거래 마커 데이터와 "최근 24시간 내 커뮤니티 글이 있는 단지" 집계는 서로
         // 무관한 조회라 Promise.all로 병렬 처리한다.
         const [res, activityRes] = await Promise.all([
-          fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12`),
+          // PERCEIVED_PERFORMANCE_V2_DATAFLOW §8 — fields=marker는 이 페이지의 dedup
+          // 규칙(좌표 없음/취소 건 제외 후 단지별 최신 1건)을 서버에서 그대로 재현한
+          // 슬림 응답이다. 아래 dedup 루프는 그대로 두어 계약이 바뀌어도(구 배포 응답이
+          // 섞여도) 결과가 같도록 한다 — 이미 걸러진 목록에 같은 필터를 다시 적용해도
+          // 결과는 동일하다(멱등).
+          fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12&fields=marker`),
           fetch(`/api/community/recent-activity`).catch(() => null),
         ]);
         // TRANSACTIONS_API_TRUST_V1 — 공유 리더로 실패/부분 실패/검증된 0건을 구분한다.

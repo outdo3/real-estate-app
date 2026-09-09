@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { formatEta } from './KakaoPlaces';
-import { loadKakaoMapsSdk } from '@/lib/kakao/maps-sdk';
-import { kakaoSdkErrorMessage } from '@/lib/kakao/map-embed-logic';
 import styles from '@/app/apt/[name]/detail.module.css';
 
 interface Props {
-  address: string;
+  // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2/§3/§4/§9 — 주소 문자열이 아니라 서버가 준
+  // canonical 좌표(ApartmentMaster)를 받는다. 예전에는 여기서 SDK 로드 → addressSearch
+  // (실측 항상 실패) → keywordSearch 폴백(결과 75건 중 첫 번째 채택) 3단계를 거친 뒤에야
+  // /api/transit/bus-stops 요청이 시작됐다 — 버스 지연의 절반 이상이 이 구간이었고,
+  // 폴백은 이름 기반 재식별 위험이기도 했다. 이제 좌표가 있으면 곧바로 요청한다.
+  coords: { lat: number; lng: number } | null;
 }
 
 interface BusRoute {
@@ -52,12 +55,20 @@ function formatRoutes(routes: BusRoute[]): string {
 // STEP 44에서 확인했듯 Kakao Local은 일반 시내버스 정류장을 검색하지 못해(문서
 // docs/development/44-apartment-detail-bus-access.md 참고), 국토교통부(TAGO)
 // 버스정류소정보 API(/api/transit/bus-stops)로 좌표 기반 근접 정류장을 조회한다.
-// 위치 확보는 KakaoPlaces.tsx/KakaoMapEmbed.tsx와 동일하게 Kakao Geocoder를 쓴다
-// (client에서는 REST 직접 호출 시 Origin 헤더를 임의로 못 넣으므로 JS SDK 필요).
-export default function BusAccessCard({ address }: Props) {
+//
+// PERCEIVED_PERFORMANCE_V2_DATAFLOW §3 — 위치 확보에 더 이상 Kakao SDK를 쓰지 않는다.
+// 이 컴포넌트는 이제 카카오 SDK를 import조차 하지 않으며(grep으로 재확인 가능),
+// 좌표는 상위가 서버에서 받은 canonical 값을 그대로 내려준다.
+export default function BusAccessCard({ coords }: Props) {
   const [data, setData] = useState<BusStopData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // §5 — 의존성은 좌표 원시값이다. regionName 같은 표시용 라벨이 뒤늦게 바뀌어도
+  // 이 effect는 다시 돌지 않는다(예전에는 이미 떠 있던 버스 정보가 skeleton으로
+  // 되돌아갔다).
+  const lat = coords?.lat ?? null;
+  const lng = coords?.lng ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -65,74 +76,42 @@ export default function BusAccessCard({ address }: Props) {
     setError('');
     setData(null);
 
-    const run = async () => {
-      const geocoder = new window.kakao.maps.services.Geocoder();
-      const ps = new window.kakao.maps.services.Places();
+    if (lat == null || lng == null) {
+      // 좌표가 없으면 추측하지 않는다 — 다른 단지의 정류장을 보여주는 것보다
+      // 모른다고 말하는 편이 낫다.
+      setError('위치 정보를 확인할 수 없어 버스 정보를 표시할 수 없습니다.');
+      setLoading(false);
+      return () => { cancelled = true; };
+    }
 
-      const fetchBusStops = async (lat: number, lng: number) => {
+    // §9 — 클릭 즉시 요청이 시작된다. Kakao SDK도, 지오코딩도 이 경로에 없다.
+    (async () => {
+      try {
+        const res = await fetch(`/api/transit/bus-stops?lat=${lat}&lng=${lng}`);
         if (cancelled) return;
-        try {
-          const res = await fetch(`/api/transit/bus-stops?lat=${lat}&lng=${lng}`);
-          if (cancelled) return;
-          if (!res.ok) {
-            setError('버스 정보를 불러오지 못했습니다.');
-            setLoading(false);
-            return;
-          }
-          const json = await res.json();
-          if (!json.success) {
-            setError('버스 정보를 불러오지 못했습니다.');
-          } else if (json.data.totalCount === 0) {
-            setError('검색 반경 내 버스정류장 정보가 없습니다.');
-          } else {
-            setData(json.data);
-          }
-        } catch {
-          if (!cancelled) setError('버스 정보를 불러오지 못했습니다.');
-        } finally {
-          if (!cancelled) setLoading(false);
+        if (!res.ok) {
+          setError('버스 정보를 불러오지 못했습니다.');
+          setLoading(false);
+          return;
         }
-      };
-
-      geocoder.addressSearch(address, (result: any, status: any) => {
+        const json = await res.json();
         if (cancelled) return;
-        if (status === window.kakao.maps.services.Status.OK) {
-          fetchBusStops(parseFloat(result[0].y), parseFloat(result[0].x));
+        if (!json.success) {
+          setError('버스 정보를 불러오지 못했습니다.');
+        } else if (json.data.totalCount === 0) {
+          setError('검색 반경 내 버스정류장 정보가 없습니다.');
         } else {
-          ps.keywordSearch(address, (res: any, status2: any) => {
-            if (cancelled) return;
-            if (status2 === window.kakao.maps.services.Status.OK) {
-              fetchBusStops(parseFloat(res[0].y), parseFloat(res[0].x));
-            } else {
-              setError('위치를 찾을 수 없어 버스 정보를 검색할 수 없습니다.');
-              setLoading(false);
-            }
-          });
+          setData(json.data);
         }
-      });
-    };
+      } catch {
+        if (!cancelled) setError('버스 정보를 불러오지 못했습니다.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
-    // PERCEIVED_PERFORMANCE_V2 §2/§5 — 예전에는 이 컴포넌트가 스크립트 주입/로드 판정을
-    // 직접 복제하고, 마지막에 `setTimeout(run, 100)`으로 100ms를 그냥 흘려보냈다.
-    // 그 100ms는 어떤 준비 상태도 기다리지 않는 순수한 여유값이었다(카카오 SDK는
-    // `kakao.maps.load()` 콜백 시점에 `libraries=services`까지 준비를 보장한다).
-    // 공용 로더(단일 프로미스 캐시)로 옮겨 임의 지연을 없애고, 같은 페이지의 다른
-    // 카드가 이미 SDK를 받아왔다면 네트워크·대기 없이 즉시 이어서 실행한다.
-    loadKakaoMapsSdk()
-      .then(() => {
-        if (cancelled) return;
-        run();
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(kakaoSdkErrorMessage(e));
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [address]);
+    return () => { cancelled = true; };
+  }, [lat, lng]);
 
   // UX QA — TAGO(국토교통부 버스정류소정보)는 서버 캐시(6h)가 없는 좌표를 처음 조회할
   // 때 실측 3초 이상 걸릴 수 있다(외부 공공데이터 API 자체 지연, 캐시 적중 시 20ms대로

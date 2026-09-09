@@ -2,7 +2,11 @@ import React from 'react';
 import KakaoPlaces from './KakaoPlaces';
 
 interface SchoolDistrictPanelProps {
-  address: string;
+  // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2 — KakaoPlaces가 주소 지오코딩을 그만두고
+  // canonical 좌표를 받도록 바뀌면서 이 패널의 계약도 함께 맞춘다.
+  // (이 컴포넌트는 현재 EducationPanel로 대체돼 렌더되지 않지만, 향후 재사용
+  //  가능성이 있어 삭제하지 않고 계약만 갱신한다 — AGENTS.md §14.)
+  coords: { lat: number; lng: number } | null;
   ready: boolean;
   lawdCd?: string;
 }
@@ -24,13 +28,13 @@ const cardStyle: React.CSSProperties = {
 // [STEP50 V1 CLEANUP] 위 두 항목("학생 수 추이"/"특목고 진학률")은 위 주석대로 데이터
 // 소스 자체가 아예 없어 어떤 단지에서도 예외 없이 "데이터 준비 중입니다"만 반복 노출했다
 // — 실제 데이터가 있는 "인근 학교" 카드만 남기고 두 placeholder 카드는 화면에서 제거했다.
-export default function SchoolDistrictPanel({ address, ready, lawdCd }: SchoolDistrictPanelProps) {
+export default function SchoolDistrictPanel({ coords, ready, lawdCd }: SchoolDistrictPanelProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
       <div style={cardStyle}>
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🏫 인근 학교</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={['SC4']} limit={5} lawdCd={lawdCd} />
+          <KakaoPlaces coords={coords} categories={['SC4']} limit={5} lawdCd={lawdCd} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}

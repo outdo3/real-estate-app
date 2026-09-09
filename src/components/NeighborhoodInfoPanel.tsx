@@ -3,8 +3,9 @@ import KakaoPlaces from './KakaoPlaces';
 import BusAccessCard from './BusAccessCard';
 
 interface NeighborhoodInfoPanelProps {
-  address: string;
-  ready: boolean; // 단지 위치(address) 확정 전에는 검색을 시작하지 않는다
+  // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2 — 주소 문자열 대신 canonical 좌표를 받는다.
+  coords: { lat: number; lng: number } | null;
+  ready: boolean; // 단지 좌표 확정 전에는 검색을 시작하지 않는다
 }
 
 const cardStyle: React.CSSProperties = {
@@ -36,7 +37,7 @@ const subSectionTitleStyle: React.CSSProperties = {
 // 3구역의 교통 정보(대중교통/광역교통) — 카카오 로컬 실제 POI 검색 결과만 사용한다(KTX는
 // 전용 카테고리 코드가 없어 키워드 검색). 도보/차량 시간은 KakaoPlaces가 실측 직선거리로
 // 계산하는 근사치를 그대로 재사용한다.
-function NeighborhoodInfoPanel({ address, ready }: NeighborhoodInfoPanelProps) {
+function NeighborhoodInfoPanel({ coords, ready }: NeighborhoodInfoPanelProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem' }}>
       <div style={cardStyle}>
@@ -46,13 +47,13 @@ function NeighborhoodInfoPanel({ address, ready }: NeighborhoodInfoPanelProps) {
             <div style={{ marginBottom: '0.9rem' }}>
               <div style={subSectionTitleStyle}>🚇 지하철</div>
               {/* keywords를 넘기지 않아 KTX/기차역이 섞이지 않는다 — SW8 카테고리(지하철)만 조회. */}
-              <KakaoPlaces address={address} categories={['SW8']} limit={4} />
+              <KakaoPlaces coords={coords} categories={['SW8']} limit={4} />
             </div>
             <div>
               <div style={subSectionTitleStyle}>🚌 버스</div>
               {/* [UI-C3-2/3] Kakao Local은 시내버스 정류장을 검색하지 못해(문서44) 국토교통부
                   TAGO 버스정류소정보(/api/transit/bus-stops)로 조회한다. */}
-              <BusAccessCard address={address} />
+              <BusAccessCard coords={coords} />
             </div>
           </>
         ) : (
@@ -65,7 +66,7 @@ function NeighborhoodInfoPanel({ address, ready }: NeighborhoodInfoPanelProps) {
             오탐 제거)는 KakaoPlaces.tsx 쪽 로직이라 그대로 유지된다(회귀 없음). */}
         <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>🚄 광역교통</h4>
         {ready ? (
-          <KakaoPlaces address={address} categories={[]} keywords={['KTX', '기차역']} limit={4} />
+          <KakaoPlaces coords={coords} categories={[]} keywords={['KTX', '기차역']} limit={4} />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>단지 위치 확인 후 표시됩니다.</p>
         )}

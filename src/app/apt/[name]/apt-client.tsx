@@ -24,7 +24,6 @@ import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
 import NextActionSection from '@/components/decision-journey/NextActionSection';
 import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } from '@/lib/decision-journey/registry';
 import { trackEvent } from '@/lib/analytics/trackEvent';
-import { geocodeAddressToCoords } from '@/lib/decision-journey/geocode-for-map';
 import type { NextAction } from '@/lib/decision-journey/types';
 import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
@@ -154,6 +153,15 @@ export default function ApartmentDetail() {
   // 속할 때만 canonical identity로 채택한다(아래 deriveCanonicalAptSeq 호출부 참고).
   const [incomingAptSeq, setIncomingAptSeq] = useState<string | null>(null);
 
+  // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2 — 서버(/api/apt/[name])가 검증된 identity로
+  // 해석해준 canonical 좌표. 이 페이지의 **모든** 위치 소비자(주거환경/교통/버스/
+  // 지도/로드뷰/지도 딥링크)가 이 값 하나를 재사용한다. null이면 위치를 모른다는
+  // 뜻이고, 그때는 추측하지 않는다.
+  const [canonicalCoord, setCanonicalCoord] = useState<{ lat: number; lng: number } | null>(null);
+  // 좌표 조회가 끝났는지(성공/실패 무관). 이게 true가 되기 전에는 하위 패널이
+  // "위치 확인 중" 상태를 유지해 '없음'으로 단정하지 않는다.
+  const [coordResolved, setCoordResolved] = useState(false);
+
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const queryAptName = searchParams.get('aptName');
@@ -262,6 +270,18 @@ export default function ApartmentDetail() {
           const tradeState = resolveTradeReadState<Trade>(true, data);
           const fetchedTrades = tradeState.trades;
           setTrades(fetchedTrades);
+          // §2 — 좌표는 서버가 이미 canonical identity로 해석해서 보내준다.
+          // 'RESOLVED'가 아니면 좌표 없음으로 확정한다(클라이언트에서 재추측 금지).
+          const coord = (data as { coordinate?: unknown }).coordinate as
+            | { lat?: number; lng?: number; status?: string }
+            | null
+            | undefined;
+          setCanonicalCoord(
+            coord && typeof coord.lat === 'number' && typeof coord.lng === 'number'
+              ? { lat: coord.lat, lng: coord.lng }
+              : null
+          );
+          setCoordResolved(true);
           // Default selectedTradeArea: raw trade-area identity only, never a Unit
           // Master canonicalExclusiveArea. Prioritizes an 84㎡-range exact raw area,
           // then its most recent transaction (see pickDefaultTradeArea contract).
@@ -306,6 +326,8 @@ export default function ApartmentDetail() {
           const tradeState = resolveTradeReadState<Trade>(false);
           setTrades(tradeState.trades);
           setTradeIncompleteMessage(tradeState.incompleteMessage);
+          setCanonicalCoord(null);
+          setCoordResolved(true);
           if (!infoFetchedInline) {
             infoFetchedInline = true;
             fetchAptInfo('', resolvedDong, resolvedLawdCd);
@@ -343,6 +365,8 @@ export default function ApartmentDetail() {
         if (!cancelled) {
           setTrades([]);
           setTradeIncompleteMessage(TRADE_API_UNAVAILABLE_MESSAGE);
+          setCanonicalCoord(null);
+          setCoordResolved(true);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -450,8 +474,13 @@ export default function ApartmentDetail() {
   };
 
   const firstTrade = trades.length > 0 ? trades[0] : null;
+  // primaryAddress는 이제 **표시용 라벨**일 뿐이다. 위치 확보에는 쓰이지 않는다
+  // (§5 — regionName이 늦게 도착해 이 문자열이 바뀌어도 좌표 소비자는 흔들리지 않는다).
   const primaryAddress = `${regionName || firstTrade?.dong || ''} ${displayName || aptName}`.trim();
   const addressReady = !loading && !!primaryAddress;
+  // §2 — 위치 기반 카드는 좌표 해석이 끝난 뒤에 판단한다. 좌표가 없으면 각 카드가
+  // "위치 정보를 확인할 수 없습니다"를 스스로 표시한다(다른 좌표로 대체하지 않는다).
+  const locationReady = !loading && coordResolved;
 
   // DECISION_JOURNEY_V1.1 — trades는 이미 name+dong 기준으로 검증된 이 페이지의 단지
   // 거래만 담고 있으므로(matchesTradeIdentity), 여기서 뽑히는 aptSeq는 안전하게 신뢰할
@@ -461,12 +490,16 @@ export default function ApartmentDetail() {
   const canonicalAptSeq = deriveCanonicalAptSeq(trades, incomingAptSeq);
 
   // DECISION_JOURNEY_V1 §9/§11 — 지도 딥링크는 lat/lng가 있어야만
-  // parseMapStateFromSearchParams가 이를 공유링크로 인식한다(없으면 기본 지역으로
-  // 열림). 상세 페이지엔 좌표가 없으므로 클릭 시점에 지오코딩한다.
+  // parseMapStateFromSearchParams가 이를 공유링크로 인식한다(없으면 기본 지역으로 열림).
+  //
+  // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2/§4 — 예전에는 클릭 시점에 "지역명 + 단지명"을
+  // 지오코딩했다(실패 시 키워드 검색 첫 결과 채택). 이제 서버가 준 canonical 좌표를
+  // 그대로 쓴다 — 클릭 즉시 이동하고, 지도가 다른 단지를 가리킬 여지가 없다.
+  // 좌표가 없으면 lat/lng 없이 이동한다(기존과 동일하게 지역 기준으로 열린다).
   const handleViewOnMap = async () => {
     if (mapCtaLoading) return;
     setMapCtaLoading(true);
-    const coords = await geocodeAddressToCoords(primaryAddress);
+    const coords = canonicalCoord;
     setMapCtaLoading(false);
     router.push(
       buildDetailMapUrl({
@@ -628,9 +661,14 @@ export default function ApartmentDetail() {
   };
 
   const renderModalContent = () => {
-    const jibunAddress = firstTrade?.dong && firstTrade?.jibun
-      ? `${regionName || firstTrade.dong} ${firstTrade.jibun}`
-      : undefined;
+    // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2/§4 — 지도/로드뷰는 이제 저장된 좌표 모드로
+    // 연다. KakaoMapEmbed의 mode="coordinate"는 Geocoder/Places를 만들지도 않는다
+    // (OFFICETEL_V1 STEP 6 §2에서 오피스텔용으로 이미 검증된 계약을 그대로 재사용).
+    // 좌표가 없으면 주소 모드로 **떨어지지 않는다** — 그건 이름 검색으로 다른 장소를
+    // 집을 수 있는 예전 경로다. 없으면 없다고 말한다.
+    const noLocation = (
+      <p style={{ color: 'var(--text-muted)' }}>위치 정보를 확인할 수 없습니다.</p>
+    );
 
     switch (activeModal) {
       case '지도':
@@ -638,7 +676,9 @@ export default function ApartmentDetail() {
           <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
             <p style={{marginBottom: '1rem'}}>📍 <b>{aptName}</b>의 위치입니다.</p>
             <div style={{flex: 1, minHeight: '400px', position: 'relative'}}>
-              <KakaoMapEmbed mode="address" address={primaryAddress} jibunAddress={jibunAddress} type="map" />
+              {canonicalCoord
+                ? <KakaoMapEmbed mode="coordinate" latitude={canonicalCoord.lat} longitude={canonicalCoord.lng} type="map" />
+                : noLocation}
             </div>
           </div>
         );
@@ -647,7 +687,9 @@ export default function ApartmentDetail() {
           <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
             <p style={{marginBottom: '1rem'}}>👀 단지 주변 <b>로드뷰</b>입니다.</p>
             <div style={{flex: 1, minHeight: '400px', position: 'relative'}}>
-              <KakaoMapEmbed mode="address" address={primaryAddress} jibunAddress={jibunAddress} type="roadview" />
+              {canonicalCoord
+                ? <KakaoMapEmbed mode="coordinate" latitude={canonicalCoord.lat} longitude={canonicalCoord.lng} type="roadview" />
+                : noLocation}
             </div>
           </div>
         );
@@ -1177,8 +1219,8 @@ export default function ApartmentDetail() {
               탭 클릭이 상세페이지 전체를 다시 렌더하지 않게 하기 위함이며, 탭 UI와
               "한 번 연 탭은 계속 마운트" 동작은 그대로 옮겨왔다(재진입 재조회 0건 유지). */}
           <InfraTabSection
-            primaryAddress={primaryAddress}
-            addressReady={addressReady}
+            coords={canonicalCoord}
+            locationReady={locationReady}
             aptName={aptName}
             lawdCd={lawdCdState}
             dong={urlDong}

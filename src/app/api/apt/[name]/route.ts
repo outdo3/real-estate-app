@@ -10,7 +10,8 @@ import {
   type MonthFetchOutcome,
 } from '@/lib/apt-trade-completeness';
 import { logServerError } from '@/lib/log-server-error';
-import { resolveStrongIdentityAptSeqs, matchesTradeIdentity } from '@/lib/apt-name-match';
+import { resolveStrongIdentityAptSeqs, matchesTradeIdentity, deriveCanonicalAptSeq } from '@/lib/apt-name-match';
+import { resolveCanonicalCoords } from '@/lib/apt-canonical-coords';
 
 export const dynamic = 'force-dynamic';
 
@@ -222,11 +223,42 @@ export async function GET(
     // 클라이언트가 URL에 lawdCd/dong을 안 넘긴 경우, 여기서 실제로 조회에 사용한(DB 조회,
     // 지오코딩 또는 기본값) 값을 함께 돌려줘서 화면의 지역명/이후 요청들이 같은 값으로
     // 맞춰지게 한다.
+    // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2 — canonical 좌표를 **여기서 한 번** 해석해
+    // 함께 내려보낸다. 예전에는 클라이언트의 인프라 카드 9개가 각자 "지역명 + 단지명"을
+    // 지오코딩했고(실측 10/10 실패 → 키워드 검색 첫 결과 채택), 그게 이름 기반 재식별
+    // 위험이자 지연의 절반이었다.
+    //
+    // identity는 이 라우트가 이미 검증한 것만 쓴다: filteredTrades는
+    // resolveStrongIdentityAptSeqs/matchesTradeIdentity를 통과한 거래이므로 그 aptSeq는
+    // 이 단지의 canonical id다(deriveCanonicalAptSeq는 후보가 하나로 좁혀질 때만 값을
+    // 준다). URL이 넘겨준 aptSeq도 그 후보 집합 안에 있을 때만 채택된다.
+    //
+    // 좌표 조회가 실패해도 거래 응답 자체는 그대로 나간다 — 좌표는 부가 정보이고,
+    // 이것 때문에 실거래가 안 보이면 안 된다.
+    const incomingAptSeq = searchParams.get('aptSeq');
+    const canonicalAptSeq = deriveCanonicalAptSeq(filteredTrades, incomingAptSeq);
+    let coordinate = null;
+    try {
+      const resolved = await resolveCanonicalCoords(prisma, {
+        aptSeq: canonicalAptSeq,
+        lawdCd,
+        dong,
+        name: filteredTrades[0]?.name || aptName,
+      });
+      coordinate = resolved.status === 'RESOLVED'
+        ? resolved.coordinate
+        : { status: 'NO_COORDINATE' as const, reason: resolved.reason };
+    } catch (e) {
+      console.warn('canonical coordinate lookup failed', e);
+      coordinate = { status: 'NO_COORDINATE' as const, reason: 'NO_MASTER' as const };
+    }
+
     return NextResponse.json({
       trades: filteredTrades,
       apiError,
       lawdCd,
       dong,
+      coordinate,
       partial: completeness.partial,
       failedMonths: completeness.failedMonths,
       monthsRequested: completeness.monthsRequested,

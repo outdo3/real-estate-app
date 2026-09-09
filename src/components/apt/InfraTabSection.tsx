@@ -9,8 +9,10 @@ import styles from '@/app/apt/[name]/detail.module.css';
 export type InfraTab = '환경' | '교통' | '학군';
 
 interface InfraTabSectionProps {
-  primaryAddress: string;
-  addressReady: boolean;
+  // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2 — 서버가 해석한 canonical 좌표 하나를
+  // 그대로 아래 세 패널이 공유한다. 주소 문자열은 더 이상 위치 소스가 아니다.
+  coords: { lat: number; lng: number } | null;
+  locationReady: boolean;
   aptName: string;
   lawdCd: string;
   dong: string;
@@ -32,7 +34,7 @@ interface InfraTabSectionProps {
  *  - 방문한 적 없는 탭은 마운트하지 않는다(불필요한 외부 API 호출을 늘리지 않는다).
  *  - 라벨/아이콘/클래스/순서 모두 기존과 동일하다.
  */
-export default function InfraTabSection({ primaryAddress, addressReady, aptName, lawdCd, dong }: InfraTabSectionProps) {
+export default function InfraTabSection({ coords, locationReady, aptName, lawdCd, dong }: InfraTabSectionProps) {
   const [infraTab, setInfraTab] = useState<InfraTab>('환경');
   const [visitedInfraTabs, setVisitedInfraTabs] = useState<Set<InfraTab>>(new Set(['환경']));
 
@@ -56,17 +58,17 @@ export default function InfraTabSection({ primaryAddress, addressReady, aptName,
 
       {visitedInfraTabs.has('환경') && (
         <div style={{ display: infraTab === '환경' ? 'block' : 'none' }}>
-          <LivingEnvironmentPanel address={primaryAddress} ready={addressReady} />
+          <LivingEnvironmentPanel coords={coords} ready={locationReady} />
         </div>
       )}
       {visitedInfraTabs.has('교통') && (
         <div style={{ display: infraTab === '교통' ? 'block' : 'none' }}>
-          <NeighborhoodInfoPanel address={primaryAddress} ready={addressReady} />
+          <NeighborhoodInfoPanel coords={coords} ready={locationReady} />
         </div>
       )}
       {visitedInfraTabs.has('학군') && (
         <div style={{ display: infraTab === '학군' ? 'block' : 'none' }}>
-          <EducationPanel aptName={aptName} lawdCd={lawdCd} dong={dong} ready={addressReady} />
+          <EducationPanel aptName={aptName} lawdCd={lawdCd} dong={dong} ready={locationReady} />
         </div>
       )}
     </>

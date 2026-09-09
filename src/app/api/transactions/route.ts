@@ -195,6 +195,47 @@ export async function GET(request: Request) {
         });
       }
 
+      // PERCEIVED_PERFORMANCE_V2_DATAFLOW §8 — 지도 마커 전용 슬림 응답(opt-in).
+      //
+      // 실측: 해운대구 12개월 응답은 4,579행 / 1,822,597 B인데 실제 마커가 되는 단지는
+      // 276개뿐이고, 마커에 쓰이는 필드는 11개다 — 나머지 94%는 클라이언트가 받아서
+      // 곧바로 버린다(4G에서 다운로드에만 1.0~2.5초).
+      //
+      // 왜 기본 동작을 바꾸지 않고 opt-in인가: 이 라우트의 소비자 3곳은 **서로 다른
+      // dedup 규칙**을 쓴다.
+      //   /map            좌표 없음 + 취소 건 제외 → 단지별 최신 1건
+      //   /stats/[type]   좌표/평형 없음 제외      → 단지별 최신 1건
+      //   ai-search       취소 건을 제외하지 않음  → 단지별 최신 1건
+      // 그래서 공용 응답을 "단지별 1건"으로 줄이면 최소 두 소비자의 의미가 조용히
+      // 달라진다. fields=marker는 **/map의 규칙을 서버에서 그대로 재현**하므로 그
+      // 화면에서는 결과가 완전히 동일하고, 다른 소비자는 기존 응답을 그대로 받는다.
+      if (searchParams.get('fields') === 'marker') {
+        const byComplex = new Map<string, any>();
+        for (const item of data as any[]) {
+          if (!item.lat || !item.lng) continue;     // /map과 동일
+          if (item.dealCanceled) continue;          // /map과 동일(취소 가격 표시 금지)
+          const key = `${item.dong}|${item.name}`;
+          if (!byComplex.has(key)) byComplex.set(key, item);
+        }
+        const markers = Array.from(byComplex.values()).map((item: any) => ({
+          aptSeq: item.aptSeq ?? null,
+          completionYear: item.completionYear ?? null,
+          name: item.name,
+          dong: item.dong || '',
+          price: item.price ?? '',
+          dealAmount: typeof item.dealAmount === 'number' ? item.dealAmount : null,
+          pyung: typeof item.pyung === 'number' ? item.pyung : null,
+          // 마커의 면적 라벨은 이 필드를 그대로 쓴다 — 값이 없으면 없는 대로 둔다
+          // (여기서 areaNum 등으로 대체하면 화면 표기가 바뀐다).
+          excluUseArea: typeof item.excluUseArea === 'number' ? item.excluUseArea : null,
+          lat: item.lat,
+          lng: item.lng,
+          // 소비자가 취소 여부를 다시 판단할 수 있게 남긴다(값은 항상 false다).
+          dealCanceled: false,
+        }));
+        return NextResponse.json({ transactions: markers, ...completeness });
+      }
+
       // TRANSACTIONS_API_TRUST_V1 — bare array였던 응답을 envelope으로 바꾼다. 완전성을
       // 담을 자리가 없어서 부분 실패를 말할 방법 자체가 없었다. 소비자는 공유 리더
       // (resolveTransactionsReadState)를 쓰며, 그 리더는 배열도 계속 받아들이므로
