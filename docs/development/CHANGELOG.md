@@ -16506,3 +16506,36 @@ API 변경:
 상태:
 
 구현/측정/문서 완료. Production 검증 대기.
+
+### PERCEIVED PERFORMANCE V2 DATAFLOW — Production 검증
+
+main @ 1500b04 배포 후, 로컬에서 Kakao SDK 401로 막혀 있던 항목을 실제 도메인에서 검증했다.
+상세 문서 §8 참고. 코드 변경 없음(문서만).
+
+결과:
+
+- Kakao SDK 정상 로드, sdk.js 1회/페이지(중복 초기화 없음), addressSearch 0회,
+  단지명 keywordSearch 0회 — 전 폭(360/390/430/1280) · 단지 3곳
+- 응답 coordinate는 3단지 모두 source=APT_SEQ, geocodeQuality=exact
+- 지하철 POI / 지도 모달 / 로드뷰 / 오피스텔 레이어 ON·OFF·재ON 전부 정상
+- 마커 → 상세 identity 정확: 더샵센텀파크2차 마커 → aptSeq 26350-2092
+  (같은 이름 계열 1차 26350-2093으로 새지 않음)
+- 매매 ↔ 전월세 토글 시 좌표 유지 정상(전 폭·전 단지)
+- 지도 payload 4G 실측: 해운대구 884ms → 202ms, 부산진구 849ms → 178ms,
+  중구 143ms → 130ms. 지도 기본 진입 구가 중구(최소 구)라 첫 화면 전체 시간에는
+  개선이 거의 드러나지 않는다 — 효과는 큰 구에서 나온다.
+- 버스(n=15): 클라이언트 사전 지연 601ms → 69ms, 첫 카드 2,458ms → 1,916ms,
+  지오코딩 9회 → 0회. bus-stops CDN MISS → HIT → HIT 확인
+
+새로 관측된 문제(이 STEP이 건드리지 않은 코드):
+
+- 지도 back 복원: 상세에서 back 하면 직전 구/중심이 아닌 다른 구로 재설정된다.
+  요청 자체는 정상(fields=marker, 200, 유효 데이터)이라 데이터 경로가 아니라 view 상태
+  문제다. 구 배포와의 A/B는 Kakao 도메인 등록이 대표 도메인에만 있어 불가능했으므로
+  기존 문제로 단정하지 않고 별도 조사 대상(P1)으로 남긴다.
+- 마커 엔드포인트가 CDN 캐시되지 않는다(max-age=0, must-revalidate → 항상 MISS).
+  payload가 작아진 지금 CDN까지 태우면 큰 구에서 추가 이득이 있다.
+
+상태:
+
+완료. durable 버스 캐시는 여전히 필요하며 DB/schema 승인이 필요한 별도 STEP이다.
