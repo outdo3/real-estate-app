@@ -16539,3 +16539,69 @@ main @ 1500b04 배포 후, 로컬에서 Kakao SDK 401로 막혀 있던 항목을
 상태:
 
 완료. durable 버스 캐시는 여전히 필요하며 DB/schema 승인이 필요한 별도 STEP이다.
+
+## 2026-09-09 (2)
+
+### PERCEIVED PERFORMANCE V2.1 — MAP RESTORE / MARKER CDN / DETAIL REVISIT
+
+상세 문서: docs/development/PERCEIVED_PERFORMANCE_V2_1.md
+
+작업:
+
+V2 Production QA에서 남은 P1 세 건을 처리했다. DB/schema 변경 없음.
+
+- 지도 view 복원(P1-A): 상세에서 back 하면 지도가 기본 지역(26140)으로 돌아가던 문제.
+  근본 원인은 복원 장치 부재가 아니라 **아무도 현재 상태를 URL에 쓰지 않은 것**이었다
+  (그 파라미터는 지금까지 공유 버튼으로만 생성됐다). 지도가 움직일 때마다
+  center/zoom/lawdCd/고정 선택 단지/레이어 상태를 history.replaceState로 기존 URL 계약에
+  동기화한다. pushState가 아니라 replaceState라 패닝이 history를 쌓지 않고(실측
+  history.length 2 유지), 400ms 디바운스, isMapReady 이후에만 쓴다(공유 링크 덮어쓰기 방지).
+  identity는 buildMapShareParams를 그대로 재사용해 aptSeq 우선/name-only 금지가 유지되고,
+  matchRestoreIdentity가 목록에 정확히 있을 때만 선택을 복원한다(stale 선택 불가).
+  buildMapShareParams 자체는 불변이라 공유 URL 계약은 바뀌지 않았다.
+- 마커 CDN 캐시(P1-B): Next 동적 라우트 기본값(max-age=0, must-revalidate) 때문에 100%
+  MISS였다. bus-stops와 같은 정책으로 **완전 성공 응답만** s-maxage=300,
+  stale-while-revalidate=1800으로 캐시한다. 부분 실패/에러는 no-store — CDN에 얹으면
+  일시적 MOLIT 장애가 "이 구엔 원래 단지가 적다"로 굳는다. 캐시 키는 Vercel이 전체 URL로
+  잡으므로 lawdCd/fields 격리가 구조적으로 보장된다.
+- 상세 재방문(P1-C): /info 2회는 중복이 아니라 "빠른 근사(jibun 없음) -> 지번 확정 후
+  정밀" 2단계였다(파라미터가 다르다). 합치면 첫 화면이 느려지거나 정밀도를 잃으므로
+  각자 캐시했다. /score도 캐시하되 조건은 res.ok가 아니라 score !== null이다 — 이 라우트는
+  catch에서도 200 + status:'INSUFFICIENT_DATA'를 돌려주므로, ok 기준으로 캐시하면 일시적
+  서버 오류가 TTL 동안 "점수 없음"으로 고정된다. 점수 계산 로직은 건드리지 않았다.
+
+서비스 기능 변경:
+
+표시 값/문구 그대로. 지도에서 상세로 갔다 돌아오면 보던 위치·줌·레이어·선택이 유지된다.
+
+DB 변경:
+
+없음.
+
+API 변경:
+
+/api/transactions 응답에 Cache-Control 헤더 추가(완전 성공 시에만 CDN 캐시).
+응답 body 형태는 그대로.
+
+검증(Production 실측):
+
+- 지도 복원 360/390/430/1280: lawdCd/zoom/layers/center 전부 복원, back 후 마커 존재,
+  history.length 2 유지
+- 마커 CDN MISS -> HIT: 중구 333ms->79ms, 부산진구 886ms->97ms, 해운대구 573ms->95ms
+- 상세 재방문 API 7 -> 4건 (score 1->0, info 2->0), 점수/단지정보 값 동일(78/60/68/90점)
+- 지도 사용가능 시간 중앙값 5,706ms(n=5, 390) — 목표 2~3초 미달. 원인은 payload가 아니라
+  Kakao SDK 로드(중앙값 2.5초)와 SDK ready -> 마커 요청 1.9초 공백이다. 마커 전송 구간은
+  CDN HIT + 12KB로 99~509ms에 불과하다. V2 대비 회귀는 없다.
+- 회귀 QA A~G 전부 PASS, addressSearch 0회, 단지명 keywordSearch 0회, sdk.js 1회/페이지
+- npx tsc --noEmit: src 0건(기존 24건 유지) / eslint 0 errors / npm run build 성공
+- map-marker-share.test.ts 13/13, detail-trade-window.test.ts 14/14
+
+남은 위험:
+
+- 버스 TAGO cold worst-case ~7.7초는 그대로다. durable 캐시는 DB/schema 승인이 필요한
+  별도 STEP이며 이 STEP에서 구현하지 않았다.
+- 지도 사용가능 시간의 대부분이 Kakao SDK 로드 + 초기화 공백이다(별도 STEP 권장).
+
+상태:
+
+완료.
