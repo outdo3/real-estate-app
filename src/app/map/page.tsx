@@ -15,6 +15,8 @@ import { resolveTransactionsReadState } from '@/lib/trade-read-state';
 import { formatMarkerPriceAreaLine, formatMarkerAreaLabel } from '@/lib/map-marker-format';
 import {
   buildMapShareParams,
+  buildMapRestoreParams,
+  mapParamsToQueryString,
   parseMapStateFromSearchParams,
   matchRestoreIdentity,
   type RestoreIdentity,
@@ -451,14 +453,62 @@ export default function FullscreenMapPage() {
   // 아예 없는 지역으로 잘못 조회될 수 있다 — selected identity 복원(matchRestoreIdentity)
   // 이 애초에 매칭될 기회조차 갖지 못하는 문제로 이어진다.
   const initialShareLawdCdRef = useRef(readInitialMapStateFromUrl()?.lawdCd ?? null);
-  const [layers, setLayers] = useState<Record<LayerKey, boolean>>({
-    apt: true,
-    officetel: false,
-    livingLodging: false,
-    redevelopment: false,
-    auction: false,
-    school: false,
+  // PERCEIVED_PERFORMANCE_V2_1 §1 — URL에 layers가 있으면(= back으로 돌아온 경우나
+  // 레이어까지 담은 링크) 그 상태로 복원한다. 없으면 기존 기본값 그대로다.
+  // 알 수 없는 키는 무시한다(구/신 배포가 섞여도 안전).
+  const [layers, setLayers] = useState<Record<LayerKey, boolean>>(() => {
+    const base: Record<LayerKey, boolean> = {
+      apt: true,
+      officetel: false,
+      livingLodging: false,
+      redevelopment: false,
+      auction: false,
+      school: false,
+    };
+    const restored = readInitialMapStateFromUrl()?.layers;
+    if (!restored) return base;
+    const next = { ...base };
+    for (const key of Object.keys(next) as LayerKey[]) next[key] = restored.includes(key);
+    return next;
   });
+  // ── PERCEIVED_PERFORMANCE_V2_1 §1 — 지도 view 상태를 URL에 동기화한다 ──────────
+  //
+  // 근본 원인(실측): 지도 -> 마커 -> 상세 -> back 하면 지도가 사용자가 보던 곳이 아니라
+  // 기본 지역(26140/서구)으로 돌아갔다. 복원 장치가 없어서가 아니다 —
+  // readInitialMapStateFromUrl/parseMapStateFromSearchParams/matchRestoreIdentity가
+  // 이미 있었고 잘 동작한다. 문제는 **아무도 현재 상태를 URL에 쓰지 않았다**는 것이다.
+  // 이 파라미터들은 지금까지 공유 버튼으로만 만들어졌으므로, back으로 돌아오면 쿼리가
+  // 비어 있고 useState 초기값(기본 지역)이 그대로 쓰였다.
+  //
+  // 그래서 새 상태 저장소를 만들지 않고, 이미 있는 URL 계약에 현재 상태를 계속 반영한다.
+  //  - replaceState를 쓴다(pushState 아님) — 패닝할 때마다 history 항목이 쌓이면
+  //    사용자가 back을 여러 번 눌러야 지도를 빠져나가게 된다.
+  //  - 400ms 디바운스 — 드래그/줌 중에 매 프레임 쓰지 않는다.
+  //  - isMapReady 전에는 쓰지 않는다 — 공유 링크로 들어온 파라미터를 우리 기본값으로
+  //    덮어쓰면 안 된다(복원이 적용된 뒤부터 쓴다).
+  //  - 선택 단지는 **고정 선택(selectedMarkerId)만** 싣는다. hover까지 반영하면 마우스가
+  //    지나가기만 해도 URL이 바뀐다.
+  //  - identity는 buildMapRestoreParams가 buildMapShareParams를 그대로 쓰므로
+  //    aptSeq 우선 / name-only 금지 규칙이 그대로 강제된다.
+  const pinnedMarker = useMemo(
+    () => resolveSelectedMarker(selectedMarkerId, aptClusters, pendingSelectedApt),
+    [selectedMarkerId, aptClusters, pendingSelectedApt]
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isMapReady) return;
+    const timer = window.setTimeout(() => {
+      const qs = mapParamsToQueryString(
+        buildMapRestoreParams(center, zoomLevel, currentLawdCd, pinnedMarker, layers)
+      );
+      const next = `${window.location.pathname}?${qs}`;
+      if (next === window.location.pathname + window.location.search) return;
+      // history.state를 그대로 넘겨 Next.js router의 내부 상태를 깨뜨리지 않는다.
+      window.history.replaceState(window.history.state, '', next);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [isMapReady, center, zoomLevel, currentLawdCd, layers, pinnedMarker]);
+
   const isDetailed = zoomLevel <= DETAIL_ZOOM_LEVEL;
   // MAP_UX_V2 §6/§9 — 확대 단계별 밀도. 두 레이어가 **같은 규칙**(map-property-focus)을
   // 쓴다: 레벨 3 이하만 낱개 마커, 그보다 축소되면 묶음 마커 하나로 그린다. V1에서

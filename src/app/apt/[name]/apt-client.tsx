@@ -27,6 +27,7 @@ import { trackEvent } from '@/lib/analytics/trackEvent';
 import type { NextAction } from '@/lib/decision-journey/types';
 import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
 import { fetchDetailTrades } from '@/lib/detail-trade-cache';
+import { fetchCachedResource, DETAIL_RESOURCE_TTL_MS } from '@/lib/detail-resource-cache';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
 import { pickDefaultTradeArea } from '@/lib/trade-area-selection';
 import { buildAptBrief } from '@/lib/apt-brief';
@@ -236,7 +237,18 @@ export default function ApartmentDetail() {
 
     const fetchAptInfo = async (jibun: string, dong: string, lawdCd: string) => {
       try {
-        const response = await fetch(`/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(jibun)}&dong=${encodeURIComponent(dong)}&lawdCd=${encodeURIComponent(lawdCd)}`);
+        // PERCEIVED_PERFORMANCE_V2_1 §3 — 재방문 시 재요청하지 않는다.
+        // success:true인 응답만 캐시한다(info가 null이어도 그건 "등재 정보 없음"이라는
+        // 진짜 사실이라 캐시해도 된다 — 실패는 success:false/!ok로 구분된다).
+        const { ok, payload } = await fetchCachedResource(
+          `/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(jibun)}&dong=${encodeURIComponent(dong)}&lawdCd=${encodeURIComponent(lawdCd)}`,
+          {
+            key: `info|${aptName}|${jibun}|${dong}|${lawdCd}`,
+            ttlMs: DETAIL_RESOURCE_TTL_MS,
+            isCacheable: (p, o) => o && !!p && (p as { success?: boolean }).success === true,
+          },
+        );
+        const response = { ok, json: async () => payload } as { ok: boolean; json: () => Promise<any> };
         if (cancelled) return;
         if (response.ok) {
           const data = await response.json();
@@ -334,10 +346,20 @@ export default function ApartmentDetail() {
           // 호출 없이 setAptInfo만 조용히 갱신).
           if (fetchedTrades.length > 0 && fetchedTrades[0].jibun) {
             if (infoFetchedInline) {
-              fetch(`/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(fetchedTrades[0].jibun)}&dong=${encodeURIComponent(fetchedTrades[0].dong || resolvedDong)}&lawdCd=${encodeURIComponent(resolvedLawdCd)}`)
-                .then((res) => (res.ok ? res.json() : null))
-                .then((data) => {
-                  if (!cancelled && data?.info) setAptInfo(data.info);
+              // §3 — 1차 호출과 파라미터(jibun)가 달라 별개의 캐시 키다. 두 호출은
+              // 중복이 아니라 "빠른 근사 -> 지번 확정 후 정밀" 2단계이며(위 주석 참고),
+              // 재방문 때는 둘 다 캐시에서 나온다.
+              fetchCachedResource(
+                `/api/apt/${encodeURIComponent(aptName)}/info?jibun=${encodeURIComponent(fetchedTrades[0].jibun)}&dong=${encodeURIComponent(fetchedTrades[0].dong || resolvedDong)}&lawdCd=${encodeURIComponent(resolvedLawdCd)}`,
+                {
+                  key: `info|${aptName}|${fetchedTrades[0].jibun}|${fetchedTrades[0].dong || resolvedDong}|${resolvedLawdCd}`,
+                  ttlMs: DETAIL_RESOURCE_TTL_MS,
+                  isCacheable: (p, o) => o && !!p && (p as { success?: boolean }).success === true,
+                },
+              )
+                .then(({ ok, payload }) => {
+                  const data = ok ? (payload as { info?: unknown } | null) : null;
+                  if (!cancelled && data?.info) setAptInfo(data.info as never);
                 })
                 .catch(() => {});
             } else {
@@ -652,8 +674,19 @@ export default function ApartmentDetail() {
     const query = new URLSearchParams();
     if (lawdCdState) query.set('lawdCd', lawdCdState);
     if (urlDong) query.set('dong', urlDong);
-    fetch(`/api/apt/${encodeURIComponent(aptName)}/score?${query.toString()}`)
-      .then((res) => (res.ok ? res.json() : null))
+    // PERCEIVED_PERFORMANCE_V2_1 §3 — 재방문 시 재요청하지 않는다. **점수 계산 로직은
+    // 건드리지 않는다** — 이건 전송 계층 재사용일 뿐이다.
+    //
+    // 캐시 조건이 `score !== null`인 이유: 이 라우트는 catch에서도 200 +
+    // status:'INSUFFICIENT_DATA'를 돌려준다(§43, 데이터 부족을 사용자 오류로 만들지
+    // 않으려는 의도된 설계). 그 응답을 캐시하면 **일시적 서버 오류가 TTL 동안 "점수
+    // 없음"으로 고정**된다. 실제로 산출된 점수가 있을 때만 캐시한다.
+    fetchCachedResource(`/api/apt/${encodeURIComponent(aptName)}/score?${query.toString()}`, {
+      key: `score|${aptName}|${lawdCdState || ''}|${urlDong || ''}`,
+      ttlMs: DETAIL_RESOURCE_TTL_MS,
+      isCacheable: (p, o) => o && !!p && (p as { score?: unknown }).score !== null && (p as { score?: unknown }).score !== undefined,
+    })
+      .then(({ ok, payload }) => (ok ? (payload as ApartmentScoreApiResponse | null) : null))
       .then((data: ApartmentScoreApiResponse | null) => {
         if (!cancelled) setScoreResult(data);
       })

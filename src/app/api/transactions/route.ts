@@ -24,6 +24,35 @@ import {
 // 지도의 첫 마커 로드가 이 route를 기다리는 동안 실측 3.6~4.5s가 걸렸는데(부산 16개 구
 // 중 큰 구는 더 심함), 원인은 이 route가 이미 완성된 apartment_trade_histories DB를 전혀
 // 쓰지 않고 12개월치 MOLIT 실시간 호출(월별 병렬)을 그대로 하고 있었기 때문이다.
+// PERCEIVED_PERFORMANCE_V2_1 §2 — 마커 응답의 CDN 캐시.
+//
+// 실측(배포 후): fields=marker 응답은 해운대구 기준 63,660 B로 줄었지만
+// `x-vercel-cache: MISS`가 100%였다 — Next의 동적 라우트 기본값이
+// `max-age=0, must-revalidate`라 CDN이 아무것도 보관하지 않는다. 같은 구를 보는
+// 사용자가 매번 원본까지 간다는 뜻이다.
+//
+// 정책은 /api/transit/bus-stops(QUICK WIN B)에서 이미 검증된 것을 그대로 쓴다:
+// **완전하게 성공한 응답만** 캐시하고, 부분 실패/실패는 절대 캐시하지 않는다.
+// 실패를 CDN에 얹으면 "성공한 빈 결과"가 TTL 동안 굳어져 FAILED가 ZERO로 접힌다.
+//
+// TTL 근거: 이 응답은 실거래에서 파생된다. 원천인 MOLIT 월 캐시가 1시간이고
+// (molit-month-cache.ts), 상세페이지의 클라이언트 캐시가 5분이다. 같은 값으로
+// 맞춰 **s-maxage=300**을 쓴다 — 서버가 같은 순간에 돌려줬을 값보다 더 오래된 값을
+// 만들지 않으면서, 지도에서 같은 구를 보는 사용자들 사이의 히트를 얻는다.
+// stale-while-revalidate=1800은 갱신 중에도 화면이 비지 않게 한다(값의 나이는
+// 최대 30분이며, 취소/신규 거래 반영이 그만큼 늦어질 수 있음을 감수한 범위다).
+//
+// 캐시 키는 Vercel CDN이 **전체 URL(쿼리스트링 포함)**로 잡으므로 lawdCd·type·
+// months·fields가 자동으로 키에 들어간다 — 구/옵션 간 교차 오염이 구조적으로 없다.
+// 이 라우트는 인증/쿠키/사용자별 데이터를 일절 읽지 않는다(전수 확인).
+const MARKER_SUCCESS_CACHE_CONTROL = 'public, s-maxage=300, stale-while-revalidate=1800';
+const NO_STORE_CACHE_CONTROL = 'no-store';
+
+/** 완전하게 성공한 응답에만 CDN 캐시를 허용한다. */
+function cacheHeaders(fullySuccessful: boolean) {
+  return { 'Cache-Control': fullySuccessful ? MARKER_SUCCESS_CACHE_CONTROL : NO_STORE_CACHE_CONTROL };
+}
+
 const BUSAN_SIDO_CODE = '26';
 
 async function fetchApt12MonthsFromDb(lawdCd: string): Promise<any[]> {
@@ -233,14 +262,22 @@ export async function GET(request: Request) {
           // 소비자가 취소 여부를 다시 판단할 수 있게 남긴다(값은 항상 false다).
           dealCanceled: false,
         }));
-        return NextResponse.json({ transactions: markers, ...completeness });
+        // 부분 실패(partial)면 캐시하지 않는다 — 일시적 MOLIT 실패가 CDN에 굳으면
+        // 그 구의 마커가 TTL 동안 계속 적게 보인다.
+        return NextResponse.json(
+          { transactions: markers, ...completeness },
+          { headers: cacheHeaders(!completeness.partial) }
+        );
       }
 
       // TRANSACTIONS_API_TRUST_V1 — bare array였던 응답을 envelope으로 바꾼다. 완전성을
       // 담을 자리가 없어서 부분 실패를 말할 방법 자체가 없었다. 소비자는 공유 리더
       // (resolveTransactionsReadState)를 쓰며, 그 리더는 배열도 계속 받아들이므로
       // 배포 중 버전이 잠시 어긋나도 화면이 깨지지 않는다.
-      return NextResponse.json({ transactions: data, ...completeness });
+      return NextResponse.json(
+        { transactions: data, ...completeness },
+        { headers: cacheHeaders(!completeness.partial) }
+      );
     }
 
     // 2. 파라미터가 없으면 기존 DB 데이터(TOP 5) 반환
@@ -253,6 +290,6 @@ export async function GET(request: Request) {
     // 모두 거치므로 실패 메시지에 요청 URL/접속 정보가 담길 수 있다. 다른 공공데이터
     // 경로와 동일하게 공유 마스킹 함수를 통과시킨다.
     console.error('Failed to fetch transactions:', redactMolitFailureMessage((error as Error)?.message));
-    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500, headers: cacheHeaders(false) });
   }
 }
