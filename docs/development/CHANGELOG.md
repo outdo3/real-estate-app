@@ -16741,3 +16741,64 @@ QA:
 상태:
 
 완료.
+
+
+## 2026-09-10
+
+### PERCEIVED PERFORMANCE V2.4 — MAP MARKER DATA PATH
+
+작업:
+
+- 데이터 경로를 먼저 계측해 "data ready가 느리다"는 전제를 검증했고, 틀렸음을 확인했다.
+  마커 API 서버 시간 20~23ms, CDN X-Vercel-Cache HIT(cold MISS도 TTFB 205ms),
+  lawdCd 진입에서는 coord2RegionCode 호출 0회. 2.6초 중 2.2초는 전부
+  "요청을 걸기까지의 대기"였다 — fetch가 client effect 안이라 JS 177KB
+  다운로드 + hydration을 기다렸다.
+- 결정적 확인: 마커 응답을 네트워크 없이 즉시 돌려줘도(route fulfill) 부산진구
+  firstChip이 3,658 → 3,666ms로 불변. lawdCd 진입에서 data ready는 **이미
+  임계경로가 아니었다**(응답 2.6초 < 첫 타일 3.3초).
+- 마커 요청을 map/layout.tsx의 인라인 스크립트로 옮겨 hydration 이전(약 320ms)에
+  출발시킨다. 응답은 window에 promise로만 얹고 state는 건드리지 않는다(V2.2 제약).
+- 직접 진입이 기본 지역(서구/26140)을 알아내려고 Kakao를 왕복하던 것을 제거했다.
+  기본 center와 기본 lawdCd를 DEFAULT_MAP_CENTER / DEFAULT_LAWD_CD 상수로 올리고,
+  center가 아직 기본값 그대로일 때만 역지오코딩을 생략한다.
+
+서비스 기능 변경:
+
+- 없음(요청 시점만 앞당김). 부트 응답은 lawdCd가 정확히 일치할 때만 채택하므로
+  다른 구의 마커가 표시될 수 없다.
+
+DB 변경:
+
+없음 (마커 서버 경로는 MOLIT live path 그대로, 성능상 바꿀 이유 없음)
+
+API 변경:
+
+없음
+
+측정 (Production, Slow 4G / CPU 4x / cold cache / 390px, n=6 중앙값):
+
+- 마커 요청 시작: 2,236 → 938ms(부산진구), 3,435 → 959ms(직접 진입)
+- data ready:     2,618 → 1,558ms(부산진구), 4,305 → 1,341ms(직접 진입)
+- 직접 진입 usable 4,414 → 3,655ms (-759ms), coord2RegionCode 1 → 0회
+- lawdCd 진입 usable은 거의 불변(3,930 → 3,870ms) — data ready가 이미
+  임계경로가 아니었기 때문이며 위 실험이 미리 예측한 결과다
+
+판정:
+
+- "data ready를 ~2.6초보다 확실히 아래로" → 달성(1.19~1.56초)
+- "부산진구 usable <=3s" → 미달(3,870ms). 데이터 경로로는 달성 불가능하며
+  (데이터를 공짜로 줘도 usable 불변), 남은 병목은 JS 다운로드/hydration/지도
+  인스턴스 생성/타일 로드 구간(약 1.8초)이다.
+
+QA (Production):
+
+- A 직접진입 / B home→map / C URL복원 / D 공유링크+aptSeq / E 구경계 패닝 6/6 PASS
+- 모든 진입에서 /api/transactions 정확히 1회(중복 없음),
+  layers=- 및 layers=officetel 링크에서는 0회
+- V2.3 렌더 QA 57/57 PASS, keepIds/컬링 Production 재검증 동일
+- eslint 0 errors / tsc --noEmit src 0건 / build 성공 / 지도 테스트 59 pass 0 fail
+
+상태:
+
+완료. 다음은 JS/hydration/지도 초기화 STEP.
