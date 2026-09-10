@@ -16971,3 +16971,53 @@ API 변경:
 상태:
 
 감사 완료. 다음은 REPORT-1(ReportEnvelope 계약 + 지역 집계 read 레이어).
+
+
+## 2026-09-10
+
+### REPORT ENGINE PRECHECK V1 — 지역코드/백필 가드 (읽기 전용)
+
+작업:
+
+- 아키텍처 감사에서 남긴 블로커 B1/B2를 Production 읽기 전용 조회로 규명.
+  코드/스키마/데이터 변경 없음. docs/development/REPORT_ENGINE_PRECHECK_V1.md 작성.
+
+B1 (lawdCd 18종) = 해소:
+
+- 26* 코드는 정확히 16종 — 부산 자치구·군 누락도 legacy 중복도 없다.
+- 추가 2종은 부산이 아니다. 데이터로 증명:
+  27110 = 대구 중구(남산동/수창동/대봉동, "대구역센트럴자이"),
+  11680 = 서울 강남구(역삼동/대치동/압구정동, "개포래미안포레스트")
+- 둘 다 2026-08-31 14:57:52/54 UTC **단일 시각** 적재, deal_ymd 202608 한 달,
+  ApartmentMaster 조인 100% null, sync_coverage_cells 0셀 → 정기 sync 산출물이 아닌
+  1회성 전국 확장 파일럿 적재. 해당 지역 기준으로는 유효하므로 삭제/재매핑하지 않는다.
+- 집계 계약: 부산 리포트는 26* 16코드 allowlist. legacy 정규화 불필요(코드 변경 구간 없음).
+  귀속은 아파트가 아니라 거래 행의 lawd_cd 기준(2개 이상 구에 걸친 aptSeq 4건 존재,
+  dong에 걸친 건 0건). master는 LEFT JOIN(부산 거래 40,292건 4.7%가 master 미매칭).
+
+B2 (백필 식별) = LIMITED:
+
+- 거래 행에 runId/적재모드 필드가 없고 source는 상수(864,628건 전부 MOLIT_APT_TRADE)라
+  임의 행의 출처를 결정론적으로 말할 수 없다 → READY 아님.
+- 그러나 정기 실행 창이 코드 상수로 고정돼 있어(SALE_DEFAULT_OVERLAP_MONTHS=3,
+  SALE_RECHECK_MIN/MAX_MONTHS_BACK=3/12) "정기 실행이 만들 수 없는 날"은 확정 가능 →
+  BLOCKED도 아님.
+- 판별자: distinct deal_ymd (백필 248/24 vs 정상 1~7), 최소 계약일(2006년 vs 당해년).
+  행수는 판별자가 아니다(정상일 206건 > 비정상일 132건).
+  실측 8일에 오탐 0 / 미탐 0.
+
+기타 확인:
+
+- vercel.json에 cron 3종이 실제 등록되어 가동 중(19/21/23시 UTC)이며 runId와 일치.
+  sale-sync 라우트 주석의 "cron 미등록" 서술은 낡았다(동작 문제 아님, 수정하지 않음).
+- created_at은 naive UTC 저장 → KST는 +9h. 일일 리포트 날짜 경계 명시 필요.
+- 202609(당월) coverage cell 0 → "오늘 새로 확인된 거래" 대부분이 미검증 월에 속함.
+
+DB 변경:
+
+없음 (읽기 전용 조회만)
+
+상태:
+
+REPORT-1 / REPORT-2 착수 가능. REPORT-5는 백필 가드+발행 게이트 동시 구현 조건부.
+근본 해결(행 단위 적재 출처 필드)은 schema 변경이라 별도 승인 사항.
