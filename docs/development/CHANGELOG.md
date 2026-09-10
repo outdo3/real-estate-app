@@ -16802,3 +16802,62 @@ QA (Production):
 상태:
 
 완료. 다음은 JS/hydration/지도 초기화 STEP.
+
+
+## 2026-09-10
+
+### PERCEIVED PERFORMANCE V2.5 — MAP JS / HYDRATION / FIRST TILE
+
+작업:
+
+- 번들 감사: /map이 받는 JS 211KB(br) 중 프레임워크(React+Next)가 72.8%이고
+  이 페이지 코드는 13.3KB(6.3%)뿐이었다. 잘라낼 몫이 없어 **번들 분할은 하지 않았다**.
+- waterfall로 진짜 원인을 특정했다: V2.2의 preload는 sdk.js를 **받아만** 두는데
+  autoload=false라 실제 지도 모듈은 kakao.maps.load()가 불려야 온다. 그 호출이
+  client effect 안이라 hydration(약 2.3초)까지 기다렸고, SDK가 595ms에 다 받아진 채
+  1.7초를 논 뒤 t1.daumcdn.net에서 kakao.js → services.js → clusterer.js를
+  **직렬로** 받았다(약 1초).
+- kakao.maps.load()를 layout 부트 스크립트에서 HTML 파싱 시점에 호출한다.
+  태그 id를 로더와 같은 상수로 공유해 중복 주입이 구조적으로 불가능하다.
+- 지도 모듈 호스트 t1.daumcdn.net preconnect 누락을 layout(서버 HTML)에서 보완.
+- 카카오 **공유** SDK(3,587~6,740ms 대역폭 점유)를 requestIdleCallback으로 이연.
+  "클릭 전 미리 로드"(팝업 차단 방지) 성질은 유지.
+- §1 계측 마크 5종 추가(perf debug 플래그일 때만 동작).
+
+서비스 기능 변경:
+
+- 없음(로드 시점만 앞당김/이연).
+
+DB 변경:
+
+없음
+
+API 변경:
+
+없음
+
+측정 (Production, Slow 4G / CPU 4x / cold cache / 390px):
+
+- 첫 타일 **요청**: 2,351 → 982~1,142ms. 구·폭·부하가 다른 17개 실행에서 모두 재현
+  (중앙값 약 1,089ms). 네트워크 바운드라 배경 부하에 강한 지표다.
+- usable: 배경 부하가 BEFORE(LT=83)와 비슷한 실행에서만 비교했다 —
+  부산진구 3,991 → 3,126ms(-865ms), 중구 2,976ms.
+  나머지 15개 실행은 측정 PC의 배경 부하(LT 177~370)가 지배해 비교하지 않았다.
+- 해운대구는 부하가 낮은 실행을 끝내 확보하지 못해 **판정 불가**로 남긴다.
+
+판정:
+
+- 첫 타일 요청 앞당기기 → 달성
+- §10 usable <=3s → 미달(부산진구 3,126ms, 근접) / 해운대구 판정 불가
+- 남은 병목은 hydration 도달 시각(약 2.3~2.45초)이며, 프레임워크 JS 153.7KB(br)를
+  받아야 시작되므로 앱 코드로는 줄일 수 없다.
+
+QA (Production):
+
+- V2.4 데이터 경로 6/6 PASS, V2.3 렌더 57/57 PASS, keepIds/컬링 동일
+- SDK 중복 주입 없음(sdk.js 요청 1회, 태그 1개)
+- eslint 0 errors / tsc --noEmit src 0건 / build 성공 / 지도 테스트 59 pass
+
+상태:
+
+완료. 다음은 라우트 셸/hydration 구조 STEP(측정은 부하 통제 환경에서).
