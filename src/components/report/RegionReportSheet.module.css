@@ -217,3 +217,15 @@
 .cmpMissing { color: var(--text-secondary, #9ca3af); font-weight: 600; }
 .cmpNote { margin-top: 3px; font-size: 0.68rem; color: var(--text-secondary, #6b7280); }
 .cmpEmpty { font-size: 0.76rem; color: var(--text-secondary, #9ca3af); padding: 6px 0; }
+
+/* ── REPORT-5 일별 리포트 전용 ─────────────────────────────
+   §19 공유 안전: 스크린샷만 돌아다녀도 "새로 확인된"과 계약일이 함께 보여야 한다. */
+.stateBox { margin: 16px 18px; border-radius: 12px; padding: 16px; text-align: center; }
+.stateWithheld { background: #fff7ed; border: 1px solid #fed7aa; }
+.statePreparing { background: #f8fafc; border: 1px solid #e2e8f0; }
+.stateZero { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.stateTitle { font-size: 0.92rem; font-weight: 800; color: var(--text-primary, #111827); }
+.stateBody { margin-top: 6px; font-size: 0.8rem; line-height: 1.6; color: var(--text-secondary, #6b7280); word-break: keep-all; }
+/* 관찰일/계약일 구분 설명 — 눈에 띄되 경고처럼 보이지 않게. */
+.obsNote { margin: 0 18px 16px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 11px 13px; font-size: 0.72rem; line-height: 1.55; color: #1e40af; word-break: keep-all; }
+.contractDate { font-size: 0.72rem; font-weight: 700; color: #b45309; background: #fffbeb; border-radius: 5px; padding: 1px 6px; display: inline-block; margin-top: 4px; }
