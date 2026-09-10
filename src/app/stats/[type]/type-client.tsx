@@ -16,6 +16,8 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
+import { districtReportHref, dongReportHref, REPORT_LABELS } from '@/lib/report/report-links';
+import { isBusanCurrentLawdCd } from '@/lib/report/region-scope';
 import { resolveTradeReadState, resolveTransactionsReadState } from '@/lib/trade-read-state';
 import { getStatsMenuItem } from '../statsMenu';
 import { buildStatsShareContext, statsRegionShareLabel } from './shareContext';
@@ -464,6 +466,27 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
             )}
           </div>
         )}
+
+        {/* REPORT-7 §4 — 지역 한장 브리핑 진입.
+            canonical lawdCd가 있고 **리포트가 실제로 다루는 부산 16개 코드**일 때만
+            노출한다. 좌표만 있거나 시도 전체가 선택된 상태에서는 지역 identity를
+            지어내지 않고 CTA를 만들지 않는다. */}
+        {slug !== 'change-map' && item.status === 'live' && (() => {
+          if (!isBusanCurrentLawdCd(region.lawdCd ?? '')) return null;
+          const isDong = region.dong && region.dong !== 'all';
+          const href = isDong
+            ? dongReportHref(region.lawdCd, region.dong)
+            : districtReportHref(region.lawdCd);
+          if (!href) return null;
+          const name = isDong ? region.dong : region.sigungu;
+          return (
+            <div style={{ margin: '0 0 0.75rem' }}>
+              <Link href={href} className={styles.reportCta}>
+                {REPORT_LABELS.district(name)}
+              </Link>
+            </div>
+          );
+        })()}
 
         {item.status === 'soon' ? (
           <ComingSoonCard title={item.title} reason={item.soonReason} />

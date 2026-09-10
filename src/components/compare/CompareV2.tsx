@@ -15,6 +15,7 @@ import { fetchCompareApartment } from '@/lib/compare-v2/fetch';
 import { buildDifferences, buildTradeoffSummary, buildHeadlineDifferences } from '@/lib/compare-v2/difference';
 import { formatHeadlineBullet, scoreDomainSummary } from '@/lib/compare-v2/format';
 import { buildCompareUrl, parseCompareUrl, type CompareSlotSeed } from '@/lib/compare-v2/url';
+import { compareReportHref, REPORT_LABELS } from '@/lib/report/report-links';
 import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
 import styles from './CompareV2.module.css';
 
@@ -108,6 +109,16 @@ export default function CompareV2() {
   const tradeoff = both ? buildTradeoffSummary(differences) : null;
   const headline = both && tradeoff ? buildHeadlineDifferences(differences, tradeoff) : [];
 
+  // REPORT-7 §3 — 비교 리포트 진입. 두 슬롯이 **모두 canonical aptSeq로 해석된
+  // 경우에만** 링크를 만든다. 이름으로만 잡힌 단지가 섞이면 compareReportHref가
+  // null을 주고, 그러면 CTA 자체를 렌더하지 않는다(깨진 리포트로 보내지 않는다).
+  const compareReportUrl = both
+    ? compareReportHref(
+        both[0].identity.kind === 'aptSeq' ? both[0].identity.aptSeq : null,
+        both[1].identity.kind === 'aptSeq' ? both[1].identity.aptSeq : null
+      )
+    : null;
+
   const shareParams = both
     ? {
         aptSeq: [
@@ -177,6 +188,14 @@ export default function CompareV2() {
         )}
 
         {both && bothLoading && <InlineLoading message="비교 데이터를 불러오는 중..." />}
+
+        {both && !bothLoading && compareReportUrl && (
+          <div className={styles.reportCtaWrap}>
+            <Link href={compareReportUrl} className={styles.reportCta}>
+              {REPORT_LABELS.compare}
+            </Link>
+          </div>
+        )}
 
         {both && !bothLoading && (
           <>

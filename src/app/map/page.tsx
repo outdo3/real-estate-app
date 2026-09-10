@@ -11,6 +11,7 @@ import { loadKakaoMapsSdk } from '@/lib/kakao/maps-sdk';
 import type { AptMarker, AptCluster } from '@/lib/map-selected-marker';
 import { buildPendingSelectedApt, resolveSelectedMarker, isPendingStillNeeded } from '@/lib/map-selected-marker';
 import { isStaleMarkerResponse, isMarkerCacheFresh } from '@/lib/map-marker-fetch-guard';
+import { REPORT_LABELS } from '@/lib/report/report-links';
 import { resolveTransactionsReadState } from '@/lib/trade-read-state';
 import { formatMarkerPriceAreaLine, formatMarkerAreaLabel } from '@/lib/map-marker-format';
 import {
@@ -2662,6 +2663,18 @@ export default function FullscreenMapPage() {
           >
             상세보기
           </button>
+          {/* REPORT-7 §5 — 선택된 단지 카드 안에서는 단지 리포트가 지역 브리핑보다
+              우선한다. canonical aptSeq가 있을 때만 노출해 이름 기반 식별을 피한다.
+              팝업을 더 무겁게 만들지 않도록 보조 버튼 하나만 추가한다. */}
+          {selectedMarker.aptSeq && (
+            <button
+              type="button"
+              onClick={() => router.push(`/report/apt/${encodeURIComponent(selectedMarker.aptSeq!)}`)}
+              style={{ marginTop: '0.5rem', width: '100%', padding: '0.7rem', background: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+            >
+              {REPORT_LABELS.aptShort}
+            </button>
+          )}
           <AdContainer variant="agent" slot="map-marker-summary-agent" label="추천 지역 중개사" />
         </div>
       )}

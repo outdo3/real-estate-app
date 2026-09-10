@@ -6,6 +6,9 @@
 // breakdown이 서버에서 이 배열로만 검증되므로(src/lib/analytics/events.ts), 타입은
 // 이 런타임 배열에서 파생시켜 하나의 정의만 유지한다.
 export const NEXT_ACTION_TYPES = [
+  // REPORT-7 — 한장 리포트 진입. 이 배열이 analytics actionType 검증의 단일 출처다
+  // (스키마/DB enum 아님 — src/lib/analytics/events.ts 주석 참고).
+  'REPORT',
   'COMPARE',
   'MAP',
   'NEARBY',

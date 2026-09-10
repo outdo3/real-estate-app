@@ -19,6 +19,7 @@ import type {
 const RANGE_LABELS: Record<AnalyticsRange, string> = { today: '오늘', '7d': '최근 7일', '30d': '최근 30일' };
 
 const NEXT_ACTION_LABELS: Record<NextActionType, string> = {
+  REPORT: '한장 리포트',
   COMPARE: '비교',
   MAP: '지도',
   NEARBY: '주변 시설',

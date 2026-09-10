@@ -230,6 +230,12 @@ export default function MyPage() {
               {/* 바로가기 */}
               <div className={styles.section}>
                 <div className={styles.sectionTitle}>바로가기</div>
+                {/* REPORT-7 §7 — 리포트 열람 이력을 저장하는 구조가 없으므로
+                    "내가 본 리포트"를 만들지 않는다(가짜 최근 항목 금지).
+                    허브로 가는 정적 링크 하나만 둔다. */}
+                <Link href="/report" className={styles.linkCard}>
+                  한장 리포트 보기
+                </Link>
                 <Link href="/community" className={styles.linkCard}>
                   💬 커뮤니티 둘러보기
                 </Link>

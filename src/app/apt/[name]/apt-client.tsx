@@ -26,6 +26,7 @@ import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } fr
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import type { NextAction } from '@/lib/decision-journey/types';
 import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
+import { aptReportHref, REPORT_LABELS } from '@/lib/report/report-links';
 import { fetchDetailTrades } from '@/lib/detail-trade-cache';
 import { fetchCachedResource, DETAIL_RESOURCE_TTL_MS } from '@/lib/detail-resource-cache';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
@@ -551,12 +552,27 @@ export default function ApartmentDetail() {
     );
   };
 
+  // REPORT-7 §2 — 한장 리포트 진입. canonical aptSeq가 확정됐을 때만 노출한다
+  // (이름 기반 식별 금지 — aptSeq가 없으면 CTA 자체를 만들지 않는다).
+  const reportHref = aptReportHref(canonicalAptSeq);
+
   const nextActions: NextAction[] = addressReady
     ? [
+        ...(reportHref
+          ? [
+              {
+                type: 'REPORT' as const,
+                label: REPORT_LABELS.apt,
+                priority: 'primary' as const,
+                href: reportHref,
+              },
+            ]
+          : []),
         {
           type: 'MAP',
           label: '지도에서 위치 보기',
-          priority: 'primary',
+          // 리포트가 primary가 되면서 지도는 secondary로 내려간다(primary 1개 규칙).
+          priority: reportHref ? 'secondary' : 'primary',
           onClick: handleViewOnMap,
           loading: mapCtaLoading,
         },

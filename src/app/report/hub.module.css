@@ -1,0 +1,106 @@
+/* REPORT-7 §8/§15 — 리포트 허브.
+   광고 배너가 아니라 조용한 목록으로 보이게 한다. 기존 카드/버튼 언어를 따른다. */
+
+.page {
+  min-height: 100dvh;
+  background: var(--bg-color, #f6f7f9);
+  /* BottomNav와 겹치지 않게 */
+  padding-bottom: 84px;
+}
+
+.intro {
+  padding: 20px 0 8px;
+}
+.title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-primary, #111827);
+}
+.sub {
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-secondary, #4b5563);
+}
+
+.section {
+  margin-top: 20px;
+}
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary, #111827);
+}
+
+.primaryCard,
+.guideCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px; /* 터치 타겟 */
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--border-color, #e5e7eb);
+  text-decoration: none;
+  color: var(--text-primary, #111827);
+}
+.primaryCard {
+  border-color: var(--primary-color, #10b981);
+  color: var(--primary-color, #10b981);
+}
+.primaryCard:active,
+.guideCard:active {
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.cardMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0; /* 긴 문구가 넘치지 않게 */
+}
+.cardTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.cardDesc {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-secondary, #4b5563);
+  /* 부제는 잘리지 않고 접힌다 — 일별 리포트의 "계약일 아님" 설명이 사라지면 안 된다. */
+  overflow-wrap: anywhere;
+}
+
+.districtGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.districtChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--border-color, #e5e7eb);
+  color: var(--text-primary, #111827);
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.districtChip:active {
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.note {
+  margin: 20px 0 0;
+  font-size: 0.74rem;
+  color: var(--text-muted, #6b7280);
+}
