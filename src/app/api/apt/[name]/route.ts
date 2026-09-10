@@ -12,6 +12,12 @@ import {
 import { logServerError } from '@/lib/log-server-error';
 import { resolveStrongIdentityAptSeqs, matchesTradeIdentity, deriveCanonicalAptSeq } from '@/lib/apt-name-match';
 import { resolveCanonicalCoords } from '@/lib/apt-canonical-coords';
+import {
+  excludeCanceled,
+  readDetailSaleTradesFromDb,
+  resolveDetailAptSeq,
+  type DetailTrade,
+} from '@/lib/apt-detail-trade-source';
 
 export const dynamic = 'force-dynamic';
 
@@ -197,6 +203,43 @@ export async function GET(
     // 날짜 최신순 정렬
     filteredTrades.sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
 
+    // ── DB_FIRST_CANCELLATION_TRUST_V1 ─────────────────────────────────────
+    // §5 취소 거래는 활성 거래 집합에서 제외한다. 지도(/map)는 예전부터 제외하고
+    // 있었는데 상세만 포함하고 있어, 취소된 거래가 최근 실거래/타임라인/최고·최저에
+    // 그대로 들어갔다. 두 화면의 규칙을 일치시킨다.
+    let activeTrades: DetailTrade[] = excludeCanceled(filteredTrades) as DetailTrade[];
+    let tradeDataSource: 'DB' | 'MOLIT' = 'MOLIT';
+    let canonicalAptSeqForRead: string | null = null;
+
+    // §3 매매(sale)는 DB를 1차 소스로 쓴다. MOLIT 라이브는 시점에 따라 이미 신고된
+    // 거래를 빠뜨리는 것이 실측으로 확인됐고(2026-09-05 계약 건들), DB는 지도·통계·
+    // 리포트가 이미 신뢰하는 append-only 소스다.
+    //
+    // aptSeq를 단일하게 확정하지 못하면 DB를 쓰지 않는다(이름으로 재식별 금지).
+    // DB가 0건이면 MOLIT 결과를 그대로 둔다 — DB가 가릴 데이터가 없는 경우뿐이라
+    // "MOLIT가 유효한 DB 거래를 덮는" 상황이 만들어지지 않는다(§9).
+    if (type === 'apt') {
+      try {
+        const aptSeq = await resolveDetailAptSeq(prisma, {
+          aptSeqParam: searchParams.get('aptSeq'),
+          aptName,
+          lawdCd,
+          dong,
+        });
+        if (aptSeq) {
+          canonicalAptSeqForRead = aptSeq;
+          const db = await readDetailSaleTradesFromDb(aptSeq, period);
+          if (db.usedDb) {
+            activeTrades = db.trades;
+            tradeDataSource = 'DB';
+          }
+        }
+      } catch (e) {
+        // DB 조회 실패를 "거래 없음"으로 위장하지 않는다 — MOLIT 결과를 그대로 쓴다.
+        console.warn('[apt-detail] DB-first 조회 실패, MOLIT 결과 유지:', (e as Error)?.message);
+      }
+    }
+
     // 공공데이터 API 자체가 실패한 경우(키 누락/만료 등) 에러 플레이스홀더가 아파트명 필터에서
     // 걸러지면서 "거래 내역 없음"과 구분이 안 되므로, 매 월 전부 실패했는지 여부를 별도로 알려준다.
     // apiError의 의미(=요청한 모든 월이 실패)는 기존과 동일하게 유지한다 — 기존 소비자
@@ -245,13 +288,16 @@ export async function GET(
     let coordinate: unknown = null;
     if (wantsCoordinate) {
       const incomingAptSeq = searchParams.get('aptSeq');
-      const canonicalAptSeq = deriveCanonicalAptSeq(filteredTrades, incomingAptSeq);
+      // DB-first가 이미 canonical aptSeq를 확정했으면 그것을 쓴다(거래 소스와 좌표
+      // identity가 갈라지지 않게). 아니면 기존 규칙 그대로.
+      const canonicalAptSeq =
+        canonicalAptSeqForRead ?? deriveCanonicalAptSeq(filteredTrades, incomingAptSeq);
       try {
         const resolved = await resolveCanonicalCoords(prisma, {
           aptSeq: canonicalAptSeq,
           lawdCd,
           dong,
-          name: filteredTrades[0]?.name || aptName,
+          name: activeTrades[0]?.name || filteredTrades[0]?.name || aptName,
         });
         coordinate = resolved.status === 'RESOLVED'
           ? resolved.coordinate
@@ -262,14 +308,22 @@ export async function GET(
       }
     }
 
+    // §10 — DATA PRESENT와 COVERAGE VERIFIED를 분리한다.
+    // DB에서 읽었다면 MOLIT 월별 성공/실패(partial/failedMonths)는 이 거래 목록의
+    // 완전성과 무관하므로 그대로 전달하되, 소스를 명시해 소비자가 구분할 수 있게 한다.
+    // DB 경로에서는 MOLIT 전월 실패(apiError)가 "거래 없음"으로 읽히면 안 되므로
+    // apiError를 승격하지 않는다 — 실제로 거래를 확보했기 때문이다.
+    const usedDb = tradeDataSource === 'DB';
     return NextResponse.json({
-      trades: filteredTrades,
-      apiError,
+      trades: activeTrades,
+      apiError: usedDb ? null : apiError,
       lawdCd,
       dong,
       ...(wantsCoordinate ? { coordinate } : {}),
-      partial: completeness.partial,
-      failedMonths: completeness.failedMonths,
+      tradeDataSource,
+      canceledExcluded: true,
+      partial: usedDb ? false : completeness.partial,
+      failedMonths: usedDb ? [] : completeness.failedMonths,
       monthsRequested: completeness.monthsRequested,
       monthsSucceeded: completeness.monthsSucceeded,
     });

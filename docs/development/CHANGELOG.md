@@ -17285,3 +17285,31 @@ DB 변경:
   (상세 응답은 12/12개월 성공 · partial=false). 소스 변경은 이 버그의 범위를 넘어
   승인 대기 항목으로 남긴다. 근거는
   `docs/development/APT_DETAIL_UNIT_TRADE_FILTER_BUG_V1.md` §5.
+
+## APT DETAIL — DB-FIRST / CANCELLATION TRUST V1 (P0)
+
+- **소스 분기 해소**: 상세페이지 매매 실거래의 1차 소스를 MOLIT 라이브에서 **DB**로
+  바꿨다. 지도(`/api/transactions`)가 쓰는 것과 **동일한 `queryTrades`를 재사용**해
+  두 화면이 같은 활성 거래 집합에서 나오도록 구조적으로 보장한다.
+  실측 근거: MOLIT 라이브 응답이 2026-09-05 계약 건들을 여러 단지에서 동시에 빠뜨렸고
+  (상세 응답은 12/12개월 성공·partial=false로 정상이었다), 그 결과 대신롯데캐슬
+  50평의 6.65억 거래가 지도에는 있고 상세에는 없었다.
+- **canonical identity**: `resolveDetailAptSeq()`는 URL이 준 aptSeq를 쓰거나,
+  ApartmentMaster를 lawdCd(+dong)로 좁힌 뒤 정규화 이름이 **정확히 하나** 일치할
+  때만 채택한다. 확정하지 못하면 DB 경로를 포기하고 기존 MOLIT 경로로 간다 —
+  이름만으로 재식별하지 않는다.
+- **취소 거래 제외**: 상세페이지는 지금까지 `dealCanceled`를 전혀 필터하지 않았다.
+  DB 경로는 `includeCanceled: false`로 애초에 조회하지 않고, MOLIT 폴백 경로는
+  `excludeCanceled()`로 제거한다. 소스가 하나라 최근 실거래·타임라인·건수·최고/최저·
+  차트·전세가율이 각 위젯 수정 없이 함께 정정됐다. DB의 취소 이력은 삭제하지 않는다.
+- **MOLIT는 유지**: 전월세(sale 전용 테이블이라), 부산 외 지역, aptSeq 미확정,
+  DB 조회 실패 시 폴백. **MOLIT가 유효한 DB 거래를 덮는 경로는 없다**(폴백은 DB가
+  0건일 때만).
+- **응답 메타**: `tradeDataSource`('DB'|'MOLIT')와 `canceledExcluded`를 추가해
+  DATA PRESENT와 COVERAGE VERIFIED를 구분한다. DB에서 읽었으면 MOLIT 월별 실패를
+  이 목록의 불완전성으로 승격하지 않는다.
+- **결과**: 대신롯데캐슬 50평이 6억 6,500만 / 2026.09.05 / 12층 / 1건으로 표시된다.
+  전체 평형 17건 → 19건. 3개 단지 전 평형의 화면 건수가 DB 유효 건수와 100% 일치하고,
+  DB/상세/지도 최신 거래 parity 4개 단지 YES.
+- **성능**: 상세 거래 API warm 34~58ms(기존 최대 12개월 upstream 호출), 평형 전환
+  p50 52~57ms, 전환 중 API 호출 0회.
