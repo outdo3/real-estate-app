@@ -24,6 +24,16 @@
 
 export const EXPORT_ROOT_ATTR = 'data-export-root';
 export const EXPORT_EXCLUDE_ATTR = 'data-export-exclude';
+/**
+ * 크기를 CSS에만 의존하는 **순수 도형** 표시.
+ *
+ * 캡처는 텍스트가 다시 접힐 때 박스가 따라 커지도록 width/height를 복사하지 않는다.
+ * 그런데 점수 도넛이나 막대그래프처럼 "크기 자체가 그림"인 요소는 그 규칙 때문에
+ * 0으로 찌그러진다(실측: 점수 링과 항목별 막대가 캡처본에서 통째로 사라졌다).
+ * 이 속성이 붙은 요소만 예외로 크기를 함께 복사한다 — 글자가 없거나 크기가 고정된
+ * 도형에만 붙인다.
+ */
+export const EXPORT_FIXED_SIZE_ATTR = 'data-export-fixed-size';
 
 /** 공유에 적당한 가로 해상도(§5). 시트 실제 폭에서 배율을 유도한다. */
 export const TARGET_WIDTH_PX = 1080;
@@ -57,12 +67,21 @@ const COPIED_PROPS = [
   'list-style', 'table-layout', 'border-collapse', 'border-spacing', 'transform',
 ] as const;
 
+/** 순수 도형에만 추가로 복사하는 기하 속성. */
+const FIXED_SIZE_PROPS = ['width', 'height', 'max-height'] as const;
+
 function inlineStyles(source: Element, target: Element) {
   const computed = window.getComputedStyle(source);
   const decls: string[] = [];
   for (const prop of COPIED_PROPS) {
     const value = computed.getPropertyValue(prop);
     if (value) decls.push(`${prop}:${value}`);
+  }
+  if (source.hasAttribute(EXPORT_FIXED_SIZE_ATTR)) {
+    for (const prop of FIXED_SIZE_PROPS) {
+      const value = computed.getPropertyValue(prop);
+      if (value) decls.push(`${prop}:${value}`);
+    }
   }
   // overflow:hidden이 남아 있으면 캡처본에서 내용이 잘린다(§3 "no clipped footer").
   // 원본 인라인 스타일은 **맨 뒤에** 붙여 우선권을 준다 — 분포 막대의 width:%처럼

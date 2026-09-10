@@ -122,6 +122,11 @@ function fmtInt(n: number | null, suffix: string): string {
   return n == null ? '정보 없음' : `${n.toLocaleString('ko-KR')}${suffix}`;
 }
 
+/** 연도는 자릿수 구분자를 넣지 않는다 — "2,014년"은 연도가 아니라 수량으로 읽힌다. */
+function fmtYear(n: number | null): string {
+  return n == null ? '정보 없음' : `${n}년`;
+}
+
 function metricOf(apt: CompareApartment, key: string): CompareMetric | undefined {
   return apt.metrics.find((m) => m.key === key);
 }
@@ -154,7 +159,7 @@ export function buildCompareReport(input: CompareReportInput): ReportEnvelope<Ap
           : 'SAFE',
       sa.overallScore == null || sb.overallScore == null ? '한쪽 이상은 점수를 계산할 데이터가 부족합니다.' : null, src),
     sideMetric('buildYear', '준공',
-      fmtInt(sa.buildYear, '년'), fmtInt(sb.buildYear, '년'),
+      fmtYear(sa.buildYear), fmtYear(sb.buildYear),
       sa.buildYear != null && sb.buildYear != null ? 'SAFE' : 'MISSING',
       sa.buildYear == null || sb.buildYear == null ? '준공연도 정보가 없는 단지가 있습니다.' : null, src),
     sideMetric('totalHouseholds', '세대수',
