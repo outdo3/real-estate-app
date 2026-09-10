@@ -15,7 +15,16 @@ import styles from './RegionReportSheet.module.css';
  * 공유는 리포트 URL을 쓴다. 공유된 이미지 자체는 딥링크가 될 수 없으므로
  * (ARCHITECTURE §9) URL을 항상 함께 싣는 지금 형태가 V1에 맞다.
  */
-export default function ReportActions({ title }: { title: string }) {
+export default function ReportActions({
+  title,
+  detailHref = null,
+  detailLabel = '지도 보기',
+}: {
+  title: string;
+  /** 있으면 이 링크로, 없으면 지도로 보낸다. 단지 리포트는 canonical aptSeq 상세로 간다(§12). */
+  detailHref?: string | null;
+  detailLabel?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   const share = async () => {
@@ -57,9 +66,9 @@ export default function ReportActions({ title }: { title: string }) {
           <Download size={16} aria-hidden="true" />
           저장 준비 중
         </button>
-        <Link href="/map" className={styles.actionBtn}>
+        <Link href={detailHref ?? '/map'} className={styles.actionBtn}>
           <ExternalLink size={16} aria-hidden="true" />
-          지도 보기
+          {detailHref ? detailLabel : '지도 보기'}
         </Link>
       </div>
     </div>

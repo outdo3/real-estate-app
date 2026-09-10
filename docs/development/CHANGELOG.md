@@ -17125,3 +17125,57 @@ QA:
 상태:
 
 완료. 다음은 REPORT-3(단지 리포트).
+
+
+## 2026-09-10
+
+### REPORT ENGINE — REPORT-3 (단지 한장 리포트)
+
+작업:
+
+- /report/apt/[aptSeq] 신설. identity는 aptSeq뿐이며 표시명으로 단지를 다시 찾지 않는다.
+  없는 aptSeq는 다른 단지로 폴백하지 않고 "찾을 수 없습니다" 화면을 낸다.
+- src/lib/report/apt-report.ts(순수 조립) + apt-read.ts(유일한 DB/Score 접근)
+- src/components/report/ApartmentReportSheet.tsx — REPORT-2 시트 셸 재사용
+- ReportActions에 detailHref 추가 → 단지 리포트는 canonical 상세로 연결
+- docs/development/REPORT_ENGINE_V1_REPORT_3_APARTMENT.md 작성
+
+Score 통합(재계산 없음):
+
+- calculateApartmentScore + getPeerContext + deriveScoreCardState + buildScore +
+  derivePeerVerdict 를 상세 화면과 동일하게 사용. 표시 규칙을 리포트에서 새로 만들지 않는다.
+- parity 실측: 26290-2625 67/67, 26260-2234 71/71,
+  26110-1 null/null(not-enough-data), 26350-225 null/null -> 전부 일치
+- Score 계산이 실패해도 리포트 전체를 죽이지 않고 점수만 '준비 중'이 된다
+
+신뢰 규칙:
+
+- 취소 거래 제외(쿼리+순수 레이어 이중)
+- 12개월 거래 5건 미만이면 가격 지표 LIMITED, 거래 건수는 사실이므로 SAFE
+- 주차 커버리지 70.7% -> 없으면 정보 없음(추정 금지)
+- eligibility=LIMITED 점수를 SAFE로 승격하지 않음
+- 평 라벨 금지(㎡만), "역대 신고가" 금지("최근 2년 최고 거래가" + 기간 문구)
+- 해석은 Score briefing(summary/strengths/caution)만 사용, 새 문장 생성 없음
+
+성능(라우트 총 시간):
+
+- 데이터 많음(275건) cold 137ms / warm 98~174ms
+- 희소(1건) 53~87ms, 주차없음 62~106ms, 없는 aptSeq 19~32ms
+- warm <=500ms, 라우트 <=1s 목표 충족
+
+QA:
+
+- 128/128 PASS (3케이스 x 5폭 + 없는 aptSeq 2종)
+  가로 오버플로 0 / 예측 어휘 0 / 역대 신고가 0 / 평 라벨 0 /
+  딥링크 전부 aptSeq / 주차없음은 정보 없음 / 1280px 시트 520px 고정 /
+  없는 aptSeq에서 다른 단지 정보 0건
+- 단위 13/13, REPORT-1 단위 25/25, 읽기 전용 통합 5/5 (회귀 없음)
+- eslint 0 errors / tsc --noEmit src 0건 / build 성공
+
+DB 변경:
+
+없음 (SELECT 전용)
+
+상태:
+
+완료. 다음은 REPORT-4(단지 비교 리포트).
