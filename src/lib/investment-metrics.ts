@@ -1,3 +1,4 @@
+import { areaMatchesSelection, isAllAreas } from './unit-area-match';
 // DETAIL TRADE AREA STATE SPLIT V1 — pure helper mirroring InvestmentMetrics.tsx's
 // gap/전세가율 calculation exactly (extracted only for unit-testability). Operates
 // strictly on selectedTradeArea (raw trade.area identity) — never on Unit Master
@@ -26,13 +27,14 @@ export function computeInvestmentMetrics(
   rentTrades: InvestmentMetricsTrade[],
   selectedTradeArea: string | undefined
 ): InvestmentMetricsResult {
-  const isAreaFiltered = !!selectedTradeArea && selectedTradeArea !== '전체';
+  const isAreaFiltered = !isAllAreas(selectedTradeArea);
   if (!isAreaFiltered) {
     return { latestSale: null, matchedRent: null, jeonseRate: null, gap: null };
   }
 
-  const areaSaleTrades = saleTrades.filter((t) => t.area === selectedTradeArea);
-  const areaRentTrades = rentTrades.filter((t) => t.area === selectedTradeArea);
+  // UNIT/TRADE FILTER BUG V1 — 숫자 매칭으로 통일(unit-area-match.ts).
+  const areaSaleTrades = saleTrades.filter((t) => areaMatchesSelection(t.area, selectedTradeArea));
+  const areaRentTrades = rentTrades.filter((t) => areaMatchesSelection(t.area, selectedTradeArea));
 
   const latestSale = areaSaleTrades.length > 0
     ? [...areaSaleTrades].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime())[0]
@@ -40,9 +42,9 @@ export function computeInvestmentMetrics(
 
   const jeonseOnlyRent = areaRentTrades.filter((r) => (r.monthlyRent ?? 0) === 0);
   const sortedRent = [...jeonseOnlyRent].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
-  const matchedRent = latestSale ? sortedRent.find((r) => r.area === latestSale.area) ?? null : null;
+  const matchedRent = latestSale ? sortedRent.find((r) => areaMatchesSelection(r.area, latestSale.area)) ?? null : null;
 
-  const isSameArea = !!(latestSale && matchedRent && matchedRent.area === latestSale.area);
+  const isSameArea = !!(latestSale && matchedRent && areaMatchesSelection(matchedRent.area, latestSale.area));
   const gap = isSameArea && latestSale && matchedRent ? latestSale.price - matchedRent.price : null;
   const jeonseRate = isSameArea && latestSale && matchedRent && latestSale.price > 0
     ? (matchedRent.price / latestSale.price) * 100

@@ -37,6 +37,7 @@ import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
 import { recordApartmentVisit } from '@/lib/recent-apartments';
 import { siteConfig } from '@/config/site';
+import { areaMatchesSelection, findUnitForArea } from '@/lib/unit-area-match';
 
 // 차트 컴포넌트(recharts)는 번들이 무거워 메인 스레드를 오래 점유한다 — 상세페이지
 // 최초 렌더에 꼭 필요하지 않으므로 지연 로딩(ssr:false)해서 초기 로드를 가볍게 하고,
@@ -110,21 +111,17 @@ export default function ApartmentDetail() {
   // 통일한다. aptName은 API 호출 키로 계속 쓰이므로 별도 상태로 분리한다.
   const [displayName, setDisplayName] = useState<string>('');
 
-  // DETAIL TRADE AREA STATE SPLIT V1 — these two are deliberately independent
-  // and must never be synchronized by an unverified mapping (see
-  // docs/development/DETAIL_TRADE_AREA_STATE_SPLIT_V1.md).
+  // APT DETAIL UNIT/TRADE FILTER BUG V1 — 평형 선택 상태는 **하나뿐**이다.
   //
-  // selectedUnitMasterArea: Unit Master canonicalExclusiveArea identity only —
-  // written by AreaSelector when Unit Master data exists for this complex.
-  // Currently used only to highlight the active Unit Master chip; there is no
-  // verified link from a Unit Master type to specific raw transactions yet.
+  // 예전에는 selectedUnitMasterArea(칩 하이라이트 전용)와 selectedTradeArea(거래
+  // 필터 전용)로 나뉘어 있었다(DETAIL_TRADE_AREA_STATE_SPLIT_V1). 두 도메인을
+  // 문자열 === 로는 이을 수 없다는 이유였는데, 그 결과 Unit Master가 있는 단지에서
+  // 칩을 눌러도 거래 데이터가 전혀 바뀌지 않았다(P0: 다른 평형 거래를 선택한 평형의
+  // 것처럼 보여줌).
   //
-  // selectedTradeArea: raw transaction API trade.area identity — drives every
-  // transaction-derived UI (Hero price, PriceTrendChart, recent sale/rent,
-  // jeonse ratio, gap, TradeTimeline). Written by AreaSelector only in its
-  // no-Unit-Master fallback mode (where its chip values already ARE raw trade
-  // areas), by PriceTrendChart's own selector, and by the 84㎡ default below.
-  const [selectedUnitMasterArea, setSelectedUnitMasterArea] = useState<string>('전체');
+  // 이제 unit-area-match.ts가 **숫자**로 매칭하므로 이 상태는 Unit Master
+  // canonical("129.7178")이든 raw trade.area("129.7178m²")든 동일하게 동작한다.
+  // 따라서 상태를 나눌 이유가 없어졌고, 모든 거래 파생 UI가 이 하나를 읽는다.
   const [selectedTradeArea, setSelectedTradeArea] = useState<string>('전체');
   const hasAutoSelectedArea = useRef(false);
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
@@ -444,7 +441,9 @@ export default function ApartmentDetail() {
   const now = new Date();
   const filteredTrades = trades.filter(trade => {
     // 1. 평형 필터
-    if (selectedTradeArea !== '전체' && trade.area !== selectedTradeArea) return false;
+    // UNIT/TRADE FILTER BUG V1 — 문자열 === 는 Unit Master canonical("84.7855")과
+    // raw trade.area("84.7855m²")를 절대 잇지 못했다. 숫자 매칭으로 통일한다.
+    if (!areaMatchesSelection(trade.area, selectedTradeArea)) return false;
 
     // 2. 거래 유형 필터
     if (tradeTypeFilter === '매매' && trade.tradeType !== '아파트 매매' && trade.tradeType !== '실거래') return false;
@@ -485,7 +484,8 @@ export default function ApartmentDetail() {
 
   const renderHeroAreaLabel = (area: string, labels: Map<number, string>) => {
     if (unitMaster && unitMaster.length > 0) {
-      const unit = unitMaster.find(u => u.canonicalExclusiveArea === area);
+      // suffix("m²") 때문에 문자열 === 가 항상 실패해 평형 라벨이 사라지던 자리.
+      const unit = findUnitForArea(unitMaster, area);
       if (unit) {
         if (unit.representativePyeong) return `${unit.representativePyeong}평 · 전용 ${unit.displayExclusiveArea}㎡`;
         return `전용 ${unit.displayExclusiveArea}㎡`;
@@ -504,19 +504,11 @@ export default function ApartmentDetail() {
   // 넣으면 "전용 25.4평 · 약 25.4평"처럼 평이 중복 표기되는 문제가 생긴다).
   // chipAreaLabels and the AreaUnit toggle have been removed.
 
-  // DETAIL TRADE AREA STATE SPLIT V1 — AreaSelector sources its chips from Unit
-  // Master canonicalExclusiveArea when Unit Master data exists for this complex,
-  // and from raw trade.area otherwise (see AreaSelector.tsx's own hasUnitMaster
-  // branch). This dispatcher must mirror that exact same condition so a chip
-  // click always writes into the state whose identity domain matches the value
-  // AreaSelector actually produced — never a cross-domain (unverified) write.
+  // AreaSelector의 칩 값은 Unit Master가 있으면 canonicalExclusiveArea, 없으면 raw
+  // trade.area다. 두 경우 모두 숫자 매칭이 처리하므로 분기 없이 같은 상태에 쓴다.
   const hasUnitMaster = Array.isArray(unitMaster) && unitMaster.length > 0;
   const handleAreaSelectorChange = (area: string) => {
-    if (hasUnitMaster) {
-      setSelectedUnitMasterArea(area);
-    } else {
-      setSelectedTradeArea(area);
-    }
+    setSelectedTradeArea(area);
   };
 
   const firstTrade = trades.length > 0 ? trades[0] : null;
@@ -1068,7 +1060,7 @@ export default function ApartmentDetail() {
               <div className={styles.priceBlock} style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <AreaSelector trades={trades} selectedArea={hasUnitMaster ? selectedUnitMasterArea : selectedTradeArea} onSelect={handleAreaSelectorChange} areaLabels={areaLabels} unitMaster={unitMaster} areaUnit={areaUnit} />
+                    <AreaSelector trades={trades} selectedArea={selectedTradeArea} onSelect={handleAreaSelectorChange} areaLabels={areaLabels} unitMaster={unitMaster} areaUnit={areaUnit} />
                   </div>
                   {/* APT DETAIL CONSISTENCY HOTFIX V1 §5 — ㎡/평 toggle은 Unit Master
                       coverage와 무관하게 모든 단지에서 항상 노출한다(구조는 동일, 데이터

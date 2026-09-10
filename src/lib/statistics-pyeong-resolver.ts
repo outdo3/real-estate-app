@@ -21,7 +21,7 @@ export interface UnitTypeCandidate {
 // Prisma Decimal↔float 왕복 오차를 흡수하기 위한 최소 허용치. 84.7855와
 // 84.9950처럼 실제로 다른 raw area는 이 허용치보다 훨씬 크게 벌어져 있어
 // 서로 병합되지 않는다(테스트로 고정).
-const AREA_MATCH_EPSILON = 0.001;
+export const AREA_MATCH_EPSILON = 0.001;
 
 export function matchTrustworthyPyeong(unitTypes: UnitTypeCandidate[], rawAreaM2: number): number | null {
   const match = unitTypes.find((u) => Math.abs(u.canonicalExclusiveArea - rawAreaM2) < AREA_MATCH_EPSILON);

@@ -11,6 +11,7 @@ import { fetchDetailTrades } from '@/lib/detail-trade-cache';
 import { narrowTradeWindow } from '@/lib/detail-trade-window';
 import styles from './PriceTrendChart.module.css';
 import type { DisplayUnit } from '@/lib/area-utils';
+import { findUnitForArea } from '@/lib/unit-area-match';
 
 // DETAIL TRADE AREA STATE SPLIT V1 — selectedTradeArea/onSelectArea always carry
 // raw trade.area values (never Unit Master canonicalExclusiveArea). unitMaster is
@@ -233,7 +234,7 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeAr
   };
 
   const unitLabel = (area: string) => {
-    const unit = unitMaster?.find((item) => item.canonicalExclusiveArea === area);
+    const unit = findUnitForArea(unitMaster, area);
     return unit ? `${unit.representativePyeong ? `${unit.representativePyeong}평 · ` : ''}전용 ${unit.displayExclusiveArea}㎡` : `전용 ${parseFloat(area).toFixed(2).replace(/\.00$/, '')}㎡`;
   };
 

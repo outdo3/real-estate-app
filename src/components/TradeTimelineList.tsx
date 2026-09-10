@@ -1,5 +1,6 @@
 import React from 'react';
 import { resolveAreaLabel, type DisplayUnit } from '@/lib/area-utils';
+import { areaMatchesSelection, findUnitForArea } from '@/lib/unit-area-match';
 
 interface TimelineTrade {
   id: number;
@@ -60,7 +61,8 @@ export default function TradeTimelineList({ trades, loading, incompleteMessage, 
       {visible.map((t, index) => {
         let areaLabel = resolveAreaLabel(parseFloat(t.area), areaLabels);
         if (unitMaster && unitMaster.length > 0) {
-          const unit = unitMaster.find(u => u.canonicalExclusiveArea === t.area);
+          // suffix("m²") 때문에 문자열 === 가 항상 실패해 평형 라벨이 빠지던 자리.
+          const unit = findUnitForArea(unitMaster, t.area);
           if (unit) {
             if (unit.representativePyeong) {
               areaLabel = `${unit.representativePyeong}평`; // In trade list, we can keep it compact (e.g. 34평 or 전용 84.79㎡)
@@ -72,7 +74,7 @@ export default function TradeTimelineList({ trades, loading, incompleteMessage, 
         const isSale = t.tradeType.includes('매매') || t.tradeType === '실거래';
         const prevTrade = trades[index + 1];
         let diffBadge: React.ReactNode = null;
-        if (prevTrade && isSale && prevTrade.area === t.area) {
+        if (prevTrade && isSale && areaMatchesSelection(prevTrade.area, t.area)) {
           const diff = t.price - prevTrade.price;
           if (diff > 0) diffBadge = <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 700 }}>▲{diff.toFixed(1)}</span>;
           else if (diff < 0) diffBadge = <span style={{ fontSize: '0.8rem', color: '#3b82f6', fontWeight: 700 }}>▼{Math.abs(diff).toFixed(1)}</span>;

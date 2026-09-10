@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { resolveAreaLabel, resolveAreaChipDisplay, type DisplayUnit } from '@/lib/area-utils';
+import { areaMatchesSelection, countTradesByArea, findUnitForArea, isAllAreas } from '@/lib/unit-area-match';
 import Chip from '@/components/ui/Chip';
 import AreaChip, { AreaChipData } from '@/components/ui/AreaChip';
 
@@ -27,17 +28,16 @@ interface AreaSelectorProps {
 export default function AreaSelector({ trades, selectedArea, onSelect, areaLabels, unitMaster, areaUnit = '㎡' }: AreaSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const countByArea = new Map<string, number>();
-  trades.forEach((t) => {
-    countByArea.set(t.area, (countByArea.get(t.area) || 0) + 1);
-  });
-
   // If unitMaster is available, use it. Otherwise, fallback to trades.
   const hasUnitMaster = Array.isArray(unitMaster) && unitMaster.length > 0;
-  
-  const allAreas = hasUnitMaster 
+
+  const allAreas = hasUnitMaster
     ? unitMaster.map(u => u.canonicalExclusiveArea)
-    : Array.from(countByArea.keys()).sort((a, b) => parseFloat(a) - parseFloat(b));
+    : Array.from(new Set(trades.map((t) => t.area))).sort((a, b) => parseFloat(a) - parseFloat(b));
+
+  // UNIT/TRADE FILTER BUG V1 — 예전에는 raw trade.area를 키로 세서, 칩 값이 Unit
+  // Master canonical일 때 건수가 항상 0이었다. 칩 값 기준으로 숫자 매칭해 센다.
+  const countByArea = countTradesByArea(trades, allAreas);
 
   const chipAreas = allAreas;
 
@@ -59,7 +59,7 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
   // 같은 계산을 여기서 하지 않는다(§4 데이터 신뢰 원칙 그대로).
   const toAreaChipData = (area: string): AreaChipData => {
     const parsedArea = parseFloat(area);
-    const unit = hasUnitMaster ? unitMaster.find(u => u.canonicalExclusiveArea === area) ?? null : null;
+    const unit = hasUnitMaster ? findUnitForArea(unitMaster, area) : null;
     // [AREA MODEL V2] representativePyeong collision resolution: if multiple units
     // share the same pyeong, we show the exclusive area to distinguish them.
     const isCollision = unit?.representativePyeong ? (pyeongCount.get(unit.representativePyeong) || 0) > 1 : false;
@@ -93,9 +93,9 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
         }}
         className="no-scrollbar"
       >
-        <Chip active={selectedArea === '전체'} onClick={() => onSelect('전체')}>전체</Chip>
+        <Chip active={isAllAreas(selectedArea)} onClick={() => onSelect('전체')}>전체</Chip>
         {chipAreas.map((area) => (
-          <AreaChip key={area} data={toAreaChipData(area)} active={selectedArea === area} onClick={() => onSelect(area)} />
+          <AreaChip key={area} data={toAreaChipData(area)} active={!isAllAreas(selectedArea) && areaMatchesSelection(area, selectedArea)} onClick={() => onSelect(area)} />
         ))}
         {allAreas.length > 0 && (
           <Chip dashed onClick={() => setIsOpen(true)}>▼ 전체 평형</Chip>
@@ -131,8 +131,8 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
                 onClick={() => { onSelect('전체'); setIsOpen(false); }}
                 style={{
                   padding: '0.75rem 1rem', borderRadius: '8px', textAlign: 'left', border: '1px solid var(--border-color)', cursor: 'pointer', fontWeight: 600,
-                  backgroundColor: selectedArea === '전체' ? 'var(--primary-color)' : 'white',
-                  color: selectedArea === '전체' ? 'white' : 'var(--text-primary)',
+                  backgroundColor: isAllAreas(selectedArea) ? 'var(--primary-color)' : 'white',
+                  color: isAllAreas(selectedArea) ? 'white' : 'var(--text-primary)',
                 }}
               >
                 전체
@@ -142,7 +142,7 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
                 let subLabel = `(${countByArea.get(area) || 0}건)`;
                 
                 if (hasUnitMaster) {
-                  const unit = unitMaster.find(u => u.canonicalExclusiveArea === area);
+                  const unit = findUnitForArea(unitMaster, area);
                   if (unit) {
                     const households = (unit.householdCount && unit.householdCount > 0) ? ` · ${unit.householdCount}세대` : '';
                     
@@ -167,8 +167,8 @@ export default function AreaSelector({ trades, selectedArea, onSelect, areaLabel
                     onClick={() => { onSelect(area); setIsOpen(false); }}
                     style={{
                       padding: '0.75rem 1rem', borderRadius: '8px', textAlign: 'left', border: '1px solid var(--border-color)', cursor: 'pointer', fontWeight: 600,
-                      backgroundColor: selectedArea === area ? 'var(--primary-color)' : 'white',
-                      color: selectedArea === area ? 'white' : 'var(--text-primary)',
+                      backgroundColor: areaMatchesSelection(area, selectedArea) && !isAllAreas(selectedArea) ? 'var(--primary-color)' : 'white',
+                      color: areaMatchesSelection(area, selectedArea) && !isAllAreas(selectedArea) ? 'white' : 'var(--text-primary)',
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                     }}
                   >

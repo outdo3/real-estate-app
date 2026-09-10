@@ -1,3 +1,4 @@
+import { areaMatchesSelection, isAllAreas } from './unit-area-match';
 export interface PriceTrendTrade {
   price: number;
   priceStr: string;
@@ -22,8 +23,11 @@ export interface PriceTrendPoint {
 type Event = Omit<PriceTrendPoint, 'id' | 'saleVolume' | 'rentVolume' | 'dailySaleCount' | 'dailyRentCount'>;
 
 export function filterTradesForArea(trades: PriceTrendTrade[] | null, selectedArea?: string): PriceTrendTrade[] | null {
-  if (!trades || !selectedArea || selectedArea === '전체') return trades;
-  return trades.filter((trade) => trade.area === selectedArea);
+  if (!trades || isAllAreas(selectedArea)) return trades;
+  // UNIT/TRADE FILTER BUG V1 — 문자열 === 대신 숫자 매칭(unit-area-match.ts).
+  // selectedArea가 Unit Master canonical("84.7855")이어도 raw trade.area
+  // ("84.7855m²")와 정상적으로 매칭된다.
+  return trades.filter((trade) => areaMatchesSelection(trade.area, selectedArea));
 }
 
 // Price values remain individual MOLIT trades. Only the volume bar counts multiple
