@@ -25,6 +25,13 @@
 export const EXPORT_ROOT_ATTR = 'data-export-root';
 export const EXPORT_EXCLUDE_ATTR = 'data-export-exclude';
 /**
+ * 문서 레이아웃 스위치(REPORT A4 EXPORT LAYOUT V1).
+ *
+ * 시트에 이 속성이 붙으면 ReportSheet.module.css가 A4 한 장 밀도로 다시 짠다.
+ * **화면에 보이는 시트는 건드리지 않는다** — 클론에만 붙인다.
+ */
+export const EXPORT_MODE_ATTR = 'data-export-mode';
+/**
  * 크기를 CSS에만 의존하는 **순수 도형** 표시.
  *
  * 캡처는 텍스트가 다시 접힐 때 박스가 따라 커지도록 width/height를 복사하지 않는다.
@@ -37,6 +44,17 @@ export const EXPORT_FIXED_SIZE_ATTR = 'data-export-fixed-size';
 
 /** 공유에 적당한 가로 해상도(§5). 시트 실제 폭에서 배율을 유도한다. */
 export const TARGET_WIDTH_PX = 1080;
+/** A4 세로 한 장을 96dpi CSS 픽셀로 옮긴 값. 210×297mm → 794×1123. */
+export const A4_WIDTH_PX = 794;
+export const A4_HEIGHT_PX = 1123;
+/**
+ * A4 세로를 씌울지 / 남는 높이를 어디로 보낼지의 경계(아래 captureReportExport 참고).
+ * 실측 채움률: 단지 0.94 · 비교 0.99 · 시 0.92 · 구 0.94 · 동 0.75 · 일별(준비 중) 0.42
+ */
+const A4_PAD_THRESHOLD = 0.65;
+const A4_SPREAD_THRESHOLD = 0.9;
+/** 남는 높이를 섹션 사이로 나눌 때 켜는 표시. */
+const EXPORT_FILL_ATTR = 'data-export-fill';
 /** 저해상도 스크린샷을 억지로 늘리지 않기 위한 상한. */
 const MAX_SCALE = 3;
 /** 지나치게 큰 파일 방지(§5) — 세로가 아주 긴 리포트에서 배율을 낮춘다. */
@@ -233,6 +251,67 @@ function loadImage(url: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error('EXPORT_SVG_RASTERIZE_FAILED'));
     img.src = url;
   });
+}
+
+/**
+ * 공유/저장용 **A4 한 장 이미지**를 만든다.
+ *
+ * 예전에는 화면에 보이는 시트를 그대로 구웠다. 그래서 360px 폰에서 공유하면
+ * 374×2429px짜리 "긴 웹 스크롤 캡처"가 나왔다(실측). 카카오톡에서는 문서가
+ * 아니라 스크린샷으로 읽힌다.
+ *
+ * 이제는 화면 밖에 A4 폭(794px) 클론을 세우고 문서 모드를 켠 뒤 그것을 굽는다:
+ *   - 보이는 화면은 전혀 흔들리지 않는다(클론만 조작한다)
+ *   - 데이터/컴포넌트/문구는 같은 것을 쓴다 — 별도 템플릿이 갈라지지 않는다
+ *   - 결과는 794×1123 → 1080×1528, A4 세로비(1 : 1.414)
+ *
+ * 내용이 A4 한 장을 넘치면 **자르지 않고** 그만큼 길어진다. 잘라서 비율을
+ * 맞추는 것보다 조금 긴 문서가 정직하다.
+ */
+async function settle(): Promise<void> {
+  // 레이아웃이 실제로 반영된 다음 프레임까지 기다린다.
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
+
+export async function captureReportExport(node: HTMLElement): Promise<CaptureResult> {
+  const holder = document.createElement('div');
+  holder.setAttribute(
+    'style',
+    `position:fixed;left:-100000px;top:0;width:${A4_WIDTH_PX}px;pointer-events:none;`
+  );
+  // 인쇄가 이 임시 노드를 잡지 않도록 같은 계약(§12)으로 표시해 둔다.
+  holder.setAttribute(EXPORT_EXCLUDE_ATTR, '');
+
+  const clone = node.cloneNode(true) as HTMLElement;
+  clone.setAttribute(EXPORT_MODE_ATTR, 'a4');
+  // 화면의 findExportRoot()가 클론을 잡지 않게 한다.
+  clone.removeAttribute(EXPORT_ROOT_ATTR);
+  holder.appendChild(clone);
+  document.body.appendChild(holder);
+  try {
+    // 레이아웃이 확정된 뒤에 computed style을 읽어야 한다.
+    await settle();
+
+    // 내용이 A4를 얼마나 채우는지 먼저 재고, 그에 맞춰 세로를 정한다.
+    //
+    //   90% 이상 → A4로 맞추고 남는 높이를 섹션 사이로 나눈다(여백이 안 보인다)
+    //   65~90%  → A4로 맞추되 남는 높이는 푸터 위 한 곳에 모은다(짧은 문서)
+    //   65% 미만 → A4로 늘리지 않는다
+    //
+    // 마지막 갈래가 필요한 이유: 준비 중/보류 상태의 일별 리포트는 A4의 42%만
+    // 채운다. 억지로 A4를 씌우면 화면의 60%가 흰 여백인 문서가 나온다(실측).
+    // A4 **폭**은 어느 경우에도 유지되므로 "긴 웹 캡처"로 돌아가지는 않는다.
+    clone.style.minHeight = '0px';
+    await settle();
+    const fill = clone.getBoundingClientRect().height / A4_HEIGHT_PX;
+    clone.style.minHeight = fill >= A4_PAD_THRESHOLD ? `${A4_HEIGHT_PX}px` : '0px';
+    if (fill >= A4_SPREAD_THRESHOLD) clone.setAttribute(EXPORT_FILL_ATTR, 'spread');
+    await settle();
+
+    return await captureElementToPng(clone);
+  } finally {
+    holder.remove();
+  }
 }
 
 /** 현재 화면에서 캡처 대상(시트) 노드를 찾는다. 없으면 null. */

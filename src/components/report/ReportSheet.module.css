@@ -38,8 +38,70 @@
 
   --r-radius: 14px;
   --r-radius-sm: 10px;
-  --r-gap: 14px;
-  --r-pad: 26px;
+
+  /* ── 밀도 토큰 (A4 EXPORT LAYOUT V1) ────────────────────────────────
+     레이아웃의 "변하는 값"은 전부 여기로 모은다. 반응형/인쇄/내보내기는
+     구조 규칙을 복제하지 않고 **이 토큰만 덮어쓴다**. 그래야 웹과 문서가
+     같은 컴포넌트를 쓰면서도 밀도만 달라지고, 두 벌이 따로 낡지 않는다. */
+  --r-gap: 14px;          /* 카드 사이 */
+  --r-pad: 26px;          /* 본문/푸터 바깥 여백 */
+  --r-pad-head: var(--r-pad); /* 헤더는 모바일에서만 조금 다르다 */
+  --r-stack: 22px;        /* 섹션 사이 */
+  --r-body-stack: 22px;   /* 본문 블록(KPI/2단/해석) 사이 */
+  --r-card-pad: 14px 14px 13px;
+  --r-row-pad: 9px;       /* 라벨:값 한 줄 */
+  --r-trade-pad: 10px;    /* 거래 한 줄 */
+  --r-bar-pad: 6px;       /* 막대 한 줄 */
+  --r-head-mb: 10px;
+  --r-head-pb: 8px;
+  --r-box-pad: 13px 15px;
+  --r-box-pad-lg: 14px 16px;
+  --r-sum-pad: 12px 16px;
+  --r-foot-pad: 18px var(--r-pad) 20px;
+  --r-foot-gap: 10px;     /* 주의사항 목록 · 서명 */
+  --r-foot-rule: 12px;    /* 출처 문구 위 구분선 */
+  --r-vs-pad: 16px;
+  --r-vs-badge-mb: 8px;
+  --r-vs-stats-mt: 12px;
+  --r-dial: 104px;
+  --r-dial-in: 80px;
+  --r-score-gap: 18px;
+  --r-score-mb: 14px;
+  --r-head-space: 8px;    /* 헤더 안 줄 간격 */
+  --r-head-gap: 18px;     /* 제목 블록 ↔ 상태 칩 */
+  --r-tag-mt: 12px;
+  --r-trade-date-display: block;
+  --r-trade-date-margin: 2px 0 0;
+  --r-bar-gap: 10px;
+
+  /* 구조 토큰 — 열 수/방향까지 토큰으로 둔다(§9 "같은 컴포넌트, 다른 배치"). */
+  --r-cols: 1.25fr 1fr;
+  --r-kpi-cols: repeat(auto-fit, minmax(148px, 1fr));
+  --r-kpi6-cols: repeat(auto-fit, minmax(140px, 1fr));
+  --r-insight-cols: 1fr 1fr;
+  --r-tradeoff-cols: 1fr 1fr;
+  --r-vs-cols: 1fr auto 1fr;
+  --r-vs-mid: flex;
+  --r-head-dir: row;
+  --r-head-side-dir: column;
+  --r-head-side-align: flex-end;
+  --r-head-side-text: right;
+  --r-dl-key: 132px;
+  --r-dl-cols: 1fr;       /* 라벨:값 목록을 몇 줄로 흘릴지 */
+  --r-bar-cols: 62px 1fr 62px;
+  --r-matrix-cols: 1.1fr 1fr 1fr;
+  --r-score-domain-cols: 1fr;
+  --r-export-only: none;  /* 내보내기 전용 문구 */
+
+  /* 글자 배율 — 큰/중간 글자에만 곱한다(작은 캡션까지 줄이면 못 읽는다). */
+  --r-fs: 1;
+  --r-fs-title: 1.9rem;
+  --r-fs-kpi: 1.32rem;
+  /* 줄 높이도 밀도다 — 문서에서는 조금 좁혀야 한 장에 들어간다. */
+  --r-lh: 1.5;
+  --r-lh-tight: 1.5;  /* KPI 값 */
+  --r-lh-lg: 1.55;    /* 해석 문장 · 상태 설명 */
+  --r-lh-sm: 1.45;    /* 점수 설명 */
 
   width: 100%;
   max-width: 1000px;
@@ -50,18 +112,19 @@
   overflow: hidden;
   /* 문서 톤 — 본문이 촘촘하게 읽히도록 */
   font-size: 15px;
-  line-height: 1.5;
+  line-height: var(--r-lh);
 }
 
 /* ── 헤더 ───────────────────────────────────────────────────────────────── */
 .header {
   background: linear-gradient(135deg, var(--r-brand-deep) 0%, var(--r-brand) 62%, #17b877 100%);
   color: #fff;
-  padding: var(--r-pad);
+  padding: var(--r-pad-head);
   display: flex;
+  flex-direction: var(--r-head-dir);
   align-items: flex-start;
   justify-content: space-between;
-  gap: 18px;
+  gap: var(--r-head-gap);
 }
 .headMain { min-width: 0; }
 .brand {
@@ -69,22 +132,22 @@
   font-weight: 800;
   letter-spacing: 0.14em;
   opacity: 0.92;
-  margin-bottom: 8px;
+  margin-bottom: var(--r-head-space);
 }
 .title {
   margin: 0;
-  font-size: 1.9rem;
+  font-size: calc(var(--r-fs-title) * var(--r-fs));
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
 .subtitle {
-  margin: 8px 0 0;
-  font-size: 0.94rem;
-  line-height: 1.5;
+  margin: var(--r-head-space) 0 0;
+  font-size: calc(0.94rem * var(--r-fs));
+  line-height: var(--r-lh);
   opacity: 0.94;
 }
-.tagRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.tagRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--r-tag-mt); }
 .tag {
   display: inline-flex;
   align-items: center;
@@ -96,11 +159,11 @@
 }
 .headSide {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: var(--r-head-side-dir);
+  align-items: var(--r-head-side-align);
   gap: 6px;
   flex-shrink: 0;
-  text-align: right;
+  text-align: var(--r-head-side-text);
 }
 .headStamp { font-size: 0.74rem; opacity: 0.92; white-space: nowrap; }
 
@@ -119,24 +182,26 @@
 .cUnverified { color: var(--r-navy); }
 
 /* ── 본문 그리드 ────────────────────────────────────────────────────────── */
-.body { padding: var(--r-pad); display: flex; flex-direction: column; gap: 22px; }
+.body { padding: var(--r-pad); display: flex; flex-direction: column; gap: var(--r-body-stack); }
 
 .kpiGrid {
   display: grid;
   /* 개수(4~6개)에 따라 자연스럽게 나눠 갖는다. 고정 6열로 두면 5개일 때
      칸이 너무 좁아져 "-12.8% (2133건 → 1861건)" 같은 값이 3줄로 접힌다. */
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  grid-template-columns: var(--r-kpi-cols);
   gap: var(--r-gap);
 }
-.kpiGrid6 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.kpiGrid6 { grid-template-columns: var(--r-kpi6-cols); }
 /* 값이 긴 KPI(증감·범위 등)는 한 단계 작게 — 칸 높이가 튀지 않게. */
-.kpiValueLong { font-size: 1.02rem; line-height: 1.35; }
+/* .kpiValue가 line-height를 갖게 되면서 순서만으로는 이 규칙이 지는다 —
+   두 클래스가 함께 붙으므로 특이도를 한 단계 올려 둔다. */
+.kpiValue.kpiValueLong { font-size: calc(1.02rem * var(--r-fs)); line-height: 1.35; }
 
 .kpi {
   background: var(--r-surface-2);
   border: 1px solid var(--r-line-soft);
   border-radius: var(--r-radius);
-  padding: 14px 14px 13px;
+  padding: var(--r-card-pad);
   min-width: 0;
 }
 .kpiAccent { background: var(--r-brand-soft); border-color: #cfeadd; }
@@ -153,24 +218,25 @@
   text-overflow: ellipsis;
 }
 .kpiValue {
-  font-size: 1.32rem;
+  font-size: calc(var(--r-fs-kpi) * var(--r-fs));
+  line-height: var(--r-lh-tight);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--r-ink);
   word-break: keep-all;
 }
 .kpiAccent .kpiValue { color: var(--r-brand-deep); }
-.kpiValueMissing { color: var(--r-ink-3); font-size: 1.02rem; font-weight: 700; }
+.kpiValueMissing { color: var(--r-ink-3); font-size: calc(1.02rem * var(--r-fs)); font-weight: 700; }
 .kpiHint { margin-top: 4px; font-size: 0.72rem; color: var(--r-ink-3); }
 
 /* 2단 본문 — 데스크톱에서 문서처럼 보이게 */
 .cols {
   display: grid;
-  grid-template-columns: 1.25fr 1fr;
-  gap: 22px;
+  grid-template-columns: var(--r-cols);
+  gap: var(--r-stack);
   align-items: start;
 }
-.col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.col { display: flex; flex-direction: column; gap: var(--r-stack); min-width: 0; }
 
 /* ── 섹션 ───────────────────────────────────────────────────────────────── */
 .section { min-width: 0; }
@@ -179,40 +245,40 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
+  margin-bottom: var(--r-head-mb);
+  padding-bottom: var(--r-head-pb);
   border-bottom: 2px solid var(--r-line);
 }
 .sectionTitle {
   margin: 0;
-  font-size: 1.02rem;
+  font-size: calc(1.02rem * var(--r-fs));
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--r-ink);
 }
 .sectionMeta { font-size: 0.76rem; color: var(--r-ink-3); white-space: nowrap; }
-.sectionNote { margin: 8px 0 0; font-size: 0.76rem; color: var(--r-ink-3); line-height: 1.5; }
+.sectionNote { margin: var(--r-head-space) 0 0; font-size: 0.76rem; color: var(--r-ink-3); line-height: var(--r-lh); }
 
 /* 라벨 : 값 목록 */
-.dl { display: flex; flex-direction: column; }
+.dl { display: grid; grid-template-columns: var(--r-dl-cols); column-gap: var(--r-gap); }
 .dlRow {
   display: grid;
-  grid-template-columns: 132px 1fr;
+  grid-template-columns: var(--r-dl-key) 1fr;
   gap: 10px;
-  padding: 9px 0;
+  padding: var(--r-row-pad) 0;
   border-bottom: 1px solid var(--r-line-soft);
   align-items: baseline;
 }
 .dlRow:last-child { border-bottom: none; }
 .dlKey { font-size: 0.84rem; color: var(--r-ink-2); font-weight: 600; word-break: keep-all; }
-.dlVal { font-size: 0.94rem; font-weight: 700; color: var(--r-ink); word-break: keep-all; }
+.dlVal { font-size: calc(0.94rem * var(--r-fs)); font-weight: 700; color: var(--r-ink); word-break: keep-all; }
 .dlValMissing { color: var(--r-ink-3); font-weight: 600; }
 
 /* ── 점수 블록 ──────────────────────────────────────────────────────────── */
-.scoreWrap { display: flex; align-items: center; gap: 18px; margin-bottom: 14px; }
+.scoreWrap { display: flex; align-items: center; gap: var(--r-score-gap); margin-bottom: var(--r-score-mb); }
 .scoreDial {
-  width: 104px;
-  height: 104px;
+  width: var(--r-dial);
+  height: var(--r-dial);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -222,8 +288,8 @@
   background: var(--r-line-soft);
 }
 .scoreDialInner {
-  width: 80px;
-  height: 80px;
+  width: var(--r-dial-in);
+  height: var(--r-dial-in);
   border-radius: 50%;
   background: #fff;
   display: flex;
@@ -231,18 +297,20 @@
   align-items: center;
   justify-content: center;
 }
-.scoreNum { font-size: 1.6rem; font-weight: 800; color: var(--r-brand-deep); line-height: 1; }
+.scoreNum { font-size: calc(1.6rem * var(--r-fs)); font-weight: 800; color: var(--r-brand-deep); line-height: 1; }
 .scoreOf { font-size: 0.68rem; color: var(--r-ink-3); margin-top: 2px; }
 .scoreSide { min-width: 0; }
 .scoreState { font-size: 0.9rem; font-weight: 800; color: var(--r-ink); }
-.scoreDesc { margin-top: 4px; font-size: 0.78rem; color: var(--r-ink-3); line-height: 1.45; }
+.scoreDesc { margin-top: 4px; font-size: 0.78rem; color: var(--r-ink-3); line-height: var(--r-lh-sm); }
 
+/* 항목별 점수 막대 묶음 — 내보내기에서 2×2로 접기 위해 컨테이너를 둔다. */
+.barGrid { display: grid; grid-template-columns: var(--r-score-domain-cols); column-gap: var(--r-gap); }
 .barRow {
   display: grid;
-  grid-template-columns: 62px 1fr 62px;
+  grid-template-columns: var(--r-bar-cols);
   align-items: center;
-  gap: 10px;
-  padding: 6px 0;
+  gap: var(--r-bar-gap, 10px);
+  padding: var(--r-bar-pad) 0;
 }
 .barName { font-size: 0.82rem; color: var(--r-ink-2); font-weight: 600; word-break: keep-all; }
 .barTrack {
@@ -263,23 +331,23 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
+  padding: var(--r-trade-pad) 0;
   border-bottom: 1px solid var(--r-line-soft);
 }
 .tradeRow:last-child { border-bottom: none; }
 .tradeMeta { font-size: 0.86rem; color: var(--r-ink-2); min-width: 0; }
-.tradeDate { display: block; font-size: 0.74rem; color: var(--r-ink-3); margin-top: 2px; }
-.tradePrice { font-size: 1rem; font-weight: 800; color: var(--r-ink); white-space: nowrap; }
+.tradeDate { display: var(--r-trade-date-display); font-size: 0.74rem; color: var(--r-ink-3); margin: var(--r-trade-date-margin); }
+.tradePrice { font-size: calc(1rem * var(--r-fs)); font-weight: 800; color: var(--r-ink); white-space: nowrap; }
 
 /* ── 하이라이트(최근 2년 최고가 등) ─────────────────────────────────────── */
 .highlight {
   background: var(--r-brand-soft);
   border: 1px solid #cfeadd;
   border-radius: var(--r-radius);
-  padding: 14px 16px;
+  padding: var(--r-box-pad-lg);
 }
 .highlightLabel { font-size: 0.76rem; font-weight: 800; color: var(--r-brand-deep); }
-.highlightValue { margin-top: 4px; font-size: 1.14rem; font-weight: 800; color: var(--r-ink); }
+.highlightValue { margin-top: 4px; font-size: calc(1.14rem * var(--r-fs)); font-weight: 800; color: var(--r-ink); }
 .highlightContext { margin-top: 3px; font-size: 0.74rem; color: var(--r-ink-2); }
 
 /* ── 해석 ───────────────────────────────────────────────────────────────── */
@@ -287,23 +355,23 @@
   background: var(--r-surface-2);
   border-left: 4px solid var(--r-brand);
   border-radius: 0 var(--r-radius-sm) var(--r-radius-sm) 0;
-  padding: 12px 16px;
-  font-size: 0.95rem;
+  padding: var(--r-sum-pad);
+  font-size: calc(0.95rem * var(--r-fs));
   font-weight: 700;
-  line-height: 1.55;
+  line-height: var(--r-lh-lg);
   color: var(--r-ink);
 }
-.insightCols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--r-gap); margin-top: 12px; }
+.insightCols { display: grid; grid-template-columns: var(--r-insight-cols); gap: var(--r-gap); margin-top: 12px; }
 .insightBox {
   border: 1px solid var(--r-line);
   border-radius: var(--r-radius);
-  padding: 13px 15px;
+  padding: var(--r-box-pad);
 }
 .insightBoxWarn { background: var(--r-warn-soft); border-color: #f3e2c7; }
-.insightTitle { font-size: 0.8rem; font-weight: 800; margin-bottom: 7px; color: var(--r-ink); }
+.insightTitle { font-size: 0.8rem; font-weight: 800; margin-bottom: var(--r-list-title-mb, 7px); color: var(--r-ink); }
 .insightTitleWarn { color: var(--r-warn); }
-.insightList { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 5px; }
-.insightList li { font-size: 0.84rem; line-height: 1.5; color: var(--r-ink-2); }
+.insightList { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: var(--r-list-gap-sm, 5px); }
+.insightList li { font-size: 0.84rem; line-height: var(--r-lh); color: var(--r-ink-2); }
 
 /* ── 신뢰 칩 ────────────────────────────────────────────────────────────── */
 .trustChip {
@@ -322,7 +390,7 @@
 .footer {
   background: var(--r-surface-2);
   border-top: 1px solid var(--r-line);
-  padding: 18px var(--r-pad) 20px;
+  padding: var(--r-foot-pad);
 }
 .footerRow {
   display: flex;
@@ -346,18 +414,18 @@
 .fPartial { background: var(--r-warn-soft); color: var(--r-warn); border-color: #f3e2c7; }
 .fUnverified { background: #eef2f6; color: var(--r-navy); border-color: #dfe6ec; }
 
-.footerNotes { margin: 10px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
-.footerNotes li { font-size: 0.76rem; color: var(--r-ink-2); line-height: 1.5; }
+.footerNotes { margin: var(--r-foot-gap) 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.footerNotes li { font-size: 0.76rem; color: var(--r-ink-2); line-height: var(--r-lh); }
 .sourceNote {
-  margin: 12px 0 0;
-  padding-top: 12px;
+  margin: var(--r-foot-rule) 0 0;
+  padding-top: var(--r-foot-rule);
   border-top: 1px solid var(--r-line);
   font-size: 0.74rem;
   color: var(--r-ink-3);
-  line-height: 1.5;
+  line-height: var(--r-lh);
 }
 .signature {
-  margin-top: 10px;
+  margin-top: var(--r-foot-gap);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -368,11 +436,11 @@
 .signBrand { font-weight: 800; color: var(--r-brand-deep); letter-spacing: 0.04em; }
 
 /* ── 비교 리포트 전용 ───────────────────────────────────────────────────── */
-.vsHead { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; }
+.vsHead { display: grid; grid-template-columns: var(--r-vs-cols); gap: var(--r-gap); align-items: stretch; }
 .vsCard {
   border: 1px solid var(--r-line);
   border-radius: var(--r-radius);
-  padding: 16px;
+  padding: var(--r-vs-pad);
   min-width: 0;
   background: var(--r-surface-2);
 }
@@ -388,17 +456,17 @@
   color: #fff;
   font-size: 0.74rem;
   font-weight: 800;
-  margin-bottom: 8px;
+  margin-bottom: var(--r-vs-badge-mb);
 }
 .vsBadgeB { background: var(--r-navy); }
-.vsName { font-size: 1.06rem; font-weight: 800; color: var(--r-ink); line-height: 1.3; word-break: keep-all; }
-.vsRegion { margin-top: 3px; font-size: 0.78rem; color: var(--r-ink-3); }
-.vsStats { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.vsName { font-size: calc(1.06rem * var(--r-fs)); font-weight: 800; color: var(--r-ink); line-height: 1.3; word-break: keep-all; }
+.vsRegion { margin-top: var(--r-vs-line-mt, 3px); font-size: 0.78rem; color: var(--r-ink-3); }
+.vsStats { margin-top: var(--r-vs-stats-mt); display: flex; flex-direction: column; gap: var(--r-list-gap, 6px); }
 .vsStatRow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .vsStatKey { font-size: 0.78rem; color: var(--r-ink-3); }
 .vsStatVal { font-size: 0.88rem; font-weight: 700; color: var(--r-ink); }
 .vsMid {
-  display: flex; align-items: center; justify-content: center;
+  display: var(--r-vs-mid); align-items: center; justify-content: center;
   font-size: 0.9rem; font-weight: 800; color: var(--r-ink-3);
   align-self: center;
 }
@@ -407,9 +475,9 @@
 .matrix { display: flex; flex-direction: column; }
 .matrixHead {
   display: grid;
-  grid-template-columns: 1.1fr 1fr 1fr;
+  grid-template-columns: var(--r-matrix-cols);
   gap: 10px;
-  padding: 8px 0;
+  padding: var(--r-head-pb) 0;
   border-bottom: 2px solid var(--r-line);
   font-size: 0.76rem;
   font-weight: 800;
@@ -425,9 +493,9 @@
 .matrixHeadB { color: var(--r-navy); }
 .matrixRow {
   display: grid;
-  grid-template-columns: 1.1fr 1fr 1fr;
+  grid-template-columns: var(--r-matrix-cols);
   gap: 10px;
-  padding: 10px 0;
+  padding: var(--r-trade-pad) 0;
   border-bottom: 1px solid var(--r-line-soft);
   align-items: baseline;
 }
@@ -437,7 +505,7 @@
   font-size: 0.84rem; color: var(--r-ink-2); font-weight: 600;
   word-break: keep-all;
 }
-.matrixVal { font-size: 0.92rem; font-weight: 700; color: var(--r-ink); word-break: keep-all; }
+.matrixVal { font-size: calc(0.92rem * var(--r-fs)); font-weight: 700; color: var(--r-ink); word-break: keep-all; }
 .matrixValMissing { color: var(--r-ink-3); font-weight: 600; font-size: 0.86rem; }
 /* 우열 강조는 SAFE 항목에서만 붙는다 — 스코어보드가 되지 않게 아주 조용히. */
 .matrixWin { color: var(--r-brand-deep); }
@@ -446,14 +514,14 @@
 .matrixNote { grid-column: 1 / -1; font-size: 0.74rem; color: var(--r-ink-3); margin-top: 2px; }
 
 /* 트레이드오프 4분류 */
-.tradeoffGrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--r-gap); }
-.toBox { border: 1px solid var(--r-line); border-radius: var(--r-radius); padding: 13px 15px; }
+.tradeoffGrid { display: grid; grid-template-columns: var(--r-tradeoff-cols); gap: var(--r-gap); }
+.toBox { border: 1px solid var(--r-line); border-radius: var(--r-radius); padding: var(--r-box-pad); }
 .toBoxA { border-left: 4px solid var(--r-brand); }
 .toBoxB { border-left: 4px solid var(--r-navy); }
 .toBoxN { border-left: 4px solid var(--r-line); background: var(--r-surface-2); }
-.toTitle { font-size: 0.82rem; font-weight: 800; margin-bottom: 7px; color: var(--r-ink); }
-.toList { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
-.toList li { font-size: 0.82rem; line-height: 1.5; color: var(--r-ink-2); }
+.toTitle { font-size: 0.82rem; font-weight: 800; margin-bottom: var(--r-list-title-mb, 7px); color: var(--r-ink); }
+.toList { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: var(--r-list-gap-sm, 4px); }
+.toList li { font-size: 0.82rem; line-height: var(--r-lh); color: var(--r-ink-2); }
 .toEmpty { font-size: 0.8rem; color: var(--r-ink-3); }
 
 /* ── 상태 박스(일별 리포트 등) ──────────────────────────────────────────── */
@@ -461,36 +529,165 @@
 .stateWithheld { background: var(--r-warn-soft); border: 1px solid #f3e2c7; }
 .statePreparing { background: #eef4fa; border: 1px solid #d8e5f0; }
 .stateZero { background: var(--r-surface-2); border: 1px solid var(--r-line); }
-.stateTitle { font-size: 1.02rem; font-weight: 800; color: var(--r-ink); }
-.stateBody { margin: 8px 0 0; font-size: 0.86rem; color: var(--r-ink-2); line-height: 1.55; }
+.stateTitle { font-size: calc(1.02rem * var(--r-fs)); font-weight: 800; color: var(--r-ink); }
+.stateBody { margin: 8px 0 0; font-size: 0.86rem; color: var(--r-ink-2); line-height: var(--r-lh-lg); }
 
-/* ── 반응형 ─────────────────────────────────────────────────────────────── */
+/* ── 반응형 ─────────────────────────────────────────────────────────────
+   구조 규칙을 다시 쓰지 않고 **토큰만** 바꾼다. 그래야 인쇄/내보내기 블록이
+   반응형 규칙과 특이도 싸움을 하지 않는다(둘 다 .sheet 토큰만 덮어쓴다). */
 @media (max-width: 860px) {
-  .cols { grid-template-columns: 1fr; }
-  .kpiGrid, .kpiGrid6 { grid-template-columns: repeat(2, 1fr); }
-  .insightCols, .tradeoffGrid { grid-template-columns: 1fr; }
-  .sheet { font-size: 14px; }
-  .title { font-size: 1.42rem; }
-  .header { padding: 20px; flex-direction: column; gap: 12px; }
-  .headSide { align-items: flex-start; text-align: left; flex-direction: row; flex-wrap: wrap; }
-  .body { padding: 18px; gap: 18px; }
-  .footer { padding: 16px 18px 18px; }
-  .dlRow { grid-template-columns: 116px 1fr; }
-  .vsHead { grid-template-columns: 1fr; }
-  .vsMid { display: none; } /* 세로로 쌓이면 'VS' 구분자가 어색하다 */
-  .matrixHead, .matrixRow { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .sheet {
+    font-size: 14px;
+    --r-pad: 18px;
+    --r-pad-head: 20px;
+    --r-head-gap: 12px;
+    --r-body-stack: 18px;
+    --r-fs-title: 1.42rem;
+    --r-cols: 1fr;
+    --r-kpi-cols: repeat(2, 1fr);
+    --r-kpi6-cols: repeat(2, 1fr);
+    --r-insight-cols: 1fr;
+    --r-tradeoff-cols: 1fr;
+    --r-vs-cols: 1fr;
+    --r-vs-mid: none; /* 세로로 쌓이면 'VS' 구분자가 어색하다 */
+    --r-head-dir: column;
+    --r-head-side-dir: row;
+    --r-head-side-align: flex-start;
+    --r-head-side-text: left;
+    --r-dl-key: 116px;
+    --r-foot-pad: 16px var(--r-pad) 18px;
+    --r-matrix-cols: 1fr 1fr 1fr;
+  }
+  .headSide { flex-wrap: wrap; }
+  .matrixHead, .matrixRow { gap: 8px; }
 }
 
 @media (max-width: 400px) {
   .page { padding: 12px 8px 128px; }
-  .kpiValue { font-size: 1.16rem; }
-  .matrixHead, .matrixRow { grid-template-columns: 0.95fr 1fr 1fr; }
-  .dlRow { grid-template-columns: 104px 1fr; }
-  .barRow { grid-template-columns: 52px 1fr 54px; }
+  .sheet {
+    --r-fs-kpi: 1.16rem;
+    --r-dl-key: 104px;
+    --r-bar-cols: 52px 1fr 54px;
+    --r-matrix-cols: 0.95fr 1fr 1fr;
+  }
 }
 
+/* ── A4 문서 밀도 (REPORT A4 EXPORT LAYOUT V1) ──────────────────────────
+ *
+ * 웹 화면과 **문서(PDF/공유 이미지)** 는 읽는 방식이 다르다. 웹은 스크롤이
+ * 공짜지만 문서는 한 장이 예산이다. 그래서 여기부터는 같은 마크업을 "A4 한 장
+ * 예산" 안에 넣기 위한 밀도 규칙이다. 구조 규칙을 복제하지 않고 위에서 만든
+ * 토큰만 덮어쓴다 — 두 벌이 따로 낡지 않게.
+ *
+ * 예산(실측):
+ *   PDF  = A4 210×297mm − 10mm 여백 → 718 × 1047 CSS px
+ *   PNG  = A4 794 × 1123 CSS px (96dpi), 1080px 폭으로 구우면 1080×1528
+ *
+ * 밀도 값은 아래 두 곳(.sheet[data-export-mode='a4'] / @media print)에 있다.
+ * CSS는 클래스를 @media print 안으로 합성해 줄 수 없어 값을 나눠 갖는다.
+ * PNG 쪽이 여백(10mm)만큼 자리가 더 넓어 실제로도 값이 조금 다르다.
+ * **한쪽만 고치지 말 것.**
+ */
+/* 내보내기 전용 문구 — 웹에서는 숨어 있다가 문서에서만 나온다(§5). */
+.exportNote { display: var(--r-export-only); margin: 6px 0 0; font-size: 0.72rem; color: var(--r-ink-3); }
+
+/* ── 공유 이미지: A4 한 장 캔버스 ───────────────────────────────────────
+   dom-to-png이 시트를 794px 폭 클론으로 화면 밖에 세운 뒤 이 모드를 켠다.
+   min-height로 A4 세로를 확보해 캡처 결과가 1 : 1.414에 맞는다. */
+.sheet[data-export-mode='a4'] {
+  width: 794px;
+  max-width: none;
+  min-height: 1123px;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+
+  --r-gap: 9px;
+  --r-pad: 18px;
+  --r-pad-head: 18px;
+  --r-head-gap: 14px;
+  --r-stack: 10px;
+  --r-body-stack: 10px;
+  --r-card-pad: 9px 11px;
+  --r-row-pad: 4px;
+  --r-trade-pad: 5px;
+  --r-bar-pad: 3px;
+  --r-head-mb: 6px;
+  --r-head-pb: 4px;
+  --r-box-pad: 8px 11px;
+  --r-box-pad-lg: 10px 12px;
+  --r-sum-pad: 8px 12px;
+  --r-foot-pad: 11px var(--r-pad) 12px;
+  --r-foot-gap: 7px;
+  --r-foot-rule: 8px;
+  --r-vs-pad: 11px;
+  --r-vs-badge-mb: 5px;
+  --r-vs-stats-mt: 8px;
+  --r-vs-line-mt: 2px;
+  --r-list-gap: 5px;
+  --r-list-gap-sm: 3px;
+  --r-list-title-mb: 5px;
+  --r-dial: 80px;
+  --r-dial-in: 59px;
+  --r-score-gap: 12px;
+  --r-score-mb: 8px;
+
+  --r-cols: 1.1fr 1fr;
+  --r-kpi-cols: repeat(3, minmax(0, 1fr));
+  --r-kpi6-cols: repeat(3, minmax(0, 1fr));
+  --r-insight-cols: 1fr 1fr;
+  --r-tradeoff-cols: 1fr 1fr;
+  --r-vs-cols: 1fr auto 1fr;
+  --r-vs-mid: flex;
+  --r-head-dir: row;
+  --r-head-side-dir: column;
+  --r-head-side-align: flex-end;
+  --r-head-side-text: right;
+  --r-dl-key: 42%;
+  --r-score-domain-cols: 1fr 1fr;
+  --r-bar-cols: 46px 1fr 46px;
+  --r-matrix-cols: 1.1fr 1fr 1fr;
+  --r-export-only: block;
+  --r-head-space: 5px;
+  --r-tag-mt: 8px;
+  --r-trade-date-display: inline;
+  --r-trade-date-margin: 0 0 0 8px;
+  --r-bar-gap: 7px;
+  --r-lh: 1.38;
+  --r-lh-tight: 1.24;
+  --r-lh-lg: 1.42;
+  --r-lh-sm: 1.38;
+
+  --r-fs: 0.92;
+  --r-fs-title: 1.9rem;
+  --r-fs-kpi: 1.32rem;
+}
+/* 남는 세로는 본문이 흡수하고 푸터는 페이지 바닥에 앉는다 — 문서처럼 읽힌다.
+   기본값은 위에서부터 쌓기: 남는 높이가 크면 아래쪽 여백 한 곳으로 모이는 편이
+   "본문이 짧은 문서"로 읽힌다. 섹션 사이를 벌리는 건 여백이 작을 때만 자연스러워서
+   dom-to-png이 A4의 90% 이상 찼다고 판단했을 때만 data-export-fill을 켠다. */
+.sheet[data-export-mode='a4'] .body { flex: 1 1 auto; justify-content: flex-start; }
+.sheet[data-export-mode='a4'][data-export-fill='spread'] .body { justify-content: space-between; }
+.sheet[data-export-mode='a4'] .headSide { flex-wrap: nowrap; }
+/* 문서에서는 '2026-09-
+05'처럼 토큰 중간에서 갈리지 않게. 좁은 화면(웹)에는
+   같은 규칙을 걸지 않는다 — 가로 넘침을 만들 수 있다. */
+.sheet[data-export-mode='a4'] .highlightValue { word-break: keep-all; overflow-wrap: normal; }
+/* 거래는 문서에서 4건까지 — 나머지는 exportNote가 명시한다. */
+.sheet[data-export-mode='a4'] .tradeList[data-export-cap='4'] > *:nth-child(n + 5) { display: none; }
+
 /* ── 인쇄(PDF) ──────────────────────────────────────────────────────────
-   같은 문서를 A4로 흘려보낸다. 별도 템플릿을 만들지 않는다. */
+ * 같은 문서를 A4로 흘려보낸다. 별도 템플릿을 만들지 않는다.
+ *
+ * 페이지 나눔 원칙(§3):
+ *   **큰 섹션은 통째로 보호하지 않는다.** 예전에는 .section / .footer 전체에
+ *   break-inside: avoid가 걸려 있어서, 남은 자리에 안 들어가는 섹션이 통째로
+ *   다음 장으로 뛰었고 1페이지 아래 절반이 비었다. 이제 **쪼개지면 안 되는
+ *   작은 단위**(KPI 카드 한 장, 거래 한 줄, 인사이트 상자)만 보호하고,
+ *   제목은 break-after: avoid로 본문과 붙여둔다.
+ */
 @media print {
   .page { padding: 0; background: #fff; display: block; }
   .sheet {
@@ -499,20 +696,92 @@
     box-shadow: none;
     border-radius: 0;
     overflow: visible;
-    font-size: 10.5pt;
+    font-size: 10pt;
+
+    /* ↓ 위 data-export-mode='a4' 블록과 짝 — 함께 움직여야 한다. */
+    --r-gap: 8px;
+    --r-pad: 14px;
+    --r-pad-head: 14px;
+    --r-head-gap: 12px;
+    --r-stack: 8px;
+    --r-body-stack: 8px;
+    --r-card-pad: 8px 10px;
+    --r-row-pad: 3px;
+    --r-trade-pad: 3px;
+    --r-bar-pad: 2px;
+    --r-head-mb: 5px;
+    --r-head-pb: 3px;
+    --r-box-pad: 7px 10px;
+    --r-box-pad-lg: 9px 11px;
+    --r-sum-pad: 7px 11px;
+    --r-foot-pad: 9px var(--r-pad) 10px;
+    --r-foot-gap: 6px;
+    --r-foot-rule: 7px;
+    --r-vs-pad: 10px;
+    --r-vs-badge-mb: 4px;
+    --r-vs-stats-mt: 7px;
+    --r-vs-line-mt: 2px;
+    --r-list-gap: 4px;
+    --r-list-gap-sm: 3px;
+    --r-list-title-mb: 4px;
+    --r-dial: 72px;
+    --r-dial-in: 53px;
+    --r-score-gap: 11px;
+    --r-score-mb: 6px;
+    --r-head-space: 4px;
+    --r-tag-mt: 6px;
+
+    --r-cols: 1.1fr 1fr;
+    --r-kpi-cols: repeat(3, minmax(0, 1fr));
+    --r-kpi6-cols: repeat(3, minmax(0, 1fr));
+    --r-insight-cols: 1fr 1fr;
+    --r-tradeoff-cols: 1fr 1fr;
+    --r-vs-cols: 1fr auto 1fr;
+    --r-vs-mid: flex;
+    --r-head-dir: row;
+    --r-head-side-dir: column;
+    --r-head-side-align: flex-end;
+    --r-head-side-text: right;
+    --r-dl-key: 42%;
+    --r-score-domain-cols: 1fr 1fr;
+    --r-bar-cols: 44px 1fr 44px;
+    --r-matrix-cols: 1.1fr 1fr 1fr;
+    --r-export-only: block;
+    --r-trade-date-display: inline;
+    --r-trade-date-margin: 0 0 0 8px;
+    --r-bar-gap: 6px;
+    --r-lh: 1.38;
+    --r-lh-tight: 1.24;
+    --r-lh-lg: 1.42;
+    --r-lh-sm: 1.38;
+
+    --r-fs: 0.88;
+    --r-fs-title: 1.9rem;
+    --r-fs-kpi: 1.32rem;
   }
-  .header {
-    /* 헤더 배경색이 인쇄에서 사라지지 않게 */
+  .headSide { flex-wrap: nowrap; }
+  .highlightValue { word-break: keep-all; overflow-wrap: normal; }
+  .tradeList[data-export-cap='4'] > *:nth-child(n + 5) { display: none; }
+
+  /* 배경색이 인쇄에서 사라지지 않게 */
+  .header,
+  .kpi, .highlight, .insightBox, .toBox, .vsCard, .stateBox, .footer, .summaryLine,
+  .scoreDial, .barTrack, .barFill, .tag, .completeness, .footerChip, .trustChip, .vsBadge {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .kpi, .highlight, .insightBox, .toBox, .vsCard, .stateBox, .footer {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .section, .kpi, .tradeRow, .insightBox, .toBox, .vsCard, .footer, .highlight {
+
+  /* 쪼개지면 곤란한 **작은** 단위만 보호한다. */
+  .kpi, .tradeRow, .dlRow, .barRow, .matrixRow,
+  .highlight, .insightBox, .toBox, .vsCard, .stateBox, .scoreWrap, .signature {
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  .cols { grid-template-columns: 1.25fr 1fr; }
+  /* 제목만 남고 본문이 넘어가는 고아 제목 방지. */
+  .sectionHead, .matrixHead {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  /* 푸터는 통째로 보호하지 않는다 — 그러다 1페이지 하단이 통으로 비었다.
+     다만 서명 줄만은 붙여 둔다(위 .signature). */
 }

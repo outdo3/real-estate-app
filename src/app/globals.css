@@ -248,9 +248,12 @@ ul, ol {
   [data-app-chrome] {
     display: none !important;
   }
+  /* REPORT A4 EXPORT LAYOUT V1 — 10mm.
+     12mm였을 때 인쇄 가용 영역이 703×1032px이었고 단지 리포트가 한 장에
+     들어가지 못했다. 10mm면 718×1047px — 문서 여백으로 여전히 자연스럽다. */
   @page {
     size: A4 portrait;
-    margin: 12mm;
+    margin: 10mm;
   }
   html,
   body {

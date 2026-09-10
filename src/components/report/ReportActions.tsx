@@ -75,17 +75,18 @@ export default function ReportActions({
     setTimeout(() => setter(null), 2500);
   };
 
-  /** §3/§4 — 보이는 시트를 그대로 PNG로. */
+  /** §3/§4 — 시트를 A4 한 장 문서 레이아웃으로 굽는다. */
   const saveImage = async () => {
     if (running.current) return;
     running.current = true;
     setBusy('image');
     setError(null);
     try {
-      const { captureElementToPng, findExportRoot } = await import('@/lib/report/dom-to-png');
+      const { captureReportExport, findExportRoot } = await import('@/lib/report/dom-to-png');
       const node = findExportRoot();
       if (!node) throw new Error('EXPORT_NO_ROOT');
-      const { blob } = await captureElementToPng(node);
+      // 보이는 화면이 아니라 A4 문서 레이아웃을 굽는다(REPORT A4 EXPORT LAYOUT V1).
+      const { blob } = await captureReportExport(node);
       const filename = identity ? buildExportFilename(identity, 'png') : 'e-jip-report.png';
       downloadBlob(blob, filename);
       flash(setDone, '저장 완료');
@@ -149,10 +150,10 @@ export default function ReportActions({
         running.current = true;
         setBusy('share');
         try {
-          const { captureElementToPng, findExportRoot } = await import('@/lib/report/dom-to-png');
+          const { captureReportExport, findExportRoot } = await import('@/lib/report/dom-to-png');
           const node = findExportRoot();
           if (node) {
-            const { blob } = await captureElementToPng(node);
+            const { blob } = await captureReportExport(node);
             const filename = identity ? buildExportFilename(identity, 'png') : 'e-jip-report.png';
             const file = new File([blob], filename, { type: 'image/png' });
             if (navigator.canShare({ files: [file] })) {

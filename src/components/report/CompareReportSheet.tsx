@@ -173,7 +173,7 @@ export default function CompareReportSheet({ envelope }: { envelope: ReportEnvel
           {/* ── A/B 요약 카드 ──────────────────────────────────────────── */}
           <div className={styles.vsHead}>
             <div className={`${styles.vsCard} ${styles.vsCardA}`}>
-              <span className={styles.vsBadge}>A</span>
+              <span className={styles.vsBadge} data-export-fixed-size="">A</span>
               <div className={styles.vsName}>{sa.name}</div>
               {sa.regionLabel && <div className={styles.vsRegion}>{sa.regionLabel}</div>}
               {sideMeta(sa) && <div className={styles.vsRegion}>{sideMeta(sa)}</div>}
@@ -188,7 +188,7 @@ export default function CompareReportSheet({ envelope }: { envelope: ReportEnvel
             </div>
             <div className={styles.vsMid}>VS</div>
             <div className={`${styles.vsCard} ${styles.vsCardB}`}>
-              <span className={`${styles.vsBadge} ${styles.vsBadgeB}`}>B</span>
+              <span className={`${styles.vsBadge} ${styles.vsBadgeB}`} data-export-fixed-size="">B</span>
               <div className={styles.vsName}>{sb.name}</div>
               {sb.regionLabel && <div className={styles.vsRegion}>{sb.regionLabel}</div>}
               {sideMeta(sb) && <div className={styles.vsRegion}>{sideMeta(sb)}</div>}

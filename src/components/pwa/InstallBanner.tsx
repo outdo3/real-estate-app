@@ -79,11 +79,14 @@ export default function InstallBanner() {
 
   return (
     <>
+      {/* data-export-exclude: 리포트를 인쇄/캡처할 때 설치 배너가 문서에 남지
+          않게 한다(REPORT-6 §12의 단일 계약). */}
       <div
         className={styles.banner}
         style={{ bottom: `calc(${offset}px + 8px)` }}
         role="region"
         aria-label="홈 화면에 추가 안내"
+        data-export-exclude=""
       >
         <div className={styles.text}>
           <span className={styles.title}>이집을 홈 화면에 추가하고 바로 확인하세요</span>
@@ -128,7 +131,7 @@ export function InstallGuideSheet({
   }, [onClose]);
 
   return (
-    <div className={styles.overlay} onClick={onClose} role="presentation">
+    <div className={styles.overlay} onClick={onClose} role="presentation" data-export-exclude="">
       <div
         className={styles.sheet}
         onClick={(e) => e.stopPropagation()}

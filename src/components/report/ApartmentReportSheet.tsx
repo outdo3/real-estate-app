@@ -47,25 +47,28 @@ function formatManwon(manwon: number): string {
 function ScoreDomains({ section }: { section: ReportSection }) {
   return (
     <>
-      {section.rows.map((r) => {
-        const score = Number(r.cells.count ?? 0);
-        return (
-          <div key={r.key} className={styles.barRow}>
-            <span className={styles.barName}>{String(r.cells.name ?? '')}</span>
-            <span className={styles.barTrack} data-export-fixed-size="">
-              {/* 점수가 없으면 막대를 그리지 않는다 — 0점처럼 보이면 안 된다. */}
-              <span
-                className={styles.barFill}
-                data-export-fixed-size=""
-                style={{ width: r.enriched ? `${Math.min(100, score)}%` : '0%' }}
-              />
-            </span>
-            <span className={`${styles.barValue} ${r.enriched ? '' : styles.barValueMissing}`}>
-              {r.enriched ? `${score}점` : '정보 없음'}
-            </span>
-          </div>
-        );
-      })}
+      {/* 막대를 컨테이너로 감싼다 — A4 내보내기에서 2×2로 접기 위한 자리(§6). */}
+      <div className={styles.barGrid}>
+        {section.rows.map((r) => {
+          const score = Number(r.cells.count ?? 0);
+          return (
+            <div key={r.key} className={styles.barRow}>
+              <span className={styles.barName}>{String(r.cells.name ?? '')}</span>
+              <span className={styles.barTrack} data-export-fixed-size="">
+                {/* 점수가 없으면 막대를 그리지 않는다 — 0점처럼 보이면 안 된다. */}
+                <span
+                  className={styles.barFill}
+                  data-export-fixed-size=""
+                  style={{ width: r.enriched ? `${Math.min(100, score)}%` : '0%' }}
+                />
+              </span>
+              <span className={`${styles.barValue} ${r.enriched ? '' : styles.barValueMissing}`}>
+                {r.enriched ? `${score}점` : '정보 없음'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
       {section.note && <p className={styles.sectionNote}>{section.note}</p>}
     </>
   );
@@ -157,7 +160,7 @@ export default function ApartmentReportSheet({
                     title="최근 실거래"
                     meta={hasMoreTrades ? '최근 5건' : `총 ${tradeRows.length}건`}
                   />
-                  <div className={styles.tradeList}>
+                  <div className={styles.tradeList} data-export-cap="4">
                     {tradeRows.map((r) => {
                       const meta = [
                         // 평 라벨을 만들지 않는다 — ㎡ 그대로.
@@ -179,6 +182,11 @@ export default function ApartmentReportSheet({
                   </div>
                   {hasMoreTrades && (
                     <p className={styles.sectionNote}>더 많은 거래는 이집 단지 상세 화면에서 확인할 수 있습니다.</p>
+                  )}
+                  {/* PDF/공유 이미지는 한 장 예산 안에서 4건만 싣는다. 줄였다는
+                      사실을 문서 안에서 밝힌다 — 전부인 척하지 않는다(§5). */}
+                  {tradeRows.length > 4 && (
+                    <p className={styles.exportNote}>최근 거래 일부 표시 · 자세한 내용은 이집에서 확인</p>
                   )}
                   {trades?.note && <p className={styles.sectionNote}>{trades.note}</p>}
                 </section>
