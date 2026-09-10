@@ -195,3 +195,25 @@
   .page { padding-top: 28px; padding-bottom: 110px; }
   .title { font-size: 1.44rem; }
 }
+
+/* ── REPORT-4 비교 리포트 전용 ─────────────────────────────
+   360px에서도 가로 스크롤이 생기지 않도록 **넓은 표를 쓰지 않는다**(§13).
+   항목명을 위에 두고 A/B 값을 아래 2열로 쌓는다. */
+.cmpHead { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--border-color, #e5e7eb); }
+.cmpCard { border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 10px; min-width: 0; }
+.cmpBadge { font-size: 0.62rem; font-weight: 800; color: #fff; background: var(--ejip-green, #13a367); border-radius: 4px; padding: 1px 6px; display: inline-block; }
+.cmpBadgeB { background: #475569; }
+.cmpName { margin-top: 5px; font-size: 0.9rem; font-weight: 800; color: var(--text-primary, #111827); overflow-wrap: anywhere; line-height: 1.3; }
+.cmpRegion { margin-top: 2px; font-size: 0.68rem; color: var(--text-secondary, #6b7280); overflow-wrap: anywhere; }
+
+.cmpRow { padding: 9px 0; border-bottom: 1px dashed #eef0f3; }
+.cmpRow:last-child { border-bottom: none; }
+.cmpLabel { font-size: 0.74rem; font-weight: 700; color: var(--text-secondary, #6b7280); display: flex; align-items: center; gap: 5px; }
+.cmpValues { margin-top: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cmpValue { font-size: 0.84rem; font-weight: 700; color: var(--text-primary, #111827); overflow-wrap: anywhere; line-height: 1.35; }
+/* §14 — 우열은 SAFE일 때만, 그리고 조용하게 표시한다. 스코어보드처럼 칠하지 않는다. */
+.cmpWin { color: var(--ejip-green-deep, #0e7d4f); }
+.cmpWinMark { font-size: 0.62rem; font-weight: 800; margin-left: 4px; }
+.cmpMissing { color: var(--text-secondary, #9ca3af); font-weight: 600; }
+.cmpNote { margin-top: 3px; font-size: 0.68rem; color: var(--text-secondary, #6b7280); }
+.cmpEmpty { font-size: 0.76rem; color: var(--text-secondary, #9ca3af); padding: 6px 0; }

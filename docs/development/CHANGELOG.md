@@ -17179,3 +17179,61 @@ DB 변경:
 상태:
 
 완료. 다음은 REPORT-4(단지 비교 리포트).
+
+
+## 2026-09-10
+
+### REPORT ENGINE — REPORT-4 (단지 비교 한장 리포트)
+
+작업:
+
+- /report/compare?a={aptSeq}&b={aptSeq} 신설. identity는 canonical aptSeq뿐.
+  누락/동일단지/한쪽없음/양쪽없음 4가지를 각각 명시적으로 거부하며 다른 단지로
+  대체하지 않는다.
+- src/lib/report/compare-report.ts(순수) + compare-read.ts(유일한 DB/Score 접근)
+- src/components/report/CompareReportSheet.tsx — REPORT-2/3 시트 셸 재사용
+- ReportActions에 variant='share-only' 추가(비교 리포트는 A/B 상세 링크를 직접 배치)
+- docs/development/REPORT_ENGINE_V1_REPORT_4_COMPARE.md 작성
+
+Compare V2 재사용 + 리포트 전용 강화:
+
+- MetricTrust/MetricDirection/buildDifferences/buildTradeoffSummary 그대로 사용.
+  리포트 전용 경쟁 신뢰 모델을 만들지 않았다.
+- 다만 Compare V2는 LIMITED에서도 favors를 낼 수 있어, 리포트에서만 더 엄격하게
+  잠갔다: 양쪽 지표가 모두 SAFE일 때만 우열을 인정하고(rankableInReport),
+  아니면 강점이 아니라 '판단이 제한되는 항목'으로 내린다(reclassifyForReport).
+  리포트는 캡처되어 단독으로 돌아다녀 주의 문구가 떨어져 나가기 쉽기 때문이다.
+  Compare V2의 의미 자체는 바꾸지 않았다.
+- 지표 빌더(selectPriceMetric/buildFactMetrics/buildLocationMetrics/buildScore)를
+  서버에서 그대로 재사용하고 RawTrade 변환 규칙도 /api/apt/[name]과 동일하게 맞췄다.
+
+종합 승자 미생성:
+
+- data.overallWinner는 타입상 항상 null. 점수 카운트로 승자를 뽑지 않는다.
+- 해석은 개수 사실 + "무엇을 우선순위에 두는지에 따라 달라집니다"로 끝난다.
+- 강점이 양쪽 0개면 해석 문장 자체를 만들지 않는다
+  (실측: rich-sparse/sparse-sparse/no-parking 모두 해석 없음, 승패표시 0개)
+
+성능(라우트 총 시간):
+
+- rich vs rich cold 144ms / warm 90~140ms
+- rich vs sparse cold 145ms / warm 50~92ms
+- sparse vs sparse cold 77ms / warm 40~46ms
+- 가드 5~56ms  => warm <=500ms, 라우트 <=1s 충족
+
+QA:
+
+- 196/196 PASS (4케이스 x 5폭 + 가드 4종)
+  승자 단정 0 / 예측 어휘 0 / 역대 신고가 0 / 평 라벨 0 /
+  상세 링크 2개 모두 aptSeq 보존 / 4분류 섹션 상시 존재 /
+  1280px 시트 520px 고정 / 가드 화면에 다른 단지 금액 0건
+- 단위 11/11, REPORT-1 25/25, REPORT-3 13/13, 통합 5/5 (회귀 없음)
+- eslint 0 errors / tsc --noEmit src 0건 / build 성공
+
+DB 변경:
+
+없음 (SELECT 전용)
+
+상태:
+
+완료. 다음은 REPORT-5(오늘의 실거래) — PRECHECK의 백필 가드와 발행 게이트를 함께 구현.

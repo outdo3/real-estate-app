@@ -19,11 +19,17 @@ export default function ReportActions({
   title,
   detailHref = null,
   detailLabel = '지도 보기',
+  variant = 'full',
 }: {
   title: string;
   /** 있으면 이 링크로, 없으면 지도로 보낸다. 단지 리포트는 canonical aptSeq 상세로 간다(§12). */
   detailHref?: string | null;
   detailLabel?: string;
+  /**
+   * 'share-only'는 공유 버튼만 그린다 — 비교 리포트는 A/B 상세 링크 2개를 직접
+   * 배치하므로 액션바 컨테이너와 나머지 버튼을 이 컴포넌트가 다시 만들면 중첩된다.
+   */
+  variant?: 'full' | 'share-only';
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -48,6 +54,14 @@ export default function ReportActions({
       /* 클립보드가 막힌 환경에서는 조용히 아무 것도 하지 않는다(거짓 성공 금지). */
     }
   };
+
+  const shareButton = (
+    <button type="button" className={`${styles.actionBtn} ${styles.actionPrimary}`} onClick={share}>
+      {copied ? <Check size={16} aria-hidden="true" /> : <Share2 size={16} aria-hidden="true" />}
+      {copied ? '링크 복사됨' : '공유하기'}
+    </button>
+  );
+  if (variant === 'share-only') return shareButton;
 
   return (
     <div className={styles.actions}>

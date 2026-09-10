@@ -83,7 +83,7 @@ const TRADE_SELECT = {
  * Score를 상세 화면과 **동일한 경로**로 계산해 표시용 view로 만든다.
  * 실패해도 리포트 전체를 죽이지 않는다 — 점수만 '준비 중'이 된다(§43과 같은 태도).
  */
-async function readScore(aptSeq: string): Promise<AptScoreView> {
+export async function readScore(aptSeq: string): Promise<AptScoreView> {
   const empty: AptScoreView = {
     state: 'no-result', overallScore: null, scoreVersion: null, eligibility: null,
     domains: [], peerVerdict: { kind: 'unavailable' }, briefing: null,
