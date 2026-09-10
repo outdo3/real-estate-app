@@ -17021,3 +17021,55 @@ DB 변경:
 
 REPORT-1 / REPORT-2 착수 가능. REPORT-5는 백필 가드+발행 게이트 동시 구현 조건부.
 근본 해결(행 단위 적재 출처 필드)은 schema 변경이라 별도 승인 사항.
+
+
+## 2026-09-10
+
+### REPORT ENGINE — REPORT-1 (ReportEnvelope + 지역 read layer)
+
+작업:
+
+- src/lib/report/ 신설. 템플릿이 raw 테이블을 직접 조회하지 않도록 envelope 하나로 모은다.
+  - types.ts          ReportEnvelope / MetricTrust / summarizeTrust (Prisma 없음)
+  - region-scope.ts   부산 현행 16코드 단일 지점 (Prisma 없음)
+  - region-aggregate.ts 집계 순수 로직 (Prisma 없음)
+  - region-report.ts  행 -> envelope 조립 (Prisma 없음)
+  - region-read.ts    유일한 DB 접근 지점 (SELECT 전용)
+- docs/development/REPORT_ENGINE_V1_REPORT_1_CONTRACTS.md 작성.
+
+신뢰 규칙(코드로 강제):
+
+- 스코프: 명시 allowlist 16개. LIKE '26%' 사용 안 함(전국 확장 시 조용히 깨짐).
+  27110/11680은 조용히 걸러내지 않고 REPORT_SCOPE_INVALID로 거부한다.
+- 취소 제외: 쿼리와 순수 레이어 양쪽에서 이중 적용.
+- LEFT JOIN: 집계는 거래 행에서 출발하고 master는 보강 전용. 미매칭이어도 행을 버리지 않는다
+  (부산 거래 40,292건 4.7%가 미매칭).
+- 표본 게이트 10건(최근 1년): 건수는 SAFE로 그대로 보여주되 비교성 지표는 LIMITED,
+  표본 부족 시 해석 문장을 만들지 않는다.
+- 평 라벨 금지(㎡만), "역대 신고가" 금지("최근 2년 최고 거래가" + 기간 문구 필수).
+- 예측 금지: interpretation은 실측 증감률만. 직전 기간 0건이면 비율을 만들지 않는다.
+- trust 요약은 지표 trust를 덮어쓰지 않는다(LIMITED를 SAFE로 승격하지 않음).
+  커버리지 미검증이면 전 지표가 SAFE여도 UNVERIFIED.
+
+검증:
+
+- 순수 단위 테스트 25/25 PASS (npx tsx --test)
+- 읽기 전용 통합 5/5 PASS (Production 2026-08-01~08-31)
+  부산 2,049건(=전체 2,113 - 취소 64) / 구 16개 / COMPLETE
+  해운대구 248건, 최근 8행 미보강 0
+  우동 52건, 중앙가 7억 4,500만원(SAFE), 해석 MEASURED_DELTA
+  27110/11680 거부 확인
+  건수는 리포트 경로를 쓰지 않는 독립 원시 쿼리와 대조해 일치 확인
+- eslint 0 errors / tsc --noEmit src 0건 / npm run build 성공
+
+DB 변경:
+
+없음 (SELECT 전용)
+
+API 변경:
+
+없음 (UI/라우트는 REPORT-2 이후)
+
+상태:
+
+완료. 다음은 REPORT-2(지역 리포트 라우트/템플릿).
