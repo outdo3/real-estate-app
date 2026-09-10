@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation';
 import { Map as KakaoMap, CustomOverlayMap } from 'react-kakao-maps-sdk';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
-import { perfMark, perfMeasure } from '@/lib/perf-debug';
+import { perfMark, perfMeasure, perfLog, perfNow, PERF_ENABLED } from '@/lib/perf-debug';
 import { loadKakaoMapsSdk } from '@/lib/kakao/maps-sdk';
 // AptMarker/AptCluster 타입과 selected-marker fast-path 판정 로직은
 // src/lib/map-selected-marker.ts로 분리해 부작용 없이 단위 테스트한다(§26).
@@ -133,6 +133,26 @@ const APT_GROUP_CHIP = { width: 40, height: 28, gap: 3, clusterRadius: 34 };
 // 마커가 뒤늦게 튀어나오는 느낌을 줄인다.
 const OFFICETEL_VIEWPORT_MARGIN_PX = 160;
 
+// PERCEIVED_PERFORMANCE_V2_3 §3 — 아파트 레이어의 뷰포트 컬링 여유분.
+//
+// 왜 필요한가(실측): 부산진구는 마커 356개가 오는데, 이 페이지는 그 **전부**를
+// clusterMarkersByPixels(… viewport=null)로 넘겨 293개 클러스터를 만들고 각각에
+// CustomOverlayMap을 하나씩 렌더했다. 그런데 360px 화면에 실제로 그려진 칩은 29개뿐이다
+// — kakao CustomOverlay는 화면 밖이면 content를 DOM에 붙이지 않아서(=portal 대상인
+// parentElement가 null) 나머지 264개는 **아무것도 보여주지 않으면서** 생성/부착 비용만
+// 냈다. 4x CPU throttling 실측(map:overlay:apt): 부산진구 664~775ms, 해운대구 511~552ms.
+// 같은 조건에서 클러스터링 자체는 19~33ms로, 렌더 비용의 ~96%가 오버레이 생성이었다.
+//
+// 여유분을 클러스터 반경(최대 54px)보다 훨씬 크게 잡는 이유: 화면에 **보이는** 묶음
+// 배지의 개수가 컬링 때문에 실제보다 적게 나오면 안 된다. 클러스터 중심이 화면 안이면
+// 그 멤버는 중심에서 최대 clusterRadius(≤54px) 안에 있으므로, 여유분이 그보다 크면
+// 보이는 배지의 개수는 컬링 전과 항상 같다(§5 identity/개수 보존).
+//
+// 값은 오피스텔과 같은 160px로 맞췄다 — 240px도 재봤지만(4x CPU, map:overlay:apt)
+// 부산진구 360px 250.6ms / 1280px 454.4ms 대 160px의 196.2ms / 356.4ms로 160px이
+// 모든 구·폭에서 더 빨랐고, 이미 배포되어 검증된 오피스텔 레이어와 값이 갈리지 않는다.
+const APT_VIEWPORT_MARGIN_PX = 160;
+
 const LEVEL_COLOR: Record<SchoolMarker['level'], string> = {
   초: '#3b82f6',
   중: '#10b981',
@@ -193,12 +213,18 @@ function clusterMarkersByPixels<T extends PixelClusterable>(
   markers: T[],
   layout: { width: number; height: number; clusterRadius: number },
   safeZone: { top: SafeZoneRect | null; right: SafeZoneRect | null },
-  viewport: { width: number; height: number; margin: number } | null
+  viewport: { width: number; height: number; margin: number } | null,
+  // PERCEIVED_PERFORMANCE_V2_3 §3 — 뷰포트 컬링을 **면제**할 마커 id.
+  // 선택/고정된 마커는 화면 밖으로 밀려나도 클러스터 목록에 남아 있어야 한다:
+  // selectedMarker(바텀시트)와 pinnedMarker(공유·복원 URL)가 둘 다
+  // resolveSelectedMarker(…, aptClusters, …)로 **클러스터에서** 찾기 때문에,
+  // 컬링되면 살짝 패닝했다는 이유로 카드가 사라지고 복원 URL에서 identity가 빠진다.
+  keepIds?: Set<string> | null
 ): { clusters: PixelCluster<T>[]; nudges: Map<string, Nudge>; visibleCount: number } {
   const points: { marker: T; x: number; y: number }[] = [];
   for (const m of markers) {
     const p = projection.containerPointFromCoords(new window.kakao.maps.LatLng(m.lat, m.lng));
-    if (viewport) {
+    if (viewport && !keepIds?.has(m.id)) {
       // 화면(+여유분) 밖이면 아예 후보에서 뺀다 — 안 보이는 DOM을 만들지 않는다.
       if (p.x < -viewport.margin || p.x > viewport.width + viewport.margin) continue;
       if (p.y < -viewport.margin || p.y > viewport.height + viewport.margin) continue;
@@ -300,6 +326,9 @@ export default function FullscreenMapPage() {
 
   const [aptMarkers, setAptMarkers] = useState<AptMarker[]>([]);
   const [aptClusters, setAptClusters] = useState<AptCluster[]>([]);
+  // PERCEIVED_PERFORMANCE_V2_3 §1 — 클러스터 확정 시각. 오버레이 커밋(React render +
+  // kakao CustomOverlay 생성/부착)이 끝난 뒤 이 값과의 차이를 렌더 비용으로 기록한다.
+  const aptCommitStartRef = useRef(0);
   const [schoolMarkers, setSchoolMarkers] = useState<SchoolMarker[]>([]);
   // OFFICETEL_MAP_LAYER_V1 — 오피스텔 레이어. 아파트 state를 재사용하지 않고 완전히
   // 분리한다(§23: 아파트 마커/식별자/카드가 이 STEP으로 인해 달라지면 안 된다).
@@ -352,6 +381,16 @@ export default function FullscreenMapPage() {
     () => resolveSelectedMarker(activeMarkerId, aptClusters, pendingSelectedApt),
     [activeMarkerId, aptClusters, pendingSelectedApt]
   );
+
+  // PERCEIVED_PERFORMANCE_V2_3 §3/§7 — recomputeClusters는 지도의 native 'idle' 리스너로
+  // 등록되는데, 그 리스너를 activeMarkerId가 바뀔 때마다 다시 걸면 마커를 고르거나
+  // hover할 때마다 전체 클러스터 재계산 + 오버레이 재생성이 일어난다(§7 재빌드 금지).
+  // 그래서 deps에는 넣지 않고 ref로만 최신 값을 읽는다 — 컬링 면제(keepIds) 판단이
+  // 패닝 이후에도 stale closure의 옛 값을 쓰지 않게 하기 위함이다.
+  const activeMarkerIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeMarkerIdRef.current = activeMarkerId;
+  }, [activeMarkerId]);
 
   // OFFICETEL_MAP_LAYER_V1 §8 — 오피스텔도 hover(선점) / click(고정)을 같은 규칙으로
   // 나눈다. 카드에 쓸 마커는 클러스터가 아니라 **원본 마커 목록**에서 찾는다 — 클러스터는
@@ -905,12 +944,32 @@ export default function FullscreenMapPage() {
     const projection = map.getProjection();
     if (!projection) return;
 
-    // ── 아파트(기존 동작 그대로) ──────────────────────────────────────────────
+    // 두 레이어가 같은 뷰포트 rect를 쓰므로 한 번만 잰다(layout read 1회).
+    const rect = mapViewportRef.current?.getBoundingClientRect();
+    const aptViewport = rect
+      ? { width: rect.width, height: rect.height, margin: APT_VIEWPORT_MARGIN_PX }
+      : null;
+
+    // ── 아파트(§3 뷰포트 컬링) ────────────────────────────────────────────────
     if (aptMarkers.length === 0) {
       setAptClusters([]);
       setClusterNudges(new Map());
     } else {
-      const apt = clusterMarkersByPixels(projection, aptMarkers, chipLayout, safeZoneRects, null);
+      const t0 = perfNow();
+      // 선택/고정된 마커는 화면 밖이어도 남긴다(위 keepIds 주석 참고). hover는 보이는
+      // 마커에서만 생기므로 activeMarkerId 하나로 두 경우가 모두 덮인다.
+      const activeId = activeMarkerIdRef.current;
+      const keepIds = activeId ? new Set([activeId]) : null;
+      const apt = clusterMarkersByPixels(projection, aptMarkers, chipLayout, safeZoneRects, aptViewport, keepIds);
+      const t1 = perfNow();
+      // §1 — 오버레이 커밋 비용을 재기 위해 "클러스터가 정해진 시각"을 남긴다.
+      aptCommitStartRef.current = t1;
+      perfLog('map:cluster:apt', {
+        markers: aptMarkers.length,
+        clusters: apt.clusters.length,
+        visible: apt.visibleCount,
+        ms: t1 - t0,
+      });
       setAptClusters(apt.clusters);
       setClusterNudges(apt.nudges);
     }
@@ -922,7 +981,6 @@ export default function FullscreenMapPage() {
       setOfficetelNudges(new Map());
       setOfficetelHiddenByCap(0);
     } else {
-      const rect = mapViewportRef.current?.getBoundingClientRect();
       // MAP_UX_V2 §8 — 픽셀 클러스터링 **이전에** 좌표가 완전히 같은 master들을 하나의
       // 표시 그룹으로 접는다. 확대해도 절대 갈라지지 않는 겹침을 부채꼴로 펼쳐봐야
       // 서로를 가릴 뿐이다. 그룹은 표시 단위일 뿐이고 멤버는 각자의 identity를 유지한다.
@@ -977,6 +1035,23 @@ export default function FullscreenMapPage() {
     },
     [chipLayout.width, chipLayout.height, safeZoneRects]
   );
+  // PERCEIVED_PERFORMANCE_V2_3 §1/§3 — 오버레이 커밋 비용 계측.
+  // aptClusters가 바뀐 뒤 이 effect가 도는 시점이면 React render + 모든 CustomOverlayMap의
+  // useLayoutEffect(=kakao CustomOverlay 생성/부착)가 이미 끝나 있다. 그래서 여기서 재는
+  // 값이 곧 "오버레이 생성 → map attach" 비용이다. PERF_ENABLED가 아니면 아무 일도 하지 않는다.
+  useEffect(() => {
+    if (!PERF_ENABLED || !aptCommitStartRef.current) return;
+    const chips = typeof document !== 'undefined'
+      ? document.querySelectorAll('[class*="markerChip"]').length
+      : 0;
+    perfLog('map:overlay:apt', {
+      clusters: aptClusters.length,
+      domChips: chips,
+      ms: perfNow() - aptCommitStartRef.current,
+    });
+    aptCommitStartRef.current = 0;
+  }, [aptClusters]);
+
   const [pendingNudge, setPendingNudge] = useState<Nudge>({ dx: 0, dy: 0 });
   useEffect(() => {
     if (!pendingSelectedApt) {
