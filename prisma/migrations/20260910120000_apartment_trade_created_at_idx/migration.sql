@@ -1,0 +1,18 @@
+-- REPORT_5_CREATED_AT_INDEX_V1 — 관찰일(created_at) 조회 성능.
+--
+-- /report/daily/[date]는 KST 관찰일을 UTC 구간으로 바꿔 created_at 범위로만
+-- 조회한다. 그런데 이 테이블(855,179행 / 472MB)에는 created_at을 선두로 하는
+-- 인덱스가 하나도 없어 매 요청이 풀스캔이었다.
+--
+-- 실측 baseline(EXPLAIN ANALYZE, Production):
+--   2026-09-10  Parallel Seq Scan  rows removed 432,270/worker  exec 7,497ms
+--   2026-08-29  Seq Scan           rows removed 674,677         exec 12,129ms (temp spill)
+--
+-- CONCURRENTLY를 쓰는 이유는 이 테이블이 증분 sync가 계속 쓰는 대상이기 때문이다.
+-- 일반 CREATE INDEX는 빌드 내내 SHARE 락을 잡아 쓰기를 막는다. Prisma Migrate는
+-- CONCURRENTLY를 감지하면 이 마이그레이션을 트랜잭션 밖에서 실행한다(필수 —
+-- CREATE INDEX CONCURRENTLY는 트랜잭션 안에서 실행될 수 없다).
+-- 같은 방식이 20260901084417_area84_lawd_exclusive_deal_date_idx에서 이미
+-- Production에 적용됐고 그 인덱스는 현재 valid 상태다.
+-- CreateIndex
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "apartment_trade_histories_created_at_idx" ON "apartment_trade_histories"("created_at");

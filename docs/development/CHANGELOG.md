@@ -17372,3 +17372,25 @@ DB 변경:
 - **남은 한계**: `/report/daily/[date]`는 여전히 `created_at` 미인덱스 풀스캔이라
   느리다(백필일 10.9초). P1 PERFORMANCE / SCHEMA APPROVAL REQUIRED — REPORT-7에서
   인덱스를 적용하지 않았다.
+
+## REPORT-5 성능 — created_at 인덱스 (승인된 schema 변경)
+
+- `apartment_trade_histories(created_at)` 인덱스를 Production에 추가했다.
+  `/report/daily/[date]`는 KST 관찰일을 UTC 구간으로 바꿔 `created_at` 범위로만
+  조회하는데, 이 컬럼을 선두로 하는 인덱스가 없어 855k행 풀스캔이 매 요청 발생했다.
+- **CONCURRENTLY로 적용**해 증분 sync의 쓰기를 막지 않았다. 같은 방식이 이미
+  `20260901084417_area84_lawd_exclusive_deal_date_idx`에서 같은 테이블에 적용된
+  선례가 있고(그 인덱스는 현재 valid), Prisma Migrate가 CONCURRENTLY를 감지해
+  트랜잭션 밖에서 실행한다. 적용 17초, 성공.
+- 실행계획: **Seq Scan → Index Scan**.
+  2026-09-10 실행시간 7,497ms → **3.0ms**, 버퍼 28,563 → **13**.
+- route 재측정(warm): 9/10 **1,948~4,458ms → 52~56ms**,
+  8/31 1,784~1,962ms → **48~53ms**, 8/29 3,247~5,337ms → **369~415ms**.
+  warm 중앙값 약 56ms, 최악 415ms — 목표(warm ≤500ms / route ≤1s) 전 날짜 충족.
+- **결과 동일성 전수 확인**: 8개 날짜의 raw/busan/valid/계약월/최소 계약일/발행 상태가
+  인덱스 적용 전 기록과 **전부 일치**. 8/29·9/3 WITHHELD_BACKFILL, 8/31 READY_ZERO
+  (스코프 밖 132건이 부산으로 새지 않음), 9월 PREPARING 유지. 취소 제외·KST 경계 불변.
+- 저장소 영향: 472MB → 478MB(+6MB). sync 코드 변경 불필요(`created_at`은 기본값으로
+  쓰기만 하고 필터에 쓰지 않는다).
+- 단일 컬럼 인덱스만 추가했다. 복합 인덱스/`ingestRunId`/`ingestMode`는 승인 범위 밖.
+- **REPORT-5 READY / REPORT ENGINE V1 FULL READY.**
