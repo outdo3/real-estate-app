@@ -19,6 +19,7 @@ import {
   representativeComplexes,
   sampleGate,
   topPricedTrades,
+  MIN_SAMPLE_FOR_INTERPRETATION,
   trustForSample,
   type MasterEnrichment,
   type TradeRow,
@@ -47,11 +48,19 @@ export interface RegionReportInput {
   dong: string | null;
   /** 기간 내 거래(취소 포함 상태로 넘겨도 된다 — 여기서 제외한다). */
   rows: readonly TradeRow[];
-  /** 직전 동일 길이 기간의 거래(전월 대비용). 없으면 빈 배열. */
-  previousRows: readonly TradeRow[];
+  /**
+   * 직전 동일 길이 기간의 **거래 건수**(취소 제외).
+   * 행 전체가 아니라 개수만 받는다 — 이 값은 증감률 계산에만 쓰이는데 부산 365일이면
+   * 행을 다 읽느라 3초/166MB가 들었다(REPORT-2 §17 실측). count 한 번이면 충분하다.
+   */
+  previousCount: number;
   /** 표본 게이트 판정에 쓰는 최근 1년 거래 수. */
   trailingYearCount: number;
-  /** 최근 2년 거래(고가 하이라이트 전용). */
+  /**
+   * 최근 2년 **최고가 후보**(금액 desc 상위 소수). 2년 전체를 읽지 않는다 —
+   * 하이라이트 1건을 뽑으려고 도시 단위 7만 행을 읽을 이유가 없다(§17).
+   * 최댓값은 반드시 이 후보 안에 있으므로 결과는 동일하다.
+   */
   twoYearRows: readonly TradeRow[];
   masters: readonly MasterEnrichment[];
   period: ReportPeriod;
@@ -91,7 +100,6 @@ function scopeOf(input: RegionReportInput): ReportScope {
 
 export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
   const rows = prepareRows(input.rows);
-  const prev = prepareRows(input.previousRows);
   const twoYear = prepareRows(input.twoYearRows);
 
   const agg = aggregate(rows);
@@ -147,7 +155,9 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
     },
   ];
 
-  const delta = countDelta(rows.length, prev.length);
+  const delta = countDelta(rows.length, input.previousCount);
+  // 증감률을 '해석'으로 쓸 수 있으려면 최근 1년 표본과 직전 기간 표본이 **둘 다** 충분해야 한다.
+  const deltaStable = gate.sampleSufficient && delta.previous >= MIN_SAMPLE_FOR_INTERPRETATION;
   metrics.push({
     key: 'transactionCountDelta',
     label: '직전 동일기간 대비 거래량',
@@ -157,9 +167,15 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
         ? '비교 불가'
         : `${delta.diff >= 0 ? '+' : ''}${Math.round(delta.ratio * 1000) / 10}% (${delta.previous}건 → ${delta.current}건)`,
     unit: '%',
-    // 직전 기간이 0건이면 비율을 만들지 않는다. 표본이 얇으면 LIMITED.
-    trust: delta.ratio == null ? 'MISSING' : gate.sampleSufficient ? 'SAFE' : 'LIMITED',
-    reason: delta.ratio == null ? '직전 동일기간 거래가 없어 증감률을 계산하지 않았습니다.' : gate.reason,
+    // 직전 기간이 0건이면 비율을 만들지 않는다.
+    // 직전 기간 자체가 얇으면(예: 1건 → 0건 = "100% 감소") 수치는 참이지만 해석은
+    // 한 건에 좌우된다. 그래서 **양쪽 표본**을 다 본다 — 표본 게이트를 둔 이유와 같다.
+    trust: delta.ratio == null ? 'MISSING' : deltaStable ? 'SAFE' : 'LIMITED',
+    reason: delta.ratio == null
+      ? '직전 동일기간 거래가 없어 증감률을 계산하지 않았습니다.'
+      : deltaStable
+        ? null
+        : `직전 동일기간 거래가 ${delta.previous}건으로 적어 증감률 해석이 제한됩니다.`,
     sampleSize: delta.previous,
     source: src,
   });
@@ -239,7 +255,7 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
     : [];
 
   // ── 해석: 실측 차이값만 ─────────────────────────────────────────────────
-  const interpretation = gate.sampleSufficient && delta.ratio != null
+  const interpretation = deltaStable && delta.ratio != null
     ? {
         source: 'MEASURED_DELTA' as const,
         text: describeCountDelta(delta, input.period.label, '직전 동일기간'),

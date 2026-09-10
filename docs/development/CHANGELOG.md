@@ -17073,3 +17073,55 @@ API 변경:
 상태:
 
 완료. 다음은 REPORT-2(지역 리포트 라우트/템플릿).
+
+
+## 2026-09-10
+
+### REPORT ENGINE — REPORT-2 (지역 한장 브리핑 UI)
+
+작업:
+
+- 라우트 3종 신설(서버 컴포넌트, force-dynamic):
+  /report/city/busan, /report/district/[lawdCd], /report/dong/[lawdCd]/[dong]
+- 템플릿 RegionReportSheet + ReportActions + InvalidScope 신설.
+  템플릿은 envelope만 읽는다(Prisma import 0건, 집계/trust 재해석 없음).
+- report-period.ts: 기본 최근 30일(어제까지), period=30|90|365만 허용.
+- docs/development/REPORT_ENGINE_V1_REPORT_2_REGION_UI.md 작성.
+
+성능 개선(§17 감사 결과 반영):
+
+- previousRows를 전부 읽고 .length만 쓰던 것을 count()로 교체
+- 하이라이트 1건을 위해 2년치 전체를 읽던 것을 orderBy+take 5로 교체
+  (정렬 우선순위를 topPricedTrades와 동일하게 맞춰 결과 동일)
+- 부산 city 30일 2,060ms/71.7MB -> 273ms/0.8MB
+  부산 city 365일 3,136ms/166.5MB -> 964ms/49.7MB
+  => SQL 집계로 옮길 필요 없음(기본 30일 city 273ms)
+
+신뢰 규칙 강화:
+
+- 증감률은 최근 1년 표본과 직전 기간 표본이 둘 다 10건 이상일 때만 SAFE.
+  QA에서 거래 0건 동이 "1건 -> 0건 100% 감소"를 냈는데 수치는 참이지만 한 건에
+  좌우되는 문장이라 표본 게이트 취지에 어긋나 LIMITED + 해석 미생성으로 바꿨다.
+- MISSING 지표는 값이 이미 '정보 없음'이므로 칩을 중복 표기하지 않는다.
+
+서비스 기능 변경:
+
+- 지역 리포트 화면 신설(읽기 전용). 기존 화면 변경 없음.
+
+DB 변경:
+
+없음 (SELECT 전용)
+
+QA:
+
+- 101/101 PASS (3라우트 x 5폭 360/390/430/767/1280 + 스코프밖 + 표본부족)
+  가로 오버플로 0 / 예측 어휘 0 / 평 라벨 0 / 모든 apt 링크에 aptSeq /
+  1280px 시트 520px 고정
+- 10/10 PASS (0건 동 / 숫자 대조 / 기간 파라미터)
+  부산 city 화면 1,861건 = DB 원시 집계 일치
+- 단위 25/25, 읽기 전용 통합 5/5
+- eslint 0 errors / tsc --noEmit src 0건 / build 성공
+
+상태:
+
+완료. 다음은 REPORT-3(단지 리포트).

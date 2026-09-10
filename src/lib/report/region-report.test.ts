@@ -217,7 +217,7 @@ test('trust 요약은 지표별 trust를 덮어쓰지 않는다', () => {
 const baseInput = (o: Partial<RegionReportInput> = {}): RegionReportInput => ({
   level: 'DISTRICT' as const, lawdCd: '26350', dong: null,
   rows: [trade(), trade({ dealAmount: 70000, dealDate: '2026-08-05' })],
-  previousRows: [trade({ dealDate: '2026-07-01' })],
+  previousCount: 1,
   trailingYearCount: 100,
   twoYearRows: [trade({ dealAmount: 120000, dealDate: '2025-05-05' })],
   masters: [],
@@ -263,7 +263,7 @@ test('표본이 얇으면 해석을 붙이지 않는다', () => {
 });
 
 test('거래가 없으면 0으로 채우지 않고 MISSING으로 둔다', () => {
-  const e = buildRegionReport(baseInput({ rows: [], twoYearRows: [], previousRows: [] }));
+  const e = buildRegionReport(baseInput({ rows: [], twoYearRows: [], previousCount: 0 }));
   assert.equal(e.metrics.find((m) => m.key === 'transactionCount')!.value, 0);
   const med = e.metrics.find((m) => m.key === 'medianDealAmount')!;
   assert.equal(med.value, null);

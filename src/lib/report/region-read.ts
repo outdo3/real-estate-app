@@ -103,6 +103,9 @@ function whereFor(level: RegionLevel, lawdCd: string | null, dong: string | null
   };
 }
 
+/** 2년 최고가를 뽑기 위해 읽는 상위 후보 수. 1건만 쓰지만 동률 확인 여유를 둔다. */
+const TWO_YEAR_TOP_CANDIDATES = 5;
+
 const TRADE_SELECT = {
   aptSeq: true,
   lawdCd: true,
@@ -142,10 +145,19 @@ export async function readRegionReport(opts: RegionReadOptions): Promise<ReportE
   const yearStart = shiftDays(end, -364);
   const twoYearStart = shiftDays(end, -729);
 
-  const [rows, previousRows, twoYearRows, trailingYearCount] = await Promise.all([
+  // §17 — previous는 개수만, 2년 최고가는 상위 후보만 읽는다.
+  // 전부 findMany로 읽던 구조에서 부산 365일이 3.1초/166MB였다(실측).
+  // 정렬은 순수 레이어의 topPricedTrades와 **같은 우선순위**로 건다
+  // (금액 desc → 계약일 desc → aptSeq asc). 최댓값은 반드시 이 후보 안에 있다.
+  const [rows, previousCount, twoYearRows, trailingYearCount] = await Promise.all([
     prisma.apartmentTradeHistory.findMany({ where: whereFor(level, lawdCd, dong, start, end), select: TRADE_SELECT }),
-    prisma.apartmentTradeHistory.findMany({ where: whereFor(level, lawdCd, dong, prevStart, prevEnd), select: TRADE_SELECT }),
-    prisma.apartmentTradeHistory.findMany({ where: whereFor(level, lawdCd, dong, twoYearStart, end), select: TRADE_SELECT }),
+    prisma.apartmentTradeHistory.count({ where: whereFor(level, lawdCd, dong, prevStart, prevEnd) }),
+    prisma.apartmentTradeHistory.findMany({
+      where: whereFor(level, lawdCd, dong, twoYearStart, end),
+      select: TRADE_SELECT,
+      orderBy: [{ dealAmount: 'desc' }, { dealDate: 'desc' }, { aptSeq: 'asc' }],
+      take: TWO_YEAR_TOP_CANDIDATES,
+    }),
     prisma.apartmentTradeHistory.count({ where: whereFor(level, lawdCd, dong, yearStart, end) }),
   ]);
 
@@ -190,7 +202,7 @@ export async function readRegionReport(opts: RegionReadOptions): Promise<ReportE
     lawdCd,
     dong,
     rows: mapped,
-    previousRows: mapRows(previousRows as RawTrade[]),
+    previousCount,
     twoYearRows: mapRows(twoYearRows as RawTrade[]),
     trailingYearCount,
     masters,

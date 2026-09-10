@@ -1,0 +1,197 @@
+/* REPORT-2 — 지역 한장 브리핑 시트.
+   목표는 대시보드가 아니라 **카카오톡으로 공유해도 읽히는 한 장**이다(§4/§14).
+   그래서 데스크톱에서도 폭을 고정한 '시트'로 두고 무한히 늘리지 않는다. */
+
+.page {
+  min-height: 100dvh;
+  background: var(--bg-color, #f5f6f8);
+  padding: 12px 12px 96px; /* 하단 액션바 높이만큼 여유 */
+  display: flex;
+  justify-content: center;
+}
+
+/* 한 장 시트. 모바일은 꽉 채우고 데스크톱은 가운데 고정폭. */
+.sheet {
+  width: 100%;
+  max-width: 520px;
+  background: var(--card-bg, #fff);
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  overflow: hidden; /* 가로 스크롤 차단 */
+}
+
+/* ── 헤더 ─────────────────────────────────────────────── */
+.header {
+  padding: 18px 18px 14px;
+  background: linear-gradient(135deg, var(--ejip-green, #13a367), var(--ejip-green-deep, #0e7d4f));
+  color: #fff;
+}
+.brand {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  opacity: 0.9;
+}
+.title {
+  margin: 6px 0 0;
+  font-size: 1.32rem;
+  font-weight: 800;
+  line-height: 1.25;
+  word-break: keep-all;
+}
+.subtitle {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+/* ── KPI ──────────────────────────────────────────────── */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border-color, #e5e7eb);
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+.kpi {
+  background: var(--card-bg, #fff);
+  padding: 14px 16px;
+  min-width: 0;
+}
+.kpiLabel {
+  font-size: 0.72rem;
+  color: var(--text-secondary, #6b7280);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.kpiValue {
+  margin-top: 4px;
+  font-size: 1.16rem;
+  font-weight: 800;
+  color: var(--text-primary, #111827);
+  /* 긴 값도 잘리지 않게 — 가로 스크롤 대신 줄바꿈 */
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+.kpiValueMissing { color: var(--text-secondary, #9ca3af); font-weight: 700; }
+.kpiUp { color: #dc2626; }
+.kpiDown { color: #2563eb; }
+
+/* LIMITED/MISSING 배지 — 존재는 알리되 시끄럽지 않게(§12) */
+.trustChip {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.trustLimited { background: #fef3c7; color: #92400e; }
+.trustMissing { background: #f3f4f6; color: #6b7280; }
+
+/* ── 섹션 ─────────────────────────────────────────────── */
+.section { padding: 16px 18px; border-bottom: 1px solid var(--border-color, #eef0f3); }
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--text-primary, #111827);
+}
+.sectionNote {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  color: #92400e;
+  background: #fffbeb;
+  border-radius: 6px;
+  padding: 7px 9px;
+  line-height: 1.45;
+}
+
+/* 분포 바 — 차트 라이브러리 없이 CSS만(§10) */
+.barRow { display: grid; grid-template-columns: 76px 1fr 62px; align-items: center; gap: 8px; padding: 5px 0; }
+.barName { font-size: 0.78rem; font-weight: 700; color: var(--text-primary, #111827); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barTrack { height: 8px; background: #eef2f5; border-radius: 999px; overflow: hidden; }
+.barFill { height: 100%; background: var(--ejip-green, #13a367); border-radius: 999px; }
+.barValue { font-size: 0.72rem; color: var(--text-secondary, #6b7280); text-align: right; font-weight: 600; white-space: nowrap; }
+
+/* 거래 카드 */
+.tradeList { display: flex; flex-direction: column; gap: 8px; }
+.tradeCard {
+  display: block;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+}
+.tradeTop { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.tradeName { font-size: 0.86rem; font-weight: 800; color: var(--text-primary, #111827); overflow-wrap: anywhere; }
+.tradePrice { font-size: 0.92rem; font-weight: 800; color: var(--ejip-green-deep, #0e7d4f); white-space: nowrap; }
+.tradeMeta { margin-top: 3px; font-size: 0.72rem; color: var(--text-secondary, #6b7280); }
+.linkHint { font-size: 0.68rem; color: var(--ejip-green-deep, #0e7d4f); font-weight: 700; }
+
+/* 하이라이트 */
+.highlight { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 14px; }
+.highlightLabel { font-size: 0.72rem; font-weight: 800; color: #166534; }
+.highlightValue { margin-top: 4px; font-size: 0.86rem; font-weight: 700; color: #14532d; line-height: 1.45; overflow-wrap: anywhere; }
+.highlightContext { margin-top: 4px; font-size: 0.68rem; color: #4d7c56; }
+
+/* 해석 */
+.interpretation { font-size: 0.84rem; line-height: 1.55; color: var(--text-primary, #111827); margin: 0; word-break: keep-all; }
+
+/* ── 신뢰 푸터 ────────────────────────────────────────── */
+.footer { padding: 14px 18px 18px; background: #fafbfc; }
+.footerRow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 0.7rem; color: var(--text-secondary, #6b7280); }
+.completeness { font-weight: 800; padding: 2px 7px; border-radius: 5px; font-size: 0.66rem; }
+.cComplete { background: #dcfce7; color: #166534; }
+.cPartial { background: #fef3c7; color: #92400e; }
+.cUnverified { background: #f3f4f6; color: #4b5563; }
+.footerNotes { margin: 8px 0 0; padding-left: 16px; font-size: 0.7rem; color: var(--text-secondary, #6b7280); line-height: 1.55; }
+.footerNotes li { margin-top: 3px; }
+.sourceNote { margin-top: 8px; font-size: 0.66rem; color: #9ca3af; line-height: 1.5; }
+
+/* ── 액션바 ───────────────────────────────────────────── */
+.actions {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border-color, #e5e7eb);
+  z-index: 50;
+}
+.actionInner { display: flex; gap: 8px; width: 100%; max-width: 520px; margin: 0 auto; }
+.actionBtn {
+  flex: 1;
+  min-height: 44px; /* 터치 타겟 */
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  background: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary, #111827);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  text-decoration: none;
+}
+.actionPrimary { background: var(--ejip-green, #13a367); border-color: var(--ejip-green, #13a367); color: #fff; }
+.actionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── 스코프 오류 ──────────────────────────────────────── */
+.invalid { padding: 40px 20px; text-align: center; }
+.invalidTitle { font-size: 1.05rem; font-weight: 800; color: var(--text-primary, #111827); }
+.invalidBody { margin-top: 8px; font-size: 0.84rem; color: var(--text-secondary, #6b7280); line-height: 1.6; word-break: keep-all; }
+.invalidLink { display: inline-block; margin-top: 16px; font-size: 0.84rem; font-weight: 700; color: var(--ejip-green-deep, #0e7d4f); }
+
+@media (min-width: 768px) {
+  .page { padding-top: 28px; padding-bottom: 110px; }
+  .title { font-size: 1.44rem; }
+}
