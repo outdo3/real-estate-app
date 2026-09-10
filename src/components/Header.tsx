@@ -90,7 +90,13 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge
           <h1 className={`${styles.pageTitle} ${pageTitleLarge ? styles.pageTitleLarge : ''} ${pageTitleAlign === 'left' ? styles.pageTitleLeft : ''}`}>{pageTitle}</h1>
         )}
 
-        <ul className={`${styles.menuList} ${hideMobileNav ? styles.menuListHideMobile : ''}`}>
+        {/* PWA_INSTALL_UX_V1 §15 — 이 목록은 모바일에서 position:fixed 하단 탭바가 된다.
+            설치 배너가 그 위로 앉도록 data-bottom-bar로 표시한다(배너가 실측해서 피한다).
+            데스크톱에서는 하단 고정이 아니라 측정 대상에서 자동으로 빠진다. */}
+        <ul
+          data-bottom-bar=""
+          className={`${styles.menuList} ${hideMobileNav ? styles.menuListHideMobile : ''}`}
+        >
           {BOTTOM_NAV_ITEMS.map((item) => (
             <li key={item.href} className={styles.menuItem}>
               <NavButton href={item.href} active={item.isActive(pathname)} Icon={item.Icon} label={item.label} />

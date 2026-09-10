@@ -1,10 +1,29 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import AppProviders from '@/components/AppProviders';
 import { siteConfig } from '@/config/site';
 import './globals.css';
 
+/**
+ * PWA_INSTALL_UX_V1 §2/§3 — 설치 가능 요건.
+ * themeColor는 Next 16에서 metadata가 아니라 viewport로 분리돼 있다.
+ * viewportFit=cover여야 env(safe-area-inset-*)가 실제 값을 갖는다(§9 safe-area).
+ */
+export const viewport: Viewport = {
+  themeColor: '#10b981',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
+  // /manifest.webmanifest (src/app/manifest.ts가 생성)
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: '이집',
+    statusBarStyle: 'default',
+  },
   title: '이집',
   description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
   icons: {

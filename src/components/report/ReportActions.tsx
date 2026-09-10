@@ -195,7 +195,7 @@ export default function ReportActions({
 
   return (
     <>
-      <div className={styles.actions} data-export-exclude="">
+      <div className={styles.actions} data-export-exclude="" data-bottom-bar="">
         <div className={styles.actionInner}>
           {shareButton}
           <button

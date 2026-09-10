@@ -15,7 +15,7 @@ export default function BottomNav() {
   const router = useRouter();
 
   return (
-    <nav className={styles.nav} aria-label="주요 메뉴">
+    <nav data-bottom-bar="" className={styles.nav} aria-label="주요 메뉴">
       {BOTTOM_NAV_ITEMS.map((item) => {
         const active = item.isActive(pathname);
         const Icon = item.Icon;

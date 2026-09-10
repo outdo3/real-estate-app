@@ -10,6 +10,7 @@ import type { FavoriteInput } from '@/lib/favorites';
 import { useRecentSync } from '@/hooks/useRecentSync';
 import { ALLOWED_PURPOSES, PURPOSE_LABELS, type Purpose } from '@/lib/preferences';
 import styles from './page.module.css';
+import InstallEntry from '@/components/pwa/InstallEntry';
 
 const ROLE_LABELS: Record<string, string> = {
   GUEST: '게스트',
@@ -236,6 +237,9 @@ export default function MyPage() {
                 <Link href="/report" className={styles.linkCard}>
                   한장 리포트 보기
                 </Link>
+                {/* PWA_INSTALL_UX_V1 §12 — 설치 안내는 배너를 닫은 뒤에도 항상
+                    여기서 다시 찾을 수 있어야 한다. */}
+                <InstallEntry className={styles.linkCard} />
                 <Link href="/community" className={styles.linkCard}>
                   💬 커뮤니티 둘러보기
                 </Link>

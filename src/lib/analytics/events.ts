@@ -31,6 +31,13 @@ export const ANALYTICS_EVENT_NAMES = [
   'finance_fit_calculate',
   'finance_fit_from_detail',
   'finance_fit_from_compare',
+  // PWA_INSTALL_UX_V1 §20 — 설치 UX 이벤트. 기존 allowlist 메커니즘을 그대로 쓰며
+  // 새 third-party analytics를 추가하지 않는다. payload는 없다(이름만 기록).
+  'pwa_install_banner_view',
+  'pwa_install_click',
+  'pwa_install_accept',
+  'pwa_install_dismiss',
+  'pwa_install_guide_open',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

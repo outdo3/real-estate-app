@@ -1,0 +1,113 @@
+/* PWA_INSTALL_UX_V1 §9/§15 — 설치 배너.
+   하단 고정 바(탭바/리포트 액션바) 위에 앉는다. bottom 값은 컴포넌트가 실측해서
+   인라인으로 넣는다 — 라우트마다 하단 바가 다르기 때문이다. */
+
+.banner {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  /* bottom은 인라인 style로 주입된다(실측값 + 8px). */
+  z-index: 900; /* BottomNav(1000)보다 아래 — 탭바를 절대 가리지 않는다. */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid var(--border-color, #e5e7eb);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.text { flex: 1; min-width: 0; }
+.title {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary, #111827);
+}
+
+.actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px; /* 터치 타겟 */
+  padding: 0 12px;
+  border-radius: 9px;
+  border: none;
+  background: var(--primary-color, #10b981);
+  color: #fff;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.primary:active { filter: brightness(0.95); }
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;   /* 터치 타겟 */
+  height: 40px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #6b7280);
+  cursor: pointer;
+}
+.close:active { background: rgba(0, 0, 0, 0.05); }
+
+/* 좁은 화면에서 문구와 버튼이 겹치지 않게 */
+@media (max-width: 359px) {
+  .title { font-size: 0.78rem; }
+  .primary { padding: 0 10px; font-size: 0.78rem; }
+}
+
+/* ── 안내 시트 (§7/§8) ─────────────────────────────────────────────────── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200; /* 시트는 탭바보다 위 — 모달이므로 의도된 것이다. */
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet {
+  width: 100%;
+  max-width: 480px;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+}
+.sheetTitle {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--text-primary, #111827);
+}
+.steps {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-secondary, #4b5563);
+}
+.sheetClose {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 10px;
+  border: none;
+  background: var(--primary-color, #10b981);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+}
