@@ -11,7 +11,11 @@
 // 스크립트 src는 기존 KakaoMapEmbed가 쓰던 문자열을 **그대로** 유지한다. 라이브러리
 // 목록을 바꾸면 같은 id를 재사용하는 다른 화면의 로딩 동작까지 바뀌므로, 이번 STEP에서
 // 건드리지 않는다.
-const SCRIPT_ID = 'kakao-map-script-main';
+// PERCEIVED_PERFORMANCE_V2_5 §5 — 부트 스크립트(map/layout.tsx)가 **같은 id로** 태그를
+// 먼저 심을 수 있게 id를 내보낸다. 같은 id를 쓰면 아래 로더가 기존 태그를 재사용하므로
+// 스크립트가 두 번 주입되지 않는다(단일 로드 보장은 여전히 이 파일이 가진다).
+export const KAKAO_SDK_SCRIPT_ID = 'kakao-map-script-main';
+const SCRIPT_ID = KAKAO_SDK_SCRIPT_ID;
 const SDK_LIBRARIES = 'services,clusterer';
 const LOAD_TIMEOUT_MS = 10000;
 

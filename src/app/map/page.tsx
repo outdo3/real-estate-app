@@ -78,6 +78,10 @@ import mapMarkerStyles from './map-marker.module.css';
 // 마크업/스타일을 인라인으로 직접 그렸는데, Header.tsx의 모바일 버전과
 // 로직이 갈라질 위험이 있어 공용 컴포넌트로 대체했다(시각적 변경 없음).
 
+// PERCEIVED_PERFORMANCE_V2_5 §1 — 라우트 JS가 실제로 **실행**된 시점.
+// 다운로드 완료(resource timing)와 실행 시작은 다르다 — 둘 사이가 파싱/컴파일 비용이다.
+perfLog("map:module-eval", { t: perfNow() });
+
 const apiKey =
   process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY ||
   process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
@@ -493,6 +497,12 @@ export default function FullscreenMapPage() {
   // 아파트 레이어 전용 플래그를 따로 둔다.
   const [aptPartial, setAptPartial] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
+
+  // PERCEIVED_PERFORMANCE_V2_5 §1 — 이 컴포넌트가 실제로 mount된 시점 = 이 라우트의
+  // hydration이 끝난 시점. 모듈 평가(map:module-eval)와의 차이가 React hydration 비용이다.
+  useEffect(() => {
+    perfLog("map:mounted", { t: perfNow() });
+  }, []);
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
   const [center, setCenter] = useState(() => readInitialMapStateFromUrl()?.center ?? DEFAULT_MAP_CENTER); // 기본: 부산광역시 서구(DEFAULT_LAWD_CD와 짝)
@@ -642,6 +652,7 @@ export default function FullscreenMapPage() {
     loadKakaoMapsSdk()
       .then(() => {
         if (cancelled) return;
+        perfLog("map:sdk-ready", { t: perfNow() });
         setIsMapReady(true);
       })
       .catch((err) => {
@@ -1151,12 +1162,14 @@ export default function FullscreenMapPage() {
     // 채워지는 시점도 마커 완료와 무관해졌다 — 그 타이밍을 그대로 따라간다.
     if (!isMapReady) return;
     if (mapRef.current) {
+      perfLog("map:instance-ready", { t: perfNow(), via: "immediate" });
       setMapInstanceReady(true);
       return;
     }
     const checkMapInstance = setInterval(() => {
       if (mapRef.current) {
         clearInterval(checkMapInstance);
+        perfLog("map:instance-ready", { t: perfNow(), via: "poll" });
         setMapInstanceReady(true);
       }
     }, 100);
@@ -1168,6 +1181,16 @@ export default function FullscreenMapPage() {
   // 번 재계산한다. zoomLevel이 바뀌면(확대/축소로 칩 크기·클러스터 반경이 달라짐) 리스너를
   // 새 chipLayout을 참조하는 클로저로 다시 등록하고, 그 자리에서 즉시 한 번 재계산해
   // 'idle' 이벤트를 기다리지 않고도 칩 배치가 바로 갱신되게 한다.
+  // PERCEIVED_PERFORMANCE_V2_5 §7 — 첫 타일이 실제로 그려진 시점. DOM에서 타일 img를
+  // 관찰하는 것보다 정확하다(카카오가 직접 알려준다). 계측이 꺼져 있으면 리스너를 걸지 않는다.
+  useEffect(() => {
+    if (!PERF_ENABLED || !mapInstanceReady || !mapRef.current || !window.kakao?.maps?.event) return;
+    const map = mapRef.current;
+    const onTiles = () => perfLog("map:tiles-loaded", { t: perfNow() });
+    window.kakao.maps.event.addListener(map, "tilesloaded", onTiles);
+    return () => window.kakao.maps.event.removeListener(map, "tilesloaded", onTiles);
+  }, [mapInstanceReady]);
+
   useEffect(() => {
     if (!mapInstanceReady || !mapRef.current || !window.kakao?.maps?.event) return;
     const map = mapRef.current;

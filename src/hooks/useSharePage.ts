@@ -37,12 +37,35 @@ export function useSharePage({ title, text, params, enableKakao = true }: UseSha
 
   // 카카오 SDK는 클릭 시점에 처음 로드하면 sendDefault 호출이 더 이상 "사용자가 직접
   // 클릭한 동기 실행 흐름"이 아니게 돼 팝업이 차단될 수 있다(KakaoShareButton에서 실측
-  // 확인된 문제) — 컴포넌트가 마운트되는 시점에 미리 로드/초기화해둔다.
+  // 확인된 문제) — 그래서 클릭 전에 미리 로드해두는 것 자체는 그대로 유지한다.
+  //
+  // PERCEIVED_PERFORMANCE_V2_5 §3 — 다만 **마운트 즉시**는 너무 이르다. /map 실측
+  // waterfall에서 이 스크립트(developers.kakao.com/sdk/js/kakao.js)는 3,587~6,740ms에
+  // 걸쳐 받아지는데, 하필 지도 모듈(t1.daumcdn.net)과 첫 타일(mts.daumcdn.net)이
+  // 대역폭을 다투는 바로 그 구간이다. 공유 SDK는 첫 화면에 필요하지 않다.
+  //
+  // 그래서 브라우저가 한가해진 뒤로 미룬다. requestIdleCallback이 없으면 짧은 타이머로
+  // 대체한다. 사용자가 공유를 누르기까지는 어떤 경우에도 이보다 훨씬 오래 걸리므로
+  // "클릭 전에 이미 로드돼 있다"는 성질(=팝업 차단 방지)은 그대로 지켜진다.
   useEffect(() => {
     if (!enableKakao) return;
-    loadKakaoShareSdk()
-      .then(() => ensureKakaoInitialized())
-      .catch(() => {});
+    let cancelled = false;
+    const start = () => {
+      if (cancelled) return;
+      loadKakaoShareSdk()
+        .then(() => ensureKakaoInitialized())
+        .catch(() => {});
+    };
+    const w = typeof window !== 'undefined' ? (window as typeof window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    }) : undefined;
+    if (w?.requestIdleCallback) {
+      const id = w.requestIdleCallback(start, { timeout: 4000 });
+      return () => { cancelled = true; w.cancelIdleCallback?.(id); };
+    }
+    const t = setTimeout(start, 2000);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [enableKakao]);
 
   const resetSoon = useCallback(() => {
