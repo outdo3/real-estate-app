@@ -16923,3 +16923,51 @@ QA (Production):
 상태:
 
 완료. 남은 지배 항목은 route JS 173.5KB(72.8%가 프레임워크)이며 앱 코드로는 줄지 않는다.
+
+
+## 2026-09-10
+
+### REPORT ENGINE V1 — DATA / TEMPLATE ARCHITECTURE (감사 전용)
+
+작업:
+
+- 리포트 엔진 6종(부산/구/동/단지/비교/오늘의 실거래)의 데이터·템플릿 구조를
+  Production **읽기 전용** 조회로 감사. 코드/스키마/데이터 변경 없음.
+- docs/development/REPORT_ENGINE_V1_ARCHITECTURE.md 작성.
+
+핵심 확인 사항:
+
+- 거래 864,628건 전부 aptSeq 보유(100%) → canonical identity 기반 리포트 가능
+- ApartmentUnitType 99행(2.9%) → 공식 평형 라벨 BLOCKED, 리포트는 ㎡ 표기만
+- 주차 70.7% / MarketFeature 85.9% → LIMITED(결측은 "정보 없음")
+- 최근 1년 거래 10건 미만 동이 52개 → 동 리포트 표본 게이트 필요
+- lawdCd가 18종(부산 자치구·군 16개)이라 구별 집계 분모 확인 필요 — 미해결로 남김
+
+"오늘 새로 확인된 실거래" 실현 가능성 = YES(조건부):
+
+- ApartmentTradeHistory가 dealDate(계약일)와 createdAt(최초 관측일)을 이미 분리 보유
+- 실측 근거: 9/9 신규 관측 89건의 계약일이 2026-02-10까지 거슬러 올라감
+  → "오늘 수집 != 어제 계약"이 데이터로 확인됨
+- 가드 3종 필수: (1) 백필일 오염(8/29 855,045건, 9/3 8,921건) 제외 수단,
+  (2) 동기화 미실행과 진짜 0건 구분(SyncCoverageCell status),
+  (3) SyncCoverageCell은 upsert라 일일 로그가 아님 → 집계는 createdAt 기준
+- 증분 관측 가용 구간은 2026-08-30 이후뿐
+
+기타:
+
+- 비교 리포트는 Compare V2의 MetricTrust/MetricDirection을 재사용하면
+  "승자 날조 금지"가 이미 구조로 해결됨
+- 한 줄 해석은 Score API의 briefing(결정론적)으로 충분 → 생성형 AI 불필요
+- 새 유료 외부 서비스 불필요
+
+DB 변경:
+
+없음 (읽기 전용 조회만)
+
+API 변경:
+
+없음
+
+상태:
+
+감사 완료. 다음은 REPORT-1(ReportEnvelope 계약 + 지역 집계 read 레이어).
