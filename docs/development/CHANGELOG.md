@@ -17313,3 +17313,30 @@ DB 변경:
   DB/상세/지도 최신 거래 parity 4개 단지 YES.
 - **성능**: 상세 거래 API warm 34~58ms(기존 최대 12개월 upstream 호출), 평형 전환
   p50 52~57ms, 전환 중 API 호출 0회.
+
+## REPORT-6 — 리포트 이미지 / PDF / 공유
+
+- 6개 리포트(city/district/dong/apt/compare/daily) 전부에 **[이미지 저장] [PDF 저장]
+  [공유하기]**를 붙였다. REPORT-2부터 "저장 준비 중"으로 비활성화돼 있던 버튼이
+  실제로 동작한다.
+- **신규 의존성 0.** html2canvas/jspdf/puppeteer 계열을 추가하지 않았다
+  (package.json이 사용자 작업 중 파일이기도 하고, STEP도 네이티브를 우선하라고 지시).
+  - 이미지: DOM → SVG `foreignObject` → canvas → PNG. 리포트 시트에 `<img>`,
+    `@font-face`, `::before` content가 전혀 없어 외부 리소스/폰트 임베딩 단계가
+    통째로 불필요하다는 것을 먼저 확인하고 택한 경로다.
+  - PDF: 인쇄 스타일시트 + `window.print()`. 본문이 벡터 텍스트로 남아 한글이
+    선명하고 선택/검색이 된다. 서버 Chromium 없음.
+- 캡처 코드는 버튼을 눌러야 `import()`되는 **3.2KB 지연 청크**다 — 리포트를 읽기만
+  하는 사용자는 내려받지 않는다(실측 확인).
+- 출력은 가로 1080px 고정·비율 유지. 넉넉히 그린 뒤 **알파 채널로 실제 내용 경계를
+  찾아 잘라낸다** — DOM 측정값을 그대로 믿으면 `foreignObject`의 줄바꿈 차이 때문에
+  마지막 줄(푸터 출처 문구)이 잘렸다.
+- **신뢰가 파일과 함께 나간다**: 제목·기간·dataAsOf·완전성 칩·trust notes·출처 문구가
+  모두 이미지에 포함된다. 일별 리포트의 5개 상태(READY/READY_ZERO/PREPARING/
+  WITHHELD_BACKFILL/OUTSIDE_SUPPORTED_RANGE)도 그대로 유지되며, 보류 상태에서
+  숫자 이미지가 만들어지는 경로는 구조적으로 존재하지 않는다.
+- 공유 URL/파일명은 표시 이름이 아니라 envelope identity(reportType+scope+period)에서
+  결정적으로 만든다. 비교 리포트는 a/b 순서를 보존한다.
+- 내보내기 제외는 셀렉터 복제 없이 `data-export-root` / `data-export-exclude`
+  속성 두 개로만 계약한다. 비교 리포트가 따로 그리던 액션바를 공용 컴포넌트로 합쳤다.
+- 성능: 이미지 생성 143~288ms(목표 2초), 페이지를 얼리지 않는다.

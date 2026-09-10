@@ -137,7 +137,7 @@ export default function ApartmentReportSheet({
 
   return (
     <div className={styles.page}>
-      <article className={styles.sheet}>
+      <article className={styles.sheet} data-export-root="">
         <header className={styles.header}>
           <div className={styles.brand}>이집 E-JIP</div>
           <h1 className={styles.title}>{envelope.scope.displayName} 단지 리포트</h1>
@@ -226,7 +226,7 @@ export default function ApartmentReportSheet({
         </footer>
       </article>
 
-      <ReportActions title={`${envelope.scope.displayName} 단지 리포트`} detailHref={detail?.href ?? null} detailLabel={detail?.label} />
+      <ReportActions title={`${envelope.scope.displayName} 단지 리포트`} envelope={envelope} detailHref={detail?.href ?? null} detailLabel={detail?.label} />
     </div>
   );
 }

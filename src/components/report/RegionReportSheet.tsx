@@ -159,7 +159,7 @@ export default function RegionReportSheet({ envelope }: { envelope: ReportEnvelo
 
   return (
     <div className={styles.page}>
-      <article className={styles.sheet}>
+      <article className={styles.sheet} data-export-root="">
         <header className={styles.header}>
           <div className={styles.brand}>이집 E-JIP</div>
           <h1 className={styles.title}>{envelope.scope.displayName} 부동산 한장 브리핑</h1>
@@ -222,7 +222,7 @@ export default function RegionReportSheet({ envelope }: { envelope: ReportEnvelo
         </footer>
       </article>
 
-      <ReportActions title={`${envelope.scope.displayName} 부동산 한장 브리핑`} />
+      <ReportActions title={`${envelope.scope.displayName} 부동산 한장 브리핑`} envelope={envelope} />
     </div>
   );
 }

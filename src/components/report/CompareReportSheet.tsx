@@ -118,7 +118,7 @@ export default function CompareReportSheet({ envelope }: { envelope: ReportEnvel
 
   return (
     <div className={styles.page}>
-      <article className={styles.sheet}>
+      <article className={styles.sheet} data-export-root="">
         <header className={styles.header}>
           <div className={styles.brand}>이집 E-JIP</div>
           <h1 className={styles.title}>단지 비교 한장 리포트</h1>
@@ -192,21 +192,16 @@ export default function CompareReportSheet({ envelope }: { envelope: ReportEnvel
         </footer>
       </article>
 
-      <div className={styles.actions}>
-        <div className={styles.actionInner}>
-          <ReportActionsInline title={envelope.title} />
-          {envelope.navigationTargets.map((t, i) => (
-            <Link key={t.href} href={t.href} className={styles.actionBtn}>
-              {i === 0 ? 'A 자세히' : 'B 자세히'}
-            </Link>
-          ))}
-        </div>
-      </div>
+      {/* REPORT-6 — 액션바를 따로 만들지 않고 공용 컴포넌트를 쓴다(내보내기/공유
+          동작이 리포트마다 갈라지지 않도록). A/B 상세 링크만 넘겨준다. */}
+      <ReportActions
+        title={envelope.title}
+        envelope={envelope}
+        extraLinks={envelope.navigationTargets.map((t, i) => ({
+          href: t.href,
+          label: i === 0 ? 'A 자세히' : 'B 자세히',
+        }))}
+      />
     </div>
   );
-}
-
-/** 공유 버튼만 재사용한다(액션바 레이아웃은 비교 리포트가 직접 구성). */
-function ReportActionsInline({ title }: { title: string }) {
-  return <ReportActions title={title} variant="share-only" />;
 }

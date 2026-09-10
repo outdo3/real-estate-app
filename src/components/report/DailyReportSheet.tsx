@@ -105,7 +105,7 @@ export default function DailyReportSheet({ envelope }: { envelope: ReportEnvelop
 
   return (
     <div className={styles.page}>
-      <article className={styles.sheet}>
+      <article className={styles.sheet} data-export-root="">
         <header className={styles.header}>
           <div className={styles.brand}>이집 E-JIP</div>
           {/* 제목 자체가 "새로 확인된"을 담는다(§19). */}
@@ -175,7 +175,7 @@ export default function DailyReportSheet({ envelope }: { envelope: ReportEnvelop
         </footer>
       </article>
 
-      <ReportActions title={envelope.title} />
+      <ReportActions title={envelope.title} envelope={envelope} />
     </div>
   );
 }

@@ -235,3 +235,25 @@ ul, ol {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* REPORT-6 §12 — 내보내기 안전 모드.
+   캡처/인쇄에서 빠져야 하는 요소는 템플릿마다 셀렉터를 복제하지 않고
+   data-export-exclude 속성 하나로만 표시한다(단일 계약). */
+@media print {
+  [data-export-exclude] {
+    display: none !important;
+  }
+  /* 전역 네비게이션/하단바 등 리포트 밖 크롬은 인쇄물에 남기지 않는다. */
+  header nav,
+  [data-app-chrome] {
+    display: none !important;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+}
