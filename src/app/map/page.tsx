@@ -19,8 +19,20 @@ import {
   mapParamsToQueryString,
   parseMapStateFromSearchParams,
   matchRestoreIdentity,
+  aptMarkerRequestPath,
+  bootPrefetchLawdCd,
+  isDefaultMapCenter,
+  DEFAULT_LAWD_CD,
+  DEFAULT_MAP_CENTER,
   type RestoreIdentity,
 } from '@/lib/map-marker-share';
+
+// PERCEIVED_PERFORMANCE_V2_4 §1 — map/layout.tsx의 부트 스크립트가 심어두는 값.
+declare global {
+  interface Window {
+    __EJIP_APT_BOOT__?: { lawdCd: string; promise: Promise<{ ok: boolean; body: unknown }> };
+  }
+}
 import {
   computeSafeZoneNudge,
   computeNudgedCenterPoint,
@@ -483,7 +495,7 @@ export default function FullscreenMapPage() {
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapInstanceReady, setMapInstanceReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
-  const [center, setCenter] = useState(() => readInitialMapStateFromUrl()?.center ?? { lat: 35.0979, lng: 129.0244 }); // 기본: 부산광역시 서구
+  const [center, setCenter] = useState(() => readInitialMapStateFromUrl()?.center ?? DEFAULT_MAP_CENTER); // 기본: 부산광역시 서구(DEFAULT_LAWD_CD와 짝)
   // MAP MARKER UX V2 §21~24 — 공유 링크(lat/lng가 URL에 있음)로 들어왔을 때만 그
   // lawdCd를 기억해둔다. 최초 마커 로드가 이 값을 모르면(일반 진입) 기존과 동일하게
   // center 좌표를 역지오코딩해 lawdCd를 알아낸다 — 그런데 공유 링크로 들어왔을 때도
@@ -695,9 +707,19 @@ export default function FullscreenMapPage() {
   const prefetchAptPayload = (lawdCd: string): Promise<{ ok: boolean; body: unknown }> => {
     const hit = aptPrefetchRef.current.get(lawdCd);
     if (hit) return hit;
-    const p = fetch(`/api/transactions?type=apt&lawdCd=${lawdCd}&months=12&fields=marker`)
-      .then(async (r) => ({ ok: r.ok, body: r.ok ? await r.json() : null }))
-      .catch(() => ({ ok: false, body: null }));
+    // PERCEIVED_PERFORMANCE_V2_4 §1 — map/layout.tsx의 부트 스크립트가 hydration 이전에
+    // 이미 같은 요청을 걸어뒀으면 그 promise를 그대로 쓴다. 같은 lawdCd일 때만 받는다
+    // (다른 구를 보고 있는데 부트 때 받아둔 기본 지역 응답을 쓰면 **다른 구의 마커를
+    // 보여주게 된다** — 절대 금지). 한 번 쓰고 나면 지우고, 이후 갱신은 평소 경로를 탄다.
+    const boot = typeof window !== 'undefined' ? window.__EJIP_APT_BOOT__ : undefined;
+    const p = boot && boot.lawdCd === lawdCd
+      ? boot.promise
+      : fetch(aptMarkerRequestPath(lawdCd))
+          .then(async (r) => ({ ok: r.ok, body: r.ok ? await r.json() : null }))
+          .catch(() => ({ ok: false, body: null }));
+    if (boot && boot.lawdCd === lawdCd && typeof window !== 'undefined') {
+      delete window.__EJIP_APT_BOOT__;
+    }
     aptPrefetchRef.current.set(lawdCd, p);
     // 오래된 응답을 재사용하지 않도록 짧게만 붙잡는다(지역 재방문은 markerCacheRef가 담당).
     setTimeout(() => aptPrefetchRef.current.delete(lawdCd), 15000);
@@ -1088,11 +1110,17 @@ export default function FullscreenMapPage() {
   // 생성/타일 로드와 오버레이 렌더가 한 커밋에 겹친다(타일 완료 2,730ms → 첫 마커
   // 3,404ms로 밀림). 그래서 조기 단계에서는 **응답만 받아두고 state는 건드리지 않는다.**
   // 렌더 순서는 예전과 100% 동일하고, 네트워크만 앞당겨진다.
+  // PERCEIVED_PERFORMANCE_V2_4 §1 — 이제 요청 자체는 layout.tsx의 부트 스크립트가
+  // hydration 이전(약 340ms)에 이미 걸어둔다. 여기서는 그 promise를 prefetch 맵에
+  // 등록만 해서, 아래 refreshActiveLayers가 같은 lawdCd로 도달했을 때 새 요청을 내지
+  // 않고 그대로 재사용하게 한다. 부트 스크립트가 못 돌았거나(구형 브라우저/차단)
+  // 조건이 안 맞았으면 평소대로 여기서 요청이 나간다 — 동작은 같고 시작만 늦어진다.
   useEffect(() => {
-    const lawdCd = initialShareLawdCdRef.current;
-    if (!lawdCd || hasNoPropertyLayer(layers) || !layers.apt) return;
+    if (hasNoPropertyLayer(layers) || !layers.apt) return;
+    const lawdCd = initialShareLawdCdRef.current ?? bootPrefetchLawdCd(window.location.search);
+    if (!lawdCd) return;
     prefetchAptPayload(lawdCd);
-    // 마운트 1회. lawdCd는 이 진입에서 URL로 이미 확정돼 있다.
+    // 마운트 1회.
   }, []);
 
   useEffect(() => {
@@ -1100,7 +1128,14 @@ export default function FullscreenMapPage() {
     // §14 — 매물 레이어가 하나도 켜져 있지 않으면 로딩 표시도 조회도 하지 않는다.
     if (hasNoPropertyLayer(layers)) return;
     if (layers.apt) setIsLoadingData(true);
-    refreshActiveLayers(center.lat, center.lng, initialShareLawdCdRef.current ?? undefined);
+    // PERCEIVED_PERFORMANCE_V2_4 §2/§3 — center가 아직 기본값 그대로면 그 지역은
+    // 이미 알고 있다(DEFAULT_MAP_CENTER ↔ DEFAULT_LAWD_CD). 그걸 다시 알아내려고
+    // Kakao coord2RegionCode를 왕복할 이유가 없다(실측 약 195ms + 서드파티 의존).
+    // GPS/IP가 center를 옮겼거나 공유 링크로 들어왔으면 이 분기를 타지 않으므로
+    // 기존 역지오코딩 경로가 그대로 유지된다 — 속도 때문에 지역 정확도를 흔들지 않는다.
+    const knownLawdCd =
+      initialShareLawdCdRef.current ?? (isDefaultMapCenter(center) ? DEFAULT_LAWD_CD : undefined);
+    refreshActiveLayers(center.lat, center.lng, knownLawdCd);
   }, [isMapReady]);
 
   // react-kakao-maps-sdk의 <Map ref={mapRef}>는 실제 kakao.maps.Map 인스턴스를 자기 내부

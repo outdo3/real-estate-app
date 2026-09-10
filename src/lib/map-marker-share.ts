@@ -8,6 +8,52 @@ import type { AptMarker } from './map-selected-marker';
 // 함).
 export type RestoreIdentity = { aptSeq: string } | { dong: string; name: string };
 
+// ── PERCEIVED_PERFORMANCE_V2_4 §2/§3 — 기본 지역을 상수로 드러낸다 ──────────────
+//
+// 이 앱의 지도 기본 진입 지역은 원래부터 **부산 서구(26140)**로 정해져 있었다.
+// 그런데 그 사실이 두 곳에 따로 흩어져 있었다: 아래 parseMapStateFromSearchParams의
+// `|| '26140'` 리터럴과, map/page.tsx의 기본 center 좌표다. 그래서 직접 진입
+// (`/map`, 파라미터 없음)은 **이미 아는 지역을 다시 알아내려고** Kakao
+// coord2RegionCode를 한 번 왕복했다(실측 Production 4G/4x: 3,143ms → 3,350ms,
+// 약 195ms + 서드파티 의존).
+//
+// 두 값을 상수로 올려 "기본 center → 기본 lawdCd"가 코드 위에서 그대로 보이게 한다.
+// 좌표가 바뀌면 lawdCd도 함께 바뀌어야 하므로 둘을 붙여 둔다.
+export const DEFAULT_LAWD_CD = '26140';
+export const DEFAULT_MAP_CENTER = { lat: 35.0979, lng: 129.0244 } as const;
+
+/**
+ * center가 아직 **기본값 그대로**인가(사용자 이동/GPS/공유 링크로 한 번도 안 바뀜).
+ *
+ * 정확히 일치하는지만 본다 — 이 값은 오직 DEFAULT_MAP_CENTER 상수에서만 들어오므로
+ * 근사 비교가 필요 없고, 근사로 비교하면 "기본값 근처의 다른 지역"까지 서구로
+ * 단정해 엉뚱한 구의 마커를 부를 위험이 생긴다.
+ */
+export function isDefaultMapCenter(center: { lat: number; lng: number }): boolean {
+  return center.lat === DEFAULT_MAP_CENTER.lat && center.lng === DEFAULT_MAP_CENTER.lng;
+}
+
+/** /map의 아파트 마커 요청 경로. 부트 스크립트와 페이지가 **같은 URL**을 쓰게 하는 단일 지점. */
+export function aptMarkerRequestPath(lawdCd: string): string {
+  return `/api/transactions?type=apt&lawdCd=${lawdCd}&months=12&fields=marker`;
+}
+
+/**
+ * PERCEIVED_PERFORMANCE_V2_4 §1/§6 — 부트 시점(hydration 이전)에 미리 받아둘 lawdCd.
+ *
+ * 아파트 레이어가 꺼진 채 들어온 링크에서는 받지 않는다(§10 불필요한 요청 금지).
+ * `layers` 파라미터가 없으면 아파트가 기본 ON이므로 받는다. lawdCd가 없으면
+ * 기본 지역이다 — 그 판단은 parseMapStateFromSearchParams의 fallback과 같은 상수를 쓴다.
+ */
+export function bootPrefetchLawdCd(search: string): string | null {
+  const params = new URLSearchParams(search);
+  const layers = parseLayerParam(params.get('layers'));
+  if (layers !== null && !layers.includes('apt')) return null;
+  const lawdCd = params.get('lawdCd') || DEFAULT_LAWD_CD;
+  // 5자리 숫자만 신뢰한다 — 조작된 쿼리로 엉뚱한 경로를 부르지 않게 한다.
+  return /^\d{5}$/.test(lawdCd) ? lawdCd : null;
+}
+
 export interface MapShareParams {
   lat: string;
   lng: string;
@@ -61,7 +107,7 @@ export function parseMapStateFromSearchParams(params: URLSearchParams): ParsedMa
   const lng = parseFloat(params.get('lng') || '');
   if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
   const zoom = parseInt(params.get('zoom') || '', 10);
-  const lawdCd = params.get('lawdCd') || '26140';
+  const lawdCd = params.get('lawdCd') || DEFAULT_LAWD_CD;
 
   const aptSeq = params.get('aptSeq');
   const dong = params.get('dong');
