@@ -16720,3 +16720,24 @@ QA:
 상태:
 
 완료. production AFTER 측정과 상세 CLS는 후속.
+
+
+### PERCEIVED PERFORMANCE V2.3 — production AFTER 측정 (배포 9e73ab9)
+
+측정 (production, 4G / CPU 4x / 390px / cold cache, n=3 중앙값):
+
+- 부산진구 LTmax 862 → 207ms (-76%), usable 4,250 → 3,797ms,
+  렌더 구간 1,736 → 1,157ms
+- 해운대구 LTmax 658 →  99ms (-85%), usable 4,090 → 3,521ms,
+  렌더 구간 1,508 → 954ms
+- 중구     LTmax 143 → 112ms,        usable 3,582 → 3,540ms
+
+판정:
+
+- "밀집 구 렌더 단계를 약 2.4초보다 확실히 아래로" → 달성
+- "부산진구 usable <=3s" → 이 가혹 조건에서는 미달(3,797ms).
+  남은 지배 비용은 렌더가 아니라 data ready(2,640ms)로, 이 STEP 범위 밖이다.
+
+상태:
+
+완료.
