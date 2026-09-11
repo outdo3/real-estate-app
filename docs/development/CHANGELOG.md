@@ -2,6 +2,65 @@
 
 ## 2026-09-11
 
+### GA4 PRIVACY POLICY PATCH V1 — GA4 고지를 개인정보처리방침에 반영
+
+GA4 INTEGRATION V1이 남긴 **PRIVACY POLICY UPDATE NEEDED** 판정을 해소한다.
+
+작업:
+
+- src/app/privacy/page.tsx — 아래 항목만 수정(다른 항 무변경)
+  - 머리말에 최종 개정일자(2026년 9월 11일) 추가
+  - 1-나. 자동 수집 정보 — Google Analytics 상호참조 1줄 추가(7항 연결)
+  - 5. 처리의 위탁 — 수탁업체 표에 `Google LLC / 서비스 이용 현황 분석(Google Analytics)` 행 추가
+  - 7. 제목을 "쿠키의 운영 및 이용 분석·광고 서비스"로 변경하고 가/나/다 소제목으로 분리
+  - 7-나 신규 — Google Analytics 고지(처리 주체·처리 정보·이용 목적·PII 미전송·거부 방법·Google 정책 링크)
+    및 분석 쿠키 표(`_ga`, `_ga_` 계열 / Google / 이용 통계 분석)
+  - 부칙 — 최초 시행일 보존 + 2026-09-11 개정 시행 문단 추가
+- docs/development/GA4_INTEGRATION_V1.md — §16을 판정 이력·반영 내용·문구↔코드 대조표·법률 검토 권고로 갱신,
+  §19에 알려진 한계 2건 추가, §20 갱신
+
+GA 계측 변경:
+
+**없음.** ga.ts / ga-events.ts / GoogleAnalytics.tsx / trackEvent.ts 무변경. Measurement ID·이벤트 매핑·
+파라미터 allowlist 모두 그대로다. 이번 STEP은 문서/UI 고지만 수정했다.
+
+DB 변경:
+
+없음(스키마/migration/프로덕션 쓰기 전부 없음)
+
+의존성 변경:
+
+없음
+
+문구 정확성 원칙:
+
+- 쿠키 만료 기간은 **숫자로 적지 않았다** — `cookie_expires`를 설정하지 않아 코드로 증명할 수 없는 값이다.
+- "검색어를 전송하지 않는다"고 **단정하지 않았다** — `/ai-search?q=`로 직접 진입하면 `page_location`에
+  포함될 수 있어, 그 사실을 방침에 그대로 고지했다.
+- 국외이전 문구는 **추가하지 않았다** — 방침에 해당 항목 자체가 없고 Supabase·Vercel도 같은 공백에 있어,
+  Google에만 붙이면 일관성이 깨진다. 방침 전체 차원의 법률 검토 사항으로 분리했다.
+
+동의 UX 판정:
+
+**B. CONSENT UX REVIEW RECOMMENDED** — CMP 미구현(범위 밖). GA4 광고 기능을 쓰지 않고 국내 대상이라
+릴리스 차단 사유는 아니나, 이용자 지역 확대 또는 광고 기능 활성화 시 재검토 필요.
+
+검증:
+
+- npx tsx --test src/lib/analytics/ga.test.ts ga-events.test.ts: 29/29 PASS
+- npx eslint src/app/privacy/page.tsx: exit 0 (경고 0)
+- npx tsc --noEmit: src/ 오류 0건. 전체 exit 2는 기존 scripts//tmp/ 오류 23건뿐(FAIL_EXISTING_SCRIPT_ERRORS)
+- npm run build: exit 0. /privacy는 정적 프리렌더(○) 유지
+- 런타임 스모크(next start): / /map /privacy /terms /report /ai-search /apt/[name] /report/apt/[aptSeq]
+  /report/city/busan 전부 200
+- 로컬에 Measurement ID가 없어 /privacy HTML에 googletagmanager 스크립트 0건 — GA 환경 게이트 정상
+
+알려진 한계:
+
+- 모바일 QA는 브라우저 렌더링이 아니라 CSS/DOM 구조 분석으로 수행했다(헤드리스 브라우저 미설치, 확장 미승인).
+  신규 표는 기존 `.tableWrapper`(overflow-x:auto) + `.table`(min-width:420px) 패턴을 그대로 쓰므로
+  기존 3·5항 표와 동일하게 동작하며 페이지 레벨 가로 오버플로는 발생하지 않는다.
+
 ### GA4 INTEGRATION V1 — GA4 마케팅 분석 레이어 추가
 
 작업:

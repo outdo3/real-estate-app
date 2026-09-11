@@ -18,7 +18,7 @@ export default function PrivacyPage() {
       <Header pageTitle="개인정보처리방침" />
       <div className="container">
         <div className={styles.content}>
-          <p className={styles.updatedAt}>시행일자: 2026년 8월 11일</p>
+          <p className={styles.updatedAt}>시행일자: 2026년 8월 11일 · 최종 개정일자: 2026년 9월 11일</p>
 
           <div className={styles.section}>
             <p>
@@ -40,6 +40,8 @@ export default function PrivacyPage() {
               <li>기기정보(브라우저 종류, OS), 접속 IP, 쿠키, 서비스 이용 기록(방문 일시, 검색어)</li>
               <li>위치정보: 이용자가 &ldquo;내 위치&rdquo; 기능을 사용하거나 위치 접근을 허용한 경우에 한해 GPS 또는
                 IP 기반 대략적 위치</li>
+              <li>위 자동 수집 정보 중 일부는 이용 현황 통계를 집계하기 위해 Google Analytics를 통해서도 수집됩니다.
+                자세한 내용은 7항을 참고해 주세요.</li>
             </ul>
             <h3>다. 커뮤니티 이용 시</h3>
             <ul>
@@ -131,6 +133,10 @@ export default function PrivacyPage() {
                     <td>카카오, 네이버</td>
                     <td>소셜 로그인 인증</td>
                   </tr>
+                  <tr>
+                    <td>Google LLC</td>
+                    <td>서비스 이용 현황 분석(Google Analytics)</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -146,11 +152,60 @@ export default function PrivacyPage() {
           </div>
 
           <div className={styles.section}>
-            <h2>7. 쿠키(Cookie)의 운영 및 광고 서비스</h2>
+            <h2>7. 쿠키(Cookie)의 운영 및 이용 분석·광고 서비스</h2>
+            <h3>가. 쿠키의 사용</h3>
             <p>
-              서비스는 이용자에게 최적화된 정보를 제공하기 위해 쿠키를 사용할 수 있습니다. 이용자는 웹브라우저 설정을 통해
-              쿠키 저장을 거부할 수 있으나, 이 경우 일부 서비스 이용에 제약이 있을 수 있습니다.
+              서비스는 로그인 상태 유지, 이용자에게 최적화된 정보 제공, 이용 현황 분석 등을 위해 쿠키와 이에 준하는
+              식별자를 사용할 수 있습니다. 이용자는 웹브라우저 설정을 통해 쿠키 저장을 거부하거나 저장된 쿠키를 삭제할 수
+              있으나, 이 경우 로그인 유지 등 일부 서비스 이용에 제약이 있을 수 있습니다.
             </p>
+
+            <h3>나. Google Analytics를 이용한 이용 현황 분석</h3>
+            <p>
+              서비스는 이용 현황과 유입 경로를 파악하기 위해 Google LLC가 제공하는 Google Analytics 4를 이용합니다. 이
+              과정에서 Google은 이용자의 기기·브라우저 정보, 방문한 페이지 주소와 방문 일시, 서비스에 들어온 경로 등
+              서비스 이용과 관련된 정보를 쿠키 또는 이에 준하는 식별자를 통해 처리할 수 있습니다.
+            </p>
+            <ul>
+              <li>이용 목적: 방문자 수·페이지 조회 등 이용 통계 집계, 유입 경로 및 채널 분석, 서비스 개선</li>
+              <li>운영자는 이름, 전화번호, 이메일 주소, 상담·문의 등 이용자가 직접 작성한 내용을 Google Analytics로
+                전송하지 않습니다. 다만 이용자가 입력한 내용이 페이지 주소에 포함된 링크로 접속하는 경우, 해당 주소가
+                방문 기록으로 함께 남을 수 있습니다.</li>
+              <li>이용자는 브라우저의 쿠키 설정을 변경하거나{' '}
+                <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">
+                  Google Analytics 차단 브라우저 부가기능
+                </a>
+                을 설치하여 수집을 거부할 수 있습니다. 거부하더라도 서비스 이용에는 제한이 없습니다.</li>
+              <li>Google이 수집한 정보를 처리하는 방식은{' '}
+                <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">
+                  Google의 정책
+                </a>
+                을 따릅니다.</li>
+            </ul>
+            <div className={styles.tableWrapper}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>쿠키</th>
+                    <th>제공자</th>
+                    <th>이용 목적</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>_ga, _ga_로 시작하는 쿠키</td>
+                    <td>Google (Google Analytics)</td>
+                    <td>방문 횟수·유입 경로 등 서비스 이용 통계 분석</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              분석 쿠키의 보관 기간은 Google이 정한 정책에 따르며, 이용자는 언제든지 브라우저에서 해당 쿠키를 삭제할 수
+              있습니다.
+            </p>
+
+            <h3>다. 광고 서비스</h3>
             <p>
               구글을 비롯한 제3자 광고 서비스 제공업체는 쿠키를 사용하여 이용자가 웹사이트 또는 다른 웹사이트를 방문한 정보를
               기반으로 광고를 게재할 수 있습니다. 구글의 광고 쿠키 사용으로 인해 구글과 구글의 파트너는 서비스 및 인터넷의
@@ -209,7 +264,11 @@ export default function PrivacyPage() {
 
           <div className={styles.section}>
             <h2>부칙</h2>
-            <p>이 방침은 2026년 8월 11일부터 시행됩니다.</p>
+            <p>이 방침은 2026년 8월 11일부터 시행되었습니다.</p>
+            <p>
+              이 방침은 2026년 9월 11일 개정되어 같은 날부터 시행됩니다. 개정 내용은 Google Analytics를 이용한 이용 현황
+              분석과 분석 쿠키에 관한 고지를 추가한 것으로, 이용자에게 불리하게 변경된 사항은 없습니다.
+            </p>
           </div>
         </div>
       </div>
