@@ -56,6 +56,13 @@ export const ANALYTICS_EVENT_NAMES = [
   // placement 같은 분해 축은 **GA4 쪽에만** 실린다(§12 — 알려진 비대칭).
   'partner_cta_impression',
   'partner_cta_click',
+  // APT_DETAIL_INLINE_MAP_ROADVIEW_V1 §19 — 상세 인라인 위치 카드.
+  // 의미 있는 상호작용만 센다: 지도가 실제로 붙은 시점 1회, 그리고 사용자가 직접
+  // 누른 모드 전환. **패닝/줌은 보내지 않는다** — 고빈도 노이즈이고 알아야 할 것을
+  // 알려주지도 않는다. 좌표·단지명·주소는 payload에 실리지 않는다(이름만 기록).
+  'detail_map_view',
+  'detail_roadview_open',
+  'detail_map_return',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

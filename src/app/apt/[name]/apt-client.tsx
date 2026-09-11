@@ -21,6 +21,7 @@ import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
 import InfraTabSection from '@/components/apt/InfraTabSection';
+import AptLocationCard from '@/components/apt/AptLocationCard';
 import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
 import NextActionSection from '@/components/decision-journey/NextActionSection';
 import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } from '@/lib/decision-journey/registry';
@@ -54,13 +55,10 @@ const InvestmentMetrics = dynamic(() => import('@/components/InvestmentMetrics')
   ssr: false,
   loading: () => <ChartSkeleton height="8rem" />,
 });
-// PERCEIVED_PERFORMANCE_V1 §19 — KakaoMapEmbed(+Kakao Maps SDK 로딩 로직)는 지도/로드뷰
-// 모달을 실제로 열 때만 필요한데 정적 import돼 있어 상세페이지 초기 번들에 항상
-// 포함되고 있었다. 위 차트 컴포넌트들과 동일한 패턴으로 지연 로딩한다.
-const KakaoMapEmbed = dynamic(() => import('@/components/KakaoMapEmbed'), {
-  ssr: false,
-  loading: () => <ChartSkeleton height="400px" />,
-});
+// APT_DETAIL_INLINE_MAP_ROADVIEW_V1 §12/§13 — 여기 있던 KakaoMapEmbed dynamic import를
+// 제거했다. 지도/로드뷰 모달이 사라지면서 이 파일에는 호출부가 하나도 남지 않았고,
+// AptLocationCard가 같은 컴포넌트를 자기 안에서 지연 로딩한다. 같은 컴포넌트로 가는
+// 지연 로딩 진입점을 두 곳에 두면 청크가 갈라지고 어느 쪽이 실제로 쓰이는지 흐려진다.
 
 interface Trade {
   id: number;
@@ -575,7 +573,9 @@ export default function ApartmentDetail() {
           : []),
         {
           type: 'MAP',
-          label: '지도에서 위치 보기',
+          // §12 — 상세 안 위치 카드가 이 단지의 위치를 이미 보여준다. 이 행동이
+          // 주는 것은 "주변 단지와 함께 보기"이므로 라벨로 그 차이를 드러낸다.
+          label: '지도에서 주변 단지와 보기',
           // 리포트가 primary가 되면서 지도는 secondary로 내려간다(primary 1개 규칙).
           priority: reportHref ? 'secondary' : 'primary',
           onClick: handleViewOnMap,
@@ -731,38 +731,10 @@ export default function ApartmentDetail() {
   };
 
   const renderModalContent = () => {
-    // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2/§4 — 지도/로드뷰는 이제 저장된 좌표 모드로
-    // 연다. KakaoMapEmbed의 mode="coordinate"는 Geocoder/Places를 만들지도 않는다
-    // (OFFICETEL_V1 STEP 6 §2에서 오피스텔용으로 이미 검증된 계약을 그대로 재사용).
-    // 좌표가 없으면 주소 모드로 **떨어지지 않는다** — 그건 이름 검색으로 다른 장소를
-    // 집을 수 있는 예전 경로다. 없으면 없다고 말한다.
-    const noLocation = (
-      <p style={{ color: 'var(--text-muted)' }}>위치 정보를 확인할 수 없습니다.</p>
-    );
-
     switch (activeModal) {
-      case '지도':
-        return (
-          <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-            <p style={{marginBottom: '1rem'}}>📍 <b>{aptName}</b>의 위치입니다.</p>
-            <div style={{flex: 1, minHeight: '400px', position: 'relative'}}>
-              {canonicalCoord
-                ? <KakaoMapEmbed mode="coordinate" latitude={canonicalCoord.lat} longitude={canonicalCoord.lng} type="map" />
-                : noLocation}
-            </div>
-          </div>
-        );
-      case '로드뷰':
-        return (
-          <div style={{height: '100%', display: 'flex', flexDirection: 'column'}}>
-            <p style={{marginBottom: '1rem'}}>👀 단지 주변 <b>로드뷰</b>입니다.</p>
-            <div style={{flex: 1, minHeight: '400px', position: 'relative'}}>
-              {canonicalCoord
-                ? <KakaoMapEmbed mode="coordinate" latitude={canonicalCoord.lat} longitude={canonicalCoord.lng} type="roadview" />
-                : noLocation}
-            </div>
-          </div>
-        );
+      // '지도' / '로드뷰' 모달은 제거됐다(§12) — AptLocationCard가 같은 일을
+      // 페이지 안에서, 라우트 이동도 모달도 없이 한다. 저장된 좌표만 쓰고 런타임
+      // 지오코딩으로 떨어지지 않는 계약은 그 카드가 그대로 이어받았다.
       case '단지정보':
         return (
           <table className={styles.detailTable}>
@@ -1234,10 +1206,10 @@ export default function ApartmentDetail() {
           
           <div className={styles.quickButtons} style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
             <Button variant="secondary" size="sm" onClick={() => openModal('LTV 기준 간편 추정')} style={{ padding: '0.6rem', width: '100%', fontSize: '0.95rem' }}>이 집 사려면 얼마 필요할까?</Button>
-            <div style={{ display: 'flex', gap: '0.6rem', width: '100%' }}>
-              <Button variant="secondary" size="sm" onClick={() => openModal('지도')} style={{ flex: 1, padding: '0.6rem', fontSize: '0.95rem' }}>지도</Button>
-              <Button variant="secondary" size="sm" onClick={() => openModal('로드뷰')} style={{ flex: 1, padding: '0.6rem', fontSize: '0.95rem' }}>로드뷰</Button>
-            </div>
+            {/* §12 — [지도][로드뷰] 모달 버튼을 없앴다. 위치는 이제 페이지 안의
+                위치 카드에서 바로 보이고, 지도↔로드뷰도 그 안에서 오간다.
+                같은 일을 하는 입구를 두 개 남겨두면 어느 쪽이 "진짜" 지도인지
+                사용자가 고민하게 된다. */}
           </div>
         </div>
       </div>
@@ -1283,6 +1255,19 @@ export default function ApartmentDetail() {
             <AptSpecGrid aptName={aptName} address="" aptInfo={aptInfo} buildYear={heroBuildYearRaw} />
           </div>
         </div>
+      </div>
+
+      {/* ══════════ 위치 ══════════
+          APT_DETAIL_INLINE_MAP_ROADVIEW_V1 §4 — 가격/실거래/제원을 다 훑은 **직후**,
+          "주변 생활정보" 바로 앞에 둔다. 사용자가 단지 자체를 파악한 다음 자연스럽게
+          "그래서 여기가 어디인가"로 넘어가는 지점이고, 그 답이 곧 아래 생활정보의
+          전제가 된다. 가격 요약 앞이나 페이지 맨 아래가 아닌 이유가 이것이다. */}
+      <div className={`container ${styles.sectionBlock}`}>
+        <AptLocationCard
+          coords={canonicalCoord}
+          locationReady={locationReady}
+          addressLine={primaryAddress || null}
+        />
       </div>
 
       {/* ══════════ 3구역: 단지 주변 생활정보 ══════════ */}

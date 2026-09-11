@@ -2,6 +2,92 @@
 
 ## 2026-09-11
 
+### APT DETAIL INLINE MAP + ROADVIEW V1 — 상세 안에서 지도↔로드뷰
+
+이전: 상세 하단 [지도] [로드뷰] 버튼이 각각 **모달**을 열었다. 위치를 보려면 항상
+한 번 더 눌러야 했고, 둘이 서로 다른 모달이라 오가려면 닫았다 다시 열어야 했다.
+
+지금: 위치 카드가 상세 페이지 안에 그대로 있고, 지도↔로드뷰는 **같은 컨테이너에서**
+바뀐다. 버튼 게이트도, 라우트 이동도, 모달도 없다.
+
+감사 결론 — 필요한 부품이 전부 이미 있었다:
+
+- KakaoMapEmbed가 이미 지도/로드뷰를 같은 컨테이너에서 전환한다(visibility만 바꾸고
+  인스턴스를 유지, relayout 호출)
+- map-embed-logic의 mode="coordinate"는 Geocoder/Places를 만들지도 않는다
+- maps-sdk.ts 단일 로더
+- **오피스텔 상세에는 이 UX가 이미 있었다**(OfficetelLocationCard)
+→ 지도 시스템 재작성이 아니라 오피스텔에만 있던 UX를 아파트로 가져온 작업이다.
+
+작업:
+
+- src/lib/kakao/use-lazy-in-view.ts 신규 — "화면에 들어올 때 한 번만" 판정 훅.
+  IntersectionObserver 단독으로는 안 된다(콜백이 렌더 파이프라인에 실려 와서, 요소가
+  이미 화면 안이어도 영영 오지 않는 경우가 있다 — 오피스텔 QA에서 실제 재현).
+  동기 판정 + IO + scroll/resize 보조를 함께 쓰고 먼저 도착하는 쪽이 이긴다
+- src/components/apt/AptLocationCard.tsx + .module.css 신규
+- src/lib/kakao/map-embed-logic.ts — locationCardState 중립 별칭(기존 이름 보존)
+- src/app/apt/[name]/apt-client.tsx — 카드를 "단지 주변 생활정보" 바로 앞에 배치.
+  [지도][로드뷰] 모달 버튼과 모달 케이스 제거, 죽은 KakaoMapEmbed dynamic import 제거
+  (호출부가 사라졌고, 같은 컴포넌트로 가는 지연 로딩 진입점이 두 곳이면 청크가 갈라진다).
+  다음 행동의 /map 라벨을 "지도에서 위치 보기" → "지도에서 주변 단지와 보기"로 변경 —
+  상세 카드가 이 단지 위치를 보여주므로 /map의 값은 이제 "주변 단지와 비교"다
+- src/components/officetel/OfficetelLocationCard.tsx — 중복 in-view 로직을 공용 훅으로
+  교체(동작 동일, 약 50줄 중복 제거)
+- src/lib/analytics/events.ts, ga-events.ts — detail_map_view / detail_roadview_open /
+  detail_map_return 추가
+- src/lib/kakao/apt-location-card.test.ts 신규 12건
+
+좌표 신뢰:
+
+서버가 canonical identity로 해석한 좌표만 쓴다. 런타임 지오코딩이 구조적으로 불가능하고
+(좌표 모드는 Geocoder/Places 객체를 생성조차 하지 않는다), 좌표가 이상해도 주소 모드로
+떨어지지 않는다. 마커는 현재 단지 하나. 지역 마커 데이터셋을 가져오지 않는다.
+"확인 중"과 "없음"을 구분해 표시한다 — 확인 중인 것을 없다고 말하면 잠시 뒤 지도가
+뜨는 순간 방금 한 말이 거짓이 된다.
+
+로딩:
+
+"지도가 바로 열린다"는 버튼 게이트가 없다는 뜻이지 초기 렌더를 SDK에 묶는다는 뜻이
+아니다. 컨테이너는 처음부터 400px 자리를 잡고(레이아웃 시프트 없음), SDK는 카드가
+화면에 다가올 때 로드된다. **상세 초기 HTML에 Kakao SDK 태그가 없다.**
+
+로드뷰 없음:
+
+getNearestPanoId(200m)가 비면 같은 카드에서 사실대로 말하고 [지도]로 즉시 복귀할 수
+있다. 검은 빈 화면을 남기지 않는다. 로드뷰 위치가 단지 출입구라고 주장하지 않는다.
+
+분석:
+
+파라미터를 하나도 추가하지 않았다 — 이름 자체가 무슨 일인지 말해주고, allowlist를
+넓히지 않으면 좌표가 새어 나갈 경로도 생기지 않는다. 패닝/줌 이벤트는 만들지 않았다
+(테스트로 고정). 스키마 변경 없음. GA4 page_view 무변경.
+
+DB / 스키마 / migration:
+
+전부 변경 없음
+
+검증:
+
+- npx tsx --test src/lib/kakao/apt-location-card.test.ts: 12/12 PASS
+- npx tsx --test src/lib/kakao/map-embed-logic.test.mjs (기존): 10/10 PASS
+- npx tsx --test (src 전체): 654/654 PASS, fail 0
+- npx eslint (변경 파일): exit 0. 경고 1건은 apt-client.tsx의 기존 unused disable
+- npx tsc --noEmit: src/ 오류 0건(전체 exit 2는 기존 scripts//tmp/)
+- npm run build: exit 0
+- 실데이터 QA: 26290-2625 / 26350-2166 / 26110-11 / 26110-15 전부 MAP_READY,
+  식별 불가 이름은 NO_COORDINATE/NO_MASTER(지오코딩 폴백 없음)
+- 성능: 상세 TTFB warm 0.011~0.014s / cold 0.108s, 초기 HTML에 Kakao SDK 태그 없음,
+  새 API 요청 0건, 지역 마커 데이터셋 요청 0건
+- 라우트 스모크: / /map /officetel/1 /finance-fit /report, 단지 상세 전부 200
+- 모바일 QA는 STRUCTURAL ONLY(브라우저 렌더링 아님)
+
+알려진 한계:
+
+지도/로드뷰 초기화 타이밍(ms)은 브라우저 계측이 필요해 측정하지 못했다.
+지도 높이는 모든 폭에서 400px(KakaoMapEmbed의 min-height 때문).
+위치 카드 컴포넌트는 아파트/오피스텔 두 벌로 남아 있다(CSS 언어가 달라 합치지 않았다).
+
 ### STATS HEADER / REGION LABEL UX FIX V1 — 지역 라벨 정리 + 공유 버튼 한 줄 배치
 
 사용자 제보 2건. 데이터 의미는 건드리지 않는 표시/레이아웃 수정이다.

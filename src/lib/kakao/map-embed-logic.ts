@@ -84,3 +84,14 @@ export function kakaoSdkErrorMessage(err: unknown): string {
       return '지도를 표시할 수 없습니다.';
   }
 }
+
+/**
+ * APT_DETAIL_INLINE_MAP_ROADVIEW_V1 §5 — 위치 카드의 상태.
+ *
+ * `officetelLocationState`와 같은 판정이다. 아파트 상세도 같은 계약을 쓰게 되면서
+ * 이름이 업종을 가리키는 것이 어색해져 중립 이름을 하나 둔다. 기존 이름은 그대로
+ * 남겨 오피스텔 호출부를 건드리지 않는다(둘은 같은 함수를 가리킨다).
+ */
+export type LocationCardState = OfficetelLocationState;
+
+export const locationCardState = officetelLocationState;

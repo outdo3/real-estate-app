@@ -11,10 +11,11 @@
 //
 // §11 — 지도는 화면에 들어올 때 로드한다. 상세 초기 렌더에 지도 SDK를 끌고 들어오면
 // PERFORMANCE V2에서 닫아둔 성능을 되돌리게 된다.
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { MapPin, Camera, Map as MapIcon } from 'lucide-react';
 import { officetelLocationState, toggleLocationView, type LocationView } from '@/lib/kakao/map-embed-logic';
+import { useLazyInView } from '@/lib/kakao/use-lazy-in-view';
 import styles from './officetel-detail.module.css';
 
 const KakaoMapEmbed = dynamic(() => import('@/components/KakaoMapEmbed'), {
@@ -22,8 +23,6 @@ const KakaoMapEmbed = dynamic(() => import('@/components/KakaoMapEmbed'), {
   loading: () => <div className={styles.mapLoading}>지도를 불러오는 중…</div>,
 });
 
-/** 화면에 닿기 전에 미리 시작할 여유분(px). */
-const TRIGGER_MARGIN_PX = 200;
 
 interface Props {
   coordinates: { latitude: number; longitude: number } | null;
@@ -35,61 +34,11 @@ interface Props {
 export default function OfficetelLocationCard({ coordinates, addressLine, roadAddress }: Props) {
   const state = officetelLocationState(coordinates);
   const [view, setView] = useState<LocationView>('map');
-  const [inView, setInView] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // 좌표가 없으면 관찰할 것도, 불러올 것도 없다.
-    if (state !== 'MAP_READY') return;
-    const el = wrapRef.current;
-    if (!el) return;
-
-    // 스크롤이 카드에 닿기 조금 전에 시작해서, 도착했을 때 이미 그려져 있게 한다.
-    const withinTriggerBand = () => {
-      const r = el.getBoundingClientRect();
-      const vh = window.innerHeight || document.documentElement.clientHeight;
-      return r.top < vh + TRIGGER_MARGIN_PX && r.bottom > -TRIGGER_MARGIN_PX;
-    };
-
-    // 첫 판정은 **동기적으로 직접** 한다.
-    //
-    // IntersectionObserver 콜백은 렌더 파이프라인에 실려 오기 때문에, 탭이 렌더되고
-    // 있지 않으면 이미 화면 안에 있는 요소에 대해서도 영영 오지 않는다. 그러면 지도는
-    // "불러오는 중" 문구에 멈춘 채 끝난다(QA에서 실제로 재현). 관찰자를 신뢰의
-    // 단일 지점으로 두지 않는다.
-    if (withinTriggerBand()) {
-      setInView(true);
-      return;
-    }
-    if (typeof IntersectionObserver === 'undefined') {
-      setInView(true);
-      return;
-    }
-
-    let io: IntersectionObserver | null = null;
-    const stop = () => {
-      io?.disconnect();
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-    };
-    const trigger = () => {
-      setInView(true);
-      stop();
-    };
-    // 관찰자가 조용한 경우를 위한 보조 경로. 둘 중 먼저 오는 쪽이 이긴다.
-    const onScroll = () => {
-      if (withinTriggerBand()) trigger();
-    };
-
-    io = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) trigger();
-    }, { rootMargin: `${TRIGGER_MARGIN_PX}px 0px` });
-    io.observe(el);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
-
-    return stop;
-  }, [state]);
+  // APT_DETAIL_INLINE_MAP_ROADVIEW_V1 §18 — 여기 있던 "화면에 들어올 때 한 번만"
+  // 판정을 useLazyInView로 옮겼다. 아파트 상세도 같은 판정이 필요해졌는데, 이건
+  // IntersectionObserver 단독으로는 안 되는(콜백이 영영 오지 않는) 미묘한 로직이라
+  // 두 벌로 두면 한쪽만 고쳐질 수밖에 없다. 동작은 그대로다.
+  const { ref: wrapRef, inView } = useLazyInView<HTMLDivElement>({ enabled: state === 'MAP_READY' });
 
   return (
     <section className={styles.card}>

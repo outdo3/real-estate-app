@@ -49,6 +49,13 @@ export const GA_EVENT_MAP: Partial<Record<AnalyticsEventName, string>> = {
   // GA4 쪽 이름도 1st-party와 같게 두어 두 시스템의 숫자를 바로 비교할 수 있게 한다.
   partner_cta_impression: 'partner_cta_impression',
   partner_cta_click: 'partner_cta_click',
+
+  // APT_DETAIL_INLINE_MAP_ROADVIEW_V1 §19 — 파라미터 없이 이름만 보낸다.
+  // 이름 자체가 무슨 일이 일어났는지 다 말해주므로 새 파라미터를 열 이유가 없고,
+  // GA_PARAM_ALLOWLIST를 넓히지 않으면 좌표가 새어 나갈 경로도 생기지 않는다.
+  detail_map_view: 'detail_map_view',
+  detail_roadview_open: 'detail_roadview_open',
+  detail_map_return: 'detail_map_return',
 };
 
 /**
