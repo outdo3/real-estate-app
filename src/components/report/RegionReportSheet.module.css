@@ -165,12 +165,27 @@
   border-top: 1px solid var(--border-color, #e5e7eb);
   z-index: 50;
 }
-/* REPORT-6 — 버튼이 4개로 늘어 360px에서 한 줄에 안 들어간다. 줄바꿈 허용. */
-.actionInner { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; max-width: 520px; margin: 0 auto; }
-.actionBtn { flex: 1 1 calc(50% - 4px); }
+/* REPORT_BOTTOM_ACTION_BAR_COMPACT_FIX_V1 §3/§4 — 4칸 동일 폭, 한 줄 유지.
+   예전에는 라벨이 길어(이미지 저장 / PDF 저장 / 이집에서 단지 자세히 보기) 360px에서
+   한 줄에 못 들어가 flex-wrap으로 두 줄이 됐다. 라벨을 줄인 지금은 네 개가 한 줄에
+   들어간다. grid의 minmax(0, 1fr)는 내용 길이와 무관하게 트랙을 강제로 균등 분할하므로
+   flex보다 "1:1:1:1"을 확실하게 보장한다. */
+.actionInner {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  /* §4 — 돌아가기 버튼만 2줄이 돼도 네 개의 바깥 높이가 같아야 한다.
+     grid 기본값 stretch가 그 정렬을 보장한다. */
+  align-items: stretch;
+}
 .actionBtn {
-  flex: 1;
-  min-height: 44px; /* 터치 타겟 */
+  /* §4 — 2줄 라벨(단지로 / 돌아가기)이 잘리지 않는 공통 높이.
+     0.82rem × line-height 1.25 × 2줄 ≈ 33px + 상하 여백. 44px 터치 타깃도 만족한다. */
+  min-height: 48px;
+  padding: 4px 2px;
   border-radius: 10px;
   border: 1px solid var(--border-color, #e5e7eb);
   background: #fff;
@@ -186,6 +201,32 @@
 }
 .actionPrimary { background: var(--ejip-green, #13a367); border-color: var(--ejip-green, #13a367); color: #fff; }
 .actionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 아이콘은 절대 찌그러지지 않는다 — 줄어드는 건 글자뿐이다. */
+.actionBtn > svg { flex-shrink: 0; }
+
+/* §2 — 라벨 줄바꿈 제어.
+   .actionWord에 걸린 nowrap이 어절 내부 분해를 막고, 어절 사이 공백만 줄바꿈
+   기회로 남는다. 그래서 "단지로 돌아가기"는 한 줄로 들어가거나,
+   정확히 "단지로 / 돌아가기"로만 갈라진다. */
+.actionLabel {
+  min-width: 0;
+  text-align: center;
+  line-height: 1.25;
+  /* 어절 사이에서만 끊기도록 보조(브라우저별 CJK 기본 동작 방어). */
+  word-break: keep-all;
+}
+
+.actionWord {
+  white-space: nowrap;
+}
+
+/* 어절 사이의 공백은 마크업이 아니라 여기서 만든다 — JSX의 공백은 빌드 과정에서
+   사라질 수 있어 믿을 수 없다. 이 여백이 유일한 줄바꿈 기회다. */
+.actionWord + .actionWord::before {
+  content: ' ';
+  white-space: normal;
+}
 
 /* ── 스코프 오류 ──────────────────────────────────────── */
 .invalid { padding: 40px 20px; text-align: center; }

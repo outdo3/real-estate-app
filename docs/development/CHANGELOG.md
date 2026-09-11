@@ -2,6 +2,73 @@
 
 ## 2026-09-11
 
+### REPORT BOTTOM ACTION BAR COMPACT FIX V1 — 라벨 단축 + 줄바꿈 지점 고정
+
+리포트 하단 액션 바가 모바일에서 답답하고 마지막 버튼이 어색하게 접히던 문제.
+**UI 라벨/레이아웃만 손댔다 — 동작·내보내기·분석 무변경.**
+
+라벨:
+
+    공유하기                    → 공유하기 (그대로)
+    이미지 저장                 → 이미지
+    PDF 저장                   → PDF
+    이집에서 단지 자세히 보기      → 단지로 돌아가기
+
+핵심: 줄바꿈 지점을 CSS가 아니라 **구조로** 고정했다
+
+한글은 기본 줄바꿈 규칙에서 음절 단위로 끊긴다. "단지로 돌아가기"를 문자열 그대로
+넣으면 좁은 폭에서 "단지로돌아 / 가기"처럼 깨진다. word-break: keep-all만으로는
+브라우저·폰트에 따라 동작이 갈려 확실하지 않다.
+그래서 ActionLabel 헬퍼가 라벨을 **띄어쓰기 기준 어절로 쪼개 각각 nowrap span**으로
+감싼다. 어절 안에서는 절대 끊기지 않고, 유일한 줄바꿈 기회는 어절 사이 공백뿐이다.
+어절 사이 공백은 JSX가 아니라 CSS(::before content)가 만든다 — JSX 공백은 빌드
+과정에서 사라질 수 있어 믿을 수 없다.
+결과: "단지로 돌아가기"는 한 줄로 들어가거나 정확히 "단지로 / 돌아가기"로만 갈라진다.
+이 처리는 모든 라벨에 적용돼 '비교 리포트 보기' '지도 보기' '공유 준비 중...' 같은
+다른 문구도 같은 보장을 받는다.
+
+레이아웃:
+
+- .actionInner를 flex-wrap → **grid repeat(4, minmax(0,1fr))** 로 교체.
+  minmax(0,1fr)은 내용 길이와 무관하게 트랙을 균등 분할하므로 1:1:1:1을 확실히 보장한다.
+  라벨이 길던 시절 두 줄로 접히던 flex-wrap을 제거했다.
+- align-items: stretch + .actionBtn min-height 48px — 돌아가기만 2줄이 돼도
+  네 버튼의 바깥 높이가 같다. 44px 터치 타깃 충족.
+- .actionBtn > svg에 flex-shrink: 0 — 아이콘은 찌그러지지 않는다.
+
+아이콘:
+
+- PDF: FileText → **Download** (이미지와 같은 저장 동작이므로 같은 아이콘)
+- 돌아가기: ExternalLink → **ArrowLeft** (바깥으로 나가는 게 아니라 되돌아가는 동작)
+- 공유 버튼의 Share2/Check는 그대로
+
+보존 확인:
+
+- 돌아갈 경로 무변경 — /apt/{name}?aptSeq={aptSeq} (라벨만 바꿨다)
+- data-export-exclude / data-bottom-bar 유지 → PNG·PDF·인쇄에 액션 바 없음
+- aria-label "리포트 이미지 저장" / "리포트 PDF 저장" 유지(§11) — 보이는 글자는
+  이미지/PDF지만 스크린리더는 무엇을 저장하는지 그대로 듣는다
+- Web Share·fallback·PNG·PDF·분석 이벤트(report_share/report_image_save/
+  report_pdf_save) 무변경
+
+렌더 실측(/report/apt/26290-2625):
+
+    버튼 4개 — [공유하기] [이미지] [PDF] [단지로|돌아가기]
+    돌아가기 어절 span: ["단지로","돌아가기"]
+    href: /apt/대연롯데캐슬레전드1단지?aptSeq=26290-2625
+    "이미지 저장"/"PDF 저장" 문자열은 aria-label에만 1회씩 존재
+    빌드 CSS: grid-template-columns:repeat(4,minmax(0,1fr)) · actionWord{white-space:nowrap}
+
+검증:
+
+- npx tsx --test src/lib/report/report-action-labels.test.ts: 16/16 PASS
+- npx tsx --test (src 전체): 724/724 PASS, fail 0
+- npx eslint (변경 파일): exit 0
+- npx tsc --noEmit: src/ 오류 0건(전체 exit 2는 기존 scripts//tmp/)
+- npm run build: exit 0
+- 모바일 QA는 STRUCTURAL ONLY(브라우저 렌더링 아님) — 360px 기준 버튼당 약 78px,
+  가장 긴 한 줄(아이콘+돌아가기)이 약 73px로 들어간다는 계산
+
 ### BUSAN LAUNCH READINESS AUDIT V1 — 출시 전 전수 감사(감사 전용, 프로덕션 무변경)
 
 부산 소프트 런칭 전 29개 영역 감사. **기능 추가 0건, 수정 0건, 프로덕션 쓰기 0건,

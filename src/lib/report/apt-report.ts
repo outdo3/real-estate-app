@@ -358,7 +358,9 @@ export function buildApartmentReport(input: AptReportInput): ReportEnvelope<Apar
       ...(input.market ? [mktSrc] : []),
     ],
     navigationTargets: [
-      { label: '이집에서 단지 자세히 보기', href: `/apt/${encodeURIComponent(m.name)}?aptSeq=${encodeURIComponent(m.aptSeq)}` },
+      // REPORT_BOTTOM_ACTION_BAR_COMPACT_FIX_V1 §1 — 라벨만 짧게 바꾼다.
+      // href(돌아갈 단지 상세 경로)는 그대로다 — aptSeq를 들고 간다(§9).
+      { label: '단지로 돌아가기', href: `/apt/${encodeURIComponent(m.name)}?aptSeq=${encodeURIComponent(m.aptSeq)}` },
     ],
     data: {
       aptSeq: m.aptSeq,

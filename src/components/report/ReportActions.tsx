@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Share2, Download, ExternalLink, Check, FileText, Loader2 } from 'lucide-react';
+import { Share2, Download, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import styles from './RegionReportSheet.module.css';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
@@ -227,7 +227,7 @@ export default function ReportActions({
   const shareButton = (
     <button type="button" className={`${styles.actionBtn} ${styles.actionPrimary}`} onClick={share}>
       {copied ? <Check size={16} aria-hidden="true" /> : <Share2 size={16} aria-hidden="true" />}
-      {busy === 'share' ? '공유 준비 중...' : copied ? '링크 복사됨' : '공유하기'}
+      <ActionLabel text={busy === 'share' ? '공유 준비 중...' : copied ? '링크 복사됨' : '공유하기'} />
     </button>
   );
   if (variant === 'share-only') return shareButton;
@@ -249,7 +249,7 @@ export default function ReportActions({
             ) : (
               <Download size={16} aria-hidden="true" />
             )}
-            {busy === 'image' ? '이미지 만드는 중...' : '이미지 저장'}
+            <ActionLabel text={busy === 'image' ? '이미지 만드는 중...' : '이미지'} />
           </button>
           <button
             type="button"
@@ -258,20 +258,24 @@ export default function ReportActions({
             disabled={busy !== 'idle'}
             aria-label="리포트 PDF 저장"
           >
-            <FileText size={16} aria-hidden="true" />
-            PDF 저장
+            {/* §5 — 이미지와 같은 저장 동작이므로 같은 아이콘을 쓴다(예전 FileText는
+                "문서"를 뜻해 저장 동작을 가리키지 않았다). */}
+            <Download size={16} aria-hidden="true" />
+            <ActionLabel text="PDF" />
           </button>
           {extraLinks && extraLinks.length > 0 ? (
             extraLinks.map((l) => (
               <Link key={l.href} href={l.href} className={styles.actionBtn}>
-                <ExternalLink size={16} aria-hidden="true" />
-                {l.label}
+                <ArrowLeft size={16} aria-hidden="true" />
+                <ActionLabel text={l.label} />
               </Link>
             ))
           ) : (
             <Link href={detailHref ?? '/map'} className={styles.actionBtn}>
-              <ExternalLink size={16} aria-hidden="true" />
-              {detailHref ? detailLabel : '지도 보기'}
+              {/* §5 — 라벨이 "단지로 돌아가기"가 되면서 ExternalLink(바깥으로 나감)는
+                  뜻이 맞지 않는다. 되돌아가는 동작이므로 ArrowLeft를 쓴다. */}
+              <ArrowLeft size={16} aria-hidden="true" />
+              <ActionLabel text={detailHref ? detailLabel : '지도 보기'} />
             </Link>
           )}
         </div>
@@ -282,6 +286,38 @@ export default function ReportActions({
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * REPORT_BOTTOM_ACTION_BAR_COMPACT_FIX_V1 §2 — 줄바꿈 지점을 **구조로** 고정한다.
+ *
+ * 한글은 기본 줄바꿈 규칙(CJK)에서 **음절 단위로 끊긴다.** 그래서 "단지로 돌아가기"를
+ * 그냥 문자열로 넣으면 좁은 폭에서 이렇게 깨진다:
+ *
+ *     단지로돌아          단지로 돌
+ *     가기        또는     아가기
+ *
+ * CSS만으로는 이걸 확실히 막기 어렵다(word-break: keep-all은 브라우저·폰트에 따라
+ * 동작이 갈린다). 그래서 **띄어쓰기로 나눈 각 어절을 nowrap span으로 감싼다.**
+ * 어절 안에서는 절대 끊기지 않고, 유일한 줄바꿈 기회는 어절 사이의 공백뿐이다:
+ *
+ *     단지로
+ *     돌아가기
+ *
+ * 이 구조는 CSS를 나중에 바꿔도 깨지지 않는다 — nowrap이 span에 직접 걸려 있다.
+ * 한 어절짜리 라벨(공유하기 / 이미지 / PDF)은 자연히 통째로 nowrap이 된다.
+ */
+function ActionLabel({ text }: { text: string }) {
+  const words = text.split(' ').filter(Boolean);
+  return (
+    <span className={styles.actionLabel}>
+      {words.map((word, i) => (
+        <span key={`${word}-${i}`} className={styles.actionWord}>
+          {word}
+        </span>
+      ))}
+    </span>
   );
 }
 
