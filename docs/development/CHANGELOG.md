@@ -2,6 +2,82 @@
 
 ## 2026-09-11
 
+### STATS HEADER / REGION LABEL UX FIX V1 — 지역 라벨 정리 + 공유 버튼 한 줄 배치
+
+사용자 제보 2건. 데이터 의미는 건드리지 않는 표시/레이아웃 수정이다.
+
+ISSUE A — 지역 선택과 공유 버튼이 두 줄:
+
+원인은 src/app/stats/page.module.css의 @media (max-width:768px)에서
+.headerTop을 flex-direction:column으로 꺾고 둘 다 width:100%로 만들던 것이었다.
+데스크톱은 이미 한 줄이었고 모바일에서만 갈라지고 있었다.
+
+ISSUE B — "부산광역시 서구 동 전체":
+
+"동"은 행정 단계 이름이지 선택된 지역이 아니다. 아무 동도 고르지 않았으면
+"서구 전체"다. 하위 단계를 고르지 않았다는 이유로 단계 이름을 문구에 끼워 넣으면
+"동"이라는 지역이 선택된 것처럼 읽힌다.
+
+진짜 원인은 라벨이 **여섯 곳에서 각자** 템플릿 문자열로 만들어지고 있었다는 점이다
+(RegionContext 기본값/GPS, stats-client, school-client, stats/[type], LargeComplexView).
+그중 다섯 곳이 "동 전체"를 붙였고, RegionSelectModal은 또 다른 규칙(구 전체 시
+"부산광역시 서구", 전체 없음)을 써서 같은 상태가 화면마다 다르게 표기됐다.
+
+작업:
+
+- src/lib/region-display-name.ts 신규 — buildRegionDisplayName() 단일 출처
+    시도만            → 부산광역시 전체
+    시도+구, 동 미선택 → 부산광역시 서구 전체
+    시도+구+동        → 부산광역시 서구 동대신동3가
+    시도 없음         → '' (지어내지 않는다)
+  dong이 'all'/빈 값이면 동 단계를 문구에 넣지 않는다. dong이 이미 전체 주소면
+  앞을 중복해서 붙이지 않는다.
+- 호출부 6곳 + RegionSelectModal 3곳을 전부 이 함수로 교체.
+  **"동 전체"를 만드는 코드는 저장소에 더 이상 없다**(SearchFilterBar의
+  <option>동 전체</option>는 "동 전부"를 뜻하는 드롭다운 선택지라 별개)
+- src/app/stats/page.module.css — 모든 폭에서 한 줄 유지.
+  .headerTop > .regionTrigger { flex:1 1 auto; min-width:0 }
+  .headerTop > *:not(.regionTrigger) { flex:0 0 auto }  ← 공유 버튼은 줄어들지 않는다
+  모바일에서는 gap과 트리거 패딩/글자만 축소
+- .regionTriggerLabel 신규 — text-overflow:ellipsis가 .regionTrigger에 걸려 있었지만
+  그 요소가 display:flex라 효과가 없었다. 글자를 담은 자식에게 옮겼다.
+  핀/캐럿 아이콘에는 flex-shrink:0
+- src/lib/region-display-name.test.ts 신규 11건 — §8 A~E 전 케이스 + 조합 전수로
+  "동 전체"/"읍면동"이 생성 불가능함을 고정
+- docs/development/00-PROJECT-ROADMAP.md — "보류 / P1 데이터 신뢰" 절 신설
+- docs/development/STATS_HEADER_REGION_LABEL_UX_FIX_V1.md 신규
+
+보류 항목 기록:
+
+SCHOOL SCORE IMPACT SIMULATION V1을 로드맵에 남겼다 — SC4 잘림 21건,
+1km 밖 null 20건, 직접 영향 41건, 점수 출처 미변경, 착수 전 영향 시뮬레이션 필요
+(percentile은 peer pool 상대 순위라 41건으로 끝나지 않고, band 임계값도 Kakao 분포에
+앵커링돼 있어 재산출이 필요하다).
+
+DB / 스키마 / migration:
+
+전부 변경 없음
+
+회귀:
+
+ShareAction은 이동만 했고 props·내부 로직 무변경(Web Share/fallback/analytics 그대로).
+지역 선택 모달 동작, 기간 필터, 정렬, 면적 selector, 랭킹 리스트, 하단 네비게이션 무변경.
+데이터 의미 무변경.
+
+검증:
+
+- npx tsx --test src/lib/region-display-name.test.ts: 11/11 PASS
+- npx tsx --test (src 전체): 642/642 PASS, fail 0
+- npx eslint (변경 파일): exit 0
+- npx tsc --noEmit: src/ 오류 0건(전체 exit 2는 기존 scripts//tmp/)
+- npm run build: exit 0
+- 빌드 산출 CSS 실측: .headerTop에 flex-direction:column 없음(모든 폭 한 줄),
+  regionTriggerLabel 말줄임 규칙 존재
+- 런타임: 공유 링크 진입 시 라벨 "부산광역시 서구 전체" 렌더, "동 전체" 0건,
+  /stats /stats/decline /stats/feed /stats/area84 /stats/change-map /school 전부 200
+- 모바일 QA는 STRUCTURAL ONLY(브라우저 렌더링 아님) — 360px에서 글자 공간 약 205px,
+  공유 버튼 44×44 고정
+
 ### SCHOOL DISTANCE SOURCE RECONCILIATION V1 — 감사 + 이전 보고 정정
 
 **정정 먼저.** 직전 STEP 문서에 "리포트 249m vs ScoreCard 341m으로 두 화면이 어긋난다"고

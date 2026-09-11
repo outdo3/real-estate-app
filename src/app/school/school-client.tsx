@@ -7,6 +7,7 @@ import RegionSelectModal from '@/components/RegionSelectModal';
 import { useRegion, RegionState } from '@/contexts/RegionContext';
 import { resolveLawdCdByNames } from '@/lib/region-utils';
 import styles from './school.module.css';
+import { buildRegionDisplayName } from '@/lib/region-display-name';
 
 const TABS = ['전체', '초등', '중등', '고등', '학원가'];
 
@@ -31,7 +32,7 @@ function RegionUrlSync({ setRegion }: { setRegion: (region: RegionState) => void
         dong: 'all',
         sido,
         sigungu,
-        displayRegionName: `${sido} ${sigungu} 동 전체`,
+        displayRegionName: buildRegionDisplayName({ sido, sigungu, dong: 'all' }),
       });
     });
   }, [searchParams, setRegion]);

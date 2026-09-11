@@ -32,6 +32,7 @@ import SupplyView from '@/components/stats/SupplyView';
 import LargeComplexView from '@/components/stats/LargeComplexView';
 import CompareV2 from '@/components/compare/CompareV2';
 import styles from '../page.module.css';
+import { buildRegionDisplayName } from '@/lib/region-display-name';
 
 const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
@@ -430,8 +431,7 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
     const sigungu = searchParams.get('sigungu') || '';
     const dong = searchParams.get('dong') || 'all';
     const lawdCd = searchParams.get('lawdCd');
-    const displayRegionName =
-      dong !== 'all' ? dong : sigungu ? `${sido} ${sigungu} 동 전체` : `${sido} 전체`;
+    const displayRegionName = buildRegionDisplayName({ sido, sigungu, dong });
     setRegion({ lawdCd: lawdCd || null, sidoCode, dong, sido, sigungu, displayRegionName });
   }, []);
 
@@ -458,7 +458,10 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
           <div className={styles.headerTop}>
             <button className={styles.regionTrigger} onClick={openRegionModal}>
               <MapPin size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} />
-              <span>{region.displayRegionName}</span>
+              {/* §4 — 말줄임은 .regionTrigger(flex 컨테이너)가 아니라 글자를 담은
+                  이 자식에게 걸어야 동작한다. 지역 이름이 길어도 공유 버튼을
+                  아래로 밀어내지 않고 여기서 잘린다. */}
+              <span className={styles.regionTriggerLabel}>{region.displayRegionName}</span>
               <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
             </button>
             {item.status === 'live' && (

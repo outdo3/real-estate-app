@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { REGION_DATA } from '@/lib/regions';
+import { buildRegionDisplayName } from '@/lib/region-display-name';
 
 export interface RegionState {
   /**
@@ -35,7 +36,7 @@ const FALLBACK_REGION: RegionState = {
   dong: 'all',
   sido: '부산광역시',
   sigungu: '서구',
-  displayRegionName: '부산광역시 서구 동 전체',
+  displayRegionName: buildRegionDisplayName({ sido: '부산광역시', sigungu: '서구', dong: 'all' }),
 };
 
 // 카카오 역지오코딩이 돌려주는 축약형 시/도명(예: "부산")을 REGION_DATA의 정식 명칭
@@ -104,7 +105,7 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
               dong: 'all',
               sido,
               sigungu: bRegion.region_2depth_name,
-              displayRegionName: `${sido} ${bRegion.region_2depth_name} 동 전체`,
+              displayRegionName: buildRegionDisplayName({ sido, sigungu: bRegion.region_2depth_name, dong: 'all' }),
             });
           }
         } catch (e) {

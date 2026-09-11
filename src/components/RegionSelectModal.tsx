@@ -5,6 +5,7 @@ import { useRegion, RegionState } from '@/contexts/RegionContext';
 import { REGCODE_PROXY, resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import styles from './RegionSelectModal.module.css';
+import { buildRegionDisplayName } from '@/lib/region-display-name';
 
 type RegionOption = { code: string; name: string };
 
@@ -95,7 +96,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       dong: 'all',
       sido: selectedSido.name,
       sigungu: '',
-      displayRegionName: `${selectedSido.name} 전체`,
+      displayRegionName: buildRegionDisplayName({ sido: selectedSido.name, sigungu: '', dong: 'all' }),
     });
   };
 
@@ -133,7 +134,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
         dong: 'all',
         sido: selectedSido.name,
         sigungu: sigunguShortName,
-        displayRegionName: `${selectedSido.name} ${sigunguShortName}`,
+        displayRegionName: buildRegionDisplayName({ sido: selectedSido.name, sigungu: sigunguShortName, dong: 'all' }),
       });
       return;
     }
@@ -145,7 +146,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       dong: dongShortName,
       sido: selectedSido.name,
       sigungu: sigunguShortName,
-      displayRegionName: dong.name,
+      displayRegionName: buildRegionDisplayName({ sido: selectedSido.name, sigungu: sigunguShortName, dong: dong.name }),
     });
   };
 

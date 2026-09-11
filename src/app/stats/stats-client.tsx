@@ -11,6 +11,7 @@ import { useRegion, RegionState } from '@/contexts/RegionContext';
 import { resolveLawdCdByNames } from '@/lib/region-utils';
 import { STATS_MENU, STATS_CATEGORIES, type StatsColorToken } from './statsMenu';
 import styles from './page.module.css';
+import { buildRegionDisplayName } from '@/lib/region-display-name';
 
 // [STATISTICS_COLOR_SYSTEM_V1] colorToken -> CSS 모듈 클래스 매핑. 지정되지
 // 않은 항목(이번 STEP 적용 대상 밖)은 기존과 동일한 브랜드 그린 기본값을 쓴다.
@@ -43,7 +44,7 @@ function RegionUrlSync({ setRegion }: { setRegion: (region: RegionState) => void
         dong: 'all',
         sido,
         sigungu,
-        displayRegionName: `${sido} ${sigungu} 동 전체`,
+        displayRegionName: buildRegionDisplayName({ sido, sigungu, dong: 'all' }),
       });
     });
   }, [searchParams, setRegion]);
@@ -65,7 +66,7 @@ export default function StatsPage() {
         <div className={styles.headerTop}>
           <button className={styles.regionTrigger} onClick={openRegionModal}>
             <MapPin size={14} aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: '0.3rem' }} />
-            <span>{region.displayRegionName}</span>
+            <span className={styles.regionTriggerLabel}>{region.displayRegionName}</span>
             <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
           </button>
         </div>

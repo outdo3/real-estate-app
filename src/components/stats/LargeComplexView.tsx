@@ -8,6 +8,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { useRegion } from '@/contexts/RegionContext';
 import styles from './LargeComplexView.module.css';
+import { buildRegionDisplayName } from '@/lib/region-display-name';
 
 // STATISTICS V2.1-4 §17/§21/§23 — "세대수가 많은 단지는?" 부산 전용 V1(§14 실측:
 // ApartmentMaster는 부산 데이터만 있음). 부산 외 지역 선택 시 빈 화면 대신 정직한
@@ -51,7 +52,7 @@ const HOUSEHOLD_FILTERS = [
 ];
 
 const PAGE_SIZE = 30;
-const BUSAN_REGION = { lawdCd: '26140', sidoCode: '26', dong: 'all', sido: '부산광역시', sigungu: '서구', displayRegionName: '부산광역시 서구 동 전체' };
+const BUSAN_REGION = { lawdCd: '26140', sidoCode: '26', dong: 'all', sido: '부산광역시', sigungu: '서구', displayRegionName: buildRegionDisplayName({ sido: '부산광역시', sigungu: '서구', dong: 'all' }) };
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 

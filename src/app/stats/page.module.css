@@ -19,12 +19,28 @@
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
+/* STATS_HEADER_REGION_LABEL_UX_FIX_V1 §4 — 지역 선택과 공유 버튼은 **항상 한 줄**이다.
+   예전에는 768px 이하에서 flex-direction:column으로 꺾여 두 줄이 됐다(아래 미디어쿼리
+   참고). 지역 이름이 길어질 때 공유 버튼이 아래로 떨어지는 대신, 지역 트리거 **안에서**
+   말줄임이 나도록 flex:1 + min-width:0을 준다. */
 .headerTop {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
+  gap: 0.75rem;
   margin-bottom: 2rem;
+}
+
+/* 남는 가로 공간을 지역 트리거가 가져가고, 모자라면 자기 안에서 줄어든다.
+   min-width:0이 없으면 flex 아이템의 기본 min-width:auto 때문에 내용 폭 아래로
+   줄어들지 못해 공유 버튼을 밀어낸다. */
+.headerTop > .regionTrigger {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 공유 버튼은 절대 줄어들지 않는다 — 탭 영역이 깎이면 안 된다. */
+.headerTop > *:not(.regionTrigger) {
+  flex: 0 0 auto;
 }
 
 /* 지역 선택 트리거: 클릭 시 실거래가 탭과 동일한 전역 지역 선택 모달이 열린다 */
@@ -57,6 +73,22 @@
 .regionTriggerCaret {
   color: var(--text-muted);
   font-size: 0.8rem;
+  /* 캐럿은 말줄임 대상이 아니다 — 지역 이름이 길어도 항상 보인다. */
+  flex-shrink: 0;
+}
+
+/* .regionTrigger 자체가 display:flex라 거기 건 text-overflow는 효과가 없다.
+   말줄임은 실제로 글자를 담고 있는 자식에게 걸어야 한다. */
+.regionTriggerLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* 핀/캐럿 아이콘은 절대 찌그러지지 않는다. 줄어드는 건 글자뿐이다. */
+.regionTrigger > svg {
+  flex-shrink: 0;
 }
 
 .tabs {
@@ -164,14 +196,17 @@
 }
 
 @media (max-width: 768px) {
+  /* §4 — 여기서 column으로 꺾던 것이 "지역과 공유가 두 줄" 문제의 원인이었다.
+     좁은 화면일수록 세로 공간이 아깝기도 해서, 한 줄을 유지하고 간격만 줄인다. */
   .headerTop {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
   }
 
   .regionTrigger {
-    width: 100%;
+    /* 360px에서도 "부산광역시 해운대구 전체"가 들어가도록 안쪽 여백과 글자만 줄인다. */
+    padding: 0.55rem 0.85rem;
+    font-size: 0.92rem;
   }
 
   .tabs {

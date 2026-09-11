@@ -167,3 +167,42 @@ STEP 1 = 완료
 STEP 1.5 = 완료 (1.5-A 완료, 1.5-B 완료, 1.5-C 완료)
 
 STEP 2~15 = 대기
+
+
+## 보류 / P1 데이터 신뢰
+
+여기 적힌 항목은 **발견됐지만 아직 고치지 않은 신뢰 문제**다. STEP 진행 중에 조용히 잊히지 않도록 로드맵에 남긴다. 해소되면 이 목록에서 지우고 CHANGELOG에 결과를 기록한다.
+
+### SCHOOL SCORE IMPACT SIMULATION V1
+
+**상태: 보류 — 점수 출처 교정 전에 영향 시뮬레이션 필요**
+
+발견 경위: `SCHOOL_DISTANCE_SOURCE_RECONCILIATION_V1` (2026-09-11, 커밋 `5ca7cfd`). 전수 대조 3,401건.
+
+무엇이 문제인가:
+
+- `collectors/location.ts`가 `categorySearch('SC4', lat, lng, 1000)`를 **단일 페이지(size=15)** 로만 호출한다. SC4는 초·중·고·대를 전부 포함하는 카테고리라, 1km 안에 학교가 많으면 **진짜 최근접 초등학교가 상위 15건 밖으로 밀린다.** 이후 `filterElementary`가 이름으로 걸러도 이미 잘려 나간 학교는 복구되지 않는다.
+- **21건**: 저장된 Kakao 거리가 NEIS 최근접 결과보다 뚜렷하게 멀다. 21건 전부 같은 방향(Kakao가 더 멀다) — 무작위 오차가 아니라 구조적 누락이다. 최악 사례 `26200-22`는 **376m로 저장돼 있으나 실제 최근접은 59m**(신선초등학교).
+- **20건**: 가장 가까운 초등학교가 1km 검색 반경 밖이라 `nearestElementaryDistanceM = null`이다. NEIS로는 전부 찾힌다(1,052~1,422m). `null`은 "학교가 없다"가 아니라 "1km 안에서 못 찾았다"인데, Score는 `treatCompleteNullAsWorst: true`로 **최악값 취급**한다.
+- **직접 영향 41건**(전체 3,401건의 1.2%).
+
+왜 아직 고치지 않았나:
+
+`nearestElementaryDistanceM`은 점수에 **두 경로**로 들어간다.
+
+1. `categories/school-access.ts` — peer pool 내 **percentile 하위지표**(상대 순위). 한 단지 값이 바뀌면 **같은 pool의 다른 단지 percentile도 함께 움직인다.** 즉 영향 범위가 41건으로 끝나지 않는다.
+2. `school-distance-band.ts` — 절대 band(200/400/650/933). 교정하면 실제로 구간이 바뀐다(`26200-22`: `CLOSE` → `VERY_CLOSE`, `26530-104`: `NORMAL` → `VERY_CLOSE`).
+
+게다가 band 임계값 자체가 **Kakao 분포에 앵커링**돼 있다(코드 주석: "반경 1000m 검색이라 933m를 넘는 값은 실측 표본에 없었다"). NEIS는 1,052~1,422m를 만들어내므로 **임계 근거까지 다시 세워야 한다.**
+
+E-JIP Score는 신뢰 임계 시스템이라 승인 없이 공식·출처·임계값을 바꾸지 않는다(AGENTS.md).
+
+진행 조건 — 착수 전에 아래를 문서로 제시하고 승인받는다:
+
+1. 수집기 수정안 (SC4 페이지네이션 vs NEIS School 테이블 전환)
+2. **점수 변동 분포 시뮬레이션** — 41건 직접 영향 + peer pool 간접 영향까지, 단지별 점수/순위 변화
+3. band 임계값 재앵커링 근거 (새 분포 기준 percentile 재산출)
+4. 순위 역전 사례 목록
+5. 회귀 계획 및 롤백 방법
+
+상세 근거: `docs/development/SCHOOL_DISTANCE_SOURCE_RECONCILIATION_V1.md`
