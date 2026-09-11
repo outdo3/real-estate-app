@@ -22,6 +22,7 @@ import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
 import InfraTabSection from '@/components/apt/InfraTabSection';
 import AptLocationCard from '@/components/apt/AptLocationCard';
+import { shouldShowActionBar } from '@/lib/apt-detail/action-bar-visibility';
 import ApartmentBriefingV2 from '@/components/ApartmentBriefingV2';
 import NextActionSection from '@/components/decision-journey/NextActionSection';
 import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } from '@/lib/decision-journey/registry';
@@ -99,6 +100,9 @@ export default function ApartmentDetail() {
   // 불러오지 못한" 경우도 담는다. 값이 있으면 거래 목록을 완전한 결과로 보여주지 않는다.
   const [tradeIncompleteMessage, setTradeIncompleteMessage] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  // APT_DETAIL_MOBILE_DENSITY_ACTION_BAR_V1 §10 — 하단 액션바는 처음엔 숨어 있다가
+  // 사용자가 페이지를 충분히 본 뒤에 올라온다. 판정 규칙은 순수 모듈에 있다.
+  const [actionBarVisible, setActionBarVisible] = useState(false);
   const [ledgerType, setLedgerType] = useState<'전유부' | '표제부'>('전유부');
   const [aptInfo, setAptInfo] = useState<Record<string, string> | null>(null);
   const [unitMaster, setUnitMaster] = useState<DisplayUnit[] | null>(null);
@@ -440,6 +444,43 @@ export default function ApartmentDetail() {
       cancelled = true;
     };
   }, [aptName, tradeTypeFilter, periodFilter]);
+
+  // §14/§20 — 스크롤 진행률로 액션바 노출을 판정한다.
+  //
+  // 리스너는 passive이고, 실제 계산은 requestAnimationFrame으로 프레임당 한 번으로
+  // 묶는다(스크롤 이벤트는 프레임보다 훨씬 자주 온다). 상태는 **값이 실제로 바뀔
+  // 때만** 갱신하므로, 스크롤하는 내내 리렌더가 발생하지 않는다.
+  //
+  // resize/orientationchange도 같은 핸들러를 탄다 — 화면이 돌아가면 viewport 높이가
+  // 바뀌어 진행률이 달라진다(§15).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let frame = 0;
+
+    const evaluate = () => {
+      frame = 0;
+      const docHeight = document.documentElement.scrollHeight;
+      setActionBarVisible((current) =>
+        shouldShowActionBar(window.scrollY, window.innerHeight, docHeight, current)
+      );
+    };
+    const onScroll = () => {
+      if (frame) return; // 이미 이번 프레임 계산이 예약돼 있다.
+      frame = window.requestAnimationFrame(evaluate);
+    };
+
+    // 다른 라우트에서 돌아오면 스크롤 위치가 복원될 수 있으므로 처음에 한 번 본다.
+    evaluate();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    window.addEventListener('orientationchange', onScroll, { passive: true });
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('orientationchange', onScroll);
+    };
+  }, []);
 
   // 필터링 적용
   const now = new Date();
@@ -974,7 +1015,7 @@ export default function ApartmentDetail() {
   };
 
   return (
-    <div className={styles.main}>
+    <div className={`${styles.main} ${actionBarVisible ? styles.mainWithActionBar : ''}`}>
       <FullPageLoader active={!pageReady && !hasLoadedOnce} />
       <Header
         searchSlot={<ApartmentSearchTrigger onOpen={() => openModal('빠른 검색')} />}
@@ -1204,12 +1245,24 @@ export default function ApartmentDetail() {
 
           <InvestmentMetrics aptName={aptName} lawdCd={lawdCdState} dong={urlDong} selectedTradeArea={selectedTradeArea} />
           
-          <div className={styles.quickButtons} style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+          {/* APT_DETAIL_MOBILE_DENSITY_ACTION_BAR_V1 §4 — 지도를 **예전 버튼 자리로**
+              옮겼다. 직전 STEP은 위치 카드를 실거래 타임라인 뒤에 뒀는데, 사용자가
+              지도를 찾던 자리는 원래 여기(차트·투자지표 아래의 [지도][로드뷰] 버튼)였다.
+              그 자리에 버튼 대신 **실제 지도**가 있는 것이 이 STEP의 목표다.
+
+              여백도 함께 정리했다: 예전 quickButtons는 버튼 두 줄을 담느라
+              marginTop 1.5rem + paddingTop 1.25rem + borderTop을 쌓아두고 있었는데,
+              버튼이 한 줄로 줄어든 뒤에도 그 여백만 남아 있었다. */}
+          <div className={styles.quickButtons} style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1rem' }}>
             <Button variant="secondary" size="sm" onClick={() => openModal('LTV 기준 간편 추정')} style={{ padding: '0.6rem', width: '100%', fontSize: '0.95rem' }}>이 집 사려면 얼마 필요할까?</Button>
-            {/* §12 — [지도][로드뷰] 모달 버튼을 없앴다. 위치는 이제 페이지 안의
-                위치 카드에서 바로 보이고, 지도↔로드뷰도 그 안에서 오간다.
-                같은 일을 하는 입구를 두 개 남겨두면 어느 쪽이 "진짜" 지도인지
-                사용자가 고민하게 된다. */}
+          </div>
+
+          <div style={{ marginTop: '1rem' }}>
+            <AptLocationCard
+              coords={canonicalCoord}
+              locationReady={locationReady}
+              addressLine={primaryAddress || null}
+            />
           </div>
         </div>
       </div>
@@ -1257,19 +1310,6 @@ export default function ApartmentDetail() {
         </div>
       </div>
 
-      {/* ══════════ 위치 ══════════
-          APT_DETAIL_INLINE_MAP_ROADVIEW_V1 §4 — 가격/실거래/제원을 다 훑은 **직후**,
-          "주변 생활정보" 바로 앞에 둔다. 사용자가 단지 자체를 파악한 다음 자연스럽게
-          "그래서 여기가 어디인가"로 넘어가는 지점이고, 그 답이 곧 아래 생활정보의
-          전제가 된다. 가격 요약 앞이나 페이지 맨 아래가 아닌 이유가 이것이다. */}
-      <div className={`container ${styles.sectionBlock}`}>
-        <AptLocationCard
-          coords={canonicalCoord}
-          locationReady={locationReady}
-          addressLine={primaryAddress || null}
-        />
-      </div>
-
       {/* ══════════ 3구역: 단지 주변 생활정보 ══════════ */}
       <div className={`container ${styles.sectionBlock}`}>
         <h2 className={styles.zoneTitle}>단지 주변 생활정보</h2>
@@ -1308,6 +1348,7 @@ export default function ApartmentDetail() {
       </div>
 
       <StickyActionBar
+        visible={actionBarVisible}
         aptName={aptName}
         lawdCd={lawdCdState}
         dong={urlDong}

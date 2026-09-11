@@ -21,6 +21,19 @@ type Props =
 
 const ROADVIEW_SEARCH_RADIUS_M = 200;
 
+/**
+ * APT_DETAIL_MOBILE_DENSITY_ACTION_BAR_V1 §5 — 높이를 CSS 변수로 연다.
+ *
+ * 이 컴포넌트는 오피스텔 상세와 아파트 상세가 함께 쓴다. 아파트 쪽만 모바일에서
+ * 낮추고 싶은데 여기 박힌 400px을 그냥 바꾸면 **모든 소비자가 같이 바뀐다**.
+ * 그래서 변수로 두고 기본값은 예전 그대로 400px로 남긴다 — 변수를 설정하지 않는
+ * 화면(오피스텔)은 동작이 1px도 변하지 않는다. 아파트 위치 카드만 미디어쿼리로
+ * 이 변수를 덮어쓴다.
+ *
+ * 지도와 로드뷰 pane은 같은 래퍼 안에 inset:0으로 깔리므로 **둘의 높이는 항상 같다**.
+ */
+const EMBED_MIN_HEIGHT = 'var(--map-embed-min-height, 400px)';
+
 export default function KakaoMapEmbed(props: Props) {
   const { type } = props;
 
@@ -158,7 +171,7 @@ export default function KakaoMapEmbed(props: Props) {
     return (
       <div
         style={{
-          width: '100%', height: '100%', minHeight: '400px', display: 'flex',
+          width: '100%', height: '100%', minHeight: EMBED_MIN_HEIGHT, display: 'flex',
           alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9',
           fontSize: '0.9rem', color: '#475569', textAlign: 'center', padding: '1rem',
         }}
@@ -176,7 +189,7 @@ export default function KakaoMapEmbed(props: Props) {
   });
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '400px', borderRadius: '8px', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: EMBED_MIN_HEIGHT, borderRadius: '8px', overflow: 'hidden' }}>
       <div ref={mapRef} style={pane(type === 'map')} />
       <div ref={rvRef} style={pane(type === 'roadview')} />
       {type === 'roadview' && noRoadview && (

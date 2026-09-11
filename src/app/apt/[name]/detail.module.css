@@ -326,6 +326,37 @@
   margin-top: 2rem;
 }
 
+/* APT_DETAIL_MOBILE_DENSITY_ACTION_BAR_V1 §2/§3 — 모바일 밀도.
+   ──────────────────────────────────────────────────────────────────────────
+   감사에서 확인된 가장 큰 낭비는 `.panel { padding: 2rem }` 에 **모바일 재정의가
+   아예 없었다**는 점이다. 360px 화면에서 카드마다 좌우 32px씩(=64px, 화면 폭의 18%)
+   과 위아래 32px씩을 그대로 쓰고 있었다. 여기에 sectionBlock 32px + zoneTitle 16px이
+   겹쳐, 섹션 하나를 지날 때마다 쓸모없는 여백이 80px 넘게 쌓였다.
+
+   전면 축소가 아니라 **쌓이는 곳만** 줄인다. 글자 크기·줄간격·터치 타깃은 건드리지
+   않는다(§3/§17). */
+@media (max-width: 768px) {
+  .sectionBlock {
+    margin-top: 1.25rem; /* 32px → 20px */
+  }
+
+  .panel {
+    /* 좌우는 화면 폭을 가장 크게 돌려준다. 위아래는 카드 경계가 흐려지지 않을
+       만큼만 남긴다. */
+    padding: 1rem;
+  }
+
+  .zoneTitle {
+    font-size: 1.12rem;
+    margin-bottom: 0.6rem; /* 16px → 9.6px */
+  }
+
+  .briefCard {
+    padding: 0.9rem 1rem;
+    margin-top: 1rem;
+  }
+}
+
 .briefCard {
   background: #f0f9ff;
   border: 1px solid #bae6fd;
@@ -467,6 +498,16 @@
      가려지지 않는다. 실측(getBoundingClientRect) 결과 stickyBar+하단탭바 합산
      높이가 약 128px로 기존 80px 여백을 초과함을 확인해 추가했다. */
   .main {
+    /* §12 — 예전에는 stickyBar가 항상 떠 있어서 그 높이를 상시 예약해야 했다.
+       이제 기본 상태에서는 바가 없으므로 **하단탭바(60px) 몫만** 남긴다.
+       바가 실제로 올라올 때만 아래 .mainWithActionBar가 추가분을 얹는다. */
+    padding-bottom: calc(60px + 1.5rem);
+  }
+
+  /* 바가 보이는 동안에만 그 높이를 예약한다. 이 클래스가 붙고 떨어질 때 문서
+     높이가 약 40px 변하는데, 진행률 임계값이 78%/60%로 18%포인트나 벌어져 있어
+     그 정도 변화로는 판정이 뒤집히지 않는다(수천 px 문서에서 약 1%). */
+  .mainWithActionBar {
     padding-bottom: calc(60px + 4rem);
   }
 
@@ -490,6 +531,27 @@
     background: white;
     border-top: 1px solid var(--border-color);
     box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+
+    /* §11 — 기본은 숨김. 아래로 밀어두고 투명하게 두되 DOM에는 남긴다.
+       pointer-events:none이라 숨어 있는 동안에는 탭을 가로채지 않는다. */
+    transform: translateY(115%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 200ms ease-out, opacity 200ms ease-out;
+  }
+
+  .stickyBarVisible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* §11 — 모션을 줄여 달라고 한 사용자에게는 슬라이드를 주지 않는다.
+   나타나고 사라지는 것 자체는 유지하되 즉시 전환한다. */
+@media (prefers-reduced-motion: reduce) {
+  .stickyBar {
+    transition: none;
   }
 }
 

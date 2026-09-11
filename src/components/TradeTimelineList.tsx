@@ -83,25 +83,33 @@ export default function TradeTimelineList({ trades, loading, incompleteMessage, 
         const dateFormatted = t.tradeDate.replace(/-/g, '.');
 
         return (
-          <div key={`row-${t.id}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.85rem 0', borderBottom: '1px solid var(--border-color)', gap: '1rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          // APT_DETAIL_MOBILE_DENSITY_ACTION_BAR_V1 §7 — 행 높이를 줄인다.
+          //
+          // 데이터는 하나도 빼지 않았다(가격/증감/날짜/평형/층/거래유형 그대로).
+          // 줄인 것은 **여백뿐**이다: 위아래 패딩 13.6px씩 → 8.8px씩, 줄 사이 간격
+          // 4px → 2.4px. 여기에 줄간격을 명시해 폰트가 기본으로 만들던 여유를 걷어낸다
+          // (명시하지 않으면 브라우저 기본 line-height가 글자마다 다른 슬랙을 만든다).
+          //
+          // 가격은 그대로 가장 강하다(§17) — 크기를 줄이지 않았다.
+          <div key={`row-${t.id}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.55rem 0', borderBottom: '1px solid var(--border-color)', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{t.priceStr}</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>{t.priceStr}</span>
                 {diffBadge}
               </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
                 {dateFormatted} · {areaLabel}
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem', flexShrink: 0 }}>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{t.floor}층</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.tradeType}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.2 }}>{t.floor}층</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.3 }}>{t.tradeType}</span>
             </div>
           </div>
         );
       })}
       {trades.length > visibleCount && (
-        <div style={{ padding: '1rem', textAlign: 'center', marginTop: '0.5rem' }}>
+        <div style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
           <button
             onClick={onLoadMore}
             style={{ padding: '0.6rem 1.5rem', borderRadius: '999px', border: '1px solid var(--border-color)', background: 'white', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}

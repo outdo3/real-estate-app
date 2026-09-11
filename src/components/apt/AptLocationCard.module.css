@@ -5,7 +5,8 @@
   background: var(--card-bg, #fff);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 1rem;
+  /* §6 — 지도가 주인공이다. 카드 자체의 여백은 지도 경계를 만들 만큼만 남긴다. */
+  padding: 0.85rem;
 }
 
 .header {
@@ -13,7 +14,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.55rem;
 }
 
 .title {
@@ -67,12 +68,19 @@
   color: var(--text-primary);
 }
 
-/* 지도 자리. 높이를 여기서 고정해 SDK가 붙기 전후로 레이아웃이 움직이지 않는다.
-   KakaoMapEmbed 내부가 min-height:400px을 쓰므로 그보다 작게 잡지 않는다. */
+/* 지도 자리.
+   §5 — 400px은 폰에서 화면 절반을 넘게 먹는다. 폭에 따라 높이를 조절하되,
+   KakaoMapEmbed가 자체 min-height를 갖고 있어 프레임만 낮추면 지도가 잘리므로
+   **같은 변수로 둘을 함께** 움직인다(그 컴포넌트의 기본값 400px은 그대로라
+   오피스텔 상세는 영향이 없다).
+
+   높이를 여기서 확정해 SDK가 붙기 전후로 레이아웃이 움직이지 않는다.
+   지도와 로드뷰는 같은 프레임을 쓰므로 높이가 항상 같다. */
 .mapFrame {
+  --map-embed-min-height: 380px;
   position: relative;
   width: 100%;
-  height: 400px;
+  height: var(--map-embed-min-height);
   border-radius: 8px;
   overflow: hidden;
   background: #f1f5f9;
@@ -84,9 +92,25 @@
   justify-content: center;
   width: 100%;
   height: 100%;
-  min-height: 400px;
   color: var(--text-muted);
   font-size: 0.88rem;
+}
+
+/* 태블릿 */
+@media (max-width: 1024px) {
+  .mapFrame { --map-embed-min-height: 340px; }
+}
+/* 큰 폰(430px 급) */
+@media (max-width: 440px) {
+  .mapFrame { --map-embed-min-height: 300px; }
+}
+/* 일반 폰(390px 급) */
+@media (max-width: 400px) {
+  .mapFrame { --map-embed-min-height: 290px; }
+}
+/* 작은 폰(360px 급) */
+@media (max-width: 375px) {
+  .mapFrame { --map-embed-min-height: 280px; }
 }
 
 .empty {
@@ -118,21 +142,17 @@
 }
 
 .address {
-  margin: 0.7rem 0 0;
+  margin: 0.55rem 0 0;
   font-size: 0.85rem;
   line-height: 1.5;
   color: var(--text-secondary);
   word-break: keep-all;
 }
 
-/* 모바일에서는 카드 여백만 줄인다.
-   지도 높이는 400px 그대로 둔다 — KakaoMapEmbed 내부가 min-height:400px을 쓰기
-   때문에 프레임만 낮추면 지도가 프레임 밖으로 나가 잘린다(overflow:hidden).
-   높이를 정말 낮추려면 그 공용 컴포넌트를 함께 고쳐야 하고, 그건 오피스텔 상세까지
-   건드리는 변경이라 이 STEP의 범위가 아니다. */
+/* 모바일 카드 여백. 지도 높이는 위 --map-embed-min-height가 담당한다. */
 @media (max-width: 768px) {
   .card {
-    padding: 0.9rem;
+    padding: 0.75rem;
   }
 }
 
