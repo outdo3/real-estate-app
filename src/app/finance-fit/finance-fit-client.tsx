@@ -9,6 +9,8 @@ import { BROKERAGE_RULE_VERSION } from '@/lib/finance-fit/types';
 import { parseFinanceFitUrl } from '@/lib/finance-fit/url';
 import { validateFinanceFitInputs, type FinanceFitValidationError } from '@/lib/finance-fit/validation';
 import type { FinanceFitResult } from '@/lib/finance-fit/types';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import PartnerCtaCard from '@/components/partner/PartnerCtaCard';
 import styles from './finance-fit.module.css';
@@ -28,6 +30,20 @@ export default function FinanceFitClient() {
   const searchParams = useSearchParams();
   const seed = useMemo(() => parseFinanceFitUrl(searchParams), [searchParams]);
   const startTracked = useRef(false);
+
+  // §16 — 들어온 단지로 돌아가는 경로. identity(lawdCd/dong/aptSeq)를 그대로 유지해
+  // 돌아간 화면이 같은 단지를 같은 방식으로 해석하게 한다. 이름만으로 되돌리지 않는다.
+  // seed는 위에서 이미 searchParams로부터 memo된 객체다. 하위 필드를 optional chaining으로
+  // 의존성에 나열하면 React Compiler lint가 수동 memo를 보존하지 못한다 — 객체 자체를 쓴다.
+  const returnHref = useMemo(() => {
+    if (!seed || !seed.name) return null;
+    const qs = new URLSearchParams();
+    if (seed.lawdCd) qs.set('lawdCd', seed.lawdCd);
+    if (seed.dong) qs.set('dong', seed.dong);
+    if (seed.aptSeq) qs.set('aptSeq', seed.aptSeq);
+    const query = qs.toString();
+    return `/apt/${encodeURIComponent(seed.name)}${query ? `?${query}` : ''}`;
+  }, [seed]);
 
   const [purchasePriceInput, setPurchasePriceInput] = useState('');
   const [availableCashInput, setAvailableCashInput] = useState('');
@@ -87,6 +103,14 @@ export default function FinanceFitClient() {
               </p>
             ) : (
               <p className={styles.refPrice}>참고할 최근 실거래가 정보가 없습니다. 직접 입력해주세요.</p>
+            )}
+            {/* REAL_ESTATE_TOOLS_FINANCE_ACTION_LOOP_V1 §16 — 자금 계획은 막다른 길이
+                아니다. 계산을 마친 사용자는 보통 그 단지로 돌아간다. 홈이 아니라
+                **원래 보던 단지 상세로** 돌려보낸다(identity를 그대로 들고 간다). */}
+            {returnHref && (
+              <Link href={returnHref} className={styles.returnLink}>
+                <ArrowLeft size={14} strokeWidth={2.2} aria-hidden="true" /> {seed.name} 단지로 돌아가기
+              </Link>
             )}
           </div>
         )}

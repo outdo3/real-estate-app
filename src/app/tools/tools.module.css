@@ -275,3 +275,177 @@
   min-height: 100px;
   margin-top: 1rem;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   REAL_ESTATE_TOOLS_FINANCE_ACTION_LOOP_V1 §17 — 출시 IA용 추가 스타일.
+   기존 클래스(.toolCard/.formInput/.resultBox 등)는 그대로 재사용한다.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.lead {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  margin: 0 0 0.9rem;
+}
+
+/* 다른 화면으로 나가는 진입 카드. 계산기 카드보다 낮고 가볍게. */
+.entryCard {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--card-bg, #fff);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.entryCard:hover {
+  border-color: var(--primary-color);
+}
+
+.entryTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.entryDesc {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 0.12rem;
+  line-height: 1.45;
+}
+
+.entryArrow {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+/* 카드 헤더에 붙는 상태 배지 — 신뢰 수준을 제목 옆에서 바로 알린다. */
+.limitedBadge,
+.soonBadge {
+  flex-shrink: 0;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.limitedBadge {
+  background: var(--warn-soft, #fef3c7);
+  color: #92400e;
+}
+
+.soonBadge {
+  background: var(--bg-color, #f5f6f8);
+  color: var(--text-muted);
+}
+
+/* 숫자 입력 + 단위 */
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.inputRow .formInput {
+  flex: 1;
+  min-width: 0;
+  /* 금액은 오른쪽 정렬이 읽기 쉽다. */
+  text-align: right;
+}
+
+.inputUnit {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* 결과 내역 — 라벨 왼쪽 / 금액 오른쪽 */
+.breakdown {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.breakdown li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.3rem 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.breakdown li b {
+  color: var(--text-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* 등기 비용 항목 목록 */
+.costList {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.costItem {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.costItem:last-child {
+  border-bottom: none;
+}
+
+.costLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex-wrap: wrap;
+}
+
+.costNature {
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--bg-color, #f5f6f8);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.costNote {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* 아주 좁은 화면에서는 2열 입력을 세로로 쌓는다. */
+@media (max-width: 400px) {
+  .twoCol {
+    grid-template-columns: 1fr;
+  }
+}

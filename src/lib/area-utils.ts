@@ -91,7 +91,9 @@ export function groupToDisplayUnits(rawUnits: RawUnitType[]): DisplayUnit[] {
 // 단지 1,800건+ 실측에서 관찰된 MOLIT 원본 최대 소수 자릿수(4자리)를 근거로
 // 정했다 — 추측치가 아니다. 그 이상 늘려도 라벨이 여전히 같다면 사실상 동일한
 // 면적으로 보고 더 늘리지 않는다.
-const M2_PER_PYEONG = 3.305785;
+// REAL_ESTATE_TOOLS_FINANCE_ACTION_LOOP_V1 §14 — 평당가 계산기가 이 상수를 쓴다.
+// 환산 규칙을 두 벌로 만들지 않기 위해 복제 대신 export한다(값은 그대로).
+export const M2_PER_PYEONG = 3.305785;
 const MAX_AREA_PRECISION = 4;
 
 function roundToPrecision(m2: number, precision: number): number {

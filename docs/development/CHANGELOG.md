@@ -2,6 +2,98 @@
 
 ## 2026-09-11
 
+### REAL ESTATE TOOLS + FINANCE ACTION LOOP V1 — 부산 출시 도구 IA + 자금 액션 루프
+
+**가장 중요한 발견 먼저.** /tools 페이지에 작성자가 주석으로 "모의 로직"이라고 직접
+적어둔 계산기 두 개가 실제 결과처럼 표시되고 있었다:
+
+    // 계산 로직 (간단한 모의 로직)
+    const taxRate = houseCount === '1주택' ? 0.033 : (houseCount === '2주택' ? 0.08 : 0.12);
+    const dsrLimit = numericIncome * 8; // 연소득의 대략 8배 대출 한도로 시뮬레이션
+
+주택 취득세는 가액 구간별 누진이라 단일 3.3%는 대부분의 가격대에서 틀린다.
+5억 주택의 실제 1주택 취득세는 550만원인데 모의 로직은 1,650만원을 냈다(3배).
+대출여력의 연소득×8은 근거가 없다. 면책 문구가 있었지만 사용자는 숫자를 보고 자금
+계획을 세운다 — sparse 문제가 아니라 신뢰 문제였고 출시 차단 사유였다.
+
+신규 — src/lib/finance-tools/:
+
+- ratios.ts — LTV / DSR / 갭 / 전세가율 / 평당가. **전부 정의가 고정된 산수**다.
+  정책은 계산하지 않는다: "LTV 70%까지 받을 수 있다"는 정책이고 "70%면 7억"은 산수다.
+  결과 객체에 approved/limit 같은 필드가 구조적으로 없다(테스트로 고정).
+  평당가는 기존 M2_PER_PYEONG을 export해서 쓴다 — 두 번째 환산 규칙을 만들지 않았다.
+- acquisition-tax.ts — 1주택·유상거래 한정. 6억 이하 1%, 6~9억 연속 구간(경계에서
+  튀지 않는다), 9억 초과 3% + 지방교육세 + 농특세(전용 85㎡ 초과). 2주택 이상·생애최초
+  감면·증여/상속/분양권은 **세율을 지어내지 않고 UNSUPPORTED를 돌려준다** — 중과세율은
+  조정대상지역 지정에 달렸고 그 지정은 수시로 바뀌어 박아두면 조용히 틀린다.
+  전용면적을 모르면 농특세를 더하지 않는다.
+- registration-cost.ts — **금액 필드 자체가 없다.** 등기비용은 공과금(계산 가능),
+  채권 할인차손(시세 따라 매일 변동), 법무사 보수(요율표 없음, 사무소마다 다름),
+  실비(건별)가 섞인 말이다. 평균값으로 합치면 어느 사무소 것도 아니고 오늘 시세도
+  아닌 숫자가 된다. 항목과 성격만 알려주고 견적으로 연결한다.
+- finance-tools.test.ts 신규 30건(극단값 조합 전수로 NaN/Infinity 누출 0건 고정)
+
+/tools 재구성:
+
+내 집 마련 / 투자 계산 / 비교·리포트 / 안전계약 4개 그룹.
+빈 카드로 자리를 채우지 않았다. 임장 노트의 "저장하기" 버튼은 저장되는 곳이 없어
+제거하고 준비중으로 바꿨다(눌리는데 아무 일도 없는 버튼 금지). 경매·공매는 기존
+준비중 유지. 리포트 3종은 기존 라우트를 그대로 연다(재구축 없음).
+등기 비용 카드 바로 아래에 기존 PartnerCtaCard — 설정 복제 없이 lib/partners/config.ts를
+그대로 쓰고 추적도 기존 partner_cta_impression/click 그대로.
+
+액션 루프:
+
+상세 → /finance-fit 컨텍스트 전달은 이미 있었다(buildFinanceFitUrl/parseFinanceFitUrl,
+aptSeq·lawdCd·dong·참고가). **없던 돌아가기를 추가했다** — 홈이 아니라 원래 보던 단지
+상세로, identity를 그대로 들고 간다(이름만으로 되돌리지 않는다).
+
+신뢰 표기:
+
+카드마다 법률 문구를 도배하지 않고 계산기별 "계산 기준" 블록 하나.
+제목 옆 배지로 신뢰 수준을 먼저 알린다(1주택 기준 / 참고 계산 / 견적 필요 / 준비중).
+대출·DSR은 "금융기관 승인 금액이 아님"을 명시한다.
+
+⚠ 출시 전 확인 필요:
+
+취득세 구간·세율은 지방세법 기준을 옮긴 것이며 저장소 안에 대조할 1차 출처가 없다.
+ACQUISITION_TAX_RULE_VERSION.verifiedAgainstPrimarySource = false로 표시하고 화면에
+기준일(2026-09-11)을 노출했다. 이 도구는 LIMITED로 분류한다.
+
+입력/출력:
+
+만원 단위 입력, 콤마·공백·문자를 걸러낸다(type="number"를 안 써서 콤마가 막히지 않는다).
+모바일 숫자 키패드(inputMode). 출력은 기존 formatWon — 원/만원을 섞지 않는다.
+0·빈값·음수·NaN·Infinity는 전부 null → "입력해 주세요".
+
+성능:
+
+전부 useMemo 기반 클라이언트 로컬 순수 함수. API 0건, DB 0건, 새 의존성 0건.
+
+DB / 스키마 / migration:
+
+전부 변경 없음
+
+검증:
+
+- npx tsx --test src/lib/finance-tools/finance-tools.test.ts: 30/30 PASS
+- npx tsx --test (src 전체): 699/699 PASS, fail 0
+- npx eslint (변경 파일): exit 0
+- npx tsc --noEmit: src/ 오류 0건(전체 exit 2는 기존 scripts//tmp/)
+- npm run build: exit 0
+- 라우트: /tools /finance-fit /stats/compare /report /report/city/busan 전부 200
+- 렌더 실측(5억·84.95㎡): 취득세 합계 550만원 = 취득세 500만 + 지방교육세 50만 +
+  농특세 해당없음. "취득세 간편 추정" "대출여력 간편추정" "3.3%" "간편 추정액"
+  문자열이 렌더 HTML에서 전부 사라진 것을 확인
+- 모바일 QA는 STRUCTURAL ONLY(브라우저 렌더링 아님)
+
+로드맵:
+
+"출시 후" 절을 신설해 취득세 1차 출처 대조, 2주택 중과/생애최초, 채권 할인차손,
+임장노트 저장, 경매·공매 연동, 상세 LTV 모달 통일, 갭 prefill,
+미착수 도구(출퇴근/재개발 고급/청약/AI 추천/브로커 PRO)를 기록했다.
+기존 "보류 / P1 데이터 신뢰"의 SCHOOL SCORE IMPACT SIMULATION V1은 그대로 보존.
+
 ### APT DETAIL MOBILE DENSITY + MAP PLACEMENT + SMART ACTION BAR V1
 
 실기기 스크린샷 피드백 반영. 데이터 의미는 건드리지 않는 밀도/배치/노출 타이밍 작업이다.

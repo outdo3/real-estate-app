@@ -1,236 +1,467 @@
 'use client';
 
-import React, { useState } from 'react';
+/**
+ * REAL_ESTATE_TOOLS_FINANCE_ACTION_LOOP_V1 §3/§17 — 부동산도구 출시 IA.
+ *
+ * ── 이 페이지가 바꾼 가장 중요한 것 ────────────────────────────────────────
+ * 예전 이 페이지에는 작성자가 주석으로 **"간단한 모의 로직"이라고 직접 적어둔**
+ * 계산기 두 개가 실제 결과처럼 표시되고 있었다:
+ *
+ *   취득세    = 가격 × (1주택 3.3% / 2주택 8% / 3주택 12%)   ← 구간 누진 무시
+ *   대출여력  = 연소득 × 8                                   ← 근거 없는 배수
+ *
+ * 둘 다 제거했다. 취득세는 구간 누진을 반영한 좁고 정확한 계산으로 대체했고,
+ * 대출여력은 LTV·DSR **산수**로 대체했다(한도 판정은 하지 않는다).
+ *
+ * 남은 원칙: 완성되지 않은 도구는 노출하지 않거나 "준비중"으로만 둔다.
+ * 눌리는데 아무 일도 일어나지 않는 버튼을 만들지 않는다(§18).
+ */
+
+import React, { useMemo, useState } from 'react';
+import Link from 'next/link';
+import {
+  Calculator, Landmark, Receipt, FileSignature, Scale, FileText,
+  TrendingUp, Ruler, ShieldCheck, Gavel, ClipboardList, ArrowRight,
+} from 'lucide-react';
 import Header from '@/components/Header';
 import Empty from '@/components/ui/Empty';
+import PartnerCtaCard from '@/components/partner/PartnerCtaCard';
+import { formatWon } from '@/lib/finance-fit/format';
+import { calculateMonthlyPayment } from '@/lib/finance-fit/amortization';
+import {
+  calculateAcquisitionTax, ACQUISITION_TAX_RULE_VERSION, UNSUPPORTED_MESSAGE,
+} from '@/lib/finance-tools/acquisition-tax';
+import { REGISTRATION_COST_ITEMS } from '@/lib/finance-tools/registration-cost';
+import { loanAmountAtLtv, calculateDsr, calculateGap, pricePerPyeong } from '@/lib/finance-tools/ratios';
+import { cityReportHref } from '@/lib/report/report-links';
 import styles from './tools.module.css';
 
 const TABS = [
-  { id: 'calc', name: '🧮 세금·대출 계산기' },
-  { id: 'safety', name: '📋 안전계약 체크' },
-  { id: 'auction', name: '⚖️ 경·공매 비교' },
-  { id: 'note', name: '📝 임장 노트' }
-];
+  { id: 'home', name: '내 집 마련', Icon: Landmark },
+  { id: 'invest', name: '투자 계산', Icon: TrendingUp },
+  { id: 'report', name: '비교·리포트', Icon: FileText },
+  { id: 'safety', name: '안전계약', Icon: ShieldCheck },
+] as const;
+
+/** 만원 단위 입력 → 원. 콤마·공백을 허용한다(§22/§23). */
+function manwonToWon(raw: string): number {
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (!digits) return 0;
+  const man = Number(digits);
+  return Number.isFinite(man) ? man * 10_000 : 0;
+}
+
+function toNumber(raw: string): number {
+  const cleaned = raw.replace(/[^0-9.]/g, '');
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
 
 export default function ToolsPage() {
-  const [activeTab, setActiveTab] = useState(TABS[0].id);
+  const [activeTab, setActiveTab] = useState<string>(TABS[0].id);
 
-  // 세금 계산기 상태
-  const [houseCount, setHouseCount] = useState('1주택');
-  const [price, setPrice] = useState('1000000000'); // 10억
-  const [income, setIncome] = useState('60000000'); // 6천만
+  // ── 내 집 마련 입력 (전부 만원 단위, 클라이언트 로컬 — API 호출 0건) ──
+  const [priceMan, setPriceMan] = useState('50000');      // 5억
+  const [areaM2, setAreaM2] = useState('84.95');
+  const [ltvRatio, setLtvRatio] = useState('70');
+  const [rate, setRate] = useState('3.5');
+  const [years, setYears] = useState('30');
+  const [incomeMan, setIncomeMan] = useState('6000');     // 연 6천만
+  const [existingDebtMan, setExistingDebtMan] = useState('0');
 
-  // 계산 로직 (간단한 모의 로직)
-  const numericPrice = parseInt(price) || 0;
-  const numericIncome = parseInt(income) || 0;
-  
-  const taxRate = houseCount === '1주택' ? 0.033 : (houseCount === '2주택' ? 0.08 : 0.12);
-  const taxAmount = numericPrice * taxRate;
-  
-  const dsrLimit = numericIncome * 8; // 연소득의 대략 8배 대출 한도로 시뮬레이션
+  // ── 투자 계산 입력 ──
+  const [gapSaleMan, setGapSaleMan] = useState('50000');
+  const [gapJeonseMan, setGapJeonseMan] = useState('35000');
+  const [ppPriceMan, setPpPriceMan] = useState('50000');
+  const [ppAreaM2, setPpAreaM2] = useState('84.95');
 
-  const formatMoney = (num: number) => {
-    if (num >= 100000000) {
-      const eok = Math.floor(num / 100000000);
-      const man = Math.floor((num % 100000000) / 10000);
-      return man > 0 ? `${eok}억 ${man.toLocaleString()}만원` : `${eok}억원`;
-    }
-    return `${(num / 10000).toLocaleString()}만원`;
-  };
+  const price = manwonToWon(priceMan);
+  const area = toNumber(areaM2);
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert('클립보드에 복사되었습니다.');
-  };
+  const tax = useMemo(
+    () => calculateAcquisitionTax({
+      purchasePrice: price,
+      homeCountAfterPurchase: 1,
+      exclusiveAreaM2: area > 0 ? area : null,
+      isPurchase: true,
+    }),
+    [price, area]
+  );
 
-  const renderToolContent = () => {
-    switch (activeTab) {
-      case 'calc':
-        return (
-          <div className={styles.toolsGrid}>
-            <div className={styles.toolCard}>
-              <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>💰 취득세 간편 추정</h2>
-              </div>
-              <div className={styles.cardBody}>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>보유 주택 수</label>
-                  <select className={styles.formSelect} value={houseCount} onChange={e => setHouseCount(e.target.value)}>
-                    <option value="1주택">1주택 (갈아타기)</option>
-                    <option value="2주택">2주택</option>
-                    <option value="3주택 이상">3주택 이상</option>
-                  </select>
-                  <p className={styles.resultSubtext} style={{ marginTop: '0.5rem' }}>
-                    생애최초(무주택) 감면 조건은 아직 정확히 반영하지 못해 옵션에서 제외했습니다.
-                  </p>
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>취득 가액 (원)</label>
-                  <input type="number" className={styles.formInput} value={price} onChange={e => setPrice(e.target.value)} />
-                </div>
-                <div className={styles.resultBox}>
-                  <p className={styles.resultText}>👉 현재 입력조건 기준 예상 취득세: {formatMoney(taxAmount)}</p>
-                  <p className={styles.resultSubtext}>적용 세율: {(taxRate * 100).toFixed(1)}% (지방교육세 등 포함 간편 추정치)</p>
-                </div>
-                <div className={styles.disclosurePanel} role="note" aria-label="취득세 간편 추정 한계 안내">
-                  ⓘ 이 계산은 <strong>보유 주택 수와 취득가액</strong>만 반영한 간편 추정입니다.
-                  지역, 면적, 취득 형태(매매·증여·상속 등), 생애최초 감면·다주택 중과 등
-                  개인별 조건은 반영되지 않아 실제 세액과 다를 수 있습니다.
-                </div>
+  const ltv = useMemo(() => loanAmountAtLtv(price, toNumber(ltvRatio)), [price, ltvRatio]);
+  const monthly = useMemo(
+    () => (ltv ? calculateMonthlyPayment(ltv.loanAmount, toNumber(rate), toNumber(years)) : 0),
+    [ltv, rate, years]
+  );
+  const dsr = useMemo(
+    () => calculateDsr(manwonToWon(incomeMan), manwonToWon(existingDebtMan), monthly),
+    [incomeMan, existingDebtMan, monthly]
+  );
+
+  const gap = useMemo(
+    () => calculateGap(manwonToWon(gapSaleMan), manwonToWon(gapJeonseMan)),
+    [gapSaleMan, gapJeonseMan]
+  );
+  const pp = useMemo(
+    () => pricePerPyeong(manwonToWon(ppPriceMan), toNumber(ppAreaM2)),
+    [ppPriceMan, ppAreaM2]
+  );
+
+  const moneyInput = (value: string, onChange: (v: string) => void, label: string, unit = '만원') => (
+    <div className={styles.formGroup}>
+      <label className={styles.formLabel}>{label}</label>
+      <div className={styles.inputRow}>
+        <input
+          className={styles.formInput}
+          // 모바일에서 숫자 키패드가 뜨도록. type="number"는 콤마 입력이 막혀 쓰지 않는다.
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className={styles.inputUnit}>{unit}</span>
+      </div>
+    </div>
+  );
+
+  const renderHome = () => (
+    <div className={styles.toolsGrid}>
+      {/* 진입점 — 상세에서 오지 않았어도 여기서 들어갈 수 있다 */}
+      <Link href="/finance-fit" className={styles.entryCard}>
+        <Calculator size={18} strokeWidth={2.2} aria-hidden="true" />
+        <div>
+          <div className={styles.entryTitle}>이 집 사려면 얼마 필요?</div>
+          <div className={styles.entryDesc}>매매가·대출·필요 현금을 한 번에 정리합니다.</div>
+        </div>
+        <ArrowRight size={16} aria-hidden="true" className={styles.entryArrow} />
+      </Link>
+
+      {/* 취득세 */}
+      <section className={styles.toolCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}><Receipt size={16} aria-hidden="true" /> 취득세 계산</h2>
+          <span className={styles.limitedBadge}>1주택 기준</span>
+        </div>
+        <div className={styles.cardBody}>
+          {moneyInput(priceMan, setPriceMan, '취득가액')}
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>전용면적 (㎡)</label>
+            <div className={styles.inputRow}>
+              <input className={styles.formInput} inputMode="decimal" value={areaM2} onChange={(e) => setAreaM2(e.target.value)} />
+              <span className={styles.inputUnit}>㎡</span>
+            </div>
+          </div>
+
+          {tax.kind === 'SUPPORTED' ? (
+            <div className={styles.resultBox}>
+              <p className={styles.resultText}>예상 취득세 합계 {formatWon(tax.result.total)}</p>
+              <ul className={styles.breakdown}>
+                <li><span>취득세 ({tax.result.baseRatePercent}%)</span><b>{formatWon(tax.result.baseTax)}</b></li>
+                <li><span>지방교육세</span><b>{formatWon(tax.result.localEducationTax)}</b></li>
+                <li>
+                  <span>농어촌특별세</span>
+                  <b>{tax.result.ruralSpecialTax > 0 ? formatWon(tax.result.ruralSpecialTax) : '해당 없음'}</b>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <div className={styles.resultBox}>
+              <p className={styles.resultText}>{UNSUPPORTED_MESSAGE[tax.reason]}</p>
+            </div>
+          )}
+
+          <div className={styles.disclosurePanel} role="note">
+            <b>계산 기준</b> — 개인이 주택을 <b>매매로 1주택 취득</b>하는 경우입니다.
+            2주택 이상 취득, 생애최초 감면, 증여·상속·분양권, 조정대상지역 중과는 반영하지 않습니다.
+            실제 세액은 세무 상담으로 확인하세요.
+            <br />
+            기준: {ACQUISITION_TAX_RULE_VERSION.source} · {ACQUISITION_TAX_RULE_VERSION.referenceDate}
+          </div>
+        </div>
+      </section>
+
+      {/* 대출 · LTV · DSR · 월 상환액 */}
+      <section className={styles.toolCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}><Landmark size={16} aria-hidden="true" /> 대출 · 월 상환액 · DSR</h2>
+          <span className={styles.limitedBadge}>참고 계산</span>
+        </div>
+        <div className={styles.cardBody}>
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>가정 LTV 비율</label>
+            <div className={styles.inputRow}>
+              <input className={styles.formInput} inputMode="decimal" value={ltvRatio} onChange={(e) => setLtvRatio(e.target.value)} />
+              <span className={styles.inputUnit}>%</span>
+            </div>
+            <p className={styles.hint}>규제·주택 수·은행에 따라 실제 한도는 달라집니다. 직접 가정값을 넣어 비교해 보세요.</p>
+          </div>
+          <div className={styles.twoCol}>
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>금리</label>
+              <div className={styles.inputRow}>
+                <input className={styles.formInput} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} />
+                <span className={styles.inputUnit}>%</span>
               </div>
             </div>
-
-            <div className={styles.toolCard}>
-              <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>🏦 대출여력 간편추정</h2>
-              </div>
-              <div className={styles.cardBody}>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>연소득 (원)</label>
-                  <input type="number" className={styles.formInput} value={income} onChange={e => setIncome(e.target.value)} />
-                </div>
-                <div className={styles.resultBox}>
-                  <p className={styles.resultText}>👉 간편 추정액: 약 {formatMoney(dsrLimit)}</p>
-                  <p className={styles.resultSubtext}>연소득을 기준으로 단순 추정한 참고 값입니다.</p>
-                </div>
-                <div className={styles.disclosurePanel} role="note" aria-label="대출여력 간편추정 한계 안내">
-                  ⓘ 이 값은 <strong>실제 DSR 계산이 아닙니다.</strong> 실제 DSR은 기존 대출,
-                  금리, 상환기간, 상환방식 등 여러 조건을 함께 반영하며, 이 값은 금융기관의
-                  승인 가능 금액이 아닙니다.
-                </div>
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>기간</label>
+              <div className={styles.inputRow}>
+                <input className={styles.formInput} inputMode="numeric" value={years} onChange={(e) => setYears(e.target.value)} />
+                <span className={styles.inputUnit}>년</span>
               </div>
             </div>
           </div>
-        );
-      
-      case 'safety':
-        return (
-          <div className={styles.toolsGrid}>
-            <div className={styles.toolCard}>
-              <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>🛡️ 전세사기 예방 / 필수 특약</h2>
-              </div>
-              <div className={styles.cardBody}>
-                <ul className={styles.checkList}>
-                  <li className={styles.checkItem}>
-                    <div>
-                      <div className={styles.checkItemTitle}>대출 불승인 시 계약금 반환</div>
-                      <div className={styles.checkItemDesc}>&quot;임차인의 전세자금대출이 목적물의 하자로 인하여 불가할 경우, 임대인은 계약금을 즉시 반환한다.&quot;</div>
-                    </div>
-                    <button className={styles.copyBtn} onClick={() => handleCopy("임차인의 전세자금대출이 목적물의 하자로 인하여 불가할 경우, 임대인은 계약금을 즉시 반환한다.")}>복사</button>
-                  </li>
-                  <li className={styles.checkItem}>
-                    <div>
-                      <div className={styles.checkItemTitle}>임대인 체납 사실 확인</div>
-                      <div className={styles.checkItemDesc}>&quot;임대인은 잔금일 전까지 국세/지방세 완납 증명서를 교부하며, 미납금 발생 시 계약을 해제할 수 있다.&quot;</div>
-                    </div>
-                    <button className={styles.copyBtn} onClick={() => handleCopy("임대인은 잔금일 전까지 국세/지방세 완납 증명서를 교부하며, 미납금 발생 시 계약을 해제할 수 있다.")}>복사</button>
-                  </li>
-                  <li className={styles.checkItem}>
-                    <div>
-                      <div className={styles.checkItemTitle}>근저당권 설정 금지 특약</div>
-                      <div className={styles.checkItemDesc}>&quot;임대인은 계약 체결일로부터 잔금일 익일까지 목적물에 어떠한 근저당이나 제한물권을 설정하지 않는다.&quot;</div>
-                    </div>
-                    <button className={styles.copyBtn} onClick={() => handleCopy("임대인은 계약 체결일로부터 잔금일 익일까지 목적물에 어떠한 근저당이나 제한물권을 설정하지 않는다.")}>복사</button>
-                  </li>
-                </ul>
+          <div className={styles.twoCol}>
+            {moneyInput(incomeMan, setIncomeMan, '연소득')}
+            {moneyInput(existingDebtMan, setExistingDebtMan, '기존 연간 원리금')}
+          </div>
+
+          <div className={styles.resultBox}>
+            {ltv ? (
+              <ul className={styles.breakdown}>
+                <li><span>예상 대출 한도 (가정 {ltv.ratioPercent}%)</span><b>{formatWon(ltv.loanAmount)}</b></li>
+                <li><span>필요 자기자금</span><b>{formatWon(ltv.requiredOwnFunds)}</b></li>
+                <li><span>월 상환액 (원리금균등)</span><b>{formatWon(Math.round(monthly))}</b></li>
+                <li>
+                  <span>DSR</span>
+                  <b>{dsr ? `${dsr.percent.toFixed(1)}%` : '연소득 입력 필요'}</b>
+                </li>
+              </ul>
+            ) : (
+              <p className={styles.resultText}>매매가와 비율을 입력해 주세요.</p>
+            )}
+          </div>
+
+          <div className={styles.disclosurePanel} role="note">
+            <b>계산 기준</b> — 입력한 가정값에 비율을 적용한 <b>참고 계산</b>입니다.
+            상환방식은 원리금균등만 지원합니다. 이 값은 <b>금융기관의 승인 가능 금액이 아니며</b>,
+            실제 한도는 규제지역·보유 주택 수·소득 증빙·은행별 심사에 따라 달라집니다.
+          </div>
+        </div>
+      </section>
+
+      {/* 등기비용 — 금액을 만들지 않는다 */}
+      <section className={styles.toolCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}><FileSignature size={16} aria-hidden="true" /> 등기 비용</h2>
+          <span className={styles.limitedBadge}>견적 필요</span>
+        </div>
+        <div className={styles.cardBody}>
+          <p className={styles.hint}>
+            등기 비용은 성격이 다른 항목이 섞여 있어 하나의 예상 금액으로 묶지 않습니다.
+            항목별로 어디서 확정되는지 알려드립니다.
+          </p>
+          <ul className={styles.costList}>
+            {REGISTRATION_COST_ITEMS.map((item) => (
+              <li key={item.key} className={styles.costItem}>
+                <div className={styles.costLabel}>
+                  {item.label}
+                  <span className={styles.costNature}>
+                    {item.nature === 'CALCULATED_ELSEWHERE' ? '계산 가능' : item.nature === 'QUOTE_REQUIRED' ? '견적 필요' : '변동'}
+                  </span>
+                </div>
+                <p className={styles.costNote}>{item.note}</p>
+              </li>
+            ))}
+          </ul>
+          {/* §11 — 기존 파트너 인프라를 그대로 쓴다(설정 복제 없음, 추적도 기존 이벤트). */}
+          <PartnerCtaCard placement="finance" />
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderInvest = () => (
+    <div className={styles.toolsGrid}>
+      <section className={styles.toolCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}><Scale size={16} aria-hidden="true" /> 필요 갭 · 전세가율</h2>
+        </div>
+        <div className={styles.cardBody}>
+          <div className={styles.twoCol}>
+            {moneyInput(gapSaleMan, setGapSaleMan, '매매가')}
+            {moneyInput(gapJeonseMan, setGapJeonseMan, '전세가')}
+          </div>
+          <div className={styles.resultBox}>
+            {gap ? (
+              <ul className={styles.breakdown}>
+                <li><span>필요 갭</span><b>{formatWon(gap.gapAmount)}</b></li>
+                <li><span>전세가율</span><b>{gap.jeonseRatioPercent.toFixed(1)}%</b></li>
+              </ul>
+            ) : (
+              <p className={styles.resultText}>매매가와 전세가를 입력해 주세요.</p>
+            )}
+          </div>
+          <div className={styles.disclosurePanel} role="note">
+            <b>계산 기준</b> — 입력한 두 값의 차이와 비율입니다.
+            <b>같은 단지의 같은 전용면적</b>끼리 비교할 때만 의미가 있습니다.
+            면적이나 시점이 다른 거래를 넣으면 실제로 존재하지 않는 갭이 나옵니다.
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.toolCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}><Ruler size={16} aria-hidden="true" /> 평당가</h2>
+        </div>
+        <div className={styles.cardBody}>
+          <div className={styles.twoCol}>
+            {moneyInput(ppPriceMan, setPpPriceMan, '가격')}
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>전용면적 (㎡)</label>
+              <div className={styles.inputRow}>
+                <input className={styles.formInput} inputMode="decimal" value={ppAreaM2} onChange={(e) => setPpAreaM2(e.target.value)} />
+                <span className={styles.inputUnit}>㎡</span>
               </div>
             </div>
           </div>
-        );
-
-      case 'auction':
-        return (
-          <div className={styles.toolsGrid}>
-            <div className={styles.toolCard}>
-              <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>⚖️ 지역 경매 및 온비드 공매 물건</h2>
-              </div>
-              <div className={styles.cardBody}>
-                {/* LAUNCH_TRUST_BLOCKERS_V1 — 이전에는 실제 경매 API 연동 없이 특정
-                    단지/동/층/감정가를 지어낸 예시 매물을 실제 매물처럼 보여줬다.
-                    데이터 소스가 없는 상태이므로, /map의 경·공매 레이어와 동일하게
-                    정직한 "준비 중" 상태로 대체한다(가짜 데이터 > 데이터 없음 금지). */}
-                <Empty
-                  variant="notReady"
-                  title="경매·공매 매물 데이터는 아직 연동 준비 중입니다."
-                  description="실제 경매/온비드 공매 데이터가 연동될 때까지 임의의 예시 매물을 보여드리지 않습니다."
-                />
-              </div>
-            </div>
+          <div className={styles.resultBox}>
+            {pp ? (
+              <ul className={styles.breakdown}>
+                <li><span>면적</span><b>약 {pp.pyeong.toFixed(1)}평</b></li>
+                <li><span>평당가</span><b>{formatWon(pp.pricePerPyeong)}</b></li>
+                <li><span>㎡당</span><b>{formatWon(pp.pricePerM2)}</b></li>
+              </ul>
+            ) : (
+              <p className={styles.resultText}>가격과 전용면적을 입력해 주세요.</p>
+            )}
           </div>
-        );
+          <div className={styles.disclosurePanel} role="note">
+            <b>계산 기준</b> — 입력한 <b>전용면적</b> 기준입니다. 공급면적 기준 평당가와는 다릅니다.
+          </div>
+        </div>
+      </section>
+    </div>
+  );
 
-      case 'note':
-        return (
-          <div className={styles.toolsGrid}>
-            <div className={styles.toolCard}>
-              <div className={styles.cardHeader}>
-                <h2 className={styles.cardTitle}>📝 단지 현장 임장 체크카드</h2>
-              </div>
-              <div className={styles.cardBody}>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>단지명</label>
-                  <input type="text" className={styles.formInput} placeholder="예) 은마아파트" />
-                </div>
-                
-                <div style={{ margin: '1.5rem 0' }}>
-                  <div className={styles.ratingRow}>
-                    <span className={styles.ratingLabel}>주차 편의성 (지하주차장 엘리베이터 유무)</span>
-                    <div className={styles.stars}><span className={styles.filled}>★</span><span className={styles.filled}>★</span><span className={styles.filled}>★</span><span className={styles.filled}>★</span><span>★</span></div>
-                  </div>
-                  <div className={styles.ratingRow}>
-                    <span className={styles.ratingLabel}>단지 쾌적성 (조경 및 일조량)</span>
-                    <div className={styles.stars}><span className={styles.filled}>★</span><span className={styles.filled}>★</span><span className={styles.filled}>★</span><span>★</span><span>★</span></div>
-                  </div>
-                  <div className={styles.ratingRow}>
-                    <span className={styles.ratingLabel}>학군 및 학원가 접근성</span>
-                    <div className={styles.stars}><span className={styles.filled}>★</span><span className={styles.filled}>★</span><span className={styles.filled}>★</span><span className={styles.filled}>★</span><span className={styles.filled}>★</span></div>
-                  </div>
-                </div>
+  const renderReport = () => (
+    <div className={styles.toolsGrid}>
+      {/* §25 — 리포트는 다시 만들지 않는다. 기존 라우트를 그대로 연다. */}
+      <Link href="/stats/compare" className={styles.entryCard}>
+        <Scale size={18} strokeWidth={2.2} aria-hidden="true" />
+        <div>
+          <div className={styles.entryTitle}>단지 비교</div>
+          <div className={styles.entryDesc}>여러 단지를 나란히 두고 비교합니다.</div>
+        </div>
+        <ArrowRight size={16} aria-hidden="true" className={styles.entryArrow} />
+      </Link>
+      <Link href="/report" className={styles.entryCard}>
+        <FileText size={18} strokeWidth={2.2} aria-hidden="true" />
+        <div>
+          <div className={styles.entryTitle}>단지 한장 리포트</div>
+          <div className={styles.entryDesc}>단지 하나를 한 장으로 정리해 저장·공유합니다.</div>
+        </div>
+        <ArrowRight size={16} aria-hidden="true" className={styles.entryArrow} />
+      </Link>
+      <Link href={cityReportHref()} className={styles.entryCard}>
+        <TrendingUp size={18} strokeWidth={2.2} aria-hidden="true" />
+        <div>
+          <div className={styles.entryTitle}>지역 브리핑</div>
+          <div className={styles.entryDesc}>부산 전체 흐름을 한 장으로 봅니다.</div>
+        </div>
+        <ArrowRight size={16} aria-hidden="true" className={styles.entryArrow} />
+      </Link>
+    </div>
+  );
 
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>자유 메모 (중개사 코멘트 등)</label>
-                  <textarea className={styles.textarea} placeholder="매도자 우위 시장인지, 급매가 있는지 기록해보세요..."></textarea>
+  const renderSafety = () => (
+    <div className={styles.toolsGrid}>
+      <section className={styles.toolCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}><ShieldCheck size={16} aria-hidden="true" /> 전세 계약 필수 특약</h2>
+        </div>
+        <div className={styles.cardBody}>
+          <ul className={styles.checkList}>
+            {SPECIAL_TERMS.map((term) => (
+              <li key={term.title} className={styles.checkItem}>
+                <div>
+                  <div className={styles.checkItemTitle}>{term.title}</div>
+                  <div className={styles.checkItemDesc}>{term.text}</div>
                 </div>
-                
-                <button style={{ width: '100%', padding: '1rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                  저장하기
+                <button
+                  type="button"
+                  className={styles.copyBtn}
+                  onClick={() => navigator.clipboard?.writeText(term.text)}
+                >
+                  복사
                 </button>
-              </div>
-            </div>
-          </div>
-        );
-      
-      default:
-        return null;
-    }
-  };
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className={styles.toolCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}><Gavel size={16} aria-hidden="true" /> 경매 · 공매</h2>
+          <span className={styles.soonBadge}>준비중</span>
+        </div>
+        <div className={styles.cardBody}>
+          <Empty
+            variant="notReady"
+            title="경매·공매 데이터는 아직 연동 준비 중입니다."
+            description="실제 데이터가 연동될 때까지 임의의 예시 매물을 보여드리지 않습니다."
+          />
+        </div>
+      </section>
+
+      <section className={styles.toolCard}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}><ClipboardList size={16} aria-hidden="true" /> 임장 노트</h2>
+          <span className={styles.soonBadge}>준비중</span>
+        </div>
+        <div className={styles.cardBody}>
+          {/* §18 — 예전에는 입력칸과 "저장하기" 버튼이 있었지만 저장되는 곳이 없었고
+              별점도 눌리지 않았다. 눌리는데 아무 일도 없는 버튼을 남기지 않는다. */}
+          <Empty
+            variant="notReady"
+            title="임장 노트는 저장 기능과 함께 준비 중입니다."
+            description="기록이 실제로 보관되기 전까지는 입력칸을 열어두지 않습니다."
+          />
+        </div>
+      </section>
+    </div>
+  );
 
   return (
     <div className={styles.main}>
       <Header pageTitle="부동산 도구" />
       <div className="container">
         <div className={styles.header}>
-          <div className={styles.headerTop}>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>현장에서 바로 꺼내쓰는 실무 최적화 도구 모음</p>
-          </div>
-          <div className={styles.tabsContainer} style={{ marginTop: '1.5rem' }}>
-            {TABS.map(tab => (
-              <button 
+          <p className={styles.lead}>집을 고른 다음, 실제로 살 수 있는지까지 계산해 봅니다.</p>
+          <div className={styles.tabsContainer}>
+            {TABS.map((tab) => (
+              <button
                 key={tab.id}
+                type="button"
                 className={`${styles.tab} ${activeTab === tab.id ? styles.activeTab : ''}`}
                 onClick={() => setActiveTab(tab.id)}
               >
-                {tab.name}
+                <tab.Icon size={14} strokeWidth={2.2} aria-hidden="true" /> {tab.name}
               </button>
             ))}
           </div>
         </div>
-        
-        {/* 모바일에서는 탭 선택에 따라 하나만 보이고, PC에서는 전체를 다 뿌려줄 수도 있지만 여기서는 통일감을 위해 탭 형태로 동작하게 설계 */}
-        {renderToolContent()}
+
+        {activeTab === 'home' && renderHome()}
+        {activeTab === 'invest' && renderInvest()}
+        {activeTab === 'report' && renderReport()}
+        {activeTab === 'safety' && renderSafety()}
       </div>
     </div>
   );
 }
+
+const SPECIAL_TERMS = [
+  {
+    title: '대출 불승인 시 계약금 반환',
+    text: '임차인의 전세자금대출이 목적물의 하자로 인하여 불가할 경우, 임대인은 계약금을 즉시 반환한다.',
+  },
+  {
+    title: '잔금일까지 권리변동 금지',
+    text: '임대인은 잔금 지급일 다음 날까지 목적물에 근저당권 등 새로운 권리를 설정하지 않는다.',
+  },
+  {
+    title: '선순위 보증금 고지',
+    text: '임대인은 계약 체결 시점의 선순위 보증금 및 미납 조세 내역을 임차인에게 고지한다.',
+  },
+] as const;
