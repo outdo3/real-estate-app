@@ -2,6 +2,93 @@
 
 ## 2026-09-11
 
+### SCORE CANONICAL APTSEQ RESOLUTION FIX V1 — 점수가 이름 대신 aptSeq로 단지를 찾는다
+
+**점수 모델은 건드리지 않았다.** 산식·가중치·임계·학교 거리 출처·percentile 정규화
+모두 그대로다. 바뀐 것은 "어느 단지를 계산 엔진에 넘기는가" 하나뿐이다.
+
+문제
+
+점수 라우트는 단지를 (sggCd + 법정동 + 정규화 이름)으로 찾고 canonical identity인
+aptSeq를 **아예 읽지 않았다.** normalizeAptName이 끝의 "아파트"를 지우므로
+`대원아파트` → `대원`이 되는데, 부산진구에 `대원`(26230-1810)이 새로 들어오자 기존
+`대원아파트`(26230-149)와 정규화 이름이 겹쳐 법정동 없는 경로에서 점수가 사라졌다.
+
+부산 전역 감사 — 1건이 아니었다
+
+scripts/apartment-score/score-identity-collision-audit.ts (읽기 전용)로 이전 해소
+규칙을 그대로 재현해 3,438건 전부에 대입했다.
+
+    BEFORE  법정동 없이 AMBIGUOUS      116 단지
+            법정동 있어도 AMBIGUOUS      8 단지
+            다른 단지로 확정될 위험      0 건
+    AFTER   aptSeq로 단일 해소        3,438 / 3,438  (124건 되살아남)
+            정규화 이름 충돌 그룹        54
+
+직전 STEP이 보고한 "1건"은 20건 INSERT가 **새로 만든** 변화량이고, 116/8은 부산 전역에
+**원래 있던** 총량이다. 두 숫자는 서로 다른 것을 센다.
+
+법정동이 있어도 모호한 8건은 같은 동에 같은 이름이 실제로 있는 경우다(수목하우스
+26230-2325 · 26230-2485 둘 다 양정동). 이 단지들은 이름 경로로는 어떤 파라미터를 줘도
+점수를 볼 수 없었다.
+
+"다른 단지로 확정될 위험 0건"이 핵심이다 — 기존 규칙은 **틀리게 고른 적이 없고
+포기했을 뿐이다.** 그래서 이 작업은 틀린 것을 고치는 게 아니라, 알 수 있는데 포기하던
+것을 알게 하는 작업이다.
+
+해소 우선순위 (resolve-score-identity.ts 한 곳에 모음)
+
+    1. canonical aptSeq   → 존재 확인 후 즉시 확정. 이름으로 재해소하지 않는다.
+    2. sggCd(+법정동) 정규화 이름 완전 일치
+    3. 완전 일치가 없을 때만 부분포함 폴백
+    4. 후보 2건 이상 → AMBIGUOUS (첫 번째를 고르지 않는다)
+
+2~4는 기존 규칙 그대로다. 더한 것은 1번 한 층이고 어느 경로도 넓히지 않았다.
+aptSeq가 왔는데 master가 없으면 이름 경로로 **폴백하지 않는다** — 없는 것은 없다고
+말한다. 형태부터 aptSeq가 아닌 값은 DB에 묻지도 않는다(실측: master 3,438건과
+TradeHistory distinct 4,977건 전부 `{lawdCd 5자리}-{일련번호}` 형태, 예외 0건).
+
+호출부 — URL 값을 그대로 보내지 않는다
+
+상세는 URL의 aptSeq를 그대로 싣지 않는다. deriveCanonicalAptSeq가 이 페이지의 거래
+목록(이미 name+dong으로 검증된 집합)에 있을 때만 canonical로 채택한다. 손으로 URL을
+고쳐도 화면과 다른 단지의 점수가 나오지 않는다.
+identity가 확정되기 전에는 점수를 묻지 않고(점수 카드는 기존 "산정 준비 중" 유지),
+한 번 확정된 identity는 전월세 탭 전환으로 흔들리지 않게 고정했다.
+비용은 점수 요청이 거래 응답 뒤로 밀리는 것이다(warm 실측 거래 65~96ms, 점수
+99~155ms). 점수가 화면의 나머지와 항상 같은 단지를 가리키는 쪽을 택했다.
+
+실측 (로컬 프로덕션 빌드, 읽기 전용)
+
+    단지                aptSeq        이름+구      이름+구+동   aptSeq
+    대원아파트          26230-149     AMBIGUOUS    OK 58        OK 58
+    진흥목화            26140-2       OK 65        OK 65        OK 65
+    해운대경동제이드     26350-2206    OK 54        OK 54        OK 54
+    수목하우스          26230-2325    AMBIGUOUS    AMBIGUOUS    OK 60
+    수목하우스          26230-2485    AMBIGUOUS    AMBIGUOUS    OK 59
+    (없는 단지)         26230-99999   NOT_FOUND    NOT_FOUND    NOT_FOUND
+
+점수 값이 경로와 무관하게 같다(65/65/65, 54/54/54, 58=58) — 같은 master면 같은 점수,
+즉 산식이 바뀌지 않았다는 실측 증거다. 같은 동 동명 수목하우스 둘이 **다른 점수**
+(60, 59)로 갈리는 것은 다른 단지로 폴백하지 않았다는 증거다.
+잘못된 형태(`26230`, `26230-1' OR 1=1`)는 DB 조회 없이 NOT_FOUND.
+
+남은 것
+
+비교(CompareV2)는 거래/점수를 의도적으로 병렬 호출해 aptSeq를 쓰지 않는다 — 같은 동
+동명 8건이 비교 화면에서는 여전히 AMBIGUOUS다. /api/apt/[name]/education도 같은 이름
+기반 해소를 쓴다. 둘 다 점수 산식과 무관한 별도 경로라 백로그에 기록만 했다.
+REVIEW_REQUIRED master 26440-329 에코델타더베르힐은 손대지 않았다.
+
+검증: src 테스트 751/751 PASS(신규 resolve-score-identity 20건 포함) · tsc src 오류 0 ·
+변경 파일 eslint 0 errors · npm run build exit 0.
+점수 산식 파일(src/lib/score-v2/*, apartment-score/server/*, peer-context.ts,
+prisma/schema.prisma) 변경 0건.
+
+문서: docs/development/SCORE_CANONICAL_APTSEQ_RESOLUTION_FIX_V1.md 신규,
+00-PROJECT-ROADMAP.md 갱신(SCHOOL SCORE MODEL REBASE V1 / MASTER COVERAGE SYNC
+AUTOMATION / REVIEW_REQUIRED 26440-329 보존).
+
 ### MASTER COVERAGE SYNC APPLY + DOMAIN OG FIX V1 — 승인된 INSERT 20건 + OG 단일 출처
 
 두 가지를 닫았다. **승인 범위는 MASTER_COVERAGE_SYNC_V1의 missing-master INSERT 하나뿐이며,

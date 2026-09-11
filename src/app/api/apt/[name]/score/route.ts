@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { aptNamesMatch, normalizeAptName } from '@/lib/apt-name-match';
+import { resolveScoreIdentity } from '@/lib/apartment-score/resolve-score-identity';
 import { calculateApartmentScore } from '@/lib/apartment-score/server/calculate';
 import { resolveDisplayedScoreVersion } from '@/lib/apartment-score/resolve-score-version';
 import { getPeerContext } from '@/lib/apartment-score/peer-context';
@@ -23,11 +23,16 @@ export async function GET(
 
     let lawdCd = searchParams.get('lawdCd') || '';
     let dong = searchParams.get('dong') || '';
+    // SCORE_CANONICAL_APTSEQ_RESOLUTION_FIX_V1 — canonical identity. 있으면 이름/법정동을
+    // 거치지 않고 바로 그 단지로 간다(resolveScoreIdentity 참고).
+    const aptSeqParam = searchParams.get('aptSeq');
 
     // §41: lawdCd/dong 없이 이름만으로는 절대 다른 단지의 score를 반환하지 않는다.
     // 기존 route.ts와 같은 관례로 Apartment 캐시에서만 보강 시도(지오코딩 추정은 하지 않음
     // — score identity는 실거래 목록 조회보다 오매칭 허용 폭이 좁아야 한다, §52).
-    if (!lawdCd || !dong) {
+    // canonical aptSeq가 있으면 이 보강 자체가 불필요하다 — 지역을 좁히려는 조회인데
+    // 대상이 이미 한 건으로 확정돼 있다.
+    if (!aptSeqParam && (!lawdCd || !dong)) {
       try {
         // BUSAN_DATA_UX_AUTOMATED_QA_V1 §L4/식별자 감사: lawdCd 없이 { name: aptName }만
         // 조회하면 위 §41 주석의 약속("이름만으로는 절대 다른 단지의 score를 반환하지
@@ -46,38 +51,15 @@ export async function GET(
       }
     }
 
-    if (!lawdCd) {
-      return NextResponse.json(emptyResponse('AMBIGUOUS'));
+    // §41/§52 — 어느 단지인지 확정하는 규칙은 전부 resolveScoreIdentity 한 곳에 있다.
+    // 확정하지 못하면 잘못된 단지의 score를 주느니 미확정으로 응답한다.
+    const identity = await resolveScoreIdentity(prisma, { aptSeqParam, aptName, lawdCd, dong });
+    if (identity.kind !== 'RESOLVED') {
+      return NextResponse.json(emptyResponse(identity.kind));
     }
+    const resolvedAptSeq = identity.aptSeq;
 
-    const candidates = await prisma.apartmentMaster.findMany({
-      where: {
-        sggCd: lawdCd,
-        aptSeq: { not: null },
-        ...(dong ? { umdName: dong } : {}),
-      },
-      select: { aptSeq: true, name: true },
-    });
-
-    // 실측 QA(서구 "구덕하이츠")에서 발견: aptNamesMatch는 부분포함도 매칭시켜(예:
-    // "구덕" ⊂ "구덕하이츠") 짧은 이름의 다른 단지와 함께 걸려 정확한 이름이 있는데도
-    // AMBIGUOUS로 떨어지는 문제가 있었다. 정확히 같은 이름(정규화 후 동일)이 하나라도
-    // 있으면 그것만 채택하고, 없을 때만 aptNamesMatch의 느슨한 부분포함 규칙으로
-    // 폴백한다 — 오매칭 허용폭을 넓히는 게 아니라 불필요한 AMBIGUOUS를 줄이는 방향이라
-    // §41/§52 원칙(다른 단지 score 오반환 방지)과 상충하지 않는다.
-    const exactMatches = candidates.filter((c) => normalizeAptName(c.name) === normalizeAptName(aptName));
-    const matched = exactMatches.length > 0 ? exactMatches : candidates.filter((c) => aptNamesMatch(c.name, aptName));
-
-    if (matched.length === 0) {
-      return NextResponse.json(emptyResponse('NOT_FOUND'));
-    }
-    if (matched.length > 1) {
-      // §41/§52: dong 없이 같은 이름이 여러 동에 걸쳐 있는 경우 등 — 잘못된 단지의
-      // score를 주느니 안전하게 미확정으로 응답한다.
-      return NextResponse.json(emptyResponse('AMBIGUOUS'));
-    }
-
-    const result = await calculateApartmentScore(matched[0].aptSeq!);
+    const result = await calculateApartmentScore(resolvedAptSeq);
     const shadowV2 = (result as any)._shadowV2;
 
     // EJIP_SCORE_V2_PHASE2 — peer context는 V2가 실제로 표시 가능할 때만 계산한다
@@ -88,12 +70,12 @@ export async function GET(
     let peerContext = null;
     if (shadowV2 && shadowV2.eligibility !== 'NOT_ENOUGH_DATA' && shadowV2.overallScore != null) {
       const targetMaster = await prisma.apartmentMaster.findUnique({
-        where: { aptSeq: matched[0].aptSeq! },
+        where: { aptSeq: resolvedAptSeq },
         select: { sigungu: true, buildYear: true, totalHouseholds: true },
       });
       if (targetMaster) {
         peerContext = await getPeerContext({
-          aptSeq: matched[0].aptSeq!,
+          aptSeq: resolvedAptSeq,
           sigungu: targetMaster.sigungu,
           buildYear: targetMaster.buildYear,
           totalHouseholds: targetMaster.totalHouseholds,

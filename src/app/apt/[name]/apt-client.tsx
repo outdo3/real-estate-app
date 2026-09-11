@@ -572,6 +572,19 @@ export default function ApartmentDetail() {
   // fallback)을 반환한다 — "다른 단지로 잘못 연결되는 것보다 낫다".
   const canonicalAptSeq = deriveCanonicalAptSeq(trades, incomingAptSeq);
 
+  // SCORE_CANONICAL_APTSEQ_RESOLUTION_FIX_V1 §7 — 점수에 쓸 identity는 **한 번 확정되면
+  // 고정**한다. canonicalAptSeq는 현재 탭의 거래 목록에서 나오므로 전월세 탭으로 바꾸면
+  // (그 계열 거래에 aptSeq가 없어) null로 되돌아갈 수 있다. 그때마다 이름 경로로 다시
+  // 물으면 같은 화면에서 점수가 사라졌다 돌아오고, 동명 단지에서는 AMBIGUOUS로 떨어진다.
+  // 다른 단지로 이동하면 페이지가 새로 마운트되므로 이 고정은 단지 경계를 넘지 않는다
+  // (canonicalCoord의 resolvedCoordRef와 같은 이유, 같은 방식).
+  const [scoreAptSeq, setScoreAptSeq] = useState<string | null>(null);
+  if (canonicalAptSeq && !scoreAptSeq) setScoreAptSeq(canonicalAptSeq);
+
+  // 거래 응답이 오기 전에는 이 페이지가 어느 단지인지 **아직 모른다**. 그 상태로 점수를
+  // 물으면 화면의 나머지와 다른 단지를 가리킬 수 있으므로 기다린다(§7 identity parity).
+  const scoreIdentityPending = loading && !scoreAptSeq;
+
   // DECISION_JOURNEY_V1 §9/§11 — 지도 딥링크는 lat/lng가 있어야만
   // parseMapStateFromSearchParams가 이를 공유링크로 인식한다(없으면 기본 지역으로 열림).
   //
@@ -718,16 +731,29 @@ export default function ApartmentDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageReady, displayName, aptName, lawdCdState, urlDong]);
 
-  // STEP SCORE S3 — 이집점수 API 조회. pageReady를 기다리지 않고 aptName이 확정되는
-  // 대로 바로 호출한다(§25 — score 로딩이 전체 상세페이지 로딩을 막으면 안 됨). 실패해도
-  // catch에서 조용히 null로 남겨 카드가 "산정 준비 중"으로 graceful degradation한다(§26).
+  // STEP SCORE S3 — 이집점수 API 조회. pageReady를 기다리지 않는다(§25 — score 로딩이
+  // 전체 상세페이지 로딩을 막으면 안 됨). 실패해도 catch에서 조용히 null로 남겨 카드가
+  // "산정 준비 중"으로 graceful degradation한다(§26).
+  //
+  // SCORE_CANONICAL_APTSEQ_RESOLUTION_FIX_V1 — 예전에는 aptName이 확정되는 즉시 이름+
+  // 법정동으로 물었다. 그래서 (1) 화면의 나머지가 확정한 단지와 다른 단지의 점수가 나올
+  // 여지가 있었고 (2) 같은 구에 정규화 이름이 겹치는 단지가 생기면 멀쩡한 점수가
+  // AMBIGUOUS로 사라졌다(실측: 대원아파트 26230-149).
+  // 이제 **이 페이지가 확정한 canonical aptSeq**로 묻는다. URL의 aptSeq를 그대로 보내지
+  // 않는다는 점이 중요하다 — deriveCanonicalAptSeq가 이 페이지의 거래 목록에서 실제로
+  // 검증한 값만 canonical이 된다. 확정하지 못하면 기존 이름+법정동 경로를 그대로 쓴다.
   useEffect(() => {
-    if (!aptName) return;
+    if (!aptName || scoreIdentityPending) return;
     let cancelled = false;
     setScoreLoading(true);
     const query = new URLSearchParams();
-    if (lawdCdState) query.set('lawdCd', lawdCdState);
-    if (urlDong) query.set('dong', urlDong);
+    if (scoreAptSeq) {
+      // canonical identity 하나면 충분하다 — 지역으로 좁힐 이유가 없다.
+      query.set('aptSeq', scoreAptSeq);
+    } else {
+      if (lawdCdState) query.set('lawdCd', lawdCdState);
+      if (urlDong) query.set('dong', urlDong);
+    }
     // PERCEIVED_PERFORMANCE_V2_1 §3 — 재방문 시 재요청하지 않는다. **점수 계산 로직은
     // 건드리지 않는다** — 이건 전송 계층 재사용일 뿐이다.
     //
@@ -736,7 +762,7 @@ export default function ApartmentDetail() {
     // 않으려는 의도된 설계). 그 응답을 캐시하면 **일시적 서버 오류가 TTL 동안 "점수
     // 없음"으로 고정**된다. 실제로 산출된 점수가 있을 때만 캐시한다.
     fetchCachedResource(`/api/apt/${encodeURIComponent(aptName)}/score?${query.toString()}`, {
-      key: `score|${aptName}|${lawdCdState || ''}|${urlDong || ''}`,
+      key: `score|${aptName}|${scoreAptSeq || ''}|${lawdCdState || ''}|${urlDong || ''}`,
       ttlMs: DETAIL_RESOURCE_TTL_MS,
       isCacheable: (p, o) => o && !!p && (p as { score?: unknown }).score !== null && (p as { score?: unknown }).score !== undefined,
     })
@@ -753,7 +779,7 @@ export default function ApartmentDetail() {
     return () => {
       cancelled = true;
     };
-  }, [aptName, lawdCdState, urlDong]);
+  }, [aptName, scoreAptSeq, scoreIdentityPending, lawdCdState, urlDong]);
 
   const openModal = (modalName: string) => {
     setActiveModal(modalName);
