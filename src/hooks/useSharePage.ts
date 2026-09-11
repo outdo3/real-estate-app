@@ -1,16 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   buildShareUrl,
   copyToClipboard,
   nativeShare,
-  loadKakaoShareSdk,
-  ensureKakaoInitialized,
   isKakaoShareReady,
   sendKakaoShare,
   buildKakaoShareImageUrl,
 } from '@/lib/share/shareUtils';
+import { useKakaoSharePreload } from './useKakaoSharePreload';
+import type { EjipShareType } from '@/lib/share/ejipShareCard';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 
 export type ShareStatus = 'idle' | 'shared' | 'copied' | 'error';
@@ -32,50 +32,29 @@ export interface UseSharePageOptions {
    */
   url?: string;
   /**
-   * GLOBAL SHARE SYSTEM V1 §4 — 공통 공유는 Web Share API를 최우선으로 쓰고, 네이티브
-   * 공유가 없는 환경(주로 데스크톱)에서만 이미 안정적으로 검증된 카카오 공유 카드로
-   * 보강한다(별도 이미지 자산 불필요, 브랜드 공용 이미지 재사용). 기존 KakaoShareButton
-   * 3개 호출부(아파트 상세/StickyActionBar/학교 상세)는 이 훅을 쓰지 않고 카카오 우선
-   * 순서를 그대로 유지해 회귀하지 않는다.
+   * SHARE_CARD_UNIFICATION_V1 §3 — 이 화면의 공유 카드 성격. CTA 버튼 라벨이 여기서
+   * 갈린다(단지=자세히 보기 / 통계=통계 보기 / 비교=비교 보기 / 리포트=리포트 보기).
+   */
+  shareType?: EjipShareType;
+  /**
+   * GLOBAL SHARE SYSTEM V1 §4 / SHARE_CARD_UNIFICATION_V1 §2 — 카카오 브랜드 카드 사용 여부.
+   *
+   * 예전에는 이 훅이 navigator.share를 **먼저** 호출하고, 네이티브 공유가 없는 환경
+   * (주로 데스크톱)에서만 카카오 카드로 보강했다. 그런데 모바일에는 navigator.share가
+   * 항상 있으므로 실제 사용자(안드로이드 카카오톡)는 카카오 카드 분기에 영영 도달하지
+   * 못했고, OS가 title+text+url을 이어붙인 평문을 카카오톡에 넘겨 **일반 OG 미리보기**가
+   * 떴다 — 아파트 상세(KakaoShareButton)만 브랜드 카드가 나오던 이유다.
+   *
+   * 이제 두 경로의 우선순위를 아파트 상세 쪽(실전 검증된 브랜드 카드)으로 통일한다.
    */
   enableKakao?: boolean;
 }
 
-export function useSharePage({ title, text, params, url: explicitUrl, enableKakao = true }: UseSharePageOptions) {
+export function useSharePage({ title, text, params, url: explicitUrl, shareType = 'generic', enableKakao = true }: UseSharePageOptions) {
   const [status, setStatus] = useState<ShareStatus>('idle');
 
-  // 카카오 SDK는 클릭 시점에 처음 로드하면 sendDefault 호출이 더 이상 "사용자가 직접
-  // 클릭한 동기 실행 흐름"이 아니게 돼 팝업이 차단될 수 있다(KakaoShareButton에서 실측
-  // 확인된 문제) — 그래서 클릭 전에 미리 로드해두는 것 자체는 그대로 유지한다.
-  //
-  // PERCEIVED_PERFORMANCE_V2_5 §3 — 다만 **마운트 즉시**는 너무 이르다. /map 실측
-  // waterfall에서 이 스크립트(developers.kakao.com/sdk/js/kakao.js)는 3,587~6,740ms에
-  // 걸쳐 받아지는데, 하필 지도 모듈(t1.daumcdn.net)과 첫 타일(mts.daumcdn.net)이
-  // 대역폭을 다투는 바로 그 구간이다. 공유 SDK는 첫 화면에 필요하지 않다.
-  //
-  // 그래서 브라우저가 한가해진 뒤로 미룬다. requestIdleCallback이 없으면 짧은 타이머로
-  // 대체한다. 사용자가 공유를 누르기까지는 어떤 경우에도 이보다 훨씬 오래 걸리므로
-  // "클릭 전에 이미 로드돼 있다"는 성질(=팝업 차단 방지)은 그대로 지켜진다.
-  useEffect(() => {
-    if (!enableKakao) return;
-    let cancelled = false;
-    const start = () => {
-      if (cancelled) return;
-      loadKakaoShareSdk()
-        .then(() => ensureKakaoInitialized())
-        .catch(() => {});
-    };
-    const w = typeof window !== 'undefined' ? (window as typeof window & {
-      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-      cancelIdleCallback?: (id: number) => void;
-    }) : undefined;
-    if (w?.requestIdleCallback) {
-      const id = w.requestIdleCallback(start, { timeout: 4000 });
-      return () => { cancelled = true; w.cancelIdleCallback?.(id); };
-    }
-    const t = setTimeout(start, 2000);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [enableKakao]);
+  // SDK 선로드 규칙(팝업 차단 회피 + idle 지연)은 ReportActions와 공유한다.
+  useKakaoSharePreload(enableKakao);
 
   const resetSoon = useCallback(() => {
     setTimeout(() => setStatus('idle'), 2000);
@@ -86,6 +65,33 @@ export function useSharePage({ title, text, params, url: explicitUrl, enableKaka
     const url = explicitUrl || buildShareUrl(params);
     if (!url) return;
 
+    // SHARE_CARD_UNIFICATION_V1 §2-A — 카카오 SDK가 준비돼 있으면 브랜드 카드가 1순위다.
+    //
+    // **await보다 먼저** 와야 한다. 한 번이라도 await를 거치면 브라우저가 사용자 제스처
+    // 흐름이 끊긴 것으로 보고 sendDefault 내부의 window.open()을 차단하고, 그 반환값이
+    // null이라 조용히 실패한다(KakaoShareButton에서 실측 확인된 문제).
+    if (enableKakao && isKakaoShareReady()) {
+      try {
+        sendKakaoShare({
+          type: shareType,
+          title,
+          description: text || title,
+          url,
+          imageUrl: buildKakaoShareImageUrl(),
+        });
+        // ANALYTICS V1 — 카카오 SDK는 실제 전송 완료를 알려주는 콜백이 없다(fire-and-forget
+        // 팝업 트리거일 뿐). 성공 여부를 신뢰성 있게 판별할 수 없으므로 share_success가
+        // 아닌 share_attempt로 기록한다.
+        trackEvent('share_attempt');
+        setStatus('idle');
+        return;
+      } catch {
+        // 카카오 콘솔에서 "카카오톡 공유" 제품이 비활성화됐거나, 오리진을 절대 URL로
+        // 만들지 못한 경우(빌더가 던짐) — 아래 네이티브 공유로 폴백한다(§16).
+      }
+    }
+
+    // §2-B — 카카오가 없거나 실패하면 OS 공유 시트. 제목 + 짧은 설명 + canonical URL.
     const nativeResult = await nativeShare({ title, text, url });
     if (nativeResult === 'shared') {
       // ANALYTICS V1 — Web Share API의 promise가 resolve된 시점 = 브라우저가 공유 완료를
@@ -100,20 +106,7 @@ export function useSharePage({ title, text, params, url: explicitUrl, enableKaka
       return;
     }
 
-    if (enableKakao && isKakaoShareReady()) {
-      try {
-        sendKakaoShare({ title, description: text || title, url, imageUrl: buildKakaoShareImageUrl() });
-        // ANALYTICS V1 — 카카오 SDK는 실제 전송 완료를 알려주는 콜백이 없다(fire-and-forget
-        // 팝업 트리거일 뿐). 성공 여부를 신뢰성 있게 판별할 수 없으므로 share_success가
-        // 아닌 share_attempt로 기록한다.
-        trackEvent('share_attempt');
-        setStatus('idle');
-        return;
-      } catch {
-        // 카카오 콘솔에서 "카카오톡 공유" 제품이 비활성화된 경우 등 — 아래 클립보드로 폴백.
-      }
-    }
-
+    // §2-C — 둘 다 없으면 링크 복사.
     const copied = await copyToClipboard(url);
     if (copied) {
       // ANALYTICS V1 — navigator.clipboard.writeText가 실제로 resolve된 시점(진짜 완료 확인).
@@ -121,7 +114,7 @@ export function useSharePage({ title, text, params, url: explicitUrl, enableKaka
     }
     setStatus(copied ? 'copied' : 'error');
     resetSoon();
-  }, [title, text, params, explicitUrl, enableKakao, resetSoon]);
+  }, [title, text, params, explicitUrl, shareType, enableKakao, resetSoon]);
 
   return { status, share };
 }

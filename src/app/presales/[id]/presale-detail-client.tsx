@@ -182,6 +182,7 @@ export default function PresaleDetailClient() {
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
                 <h1 className={styles.title}>{presale.houseName}</h1>
                 <ShareAction
+                  shareType="apartment"
                   title={`${presale.houseName} 분양정보 | 이집`}
                   text={presale.subscriptionAreaName ? `${presale.subscriptionAreaName} 분양가·일정 정보` : '분양가·일정 정보'}
                 />

@@ -10,6 +10,7 @@ import Button from '@/components/ui/Button';
 import styles from './detail.module.css';
 import AreaSelector from '@/components/AreaSelector';
 import KakaoShareButton from '@/components/KakaoShareButton';
+import { apartmentShareCopy } from '@/lib/share/ejipShareCard';
 import FavoriteButton from '@/components/FavoriteButton';
 import AptSpecGrid from '@/components/AptSpecGrid';
 import TradeTimelineList from '@/components/TradeTimelineList';
@@ -39,7 +40,6 @@ import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trad
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
 import { recordApartmentVisit } from '@/lib/recent-apartments';
-import { siteConfig } from '@/config/site';
 import { areaMatchesSelection, findUnitForArea } from '@/lib/unit-area-match';
 
 // 차트 컴포넌트(recharts)는 번들이 무거워 메인 스레드를 오래 점유한다 — 상세페이지
@@ -1108,10 +1108,13 @@ export default function ApartmentDetail() {
                     name={displayName || aptName}
                     address={primaryAddress}
                   />
+                  {/* SHARE_CARD_UNIFICATION_V1 §5 — 공유 문구는 화면마다 직접 쓰지 않고
+                      공통 헬퍼가 만든다. Hero와 하단 StickyActionBar가 같은 카드를 낸다. */}
                   <KakaoShareButton
                     compact
-                    title={`${aptName} 실거래가·시세 - ${siteConfig.name}`}
-                    description={`${aptName}의 실거래가, 시세 변동 추이, 평형별 거래 내역을 확인하세요.`}
+                    shareType="apartment"
+                    title={apartmentShareCopy(displayName || aptName).title}
+                    description={apartmentShareCopy(displayName || aptName).description}
                   />
                 </div>
               </div>
@@ -1380,8 +1383,8 @@ export default function ApartmentDetail() {
         dong={urlDong}
         name={displayName || aptName}
         address={primaryAddress}
-        shareTitle={`${aptName} 실거래가·시세 - ${siteConfig.name}`}
-        shareDescription={`${aptName}의 실거래가, 시세 변동 추이, 평형별 거래 내역을 확인하세요.`}
+        shareTitle={apartmentShareCopy(displayName || aptName).title}
+        shareDescription={apartmentShareCopy(displayName || aptName).description}
       />
     </div>
   );

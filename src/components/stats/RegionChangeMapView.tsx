@@ -216,7 +216,7 @@ export default function RegionChangeMapView() {
             </React.Fragment>
           ))}
         </nav>
-        <ShareAction title={shareTitle} text="이집 지역 변동지도" params={shareParams} />
+        <ShareAction shareType="stats" title={shareTitle} text="이집 지역 변동지도" params={shareParams} />
       </div>
 
       <h2 className={styles.title}>{pageTitle}</h2>

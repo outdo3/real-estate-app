@@ -1,3 +1,4 @@
+import { statsShareCopy } from '@/lib/share/ejipShareCard';
 import type { StatsMenuItem } from '../statsMenu';
 import type { RegionState } from '@/contexts/RegionContext';
 
@@ -25,9 +26,13 @@ export interface StatsShareContext {
 // RegionContext(client-only)에만 있고 URL에는 없어(감사 결과) 공유 링크에서는 잃지
 // 않도록 쿼리스트링으로 실어 보낸다.
 export function buildStatsShareContext(item: StatsMenuItem, region: RegionState): StatsShareContext {
+  // SHARE_CARD_UNIFICATION_V1 §7 — 브랜드 접미사와 설명 폴백은 공통 헬퍼가 정한다.
+  // 메뉴별 subtitle은 "지역 실거래와 가격 흐름을 확인하세요" 같은 공통 문장보다 그
+  // 화면에서 실제로 보여주는 것을 더 정확히 말해주므로 있으면 그대로 쓴다.
+  const copy = statsShareCopy(`${statsRegionShareLabel(region)} ${item.title}`, item.subtitle);
   return {
-    title: `${statsRegionShareLabel(region)} ${item.title} | 이집`,
-    text: item.subtitle,
+    title: copy.title,
+    text: copy.description,
     params: {
       sido: region.sido,
       sidoCode: region.sidoCode,

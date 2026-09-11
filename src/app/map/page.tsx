@@ -2011,6 +2011,7 @@ export default function FullscreenMapPage() {
           </button>
         </div>
         <ShareAction
+          shareType="apartment"
           variant="icon"
           tone="brand"
           title={selectedMarker ? `${selectedMarker.name} 위치 | 이집` : '아파트 지도 | 이집'}

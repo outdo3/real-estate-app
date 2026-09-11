@@ -12,6 +12,9 @@ import {
   type ReportIdentity,
 } from '@/lib/report/export-identity';
 import type { ReportEnvelope } from '@/lib/report/types';
+import { useKakaoSharePreload } from '@/hooks/useKakaoSharePreload';
+import { isKakaoShareReady, sendKakaoShare, buildKakaoShareImageUrl, resolveShareOrigin } from '@/lib/share/shareUtils';
+import { reportShareCopy } from '@/lib/share/ejipShareCard';
 
 /**
  * REPORT-6 §2 — 리포트 액션바.
@@ -51,6 +54,10 @@ export default function ReportActions({
   // 연타로 캡처가 겹치지 않게. 상태와 별도로 즉시 반영돼야 해서 ref를 쓴다.
   const running = useRef(false);
 
+  // SHARE_CARD_UNIFICATION_V1 §8 — 리포트 공유에도 브랜드 카카오 카드를 쓴다.
+  // 클릭 전에 SDK가 준비돼 있어야 팝업이 차단되지 않는다(훅 주석 참고).
+  useKakaoSharePreload();
+
   const identity: ReportIdentity | null = envelope
     ? {
         reportType: envelope.reportType,
@@ -66,7 +73,9 @@ export default function ReportActions({
 
   const canonicalUrl = useCallback(() => {
     if (typeof window === 'undefined') return '';
-    const fromIdentity = identity ? reportCanonicalUrl(window.location.origin, identity) : null;
+    // SHARE_CARD_UNIFICATION_V1 §11 — 오리진은 siteConfig(NEXT_PUBLIC_SITE_URL)에서 온다.
+    // 그래야 도메인 커토버 후 리포트 공유 링크도 같이 e-jip.com으로 넘어간다.
+    const fromIdentity = identity ? reportCanonicalUrl(resolveShareOrigin(), identity) : null;
     // identity로 못 만들면 현재 주소를 쓴다 — 추측한 경로로 다른 리포트를 가리키지 않는다.
     return fromIdentity ?? window.location.href;
   }, [identity]);
@@ -165,6 +174,37 @@ export default function ReportActions({
     const url = canonicalUrl();
     if (!url) return;
     const text = envelope ? buildShareText(envelope) : title;
+
+    /**
+     * SHARE_CARD_UNIFICATION_V1 §8 — 카카오 브랜드 카드가 1순위.
+     *
+     * 카카오톡으로 리포트를 보내면 예전에는 일반 OG 미리보기(또는 클릭할 수 없는 PNG
+     * 한 장)만 갔다. 이제는 다른 화면과 같은 브랜드 카드 + "이집에서 리포트 보기"
+     * 버튼이 가고, 수신자가 **살아있는 리포트로 돌아올 수 있다**.
+     *
+     * PDF/이미지를 카드에 싣지는 않는다(§8) — 액션바의 [이미지]/[PDF] 저장 버튼과
+     * 인쇄 파이프라인은 이 분기와 무관하게 그대로다. 카카오를 쓸 수 없는 환경에서는
+     * 아래 기존 파일 첨부 공유 → URL 공유 → 링크 복사 사슬이 그대로 살아 있다.
+     *
+     * await보다 먼저 와야 사용자 제스처가 끊기지 않는다.
+     */
+    if (isKakaoShareReady()) {
+      try {
+        const copy = reportShareCopy(title);
+        sendKakaoShare({
+          type: 'report',
+          title: copy.title,
+          description: copy.description,
+          url,
+          imageUrl: buildKakaoShareImageUrl(),
+        });
+        // 카카오 SDK는 전송 완료 콜백이 없다 — 보낸 척하지 않도록 method로 경로만 남긴다.
+        trackEvent('report_share', { ga: { ...gaContext(), method: 'kakao_card' } });
+        return;
+      } catch {
+        // 카카오 공유 제품 비활성화/절대 URL 실패 등 — 아래 기존 경로로 내려간다.
+      }
+    }
 
     if (typeof navigator !== 'undefined' && navigator.share) {
       // 파일 공유가 가능한지 먼저 확인한 뒤에만 캡처한다 — 불가능한 환경에서

@@ -97,6 +97,7 @@ export default function RedevelopmentDetailClient() {
               <div className={styles.heroTitleRow} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
                 <h1 className={styles.heroTitle}>{detail.canonicalName}</h1>
                 <ShareAction
+                  shareType="apartment"
                   title={`${detail.canonicalName} | 이집`}
                   text={`${sidoShortLabel(detail.sido)} ${detail.sigungu} 재개발·재건축 정보`}
                 />

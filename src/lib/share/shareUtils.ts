@@ -3,6 +3,13 @@
 // 검증한 구현(SDK 사전 로드로 팝업 차단 회피, location.origin 기반 URL 조합, AbortError
 // 정상 취소 처리 등)을 그대로 옮겨왔다 — 새 로직을 발명하지 않고 재사용한다.
 
+import { siteConfig } from '@/config/site';
+import {
+  buildEjipKakaoShare,
+  type EjipShareType,
+  type KakaoFeedPayload,
+} from './ejipShareCard';
+
 declare global {
   interface Window {
     Kakao: any;
@@ -67,34 +74,73 @@ export function isKakaoShareReady(): boolean {
 // 약 24%씩 잘림) 로고가 잘리고 메뉴 UI까지 노출된다. 그래서 중앙 정렬 + 여백을 넉넉히
 // 둔 브랜드 공용 이미지를 카카오 공유 전용으로 따로 쓴다(페이지별 이미지 자산 불필요 —
 // 모든 페이지가 동일한 이미지를 재사용할 수 있어 이 공통 시스템에 그대로 재사용 가능).
+//
+// SHARE_CARD_UNIFICATION_V1 §4 — 이미 실전에서 브랜드 카드로 검증된 바로 그 자산이다.
+// 두 번째 브랜드 이미지를 새로 만들지 않는다.
 export const KAKAO_SHARE_IMAGE_PATH = '/brand/share/ejip-kakao-share-1200x630.jpg';
 
-export function buildKakaoShareImageUrl(): string {
-  if (typeof window === 'undefined') return KAKAO_SHARE_IMAGE_PATH;
-  return `${window.location.origin}${KAKAO_SHARE_IMAGE_PATH}`;
+/**
+ * SHARE_CARD_UNIFICATION_V1 §10/§11 — 공유에 쓸 오리진.
+ *
+ * 1순위는 siteConfig(=NEXT_PUBLIC_SITE_URL). 그래야 환경변수를 e-jip.com으로 바꾸는
+ * 것만으로 canonical URL / 카드 이미지 / CTA 링크가 **한꺼번에** 따라온다(§11).
+ *
+ * 다만 siteConfig의 폴백 계산은 서버 전용 환경변수(VERCEL_ENV)에 기대는 가지가 있어
+ * 클라이언트 번들에서는 http://localhost:3000으로 내려앉을 수 있다. 그 값으로 만든
+ * 이미지 URL은 카카오 서버가 가져올 수 없고, 링크는 수신자 기기에서 열리지 않는다.
+ * 그래서 https 오리진이 아닐 때만 지금 실제로 열려 있는 주소로 내려간다 —
+ * 호스트를 코드에 박지 않으면서도 프로덕션에서 localhost가 새어나가지 않는다.
+ */
+export function resolveShareOrigin(): string {
+  const configured = siteConfig.url.replace(/\/+$/, '');
+  if (/^https:\/\//i.test(configured)) return configured;
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return configured;
 }
 
+/** resolveShareOrigin() 기준의 절대 URL. 공유 경로는 전부 이걸 통과한다. */
+export function absoluteShareUrl(path: string): string {
+  return `${resolveShareOrigin()}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+export function buildKakaoShareImageUrl(): string {
+  return absoluteShareUrl(KAKAO_SHARE_IMAGE_PATH);
+}
+
+/**
+ * SHARE_CARD_UNIFICATION_V1 §3 — 모든 공유 표면이 쓰는 단 하나의 카카오 전송 경로.
+ *
+ * 카드 조립 규칙(브랜드 접미사/URL 제거/CTA 라벨/절대 URL 검증)은 전부 순수 모듈인
+ * ejipShareCard.ts가 갖는다. 여기서는 SDK를 호출하기만 한다.
+ *
+ * 주의: 이 함수는 **동기**여야 한다. 호출 전에 await가 하나라도 끼면 브라우저가
+ * 사용자 제스처 흐름이 끊긴 것으로 보고 sendDefault 내부의 window.open을 차단한다.
+ */
 export function sendKakaoShare({
+  type = 'generic',
   title,
   description,
   url,
   imageUrl,
+  buttonLabel,
 }: {
+  type?: EjipShareType;
   title: string;
   description: string;
   url: string;
   imageUrl: string;
-}) {
-  window.Kakao.Share.sendDefault({
-    objectType: 'feed',
-    content: {
-      title,
-      description,
-      imageUrl,
-      link: { mobileWebUrl: url, webUrl: url },
-    },
-    buttons: [{ title: '이집에서 자세히 보기', link: { mobileWebUrl: url, webUrl: url } }],
+  buttonLabel?: string;
+}): KakaoFeedPayload {
+  const payload = buildEjipKakaoShare({
+    type,
+    title,
+    description,
+    imageUrl,
+    canonicalUrl: url,
+    buttonLabel,
   });
+  window.Kakao.Share.sendDefault(payload);
+  return payload;
 }
 
 // 현재 페이지의 origin+pathname+search를 조합해 공유 URL을 만든다. NEXT_PUBLIC_APP_URL

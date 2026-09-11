@@ -160,21 +160,32 @@ test('§F 짧은 URL에는 legacy 파서가 아무것도 만들지 않는다(서
 
 // ── G/H. 공유 페이로드 ──────────────────────────────────────────────────────
 
+import { compareShareCopy } from '@/lib/share/ejipShareCard';
+
 const ROOT = resolvePath(__dirname, '../../..');
 const COMPARE = readFileSync(resolvePath(ROOT, 'src/components/compare/CompareV2.tsx'), 'utf8');
 const HOOK = readFileSync(resolvePath(ROOT, 'src/hooks/useSharePage.ts'), 'utf8');
 
 test('§G 공유 text에 URL을 넣지 않는다 — Web Share의 url 필드가 따로 있다', () => {
-  const textProp = COMPARE.match(/text="([^"]*)"/);
-  assert.ok(textProp, '공유 text를 찾지 못했다');
-  assert.ok(!/https?:|\{shareUrl\}|url/i.test(textProp![1]), `text에 URL이 섞였다: ${textProp![1]}`);
-  assert.equal(textProp![1], '2개 단지 시세와 데이터를 비교해보세요.');
+  // SHARE_CARD_UNIFICATION_V1 §6 — 문구는 화면에 리터럴로 쓰지 않고 공통 헬퍼가 만든다
+  // (Hero/하단바/카카오 카드가 서로 다른 문장을 내지 않도록). 규칙은 그대로다.
+  assert.ok(
+    /text=\{compareShareCopy\(both\[0\]\.displayName, both\[1\]\.displayName\)\.description\}/.test(COMPARE),
+    '비교 화면이 공통 문구 헬퍼를 쓰지 않는다'
+  );
+  const { title, description } = compareShareCopy('대신해모로', '대신더샵');
+  assert.ok(!/https?:/i.test(description), `text에 URL이 섞였다: ${description}`);
+  assert.equal(description, '두 단지의 실거래·가격·입지 데이터를 비교해보세요.');
+  assert.equal(title, '대신해모로 vs 대신더샵 비교 | 이집');
 });
 
 test('§G 공유 payload는 title/text/url 세 필드로만 나간다', () => {
   assert.ok(/await nativeShare\(\{ title, text, url \}\)/.test(HOOK));
-  // 카카오 폴백도 url을 description에 복사하지 않는다.
-  assert.ok(/sendKakaoShare\(\{ title, description: text \|\| title, url, imageUrl/.test(HOOK));
+  // 카카오 브랜드 카드도 url을 description에 복사하지 않는다 — 링크는 link 필드에만 있다.
+  const kakaoCall = HOOK.slice(HOOK.indexOf('sendKakaoShare({'), HOOK.indexOf('share_attempt'));
+  assert.ok(/description: text \|\| title,/.test(kakaoCall), `카카오 설명이 바뀌었다: ${kakaoCall}`);
+  assert.ok(/\burl,/.test(kakaoCall), '카카오 카드가 canonical url을 받지 않는다');
+  assert.ok(!/https?:/.test(kakaoCall));
 });
 
 test('§6 호출부가 준 canonical URL이 주소창 복사보다 우선한다', () => {
@@ -185,7 +196,10 @@ test('§6 호출부가 준 canonical URL이 주소창 복사보다 우선한다'
 });
 
 test('§8 공유 URL의 오리진은 siteConfig에서 나온다 — 호스트를 박지 않는다', () => {
-  assert.ok(/absoluteUrl\(sharePath\)/.test(COMPARE));
+  // SHARE_CARD_UNIFICATION_V1 §10 — absoluteUrl → absoluteShareUrl. 오리진은 여전히
+  // siteConfig(NEXT_PUBLIC_SITE_URL)가 1순위이고, 그 값이 https가 아닐 때만(=클라이언트
+  // 번들에서 localhost로 내려앉은 배포) 지금 열려 있는 오리진으로 폴백한다.
+  assert.ok(/absoluteShareUrl\(sharePath\)/.test(COMPARE));
   // 주석은 빼고 본다 — 커토버 절차를 설명하는 문장에 도메인이 등장할 수 있다.
   const code = COMPARE.replace(/^\s*\/\/.*$/gm, '');
   assert.ok(!/vercel\.app|e-jip\.com/.test(code), '비교 화면에 호스트가 박혀 있다');

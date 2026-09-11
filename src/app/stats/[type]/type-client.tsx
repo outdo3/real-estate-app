@@ -459,7 +459,7 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
               <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
             </button>
             {item.status === 'live' && (
-              <ShareAction title={shareContext.title} text={shareContext.text} params={shareContext.params} />
+              <ShareAction shareType="stats" title={shareContext.title} text={shareContext.text} params={shareContext.params} />
             )}
           </div>
         )}

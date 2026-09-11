@@ -15,7 +15,8 @@ import { fetchCompareApartment } from '@/lib/compare-v2/fetch';
 import { buildDifferences, buildTradeoffSummary, buildHeadlineDifferences } from '@/lib/compare-v2/difference';
 import { formatHeadlineBullet, scoreDomainSummary } from '@/lib/compare-v2/format';
 import { buildCompareUrl, buildCompareSharePath, parseCompareUrl, type CompareSlotSeed } from '@/lib/compare-v2/url';
-import { absoluteUrl } from '@/config/site';
+import { absoluteShareUrl } from '@/lib/share/shareUtils';
+import { compareShareCopy } from '@/lib/share/ejipShareCard';
 import { compareReportHref, REPORT_LABELS } from '@/lib/report/report-links';
 import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
 import styles from './CompareV2.module.css';
@@ -141,6 +142,12 @@ export default function CompareV2({ initialSeeds, unresolvedAptSeqs }: CompareV2
   //
   // 오리진은 window.location이 아니라 siteConfig에서 나온다(§8) — NEXT_PUBLIC_SITE_URL을
   // e-jip.com으로 바꾸고 재배포하면 같은 코드가 e-jip.com 링크를 만든다.
+  //
+  // SHARE_CARD_UNIFICATION_V1 §10 — absoluteUrl 대신 absoluteShareUrl을 쓴다. siteConfig의
+  // 폴백 계산에는 서버 전용 환경변수(VERCEL_ENV)에 기대는 가지가 있어, NEXT_PUBLIC_SITE_URL을
+  // 넣지 않은 배포의 **클라이언트 번들**에서는 http://localhost:3000이 나온다 — 수신자가
+  // 열 수 없는 링크다. absoluteShareUrl은 그때만 지금 열려 있는 오리진으로 내려간다.
+  // 호스트를 코드에 박지 않는다는 §8 계약은 그대로다.
   const sharePath = both
     ? buildCompareSharePath(
         both[0].identity.kind === 'aptSeq' ? both[0].identity.aptSeq : null,
@@ -149,7 +156,7 @@ export default function CompareV2({ initialSeeds, unresolvedAptSeqs }: CompareV2
     : null;
   // canonical identity를 얻지 못한 슬롯이 있으면 짧은 링크를 만들 수 없다. 그때만
   // 기존 동작(현재 주소창 URL 공유)으로 떨어진다 — 열리지 않는 짧은 링크보다 낫다.
-  const shareUrl = sharePath ? absoluteUrl(sharePath) : undefined;
+  const shareUrl = sharePath ? absoluteShareUrl(sharePath) : undefined;
 
   return (
     <div className={styles.page}>
@@ -159,8 +166,9 @@ export default function CompareV2({ initialSeeds, unresolvedAptSeqs }: CompareV2
           <div className={styles.topBarTitle}>단지 2곳 비교</div>
           {both && (
             <ShareAction
-              title={`${both[0].displayName} vs ${both[1].displayName} 비교 | 이집`}
-              text="2개 단지 시세와 데이터를 비교해보세요."
+              shareType="compare"
+              title={compareShareCopy(both[0].displayName, both[1].displayName).title}
+              text={compareShareCopy(both[0].displayName, both[1].displayName).description}
               url={shareUrl}
             />
           )}

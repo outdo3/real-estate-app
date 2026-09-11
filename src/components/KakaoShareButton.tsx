@@ -12,6 +12,7 @@ import {
   sendKakaoShare,
   nativeShare,
 } from '@/lib/share/shareUtils';
+import type { EjipShareType } from '@/lib/share/ejipShareCard';
 import styles from './KakaoShareButton.module.css';
 
 interface KakaoShareButtonProps {
@@ -25,6 +26,12 @@ interface KakaoShareButtonProps {
    *  기본값 '공유하기'는 Hero/학교상세 등 기존 호출부 동작을 그대로 유지하고,
    *  StickyActionBar만 짧은 '공유'를 넘겨 3-action bar 폭을 좁게 유지한다. */
   label?: string;
+  /**
+   * SHARE_CARD_UNIFICATION_V1 §3/§9 — 카카오 카드 CTA 버튼 라벨을 정하는 카드 성격.
+   * 이 컴포넌트의 세 호출부(단지 상세 Hero / StickyActionBar / 학교 상세)는 전부
+   * 단지 성격이라 기본값이 'apartment'다.
+   */
+  shareType?: EjipShareType;
 }
 
 // GLOBAL SHARE SYSTEM V1 §11 — 이 컴포넌트는 이미 안정적으로 동작 중인 3개 호출부
@@ -33,7 +40,7 @@ interface KakaoShareButtonProps {
 // 클립보드 복사만 새 공통 유틸(src/lib/share/shareUtils.ts)로 옮겨 재사용한다 — 새로
 // 만드는 페이지가 쓰는 ShareAction/useSharePage와 같은 저수준 로직을 공유해 중복을
 // 없앤다(회귀 없는 리팩터링).
-export default function KakaoShareButton({ title, description, compact, label = '공유하기' }: KakaoShareButtonProps) {
+export default function KakaoShareButton({ title, description, compact, label = '공유하기', shareType = 'apartment' }: KakaoShareButtonProps) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const sdkReadyRef = useRef(false);
 
@@ -67,7 +74,7 @@ export default function KakaoShareButton({ title, description, compact, label = 
     // 동기적으로 호출해야 브라우저가 팝업을 차단하지 않는다(loadKakaoShareSdk 주석 참고).
     if (getKakaoAppKey() && sdkReadyRef.current && window.Kakao?.isInitialized?.()) {
       try {
-        sendKakaoShare({ title, description, url, imageUrl: buildKakaoShareImageUrl() });
+        sendKakaoShare({ type: shareType, title, description, url, imageUrl: buildKakaoShareImageUrl() });
         setStatus('idle');
         return;
       } catch {

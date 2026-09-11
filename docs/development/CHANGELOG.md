@@ -2,6 +2,90 @@
 
 ## 2026-09-11
 
+### SHARE CARD UNIFICATION V1 — 공유 카드를 하나로
+
+사용자가 실제 카카오톡 스크린샷 두 장으로 재현: 아파트 상세에서 공유하면 이집 브랜드
+카드(브랜드 이미지 + 제목 + 설명 + "이집에서 자세히 보기" 버튼)가 가는데, 비교에서
+공유하면 일반 URL 미리보기가 간다.
+
+원인은 카드 능력의 차이가 아니라 **호출 순서**였다.
+
+    KakaoShareButton(아파트 상세/StickyActionBar/학교 상세)
+      카카오 먼저 → 네이티브 → 클립보드            → 브랜드 카드
+
+    useSharePage(통계/비교/지도/분양/재개발/커뮤니티/AI검색)
+      네이티브 먼저 → 카카오 → 클립보드            → 일반 OG 미리보기
+
+    ReportActions(리포트)
+      네이티브(+파일) → 클립보드                    → 카카오 경로 없음
+
+useSharePage는 "네이티브 공유가 없는 환경(주로 데스크톱)에서만 카카오로 보강"하도록
+설계돼 있었는데, 모바일에는 navigator.share가 **항상** 있다. 그래서 실제 사용자
+(안드로이드 카카오톡)는 카카오 분기에 영영 도달하지 못했다. 브랜드 카드 코드도 브랜드
+이미지 자산도 이미 있었지만 도달할 수 없는 상태였다.
+
+바뀐 것
+
+카드 조립을 순수 모듈 하나로 모았다 — src/lib/share/ejipShareCard.ts.
+
+    buildEjipKakaoShare({ type, title, description, imageUrl, canonicalUrl, buttonLabel })
+
+type은 apartment | stats | compare | report | generic. 절대 URL 검증, 설명문 URL
+제거, 브랜드 접미사 정규화("이집 | 이집" 방지)가 전부 여기 있다. Kakao.Share.
+sendDefault()를 부르는 곳은 shareUtils 한 곳뿐이고, 화면 어디에도 카카오 템플릿
+리터럴이 없다(테스트로 고정).
+
+순서는 실전에서 검증된 아파트 상세 쪽으로 통일했다.
+
+    A. 카카오 SDK 준비됨 → 브랜드 카드   (await 이전 동기 호출 — 팝업 차단 회피)
+    B. 그 외 → navigator.share(title, text, url)
+    C. 그 외 → 링크 복사
+
+CTA 라벨
+
+    apartment  이집에서 자세히 보기
+    compare    이집에서 비교 보기
+    stats      이집에서 통계 보기
+    report     이집에서 리포트 보기
+
+브랜드 이미지는 첫 스크린샷이 이미 쓰던 그 자산을 그대로 재사용한다
+(/brand/share/ejip-kakao-share-1200x630.jpg). 두 번째 브랜드 이미지를 만들지 않았고,
+공유 시점에 스크린샷을 굽지 않는다.
+
+오리진
+
+resolveShareOrigin()을 추가했다. siteConfig(NEXT_PUBLIC_SITE_URL)가 https면 그대로
+쓰고, 아니면 지금 열려 있는 오리진으로 내려간다. siteConfig의 폴백에는 서버 전용
+환경변수(VERCEL_ENV)에 기대는 가지가 있어 클라이언트 번들에서 http://localhost:3000
+으로 내려앉을 수 있는데, 그 값으로 만든 카드 이미지는 카카오가 가져올 수 없고 링크는
+수신자가 열 수 없다. 컴포넌트에 호스트를 박지 않으므로 NEXT_PUBLIC_SITE_URL 하나만
+바꾸면 canonical URL · 카드 이미지 · CTA 링크가 함께 따라온다.
+
+지키기로 한 것
+
+    /stats/compare?a=<aptSeqA>&b=<aptSeqB>
+
+선행 STEP의 짧은 비교 링크는 그대로다. 이름·동·구코드·인코딩된 한글은 돌아오지 않았다
+(테스트로 고정). Open Graph 메타데이터도 그대로 둔다 — 외부 메신저·브라우저·검색엔진이
+여전히 필요로 한다. 분석 이벤트(share_attempt / share_success / report_share)와 GA
+파라미터 정책도 바뀌지 않았다(report_share에 method='kakao_card'만 추가).
+
+주의
+
+리포트 공유는 카카오가 가능한 환경에서 브랜드 카드 우선으로 바뀌었다. 캡처 PNG를
+첨부하던 navigator.share({files}) 경로는 카카오를 쓸 수 없을 때의 폴백으로 남는다.
+액션바의 [이미지] / [PDF] 저장 버튼과 인쇄 파이프라인은 전혀 바뀌지 않았다.
+
+테스트
+
+    npx tsx --test src/lib/share/ejipShareCard.test.ts   24/24 PASS
+    npx tsx --test "src/**/*.test.ts"                    793/793 PASS
+    npx tsc --noEmit                                     src/ 오류 0
+                                                         (scripts/는 사전 존재 오류)
+
+카카오톡 시각 결과는 기기가 없어 검증하지 못했다 — DEVICE QA REQUIRED.
+체크리스트는 docs/development/SHARE_CARD_UNIFICATION_V1.md §11.
+
 ### COMPARE SHARE URL COMPACT FIX V1 — 비교 공유 링크 340자 → 81자
 
 사용자가 모바일에서 재현: 비교를 카카오톡으로 공유하면 OG 카드 위에 %EB%... 덩어리가
