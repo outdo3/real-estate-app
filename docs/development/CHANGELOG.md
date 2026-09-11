@@ -2,6 +2,85 @@
 
 ## 2026-09-11
 
+### BUSAN LAUNCH READINESS AUDIT V1 — 출시 전 전수 감사(감사 전용, 프로덕션 무변경)
+
+부산 소프트 런칭 전 29개 영역 감사. **기능 추가 0건, 수정 0건, 프로덕션 쓰기 0건,
+src/ 변경 0건.** 추가된 것은 감사 문서와 로드맵/CHANGELOG 갱신뿐이다.
+
+종합 판정: **LIMITED** — 소프트 런칭 가능. **P0 없음**, P1 3건.
+
+P0 블로커: 없음
+
+잘못된 단지 신원·잘못된 금액·다른 단지 폴백·인증/프라이버시 결함·핵심 기능 불가
+어느 것도 발견되지 않았다. src/ 전수 검색에서 살아 있는 모의 로직·플레이스홀더 계산·
+하드코딩 세율·income*N 류가 0건이다(검색에 걸린 "가짜/모의" 문자열은 전부 과거에
+제거한 로직을 설명하는 주석이었다).
+
+P1-1. MASTER COVERAGE 드리프트 — 자동화 없음 (신규 발견)
+
+MASTER_COVERAGE_SYNC_V1은 **이미 구현돼 있다**(scripts/master-coverage-sync.ts,
+dry-run 기본, INSERT 전용, HIGH_CONFIDENCE만). 문제는 cron이 없다는 것이다.
+  2026-08-31 실행: 거래 단지 3,400 · 미매칭 0 · 커버리지 100%
+  2026-09-11 현재: 거래 단지 3,418 · 미매칭 21 · 커버리지 99.39%
+**11일에 21곳 — 하루 약 2곳씩 누적된다.** vercel.json cron은 sale-sync/rent-sync/
+sale-recheck 셋뿐이다.
+사용자 영향(실측, 송암파크빌 26140-118): 상세 200·실거래 정상 표시, 좌표는
+NO_COORDINATE/NO_MASTER로 정직 표시(가짜 지도 없음), 점수는 NOT_FOUND(지어낸 점수 없음).
+**틀린 데이터가 아니라 기능이 조용히 빠지는 것**이라 P0가 아니라 P1이다.
+조치: 출시 전 --apply 1회(프로덕션 INSERT → 승인 필요), 출시 직후 cron 추가.
+(참고: 전체 기간 미매칭 1,559건은 대부분 2006년대 빌라 1회 거래 기록이다. sync의
+판정 기준인 "부산+매매+취소제외+24개월"이 제품이 실제 다루는 범위다.)
+
+P1-2. 학교 거리 표시 모순 — 사용자가 볼 수 있다 (지시 §2 확인 항목)
+
+리치플러스(26530-105) 실측:
+  리포트   괘법초등학교 · 직선 79m
+  점수카드 "도보로 다닐 만한 무난한 거리" + evidence 508m
+79m는 바로 옆 건물인데 점수 카드는 "무난한 거리"라고 말한다. 41개 단지 해당.
+표시 전용 완화안 3가지를 검토했으나 **어느 것도 깨끗하지 않다**(NEIS 숫자로 바꾸면
+설명 문구가 Kakao band에서 나와 여전히 어긋나고, 수치 줄을 지우면 정확한 3,360건에서
+정보가 사라진다). 진짜 해법은 이미 기록된 SCHOOL SCORE MODEL REBASE V1이다.
+소프트 런칭에서는 리포트를 권위 화면으로 두고 현 상태 수용 권고. 점수 모델 무변경.
+
+P1-3. 도메인 커토버 — OG 메타태그 하드코딩
+
+src/app/layout.tsx 43·47·59행이 https://real-estate-app-park11.vercel.app 를 박아두고
+siteConfig.url을 거치지 않는다. getBaseUrl() 체인은 정상이라 metadataBase·robots·
+sitemap·absoluteUrl은 NEXT_PUBLIC_SITE_URL 하나로 따라오지만 **이 3줄은 따라오지 않는다** —
+e-jip.com 전환 후에도 공유 카드가 옛 도메인을 가리킨다.
+
+부산 16개 구: **16/16 전부 존재, 부산 외 sggCd 유출 0건**
+
+ApartmentMaster 3,418건이 16개 구에 분포. ApartmentTradeHistory에 부산 외 aptSeq
+70건(서울 11680:39, 대구 27110:31 파일럿 잔존)이 있으나 모든 화면이 lawdCd로
+필터하므로 사용자 화면에 유출되지 않는다(P2).
+
+성능: 3초 초과 0건
+
+warm TTFB — / 0.004s · /map 0.018s · 단지상세 0.034s · /tools 0.008s · /stats 0.024s ·
+/report 0.121s · /report/city/busan 0.911s(최대) · /officetel/1 0.665s.
+로컬 프로덕션 빌드 기준이며 실제 사용자 환경은 아니다.
+
+빌드/테스트: src 708/708 PASS · tsc src 오류 0 · build exit 0
+(scripts//tmp/ 14개 파일 오류는 기존, FAIL_EXISTING_SCRIPT_ERRORS)
+
+모바일: **STRUCTURAL ONLY** — 브라우저 미승인으로 렌더 QA 미실시. 렌더 PASS 주장 안 함.
+
+커토버 차단 2건: layout.tsx OG 하드코딩, Kakao Map JS 키 허용 도메인 등록
+(미등록 시 지도·로드뷰 전부 실패). 그 외 Vercel 도메인/DNS/www 정책/
+NEXT_PUBLIC_SITE_URL/NEXTAUTH_URL/OAuth 3사 리디렉션 URI 등록 필요.
+
+연기 항목 보존(§35): 로드맵에 "출시 직후 / P1", "데이터 감사 후", "출시 후(제품 확장)"
+절을 정리해 RENT Phase C, AI DSL, 출퇴근, 예산 추천, 학교 기반 검색, 대체 단지 추천,
+PARTNER ANALYTICS V2, MASTER COVERAGE SYNC 자동화(신규), PRESALE COMPETITION V1,
+재개발 공식 출처, Broker PRO/매물/CRM/PRO리포트/뉴스 확장을 전부 기록했다.
+**어느 것도 삭제하지 않았다.**
+
+문서:
+
+- docs/development/BUSAN_LAUNCH_READINESS_AUDIT_V1.md 신규(전체 매트릭스 29개 영역)
+- docs/development/00-PROJECT-ROADMAP.md — 연기 항목 절 정리/추가
+
 ### SCHOOL SCORE IMPACT SIMULATION V1 — 읽기 전용 영향 분석(프로덕션 무변경)
 
 로드맵의 [보류 / P1 데이터 신뢰] 항목에 필요한 영향 시뮬레이션을 수행했다.

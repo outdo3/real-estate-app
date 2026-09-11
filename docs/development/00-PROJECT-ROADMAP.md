@@ -242,3 +242,28 @@ E-JIP Score는 신뢰 임계 시스템이라 승인 없이 공식·출처·임�
 - **상세 LTV 모달 통일** — 상세의 80/70/40% 가정 모달을 `lib/finance-tools/ratios.ts` 기반으로 옮긴다. 현재는 그 모달만 기준일 없는 가정을 쓰고 있다.
 - **갭 계산기 단지 컨텍스트 prefill** — 동일 단지·동일 전용면적 확인 로직이 선행돼야 한다. 확인 없이 채우면 존재하지 않는 갭이 나온다.
 - **출퇴근 분석 / 재개발 고급 분석 / 청약 경쟁률 / AI 추천 / 브로커 PRO** — 미착수. 완성 전까지 도구 화면에 노출하지 않는다.
+
+## 출시 직후 / P1
+
+`BUSAN_LAUNCH_READINESS_AUDIT_V1`(2026-09-11)에서 확인·정리한 목록. 출시를 막지는 않지만 출시 직후 다뤄야 한다. **완료 전까지 지우지 않는다.**
+
+- **MASTER COVERAGE SYNC 자동화** — `scripts/master-coverage-sync.ts`는 이미 있지만 **cron이 없다**. 2026-08-31 실행 시 커버리지 100%였는데 2026-09-11 기준 99.39%(21곳 미매칭)로 밀렸다 — 11일에 21곳, 하루 약 2곳씩 누적된다. `vercel.json`에 master sync cron 추가 필요. 출시 전에는 `--apply` 1회 실행(프로덕션 INSERT → 승인 필요).
+- **SCHOOL SCORE MODEL REBASE V1** — 위 "보류 / P1 데이터 신뢰" 항목 참고. NEIS 출처 + 임계 재앵커 + percentile 재보정 + LocationFeature 재수집을 함께.
+- **학교 거리 표시 모순 해소** — 41개 단지에서 점수 카드(Kakao)와 리포트(NEIS)가 다른 거리를 보여준다. 깨끗한 표시 전용 해법이 없어 위 리베이스와 함께 처리한다.
+- **도메인 OG 하드코딩 제거** — `src/app/layout.tsx`의 openGraph.url / openGraph.images / twitter.images 3줄이 Vercel 도메인을 박아두고 있어 `NEXT_PUBLIC_SITE_URL`을 따라가지 않는다. e-jip.com 전환의 차단 요인.
+- **RENT Phase C 2014+** — `ApartmentRentHistory` DB 보유 범위가 2024-08~2026-08뿐이라 그 이전 연도별 경로는 외부 MOLIT 호출에 의존한다.
+- **AI 결정적 DSL / 구조화 검색** — 현재 AI 검색은 베타.
+- **출퇴근 접근성**
+- **예산 기반 추천**
+- **학교 기반 단지 검색**
+- **대체 단지 추천**
+- **PARTNER ANALYTICS V2** — 성사 귀속은 파트너 확인 수단이 생긴 뒤.
+
+## 데이터 감사 후
+
+- **PRESALE COMPETITION V1** — 경쟁률 데이터 감사가 선행. 그 전까지 수치를 만들지 않는다.
+- **재개발 공식 출처 확장** — 공식 연동 전까지 완결성을 암시하는 문구를 쓰지 않는다.
+
+## 출시 후 (제품 확장)
+
+- Broker PRO · 매물 · CRM/AI 매칭 · PRO 리포트 · 뉴스/커뮤니티 확장
