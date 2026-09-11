@@ -247,10 +247,11 @@ E-JIP Score는 신뢰 임계 시스템이라 승인 없이 공식·출처·임�
 
 `BUSAN_LAUNCH_READINESS_AUDIT_V1`(2026-09-11)에서 확인·정리한 목록. 출시를 막지는 않지만 출시 직후 다뤄야 한다. **완료 전까지 지우지 않는다.**
 
-- **MASTER COVERAGE SYNC 자동화** — `scripts/master-coverage-sync.ts`는 이미 있지만 **cron이 없다**. 2026-08-31 실행 시 커버리지 100%였는데 2026-09-11 기준 99.39%(21곳 미매칭)로 밀렸다 — 11일에 21곳, 하루 약 2곳씩 누적된다. `vercel.json`에 master sync cron 추가 필요. 출시 전에는 `--apply` 1회 실행(프로덕션 INSERT → 승인 필요).
+- **MASTER COVERAGE SYNC AUTOMATION** — 출시 전 `--apply` 1회는 **완료**(2026-09-11, 승인 받은 INSERT 20건, 커버리지 99.39% → 99.97%). 남은 것은 **자동화**다. `scripts/master-coverage-sync.ts`는 CLI 스크립트일 뿐 cron이 없고, `vercel.json`의 cron은 sale-sync/rent-sync/sale-recheck 셋뿐이다. 방치하면 하루 약 2곳씩 다시 밀린다. 자동화 감사 판정은 **B. NEEDS FOLLOW-UP** — 스크립트 자체는 안전(외부 API 호출 0건, DB 전용, 2.4초, INSERT 전용 단일 쓰기, 재실행 시 0건 삽입)하지만 무인 실행 전에 네 가지가 선행돼야 한다: (1) `scripts/`는 Next 번들에 포함되지 않으므로 로직을 서버 모듈로 옮기고 기존 세 cron과 같은 `CRON_SECRET` fail-closed 게이트를 쓰는 `/api/cron/master-coverage-sync` 신설, (2) 좌표 없는 master가 조용히 쌓이므로 지오코딩 백필과 짝지어야 함, (3) REVIEW_REQUIRED 누적 알림, (4) 아래 "동명 단지 AMBIGUOUS" 부작용이 무인 실행으로 재발하지 않게 하는 장치. **이 STEP에서는 프로덕션에 쓰는 cron을 추가하지 않았다.**
+- **동명 단지 AMBIGUOUS — score identity를 aptSeq로** — 위 INSERT의 실측 부작용. `/api/apt/[name]/score`는 (sggCd + umdName + 정규화 이름)으로 단지를 해소하고 `aptSeq`를 받지 않는다. 새로 넣은 `대원`(26230-1810, 부전동) 때문에 기존 `대원아파트`(26230-149, 범천동)가 **dong 없이 들어오는 경로**에서만 OK(58점) → AMBIGUOUS(점수 없음)로 바뀌었다. 16개 구 전 master 시뮬레이션 결과 해당 사례는 **이 1건뿐**이고, dong이 있으면 어디서도 회귀가 없다. 틀린 점수가 아니라 점수 없음이라 P1이며, 근본 해법은 이름이 아니라 canonical identity(`aptSeq`)로 해소하는 것이다 — score 해소 규칙 변경은 승인 대상이라 이 STEP에서 손대지 않았다.
 - **SCHOOL SCORE MODEL REBASE V1** — 위 "보류 / P1 데이터 신뢰" 항목 참고. NEIS 출처 + 임계 재앵커 + percentile 재보정 + LocationFeature 재수집을 함께.
 - **학교 거리 표시 모순 해소** — 41개 단지에서 점수 카드(Kakao)와 리포트(NEIS)가 다른 거리를 보여준다. 깨끗한 표시 전용 해법이 없어 위 리베이스와 함께 처리한다.
-- **도메인 OG 하드코딩 제거** — `src/app/layout.tsx`의 openGraph.url / openGraph.images / twitter.images 3줄이 Vercel 도메인을 박아두고 있어 `NEXT_PUBLIC_SITE_URL`을 따라가지 않는다. e-jip.com 전환의 차단 요인.
+- **도메인 커토버 (OG 하드코딩은 해소됨)** — `src/app/layout.tsx`의 3줄은 제거됐다(2026-09-11). 이제 오리진을 정하는 곳은 `src/config/site.ts`의 `getBaseUrl()` 하나뿐이고 `src/config/site-metadata.test.ts`가 이를 고정한다. 남은 커토버 작업: `NEXT_PUBLIC_SITE_URL` 설정 **후 재배포**(정적 프리렌더 라우트 `/`·`/robots.txt`는 오리진을 빌드 시점에 굽는다 — 환경변수만 바꾸면 동적 라우트만 따라간다), Vercel 커스텀 도메인/DNS, `NEXTAUTH_URL`, OAuth 3사 리디렉션 URI, **Kakao Map JS 키 허용 도메인 등록**(미등록 시 지도·로드뷰 전부 실패), GA4 스트림 URL, Search Console.
 - **RENT Phase C 2014+** — `ApartmentRentHistory` DB 보유 범위가 2024-08~2026-08뿐이라 그 이전 연도별 경로는 외부 MOLIT 호출에 의존한다.
 - **AI 결정적 DSL / 구조화 검색** — 현재 AI 검색은 베타.
 - **출퇴근 접근성**

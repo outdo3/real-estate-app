@@ -2,6 +2,76 @@
 
 ## 2026-09-11
 
+### MASTER COVERAGE SYNC APPLY + DOMAIN OG FIX V1 — 승인된 INSERT 20건 + OG 단일 출처
+
+두 가지를 닫았다. **승인 범위는 MASTER_COVERAGE_SYNC_V1의 missing-master INSERT 하나뿐이며,
+DELETE·UPDATE·스키마·마이그레이션·점수 재수집은 어느 것도 하지 않았다.**
+
+1) MASTER COVERAGE — 프로덕션 INSERT 20건
+
+쓰기 전에 스크립트 체인 전체에서 Prisma 쓰기가 몇 개인지부터 셌다. 정확히 한 줄
+(scripts/master-coverage-sync.ts의 apartmentMaster.create)이고, 그 앞에 HIGH_CONFIDENCE
+필터와 쓰기 직전 중복 재확인이 있다. UPDATE/DELETE 경로는 존재하지 않는다.
+
+    dry-run   미매칭 21 · 커버리지 99.38% · HIGH_CONFIDENCE 20 · REVIEW_REQUIRED 1
+    --apply   inserted 20, failed 0 (id 5407~5426)
+    쓰기 후   ApartmentMaster 3,418 → 3,438 (+20 정확히) · 중복 aptSeq 0
+    재실행    미매칭 1 · 커버리지 99.97% · 삽입 0건(멱등)
+
+REVIEW_REQUIRED 1건(26440-329 에코델타더베르힐)은 같은 주소에 다른 aptSeq의 기존 Master가
+있어 alias 여부가 확정되지 않았다. 자동 생성하지 않는다.
+
+새로 들어온 20건은 **전부 좌표가 없다.** 결함이 아니라 설계다 — sync는 identity만 넣고
+좌표·세대수·주차를 채우지 않는다. 좌표를 지어내지 않았다.
+
+사용자 화면 실측(송암파크빌 26140-118):
+
+    상세 200 · 검색이 canonical aptSeq로 잡힘 · 거래 목록에 다른 단지 혼입 0
+    좌표   NO_MASTER → MASTER_WITHOUT_COORDS (더 정확해졌고, 여전히 정직하게 없음)
+    지도   "위치 정보를 확인할 수 없습니다" — 가짜 지도 없음
+    점수   NOT_FOUND → INSUFFICIENT_DATA, score: null — 지어낸 점수 없음
+
+부작용 1건을 실측으로 찾아 기록했다. score 라우트는 단지를 (sggCd + 동 + 정규화 이름)으로
+해소하고 aptSeq를 읽지 않는다. normalizeAptName이 "아파트" 접미사를 지우므로 새로 넣은
+`대원`(26230-1810 부전동)이 기존 `대원아파트`(26230-149 범천동)와 같은 정규화 이름이 됐다.
+16개 구 전 master 이름을 대입한 시뮬레이션 결과 **dong 없는 진입 경로에서만, 이 1건만**
+OK(58점) → AMBIGUOUS로 바뀐다. dong이 있으면 회귀 0건. 틀린 점수가 아니라 점수 없음이며,
+근본 해법(aptSeq 기반 해소)은 score 해소 규칙 변경이라 승인 대상 — 로드맵 P1로 기록.
+
+2) DOMAIN OG — 오리진 단일 출처
+
+src/app/layout.tsx의 openGraph.url / openGraph.images / twitter.images 세 줄이 Vercel
+호스트를 직접 박아둬, metadataBase·robots·sitemap이 NEXT_PUBLIC_SITE_URL을 따라가는데도
+**공유 카드만 옛 도메인에 남는** 상태였다. 셋 다 siteConfig 파생으로 바꿨다.
+이제 오리진을 정하는 곳은 src/config/site.ts의 getBaseUrl() 하나뿐이다.
+CANONICAL_PRODUCTION_URL 폴백 상수는 유지 — 환경변수를 아직 넣지 않은 현재 배포의 공유
+카드를 살려두는 장치이고, 지우면 지금 배포가 깨진다.
+
+NEXT_PUBLIC_SITE_URL=https://e-jip.com으로 기동해 실측:
+
+    동적 /apt/...      og:url/og:image → e-jip.com  (이중 슬래시 0 · undefined 0)
+    동적 /sitemap.xml  <loc>https://e-jip.com/</loc>
+    정적 /             빌드 시점 값 그대로
+
+**정적 프리렌더 라우트(/, /robots.txt)는 오리진을 빌드 시점에 굽는다 — 커토버 때
+환경변수만 바꾸면 안 되고 재배포가 필요하다.** 이번 변경으로 생긴 성질이 아니라
+metadataBase가 원래 갖고 있던 성질이며, 변경 전에는 재배포를 해도 OG 3줄이 안 따라왔다.
+
+src/config/site-metadata.test.ts(7건)가 이 계약을 고정한다 — layout.tsx에 호스트 하드코딩
+금지, 폴백 상수는 site.ts에 1개만, e-jip.com 전환 시 메타데이터가 따라오는지, 환경변수가
+없을 때 현 배포가 보존되는지, 이중 슬래시·undefined·localhost 유출이 없는지.
+
+마스터 sync 자동화 감사 판정: **B. NEEDS FOLLOW-UP.** 스크립트 자체는 안전하지만
+(외부 호출 0 · DB 전용 · 2.4초 · INSERT 전용 · 멱등) 무인 실행 전에 cron 라우트 신설
+(scripts/는 Next 번들에 없다), 지오코딩 백필 연동, REVIEW_REQUIRED 알림, 위 AMBIGUOUS
+부작용 방지가 선행돼야 한다. **이 STEP에서 프로덕션에 쓰는 cron은 추가하지 않았다.**
+
+검증: src 테스트 731/731 PASS · tsc src 오류 0(scripts/tmp 14개 파일은 기존) ·
+변경 파일 eslint 0 problems · npm run build exit 0.
+
+문서: docs/development/MASTER_COVERAGE_SYNC_APPLY_DOMAIN_OG_FIX_V1.md 신규,
+00-PROJECT-ROADMAP.md의 P1 항목 갱신(SCHOOL SCORE MODEL REBASE V1은 그대로 보존).
+
 ### REPORT BOTTOM ACTION BAR COMPACT FIX V1 — 라벨 단축 + 줄바꿈 지점 고정
 
 리포트 하단 액션 바가 모바일에서 답답하고 마지막 버튼이 어색하게 접히던 문제.

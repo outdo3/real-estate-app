@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import AppProviders from '@/components/AppProviders';
-import { siteConfig } from '@/config/site';
+import { siteConfig, absoluteUrl } from '@/config/site';
 import './globals.css';
 
 /**
@@ -14,6 +14,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
 };
+
+/** 대표 OG 이미지 경로. 절대 URL은 siteConfig에서 만든다(호스트를 여기 적지 않는다). */
+const OG_IMAGE_PATH = '/brand/og/ejip-og-main-1200x630.jpg';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
@@ -37,14 +40,22 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: '/brand/icon/ejip-app-icon-180.png', sizes: '180x180', type: 'image/png' }],
   },
+  // MASTER_COVERAGE_SYNC_APPLY_DOMAIN_OG_FIX_V1 §10 — 예전에는 아래 세 곳(openGraph.url,
+  // openGraph.images[0].url, twitter.images[0])이 Vercel 호스트를 **직접 박아두고** 있었다.
+  // metadataBase·robots·sitemap은 siteConfig를 거치므로 NEXT_PUBLIC_SITE_URL 하나로
+  // 따라오는데, 이 셋만 따라오지 않아 도메인을 바꿔도 공유 카드가 옛 주소를 가리켰다.
+  //
+  // 이제 전부 siteConfig(=단일 출처)에서 파생한다. 오리진을 정하는 곳은
+  // src/config/site.ts의 getBaseUrl() 하나뿐이고, 거기서 NEXT_PUBLIC_SITE_URL →
+  // 프로덕션 고정 도메인 → 프리뷰 호스트 → localhost 순으로 결정된다.
   openGraph: {
     title: '이집',
     description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
-    url: 'https://real-estate-app-park11.vercel.app',
+    url: siteConfig.url,
     siteName: '이집',
     images: [
       {
-        url: 'https://real-estate-app-park11.vercel.app/brand/og/ejip-og-main-1200x630.jpg',
+        url: absoluteUrl(OG_IMAGE_PATH),
         width: 1200,
         height: 630,
         alt: '이집 - 복잡한 부동산, 이집으로 쉽게',
@@ -56,7 +67,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: '이집',
     description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
-    images: ['https://real-estate-app-park11.vercel.app/brand/og/ejip-og-main-1200x630.jpg'],
+    images: [absoluteUrl(OG_IMAGE_PATH)],
   },
 };
 
