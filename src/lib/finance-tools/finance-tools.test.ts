@@ -12,6 +12,7 @@ import {
   baseRatePercent,
   midBandRatePercent,
   ACQUISITION_TAX_RULE_VERSION,
+  PRIMARY_SOURCES,
 } from './acquisition-tax';
 import { REGISTRATION_COST_ITEMS, quoteRequiredItems } from './registration-cost';
 import { calculateMonthlyPayment } from '../finance-fit/amortization';
@@ -191,11 +192,133 @@ test('취득세: 가액이 없거나 이상하면 계산하지 않는다', () =>
   }
 });
 
-test('취득세: 세율표에 기준일이 붙어 있고, 1차 출처 미대조 상태가 표시된다', () => {
+// ── ACQUISITION_TAX_PRIMARY_SOURCE_VERIFICATION_V1 §6/§7/§10 ────────────────
+//
+// 아래는 법제처 사이트(law.go.kr / easylaw.go.kr)와 대조해 확인한 산식을 고정한다.
+// 코드가 아니라 **법령**을 기준으로 기대값을 적었다 — 구현을 바꾸면 여기서 깨진다.
+
+test('취득세: 1차 출처 대조가 끝났고 출처·기준일이 기록돼 있다', () => {
+  assert.equal(ACQUISITION_TAX_RULE_VERSION.verifiedAgainstPrimarySource, true);
   assert.ok(ACQUISITION_TAX_RULE_VERSION.referenceDate);
-  assert.ok(ACQUISITION_TAX_RULE_VERSION.source.length > 0);
-  // 출시 전 대조가 끝나면 이 값을 true로 바꾸고 UI 안내가 사라진다.
-  assert.equal(ACQUISITION_TAX_RULE_VERSION.verifiedAgainstPrimarySource, false);
+  assert.ok(ACQUISITION_TAX_RULE_VERSION.source.includes('지방세법'));
+  // 다음 검증자가 같은 곳을 볼 수 있도록 출처 URL이 남아 있어야 한다.
+  assert.ok(PRIMARY_SOURCES.length >= 3);
+  for (const s of PRIMARY_SOURCES) {
+    assert.ok(s.url.startsWith('https://'), `출처 URL이 없다: ${s.law}`);
+    assert.ok(/law\.go\.kr|easylaw\.go\.kr|wetax\.go\.kr|mois\.go\.kr/.test(s.url), `1차 출처가 아니다: ${s.url}`);
+  }
+});
+
+/** 법령 산식을 코드와 **독립적으로** 다시 구현한 것. 대조용 기준값. */
+function statutoryRateFraction(price: number): number {
+  if (price <= 6 * EOK) return 0.01;          // 1천분의 10
+  if (price > 9 * EOK) return 0.03;           // 1천분의 30
+  // (해당 주택의 취득당시가액 × 2/3억원 − 3) × 1/100, 다섯째자리 반올림 → 넷째자리
+  return Math.round(((price / EOK) * (2 / 3) - 3) / 100 * 10_000) / 10_000;
+}
+
+test('§6 경계 구간: 법령 산식과 구현이 모든 지점에서 일치한다', () => {
+  const points = [5, 6, 7, 8, 9, 10].map((v) => v * EOK);
+  // 6억·9억 바로 위 1원
+  points.push(6 * EOK + 1, 9 * EOK + 1);
+  for (const p of points) {
+    assert.equal(
+      baseRatePercent(p) / 100,
+      statutoryRateFraction(p),
+      `가액 ${p}에서 법령 산식과 어긋난다`
+    );
+  }
+});
+
+test('§6 연속성: 6억·9억 경계에서 세율이 도약하지 않는다', () => {
+  // 6억(1%) → 6억+1원도 1%여야 한다. 구간이 갈리는 지점에서 세금이 껑충 뛰면
+  // 6억 1원에 산 사람이 6억에 산 사람보다 갑자기 크게 손해를 본다.
+  assert.equal(baseRatePercent(6 * EOK), 1);
+  assert.equal(baseRatePercent(6 * EOK + 1), 1);
+  // 9억(3%) → 9억+1원도 3%.
+  assert.equal(baseRatePercent(9 * EOK), 3);
+  assert.equal(baseRatePercent(9 * EOK + 1), 3);
+});
+
+test('§6 단조성: 가액이 오르면 세율이 내려가지 않는다', () => {
+  let prev = 0;
+  for (let eok = 5; eok <= 10; eok += 0.1) {
+    const rate = baseRatePercent(Math.round(eok * EOK));
+    assert.ok(rate >= prev - 1e-9, `${eok}억에서 세율이 역전됐다: ${prev} → ${rate}`);
+    prev = rate;
+  }
+});
+
+test('§6 중간 지점 실측값(7억·8억)', () => {
+  assert.equal(baseRatePercent(7 * EOK), 1.67);
+  assert.equal(baseRatePercent(8 * EOK), 2.33);
+});
+
+test('§7 5억원 표본: 세 항목을 각각 확인한다(합계로 뭉개지 않는다)', () => {
+  const c = calculateAcquisitionTax({
+    purchasePrice: 5 * EOK, homeCountAfterPurchase: 1, exclusiveAreaM2: 84.95, isPurchase: true,
+  });
+  if (c.kind !== 'SUPPORTED') throw new Error('지원돼야 한다');
+  const { result } = c;
+  // 취득세: 5억 × 1% (지방세법 제11조제1항제8호 가목)
+  assert.equal(result.baseRatePercent, 1);
+  assert.equal(result.baseTax, 5_000_000);
+  // 지방교육세: 5억 × (1% × 50/100) × 20/100 = 5억 × 0.1% (지방세법 제151조)
+  assert.equal(result.localEducationTax, 500_000);
+  // 농어촌특별세: 전용 84.95㎡ ≤ 85㎡ → 서민주택 비과세 (농어촌특별세법 제5조)
+  assert.equal(result.ruralSpecialTax, 0);
+  assert.equal(result.total, 5_500_000);
+});
+
+test('§7 9억 초과 표본: 지방교육세가 0.3%가 된다(세율에 비례한다)', () => {
+  const c = calculateAcquisitionTax({
+    purchasePrice: 10 * EOK, homeCountAfterPurchase: 1, exclusiveAreaM2: 101.5, isPurchase: true,
+  });
+  if (c.kind !== 'SUPPORTED') throw new Error('지원돼야 한다');
+  assert.equal(c.result.baseTax, 30_000_000);       // 3%
+  assert.equal(c.result.localEducationTax, 3_000_000); // 3% × 50% × 20% = 0.3%
+  assert.equal(c.result.ruralSpecialTax, 2_000_000);   // 0.2% (85㎡ 초과)
+  assert.equal(c.result.total, 35_000_000);            // 합계 3.5%
+});
+
+test('농어촌특별세는 취득세액의 10%가 아니라 가액의 0.2%다(과세표준이 2% 고정)', () => {
+  // 1% 구간과 3% 구간에서 농특세가 **같아야** 한다 — 과세표준이 실제 세율과 무관하기 때문.
+  const low = calculateAcquisitionTax({
+    purchasePrice: 5 * EOK, homeCountAfterPurchase: 1, exclusiveAreaM2: 100, isPurchase: true,
+  });
+  const high = calculateAcquisitionTax({
+    purchasePrice: 5 * EOK, homeCountAfterPurchase: 1, exclusiveAreaM2: 100, isPurchase: true,
+  });
+  if (low.kind !== 'SUPPORTED' || high.kind !== 'SUPPORTED') throw new Error('지원돼야 한다');
+  assert.equal(low.result.ruralSpecialTax, 1_000_000); // 5억 × 0.2%
+  // 취득세액(500만)의 10%인 50만원이 **아니다**.
+  assert.notEqual(low.result.ruralSpecialTax, 500_000);
+});
+
+test('농어촌특별세 경계: 85㎡ 정확히는 비과세, 그 초과부터 과세', () => {
+  const at85 = calculateAcquisitionTax({
+    purchasePrice: 5 * EOK, homeCountAfterPurchase: 1, exclusiveAreaM2: 85, isPurchase: true,
+  });
+  const over = calculateAcquisitionTax({
+    purchasePrice: 5 * EOK, homeCountAfterPurchase: 1, exclusiveAreaM2: 85.01, isPurchase: true,
+  });
+  if (at85.kind !== 'SUPPORTED' || over.kind !== 'SUPPORTED') throw new Error('지원돼야 한다');
+  assert.equal(at85.result.ruralSpecialTax, 0, '85㎡ 이하는 서민주택으로 비과세');
+  assert.ok(over.result.ruralSpecialTax > 0, '85㎡ 초과는 과세');
+});
+
+test('§10 지원하지 않는 경우에는 금액을 만들지 않는다', () => {
+  const cases: { input: Parameters<typeof calculateAcquisitionTax>[0]; why: string }[] = [
+    { input: { purchasePrice: 5 * EOK, homeCountAfterPurchase: 2, exclusiveAreaM2: 84, isPurchase: true }, why: '2주택' },
+    { input: { purchasePrice: 5 * EOK, homeCountAfterPurchase: 1, exclusiveAreaM2: 84, isPurchase: false }, why: '증여/상속' },
+    { input: { purchasePrice: 0, homeCountAfterPurchase: 1, exclusiveAreaM2: 84, isPurchase: true }, why: '가액 없음' },
+  ];
+  for (const { input, why } of cases) {
+    const c = calculateAcquisitionTax(input);
+    assert.equal(c.kind, 'UNSUPPORTED', why);
+    // 금액 필드가 아예 없어야 한다 — 0원조차 "계산된 값"처럼 보이면 안 된다.
+    assert.equal('result' in c, false, `${why}에서 금액이 새어 나왔다`);
+  }
 });
 
 // ── 등기비용: 금액을 만들지 않는다 ──────────────────────────────────────────

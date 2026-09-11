@@ -449,3 +449,13 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ACQUISITION_TAX_PRIMARY_SOURCE_VERIFICATION_V1 §8 — 법령 근거 줄.
+   본문보다 한 단계 낮춰, 읽고 싶은 사람만 보게 한다. */
+.sourceLine {
+  display: inline-block;
+  margin-top: 0.3rem;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

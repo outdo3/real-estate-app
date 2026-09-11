@@ -170,11 +170,17 @@ export default function ToolsPage() {
           )}
 
           <div className={styles.disclosurePanel} role="note">
-            <b>계산 기준</b> — 개인이 주택을 <b>매매로 1주택 취득</b>하는 경우입니다.
+            <b>적용 범위</b> — 개인이 주택을 <b>매매로 1주택 취득</b>하는 경우입니다.
             2주택 이상 취득, 생애최초 감면, 증여·상속·분양권, 조정대상지역 중과는 반영하지 않습니다.
-            실제 세액은 세무 상담으로 확인하세요.
+            {/* §8 — 신고 시점의 개인 사정(감면 요건, 주택 수 판정 등)은 우리가 알 수 없다.
+                계산은 예상치이고 최종 확인은 세무 상담이라는 점을 분명히 둔다. */}
             <br />
-            기준: {ACQUISITION_TAX_RULE_VERSION.source} · {ACQUISITION_TAX_RULE_VERSION.referenceDate}
+            입력값 기준 <b>예상 계산</b>이며, 실제 신고·감면·주택 수 판정에 따라 달라질 수 있습니다.
+            <br />
+            <span className={styles.sourceLine}>
+              근거: {ACQUISITION_TAX_RULE_VERSION.source} · 기준일 {ACQUISITION_TAX_RULE_VERSION.referenceDate}
+              {ACQUISITION_TAX_RULE_VERSION.verifiedAgainstPrimarySource && ' · 법령 원문 대조 완료'}
+            </span>
           </div>
         </div>
       </section>

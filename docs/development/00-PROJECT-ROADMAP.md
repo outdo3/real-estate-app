@@ -213,7 +213,7 @@ E-JIP Score는 신뢰 임계 시스템이라 승인 없이 공식·출처·임�
 
 관련 문서: `docs/development/REAL_ESTATE_TOOLS_FINANCE_ACTION_LOOP_V1.md` §13
 
-- **취득세 1차 출처 대조** — 현행 지방세법과 세율표를 대조하고 `ACQUISITION_TAX_RULE_VERSION.verifiedAgainstPrimarySource`를 true로. 끝나면 취득세 계산기의 LIMITED 표시가 사라진다.
+- ~~취득세 1차 출처 대조~~ → **완료**(2026-09-11). 지방세법 제11조·제151조, 농어촌특별세법 제5조와 대조했고 세 산식 모두 일치해 고칠 부분이 없었다. `verifiedAgainstPrimarySource = true`.
 - **취득세 확장** — 2주택 이상 중과, 생애최초 감면. 조정대상지역 지정 데이터 확보가 선행돼야 한다(지정이 수시로 바뀌므로 값을 박아둘 수 없다).
 - **등기 비용 채권 할인차손 자동 계산** — 국민주택채권 시세 연동이 선행. 그 전에는 금액을 만들지 않는다.
 - **임장 노트 저장** — 저장소가 생긴 뒤에만 입력칸을 연다(지금은 준비중).
