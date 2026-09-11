@@ -2,6 +2,76 @@
 
 ## 2026-09-11
 
+### APT DETAIL DEFAULT ALL + RECENT TRADE TRUST FIX V1 — 사용자 제보 신뢰 버그
+
+상세 진입 시 84㎡가 자동 선택되면서, 헤더는 "최근 실거래가"인데 값은 84㎡의 최신 거래인
+상태가 만들어졌다. 다른 평형에 더 최근 거래가 있어도 가려졌다.
+
+프로덕션 데이터 재현(대연롯데캐슬레전드1단지, 920건·9종):
+
+- 예전: 8억 / 2026-08-25 / 84.98㎡
+- 지금: 8억 9,000만 / 2026-09-03 / 100.95㎡
+- 예전 화면은 9일 더 최근인 거래를 가리고 있었다(차이 9,000만원)
+
+근본 원인:
+
+src/lib/trade-area-selection.ts의 pickDefaultTradeArea가 84~85㎡ 구간을 우선 선택하고,
+apt-client가 거래 수신 직후 그것으로 자동 선택하고 있었다. 84㎡는 "가장 흔한 평형"이지
+"가장 최근 거래된 평형"이 아닌데, 라벨은 전 평형을 뜻했다.
+
+작업:
+
+- src/app/apt/[name]/apt-client.tsx — 자동 선택 제거(기본 '전체'). 파생 로직은 이미
+  올발라서 새로 만든 것이 없다: 전체면 면적 필터가 통과하고 API가 최신순 정렬이므로
+  filteredTrades[0]가 곧 전 평형 최신이며, Hero는 그 거래의 실제 평형을 표시한다.
+  헤더도 조건화 — 전체는 "최근 실거래가", 평형 선택 시 "선택 평형 최근 실거래가"
+- src/lib/trade-area-selection.ts — pickDefaultTradeArea에 "상세 기본값으로 쓰지 말 것"
+  경고 주석. 함수 자체는 보존(다른 화면에서 유효한 정책)
+- src/lib/price-trend-data.ts — buildUnitTrendSeries 신규. 전체 모드에서 면적마다
+  독립된 선을 만든다. 그룹 기준은 소수 4자리까지의 정확한 전용면적이라 표기 차이는
+  묶이고 84.7855/84.9950처럼 다른 면적은 절대 합쳐지지 않는다. 가독성 상한은 결정적
+  (건수 내림차순 → 면적 오름차순 → 상위 5개)이고 빠진 평형은 개수만 알린다
+- src/components/PriceTrendChart.tsx — 전체 모드 전용 렌더 경로. 기존 선택-평형 경로
+  (크로스헤어/거래량 막대/매매·전세 토글)는 한 줄도 건드리지 않았다
+- src/lib/report/nearest-school.ts 신규 + apt-read.ts / apt-report.ts — 리포트 초등학교
+  이름 표시
+- src/lib/apt-detail-recent-trade.test.ts 신규 17건
+
+리포트 초등학교 이름:
+
+근본 원인은 ApartmentLocationFeature에 학교 이름 컬럼이 없다는 것이었다(수집기가 Kakao
+응답에서 거리만 저장). School 테이블(NEIS)을 조회해 보니 부산 초등학교 305곳이 전부
+active·좌표 보유·OFFICIAL_POINT·COMPLETE라, **스키마 변경 없이 읽기 전용 조회**로
+이름과 거리를 같은 출처에서 함께 얻도록 했다.
+출처를 섞지 않는다 — NEIS 이름에 Kakao 거리를 붙이면 서로 다른 학교를 가리킬 수 있다.
+실측: `초등학교 341m` → `초등학교 연포초등학교 · 249m`
+
+DB / 스키마 / migration:
+
+전부 변경 없음(School 조회는 읽기 전용)
+
+알려진 불일치(확인 필요):
+
+리포트 거리는 NEIS 공식 좌표 기준, ApartmentScoreCard는 여전히 Kakao 기준이라 두 화면의
+숫자가 다를 수 있다. Score는 신뢰 임계 시스템이라 이 STEP에서 건드리지 않았다 —
+정리하려면 영향 분석 후 승인이 필요하다.
+
+기존 신뢰 장치 회귀 없음:
+
+canonical aptSeq / DB-first 거래 소스 / 취소 거래 제외 / 면적 숫자 매처 /
+129.7178 정규화 / 지도·상세 parity 전부 무변경(API를 건드리지 않았다)
+
+검증:
+
+- npx tsx --test src/lib/apt-detail-recent-trade.test.ts: 17/17 PASS
+- npx tsx --test (src 전체 50개 파일): 621/621 PASS, fail 0
+- npx eslint (변경 파일): exit 0. 경고 1건은 apt-client.tsx의 기존 unused disable
+- npx tsc --noEmit: src/ 오류 0건. 전체 exit 2는 기존 scripts//tmp/(FAIL_EXISTING_SCRIPT_ERRORS)
+- npm run build: exit 0
+- 런타임 스모크: / /map /finance-fit /report /report/city/busan, 단지 상세, 단지 리포트 전부 200
+- 전체 모드 차트 실데이터: 920건 → 5시리즈/737포인트, 면적 혼합 0, 84.95와 84.98 분리 유지
+- 모바일 QA는 CSS/DOM 구조 분석(브라우저 렌더링 아님)
+
 ### PARTNER LEAD TRACKING V1 — 첫 실제 제휴 파트너 CTA (황보재호법무사사무실)
 
 예약만 돼 있던 파트너 이벤트에 **실제 파트너**를 연결한다. click-out 모델이며
@@ -8888,7 +8958,7 @@ dispatch해, 검증되지 않은 매핑으로 두 identity를 강제 연결하�
 84㎡ 기본 선택 로직과 `PriceTrendChart`의 raw sale+순수전세 union
 selector 로직을 `src/lib/trade-area-selection.ts`로, `InvestmentMetrics`의
 갭/전세가율 계산을 `src/lib/investment-metrics.ts`로 순수 함수 추출해
-회귀 테스트 12개 추가(기존 3개+4개 포함 총 19/19 PASS).
+회귀 테스트 12개 추가(기존 3개+4개 포함 총 17/17 PASS).
 
 실거래 3개 단지(대신롯데캐슬/연산동일동미라주더스타/대신해모로센트럴아파트)로
 로컬 dev server + 실제 DB에서 직접 검증: Unit Master 칩을 눌러도 Hero

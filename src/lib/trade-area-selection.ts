@@ -30,11 +30,20 @@ export function buildTransactionAreaOptions(
   return Array.from(areas).sort((a, b) => parseFloat(a) - parseFloat(b));
 }
 
-// Default selectedTradeArea policy: prefer the most recently traded raw area
-// in the 84~85㎡ range; otherwise the most recently traded raw area overall;
-// '전체' (no selection) when there are no trades at all. Never merges distinct
-// raw areas (e.g. 84.7855 vs 84.9950) — it only picks among the exact values
-// already present in the data.
+// ⚠️ APT_DETAIL_DEFAULT_ALL_TRUST_FIX_V1 §1 — **단지 상세의 기본 평형으로 쓰지 말 것.**
+//
+// 이 함수는 84~85㎡ 구간을 우선 고르기 때문에, 상세 진입 시 자동 선택에 쓰면
+// 헤더는 "최근 실거래가"인데 값은 84㎡의 최신 거래인 상태가 만들어진다. 다른 평형에
+// 더 최근 거래가 있으면 그게 가려지고, 라벨과 값이 어긋난다(사용자 신뢰 버그로 보고됨).
+// 그래서 apt-client는 더 이상 이 함수를 호출하지 않고 '전체'로 시작한다.
+//
+// 함수 자체는 남겨 둔다 — "가장 흔한 평형"이 실제로 필요한 다른 화면(예: 단지 요약
+// 카드의 대표 평형)에서는 유효한 정책이기 때문이다. 다만 **"최근 실거래가"처럼
+// 전 평형을 뜻하는 라벨 옆에는 절대 쓰지 않는다.**
+//
+// 정책: 84~85㎡ 구간 중 가장 최근 거래된 raw area를 우선하고, 없으면 전체에서 가장
+// 최근 거래된 raw area. 거래가 하나도 없으면 '전체'. 서로 다른 raw area
+// (84.7855 vs 84.9950)를 합치지 않고, 데이터에 실제로 있는 값 중에서만 고른다.
 export function pickDefaultTradeArea(trades: TradeAreaDateCandidate[]): string {
   if (trades.length === 0) return '전체';
 

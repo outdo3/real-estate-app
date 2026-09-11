@@ -11,6 +11,7 @@
 // 여기서 다시 판단하면 리포트와 상세 화면의 점수가 갈라진다.
 
 import { prisma } from '@/lib/prisma';
+import { findNearestSchool } from './nearest-school';
 import { calculateApartmentScore } from '@/lib/apartment-score/server/calculate';
 import { resolveDisplayedScoreVersion } from '@/lib/apartment-score/resolve-score-version';
 import { getPeerContext } from '@/lib/apartment-score/peer-context';
@@ -192,6 +193,8 @@ export async function readApartmentReport(aptSeq: string, now: Date = new Date()
         nearestSubwayName: true, nearestSubwayDistanceM: true, nearestElementaryDistanceM: true,
         convenienceCount500m: true, martCount1000m: true, parkCount1000m: true,
         qualityFlag: true, fetchedAt: true,
+        // §7 — 초등학교 이름을 NEIS School 원천에서 직접 해석하기 위해 좌표를 함께 읽는다.
+        latitude: true, longitude: true,
       },
     }),
     prisma.apartmentMarketFeature.findUnique({
@@ -209,6 +212,22 @@ export async function readApartmentReport(aptSeq: string, now: Date = new Date()
   ]);
 
   const score = await readScore(aptSeq);
+
+  // §7 — 초등학교 이름 해석용 후보. 좌표가 있는 활성 초등학교만 읽는다(읽기 전용).
+  // 부산 초등학교는 305곳 규모라 전건을 메모리에서 비교해도 비용이 무시할 만하고,
+  // 경계 상자로 미리 자르면 경계 바로 밖의 더 가까운 학교를 놓칠 위험만 생긴다.
+  // 아파트 좌표가 없으면 조회 자체를 건너뛴다.
+  const elementarySchools = location?.latitude != null && location?.longitude != null
+    ? await prisma.school.findMany({
+        where: {
+          schoolLevel: '초등학교',
+          isActive: true,
+          latitude: { not: null },
+          longitude: { not: null },
+        },
+        select: { schoolName: true, latitude: true, longitude: true },
+      })
+    : [];
 
   const dataAsOf = cells.length ? cells[0].verifiedAt.toISOString() : null;
   // 최근 12개월 셀이 모두 COMPLETE일 때만 완전하다고 말한다(없으면 검증 중).
@@ -240,6 +259,7 @@ export async function readApartmentReport(aptSeq: string, now: Date = new Date()
           nearestSubwayName: location.nearestSubwayName,
           nearestSubwayDistanceM: location.nearestSubwayDistanceM,
           nearestElementaryDistanceM: location.nearestElementaryDistanceM,
+          nearestElementarySchool: findNearestSchool(location.latitude, location.longitude, elementarySchools),
           convenienceCount500m: location.convenienceCount500m,
           martCount1000m: location.martCount1000m,
           parkCount1000m: location.parkCount1000m,

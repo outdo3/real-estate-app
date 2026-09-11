@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from 'recharts';
-import { buildPriceTrendPoints, filterTradesForArea, formatTrendDate, latestTrade, type PriceTrendTrade } from '@/lib/price-trend-data';
+import { buildPriceTrendPoints, buildUnitTrendSeries, filterTradesForArea, formatTrendDate, latestTrade, type PriceTrendTrade } from '@/lib/price-trend-data';
 import { buildTransactionAreaOptions } from '@/lib/trade-area-selection';
 import { toggleSeriesVisibility, type SeriesVisibility } from '@/lib/series-visibility';
 import { findNearestIndex, type IndexedPosition } from '@/lib/chart-crosshair';
@@ -31,6 +31,11 @@ const SOURCE_PERIOD_MONTHS = PERIODS['5년'];
 const SALE_COLOR = '#07865a';
 const RENT_COLOR = '#3152d6';
 const MIN_TREND_POINTS = 2;
+// §6 전체 모드 — 한 화면에서 읽을 수 있는 평형 선의 상한. 넘치는 평형은 지어내거나
+// 뭉뚱그리지 않고, 개수만 알린 뒤 "평형을 선택하면 볼 수 있다"고 안내한다.
+const MAX_UNIT_SERIES = 5;
+// 매매 초록(SALE_COLOR)에서 출발해 서로 구분되는 색. 순서는 면적 오름차순에 대응한다.
+const UNIT_COLORS = ['#07865a', '#3152d6', '#c2410c', '#7c3aed', '#0891b2'];
 
 export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeArea, selectedTradeAreaLabel, unitMaster, onSelectArea }: PriceTrendChartProps) {
   // §6 — state는 **60개월 원본**을 담는다. 화면에 쓰는 값은 아래에서 선택 기간으로
@@ -216,6 +221,17 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeAr
     () => buildTransactionAreaOptions(saleRead?.trades ?? [], rentRead?.trades ?? []),
     [saleRead, rentRead]
   );
+  // §6 — 전체 모드에서는 면적마다 독립된 선을 그린다. 기본 상태가 '전체'가 되면서
+  // 차트가 비어 있으면 안 되지만, 서로 다른 면적을 한 선으로 이으면 존재하지 않는
+  // 가격 변동을 그리게 된다. 매매만 쓴다 — 전세까지 겹치면 선이 두 배가 되고,
+  // 애초에 매매가와 전세가는 같은 절대 축에서 비교할 값이 아니다.
+  const allModeSaleTrades = needsAreaSelection ? (saleRead?.trades ?? []) : [];
+  const unitTrend = useMemo(
+    () => buildUnitTrendSeries(allModeSaleTrades, MAX_UNIT_SERIES),
+    [allModeSaleTrades]
+  );
+  const hasUnitTrend = unitTrend.points.length > 0;
+
   const hasData = points.length > 0;
   const saleThin = saleTrades.length > 0 && saleTrades.length < MIN_TREND_POINTS;
   const rentThin = rentTrades.length > 0 && rentTrades.length < MIN_TREND_POINTS;
@@ -287,7 +303,42 @@ export default function PriceTrendChart({ aptName, lawdCd, dong, selectedTradeAr
     <div className={styles.header}><div><h3 className={styles.title}>매매·전세 시세 추이</h3>{onSelectArea && <select className={styles.unitSelector} aria-label="차트 평형 선택" value={selectedTradeArea || '전체'} onChange={(event) => onSelectArea(event.target.value)}><option value="전체">평형 선택</option>{selectableAreas.map((area) => <option key={area} value={area}>{unitLabel(area)}</option>)}</select>}<p className={styles.area}>{selectedLabel} · 개별 실거래 기준</p></div><div className={styles.periods} aria-label="조회 기간">{(Object.keys(PERIODS) as Period[]).map((item) => <button key={item} type="button" className={styles.period} aria-pressed={period === item} onClick={() => setPeriod(item)}>{item}</button>)}</div></div>
     {!loading && errors.length > 0 && <p className={styles.notice}>{errors[0]}</p>}
     {!loading && !errors.length && (saleThin || rentThin) && <p className={styles.notice}>{saleThin && rentThin ? '선택 평형은 매매·전세 거래가 모두 적어 추이를 읽기 어렵습니다.' : saleThin ? '선택 평형은 매매 거래가 적어 추이를 읽기 어렵습니다.' : '선택 평형은 전세 거래가 적어 추이를 읽기 어렵습니다.'}</p>}
-    {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : needsAreaSelection ? <div className={styles.empty}>평형을 선택해 시세 추이를 확인하세요.</div> : !hasData && errors.length > 0 ? <div className={styles.empty}>{errors[0]}</div> : !hasData ? <div className={styles.empty}>선택한 평형의 최근 거래가 없습니다.</div> : <>
+    {loading ? <div className={styles.empty}>데이터를 불러오는 중입니다...</div> : needsAreaSelection ? (
+      /* §6 전체 모드 — 평형별 매매 실거래 비교. 선택 모드의 크로스헤어/거래량 막대는
+         쓰지 않는다(별도 렌더 경로라 기존 동작에 손대지 않는다). */
+      !hasUnitTrend ? <div className={styles.empty}>{errors.length > 0 ? errors[0] : '최근 매매 실거래가 없습니다.'}</div> : <>
+        <p className={styles.notice}>평형마다 별도의 선입니다. 다른 평형의 거래끼리는 잇지 않습니다.</p>
+        <div className={styles.legend} role="group" aria-label="평형별 매매 시세">
+          {unitTrend.series.map((s, i) => (
+            <span key={s.key} className={styles.legendItem}>
+              <i className={styles.swatch} style={{ background: UNIT_COLORS[i % UNIT_COLORS.length] }} />
+              <span>{unitLabel(s.area)}</span>
+            </span>
+          ))}
+        </div>
+        {unitTrend.omittedCount > 0 && <p className={styles.notice}>거래가 많은 {unitTrend.series.length}개 평형만 표시했습니다. 나머지 {unitTrend.omittedCount}개 평형은 위에서 평형을 선택하면 볼 수 있습니다.</p>}
+        <div className={styles.chart}><ResponsiveContainer width="100%" height="100%"><ComposedChart data={unitTrend.points} margin={{ top: 8, right: 2, left: -12, bottom: 0 }}>
+          <CartesianGrid stroke="#e9eef0" strokeDasharray="3 4" vertical={false} />
+          <XAxis dataKey="id" axisLine={false} tickLine={false} interval={Math.max(0, Math.ceil(unitTrend.points.length / 5) - 1)} minTickGap={28} tick={{ fill: '#687680', fontSize: 11 }} tickFormatter={(id) => formatTrendDate(String(unitTrend.points[id as number]?.date || ''))} />
+          <YAxis yAxisId="price" axisLine={false} tickLine={false} width={44} domain={['auto', 'auto']} tick={{ fill: '#687680', fontSize: 11 }} tickFormatter={(value) => value >= 1 ? `${value}억` : `${Math.round(value * 10000)}만`} />
+          <Tooltip cursor={false} content={({ active, payload }: TooltipContentProps) => {
+            const point = payload?.[0]?.payload as Record<string, unknown> | undefined;
+            if (!active || !point) return null;
+            const hit = unitTrend.series.find((s) => point[s.key] != null);
+            if (!hit) return null;
+            return <div style={{ background: '#fff', border: '1px solid #dfe6e9', borderRadius: 10, boxShadow: '0 8px 22px rgba(15, 23, 42, .12)', padding: '0.65rem 0.75rem' }}>
+              <div style={{ color: '#56636d', fontSize: '0.78rem', marginBottom: '0.35rem' }}>{String(point.date).replace(/-/g, '.')}</div>
+              <div style={{ color: 'var(--text-primary)', fontSize: '0.82rem', marginBottom: '0.2rem' }}>{unitLabel(hit.area)}</div>
+              <div style={{ color: SALE_COLOR, fontSize: '0.88rem', fontWeight: 800 }}>매매 {String(point[`${hit.key}Str`] ?? '')}</div>
+            </div>;
+          }} />
+          {unitTrend.series.map((s, i) => (
+            <Line key={s.key} yAxisId="price" type="linear" dataKey={s.key} stroke={UNIT_COLORS[i % UNIT_COLORS.length]} strokeWidth={2} dot={{ r: 2.5, fill: UNIT_COLORS[i % UNIT_COLORS.length] }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />
+          ))}
+        </ComposedChart></ResponsiveContainer></div>
+        <p className={styles.notice}>평형을 선택하면 매매·전세를 함께 보고 거래량까지 확인할 수 있습니다.</p>
+      </>
+    ) : !hasData && errors.length > 0 ? <div className={styles.empty}>{errors[0]}</div> : !hasData ? <div className={styles.empty}>선택한 평형의 최근 거래가 없습니다.</div> : <>
       <div className={styles.volumeLegend}><span>하단 막대: 같은 날짜의 실제 거래 수</span><span className={styles.volumeLegend}><i className={styles.volumeBar} style={{ background: SALE_COLOR }} />매매</span><span className={styles.volumeLegend}><i className={styles.volumeBar} style={{ background: RENT_COLOR }} />전세</span></div>
       <div className={styles.legend} role="group" aria-label="매매·전세 시세 표시 전환">
         <button type="button" className={styles.legendItem} aria-pressed={seriesVisible.sale} onClick={() => toggleSeries('sale')}>

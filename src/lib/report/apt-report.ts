@@ -64,6 +64,11 @@ export interface AptLocationInfo {
   nearestSubwayName: string | null;
   nearestSubwayDistanceM: number | null;
   nearestElementaryDistanceM: number | null;
+  /**
+   * §7 — NEIS School 원천에서 해석한 가장 가까운 초등학교. **이름과 거리가 같은 출처다.**
+   * 확인할 수 없으면 null이며, 그때는 이름 없는 거리를 대신 보여주지 않는다.
+   */
+  nearestElementarySchool: { name: string; distanceM: number } | null;
   convenienceCount500m: number | null;
   martCount1000m: number | null;
   parkCount1000m: number | null;
@@ -260,9 +265,12 @@ export function buildApartmentReport(input: AptReportInput): ReportEnvelope<Apar
       loc.nearestSubwayDistanceM != null
         ? { label: '지하철', value: `${loc.nearestSubwayName ?? '역'} ${loc.nearestSubwayDistanceM}m` }
         : { label: '지하철', value: '정보 없음' },
-      loc.nearestElementaryDistanceM != null
-        ? { label: '초등학교', value: `${loc.nearestElementaryDistanceM}m` }
-        : { label: '초등학교', value: '정보 없음' },
+      // §7 — 이름을 확인한 경우에만 "OO초등학교 · 341m"을 쓴다. 이름과 거리는 같은
+      // 출처(NEIS School)에서 왔다. 확인하지 못했으면 이름 없는 거리를 마치 특정 학교인
+      // 것처럼 보여주지 않고, 사실대로 확인 불가를 말한다.
+      loc.nearestElementarySchool
+        ? { label: '초등학교', value: `${loc.nearestElementarySchool.name} · ${loc.nearestElementarySchool.distanceM}m` }
+        : { label: '초등학교', value: '학교 정보 확인 불가' },
       loc.convenienceCount500m != null
         ? { label: '편의점(500m)', value: `${loc.convenienceCount500m}개` }
         : { label: '편의점(500m)', value: '정보 없음' },

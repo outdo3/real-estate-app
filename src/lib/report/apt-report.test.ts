@@ -30,6 +30,7 @@ const base = (o: Partial<AptReportInput> = {}): AptReportInput => ({
   recentTradeRows: [trade({ dealDate: '2026-08-20', dealAmount: 90000 }), trade({ dealDate: '2026-08-01' })],
   score: score(),
   location: { nearestSubwayName: '해운대역', nearestSubwayDistanceM: 320, nearestElementaryDistanceM: 180,
+    nearestElementarySchool: { name: '해운대초등학교', distanceM: 341 },
     convenienceCount500m: 12, martCount1000m: 2, parkCount1000m: 3, qualityFlag: 'OK', fetchedAt: '2026-09-01T00:00:00.000Z' },
   market: { medianPricePerM2_12m: 800, transactionCount12m: 5, priceChange12m: 0.083, fetchedAt: '2026-09-01T00:00:00.000Z' },
   period: { start: '2025-09-10', end: '2026-09-09', label: '최근 12개월' },

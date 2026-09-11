@@ -31,7 +31,6 @@ import { aptReportHref, REPORT_LABELS } from '@/lib/report/report-links';
 import { fetchDetailTrades } from '@/lib/detail-trade-cache';
 import { fetchCachedResource, DETAIL_RESOURCE_TTL_MS } from '@/lib/detail-resource-cache';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
-import { pickDefaultTradeArea } from '@/lib/trade-area-selection';
 import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
 import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
@@ -125,7 +124,6 @@ export default function ApartmentDetail() {
   // canonical("129.7178")이든 raw trade.area("129.7178m²")든 동일하게 동작한다.
   // 따라서 상태를 나눌 이유가 없어졌고, 모든 거래 파생 UI가 이 하나를 읽는다.
   const [selectedTradeArea, setSelectedTradeArea] = useState<string>('전체');
-  const hasAutoSelectedArea = useRef(false);
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
   const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
   const [saleFilter, setSaleFilter] = useState<'all' | 'sale' | 'rent'>('all');
@@ -319,16 +317,22 @@ export default function ApartmentDetail() {
               ? { lat: coord.lat, lng: coord.lng }
               : null
           );
-          // Default selectedTradeArea: raw trade-area identity only, never a Unit
-          // Master canonicalExclusiveArea. Prioritizes an 84㎡-range exact raw area,
-          // then its most recent transaction (see pickDefaultTradeArea contract).
-          if (!hasAutoSelectedArea.current && fetchedTrades.length > 0) {
-            const defaultArea = pickDefaultTradeArea(fetchedTrades);
-            if (defaultArea !== '전체') {
-              hasAutoSelectedArea.current = true;
-              setSelectedTradeArea(defaultArea);
-            }
-          }
+          // APT_DETAIL_DEFAULT_ALL_TRUST_FIX_V1 §1 — **평형을 자동 선택하지 않는다.**
+          //
+          // 예전에는 pickDefaultTradeArea가 84~85㎡ 구간을 우선 골라 자동 선택했다.
+          // 그 결과 첫 화면이 이렇게 됐다:
+          //
+          //   헤더  : "최근 실거래가"          ← 단지 전체의 최신 거래라는 뜻으로 읽힌다
+          //   값    : 84㎡의 최신 거래          ← 실제로는 한 평형의 최신 거래
+          //
+          // 다른 평형에 **더 최근 거래가 있어도** 그게 가려졌다. 라벨과 값이 어긋나는
+          // 것이므로 단순한 UI 선호 문제가 아니라 신뢰 문제다.
+          //
+          // 이제 selectedTradeArea는 '전체'로 남는다. 그러면 아래 filteredTrades의
+          // 평형 필터가 통과 상태가 되고, API가 이미 최신순으로 정렬해 주므로
+          // filteredTrades[0]가 곧 **모든 평형을 통틀어 가장 최근의 유효 거래**다.
+          // Hero는 그 거래의 실제 평형을 그대로 표시한다(renderHeroAreaLabel).
+          // 평형은 사용자가 직접 고를 때만 좁혀진다.
           setTradeIncompleteMessage(tradeState.incompleteMessage);
           if (data.lawdCd) resolvedLawdCd = data.lawdCd;
           // URL에 dong이 없었다면(위 dongQuery가 비어 실제로는 구 전체를 뒤진 응답이다) API가
@@ -1119,7 +1123,11 @@ export default function ApartmentDetail() {
                 )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 700 }}>최근 실거래가</span>
+                  {/* §3 — 특정 평형을 고른 상태에서 그냥 "최근 실거래가"라고 쓰면 그 값이
+                      단지 전체의 최신 거래로 읽힌다. 좁혀져 있을 때는 좁혀져 있다고 말한다. */}
+                  <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 700 }}>
+                    {selectedTradeArea === '전체' ? '최근 실거래가' : '선택 평형 최근 실거래가'}
+                  </span>
                   <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '8px', padding: '2px', border: '1px solid var(--border-color)' }}>
                     <button onClick={() => setTradeTypeFilter('매매')} style={{ padding: '0.4rem 0.8rem', border: 'none', background: tradeTypeFilter === '매매' ? 'white' : 'transparent', color: tradeTypeFilter === '매매' ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '매매' ? 700 : 500, borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: tradeTypeFilter === '매매' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>매매</button>
                     <button onClick={() => setTradeTypeFilter('전월세')} style={{ padding: '0.4rem 0.8rem', border: 'none', background: tradeTypeFilter === '전월세' ? 'white' : 'transparent', color: tradeTypeFilter === '전월세' ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: tradeTypeFilter === '전월세' ? 700 : 500, borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: tradeTypeFilter === '전월세' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>전월세</button>
