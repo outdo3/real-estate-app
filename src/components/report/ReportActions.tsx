@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Share2, Download, ExternalLink, Check, FileText, Loader2 } from 'lucide-react';
 import styles from './RegionReportSheet.module.css';
+import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
   buildExportFilename,
   buildShareText,
@@ -70,6 +71,33 @@ export default function ReportActions({
     return fromIdentity ?? window.location.href;
   }, [identity]);
 
+  /**
+   * GA4_INTEGRATION_V1 §10/§11 — 리포트 이벤트에 실리는 문맥.
+   *
+   * 전부 **고정 enum + 공개 행정코드**다. 단지명/동 이름 같은 표시용 문자열이나
+   * aptSeq는 싣지 않는다(§10 판단 근거는 GA4_INTEGRATION_V1.md에 기록).
+   * ga.ts의 allowlist를 한 번 더 통과하므로 여기에 무엇을 넣든 목록 밖 키는 버려진다.
+   */
+  const gaContext = useCallback(
+    () => ({
+      report_type: envelope?.reportType,
+      scope_type: envelope?.scope.level,
+      ...(envelope?.scope.lawdCd ? { lawd_cd: envelope.scope.lawdCd } : {}),
+    }),
+    [envelope]
+  );
+
+  // §11 — 리포트 진입. ReportActions는 4개 시트 각각에 **정확히 한 번** 렌더되므로
+  // 여기가 리포트당 1회 진입을 보장하는 유일한 클라이언트 마운트 지점이다.
+  // ref 가드는 개발 모드 StrictMode의 effect 이중 실행을 막는다.
+  const viewFired = useRef(false);
+  useEffect(() => {
+    if (variant !== 'full') return;
+    if (!envelope || viewFired.current) return;
+    viewFired.current = true;
+    trackEvent('report_view', { ga: gaContext() });
+  }, [variant, envelope, gaContext]);
+
   const flash = (setter: (v: string | null) => void, value: string) => {
     setter(value);
     setTimeout(() => setter(null), 2500);
@@ -89,6 +117,8 @@ export default function ReportActions({
       const { blob } = await captureReportExport(node);
       const filename = identity ? buildExportFilename(identity, 'png') : 'e-jip-report.png';
       downloadBlob(blob, filename);
+      // 캡처가 실제로 성공했을 때만 집계한다 — 실패한 저장을 저장으로 세지 않는다.
+      trackEvent('report_image_save', { ga: gaContext() });
       flash(setDone, '저장 완료');
     } catch {
       // 무엇이 실패했는지 모른 채 "저장됨"이라고 하지 않는다.
@@ -106,6 +136,10 @@ export default function ReportActions({
   const savePdf = () => {
     if (running.current) return;
     setBusy('pdf');
+    // 인쇄 대화상자에서 사용자가 실제로 "PDF로 저장"까지 했는지는 브라우저가 알려주지
+    // 않는다. 그래서 이 이벤트의 의미는 **"PDF 저장을 시작했다"**이며, 완료율로 읽으면
+    // 안 된다(GA4_INTEGRATION_V1.md 한계 항목).
+    trackEvent('report_pdf_save', { ga: gaContext() });
     // print()는 동기적으로 블로킹되므로 버튼 상태가 먼저 그려지도록 한 틱 넘긴다.
     setTimeout(() => {
       try {
@@ -158,6 +192,7 @@ export default function ReportActions({
             const file = new File([blob], filename, { type: 'image/png' });
             if (navigator.canShare({ files: [file] })) {
               await navigator.share({ title, text, url, files: [file] });
+              trackEvent('report_share', { ga: { ...gaContext(), method: 'web_share_file' } });
               return;
             }
           }
@@ -171,14 +206,17 @@ export default function ReportActions({
 
       try {
         await navigator.share({ title, text, url });
+        trackEvent('report_share', { ga: { ...gaContext(), method: 'web_share' } });
         return;
       } catch {
         // 사용자가 취소한 경우도 여기로 온다 — 실패로 표시하지 않는다.
+        // 취소는 공유가 아니므로 이벤트도 보내지 않는다(share 수치를 부풀리지 않는다).
         return;
       }
     }
     try {
       await navigator.clipboard.writeText(url);
+      trackEvent('report_share', { ga: { ...gaContext(), method: 'copy_link' } });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

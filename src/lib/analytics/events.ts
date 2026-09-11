@@ -38,6 +38,13 @@ export const ANALYTICS_EVENT_NAMES = [
   'pwa_install_accept',
   'pwa_install_dismiss',
   'pwa_install_guide_open',
+  // GA4_INTEGRATION_V1 §11 — 리포트 퍼널. 스키마 변경 없이 기존 `/__event__/<name>`
+  // 네임스페이스를 그대로 쓴다. report_view만 진입(마운트) 이벤트이고 나머지 셋은
+  // 전부 **사용자가 실제로 버튼을 눌렀을 때만** 발생한다(렌더로 발생하지 않는다).
+  'report_view',
+  'report_image_save',
+  'report_pdf_save',
+  'report_share',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

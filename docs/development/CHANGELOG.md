@@ -1,5 +1,60 @@
 # 이집 개발 변경 기록
 
+## 2026-09-11
+
+### GA4 INTEGRATION V1 — GA4 마케팅 분석 레이어 추가
+
+작업:
+
+- 기존 1st-party 분석(trackEvent → /api/log/event)을 **그대로 유지**한 채 GA4를 2차 레이어로 추가
+- src/lib/analytics/ga.ts 신규 — 환경 게이트, 파라미터 allowlist/정제, page_view 중복 방지
+- src/lib/analytics/ga-events.ts 신규 — 1st-party → GA4 이벤트명 매핑 단일 원본
+- src/components/analytics/GoogleAnalytics.tsx 신규 — next/script 기반 gtag 로더 + App Router page_view
+- src/lib/analytics/trackEvent.ts — GA4 브리지 추가(호출부 변경 없음). GA 전용 `ga` 컨텍스트는
+  1st-party POST 본문에 포함되지 않는다
+- src/lib/analytics/events.ts — report_view/report_image_save/report_pdf_save/report_share 추가
+- src/components/report/ReportActions.tsx — 리포트 진입/이미지 저장/PDF/공유 계측
+- src/components/pwa/InstallBanner.tsx, InstallEntry.tsx — 기존 PWA 이벤트에 placement 파라미터 부여
+- 테스트 29건 신규(src/lib/analytics/ga.test.ts, ga-events.test.ts)
+- docs/development/GA4_INTEGRATION_V1.md 작성
+
+서비스 기능 변경:
+
+없음(분석 계측만 추가). Measurement ID 미설정 시 GA4는 완전 비활성이며 앱 동작은 동일하다.
+
+DB 변경:
+
+없음(스키마/migration/프로덕션 쓰기 전부 없음)
+
+API 변경:
+
+없음(/api/log/event 라우트 미변경)
+
+의존성 변경:
+
+없음(@next/third-parties·react-ga4 미사용, next/script + 공식 gtag 스니펫)
+
+검증:
+
+- npx tsx --test (신규 2파일): 29/29 PASS
+- npx tsx --test (src 전체): 1104/1105 PASS — 실패 1건은 이 STEP과 무관한 기존 실패
+  (src/lib/transactions-read-state.test.mjs, 대상 라우트 미변경)
+- npx tsc --noEmit: src 오류 0건 (전체 24건은 scripts/·tmp/ 기존 오류, FAIL_EXISTING_SCRIPT_ERRORS)
+- npx eslint (변경 파일 11개): clean
+- npm run build: PASS
+
+알려진 사항:
+
+- 개인정보처리방침 갱신 필요(Google Analytics 위탁 고지 + 분석 쿠키 문구). 법률/정책 변경이라
+  승인 전까지 문안만 초안으로 제시하고 수정하지 않았다.
+- /map 랜딩은 지도 URL 동기화(400ms replaceState)로 주소창의 utm이 지워진다. GA4 집계는 유입
+  URL 스냅샷으로 보호했으나, 지도 URL 계약 자체는 이 STEP에서 바꾸지 않았다.
+
+상태:
+
+완료(Measurement ID 설정 대기)
+
+
 ## 2026-08-12
 
 ### STEP 0 — 개발 기록 체계 구축

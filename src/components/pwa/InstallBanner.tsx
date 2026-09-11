@@ -55,7 +55,9 @@ export default function InstallBanner() {
   useEffect(() => {
     if (shouldShowBanner && !viewed) {
       setViewed(true);
-      trackEvent('pwa_install_banner_view');
+      // GA4_INTEGRATION_V1 §12 — placement로 배너/설정 진입을 구분한다. 두 표면은
+      // 동시에 발생하지 않으므로 중복 집계가 아니라 퍼널 구분이다.
+      trackEvent('pwa_install_banner_view', { ga: { placement: 'banner' } });
     }
   }, [shouldShowBanner, viewed]);
 
@@ -65,15 +67,15 @@ export default function InstallBanner() {
   const canPromptNatively = capability === 'PROMPTABLE';
 
   const onInstall = async () => {
-    trackEvent('pwa_install_click');
+    trackEvent('pwa_install_click', { ga: { placement: 'banner' } });
     const outcome = await promptInstall();
-    if (outcome === 'accepted') trackEvent('pwa_install_accept');
-    else if (outcome === 'dismissed') trackEvent('pwa_install_dismiss');
+    if (outcome === 'accepted') trackEvent('pwa_install_accept', { ga: { placement: 'banner' } });
+    else if (outcome === 'dismissed') trackEvent('pwa_install_dismiss', { ga: { placement: 'banner' } });
     else setGuideOpen(true); // 프롬프트가 사라졌으면 안내로 내려간다(거짓 성공 금지).
   };
 
   const onGuide = () => {
-    trackEvent('pwa_install_guide_open');
+    trackEvent('pwa_install_guide_open', { ga: { placement: 'banner' } });
     setGuideOpen(true);
   };
 

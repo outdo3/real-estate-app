@@ -33,14 +33,14 @@ export default function InstallEntry({ className }: { className?: string }) {
 
   const onClick = async () => {
     if (capability === 'PROMPTABLE') {
-      trackEvent('pwa_install_click');
+      trackEvent('pwa_install_click', { ga: { placement: 'entry' } });
       const outcome = await promptInstall();
-      if (outcome === 'accepted') trackEvent('pwa_install_accept');
-      else if (outcome === 'dismissed') trackEvent('pwa_install_dismiss');
+      if (outcome === 'accepted') trackEvent('pwa_install_accept', { ga: { placement: 'entry' } });
+      else if (outcome === 'dismissed') trackEvent('pwa_install_dismiss', { ga: { placement: 'entry' } });
       else setGuideOpen(true);
       return;
     }
-    trackEvent('pwa_install_guide_open');
+    trackEvent('pwa_install_guide_open', { ga: { placement: 'entry' } });
     setGuideOpen(true);
   };
 
