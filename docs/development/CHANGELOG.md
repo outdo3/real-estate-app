@@ -2,6 +2,97 @@
 
 ## 2026-09-11
 
+### SCHOOL SCORE IMPACT SIMULATION V1 — 읽기 전용 영향 분석(프로덕션 무변경)
+
+로드맵의 [보류 / P1 데이터 신뢰] 항목에 필요한 영향 시뮬레이션을 수행했다.
+**프로덕션 점수 동작은 하나도 바뀌지 않았다** — DB 쓰기 0건, 스키마·공식·임계값·
+가중치·수집기·API 무변경, src/ 아래 변경 0건.
+
+방법:
+
+프로덕션 점수 로직을 복제하지 않고 실제 운영 함수를 그대로 import해 돌렸다
+(rankFeature / computeSchoolAccessCategory / resolvePeerPoolLevels /
+absoluteSchoolDistanceBand). 바꾼 것은 입력 한 필드(nearestElementaryDistanceM)뿐이다.
+스크립트: scripts/apartment-score/school-distance-impact-simulation.ts (SELECT만)
+
+점수 경로 확인:
+
+Kakao 거리 → lowerIsBetter percentile(선형, tie-aware) → 5 + pct/100×90
+→ schoolAccess(거리 60 : 개수 40) → 총점 15% 몫.
+즉 이 한 필드가 총점에서 갖는 몫은 15% × 60% = **9%**.
+점수는 테이블에 저장되지 않고 요청 시 계산된다(ApartmentScore 모델 없음) —
+출처를 바꾸려면 점수 마이그레이션이 아니라 **feature 재수집**이 필요하다.
+
+원본 거리(3,401건 전수):
+
+0–5m 3,360 / 6–25m **0** / 26–100m 2 / 101–300m 10 / >300m 9,
+정확히 일치 1,514, Kakao null→NEIS 20, NEIS 후보 없음 0.
+**25m 초과 21건 + null 20건 = 41건 — 직전 감사와 정확히 일치(재현됨).**
+상위 12개 보정 중 11건이 사상구 괘법초 주변 — 무작위가 아니라 특정 학교 밀집 구역에
+집중돼 있다.
+
+band 전이 44건(현행 임계값 그대로):
+
+UNKNOWN→VERY_FAR 20, NORMAL→VERY_CLOSE 7, CLOSE→NORMAL 6, NORMAL→CLOSE 6,
+CLOSE→VERY_CLOSE 2, FAR→VERY_FAR 1, VERY_CLOSE→CLOSE 1, FAR→NORMAL 1.
+이 중 13건은 1~2m 차이가 임계선을 넘나든 경계 노이즈다.
+
+점수 영향:
+
+학교 점수가 움직인 단지 **584건** = 직접 362 + **간접 222**(자기 데이터 불변).
+총점 변화: >0~<0.5 536 / 0.5~1 10 / 1~2 12 / 2~3 14 / >3 12.
+최대 +5.65점(레스틴뷰) / 최대 −3.19점(주은타워빌).
+절대델타 중앙값 0.076점, 95분위 1.718점.
+**반올림 후 사용자에게 다른 점수가 보이는 단지 48건 — 그중 27건이 하락.**
+
+핵심 발견:
+
+    주은타워빌         466m → 467m (1미터)  총점 −3.19점
+    센트럴스타힐스     423m → 423m (0미터)  총점 −2.70점
+
+사상구에서 21개 단지가 500m대 → 100m대로 한꺼번에 올라오면 그 구의 percentile 곡선이
+통째로 눌린다. 손 하나 대지 않은 단지가 3점씩 떨어진다. 하락 320건 중 62건은 자기
+데이터가 전혀 바뀌지 않았다 — 사용자에게 설명할 수 없는 변화다.
+
+랭킹(§8):
+
+제품에 E-JIP Score 기반 랭킹이 **없다**(/stats 순위는 가격·갭·거래량 기준).
+없는 랭킹을 지어내지 않았다. 실재하는 순위 효과는 위 peer percentile 이동뿐이다.
+
+임계 앵커 판정: **RE-ANCHOR RECOMMENDED**
+
+분포 몸통은 사실상 동일(p10~p90 최대 6m 차이) → 200/400/650은 유효.
+꼬리만 다르다: 현행 max 999m(1km 검색의 인공적 상한) vs NEIS max 2,440m.
+**36건이 933m를 넘어 VERY_FAR로 떨어진다** — 코드 주석이 "이론적 잔여 구간"이라
+적어둔, 실측 표본이 없던 band다.
+
+null 의미 결함(플래그만, 수정 안 함):
+
+현재 complete+null을 "확인된 부재"로 보고 sentinel 최하위에 넣는다. 그러나 실제 의미는
+"1km 안에서 못 찾음"이고, 20건 전부 학교가 실재한다(1,052~1,422m). 방향은 우연히
+맞지만 **크기가 임의적**이다(실제 1,359m가 아니라 "관측 최댓값 + span×0.5 + 1").
+
+권고: **OPTION D → 출시 직후 OPTION C**
+
+- B(출처만 교체)는 미완성 — 933 임계가 무효인 채로 나가고, 잘못된 적 없는 27개 단지
+  점수가 설명 없이 떨어진다
+- C(임계 재앵커 + 출처 교체)가 옳지만 Score 모델 변경이라 출시 주간 작업이 아니다
+- 완화 요인: 리포트 화면은 이미 NEIS 기반 값을 보여준다. 낡은 값이 남은 곳은 Score 카드뿐
+- 착수 시 ApartmentLocationFeature 3,401행 재수집(프로덕션 bulk write) → **승인 필수**
+
+문서:
+
+- docs/development/SCHOOL_SCORE_IMPACT_SIMULATION_V1.md 신규
+- docs/development/00-PROJECT-ROADMAP.md — 보류 항목에 결과·권고 반영(**항목은 유지**,
+  실제 교정 STEP이 승인·완료될 때까지 지우지 않는다)
+- scripts/apartment-score/school-distance-impact-simulation.ts 신규(영구 감사 도구)
+
+검증:
+
+- npx tsx --test (src 전체): 708/708 PASS — 직전과 동일(제품 코드 무변경)
+- npx eslint scripts/apartment-score/school-distance-impact-simulation.ts: exit 0
+- build 미실행 — 제품 코드가 바뀌지 않았으므로 실행할 이유가 없다
+
 ### ACQUISITION TAX PRIMARY SOURCE VERIFICATION V1 — 법령 원문 대조, 출시 게이트 해제
 
 직전 STEP이 LIMITED로 남긴 이유(취득세 산식의 1차 출처 미대조)를 해소한다.
