@@ -1,0 +1,141 @@
+/* PARTNER_LEAD_TRACKING_V1 — 제휴 CTA 카드.
+   톤: 신뢰감 있고 차분하게. 이집의 데이터 카드와 **구별**되도록 중립 회색 표면을
+   쓰고, 브랜드 초록(--primary-color)은 쓰지 않는다 — 초록을 쓰면 이집이 직접
+   제공하는 기능처럼 보인다. */
+
+.card {
+  display: block;
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  background: var(--surface-subtle, #f8fafc);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: #eceff3;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.title {
+  margin: 0.7rem 0 0.35rem;
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.partnerName {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.body {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.button {
+  flex: 1 1 0;
+  /* 최소 44px — 손가락 탭 타깃. */
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.6rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  /* 버튼 안에서 줄이 접히지 않도록 — 좁은 화면에서는 아래 미디어쿼리가 세로로 쌓는다. */
+  white-space: nowrap;
+}
+
+.kakao {
+  /* 카카오 브랜드 색. 이집 브랜드색과 겹치지 않아 외부 서비스임이 드러난다. */
+  background: #fee500;
+  color: #191600;
+  border: 1px solid #f5dc00;
+}
+
+.phone {
+  background: var(--card-bg, #fff);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  /* 번호를 라벨 아래 줄로 내린다. */
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.phoneNumber {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+.icon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.disclaimer {
+  margin: 0.8rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* 좁은 화면(360px 등): 두 버튼을 나란히 두면 "카카오톡 상담"이 잘린다.
+   실측 기준 400px 이하에서 세로로 쌓는다. 저장소의 기존 관례(finance-fit.module.css가
+   같은 400px 브레이크포인트를 쓴다)를 따랐다. */
+@media (max-width: 400px) {
+  .card {
+    padding: 1.1rem 1rem;
+  }
+  .actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .phone {
+    /* 세로로 쌓이면 가로 폭이 넉넉하므로 번호를 같은 줄로 되돌린다. */
+    flex-direction: row;
+    gap: 0.45rem;
+  }
+}
+
+/* 데스크톱: 본문 폭이 넓어져도 카드가 과하게 벌어지지 않게 한다. */
+@media (min-width: 768px) {
+  .card {
+    padding: 1.5rem;
+  }
+  .actions {
+    max-width: 420px;
+  }
+}
+
+/* 인쇄물/리포트 내보내기에는 광고를 남기지 않는다(§8).
+   globals.css의 @media print [data-export-exclude] 규칙과 이중으로 보장한다. */
+@media print {
+  .card {
+    display: none !important;
+  }
+}

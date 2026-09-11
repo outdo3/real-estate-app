@@ -44,16 +44,22 @@ export const GA_EVENT_MAP: Partial<Record<AnalyticsEventName, string>> = {
   pwa_install_accept: 'pwa_install_accept',
   pwa_install_dismiss: 'pwa_install_dismiss',
   pwa_install_guide_open: 'pwa_install_guide_open',
+
+  // PARTNER_LEAD_TRACKING_V1 §9 — 예약만 해두었던 파트너 이벤트를 실제로 연결한다.
+  // GA4 쪽 이름도 1st-party와 같게 두어 두 시스템의 숫자를 바로 비교할 수 있게 한다.
+  partner_cta_impression: 'partner_cta_impression',
+  partner_cta_click: 'partner_cta_click',
 };
 
 /**
  * §15 — 파트너 CTA.
  *
- * 현재 저장소에 파트너 리드 기능이 **존재하지 않는다**(관련 컴포넌트/이벤트/라우트 없음).
- * 그래서 파트너 이벤트를 지어내지 않는다. PARTNER LEAD TRACKING V1이 실제로 구현되면
- * 아래 이름을 GA_EVENT_MAP에 추가하는 것만으로 연결되도록 이름만 예약해 둔다.
+ * PARTNER_LEAD_TRACKING_V1에서 **실제로 연결됐다**(위 GA_EVENT_MAP 참고). 이 배열은
+ * 이제 "예약 목록"이 아니라 파트너 관련 이벤트가 이 둘뿐임을 고정하는 계약이다.
+ *
  * call_connected / consultation_completed 처럼 **측정 수단이 없는 성과 이벤트는
- * 예약하지도 않는다** — 있으면 언젠가 추정값으로 채워질 위험이 있다.
+ * 여전히 만들지 않는다** — 있으면 언젠가 추정값으로 채워질 위험이 있다. click은
+ * 상담 성사가 아니며, 성사 귀속은 확인 수단이 생긴 뒤의 별도 STEP이다(§13).
  */
 export const GA_RESERVED_PARTNER_EVENTS = ['partner_cta_impression', 'partner_cta_click'] as const;
 

@@ -83,13 +83,20 @@ test('찜/비교 이벤트 매핑', () => {
 
 // ── §15 파트너 ──────────────────────────────────────────────────────────────
 
-test('파트너 이벤트는 예약만 돼 있고 실제로 매핑되지 않는다', () => {
-  // 저장소에 파트너 리드 기능 자체가 없다. 존재하지 않는 이벤트를 지어내지 않는다.
+// PARTNER_LEAD_TRACKING_V1 — 이 테스트는 원래 "아직 연결되지 않았다"를 지키고 있었다.
+// 실제 파트너(황보재호법무사사무실)가 붙으면서 계약이 뒤집혔으므로, 같은 두 이름에
+// 대해 이제는 **연결돼 있다**를 지킨다. 이름 자체는 그대로라 GA4 리포트가 끊기지 않는다.
+test('예약돼 있던 파트너 이벤트가 실제로 GA4에 연결됐다', () => {
   const mappedGaNames = new Set(Object.values(GA_EVENT_MAP));
   for (const reserved of GA_RESERVED_PARTNER_EVENTS) {
-    assert.equal(mappedGaNames.has(reserved), false, `${reserved}는 아직 연결되면 안 된다`);
-    assert.ok(isValidGaEventName(reserved), '예약 이름도 GA4 명명 규칙은 지켜 둔다');
+    assert.equal(mappedGaNames.has(reserved), true, `${reserved}가 연결돼 있어야 한다`);
+    assert.ok(isValidGaEventName(reserved), 'GA4 명명 규칙을 지킨다');
   }
+});
+
+test('파트너 이벤트는 이 둘뿐이다(성과 이벤트가 슬쩍 늘지 않는다)', () => {
+  const partnerNames = Object.values(GA_EVENT_MAP).filter((n) => n?.startsWith('partner_'));
+  assert.deepEqual(partnerNames.sort(), ['partner_cta_click', 'partner_cta_impression']);
 });
 
 test('측정 수단이 없는 성과 이벤트는 예약조차 하지 않는다', () => {

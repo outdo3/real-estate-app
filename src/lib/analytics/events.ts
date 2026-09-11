@@ -45,6 +45,17 @@ export const ANALYTICS_EVENT_NAMES = [
   'report_image_save',
   'report_pdf_save',
   'report_share',
+  // PARTNER_LEAD_TRACKING_V1 §9/§13 — 제휴 파트너 CTA. 스키마 변경 없이 기존
+  // `/__event__/<name>` 네임스페이스를 그대로 쓴다.
+  //
+  // **이름이 곧 의미다.** click은 "버튼을 눌렀다"까지만 뜻하며 상담 성사가 아니다.
+  // lead / conversion / consultation_complete 류의 이름을 쓰지 않는 이유이고,
+  // 실제 성사 여부를 확인할 수단이 생기기 전에는 그런 이벤트를 만들지 않는다.
+  //
+  // 이 라우트는 이름 외에 complexId/aptName만 저장하므로, channel(kakao|phone)과
+  // placement 같은 분해 축은 **GA4 쪽에만** 실린다(§12 — 알려진 비대칭).
+  'partner_cta_impression',
+  'partner_cta_click',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

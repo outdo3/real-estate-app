@@ -77,6 +77,11 @@ export const GA_PARAM_ALLOWLIST = [
   'scope_type',
   'placement',
   'partner_type',
+  // PARTNER_LEAD_TRACKING_V1 §9 — 둘 다 **고정 enum/slug 전용**이다.
+  // partner_id는 config의 사람이 읽는 식별자(예: hwangbo-jaeho-legal)이고,
+  // 전화번호·오픈채팅 주소·상호는 여기로 나가지 않는다.
+  'partner_id',
+  'channel',
   'lawd_cd',
   'device_class',
   'source_surface',

@@ -16,6 +16,7 @@ import TradeTimelineList from '@/components/TradeTimelineList';
 import CommunityPreview from '@/components/CommunityPreview';
 import StickyActionBar from '@/components/StickyActionBar';
 import AdContainer from '@/components/AdContainer';
+import PartnerCtaCard from '@/components/partner/PartnerCtaCard';
 import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
@@ -1303,6 +1304,14 @@ export default function ApartmentDetail() {
         <div className={styles.panel}>
           <CommunityPreview aptName={aptName} />
         </div>
+      </div>
+
+      {/* PARTNER_LEAD_TRACKING_V1 §7 — 페이지 맨 아래. 단지를 끝까지 살펴본 사용자만
+          만난다. 데이터 구역(가격/실거래/점수) 안이 아니라 전부 지나간 뒤에 두어
+          객관적 정보로 오인되지 않게 한다. 상세 페이지 본문은 이미 하단탭바+
+          StickyActionBar 높이만큼 padding-bottom을 확보하고 있어 가려지지 않는다. */}
+      <div className="container">
+        <PartnerCtaCard placement="apt_detail" />
       </div>
 
       <StickyActionBar

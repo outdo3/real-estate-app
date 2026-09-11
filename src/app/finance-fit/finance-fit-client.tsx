@@ -10,6 +10,7 @@ import { parseFinanceFitUrl } from '@/lib/finance-fit/url';
 import { validateFinanceFitInputs, type FinanceFitValidationError } from '@/lib/finance-fit/validation';
 import type { FinanceFitResult } from '@/lib/finance-fit/types';
 import { trackEvent } from '@/lib/analytics/trackEvent';
+import PartnerCtaCard from '@/components/partner/PartnerCtaCard';
 import styles from './finance-fit.module.css';
 
 // 원 단위 텍스트 입력 — 숫자 이외 문자는 무시하고, 커서 위치를 건드리는 재포맷은
@@ -253,6 +254,12 @@ export default function FinanceFitClient() {
             <li>DSR·LTV 규제 판단</li>
           </ul>
         </div>
+
+        {/* PARTNER_LEAD_TRACKING_V1 §7 — 바로 위 패널이 "등기·법무 비용은 이 계산에
+            포함되지 않는다"고 알린 직후다. 사용자가 방금 생긴 질문을 들고 있는 자리라
+            이 STEP에서 문맥이 가장 강하다. 계산 결과 카드 **안**이 아니라 바깥에 두어
+            객관적 계산값과 광고가 섞이지 않게 한다. */}
+        <PartnerCtaCard placement="finance" />
       </div>
     </div>
   );

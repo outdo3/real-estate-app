@@ -2,6 +2,81 @@
 
 ## 2026-09-11
 
+### PARTNER LEAD TRACKING V1 — 첫 실제 제휴 파트너 CTA (황보재호법무사사무실)
+
+예약만 돼 있던 파트너 이벤트에 **실제 파트너**를 연결한다. click-out 모델이며
+이집은 고객 정보를 하나도 수집하지 않는다.
+
+신규:
+
+- src/lib/partners/types.ts — PartnerConfig / PartnerType / PartnerPlacement / PartnerChannel
+- src/lib/partners/config.ts — 파트너 정보 **단일 출처**(DB 없음). 한 행짜리 테이블을 위해
+  스키마·migration을 만들지 않는다. 파트너가 늘면 배열에 객체만 추가
+- src/components/partner/PartnerCtaCard.tsx + .module.css — 광고·제휴 배지, 카카오/전화 CTA
+- src/lib/partners/partners.test.ts — 14건
+
+수정:
+
+- src/lib/analytics/events.ts — partner_cta_impression / partner_cta_click을 1st-party taxonomy에 추가
+- src/lib/analytics/ga.ts — GA_PARAM_ALLOWLIST에 partner_id / channel 추가(둘 다 고정 enum·slug 전용)
+- src/lib/analytics/ga-events.ts — 예약돼 있던 두 이벤트를 GA_EVENT_MAP에 실제 연결
+- src/lib/analytics/ga-events.test.ts — "아직 연결되면 안 된다" 테스트를 "연결됐다"로 뒤집고,
+  파트너 이벤트가 이 둘뿐임을 고정하는 테스트 추가
+- src/app/finance-fit/finance-fit-client.tsx — "이번 계산에 포함되지 않음" 패널 바로 아래 배치
+- src/app/apt/[name]/apt-client.tsx — 단지 상세 맨 아래(커뮤니티 뒤 / StickyActionBar 앞) 배치
+
+배치 원칙:
+
+문맥 우선, 배너 도배 아님. **두 자리만** 쓴다. finance-fit은 방금 "등기·법무 비용이 계산에
+빠져 있다"고 알린 직후라 문맥이 가장 강하다. NextActionSection(이집의 객관적 다음 행동),
+리포트 웹뷰, 페이지 상단, 지도 위, 데이터 카드 안에는 **넣지 않았다**.
+
+클릭은 상담이 아니다:
+
+이벤트 이름을 partner_cta_click으로 고정한다. lead / conversion / consultation_complete /
+call_connected는 **측정 수단이 없어** 만들지 않는다. 성과처럼 들리는 이름은 언젠가 성과로
+읽힌다. 이 규칙을 테스트로 고정했다.
+
+분석 페이로드:
+
+partner_type / partner_id / placement / channel — 전부 고정 enum·slug.
+전화번호·오픈채팅 주소·상호는 allowlist에 키가 없어 구조적으로 막히고, 값이 전화번호처럼
+보이면 PHONE_LIKE 검사가 한 번 더 버린다.
+1st-party는 라우트에 컬럼이 없어 **이벤트 이름만** 남는다(의도적 비대칭, 스키마 무변경).
+
+중복 방지:
+
+IntersectionObserver(threshold 0.5) + useRef 가드로 노출은 마운트당 1회.
+첫 노출 후 disconnect. IntersectionObserver가 없으면 아무것도 보내지 않는다.
+
+리포트 내보내기:
+
+현재 리포트에 CTA 없음(실측 0건). 그래도 카드에 data-export-exclude와
+@media print { display:none }을 이중으로 걸어, 나중에 얹더라도 기본값이 "내보내기 제외"다.
+
+개인정보:
+
+**방침 수정 불필요.** 입력 폼 없음, 이집이 파트너에게 넘기는 정보 없음, 새 개인정보 항목
+없음, 새 쿠키·수탁업체 없음. 광고 표시와 법무사 직역 광고 규정은
+LEGAL_REVIEW_RECOMMENDED로 문서에 기록.
+
+DB / 스키마 / migration / 의존성:
+
+전부 변경 없음
+
+검증:
+
+- npx tsx --test src/lib/partners/partners.test.ts: 14/14 PASS
+- npx tsx --test (src 전체 50개 파일): 603/603 PASS, fail 0
+- npx eslint (변경 파일): exit 0. 경고 1건은 apt-client.tsx의 기존 unused disable(HEAD와 동일)
+- npx tsc --noEmit: src/ 오류 0건. 전체 exit 2는 기존 scripts//tmp/ 14개 파일(FAIL_EXISTING_SCRIPT_ERRORS)
+- npm run build: exit 0
+- 렌더 실측(단지 상세 HTML): 배지/상호/번호/제목 각 1회(중복 없음),
+  카카오 링크 target=_blank rel="noopener noreferrer nofollow", tel:01080264778,
+  카카오 주소는 href 안에만 등장(텍스트 노출 0),
+  DOM 순서 커뮤니티 → 광고 카드 → stickyBar, 리포트 3종에서 0건
+- 모바일 QA는 CSS/DOM 구조 분석(브라우저 렌더링 아님) — 360/390/430/768/1280
+
 ### GA4 URL PRIVACY HARDENING V1 — 쿼리 문자열이 GA4로 새는 경로 차단
 
 GA4 PRIVACY POLICY PATCH V1이 "한계"로 기록했던 유출 경로를 **코드에서 닫는다.**
