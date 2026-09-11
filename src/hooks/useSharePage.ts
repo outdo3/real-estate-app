@@ -23,6 +23,15 @@ export interface UseSharePageOptions {
   /** 현재 URL의 쿼리스트링에 추가/덮어쓸 값(지역/기간/필터 등 client-only state 보존용). */
   params?: Record<string, string | null | undefined>;
   /**
+   * COMPARE_SHARE_URL_COMPACT_FIX_V1 §6 — 공유할 절대 URL을 호출부가 직접 정한다.
+   *
+   * 기본 동작(params)은 **현재 주소창 URL을 그대로 복사**해 값을 덧씌운다. 화면 상태가
+   * 전부 쿼리스트링에 있는 통계 화면에는 맞지만, 주소창에 복원용 파라미터가 잔뜩 붙는
+   * 화면에서는 그 쓰레기까지 공유 링크에 딸려 간다. 그런 화면은 자기만의 canonical
+   * 링크를 알고 있으므로 그걸 그대로 쓴다.
+   */
+  url?: string;
+  /**
    * GLOBAL SHARE SYSTEM V1 §4 — 공통 공유는 Web Share API를 최우선으로 쓰고, 네이티브
    * 공유가 없는 환경(주로 데스크톱)에서만 이미 안정적으로 검증된 카카오 공유 카드로
    * 보강한다(별도 이미지 자산 불필요, 브랜드 공용 이미지 재사용). 기존 KakaoShareButton
@@ -32,7 +41,7 @@ export interface UseSharePageOptions {
   enableKakao?: boolean;
 }
 
-export function useSharePage({ title, text, params, enableKakao = true }: UseSharePageOptions) {
+export function useSharePage({ title, text, params, url: explicitUrl, enableKakao = true }: UseSharePageOptions) {
   const [status, setStatus] = useState<ShareStatus>('idle');
 
   // 카카오 SDK는 클릭 시점에 처음 로드하면 sendDefault 호출이 더 이상 "사용자가 직접
@@ -73,7 +82,8 @@ export function useSharePage({ title, text, params, enableKakao = true }: UseSha
   }, []);
 
   const share = useCallback(async () => {
-    const url = buildShareUrl(params);
+    // 호출부가 canonical 링크를 준 경우 주소창을 보지 않는다(§6).
+    const url = explicitUrl || buildShareUrl(params);
     if (!url) return;
 
     const nativeResult = await nativeShare({ title, text, url });
@@ -111,7 +121,7 @@ export function useSharePage({ title, text, params, enableKakao = true }: UseSha
     }
     setStatus(copied ? 'copied' : 'error');
     resetSoon();
-  }, [title, text, params, enableKakao, resetSoon]);
+  }, [title, text, params, explicitUrl, enableKakao, resetSoon]);
 
   return { status, share };
 }

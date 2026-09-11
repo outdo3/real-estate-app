@@ -293,3 +293,16 @@
   text-decoration: none;
 }
 .reportCta:active { background: rgba(16, 185, 129, 0.06); }
+
+/* COMPARE_SHARE_URL_COMPACT_FIX_V1 §3 — 공유 링크의 단지를 못 찾았을 때의 정직한 안내. */
+.unresolvedNotice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--color-surface-subtle, #f9fafb);
+  color: var(--color-text-secondary, #4b5563);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}

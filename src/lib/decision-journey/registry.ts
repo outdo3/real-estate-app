@@ -1,4 +1,5 @@
 import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
+import { buildCompareUrl } from '@/lib/compare-v2/url';
 
 // DECISION_JOURNEY_V1 §7 — 페이지별 Next Action URL을 만드는 순수 함수 모음.
 // 새 API/새 state를 만들지 않고, 이미 존재하는 route와 그 route가 이미 지원하는
@@ -41,12 +42,14 @@ export function buildDetailCompareUrl(params: {
   dong?: string;
   aptSeq?: string;
 }): string {
-  const qs = new URLSearchParams();
-  qs.set('aName', params.name);
-  if (params.lawdCd) qs.set('aLawdCd', params.lawdCd);
-  if (params.dong) qs.set('aDong', params.dong);
-  if (params.aptSeq) qs.set('aptSeq', params.aptSeq);
-  return `/stats/compare?${qs.toString()}`;
+  // COMPARE_SHARE_URL_COMPACT_FIX_V1 §5 — 공용 빌더 하나만 쓴다. aptSeq를 알면
+  // `?a=26140-1164`로 끝나고, 모를 때만 이름·동·구코드가 남는다.
+  return buildCompareUrl({
+    name: params.name,
+    lawdCd: params.lawdCd,
+    dong: params.dong || '',
+    aptSeq: params.aptSeq,
+  });
 }
 
 // FINANCE_FIT_V1_PHASE2A §23 — src/lib/finance-fit/url.ts의 buildFinanceFitUrl을

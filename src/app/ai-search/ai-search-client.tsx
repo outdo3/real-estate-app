@@ -9,6 +9,7 @@ import ShareAction from '@/components/ShareAction';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { useRegion } from '@/contexts/RegionContext';
 import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
+import { buildCompareUrl } from '@/lib/compare-v2/url';
 import styles from './ai-search-client.module.css';
 
 type AiIntent = 'condition_search' | 'regional_stats' | 'compare';
@@ -123,16 +124,15 @@ export default function AiSearchClient() {
     const a = result.complexA;
     const b = result.complexB;
     if (!a.resolvedLawdCd || !b.resolvedLawdCd) return;
-    const qs = new URLSearchParams();
-    const seqs = [a.aptSeq, b.aptSeq].filter(Boolean) as string[];
-    if (seqs.length > 0) qs.set('aptSeq', seqs.join(','));
-    qs.set('aName', a.name);
-    qs.set('aLawdCd', a.resolvedLawdCd);
-    qs.set('aDong', a.dong || '');
-    qs.set('bName', b.name);
-    qs.set('bLawdCd', b.resolvedLawdCd);
-    qs.set('bDong', b.dong || '');
-    router.push(`/stats/compare?${qs.toString()}`);
+    // COMPARE_SHARE_URL_COMPACT_FIX_V1 §5 — 예전에는 여기서 이름·동·구코드를 직접
+    // 쿼리스트링에 실었다. 이제 공용 빌더를 쓴다 — canonical aptSeq를 아는 슬롯은
+    // `a`/`b` 한 글자로 끝나고, 모르는 슬롯만 동반 파라미터가 남는다.
+    router.push(
+      buildCompareUrl(
+        { name: a.name, lawdCd: a.resolvedLawdCd, dong: a.dong || '', aptSeq: a.aptSeq || undefined },
+        { name: b.name, lawdCd: b.resolvedLawdCd, dong: b.dong || '', aptSeq: b.aptSeq || undefined }
+      )
+    );
   }, [result, router]);
 
   useEffect(() => {

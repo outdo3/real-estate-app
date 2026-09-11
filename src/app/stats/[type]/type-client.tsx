@@ -30,7 +30,6 @@ import VolumeChartCard from '@/components/stats/VolumeChartCard';
 import GapInvestView from '@/components/stats/GapInvestView';
 import SupplyView from '@/components/stats/SupplyView';
 import LargeComplexView from '@/components/stats/LargeComplexView';
-import CompareV2 from '@/components/compare/CompareV2';
 import styles from '../page.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
 
@@ -436,11 +435,6 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
   }, []);
 
   if (!item) return null;
-
-  // COMPARE_V2_PHASE2 — CompareV2는 자체 Header/ShareAction/region-free 진입을 갖는
-  // 독립 화면이라, 다른 slug들이 공유하는 아래 headerTop/RegionSelectModal 래퍼를
-  // 거치지 않는다(중복 Header 방지).
-  if (slug === 'compare') return <CompareV2 />;
 
   const shareContext = buildStatsShareContext(item, region);
 

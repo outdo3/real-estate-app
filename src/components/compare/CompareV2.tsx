@@ -14,7 +14,8 @@ import type { CompareApartment, CompareDifference } from '@/lib/compare-v2/types
 import { fetchCompareApartment } from '@/lib/compare-v2/fetch';
 import { buildDifferences, buildTradeoffSummary, buildHeadlineDifferences } from '@/lib/compare-v2/difference';
 import { formatHeadlineBullet, scoreDomainSummary } from '@/lib/compare-v2/format';
-import { buildCompareUrl, parseCompareUrl, type CompareSlotSeed } from '@/lib/compare-v2/url';
+import { buildCompareUrl, buildCompareSharePath, parseCompareUrl, type CompareSlotSeed } from '@/lib/compare-v2/url';
+import { absoluteUrl } from '@/config/site';
 import { compareReportHref, REPORT_LABELS } from '@/lib/report/report-links';
 import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
 import styles from './CompareV2.module.css';
@@ -31,7 +32,17 @@ interface SlotState {
 // Region selection is no longer required to view an already-identified pair — only
 // the "add a complex by search" affordance needs one, and only implicitly via
 // ApartmentAutocomplete's own region-free keyword search.
-export default function CompareV2() {
+export interface CompareV2Props {
+  /**
+   * COMPARE_SHARE_URL_COMPACT_FIX_V1 §3 — 서버가 공유 링크의 `a`/`b`(canonical aptSeq)로
+   * 복원해 준 슬롯. 이게 있으면 URL에 이름·동·구코드가 없어도 화면이 살아난다.
+   */
+  initialSeeds?: (CompareSlotSeed | null)[];
+  /** 링크에는 있었지만 실제 단지를 찾지 못한 aptSeq. 조용히 비우지 않고 알린다(§3). */
+  unresolvedAptSeqs?: string[];
+}
+
+export default function CompareV2({ initialSeeds, unresolvedAptSeqs }: CompareV2Props = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [slots, setSlots] = useState<(SlotState | null)[]>([null, null]);
@@ -40,12 +51,17 @@ export default function CompareV2() {
   useEffect(() => {
     if (seededRef.current) return;
     seededRef.current = true;
+    // 서버가 canonical aptSeq로 복원한 슬롯이 우선이다. legacy 긴 URL로 들어온 경우에만
+    // 쿼리스트링의 동반 파라미터를 쓴다(§5 — 열리긴 하되 새로 만들지는 않는 형태).
     const { a, b } = parseCompareUrl(searchParams);
+    const seeds = [initialSeeds?.[0] ?? a, initialSeeds?.[1] ?? b];
     const next: (SlotState | null)[] = [null, null];
-    if (a) next[0] = { seed: a, apartment: null, loading: true };
-    if (b) next[1] = { seed: b, apartment: null, loading: true };
-    if (a || b) setSlots(next);
-  }, [searchParams]);
+    seeds.forEach((seed, i) => {
+      if (seed) next[i] = { seed, apartment: null, loading: true };
+    });
+    if (next[0] || next[1]) setSlots(next);
+    // initialSeeds는 서버 렌더 값이라 마운트 중 바뀌지 않는다(seededRef가 1회만 통과시킨다).
+  }, [searchParams, initialSeeds]);
 
   useEffect(() => {
     slots.forEach((slot, i) => {
@@ -119,20 +135,21 @@ export default function CompareV2() {
       )
     : null;
 
-  const shareParams = both
-    ? {
-        aptSeq: [
-          both[0].identity.kind === 'aptSeq' ? both[0].identity.aptSeq : undefined,
-          both[1].identity.kind === 'aptSeq' ? both[1].identity.aptSeq : undefined,
-        ].filter(Boolean).join(',') || null,
-        aName: both[0].displayName,
-        aLawdCd: both[0].identity.lawdCd,
-        aDong: both[0].identity.dong,
-        bName: both[1].displayName,
-        bLawdCd: both[1].identity.lawdCd,
-        bDong: both[1].identity.dong,
-      }
-    : undefined;
+  // COMPARE_SHARE_URL_COMPACT_FIX_V1 §2 — 공유 링크에는 canonical aptSeq 둘만 들어간다.
+  // 이름·동·구코드를 실으면 한글이 퍼센트 인코딩돼 300자가 넘고, 카카오톡에서 OG 카드
+  // 위에 %EB%... 덩어리가 그대로 말풍선으로 보인다(실측 292~340자).
+  //
+  // 오리진은 window.location이 아니라 siteConfig에서 나온다(§8) — NEXT_PUBLIC_SITE_URL을
+  // e-jip.com으로 바꾸고 재배포하면 같은 코드가 e-jip.com 링크를 만든다.
+  const sharePath = both
+    ? buildCompareSharePath(
+        both[0].identity.kind === 'aptSeq' ? both[0].identity.aptSeq : null,
+        both[1].identity.kind === 'aptSeq' ? both[1].identity.aptSeq : null
+      )
+    : null;
+  // canonical identity를 얻지 못한 슬롯이 있으면 짧은 링크를 만들 수 없다. 그때만
+  // 기존 동작(현재 주소창 URL 공유)으로 떨어진다 — 열리지 않는 짧은 링크보다 낫다.
+  const shareUrl = sharePath ? absoluteUrl(sharePath) : undefined;
 
   return (
     <div className={styles.page}>
@@ -142,12 +159,20 @@ export default function CompareV2() {
           <div className={styles.topBarTitle}>단지 2곳 비교</div>
           {both && (
             <ShareAction
-              title={`${both[0].displayName} vs ${both[1].displayName} 비교`}
-              text="이집에서 두 단지를 비교해보세요"
-              params={shareParams}
+              title={`${both[0].displayName} vs ${both[1].displayName} 비교 | 이집`}
+              text="2개 단지 시세와 데이터를 비교해보세요."
+              url={shareUrl}
             />
           )}
         </div>
+
+        {unresolvedAptSeqs && unresolvedAptSeqs.length > 0 && (
+          // §3 — 링크의 단지를 못 찾았으면 빈 자리로 두지 않고 말한다. 비슷한 이름의
+          // 다른 단지를 대신 보여주지 않는다.
+          <div className={styles.unresolvedNotice} role="status">
+            공유 링크의 단지 {unresolvedAptSeqs.length}곳을 찾지 못했습니다. 아래에서 직접 선택해주세요.
+          </div>
+        )}
 
         <div className={styles.slotRow}>
           {[0, 1].map((i) => {
