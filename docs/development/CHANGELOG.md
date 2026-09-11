@@ -2,6 +2,75 @@
 
 ## 2026-09-11
 
+### SCHOOL DISTANCE SOURCE RECONCILIATION V1 — 감사 + 이전 보고 정정
+
+**정정 먼저.** 직전 STEP 문서에 "리포트 249m vs ScoreCard 341m으로 두 화면이 어긋난다"고
+적혀 있었으나 **사실이 아니다.** 341m은 해당 단지의 저장값이 아니라 직전 STEP 지시문에
+예시로 나온 숫자였고, 작성자가 실측값처럼 옮겨 적었다.
+26290-2625의 실제 저장 Kakao 거리는 249m이고 NEIS 계산값도 249m이며 학교도 둘 다
+연포초등학교다. 불일치 자체가 없었다. 해당 문서와 CHANGELOG 서술을 정정했다.
+
+전수 대조(아파트 3,401건 · NEIS 초등학교 305곳):
+
+- 두 값 모두 존재: 3,381건
+- 정확히 일치 1,514건(44.8%) / 5m 이내 1,846건(54.6%) / 6~25m 0건 / 25m 초과 21건(0.6%)
+- Kakao null(1km 밖): 20건 — 전부 NEIS로는 찾힘
+- 99.4%가 5m 이내로 일치한다. 6~25m가 0건이라 "거의 같음"과 "아예 다른 학교"로 갈린다
+
+거리 의미:
+
+둘 다 **직선거리**다(도보 대 직선 문제가 아니다). 아파트 좌표도 같은 값을 쓴다.
+Kakao가 돌려준 distance와 그 POI 좌표로 직접 계산한 haversine이 m 단위까지 일치함을 확인.
+
+드러난 진짜 결함(둘 다 Score 경로):
+
+1. categorySearch('SC4', 1km, size=15) 단일 페이지 — SC4가 초/중/고/대를 전부 포함해
+   1km 안에 학교가 많으면 진짜 최근접 초등학교가 상위 15건 밖으로 밀린다. 21건 전부
+   Kakao 쪽이 더 멀게 나온다(예: 26200-22 Kakao 376m vs NEIS 신선초등학교 59m).
+   저장소는 해수욕장 수집에서 같은 문제를 keywordSearchNearestMatch로 이미 고쳤으나
+   학교 경로에는 적용되지 않았다.
+2. 반경 1km 밖 20건은 null이 된다. null은 "학교 없음"이 아니라 "1km 안에서 못 찾음"인데
+   Score는 treatCompleteNullAsWorst로 최악값 취급한다.
+
+Score 영향 — **바꾸지 않았다**:
+
+nearestElementaryDistanceM은 school-access percentile 하위지표(peer pool 상대 순위)와
+absolute band(200/400/650/933) 양쪽에 들어간다. 출처를 바꾸면 band가 실제로 움직인다
+(26200-22: CLOSE→VERY_CLOSE, 26530-104: NORMAL→VERY_CLOSE). 직접 영향 41건(1.2%)이고
+percentile이 상대 순위라 같은 pool의 다른 단지도 간접 영향을 받는다. 게다가 band 임계값
+자체가 Kakao 분포에 앵커링돼 있어(주석: 933m 초과는 실측 표본에 없음) NEIS의 1,052~1,422m가
+들어오면 임계 근거를 다시 세워야 한다.
+→ AGENTS.md·지시문 §4에 따라 수집기/feature/임계/점수 로직 어느 것도 건드리지 않았다.
+   승인과 정식 영향 분석이 필요하다.
+
+작업(표시 계층만):
+
+- src/lib/report/apt-report.ts — 교통·생활 표의 거리에 **직선** 라벨 명시.
+  ApartmentScoreCard는 이미 "직선거리"라고 쓰고 있었는데 리포트만 라벨이 없어
+  도보 거리로 읽힐 여지가 있었다. 지하철 행도 같은 성격이라 함께 맞췄다
+  (한 행만 고치면 표 안에 새 불일치가 생긴다).
+    지하철   : 못골역 342m        → 못골역 · 직선 342m
+    초등학교 : 연포초등학교 · 249m → 연포초등학교 · 직선 249m
+  **숫자는 한 건도 바뀌지 않았고 Score도 바뀌지 않았다.**
+- src/lib/report/school-distance-source.test.ts 신규 10건 — 이름+거리 동일 레코드 보장,
+  신원 미확인 시 무명 거리 금지, 직선거리 대칭성, 1km 밖 비은닉,
+  그리고 band 임계값이 그대로임을 고정(승인 없이 점수가 움직이지 않게)
+- docs/development/SCHOOL_DISTANCE_SOURCE_RECONCILIATION_V1.md 신규
+- docs/development/APT_DETAIL_DEFAULT_ALL_TRUST_FIX_V1.md — 잘못된 341m 서술 정정
+
+DB / 스키마 / migration:
+
+전부 변경 없음. 감사 스크립트는 읽기 전용이었고 저장소에 남기지 않았다
+(DB 쓰기 0건, Kakao 재조회는 진단 목적 5회).
+
+검증:
+
+- npx tsx --test src/lib/report/school-distance-source.test.ts: 10/10 PASS
+- npx tsx --test (src 전체): 631/631 PASS, fail 0
+- npx eslint (변경 파일): exit 0
+- npx tsc --noEmit: src/ 오류 0건(전체 exit 2는 기존 scripts//tmp/)
+- npm run build: exit 0
+
 ### APT DETAIL DEFAULT ALL + RECENT TRADE TRUST FIX V1 — 사용자 제보 신뢰 버그
 
 상세 진입 시 84㎡가 자동 선택되면서, 헤더는 "최근 실거래가"인데 값은 84㎡의 최신 거래인
@@ -44,7 +113,7 @@ apt-client가 거래 수신 직후 그것으로 자동 선택하고 있었다. 8
 active·좌표 보유·OFFICIAL_POINT·COMPLETE라, **스키마 변경 없이 읽기 전용 조회**로
 이름과 거리를 같은 출처에서 함께 얻도록 했다.
 출처를 섞지 않는다 — NEIS 이름에 Kakao 거리를 붙이면 서로 다른 학교를 가리킬 수 있다.
-실측: `초등학교 341m` → `초등학교 연포초등학교 · 249m`
+실측: `초등학교 249m` → `초등학교 연포초등학교 · 249m`(이름이 생겼고 숫자는 그대로)
 
 DB / 스키마 / migration:
 

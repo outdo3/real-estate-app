@@ -262,14 +262,19 @@ export function buildApartmentReport(input: AptReportInput): ReportEnvelope<Apar
   const loc = input.location;
   if (loc) {
     const rows = [
+      // SCHOOL_DISTANCE_SOURCE_RECONCILIATION_V1 §3 — 이 표의 거리는 전부 **직선거리**다
+      // (지하철은 Kakao가 돌려준 직선 m, 초등학교는 NEIS 공식 좌표로 계산한 직선 m).
+      // 라벨 없이 "342m"라고만 쓰면 도보 거리로 읽힐 수 있고, ApartmentScoreCard는 이미
+      // "직선거리"라고 명시하고 있어 두 화면의 표현이 어긋났다. 같은 의미의 값에는 같은
+      // 라벨을 붙인다. 값 자체는 바꾸지 않는다.
       loc.nearestSubwayDistanceM != null
-        ? { label: '지하철', value: `${loc.nearestSubwayName ?? '역'} ${loc.nearestSubwayDistanceM}m` }
+        ? { label: '지하철', value: `${loc.nearestSubwayName ?? '역'} · 직선 ${loc.nearestSubwayDistanceM}m` }
         : { label: '지하철', value: '정보 없음' },
-      // §7 — 이름을 확인한 경우에만 "OO초등학교 · 341m"을 쓴다. 이름과 거리는 같은
+      // 이름을 확인한 경우에만 "OO초등학교 · 직선 249m"을 쓴다. 이름과 거리는 같은
       // 출처(NEIS School)에서 왔다. 확인하지 못했으면 이름 없는 거리를 마치 특정 학교인
       // 것처럼 보여주지 않고, 사실대로 확인 불가를 말한다.
       loc.nearestElementarySchool
-        ? { label: '초등학교', value: `${loc.nearestElementarySchool.name} · ${loc.nearestElementarySchool.distanceM}m` }
+        ? { label: '초등학교', value: `${loc.nearestElementarySchool.name} · 직선 ${loc.nearestElementarySchool.distanceM}m` }
         : { label: '초등학교', value: '학교 정보 확인 불가' },
       loc.convenienceCount500m != null
         ? { label: '편의점(500m)', value: `${loc.convenienceCount500m}개` }
