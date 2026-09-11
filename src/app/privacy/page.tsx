@@ -169,8 +169,8 @@ export default function PrivacyPage() {
             <ul>
               <li>이용 목적: 방문자 수·페이지 조회 등 이용 통계 집계, 유입 경로 및 채널 분석, 서비스 개선</li>
               <li>운영자는 이름, 전화번호, 이메일 주소, 상담·문의 등 이용자가 직접 작성한 내용을 Google Analytics로
-                전송하지 않습니다. 다만 이용자가 입력한 내용이 페이지 주소에 포함된 링크로 접속하는 경우, 해당 주소가
-                방문 기록으로 함께 남을 수 있습니다.</li>
+                전송하지 않습니다. 서비스가 Google Analytics로 보내는 페이지 주소에서도 검색어처럼 이용자가 입력한 값은
+                전송 전에 제거하며, 유입 경로 분석에 필요한 캠페인 표시(utm) 정보만 남깁니다.</li>
               <li>이용자는 브라우저의 쿠키 설정을 변경하거나{' '}
                 <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">
                   Google Analytics 차단 브라우저 부가기능

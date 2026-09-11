@@ -452,3 +452,123 @@ Preview 배포에 `NEXT_PUBLIC_GA_DEBUG=true`를 설정하면 GA4 → 관리 →
 - `/map` URL 동기화가 UTM을 보존하도록 개선
 - `source_surface` 채우기(어느 화면에서 리포트/비교로 들어왔는지)
 - GA4 전환(Conversion) 지정: `report_share`, `pwa_install_accept`, `favorite_add`
+
+---
+
+## 21. URL PRIVACY HARDENING V1 (2026-09-11, 기준 `c4008b0`)
+
+### 왜 필요했나 — 이전 STEP이 남긴 유출 경로
+
+이벤트 파라미터 allowlist(`GA_PARAM_ALLOWLIST`)는 자유 텍스트를 구조적으로 막는다. 그런데 **page_view가 싣는 URL 자체는 그 allowlist 밖**이었다.
+
+```
+/ai-search?q=<이용자 입력>   →  page_location에 q가 그대로 포함
+```
+
+감사 과정에서 **두 번째 경로**가 추가로 발견됐다. URL만 정제하면 닫히지 않는다:
+
+```
+src/app/ai-search/page.tsx  generateMetadata()
+  title = `"<q>" AI 검색 결과 - 이집`
+```
+
+`page_title`은 `document.title`을 그대로 싣는다. 즉 쿼리에서 `q`를 잘라내도 **같은 값이 제목으로 나간다.**
+
+### 안전 쿼리 allowlist (`GA_SAFE_QUERY_PARAMS`)
+
+| 보존 | 이유 |
+|---|---|
+| `utm_source` `utm_medium` `utm_campaign` `utm_content` `utm_term` | 유입 귀속. 카카오 공유 트래킹이 여기에 달려 있다 |
+
+**그 외 모든 쿼리는 제거된다.** `q`, `lat`/`lng`/`zoom`, `lawdCd`, `dong`, `aptSeq`, `__ejip_qa`, 처음 보는 파라미터 전부 포함. denylist가 아니므로 **새 화면이 새 쿼리를 만들어도 목록을 갱신할 필요가 없다.**
+
+`gclid` / `gbraid` / `wbraid`는 **넣지 않았다** — 이 저장소에 Google Ads 연동이 없다. 집행하게 되면 배열에 한 줄 추가하면 된다.
+
+`hash(#...)`는 통째로 버린다. 귀속에 쓰이지 않으면서 무엇이든 담을 수 있다.
+
+### 적용 지점 (4곳, 전부 `src/lib/analytics/ga.ts`)
+
+| 지점 | 동작 |
+|---|---|
+| `sanitizeAnalyticsUrl()` | `origin + pathname + allowlist 쿼리`로 **재조립**. 빼는 게 아니라 안전한 것만 옮겨 담는다 |
+| `INITIAL_LOCATION_HREF` | 유입 스냅샷을 **붙잡는 시점에** 정제. 메모리에도 원본이 남지 않는다 |
+| `buildPageViewParams()` | `page_path`=pathname 전용(§5), `page_location`=정제 URL, `page_title`=반향 검사 통과 시에만 |
+| `sanitizeGaParams()` | `page_location`/`page_path` 값을 **한 번 더** 정제 — 호출부가 원본 URL을 직접 넣는 우회 경로(§6)를 막는다 |
+
+### page_title 반향(echo) 검사
+
+경로 denylist를 만들지 않았다. 대신 **"우리가 방금 버린 쿼리 값이 제목에 들어 있으면 제목을 통째로 버린다."** 무엇을 버렸는지는 `droppedQueryValues()`가 정확히 알고 있으므로 화면이 늘어나도 관리할 목록이 없다. `page_title`은 부가 정보라 애매할 때 버리는 쪽이 항상 안전하다.
+
+### 실제 전송 페이로드 (E2E 하니스로 확인)
+
+유입: `https://ejip.kr/ai-search?q=홍길동 01012345678 해운대&utm_source=kakao&utm_medium=share`
+
+```
+["event","page_view",{"page_path":"/ai-search",
+                      "page_location":"https://ejip.kr/ai-search?utm_source=kakao&utm_medium=share"}]
+["event","page_view",{"page_path":"/map",
+                      "page_location":"https://ejip.kr/map","page_title":"지도 - 이집"}]
+["event","share",{"page_location":"https://ejip.kr/ai-search?utm_source=kakao&utm_medium=share",
+                  "method":"kakao"}]
+```
+
+- 첫 page_view의 `page_title`이 **없다** — 제목이 검색어를 담고 있어 버려졌다.
+- 세 번째는 호출부가 원본 URL과 `q`를 일부러 우겨넣은 것이다. 둘 다 정제/탈락했다.
+- `utm_source` / `utm_medium`은 **보존**됐다(§4 귀속 회귀 없음).
+
+### 주소창은 바뀌지 않는다
+
+이 STEP은 **분석 전송값만** 만든다. `ga.ts`에는 `location`/`history` 쓰기가 한 줄도 없다(읽기 2곳뿐). `/ai-search?q=해운대`는 여전히 정상 렌더되고 지도 URL 상태 동기화도 그대로다.
+
+---
+
+## 22. Enhanced Measurement 중복 판정 — **B. CONFIG REVIEW NEEDED**
+
+### 코드로 확정할 수 있는 것
+
+`gtag('config', ID, { send_page_view: false })` — 이건 **config 명령이 보내는 최초 page_view만** 끈다.
+
+### 코드로 확정할 수 없는 것 (그래서 A가 아니다)
+
+Enhanced Measurement의 **"브라우저 기록 이벤트 기반 페이지 변경"** 은 GA4 웹 스트림의 **서버 측 설정**이다. `send_page_view:false`로 꺼지지 않으며, 저장소 코드에서는 상태를 읽을 수도 바꿀 수도 없다.
+
+이 앱에는 history 이벤트가 **두 종류** 있다:
+
+| 발생원 | 빈도 | 우리 수동 page_view | EM이 켜져 있다면 |
+|---|---|---|---|
+| App Router 라우트 이동(pushState) | 화면 전환마다 | 1건 보냄 | **추가 1건 → 중복** |
+| `/map` URL 동기화(replaceState, 400ms 디바운스) | **지도를 움직일 때마다** | 보내지 않음(pathname 불변) | **패닝마다 1건 → /map 과다 집계** |
+
+### 더 중요한 문제: 이 STEP의 정제를 **우회한다**
+
+EM이 만드는 page_view는 Google의 gtag.js가 **`window.location`을 직접 읽어** 보낸다. 우리 `sanitizeAnalyticsUrl`을 거치지 않는다.
+
+→ EM 기록 추적이 켜져 있으면 **`/ai-search?q=<검색어>`의 원본 URL이 그대로 GA4에 전송된다.** 즉 §21의 방어는 코드 쪽에서는 완결됐지만, **완전한 차단은 아래 설정 확인까지 끝나야 성립한다.**
+
+### 운영자가 확인할 정확한 위치
+
+```
+GA4 → 관리(Admin) → 데이터 스트림 → 웹 스트림 선택
+  → 향상된 측정(Enhanced measurement) → 페이지 조회수 오른쪽 톱니바퀴
+  → "브라우저 기록 이벤트를 기반으로 하는 페이지 변경" 체크 해제
+```
+
+권장: **해제.** 우리는 SPA page_view를 직접, 정제해서 보내고 있다. 이 설정을 끄면 중복과 우회가 동시에 사라지고, 스크롤/이탈 클릭 등 나머지 향상된 측정 기능은 그대로 유지된다.
+
+**코드에서 GA4 콘솔 설정을 바꾸지 않았다**(§7 지시). 설정 확인 전까지 판정은 B다.
+
+---
+
+## 23. GA4 Realtime / DebugView 수동 검증 절차 (§10)
+
+Preview 배포에 `NEXT_PUBLIC_GA_DEBUG=true`를 두면 DebugView에서 파라미터를 건별로 볼 수 있다(Production에는 두지 않는다).
+
+| # | 시나리오 | 조작 | 기대 결과 |
+|---|---|---|---|
+| 1 | 일반 page_view | 홈 접속 | `page_view` **1건**. `page_path=/`. 2건이면 §22 설정 문제 |
+| 2 | 카카오 UTM 랜딩 | `/?utm_source=kakao&utm_medium=share&utm_campaign=test` 접속 | 실시간 → 사용자 소스에 `kakao`. `page_location`에 utm 3종 유지 |
+| 3 | **검색어 차단** | `/ai-search?q=테스트검색어` **직접 접속** | `page_location`이 `/ai-search`로 끝나고 **`q`와 `테스트검색어`가 어디에도 없어야 한다.** `page_title`도 비어 있어야 정상 |
+| 4 | 라우트 이동 | 홈 → 지도 → 단지 상세 | 이동마다 `page_view` 1건씩. `page_path`에 `?`가 **없어야** 한다 |
+| 5 | **중복 확인** | 지도에서 **패닝만** 반복(화면 전환 없이) | `page_view`가 **늘지 않아야** 정상. 늘어나면 §22가 C로 확정 → 설정 해제 |
+
+3번과 5번이 이 STEP의 핵심 검증이다.

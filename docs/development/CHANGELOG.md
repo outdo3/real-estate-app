@@ -2,6 +2,64 @@
 
 ## 2026-09-11
 
+### GA4 URL PRIVACY HARDENING V1 — 쿼리 문자열이 GA4로 새는 경로 차단
+
+GA4 PRIVACY POLICY PATCH V1이 "한계"로 기록했던 유출 경로를 **코드에서 닫는다.**
+
+발견된 유출 경로 2개:
+
+1. `page_location` / `page_path` — `/ai-search?q=<이용자 입력>` 의 쿼리가 그대로 전송
+2. `page_title` — **이번 감사에서 추가로 발견.** `/ai-search`의 generateMetadata가 제목을
+   `"<q>" AI 검색 결과 - 이집` 으로 만들기 때문에, URL만 정제하면 같은 값이 제목으로 나간다
+
+작업(src/lib/analytics/ga.ts):
+
+- `GA_SAFE_QUERY_PARAMS` 신규 — GA4로 내보낼 쿼리 **allowlist**. utm 5종만 보존하고 나머지는 전부 제거
+  (`q`, `lat`/`lng`/`zoom`, `lawdCd`, `dong`, `aptSeq`, 처음 보는 파라미터 포함). hash는 통째로 제거
+- `sanitizeAnalyticsUrl()` 신규 — `origin + pathname + allowlist 쿼리`로 URL을 **재조립**
+- `toSafePagePath()` 신규 — page_path는 pathname 전용(쿼리를 싣지 않는다)
+- `buildPageViewParams()` — 위 두 함수 사용 + **page_title 반향 검사**: 방금 버린 쿼리 값이
+  제목에 들어 있으면 제목도 버린다(경로 denylist를 만들지 않기 위한 구조적 방어)
+- `sanitizeGaParams()` — `page_location`/`page_path` 값을 한 번 더 정제해, 호출부가 원본 URL을
+  직접 넣는 우회 경로를 차단
+- `INITIAL_LOCATION_HREF` — 유입 스냅샷을 붙잡는 시점에 정제(utm은 보존되므로 귀속 영향 없음)
+
+src/app/privacy/page.tsx:
+
+- 7-나의 "입력 내용이 페이지 주소에 포함되면 함께 남을 수 있다" 문장을 실제 동작에 맞게 교체.
+  "전송 전에 제거하며 캠페인 표시(utm) 정보만 남긴다"로 수정(다른 항 무변경)
+
+유입 귀속:
+
+**회귀 없음.** utm 5종은 page_location에 그대로 보존된다. 카카오 공유 트래킹 영향 없음.
+
+주소창:
+
+**바뀌지 않는다.** ga.ts에 location/history 쓰기가 없다(읽기 2곳뿐). `/ai-search?q=`는 정상 렌더되고
+지도 URL 상태 동기화도 그대로다. 분석 전송값만 정제한다.
+
+DB / 스키마 / migration / 의존성:
+
+전부 변경 없음
+
+Enhanced Measurement 판정:
+
+**B. CONFIG REVIEW NEEDED.** `send_page_view:false`는 config의 최초 page_view만 끄며, 향상된 측정의
+"브라우저 기록 이벤트 기반 페이지 변경"은 **서버 측 스트림 설정**이라 코드로 끌 수 없다. 켜져 있으면
+(a) 라우트 이동마다 page_view 중복, (b) 지도 패닝마다 /map 과다 집계, (c) **gtag가 window.location을
+직접 읽으므로 이번 정제를 우회**한다. 확인 위치는 GA4_INTEGRATION_V1 §22에 기록했다.
+
+검증:
+
+- npx tsx --test (ga.test.ts + ga-events.test.ts): 42/42 PASS (신규 13건 — §8 A~F 시나리오 전부)
+- npx tsx --test (src 전체 50개 파일): 589/589 PASS, fail 0
+- E2E 하니스로 dataLayer 실제 페이로드 확인 — 검색어/전화번호/지도 상태 전부 미전송, utm 보존
+- npx eslint (변경 파일): exit 0
+- npx tsc --noEmit: src/ 오류 0건. 전체 exit 2는 기존 scripts//tmp/ 14개 파일 오류뿐(FAIL_EXISTING_SCRIPT_ERRORS)
+- npm run build: exit 0
+- 런타임 스모크: / /map /ai-search /terms /privacy /report /report/city/busan,
+  `/ai-search?q=해운대`, `/map?lat&lng&zoom`, 단지 상세, /report/apt/26290-2625 전부 200
+
 ### GA4 PRIVACY POLICY PATCH V1 — GA4 고지를 개인정보처리방침에 반영
 
 GA4 INTEGRATION V1이 남긴 **PRIVACY POLICY UPDATE NEEDED** 판정을 해소한다.

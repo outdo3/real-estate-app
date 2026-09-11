@@ -31,6 +31,35 @@ export const GA_DEBUG_MODE = GA_DEBUG;
 const INTERNAL_QUERY_PARAMS = ['__ejip_qa'] as const;
 
 /**
+ * GA4_URL_PRIVACY_HARDENING_V1 §2 — **GA4로 내보내도 되는 쿼리 파라미터의 전체 목록.**
+ *
+ * 여기 없는 쿼리는 전부 잘라낸다. denylist(q/keyword/phone/...)를 쓰지 않는 이유는
+ * 파라미터 allowlist와 같다: 새 화면이 새 쿼리를 만들 때마다 목록을 갱신해야 하는 구조는
+ * 언젠가 반드시 빠뜨린다. allowlist는 **적지 않은 것은 나가지 않는다**가 기본값이다.
+ *
+ * 그래서 `q`(AI 검색어), `lat`/`lng`/`zoom`(지도 상태), 그 밖의 어떤 자유 텍스트도
+ * 목록에 없다는 이유만으로 자동 차단된다.
+ *
+ * 배열 순서가 곧 출력 순서다 — 같은 랜딩이 항상 같은 page_location 문자열이 되어
+ * GA4 리포트에서 URL이 쪼개지지 않는다.
+ *
+ * gclid / gbraid / wbraid(광고 클릭 ID)는 **일부러 넣지 않았다.** 이 저장소에는 Google Ads
+ * 연동이 없고(AdContainer는 NEXT_PUBLIC_ADS_ENABLED 게이트의 광고 슬롯일 뿐 캠페인 유입이
+ * 아니다), 쓰지도 않는 식별자를 미리 허용할 이유가 없다. 실제로 Google Ads를 집행하게 되면
+ * 이 배열에 한 줄 추가하는 것으로 끝난다.
+ */
+export const GA_SAFE_QUERY_PARAMS = [
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_content',
+  'utm_term',
+] as const;
+
+/** 쿼리 값 상한. page_location 전체가 100자로 잘리기 전에 개별 값부터 억제한다. */
+const GA_QUERY_VALUE_MAX_LENGTH = 64;
+
+/**
  * GA4 이벤트 파라미터로 **보낼 수 있는 키의 전체 목록**(§10).
  *
  * denylist가 아니라 allowlist인 이유: denylist는 새 호출부가 생길 때마다 빠뜨릴 수
@@ -128,6 +157,71 @@ export function stripInternalQueryParams(href: string): string {
 }
 
 /**
+ * GA4_URL_PRIVACY_HARDENING_V1 §3 — **GA4로 보낼 URL을 만든다.**
+ *
+ * `origin + pathname + (allowlist에 있는 쿼리만)` 으로 URL을 **다시 조립한다**.
+ * 원본에서 위험한 것을 빼는 방식이 아니라 안전한 것만 옮겨 담는 방식이라, 처음 보는
+ * 쿼리 파라미터는 자동으로 탈락한다.
+ *
+ *   /ai-search?q=홍길동01012345678&utm_source=kakao  →  /ai-search?utm_source=kakao
+ *   /report/apt/26140-1164?foo=bar                   →  /report/apt/26140-1164
+ *
+ * **hash(#...)는 통째로 버린다.** 유입 귀속에 쓰이지 않으면서 무엇이든 담을 수 있는
+ * 통로이기 때문이다.
+ *
+ * 주의: 이 함수는 **주소창을 바꾸지 않는다.** 분석 전송값만 만든다(§3).
+ */
+export function sanitizeAnalyticsUrl(href: string): string {
+  try {
+    const url = new URL(href);
+    const kept = new URLSearchParams();
+    for (const key of GA_SAFE_QUERY_PARAMS) {
+      const raw = url.searchParams.get(key);
+      if (raw === null) continue;
+      const value = raw.trim();
+      if (!value) continue;
+      // allowlist를 통과한 키라도 값이 PII로 보이면 버린다(심층 방어).
+      if (EMAIL_LIKE.test(value) || PHONE_LIKE.test(value)) continue;
+      kept.set(key, value.slice(0, GA_QUERY_VALUE_MAX_LENGTH));
+    }
+    const search = kept.toString();
+    return `${url.origin}${url.pathname}${search ? `?${search}` : ''}`;
+  } catch {
+    // 절대 URL이 아니면(상대 경로/깨진 값) 쿼리와 hash를 통째로 떼어낸다.
+    return href.split('#')[0].split('?')[0];
+  }
+}
+
+/** 위험할 수 있는 경로 부분만 남긴 page_path(§5). 쿼리는 절대 싣지 않는다. */
+export function toSafePagePath(href: string): string {
+  const clean = sanitizeAnalyticsUrl(href);
+  try {
+    return new URL(clean).pathname;
+  } catch {
+    return clean;
+  }
+}
+
+/**
+ * sanitizeAnalyticsUrl이 **버린** 쿼리 값들. page_title 검사에만 쓴다.
+ * 한 글자 값은 우연히 제목과 겹치기 쉬워 제외한다.
+ */
+function droppedQueryValues(href: string): string[] {
+  try {
+    const url = new URL(href);
+    const out: string[] = [];
+    for (const [key, raw] of url.searchParams.entries()) {
+      if ((GA_SAFE_QUERY_PARAMS as readonly string[]).includes(key)) continue;
+      const value = raw.trim();
+      if (value.length >= 2) out.push(value);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 유입 시점의 URL 스냅샷(§6).
  *
  * 왜 필요한가: `/map`은 지도가 준비된 뒤 400ms 디바운스로 `history.replaceState`를 써
@@ -141,7 +235,7 @@ export function stripInternalQueryParams(href: string): string {
  * 계약이 그 동작에 의존한다).
  */
 const INITIAL_LOCATION_HREF: string | null =
-  typeof window !== 'undefined' ? stripInternalQueryParams(window.location.href) : null;
+  typeof window !== 'undefined' ? sanitizeAnalyticsUrl(window.location.href) : null;
 
 export function getInitialLocationHref(): string | null {
   return INITIAL_LOCATION_HREF;
@@ -170,7 +264,13 @@ export function sanitizeGaParams(params: Record<string, unknown> | null | undefi
       continue;
     }
     if (typeof raw !== 'string') continue;
-    const value = raw.trim();
+    let value = raw.trim();
+    if (!value) continue;
+    // §6 — page_location/page_path는 allowlist를 "키"로는 통과하므로, 호출부가 원본 URL을
+    // 직접 넣으면 쿼리가 그대로 새어 나갈 수 있었다. 여기서 한 번 더 정제해 그 경로를 막는다.
+    // buildPageViewParams가 이미 정제한 값에 대해서는 멱등이다.
+    if (key === 'page_location') value = sanitizeAnalyticsUrl(value);
+    else if (key === 'page_path') value = toSafePagePath(value);
     if (!value) continue;
     if (EMAIL_LIKE.test(value) || PHONE_LIKE.test(value)) continue;
     out[key] = value.slice(0, GA_PARAM_MAX_LENGTH);
@@ -178,20 +278,39 @@ export function sanitizeGaParams(params: Record<string, unknown> | null | undefi
   return out as GaEventParams;
 }
 
-/** page_view 페이로드(§5). 안전한 페이지 정보만 담는다. */
+/**
+ * page_view 페이로드(§5). 안전한 페이지 정보만 담는다.
+ *
+ * GA4_URL_PRIVACY_HARDENING_V1:
+ *  - page_location : allowlist로 재조립한 URL(utm은 보존, 나머지 쿼리와 hash는 제거)
+ *  - page_path     : **pathname 전용.** 쿼리 문자열을 싣지 않는다(§5)
+ *  - page_title    : 아래 "반향 검사"를 통과할 때만 싣는다
+ *
+ * ### page_title 반향(echo) 검사가 필요한 이유
+ *
+ * URL만 정제하면 충분해 보이지만 아니다. `/ai-search`의 generateMetadata는 제목을
+ * `"<검색어>" AI 검색 결과 - 이집` 으로 만든다(src/app/ai-search/page.tsx). 즉 쿼리에서
+ * `q`를 잘라내도 **같은 값이 document.title을 통해 그대로 나갈 수 있다.**
+ *
+ * 그래서 경로 목록(denylist)을 만드는 대신, **우리가 방금 버린 쿼리 값이 제목에 들어
+ * 있으면 제목을 통째로 버린다.** 무엇을 버렸는지는 이 함수가 정확히 알고 있으므로
+ * 화면이 늘어나도 목록을 관리할 필요가 없다. page_title은 있으면 좋은 부가 정보일 뿐이라
+ * 애매할 때는 버리는 쪽이 항상 안전하다.
+ */
 export function buildPageViewParams(href: string, title?: string | null): GaEventParams {
-  const clean = stripInternalQueryParams(href);
-  let pagePath = clean;
-  try {
-    const url = new URL(clean);
-    pagePath = `${url.pathname}${url.search}`;
-  } catch {
-    // 절대 URL이 아니면 받은 값을 그대로 경로로 쓴다.
+  const clean = sanitizeAnalyticsUrl(href);
+  const pagePath = toSafePagePath(href);
+
+  let safeTitle = title?.trim() || undefined;
+  if (safeTitle) {
+    const dropped = droppedQueryValues(href);
+    if (dropped.some((value) => safeTitle!.includes(value))) safeTitle = undefined;
   }
+
   return sanitizeGaParams({
     page_path: pagePath,
     page_location: clean,
-    page_title: title ?? undefined,
+    page_title: safeTitle,
   });
 }
 
