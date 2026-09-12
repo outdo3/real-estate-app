@@ -2,6 +2,68 @@
 
 ## 2026-09-12
 
+### SUPPLY MAP REGION BOUNDS FIX V1 — 지역 선택과 지도 viewport 일치
+
+통계 → 공급에서 지역이 "부산광역시"인데 목록은 부산 전역을 보여주고 지도만 기장/울산
+경계 부근으로 치우쳐 열렸다.
+
+원인: 한 줄이었다
+
+    center={{ lat: data.mapMarkers[0].lat, lng: data.mapMarkers[0].lng }}
+    level={nationwide ? 13 : 8}
+
+mapMarkers는 서버가 orderBy 없이 읽은 순서라 첫 원소는 사실상 id가 가장 작은 아무
+단지다(목록만 별도로 입주예정월 정렬한다). 그리고 좌표가 얼마나 퍼져 있든 zoom이
+상수였다 — 이 화면에는 setBounds가 아예 없었다.
+
+production 실측(2026-09-12, 부산·향후 2년, 좌표 26건)
+
+    mapMarkers[0]  부산 장안지구 B-2블록 중흥S-클래스(기장군) 35.32036, 129.24011
+    실제 bounds     lat 35.09287~35.32036 / lng 128.93527~129.24012
+    bounds 중심     35.20661, 129.08769        ← 부산 중앙
+    편차            위도 0.114도 / 경도 0.152도
+
+즉 center가 부산 북동 모서리였고 level 8은 구 단위 축척이라 부산 대부분이 화면 밖이었다.
+데이터가 아니라 viewport 계산의 문제였다.
+
+방법: 유효 좌표 → viewport 판정을 순수 함수로 분리
+
+    src/lib/stats/supply-map-bounds.ts
+      서로 다른 좌표 2개 이상 → bounds (모든 점 extend + 48px 여백)
+      서로 다른 좌표 1개       → 그 지점 center + level 5
+      유효 좌표 0개            → none (center도 level도 없음)
+
+"개수"가 아니라 "퍼짐"으로 판정한다. 조합원 취소분이 본 사업지와 좌표가 완전히 같은
+경우가 실제로 있어(동래 롯데캐슬 시그니처 127/576, 더샵 금정위버시티 428/694) 금정구처럼
+같은 좌표 2건만 남는 구를 그대로 setBounds에 넣으면 폭·높이 0인 bounds가 되어 지도가
+최대 배율로 튄다.
+
+좌표 유효성도 지도 쪽에서 한 번 더 막는다 — 서버는 null만 보므로 NaN/Infinity/범위 밖/
+0,0 sentinel이 걸러지지 않는다(실측 위반 0건이지만 생략하지 않았다). 무효 좌표는 마커도
+찍지 않고, 요약의 "위치 확인 N개"도 실제로 찍히는 수를 말한다.
+
+좌표 0개일 때 부산 canonical center를 쓰지 않았다. 기존의 정직한 빈 상태("위치가 확인된
+단지가 없어요 / 아래 목록에서 전체 단지를 볼 수 있어요")가 더 정확하다 — 보여줄 단지가
+없는데 지도를 펼치면 사용자는 뭔가 있다고 읽는다. 이 모듈에 위경도 리터럴이 없음을
+테스트가 고정한다.
+
+지도 인스턴스는 onCreate로 잡는다 — presale-nearby-map.tsx가 이미 쓰는 패턴 그대로다.
+bounds 경로의 초기 center도 첫 마커가 아니라 bounds 중심이라 첫 프레임부터 어긋나지 않고,
+초기 level은 setBounds가 즉시 덮어쓴다. 지역/기간을 바꾸면 선택 마커 카드도 초기화된다.
+
+stale 응답은 원래부터 문제가 아니었다(SWR 키에 지역·시군구·기간이 들어가고
+keepPreviousData를 쓰지 않는다) — 감사로 확인하고 테스트로 고정했다. 목록·지도·추이가
+한 번의 fetch 결과를 공유하는 구조도 그대로다.
+
+검증: 신규 20 tests, src 전체 1065/1065 pass, tsc src 오류 0, eslint 변경 파일 0,
+build Compiled successfully.
+
+지도 실렌더는 브라우저가 필요해 STRUCTURAL PASS / DEVICE QA REQUIRED다 — 확인할 7가지를
+docs/development/SUPPLY_MAP_REGION_BOUNDS_FIX_V1.md §8에 남겼다.
+
+범위 밖으로 남긴 것: RegionChangeMapView.tsx에 같은 계열의 버그가 있다(center가 첫 항목,
+zoomLevel 고정 9/7). 같은 헬퍼를 재사용해 별도 STEP으로 고치는 것을 권한다.
+
 ### BUSAN 12M STATS PERFORMANCE FIX V1 — 한 요청의 MOLIT 호출 384 → 16
 
 통계 → 실거래 피드에서 "부산광역시 전체 + 최근 12개월"을 고르면 Production 실측

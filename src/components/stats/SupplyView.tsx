@@ -1,11 +1,18 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import Empty from '@/components/ui/Empty';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { useRegion } from '@/contexts/RegionContext';
+import {
+  SUPPLY_MAP_BOUNDS_PADDING,
+  isValidSupplyCoord,
+  resolveSupplyViewport,
+  supplyViewportKey,
+  validSupplyPoints,
+} from '@/lib/stats/supply-map-bounds';
 import styles from './SupplyView.module.css';
 
 // STATISTICS V2.1-4 — SUPPLY(공급). §7/§14 입주지도 + 공급추이 두 탭. Presale에는
@@ -59,6 +66,7 @@ export default function SupplyView() {
 
   const [isMapReady, setIsMapReady] = useState(false);
   const [KakaoMap, setKakaoMap] = useState<any>(null);
+  const [mapInstance, setMapInstance] = useState<any>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -102,6 +110,40 @@ export default function SupplyView() {
     dedupingInterval: 60 * 1000,
   });
 
+  // SUPPLY_MAP_REGION_BOUNDS_FIX_V1 §6 LIST/MAP PARITY — 지도 viewport는 목록과 **같은
+  // 응답**(같은 지역·기간 필터 결과)의 좌표만 쓴다. 지도용 별도 fetch나 subset이 없다.
+  const mapPoints = useMemo(() => validSupplyPoints(data?.mapMarkers ?? []), [data]);
+  const viewport = useMemo(() => resolveSupplyViewport(mapPoints), [mapPoints]);
+  // §5 — 지역/기간/전국 토글을 식별하는 키. 필터가 바뀌면 이전 viewport가 그대로 남지
+  // 않도록 좌표 집합과 함께 묶는다. SWR 키도 이 스코프로 갈라지므로(아래 params) 이전
+  // 지역 응답이 새 선택을 덮을 수 없다 — keepPreviousData를 쓰지 않아 전환 중에는
+  // data가 undefined이고 로딩 상태로 간다.
+  const scopeKey = nationwide ? 'nationwide' : `${region.sido}|${region.lawdCd && region.sigungu ? region.sigungu : ''}`;
+  const fitKey = supplyViewportKey(`${scopeKey}|${period}`, mapPoints);
+
+  // §3 FIT BOUNDS — 지도 인스턴스와 좌표가 확정된 뒤 viewport를 맞춘다. 고정 zoom이 아니다.
+  // 서로 다른 좌표가 2개 이상이면 전부 들어오도록 setBounds, 한 지점이면 그 지점을
+  // center로 두고 적당한 level, 0개면 지도를 아예 그리지 않는다(아래 none 분기).
+  useEffect(() => {
+    if (!mapInstance || !window.kakao?.maps) return;
+    if (viewport.kind === 'bounds') {
+      const bounds = new window.kakao.maps.LatLngBounds();
+      for (const point of viewport.points) {
+        bounds.extend(new window.kakao.maps.LatLng(point.lat, point.lng));
+      }
+      mapInstance.setBounds(bounds, SUPPLY_MAP_BOUNDS_PADDING);
+    } else if (viewport.kind === 'center') {
+      mapInstance.setCenter(new window.kakao.maps.LatLng(viewport.center.lat, viewport.center.lng));
+      mapInstance.setLevel(viewport.level);
+    }
+  }, [mapInstance, viewport, fitKey]);
+
+  // 지역/기간을 바꾸면 이전 선택 마커 카드가 남지 않게 한다(새 결과에 없는 단지를
+  // 가리키고 있을 수 있다).
+  useEffect(() => {
+    setSelectedMarkerId(null);
+  }, [scopeKey, period]);
+
   const scopeLabel = nationwide ? '전국' : region.lawdCd && region.sigungu ? `${region.sido} ${region.sigungu}` : region.sido;
   const selectedMarker = data?.mapMarkers.find((m) => m.id === selectedMarkerId) || null;
   const maxHouseholdSum = data ? Math.max(1, ...data.trend.map((t) => t.householdSum)) : 1;
@@ -137,7 +179,7 @@ export default function SupplyView() {
           <div className={styles.summaryCard}>
             <div className={styles.summaryTitle}>{scopeLabel} · {PERIOD_OPTIONS.find((p) => p.value === period)?.label}</div>
             <div className={styles.summaryText}>
-              전체 입주예정 단지 <strong>{data.summary.totalCount.toLocaleString('ko-KR')}개</strong> 중 위치 확인 <strong>{data.summary.mapCount.toLocaleString('ko-KR')}개</strong>
+              전체 입주예정 단지 <strong>{data.summary.totalCount.toLocaleString('ko-KR')}개</strong> 중 위치 확인 <strong>{mapPoints.length.toLocaleString('ko-KR')}개</strong>
             </div>
             <div className={styles.honestNote}>지도에는 위치정보가 확인된 단지만 표시됩니다. 나머지는 아래 목록에서 확인할 수 있어요.</div>
           </div>
@@ -154,11 +196,21 @@ export default function SupplyView() {
           <div className={styles.mapBox}>
             {!apiKey || !isMapReady || !KakaoMap ? (
               <InlineLoading message="지도를 불러오는 중입니다..." />
-            ) : data.mapMarkers.length === 0 ? (
+            ) : /* §4 — 유효 좌표가 0개면 지도를 억지로 그리지 않는다. 다른 단지·다른
+                   지역 좌표로 메우거나 임의 center를 만들지 않는다. 목록은 그대로 남는다. */
+              viewport.kind === 'none' ? (
               <Empty variant="noData" title="위치가 확인된 단지가 없어요." description="아래 목록에서 전체 단지를 볼 수 있어요." showMascot={false} />
             ) : (
-              <KakaoMap.Map center={{ lat: data.mapMarkers[0].lat, lng: data.mapMarkers[0].lng }} style={{ width: '100%', height: '100%' }} level={nationwide ? 13 : 8}>
-                {data.mapMarkers.map((m) => (
+              <KakaoMap.Map
+                center={viewport.center}
+                style={{ width: '100%', height: '100%' }}
+                /* 첫 프레임용 초기값일 뿐이다 — bounds 경로에서는 위 effect의 setBounds가
+                   즉시 덮어쓴다(최종 zoom을 이 숫자가 결정하지 않는다). 시도/전국 초기값은
+                   RegionChangeMapView의 sido level 9 관례를 따른다. */
+                level={viewport.kind === 'center' ? viewport.level : nationwide ? 13 : 9}
+                onCreate={setMapInstance}
+              >
+                {data.mapMarkers.filter((m) => isValidSupplyCoord(m.lat, m.lng)).map((m) => (
                   <KakaoMap.CustomOverlayMap key={m.id} position={{ lat: m.lat, lng: m.lng }} yAnchor={0.5}>
                     <button
                       aria-label={`${m.name} 입주예정 단지`}
