@@ -2,6 +2,78 @@
 
 ## 2026-09-12
 
+### SCORE CANONICAL APTSEQ RESOLUTION FIX V1 (비교 화면 전달 보완)
+
+감사 결과를 먼저 적는다: **해소기 자체는 이미 고쳐져 있었다.** 커밋 0d14a69이
+resolveScoreIdentity에 Tier 1(aptSeq 우선, 미스 시 이름 폴백 금지, 형태 가드)을 넣고
+대원/대원아파트 충돌 케이스를 테스트 20개로 고정해 뒀다. 이번에 새로 만든 것은 없고,
+남아 있던 **전달 경로 한 곳**을 메웠다.
+
+남아 있던 구멍 — 비교 화면 (root cause B: caller가 aptSeq를 전달하지 않음)
+
+    상세  : query.set('aptSeq', scoreAptSeq)        → aptSeq로 물음  ✓
+    리포트: readScore(aptSeq) → calculateApartmentScore(aptSeq)      ✓
+    비교  : scoreParams = new URLSearchParams({ lawdCd, dong })      ✗
+
+비교 화면은 공유 링크의 aptSeq로 단지를 확정해서 보여주는데(resolveCompareSeeds가
+ApartmentMaster unique 키로 되살린다) **점수만 이름으로 다시 물었다.** 즉 화면의 단지와
+점수의 단지가 갈라질 수 있었다. incomingAptSeq를 인자로 이미 받아놓고 trades 요청에만
+쓰고 있었다.
+
+이 aptSeq를 신뢰하는 근거: trades 요청에 쓰는 name/lawdCd/dong이 바로 그 aptSeq의
+master 행에서 나온 값이다. 같은 한 행에서 나온 일관된 identity이고, 해소되지 않는
+aptSeq는 애초에 seed가 되지 않는다. 형태 검사(isWellFormedAptSeq)를 통과할 때만 싣고,
+통과하지 못하면 기존 지역 경로를 그대로 쓴다.
+
+trades에서 파생되는 canonicalAptSeq를 쓰지 않은 이유는 그 값이 trades 응답 이후에야
+나와서, 쓰려면 두 요청을 직렬화해야 하기 때문이다. 비교는 단지 두 곳을 동시에 부르므로
+왕복이 두 배가 된다. 요청 수는 단지당 2회 그대로이고 병렬도 유지된다.
+
+Production 읽기 전용 실측 (쓰기 없음)
+
+    ApartmentMaster(aptSeq 보유)   3,438건
+    aptSeq distinct                3,438 / 3,438   (유일, @unique = 인덱스 적중)
+    aptSeq 형태 위반               0건
+    ApartmentLocationFeature       aptSeq로 직접 연결됨
+
+    대원 계열 5건
+      26350-116  대원      해운대구 좌동
+      26230-149  대원아파트 부산진구 범천동   ← 신고된 충돌 쌍
+      26230-1810 대원      부산진구 부전동   ←
+      26470-11   대원      연제구 거제동
+      26350-224  대원      해운대구 재송동
+
+    같은 구 안에서 정규화 이름이 겹치는 그룹        54개
+    구·법정동·이름까지 모두 같아 이름으로 확정 불가   4개 그룹
+      26230 양정동 수목하우스 (26230-2325 / 26230-2485)
+      26200 동삼동 오션라이프에일린의뜰2단지
+      26710 기장읍 교리 리츠빌리지
+      26410 부곡동 부곡늘푸른아파트
+
+마지막 4개 그룹은 법정동을 실어도 이름으로는 영원히 확정할 수 없다 — 그 단지들에서는
+aptSeq만이 답이다. 이름 경로가 일회성 문제가 아니라는 뜻이다.
+
+건드리지 않은 것
+
+점수 값·가중치·임계값·백분위·school source·ApartmentLocationFeature 수집·MASTER
+sync·좌표·거래 DB — 전부 무변경. 이번 변경은 요청 파라미터 조립 한 곳과 테스트뿐이다.
+스키마/인덱스 변경도 필요하지 않았다(aptSeq가 이미 unique).
+
+지역 변동지도·거래량 카드처럼 이미 정상인 경로는 손대지 않았다.
+
+혼동 방지: 이번 작업은 **identity resolution 전달 보완**이다.
+SCHOOL SCORE MODEL REBASE V1은 별개의 post-launch P1로 남아 있다.
+
+테스트
+
+    npx tsx --test src/lib/compare-v2/score-identity-parity.test.ts   12/12 PASS
+    npx tsx --test src/lib/apartment-score/resolve-score-identity.test.ts  20/20 (기존)
+    npx tsx --test "src/**/*.test.ts"                                 998/998 PASS
+    npx tsc --noEmit                                                  src/ 오류 0
+    npm run build                                                     Compiled successfully
+
+## 2026-09-12
+
 ### STATS LOADING STATE UX FIX V1 — 조회 중에 "없어요"라고 말하지 않는다
 
 기간 버튼을 바꾸면 조회가 진행 중인데도
