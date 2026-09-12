@@ -2,6 +2,54 @@
 
 ## 2026-09-12
 
+### REPORT TOP COMPLEX ROW UI TUNE V1 — "거래가 많은 단지"를 한 줄로
+
+한장 리포트에서 단지명 아래 작은 글씨로 `동 · 5건 거래`가 다시 나왔고, 오른쪽은 비어
+있었다. 같은 건수 정보가 두 줄로 흩어져 세로 예산만 먹었다.
+
+    before   대신해모로센트럴아파트                    (오른쪽 비어 있음)
+             대신동 · 5건 거래
+
+    after    대신해모로센트럴아파트                    5건
+
+원인: 이 섹션이 "최근 실거래"와 같은 컴포넌트(TradeSection)를 쓰고 있었다. 그 구조는
+`[이름 + 부줄] … [가격]`인데 representativeComplexes의 cells에는 가격이 없다(aptSeq,
+aptName, dong, count, latestDealDate뿐). 그래서 오른쪽이 비고 건수가 부줄로 내려갔다.
+
+방법: TradeSection은 건드리지 않고 ComplexCountSection을 따로 두었다. 최근 실거래는
+2줄 구조·가격·전용면적·계약일 그대로다. 섹션 헤드 meta는 `5건` → `상위 5곳`으로 바꿨다
+(행마다 N건이 나오는데 헤드에도 5건이면 "총 5건"으로 읽힌다 — 분포 섹션의 표기에 맞췄다).
+TradeSection에 남아 있던 `${count}건 거래` 조각도 제거했다. 그 조각은 이 섹션 전용이었고
+남은 소비처의 행에는 count 자체가 없어 출력은 그대로다.
+
+지역 부줄 제거 전 감사(§3): 동은 행 key에만 쓰이고 상세 링크는 aptSeq만 쓰며 동 단위
+리포트는 이미 showDong=false다. production 실측(부산 매매 최근 12개월)
+
+    같은 구 · 같은 이름 · 다른 aptSeq 그룹            43건
+      그중 법정동까지 같아 동으로도 구분 불가            1건
+    구별 상위 5위 안에 같은 이름이 둘 이상 든 경우      0건
+
+지금은 한 건도 없지만 구조적으로 가능하다(부산진구 유림노르웨이숲이 구포동 50건 /
+만덕동 13건으로 따로 있다). 그래서 기본은 이름만 쓰고, 같은 목록에서 이름이 겹치고 그
+그룹의 동이 서로 다를 때만 그 행들에 동을 인라인으로 붙인다 — `유림노르웨이숲 (구포동)`.
+여전히 한 줄이라 밀도는 그대로다. 동까지 같은 1건은 붙여도 구분이 안 되므로 붙이지
+않는다(없는 지역명을 만들지 않는다).
+
+레이아웃: 이름은 flex:1 / min-width:0 / ellipsis로 줄어들고, 건수는 flex-shrink:0 +
+nowrap이라 잘리지 않는다. 건수를 과하게 키우지 않았다(이름 0.94rem/700, 건수 0.9rem/700).
+tabular-nums로 숫자 폭을 고정해 3건/16건/123건이 섞여도 오른쪽 끝이 흔들리지 않는다.
+세로 여백은 기존 --r-trade-pad 토큰을 공유하므로 A4(5px)/print(3px) 밀도가 자동 적용된다.
+기존 클래스는 재정의하지 않고 새 클래스 3개만 추가했다. 섹션이 5줄×2 → 5줄×1이 되어
+A4 한 장 예산은 오히려 여유로워지고, 남는 공간은 기존 data-export-fill 로직이 처리한다.
+
+데이터는 손대지 않았다: 건수 계산·ranking·정렬·기간·집계 source·canonical identity·
+report API 전부 그대로이고, 테스트가 그룹 키(aptSeq 우선)·정렬식·섹션 제목·상위 5곳·
+cells 구성·trust 판정·aptSeq 없이는 링크를 만들지 않는 규칙까지 함께 고정한다.
+
+검증: 신규 23 tests, src 전체 1120/1120 pass, tsc src 오류 0, eslint 변경 파일 0,
+build Compiled successfully. 실렌더/export 확인은 브라우저가 필요해 DEVICE QA REQUIRED —
+확인할 6가지를 docs/development/REPORT_TOP_COMPLEX_ROW_UI_TUNE_V1.md §10에 남겼다.
+
 ### REGION CHANGE MAP BOUNDS FIX V1 — 변동지도도 선택 지역에 맞춰 viewport를 계산한다
 
 직전 STEP(공급 지도, 9413ddf)에서 같은 계열 버그가 여기에도 있다고 보고한 것의 후속이다.

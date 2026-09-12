@@ -11,6 +11,7 @@ import Link from 'next/link';
 import styles from './ReportSheet.module.css';
 import type { ReportEnvelope, ReportMetric, ReportSection } from '@/lib/report/types';
 import ReportActions from './ReportActions';
+import { complexCountLabel, complexRowLabels } from '@/lib/report/complex-row-labels';
 import { KpiCard, ReportHeader, SectionHead, TrustFooter } from './ReportPrimitives';
 
 /** KPI로 띄울 지표 키와 순서. 스코프별로 의미 있는 것만 고른다. */
@@ -61,6 +62,53 @@ function aptHref(cells: Record<string, string | number | null>): string | null {
   return `/apt/${encodeURIComponent(name)}?aptSeq=${encodeURIComponent(String(aptSeq))}`;
 }
 
+/**
+ * "거래가 많은 단지" — 한 줄 `[단지명] [N건]`.
+ *
+ * REPORT_TOP_COMPLEX_ROW_UI_TUNE_V1: 예전에는 `TradeSection`을 그대로 썼는데 이 섹션의
+ * 행에는 가격이 없어서(cells에 dealAmount가 없다) 오른쪽이 비었고, 건수는 단지명 아래
+ * 작은 글씨로 `동 · N건 거래`로 내려가 같은 정보가 두 줄로 흩어졌다. 이름과 건수를
+ * 한 줄에서 바로 비교하도록 별도 컴포넌트로 분리한다 — `TradeSection`(최근 실거래)은
+ * 그대로 둔다.
+ *
+ * 데이터는 손대지 않는다: 건수·순위·정렬·기간·집계는 모두 envelope이 이미 정했고
+ * 여기서는 배치만 한다(이 파일의 헤더 원칙 그대로).
+ */
+function ComplexCountSection({ section, showDong }: { section: ReportSection; showDong: boolean }) {
+  const rows = section.rows.slice(0, 5);
+  // 같은 목록에 같은 이름이 있을 때만 동을 덧붙인다(평상시에는 이름 그대로).
+  const labels = complexRowLabels(
+    rows.map((r) => ({ aptName: String(r.cells.aptName ?? ''), dong: r.cells.dong != null ? String(r.cells.dong) : null })),
+    showDong
+  );
+  return (
+    <section className={styles.section}>
+      <SectionHead title={section.title} meta={`상위 ${rows.length}곳`} />
+      <div className={styles.tradeList}>
+        {rows.map((r, i) => {
+          const href = aptHref(r.cells);
+          const body = (
+            <>
+              <span className={styles.complexName}>{labels[i]}</span>
+              <span className={styles.complexCount}>{complexCountLabel(r.cells.count)}</span>
+            </>
+          );
+          return href ? (
+            <Link key={r.key} href={href} className={styles.complexRow}>
+              {body}
+            </Link>
+          ) : (
+            <div key={r.key} className={styles.complexRow}>
+              {body}
+            </div>
+          );
+        })}
+      </div>
+      {section.note && <p className={styles.sectionNote}>{section.note}</p>}
+    </section>
+  );
+}
+
 function TradeSection({ section, showDong }: { section: ReportSection; showDong: boolean }) {
   const rows = section.rows.slice(0, 5);
   return (
@@ -76,7 +124,9 @@ function TradeSection({ section, showDong }: { section: ReportSection; showDong:
             // 평 라벨을 만들지 않는다 — ㎡ 그대로.
             area != null ? `전용 ${area}㎡` : null,
             r.cells.dealDate ? String(r.cells.dealDate) : null,
-            r.cells.count != null ? `${r.cells.count}건 거래` : null,
+            // `N건 거래`는 "거래가 많은 단지" 전용이었고 그 섹션은 이제
+            // ComplexCountSection이 한 줄로 보여준다. 남은 소비처(최근 실거래)의
+            // 행에는 count 자체가 없다(enrichRows cells 참고).
           ]
             .filter(Boolean)
             .join(' · ');
@@ -146,7 +196,7 @@ export default function RegionReportSheet({ envelope }: { envelope: ReportEnvelo
           <div className={styles.cols}>
             <div className={styles.col}>
               {complexes && complexes.rows.length > 0 && (
-                <TradeSection section={complexes} showDong={showDong} />
+                <ComplexCountSection section={complexes} showDong={showDong} />
               )}
               {recent && recent.rows.length > 0 && <TradeSection section={recent} showDong={showDong} />}
             </div>
