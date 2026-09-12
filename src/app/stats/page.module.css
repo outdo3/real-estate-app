@@ -791,3 +791,31 @@
   text-decoration: none;
 }
 .reportCta:active { background: rgba(16, 185, 129, 0.06); }
+
+/* STATS_REPORT_ENTRY_V1 — 통계 메인 헤더의 인라인(보조) 진입점.
+ * `.reportCta`는 전체폭 버튼이라 헤더 한 줄에 지역 트리거와 나란히 놓을 수 없다.
+ * 같은 색·같은 테두리를 쓰되 폭만 내용에 맞추고, 터치 타겟 44px은 유지한다.
+ * 줄어들지 않는 규칙은 `.headerTop > *:not(.regionTrigger)`가 이미 갖고 있어
+ * 지역명이 길어지면 지역 트리거 쪽 라벨이 말줄임된다(이 버튼은 깎이지 않는다). */
+.reportCtaInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 0 0.85rem;
+  border: 1px solid var(--primary-color, #10b981);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--primary-color, #10b981);
+  font-size: 0.84rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.reportCtaInline:active { background: rgba(16, 185, 129, 0.06); }
+
+@media (max-width: 380px) {
+  /* 360px 폭에서 지역명이 길 때 두 요소가 함께 들어가도록 가로 여백만 줄인다.
+     문구를 줄이거나 버튼을 숨기지 않는다. */
+  .reportCtaInline { padding: 0 0.65rem; gap: 4px; }
+}

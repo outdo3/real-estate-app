@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { MapPin, ChevronDown, School, Wrench } from 'lucide-react';
+import { MapPin, ChevronDown, School, Wrench, FileText } from 'lucide-react';
 import Header from '@/components/Header';
 import RegionSelectModal from '@/components/RegionSelectModal';
 import SectionHeader from '@/components/ui/SectionHeader';
@@ -12,6 +12,7 @@ import { resolveLawdCdByNames } from '@/lib/region-utils';
 import { STATS_MENU, STATS_CATEGORIES, type StatsColorToken } from './statsMenu';
 import styles from './page.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
+import { resolveStatsReportEntry } from '@/lib/report/stats-report-entry';
 
 // [STATISTICS_COLOR_SYSTEM_V1] colorToken -> CSS 모듈 클래스 매핑. 지정되지
 // 않은 항목(이번 STEP 적용 대상 밖)은 기존과 동일한 브랜드 그린 기본값을 쓴다.
@@ -54,6 +55,10 @@ function RegionUrlSync({ setRegion }: { setRegion: (region: RegionState) => void
 
 export default function StatsPage() {
   const { region, setRegion, openRegionModal } = useRegion();
+  // STATS_REPORT_ENTRY_V1 — 지금 선택된 지역의 한장 브리핑. 경로 판정은 통계 상세와
+  // 같은 함수를 쓴다(부산 전체→city, 구/군→district, 동→dong). 리포트가 없는 지역이면
+  // null이고, 그때는 링크를 만들지 않는다 — 다른 지역 리포트로 보내지 않는다.
+  const reportEntry = resolveStatsReportEntry(region);
 
   return (
     <div className={styles.main}>
@@ -69,6 +74,15 @@ export default function StatsPage() {
             <span className={styles.regionTriggerLabel}>{region.displayRegionName}</span>
             <ChevronDown size={14} aria-hidden="true" className={styles.regionTriggerCaret} />
           </button>
+          {/* 보조 액션 수준의 진입점 — 지역명은 왼쪽 트리거에 이미 보이므로 짧은 문구를
+              쓴다. 통계 상세의 공유 버튼과 같은 자리·같은 축소 규칙이라(.headerTop >
+              *:not(.regionTrigger)) 지역명이 길어도 이 버튼이 깎이지 않는다. */}
+          {reportEntry && (
+            <Link href={reportEntry.href} className={styles.reportCtaInline} aria-label={reportEntry.label}>
+              <FileText size={14} strokeWidth={2.2} aria-hidden="true" />
+              {reportEntry.shortLabel}
+            </Link>
+          )}
         </div>
 
         {/* [STATISTICS V2 §35] 16개 메뉴를 5개 카테고리로 grouping — emoji

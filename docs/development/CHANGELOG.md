@@ -2,6 +2,60 @@
 
 ## 2026-09-12
 
+### STATS REPORT ENTRY AUDIT + FIX V1 — 통계에서 리포트로 가는 길을 잇는다
+
+사용자 관찰: "통계에 리포트 기능이 빠진 것 같다."
+
+감사 결과: 삭제된 게 아니라 미연결이었다
+
+    /stats(통계 메인)           리포트 진입점 없음
+    /stats/[type](개별 통계)     진입점 있음 — 단, 조건이
+                                 isBusanCurrentLawdCd(region.lawdCd ?? '')
+    RegionContext 기본값         lawdCd: null / sidoCode '26' / "부산광역시 전체"
+
+앱의 기본 지역은 lawdCd가 null인 "부산 전체"다(위치 권한을 거부하거나 GPS가 실패해도
+이 상태가 유지된다). 그 상태에서 위 게이트가 false이므로, 처음 들어온 사용자는 구/군을
+직접 고를 때까지 어떤 통계 화면에서도 CTA를 볼 수 없었고 통계 메인에는 애초에 없었다.
+
+route는 전부 살아 있었다. 시 리포트(/report/city/busan)는 /tools와 InvalidScope에서만
+링크됐고 통계에서는 한 번도 연결된 적이 없다(git log --all -S "REPORT_LABELS.city" --
+src/app/stats/ → 0건). feature flag도 없고, 제거 이력도 없다(reportCta는 ca1d255에서
+추가된 뒤 그대로). 그 커밋 메시지가 의도를 적어 뒀다 — "the region CTA is additionally
+gated on isBusanCurrentLawdCd, since reports only cover Busan" — 지역을 지어내지 않기
+위한 올바른 가드였지만 "시도 전체"라는 정상 상태를 위한 분기가 없었다.
+
+방법: 경로 판정을 한 곳으로 모으고 시 스코프를 연결
+
+    src/lib/report/stats-report-entry.ts
+      동 선택        → /report/dong/{lawdCd}/{dong}
+      구·군 선택      → /report/district/{lawdCd}
+      시도 전체(부산) → /report/city/busan
+      그 외          → null
+
+null이 되는 경우를 명시했다: 부산이 아닌 시도, 현행 16개가 아닌 lawdCd(27110·11680·
+26999 등). 특히 후자를 "부산 전체"로 바꿔 보내지 않는다 — 사용자가 고른 지역이 아니다.
+구 이름을 모르면 경로는 lawdCd로 정상 생성하되 문구에서 지역명을 추측하지 않는다.
+경로 문자열은 이 파일에서 만들지 않고 report-links.ts의 단일 정의만 호출한다.
+
+통계 메인은 헤더의 지역 트리거 옆에 보조 버튼을 놓았다(통계 상세의 공유 버튼과 같은
+자리). 지역명이 왼쪽에 이미 보이므로 짧은 문구 "한장 브리핑"을 쓴다 — REPORT_LABELS에
+regionShort 하나만 추가했고(기존 aptShort와 같은 이유: 호출부가 각자 줄이면 갈라진다)
+route 정의는 한 줄도 바꾸지 않았다. 통계 상세는 같은 함수를 쓰되 지역명이 들어간 전체
+문구를 유지한다. 변동지도 제외는 그대로다(자체 드릴다운이 RegionContext와 별개다).
+
+레이아웃은 기존 규칙을 그대로 물려받는다 — .headerTop > .regionTrigger가 flex:1 1 auto
++ min-width:0이고 나머지는 flex:0 0 auto라, 지역명이 길어지면 왼쪽 라벨이 말줄임되고
+버튼은 깎이지 않는다. 추가한 .reportCtaInline은 .reportCta(width:100% 전체폭)를 헤더
+한 줄에 놓을 수 없어 만든 축약형이고, 흰 배경 + 브랜드색 테두리/글자라 강한 primary가
+아닌 보조 액션이다. 터치 타겟 44px과 nowrap을 유지하고 380px 이하에서는 가로 여백만
+줄인다 — 문구를 줄이거나 버튼을 숨기지 않는다.
+
+Report Engine은 건드리지 않았다: PNG·PDF·share·one-page layout·route·envelope 전부 그대로.
+
+검증: 신규 21 tests, src 전체 1141/1141 pass, tsc src 오류 0, eslint 변경 파일 0,
+build Compiled successfully. 실렌더 확인은 브라우저가 필요해 DEVICE QA REQUIRED —
+확인할 6가지를 docs/development/STATS_REPORT_ENTRY_AUDIT_FIX_V1.md §9에 남겼다.
+
 ### REPORT TOP COMPLEX ROW UI TUNE V1 — "거래가 많은 단지"를 한 줄로
 
 한장 리포트에서 단지명 아래 작은 글씨로 `동 · 5건 거래`가 다시 나왔고, 오른쪽은 비어

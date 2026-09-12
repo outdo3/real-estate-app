@@ -16,8 +16,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
-import { districtReportHref, dongReportHref, REPORT_LABELS } from '@/lib/report/report-links';
-import { isBusanCurrentLawdCd } from '@/lib/report/region-scope';
+import { resolveStatsReportEntry } from '@/lib/report/stats-report-entry';
 import { resolveTradeReadState, resolveTransactionsReadState } from '@/lib/trade-read-state';
 import { getStatsMenuItem } from '../statsMenu';
 import { buildStatsShareContext, statsRegionShareLabel } from './shareContext';
@@ -464,22 +463,20 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
           </div>
         )}
 
-        {/* REPORT-7 §4 — 지역 한장 브리핑 진입.
-            canonical lawdCd가 있고 **리포트가 실제로 다루는 부산 16개 코드**일 때만
-            노출한다. 좌표만 있거나 시도 전체가 선택된 상태에서는 지역 identity를
-            지어내지 않고 CTA를 만들지 않는다. */}
+        {/* REPORT-7 §4 / STATS_REPORT_ENTRY_V1 — 지역 한장 브리핑 진입.
+            경로 판정은 resolveStatsReportEntry 한 곳에서 한다(통계 메인과 같은 함수).
+            예전에는 이 자리에서 `isBusanCurrentLawdCd`만 보고 끝냈는데, RegionContext
+            기본값이 "부산광역시 전체"(lawdCd null)라 **처음 들어온 사용자에게는 CTA가
+            아예 보이지 않았다** — 시 리포트(/report/city/busan)는 살아 있는데 통계에서
+            연결된 적이 없었다. 지역 identity가 불충분하면 여전히 null이고, 그때는 다른
+            지역 리포트로 보내지 않고 CTA를 만들지 않는다. */}
         {slug !== 'change-map' && item.status === 'live' && (() => {
-          if (!isBusanCurrentLawdCd(region.lawdCd ?? '')) return null;
-          const isDong = region.dong && region.dong !== 'all';
-          const href = isDong
-            ? dongReportHref(region.lawdCd, region.dong)
-            : districtReportHref(region.lawdCd);
-          if (!href) return null;
-          const name = isDong ? region.dong : region.sigungu;
+          const entry = resolveStatsReportEntry(region);
+          if (!entry) return null;
           return (
             <div style={{ margin: '0 0 0.75rem' }}>
-              <Link href={href} className={styles.reportCta}>
-                {REPORT_LABELS.district(name)}
+              <Link href={entry.href} className={styles.reportCta}>
+                {entry.label}
               </Link>
             </div>
           );

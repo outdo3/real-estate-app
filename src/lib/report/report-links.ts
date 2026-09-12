@@ -61,6 +61,9 @@ export const REPORT_LABELS = {
   city: '부산 한장 브리핑',
   district: (name: string) => `${name} 한장 브리핑`,
   dong: (name: string) => `${name} 한장 브리핑`,
+  /** STATS_REPORT_ENTRY_V1 — 지역명이 바로 옆에 이미 보이는 좁은 자리(통계 헤더)용.
+   *  `aptShort`와 같은 이유로 둔다: 같은 문구를 호출부가 각자 줄이면 갈라진다. */
+  regionShort: '한장 브리핑',
   apt: '이 단지 한장 리포트',
   aptShort: '한장 리포트',
   compare: '비교 리포트 보기',
