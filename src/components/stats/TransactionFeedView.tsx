@@ -15,6 +15,7 @@ import {
 import { Calendar } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Empty from '@/components/ui/Empty';
+import { canShowStatsEmpty } from '@/lib/stats/view-state';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { formatPercentChange, directionColor } from '@/lib/stats-format';
@@ -230,13 +231,18 @@ export default function TransactionFeedView({
         ))}
       </div>
 
-      {isLoading && offset === 0 && visibleTrades.length === 0 ? (
-        <InlineLoading message="실거래 데이터를 불러오는 중입니다..." />
-      ) : error || data?.status === 'ERROR' ? (
+      {/* STATS_LOADING_STATE_UX_V1 §2 — 오류 → 로딩 → 빈 상태 → 성공 순서.
+          예전에는 로딩 분기가 `visibleTrades.length === 0`까지 요구해서, 이전 목록이
+          남아 있는 전환 중에는 로딩으로 가지 못하고 아래 `!data`에 걸려 **빈 상태
+          문구가 떴다**(사용자 보고 증상). `!data`는 "없다"가 아니라 "아직 안 왔다"다. */}
+      {error || data?.status === 'ERROR' ? (
         <ErrorState variant="section" message={data?.message || '실거래 데이터를 불러오지 못했어요.'} />
+      ) : !data ? (
+        <InlineLoading message="실거래 데이터를 확인하고 있어요..." />
       ) : data?.apiError ? (
         <ErrorState variant="section" message="국토교통부 실거래 API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요." />
-      ) : !data || (!isStale && data.summary.totalCount === 0 && visibleTrades.length === 0) ? (
+      ) : canShowStatsEmpty({ hasResponse: true, isFetching: isLoading && offset === 0, hasError: false }) &&
+        !isStale && data.summary.totalCount === 0 && visibleTrades.length === 0 ? (
         <Empty variant="noData" title={`${displayRegionName}, ${PERIOD_OPTIONS.find((p) => p.preset === preset)?.label || ''} 기간 내 실거래가 없어요.`} description="다른 기간을 선택해보세요." showMascot={false} />
       ) : (
         <>

@@ -283,7 +283,10 @@ export default function GapInvestView({
           )}
 
           <div className={styles.aptSectionTitle}>단지별 갭투자 형태 거래</div>
-          {!data || data.apartmentRanking.length === 0 ? (
+          {/* §5 — 응답이 없으면 빈 상태가 아니다. */}
+          {!data ? (
+            <InlineLoading message="갭 형태 거래를 확인하고 있어요..." />
+          ) : data.apartmentRanking.length === 0 ? (
             <Empty variant="noResult" title={`${periodLabel} 동안 이 지역에서 조건에 맞는 갭 형태 거래가 없어요.`} description="매매·전세 계약 시점이 90일 이내로 가까운 거래만 인정돼요." />
           ) : (
             <ul className={styles.aptList}>

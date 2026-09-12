@@ -127,7 +127,10 @@ export default function SupplyView() {
         <InlineLoading message="공급 데이터를 불러오는 중입니다..." />
       ) : data?.status === 'ERROR' ? (
         <ErrorState variant="section" message={data.message || '공급 데이터를 불러오지 못했어요.'} />
-      ) : !data || data.summary.totalCount === 0 ? (
+      ) : /* §5 — 응답이 도착한 뒤에만 "없어요"라고 말한다. */
+        !data ? (
+        <InlineLoading message="공급 데이터를 확인하고 있어요..." />
+      ) : data.summary.totalCount === 0 ? (
         <Empty variant="noData" title="선택한 지역/기간에 확인된 입주예정 단지가 없어요." showMascot={false} />
       ) : tab === 'map' ? (
         <>

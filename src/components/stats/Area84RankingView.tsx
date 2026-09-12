@@ -114,6 +114,11 @@ export default function Area84RankingView({
   const [navigatingKey, setNavigatingKey] = useState<string | null>(null);
   const [allRows, setAllRows] = useState<Area84Row[]>([]);
 
+  // STATS_LOADING_STATE_UX_V1 §5 — 누적본이 비어 있으면 현재 응답에서 직접 가져온다.
+  // onSuccess는 실제 fetch에서만 불리므로, dedupingInterval 안에 같은 조건으로 되돌아오면
+  // 호출되지 않는다. 조건 변경 시 allRows를 비우므로 그때 목록만 비어 "거래가 없어요"가
+  // 떴다(PriceRankingView와 같은 원인).
+
   useEffect(() => {
     setOffset(0);
     setAllRows([]);
@@ -147,6 +152,8 @@ export default function Area84RankingView({
   const prefetchApt = (r: Area84Row) => router.prefetch(buildAptHref(r));
 
   const regionLabel = (r: Area84Row) => [r.sigunguName, r.dong].filter(Boolean).join(' ') || displayRegionName;
+  const visibleRows = allRows.length > 0 ? allRows : data?.status === 'OK' ? data.rows : [];
+
   const periodLabel = PERIOD_OPTIONS.find((p) => p.value === period)?.label || period;
 
   return (
@@ -181,7 +188,10 @@ export default function Area84RankingView({
         <ErrorState variant="section" message={data.message || '데이터를 불러오지 못했어요.'} />
       ) : data?.apiError ? (
         <ErrorState variant="section" message="국토교통부 실거래 API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요." />
-      ) : allRows.length === 0 ? (
+      ) : /* §5 — 응답이 아직 없으면 빈 상태가 아니라 로딩이다. */
+        !data ? (
+        <InlineLoading message={`${displayRegionName} 데이터를 확인하고 있어요...`} />
+      ) : visibleRows.length === 0 ? (
         <Empty
           variant="noResult"
           title={`선택한 기간에 확인된 84㎡ 거래가 없어요.`}
@@ -190,14 +200,14 @@ export default function Area84RankingView({
       ) : (
         <>
           <div className={styles.summary}>
-            {displayRegionName} · 최근 {periodLabel} 84㎡ 매매 {data?.summary?.totalCount ?? allRows.length}개 단지
+            {displayRegionName} · 최근 {periodLabel} 84㎡ 매매 {data?.summary?.totalCount ?? visibleRows.length}개 단지
             {data?.summary?.medianAmount != null && ` · 중앙값 ${formatEok(data.summary.medianAmount)}`}
           </div>
 
           {data?.regionInterpretation && <p className={styles.regionInterpretation}>{data.regionInterpretation}</p>}
 
           <ul className={styles.list}>
-            {allRows.map((r, i) => (
+            {visibleRows.map((r, i) => (
               <li
                 key={`${r.complexKey}-${r.groupKey}-${i}`}
                 className={styles.row}

@@ -192,10 +192,18 @@ export default function PriceRankingView({
     return Array.from(set).sort((a, b) => parseInt(a) - parseInt(b));
   }, [allRows]);
 
+  // STATS_LOADING_STATE_UX_V1 §5 — 누적본이 비어 있으면 현재 응답에서 직접 가져온다.
+  //
+  // onSuccess는 **실제 fetch에서만** 불린다. dedupingInterval(60초) 안에 같은 조건으로
+  // 되돌아오면 SWR이 캐시로 응답하고 onSuccess가 호출되지 않는다. 그런데 조건이 바뀔 때
+  // allRows를 비우므로, 그 경우 data는 정상인데 목록만 비어 "거래가 없어요"가 떴다.
+  // (TransactionFeedView가 PERFORMANCE_V2 §10에서 같은 이유로 이미 고친 문제다.)
+  const baseRows = allRows.length > 0 ? allRows : data?.status === 'OK' ? data.rows : [];
+
   const filteredRows = useMemo(() => {
-    if (areaBand === 'all') return allRows;
-    return allRows.filter((r) => areaBandLabel(r.excluUseArea) === areaBand);
-  }, [allRows, areaBand]);
+    if (areaBand === 'all') return baseRows;
+    return baseRows.filter((r) => areaBandLabel(r.excluUseArea) === areaBand);
+  }, [baseRows, areaBand]);
 
   const buildAptHref = (r: PriceRankingRow) => {
     const qs = new URLSearchParams({ lawdCd: r.lawdCd });
@@ -254,6 +262,9 @@ export default function PriceRankingView({
         <ErrorState variant="section" message={data.message || '데이터를 불러오지 못했어요.'} />
       ) : data?.apiError ? (
         <ErrorState variant="section" message="국토교통부 실거래 API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요." />
+      ) : /* §5 — 응답이 아직 없으면 빈 상태가 아니라 로딩이다. */
+        !data ? (
+        <InlineLoading message={`${displayRegionName} 데이터를 확인하고 있어요...`} />
       ) : filteredRows.length === 0 ? (
         <Empty
           variant="noResult"

@@ -146,7 +146,11 @@ export default function ConcentrationView({
         <ErrorState variant="section" message={data?.message || '거래집중 데이터를 불러오지 못했어요.'} />
       ) : data?.apiError ? (
         <ErrorState variant="section" message="국토교통부 실거래 API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요." />
-      ) : !data || data.entries.length === 0 ? (
+      ) : /* STATS_LOADING_STATE_UX_V1 §5 — `!data`는 "없다"가 아니라 "아직 안 왔다"다.
+             예전에는 `!data || entries.length === 0`으로 묶어 빈 상태를 말했다. */
+        !data ? (
+        <InlineLoading message="거래집중 데이터를 확인하고 있어요..." />
+      ) : data.entries.length === 0 ? (
         <Empty variant="noData" title={`${displayRegionName}, ${PERIOD_OPTIONS.find((p) => p.preset === preset)?.label || ''} 기간 내 거래가 없어요.`} description="다른 기간을 선택해보세요." showMascot={false} />
       ) : (
         <>
