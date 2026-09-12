@@ -7,6 +7,7 @@ import Header from '@/components/Header';
 import AdContainer from '@/components/AdContainer';
 import HomeApartmentSearch from '@/components/HomeApartmentSearch';
 import Button from '@/components/ui/Button';
+import { isFeatureEnabled } from '@/lib/feature-flags';
 import { useRecentApartments } from '@/hooks/useRecentApartments';
 import {
   RECENT_ROWS_COLLAPSED,
@@ -54,9 +55,20 @@ export default function Home() {
             <Button href="/map" variant="secondary" className={styles.quickActionBtn} icon={<MapIcon width={18} height={18} strokeWidth={2} />}>
               지도에서 찾기
             </Button>
-            <Button href="/ai-search" variant="secondary" className={styles.quickActionBtn} icon={<Sparkles width={18} height={18} strokeWidth={2} />}>
-              조건으로 집 찾기
-            </Button>
+            {/* CONDITIONAL_HOME_FIND_UI_HIDE_V1 — '조건으로 집 찾기'의 **유일한**
+                사용자 진입점. 소프트런칭 동안 숨긴다.
+
+                기능은 지우지 않았다 — /ai-search 라우트와 /api/ai-search는 그대로
+                살아 있고 직접 URL로 들어가면 정상 동작한다(내부 테스트용).
+                다시 켜려면 src/lib/feature-flags.ts의 값 하나만 true로 바꾼다.
+
+                버튼이 하나만 남아도 레이아웃은 깨지지 않는다 — quickActionsRow가
+                flex이고 quickActionBtn이 flex:1이라 남은 버튼이 폭을 채운다. */}
+            {isFeatureEnabled('conditionalHomeFindEntry') && (
+              <Button href="/ai-search" variant="secondary" className={styles.quickActionBtn} icon={<Sparkles width={18} height={18} strokeWidth={2} />}>
+                조건으로 집 찾기
+              </Button>
+            )}
           </div>
         </section>
 

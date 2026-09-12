@@ -2,6 +2,67 @@
 
 ## 2026-09-12
 
+### CONDITIONAL HOME FIND UI HIDE V1 — 진입점만 숨기고 기능은 남긴다
+
+'조건으로 집 찾기'(/ai-search)를 부산 소프트런칭 동안 사용자에게 노출하지 않는다.
+기능은 지우지 않았다.
+
+감사: 사용자 진입점은 하나뿐이었다
+
+    src/app/home-client.tsx  홈 퀵액션 버튼 "조건으로 집 찾기"   ← 유일
+
+하단탭바 5개 메뉴(BOTTOM_NAV_ITEMS)에는 없고, Header·지도·통계·MY에도 링크가 없다.
+나머지 ai-search 언급은 전부 주석이거나 공용 상수 import
+(NATIONAL_STANDARD_AREA_MIN/MAX를 비교 화면과 일별 리포트가 쓴다)였다.
+
+방법: feature flag 한 곳
+
+    src/lib/feature-flags.ts
+      conditionalHomeFindEntry: false
+
+다시 켜려면 **이 값 하나를 true로 바꿔 배포**한다. 그 외에 손댈 곳이 없다
+(테스트가 플래그를 읽는 곳이 홈 하나뿐임을 고정한다).
+
+display:none을 쓰지 않은 이유: 화면마다 흩뿌리면 어디가 숨겨졌는지 모르게 되고 다시
+켤 때 빠뜨린 자리가 남는다. 환경변수를 쓰지 않은 이유: 클라이언트에서 읽는 값은
+NEXT_PUBLIC_이라도 빌드 타임에 구워져 되돌릴 때 어차피 재배포가 필요하다. 그렇다면
+값이 코드에 있고 git 이력에 남는 편이 낫다.
+
+버튼이 하나만 남아도 레이아웃은 깨지지 않는다 — quickActionsRow가 flex이고
+quickActionBtn이 flex:1이라 "지도에서 찾기"가 폭을 채운다.
+
+남긴 것
+
+    ƒ /ai-search        빌드에 그대로 존재
+    ƒ /api/ai-search    빌드에 그대로 존재
+    src/lib/ai-search.ts, ai-search-client.tsx  삭제하지 않음
+
+직접 URL로 들어가면 정상 동작한다(내부 테스트·QA용). 검색/추천 로직도 무변경이고,
+비교·일별 리포트가 쓰는 공용 상수도 그대로다. 기존 테스트도 손대지 않았다.
+
+SEO 감사 (보고만, 변경 없음)
+
+    sitemap        /ai-search 없음 (라이브 sitemap 36 URL 중 0건)
+    robots         /ai-search에 대한 Disallow 없음
+    페이지 metadata robots: noindex 설정 없음
+
+즉 색인 제출 대상은 아니지만 크롤링이 차단돼 있지도 않다. 다만 이번에 홈 링크가
+사라지면서 **사이트 내부에서 그 경로로 가는 링크가 하나도 없어진다** — 크롤러가
+발견할 경로가 없다. 추가로 noindex를 붙이거나 robots에 Disallow를 넣을지는 지시대로
+변경하지 않고 보고만 한다. 판단 재료: 검색 유입을 원하지 않는 미완성 기능이라면
+noindex가 더 확실하고, 나중에 다시 공개할 계획이라면 지금 상태로 두는 편이 되돌리기
+쉽다.
+
+테스트
+
+    npx tsx --test src/lib/feature-flags.test.ts   11/11 PASS
+    npx tsx --test "src/**/*.test.ts"              1027/1027 PASS
+    npx tsc --noEmit                               src/ 오류 0
+    npm run build                                  Compiled successfully
+                                                   ƒ /ai-search, ƒ /api/ai-search 확인
+
+## 2026-09-12
+
 ### MOBILE DEVICE QA V1 — 서버 측 검증 + 성능 P1 1건 재현 (실기기 QA 미수행)
 
 이 환경에는 브라우저·실기기·에뮬레이터가 없다. 그래서 지시문 §2~§12의 실기기 절차는
