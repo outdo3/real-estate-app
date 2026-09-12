@@ -2,6 +2,83 @@
 
 ## 2026-09-12
 
+### INDEXNOW V1 — 변경 통지 연동 (키 대기 중)
+
+Bing·Naver 등 IndexNow 참여 검색엔진에 URL 변경을 알리는 연동을 넣었다.
+클라이언트·스크립트·테스트는 끝났고, **키 파일과 초기 제출만 남았다.**
+
+키를 지어내지 않았다
+
+작업 지시문의 INDEXNOW_KEY 자리가 placeholder 그대로 왔다. 사용자가 Bing/IndexNow
+화면에서 이미 발급받은 값이 따로 있으므로, 임의로 키를 만들어 올리면 그 값이 고아가
+된다. 키가 없는 동안 클라이언트는 NOT_CONFIGURED로 동작하며 네트워크 요청을 아예
+보내지 않는다 — 설정되지 않은 상태가 조용히 깨진 상태가 되지 않는다.
+
+키는 비밀이 아니다
+
+IndexNow의 소유 확인 방식 자체가 "이 키를 사이트 루트에 공개 텍스트 파일로 올려라"다.
+NEXTAUTH_SECRET이나 OAuth secret과 같은 취급을 하지 않는다. 다만 실패 응답 본문은
+로그와 반환값 어디에도 싣지 않는다 — IndexNow가 오류 응답에 키를 되돌려주는 경우가
+있다. 반환값에 키가 섞이지 않는 것은 테스트로 고정했다.
+
+키 파일은 손으로 만들지 않는다
+
+    INDEXNOW_KEY=<키> npm run indexnow:write-key   →   public/<키>.txt
+
+파일 이름과 제출 페이로드의 값이 같은 키여야 하는데 사람이 두 곳에 적으면 언젠가
+갈라진다. 출처는 환경변수 하나이고 파일은 거기서 파생된다. 키를 교체하면 루트의 옛
+키 파일을 지운다(둘이 남으면 어느 쪽이 현행인지 알 수 없다).
+
+클라이언트
+
+submitIndexNow(urls)는 우리 호스트의 https URL만 통과시킨다. 외부 도메인,
+e-jip.com.evil.test 같은 유사 호스트, localhost, *.vercel.app 프리뷰, http, 그리고
+/api/ /admin /my /community/write는 전부 거부한다. 중복은 제거하고 10,000개 단위로
+나눠 보낸다. 허용 호스트는 siteConfig에서 나오며, 오리진이 https가 아니면
+NOT_CONFIGURED가 되어 로컬에서 실수로 통지가 나가는 경로 자체가 없다.
+
+절대 던지지 않는다. 나중에 커뮤니티 글 발행 같은 흐름에 붙을 수 있는데, 검색엔진
+통지가 실패했다고 글 발행이 실패하면 안 된다. 모든 실패가 값으로 돌아온다.
+
+제출 성공은 색인이 아니다
+
+    SUBMITTED  =  검색엔진에 URL이 바뀌었다고 통지했다
+    SUBMITTED  ≠  색인됐다
+
+반환 타입 이름도, 스크립트 출력 문구도 이 구분을 지킨다.
+
+사이트맵 일괄 제출
+
+npm run indexnow:submit-sitemap 은 프로덕션 sitemap.xml을 그대로 읽어 그 URL만
+제출한다. 색인 범위를 다시 정의하지 않는다 — 사이트맵이 곧 색인 대상이고, 두 곳에서
+정하면 갈라진다. 부산 밖 sido 파라미터가 하나라도 있으면 제출하지 않고 멈춘다.
+조용히 걸러내면 사이트맵 정책이 바뀐 사실을 아무도 모른 채 통지만 나간다.
+
+사이트맵의 지역 URL은 ?sido=...&amp;sigungu=... 형태다. &amp;는 XML에서 & 한 글자를
+뜻하므로 디코드하지 않고 제출하면 amp;sigungu라는 존재하지 않는 파라미터가 붙은 URL을
+통지하게 된다. 파서가 이를 푼다.
+
+실제 프로덕션 사이트맵으로 dry-run 검증:
+
+    사이트맵 URL: 36개   제출 대상 36개   거부 0   범위 밖 0
+    (정적 4 + 부산 16개 구·군 × 통계/학군 32)
+
+반복 제출 cron은 만들지 않았다. IndexNow는 바뀐 것을 알리는 통지이지 전체 목록을
+주기적으로 재전송하는 채널이 아니다. 앞으로 붙일 지점(커뮤니티 발행, 리포트 발행,
+향후 매물 등록)은 문서에 적어뒀지만 아직 훅을 달지 않았다 — 존재하지 않는
+워크플로우에 가짜 훅을 만들지 않는다.
+
+테스트
+
+    npx tsx --test src/lib/indexnow/indexnow.test.ts   26/26 PASS
+    npx tsx --test "src/**/*.test.ts"                  879/879 PASS
+    npx tsc --noEmit                                   src/ 오류 0
+    npm run build                                      Compiled successfully
+
+Bing Webmaster Tools 화면은 이 환경에서 볼 수 없다 — CONSOLE QA REQUIRED.
+
+## 2026-09-12
+
 ### APT DETAIL PARTNER + TRADE DENSITY UX V1 — 데이터가 먼저, 행동은 그다음
 
 단지 상세의 밀도 문제 두 가지를 함께 고쳤다.
