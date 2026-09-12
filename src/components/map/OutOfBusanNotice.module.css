@@ -1,0 +1,64 @@
+/* BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §4 — 지도 하단 상태 스택 안에 들어가는 안내 카드.
+   스택 컨테이너가 pointer-events: none이라, 닫기 버튼을 누를 수 있으려면 여기서 auto로
+   되돌려야 한다(스택의 나머지 영역은 계속 지도로 통과된다 — 지도 조작을 막지 않는다). */
+.notice {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  max-width: 100%;
+  padding: 0.7rem 0.75rem 0.7rem 0.9rem;
+  border-radius: 12px;
+  /* 오류가 아니라 안내다 — 경고색을 쓰지 않고 기존 '준비중' 배너와 같은 중립 톤을 쓴다. */
+  background: rgba(30, 41, 59, 0.92);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  text-align: left;
+}
+
+.icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  opacity: 0.9;
+}
+
+.text {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.45;
+  /* 한글이 음절 단위로 끊기지 않도록 — 좁은 폭에서 "부산 외 지" / "역입니다" 방지. */
+  word-break: keep-all;
+}
+
+.close {
+  flex-shrink: 0;
+  /* 터치 타깃 44px(MAP_UX_V2 §17). 시각적으로는 작게 보이되 누를 면적은 확보한다. */
+  width: 44px;
+  height: 44px;
+  margin: -0.7rem -0.75rem -0.7rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: #fff;
+}
+
+.closeIcon {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 400px) {
+  .text {
+    font-size: 0.78rem;
+  }
+}

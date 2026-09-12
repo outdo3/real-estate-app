@@ -27,16 +27,26 @@ export interface RegionState {
 
 // GPS 위치 조회에 실패했을 때(권한 거부, 비-브라우저 환경, 좌표 역지오코딩 실패 등)의
 // 최종 폴백 — 이전 기본값(서울 강남구)은 유저 위치와 무관하게 항상 고정돼 있어, 다른
-// 지역(예: 부산 서구) 유저에게는 매번 엉뚱한 지역으로 시작하는 문제가 있었다. 이 앱이
-// 실제로 가장 많이 다루는 지역(부산 서구, /map·/api/ai-search의 기본 대상 지역과 동일)을
-// GPS 실패 시의 폴백으로 삼는다.
+// 지역 유저에게는 매번 엉뚱한 지역으로 시작하는 문제가 있었다. 그래서 부산으로 옮겼다.
+//
+// BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §5 — 다만 '부산 서구'는 너무 좁았다. 부산 출시
+// 범위는 16개 자치구·군 전체인데, 위치를 모르는 사용자를 특정 한 구에서 시작시키면
+// (1) 왜 하필 서구인지 설명할 수 없고 (2) 서비스 범위가 그 구뿐인 것처럼 보인다.
+// 그래서 출시 범위와 같은 '부산광역시 전체'에서 시작하고, 구·동은 사용자가 직접 고른다.
+//
+// lawdCd: null은 RegionSelectModal의 "시도 전체" 선택이 이미 만들어내는 상태와 **같은
+// 모양**이다(통계 뷰들은 lawdCd가 null이면 sidoCode로 시도 단위 집계를 요청한다).
+// 새 상태를 발명한 게 아니라 이미 지원되는 상태를 기본값으로 삼은 것이다.
+//
+// 지도(/map)의 기본 중심은 이 값과 별개다 — 지도는 현재 위치를 따르고, 통계는 사용자가
+// 명시적으로 고른 지역을 따른다(§6).
 const FALLBACK_REGION: RegionState = {
-  lawdCd: '26140',
+  lawdCd: null,
   sidoCode: '26',
   dong: 'all',
   sido: '부산광역시',
-  sigungu: '서구',
-  displayRegionName: buildRegionDisplayName({ sido: '부산광역시', sigungu: '서구', dong: 'all' }),
+  sigungu: '',
+  displayRegionName: buildRegionDisplayName({ sido: '부산광역시', sigungu: '', dong: 'all' }),
 };
 
 // 카카오 역지오코딩이 돌려주는 축약형 시/도명(예: "부산")을 REGION_DATA의 정식 명칭

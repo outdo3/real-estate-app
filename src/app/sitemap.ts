@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { prisma } from '@/lib/prisma';
 import { absoluteUrl } from '@/config/site';
-import { REGION_DATA } from '@/lib/regions';
+import { buildLaunchRegionRoutes } from '@/lib/sitemap-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,24 +12,15 @@ const STATIC_ROUTES: Array<{ path: string; priority: number; changeFrequency: Me
   { path: '/community', priority: 0.6, changeFrequency: 'daily' },
 ];
 
+// BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §2 — 지역 경로는 출시 범위(부산 16개)만 싣는다.
+// 예전에는 REGION_DATA(전국 17개 시도)를 통째로 돌아 서울/경기 등 데이터가 없는
+// 지역 URL 약 460개가 색인 대상으로 나갔다. 범위 판단은 @/lib/sitemap-scope가 갖는다.
 function buildRegionRoutes(): MetadataRoute.Sitemap {
-  const routes: MetadataRoute.Sitemap = [];
-  for (const [sido, sigunguList] of Object.entries(REGION_DATA)) {
-    for (const sigungu of sigunguList) {
-      const query = `sido=${encodeURIComponent(sido)}&amp;sigungu=${encodeURIComponent(sigungu)}`;
-      routes.push({
-        url: absoluteUrl(`/stats?${query}`),
-        changeFrequency: 'daily',
-        priority: 0.5,
-      });
-      routes.push({
-        url: absoluteUrl(`/school?${query}`),
-        changeFrequency: 'weekly',
-        priority: 0.4,
-      });
-    }
-  }
-  return routes;
+  return buildLaunchRegionRoutes().map((r) => ({
+    url: absoluteUrl(r.path),
+    changeFrequency: r.changeFrequency,
+    priority: r.priority,
+  }));
 }
 
 const MAX_COMMUNITY_URLS = 500;

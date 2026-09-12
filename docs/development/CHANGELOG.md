@@ -2,6 +2,86 @@
 
 ## 2026-09-12
 
+### BUSAN LAUNCH SCOPE + SITEMAP FIX V1 — 색인 범위를 실제 출시 범위로
+
+검색엔진 등록 직전 점검에서 배포된 사이트맵을 직접 받아봤다.
+
+    curl https://e-jip.com/sitemap.xml | grep -c "<loc>"   462
+    그중 부산 관련                                           32
+
+    /stats?sido=서울특별시&sigungu=강남구
+    /school?sido=서울특별시&sigungu=강남구
+
+462개 중 약 460개가 지역 URL이었고 대부분이 부산이 아니었다.
+
+원인은 sitemap.ts의 buildRegionRoutes()가 src/lib/regions.ts의 REGION_DATA
+(전국 17개 시도 · 약 230개 시군구)를 통째로 순회한 것이다. REGION_DATA는 지역
+**선택 UI**를 위한 전국 목록인데 그걸 색인 범위로 그대로 썼다. 검색엔진에는
+전국 서비스처럼 보이고, 서울 강남구 통계를 연 사용자는 빈 화면을 받는다.
+
+바뀐 것
+
+지역 경로는 부산 16개 자치구·군만 싣는다. 목록은 새로 적지 않고 이미 검증된
+단일 출처(report/region-scope.ts의 BUSAN_DISTRICTS — 리포트 스코프 검증이 쓰는
+바로 그 목록)를 재사용하므로 둘이 갈라질 수 없다.
+
+    지역 URL  약 460개 → 32개 (부산 16개 × stats/school)
+
+사이트맵에서 뺐다고 접근을 막지는 않는다. 서울 URL은 지금도 그대로 열린다 —
+사이트맵은 색인을 정하고 robots는 접근을 정한다. robots는 건드리지 않았다.
+
+&amp;는 오타가 아니다
+
+쿼리 구분자가 &가 아니라 &amp;인 건 의도된 것이다. Next.js의 사이트맵 직렬화는
+<loc> 문자열을 XML 이스케이프하지 않는다(실측 근거: 배포 XML에 &amp;가 한 겹으로만
+나온다 — 이스케이프됐다면 &amp;amp;가 됐어야 한다). 직접 이스케이프해야 well-formed
+XML이 되고, 파서가 디코드하면 크롤러는 올바른 &를 받는다. "고치면" 깨진다 —
+테스트로 고정했다.
+
+부산 밖 사용자 안내
+
+지도는 계속 사용자의 실제 위치로 열린다(의도된 동작, 되돌리지 않음). 다만 그 위치가
+부산 밖이면 안내를 한 번 띄운다.
+
+    현재 위치는 부산 외 지역입니다.
+    이집은 현재 부산 지역 데이터를 우선 제공하고 있습니다.
+
+지도 조작을 막지 않고(하단 상태 스택의 pointer-events: none 안, 카드만 auto),
+오류처럼 보이지 않고(경고색 없음), 세션당 한 번만 뜨고, 닫을 수 있고, 로그인이
+필요 없다. 판정은 좌표 bounding box 하나 — 역지오코딩 호출을 추가하지 않았다.
+
+그 박스도 새로 만들지 않았다. BUSAN_DATA_UX_AUTOMATED_QA_V1이 실측/합의해
+scripts/busan-qa-logic.ts와 학교 좌표 검증이 이미 쓰던 값이며, 세 번째 사본이
+생기지 않도록 src/lib/busan-bounds.ts 하나로 모으고 학교 검증이 그걸 import하게
+했다(값 동일 — 판정 결과 변화 없음).
+
+통계 기본 지역
+
+감사 결과: 기본값 '부산 서구'는 GPS 실패/거부일 때만 쓰이고, 마지막 선택 지역은
+저장되지 않으며, 첫 진입 시 GPS 역지오코딩이 통계 지역을 정한다. GPS가 통계를
+정하는 건 원래 의도된 아키텍처라 그대로 뒀다.
+
+폴백만 '부산광역시 서구' → '부산광역시 전체'로 바꿨다. lawdCd: null + sigungu: ''는
+RegionSelectModal의 "시도 전체"가 이미 만들어내는 상태이고, 통계 뷰들의 prop이
+전부 lawdCd: string | null이며 null이면 sidoCode로 시도 단위 집계를 요청하도록
+이미 구현돼 있어 안전하다. 지도의 기본 중심은 바꾸지 않았다 — 지도와 통계는 서로
+다른 규칙을 따른다.
+
+noindex는 추가하지 않았다. /stats·/school이 쿼리스트링으로 지역을 받는 구조라
+동적 메타데이터 분기가 필요하고 정상 페이지 색인을 해칠 위험이 있다 — 후속 과제.
+
+테스트
+
+    npx tsx --test src/lib/sitemap-scope.test.ts    19/19 PASS
+    npx tsx --test "src/**/*.test.ts"               812/812 PASS
+    npx tsc --noEmit                                src/ 오류 0
+    npm run build                                   Compiled successfully
+
+재배포 전까지는 프로덕션 사이트맵에 여전히 서울 URL이 실려 있다. 검색엔진 등록은
+재배포 후 사이트맵을 확인한 다음에 진행한다.
+
+## 2026-09-12
+
 ### DOMAIN CUTOVER V1 — 사전 감사: 코드는 준비 완료, DNS는 아직 파킹
 
 e-jip.com으로 프로덕션 identity를 옮기기 위한 사전 감사. 기능 변경 없음.

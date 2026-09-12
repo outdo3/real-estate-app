@@ -72,6 +72,7 @@ import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
 import ShareAction from '@/components/ShareAction';
 import mapMarkerStyles from './map-marker.module.css';
+import OutOfBusanNotice from '@/components/map/OutOfBusanNotice';
 
 // [DESIGN SYSTEM 3 §9] 지도 페이지는 전체화면 커스텀 UI라 Header를 아예
 // 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸 막기 위함) 하단탭바만
@@ -2077,6 +2078,12 @@ export default function FullscreenMapPage() {
           pointerEvents: 'none',
         }}
       >
+      {/* BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §4 — 지도가 부산 밖에서 열렸을 때만 뜨는
+          안내. 현재 위치로 지도를 여는 동작은 그대로 두고(§4 — 사용자를 부산으로
+          강제로 끌어오지 않는다), 데이터가 부산 우선이라는 사실만 정직하게 말한다.
+          세션당 한 번, 닫으면 끝 — pan/zoom마다 다시 뜨지 않는다. */}
+      <OutOfBusanNotice lat={center.lat} lng={center.lng} />
+
       {activeComingSoon.length > 0 && (
         <div
           style={{

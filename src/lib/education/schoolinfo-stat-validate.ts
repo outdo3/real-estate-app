@@ -3,6 +3,8 @@
 // 벗어나는 경우는 write 대상에서 제외(REVIEW)한다 — null을 0으로 바꾸지 않고,
 // 0이 실제로 원본값일 때만 그대로 저장한다.
 
+import { isInsideBusanBounds } from '@/lib/busan-bounds';
+
 export interface SchoolStatCandidate {
   studentCount: number | null;
   classCount: number | null;
@@ -32,12 +34,13 @@ export function validateSchoolStat(candidate: SchoolStatCandidate): ValidationRe
 
 // 부산 School 좌표 범위(BUSAN_DATA_UX_AUTOMATED_QA_V1이 이미 실측/합의한 여유
 // bounding box와 동일 기준 재사용 — scripts/busan-qa-logic.ts BUSAN_BBOX).
-const BUSAN_BBOX = { minLat: 34.9, maxLat: 35.45, minLng: 128.6, maxLng: 129.35 };
-
+//
+// BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §11 — 지도의 "부산 밖" 안내도 같은 박스를 쓰게
+// 되면서 상수를 src/lib/busan-bounds.ts 하나로 모았다. **값은 그대로다**(판정 결과
+// 변화 없음). 여기서 사본을 유지하면 둘이 조용히 갈라진다.
 export function isValidBusanCoordinate(lat: number | null, lng: number | null): boolean {
   if (lat == null || lng == null) return false;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-  return lat >= BUSAN_BBOX.minLat && lat <= BUSAN_BBOX.maxLat && lng >= BUSAN_BBOX.minLng && lng <= BUSAN_BBOX.maxLng;
+  return isInsideBusanBounds(lat, lng);
 }
 
 // 학급당 학생수/교원 1인당 학생수는 runtime derived — DB에 저장하지 않는다(§7
