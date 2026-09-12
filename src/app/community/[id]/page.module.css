@@ -137,6 +137,12 @@
 .commentAuthor {
   font-weight: 700;
   color: var(--text-primary);
+  /* §15 — 닉네임이 20자까지 가능해졌다(USER_NICKNAME_EDIT_V1). 폭을 제한하지 않으면
+     긴 닉네임이 시간/삭제 버튼을 메타 줄 밖으로 밀어낸다. */
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .commentDelete {
@@ -194,4 +200,71 @@
   text-align: center;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+/* COMMUNITY_LAUNCH_READINESS_V1 — 이 STEP에서 추가된 요소들. */
+
+.aptBadge,
+.retryBtn,
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.pinIcon {
+  flex-shrink: 0;
+  margin-right: 0.3rem;
+  vertical-align: -2px;
+  color: var(--primary-color);
+}
+
+/* §5 — 목록으로 돌아가기. 공유 링크로 바로 들어온 사용자에게 나갈 길을 준다. */
+.backLink {
+  margin: 1rem 0 0;
+  min-height: 44px;
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.backLink:hover {
+  color: var(--text-primary);
+  border-color: var(--primary-color);
+}
+
+/* §16 — 오류 상태의 재시도. */
+.retryBtn {
+  margin-top: 0.25rem;
+  min-height: 44px;
+  padding: 0.55rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* §7/§8 — 삭제/댓글 실패를 alert() 대신 화면 안에서 말한다. */
+.actionError {
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #b91c1c;
+  word-break: keep-all;
+}
+
+.dangerBtn:disabled,
+.commentDelete:disabled,
+.commentSubmit:disabled {
+  opacity: 0.6;
+  cursor: default;
 }

@@ -119,3 +119,11 @@
   color: #ef4444;
   font-size: 0.85rem;
 }
+
+/* COMMUNITY_LAUNCH_READINESS_V1 — 이모지를 lucide 아이콘으로 교체하면서 필요해진 정렬. */
+.aptChipLabel,
+.errorText {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}

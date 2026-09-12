@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getCurrentUser } from '@/lib/auth-helpers';
+import { getCurrentUser, isAdminSessionUser } from '@/lib/auth-helpers';
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -12,7 +12,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     if (!existing) return NextResponse.json({ success: false, error: '댓글을 찾을 수 없습니다.' }, { status: 404 });
 
     const isOwner = existing.authorId === user.id;
-    const isAdmin = user.role === 'ADMIN';
+    const isAdmin = isAdminSessionUser(user as { role?: string | null; email?: string | null });
     if (!isOwner && !isAdmin) {
       return NextResponse.json({ success: false, error: '삭제 권한이 없습니다.' }, { status: 403 });
     }

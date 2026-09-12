@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const comment = await prisma.comment.create({
       data: { content, postId: id, authorId: user!.id },
-      include: { author: { select: { id: true, name: true, image: true, role: true } } },
+      include: { author: { select: { name: true, image: true, role: true } } },
     });
 
     return NextResponse.json({ success: true, data: comment });

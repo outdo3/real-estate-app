@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AlertTriangle, Building2 } from 'lucide-react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import ApartmentAutocomplete from '@/components/ApartmentAutocomplete';
@@ -43,6 +44,8 @@ export default function WritePostPage() {
   }, []);
 
   const handleSubmit = async () => {
+    // §6 — 중복 제출 방지. 버튼 disabled가 1차 방어지만 가드를 한 겹 더 둔다.
+    if (submitting) return;
     if (!title.trim() || !content.trim()) {
       setError('제목과 내용을 모두 입력해주세요.');
       return;
@@ -81,7 +84,10 @@ export default function WritePostPage() {
           <div className={styles.form}>
             {aptName ? (
               <div className={styles.aptChip}>
-                <span>🏢 {aptName}</span>
+                <span className={styles.aptChipLabel}>
+                  <Building2 size={13} aria-hidden="true" />
+                  {aptName}
+                </span>
                 {!aptLocked && (
                   <button
                     type="button"
@@ -113,7 +119,12 @@ export default function WritePostPage() {
               value={content}
               onChange={(e) => setContent(e.target.value)}
             />
-            {error && <div className={styles.errorText}>⚠️ {error}</div>}
+            {error && (
+              <div className={styles.errorText} role="alert">
+                <AlertTriangle size={15} aria-hidden="true" />
+                {error}
+              </div>
+            )}
             <div className={styles.actions}>
               <button className={styles.cancelBtn} onClick={() => router.back()}>
                 취소

@@ -2,6 +2,89 @@
 
 ## 2026-09-12
 
+### COMMUNITY LAUNCH READINESS V1 — 출시 전 커뮤니티 점검
+
+부산 출시 전에 커뮤니티를 전수 점검하고 P0/P1을 정리했다. 대개편이 아니다.
+DB 변경 없음.
+
+P0는 없었다
+
+서버 권한은 이미 정상이었다. 글·댓글 수정/삭제 모두 서버에서
+existing.authorId === user.id || 관리자를 검사하고, 작성자는 authorId: user!.id로
+세션에서만 정한다. 클라이언트 body의 사용자 식별자를 읽는 경로 자체가 없다.
+
+P1 9건 수정
+
+1. 통신 실패를 "글이 없음"으로 표시하던 false empty. useSWR의 error를 보지 않고
+   data.success만 봐서, fetch가 throw하면(오프라인·타임아웃) data가 undefined로 남아
+   "아직 작성된 글이 없습니다"가 떴다. 이제 로딩 / 오류(+다시 시도) / 빈 상태를
+   분리하고, 404와 통신 실패도 구분한다.
+
+2. 모든 글의 og:url이 홈을 가리켰다. buildOpenGraph가 url을 siteConfig.url(루트)로
+   넣기 때문에 공유 카드와 검색엔진이 글을 구분하지 못했다. 글 단위 canonical과
+   og:url을 넣었다. 공용 헬퍼는 건드리지 않았다 — /stats/compare와 같은 패턴이라
+   범위 밖 화면에 영향이 없다.
+
+3. 댓글 Enter 연타 중복 등록. 버튼은 disabled였지만 키보드 경로에 가드가 없었다.
+
+4. 삭제에 in-flight 가드가 없어 연타하면 같은 DELETE가 여러 번 나갔다.
+
+5. 관리자 판정 불일치. 고정(pin)은 requireAdmin을 쓰는데 수정/삭제는 role === 'ADMIN'만
+   봐서, ADMIN_EMAIL로만 관리자인 계정은 글을 고정할 수는 있어도 삭제할 수 없었다.
+   isAdminSessionUser 단일 기준으로 통일했다.
+
+6. 차단(banned) 계정이 기존 글을 수정할 수 있었다. 글쓰기는 requireUser로 막혀 있는데
+   수정은 getCurrentUser만 써서 차단이 무의미했다. 수정을 requireUser로 바꿨다.
+   삭제는 그대로 뒀다 — 차단된 사용자가 자기 글을 지우는 것까지 막을 이유는 없다.
+
+7. 상세에서 목록으로 돌아갈 길이 없었다(공유 링크로 들어오면 뒤로가기뿐).
+
+8. 20자 닉네임이 레이아웃을 밀어냈다. USER_NICKNAME_EDIT_V1 이후 생긴 신규 위험으로,
+   .rowMeta가 flex-shrink: 0이라 360px에서 제목 영역을 그대로 잠식했다. 작성자명에
+   max-width + ellipsis를 넣었다.
+
+9. 장식용 이모지(📌 🏢 ✏️ 📍 ⚠️)를 lucide 아이콘으로 교체했다(AGENTS.md 규칙).
+
+부수적으로 alert()를 화면 내 인라인 오류로 바꾸고, 빈 상태를 "없습니다"에서 첫 글
+유도로 바꾸고(과장 문구 없이), 공개 응답에서 클라이언트가 쓰지도 않던 내부
+author.id를 제거했다.
+
+닉네임 연계
+
+Post/Comment는 authorId만 저장하고 조회 시 User를 join한다. 닉네임을 바꾸면 기존
+글·댓글의 작성자명도 함께 바뀐다. snapshot 컬럼을 만들지 않았고, 만들지 않는다는
+것을 테스트로 고정했다.
+
+확인했지만 바꾸지 않은 것
+
+커뮤니티는 비로그인으로 열람 가능하다(목록·상세 GET에 인증 없음 — 테스트로 고정).
+다만 AuthGate가 감싸고 있어 비로그인 방문자에게 로그인 모달이 자동으로 뜬다. 닫으면
+그대로 볼 수 있고 AuthGate 주석에 의도로 기록돼 있다. 검색 유입 첫 화면이라는 점에서
+재고할 여지가 있지만 버그가 아니라 로그인 유도 정책이라, 제품 결정으로 남기고 바꾸지
+않았다. 바꾸려면 두 화면의 AuthGate 래퍼만 걷어내면 된다.
+
+카테고리는 스키마에 필드 자체가 없다(aptName은 자유 텍스트 태그). 도입하려면 DB
+변경이 필요해 STOP 대상이며, label/order/hide 수준으로 정리할 대상이 존재하지 않는다.
+
+신고 기능은 없다. 본인 글·댓글 삭제와 관리자 삭제가 정상 동작하므로 출시 blocker는
+아니라고 판단해 P2로 남긴다.
+
+성능은 이미 충분해 건드리지 않았다. 목록은 findMany+count 병렬에 take 20, 상세는
+단일 쿼리로 글·댓글·작성자를 가져와 N+1이 없고, pinned/createdAt·aptName/createdAt·
+postId 인덱스가 조회 경로에 모두 대응한다.
+
+테스트
+
+    npx tsx --test src/lib/community/community-launch.test.ts   26/26 PASS
+    npx tsx --test "src/**/*.test.ts"                           948/948 PASS
+    npx tsc --noEmit                                            src/ 오류 0
+    npm run build                                               Compiled successfully
+
+브라우저가 없어 360/390/430px 실제 렌더는 확인하지 못했다 —
+STRUCTURAL PASS / DEVICE QA REQUIRED.
+
+## 2026-09-12
+
 ### USER NICKNAME EDIT V1 — MY에서 닉네임 직접 변경
 
 로그인하면 provider가 준 이름이 User.name에 들어가는데, 이집 안에서 그걸 바꿀 방법이

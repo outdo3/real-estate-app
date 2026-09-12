@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
         include: {
-          author: { select: { id: true, name: true, image: true, role: true } },
+          author: { select: { name: true, image: true, role: true } },
           _count: { select: { comments: true } },
         },
       }),
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
     const post = await prisma.post.create({
       data: { title, content, aptName, authorId: user!.id },
-      include: { author: { select: { id: true, name: true, image: true, role: true } } },
+      include: { author: { select: { name: true, image: true, role: true } } },
     });
 
     return NextResponse.json({ success: true, data: post });
