@@ -41,6 +41,7 @@ import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-typ
 import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
+import { useSession } from 'next-auth/react';
 import { recordApartmentVisit } from '@/lib/recent-apartments';
 import { areaMatchesSelection, findUnitForArea } from '@/lib/unit-area-match';
 
@@ -85,6 +86,8 @@ interface Trade {
 export default function ApartmentDetail() {
   const params = useParams();
   const router = useRouter();
+  // RECENT_VIEWED_AUTH_PARITY_V1 §10 — 방문 기록을 게스트 저장소에 쓸지 판단하는 데만 쓴다.
+  const { status: sessionStatus } = useSession();
   const [aptName, setAptName] = useState<string>('');
   const [mapCtaLoading, setMapCtaLoading] = useState(false);
 
@@ -704,12 +707,8 @@ export default function ApartmentDetail() {
     // [UI-C1] "최근 본 단지" 기록 — pageReady가 처음 true가 되는(단지명·지역이 확정된)
     // 이 시점에 위 조회 로그와 함께 딱 한 번만 남긴다.
     const visitAddress = [heroRegionLabel, urlDong].filter(Boolean).join(' ');
-    recordApartmentVisit({
-      name: resolvedName,
-      address: visitAddress,
-      lawdCd: lawdCdState,
-      dong: urlDong,
-    });
+    // RECENT_VIEWED_AUTH_PARITY_V1 §10 — 게스트 저장소 기록은 아래 별도 effect에서 한다
+    // (세션이 확정된 뒤에만 써야 하므로). 서버 기록은 아래 그대로 남긴다.
     // [MY-3] 로그인 상태면 서버 recent_views에도 upsert한다. 실패해도 상세페이지는 정상 동작.
     fetch('/api/my/recent/sync', {
       method: 'POST',
@@ -740,6 +739,30 @@ export default function ApartmentDetail() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageReady, displayName, aptName, lawdCdState, urlDong]);
+
+  // RECENT_VIEWED_AUTH_PARITY_V1 §10 — 게스트 저장소(localStorage) 방문 기록.
+  //
+  // 위 로그 effect와 분리한 이유: 그 effect는 pageReady가 확정되는 순간 한 번 돌고
+  // 세션 상태를 deps에 담지 않는다. 세션이 아직 'loading'인 채로 그 시점이 지나가면
+  // 로그인 사용자의 방문이 게스트 기록으로 남고, 로그아웃 후 홈에 그대로 보인다.
+  //
+  // 그래서 **세션이 확정되고 비로그인일 때만** 쓴다. 로그인 사용자는 서버에만 남고,
+  // 확정 전에는 아무것도 쓰지 않는다(모르는 상태를 게스트로 단정하지 않는다).
+  useEffect(() => {
+    if (!pageReady) return;
+    if (sessionStatus !== 'unauthenticated') return;
+    const resolvedName = displayName || aptName;
+    if (!resolvedName) return;
+    recordApartmentVisit({
+      name: resolvedName,
+      address: [heroRegionLabel, urlDong].filter(Boolean).join(' '),
+      lawdCd: lawdCdState,
+      dong: urlDong,
+    });
+    // heroRegionLabel은 표시용 라벨이라 뒤늦게 채워져도 같은 단지의 같은 기록을
+    // 앞으로 끌어올리기만 한다(name+dong 키로 중복 제거됨).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageReady, sessionStatus, displayName, aptName, lawdCdState, urlDong]);
 
   // STEP SCORE S3 — 이집점수 API 조회. pageReady를 기다리지 않는다(§25 — score 로딩이
   // 전체 상세페이지 로딩을 막으면 안 됨). 실패해도 catch에서 조용히 null로 남겨 카드가

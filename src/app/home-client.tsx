@@ -1,13 +1,19 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { Map as MapIcon, Sparkles, BarChart3, Building2, TrendingDown, Award, TrendingUp, Activity, Scale, Coins, Rows3 } from 'lucide-react';
+import { Map as MapIcon, Sparkles, BarChart3, Building2, TrendingDown, Award, TrendingUp, Activity, Scale, Coins, Rows3, ChevronDown, ChevronUp } from 'lucide-react';
 import Header from '@/components/Header';
 import AdContainer from '@/components/AdContainer';
 import HomeApartmentSearch from '@/components/HomeApartmentSearch';
 import Button from '@/components/ui/Button';
-import { getRecentApartments, RecentApartment } from '@/lib/recent-apartments';
+import { useRecentApartments } from '@/hooks/useRecentApartments';
+import {
+  RECENT_ROWS_COLLAPSED,
+  canCollapseRecent,
+  canExpandRecent,
+  visibleRecentItems,
+} from '@/lib/my/recent-rows';
 import styles from './home-client.module.css';
 
 const QUICK_MENU = [
@@ -22,16 +28,17 @@ const QUICK_MENU = [
   { Icon: Coins, label: '갭투자', href: '/stats/gap-invest' },
 ];
 
-// 홈에서는 상세페이지(최대 8개 보관)와 달리 첫 화면 공간을 고려해 최근 5개만 노출한다.
-const HOME_RECENT_LIMIT = 5;
-
 export default function Home() {
-  const [recent, setRecent] = useState<RecentApartment[]>([]);
+  // RECENT_VIEWED_AUTH_PARITY_V1 §4 — 출처를 세션에 따라 가른다.
+  //
+  // 예전에는 세션과 무관하게 localStorage만 읽었다. 그래서 로그인해도 홈은 계정
+  // 기록이 아니라 로컬 기록을 보여줬고, 로그아웃한 뒤에도 그대로 남았다.
+  const { items: recentAll, loading: recentLoading, error: recentError } = useRecentApartments();
 
-  // localStorage는 클라이언트에서만 읽는다(SSR 중 접근 없음 — 하이드레이션 불일치 없음).
-  useEffect(() => {
-    setRecent(getRecentApartments().slice(0, HOME_RECENT_LIMIT));
-  }, []);
+  // §9 — 기본 5개, 초과분은 요청할 때 펼친다. 개수 규칙은 MY의 최근 목록과 같은
+  // 모듈을 쓴다(기본 5 + 전부 펼치기) — 두 화면이 같은 의미를 갖도록.
+  const [recentExpanded, setRecentExpanded] = useState(false);
+  const recent = visibleRecentItems(recentAll, recentExpanded);
 
   return (
     <div className={styles.page}>
@@ -55,19 +62,54 @@ export default function Home() {
 
         <section className={styles.recentSection}>
           <div className={styles.recentHeading}>최근 본 단지</div>
-          {recent.length > 0 ? (
-            <div className={styles.recentScroll}>
-              {recent.map((r) => (
-                <Link
-                  key={`${r.name}|${r.dong}`}
-                  href={`/apt/${encodeURIComponent(r.name)}?lawdCd=${encodeURIComponent(r.lawdCd)}&dong=${encodeURIComponent(r.dong)}`}
-                  className={styles.recentCard}
-                >
-                  <span className={styles.recentCardName}>{r.name}</span>
-                  {r.address && <span className={styles.recentCardAddress}>{r.address}</span>}
-                </Link>
-              ))}
+          {/* §4 — 세션 확인 전에는 잘못된 목록을 먼저 보여주지 않는다. */}
+          {recentLoading ? (
+            <div className={styles.recentEmpty} role="status">
+              <span>최근 본 단지를 불러오는 중입니다...</span>
             </div>
+          ) : recentError ? (
+            /* §11 — 계정 목록을 못 불러왔을 때 로컬 기록으로 대체하지 않는다.
+               남의 목록을 내 기록인 척 보여주는 것보다 비어 있는 편이 낫다. */
+            <div className={styles.recentEmpty} role="alert">
+              <span>최근 본 단지를 불러오지 못했어요.</span>
+            </div>
+          ) : recent.length > 0 ? (
+            <>
+              <div className={styles.recentScroll}>
+                {recent.map((r) => (
+                  <Link
+                    key={`${r.name}|${r.dong}`}
+                    href={`/apt/${encodeURIComponent(r.name)}?lawdCd=${encodeURIComponent(r.lawdCd)}&dong=${encodeURIComponent(r.dong)}`}
+                    className={styles.recentCard}
+                  >
+                    <span className={styles.recentCardName}>{r.name}</span>
+                    {r.address && <span className={styles.recentCardAddress}>{r.address}</span>}
+                  </Link>
+                ))}
+              </div>
+              {/* §9 — 5개를 넘을 때만 펼칠 수 있다. 로그인/비로그인 동일 UX. */}
+              {(canExpandRecent(recentAll.length) || canCollapseRecent(recentAll.length, recentExpanded)) && (
+                <button
+                  type="button"
+                  className={styles.recentToggle}
+                  onClick={() => setRecentExpanded((v) => !v)}
+                  aria-expanded={recentExpanded}
+                  aria-label={recentExpanded ? '최근 본 단지 접기' : '최근 본 단지 더보기'}
+                >
+                  {recentExpanded ? (
+                    <>
+                      접기
+                      <ChevronUp size={14} aria-hidden="true" />
+                    </>
+                  ) : (
+                    <>
+                      더보기 ({recentAll.length - RECENT_ROWS_COLLAPSED})
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+              )}
+            </>
           ) : (
             <div className={styles.recentEmpty}>
               <img src="/brand/mascot/ejipy-empty.webp" alt="" className={styles.recentEmptyMascot} />

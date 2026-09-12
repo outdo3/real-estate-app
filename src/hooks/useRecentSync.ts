@@ -10,10 +10,9 @@
 
 import { useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { getRecentApartments, RecentApartment } from '@/lib/recent-apartments';
+import { getRecentApartments, type RecentApartment } from '@/lib/recent-apartments';
 
 const SYNC_FLAG_KEY = 'ejip:recentSyncedThisSession';
-const LOCAL_RECENT_KEY = 'ejip:recentApartments';
 
 export function useRecentSync() {
   const { status } = useSession();
@@ -51,27 +50,15 @@ export function useRecentSync() {
     })
       .then((res) => res.json())
       .then((json) => {
-        if (!json.success || !Array.isArray(json.data)) return;
-        // 서버 결과(최대 20개)를 local에 mirror.
-        // local 최신 8개 UX를 유지하기 위해 최신 8개만 local에 쓴다.
-        const serverItems = json.data as Array<{
-          lawdCd: string;
-          dong: string;
-          name: string;
-          address?: string | null;
-          viewedAt: string; // Prisma DateTime → JSON string
-        }>;
-        const mirrorItems: RecentApartment[] = serverItems.slice(0, 8).map((item) => ({
-          lawdCd: item.lawdCd,
-          dong: item.dong,
-          name: item.name,
-          address: item.address ?? '',
-          visitedAt: new Date(item.viewedAt).getTime(),
-        }));
-        try {
-          window.localStorage.setItem(LOCAL_RECENT_KEY, JSON.stringify(mirrorItems));
-        } catch { /* localStorage 쿼터 초과 등 — 무시 */ }
-        // sync 완료 flag
+        if (!json.success) return;
+        // RECENT_VIEWED_AUTH_PARITY_V1 §10 — **서버 목록을 local에 mirror하지 않는다.**
+        //
+        // 예전에는 병합 결과(계정 기록)를 localStorage에 써넣었다. 홈이 세션과 무관하게
+        // local을 읽었으므로, 로그아웃한 뒤에도(또는 같은 기기의 다른 사람에게도) 그
+        // 계정이 본 단지가 그대로 보였다. 게스트 저장소에는 비회원 상태로 본 것만 남는다.
+        //
+        // 로그인 상태의 화면은 이제 useRecentApartments가 /api/my/recent에서 직접
+        // 읽으므로 mirror가 필요 없다 — 업로드(local → 서버 병합)만 남긴다.
         try {
           window.sessionStorage.setItem(SYNC_FLAG_KEY, '1');
         } catch { /* 무시 */ }

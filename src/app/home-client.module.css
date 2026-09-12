@@ -260,3 +260,26 @@
     font-size: 1.15rem;
   }
 }
+
+/* RECENT_VIEWED_AUTH_PARITY_V1 §9 — 홈 최근 본 단지 더보기 / 접기.
+   목록이 가로 스크롤이라 버튼은 그 아래 한 줄로 조용히 둔다. 터치 타깃 44px. */
+.recentToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recentToggle:hover {
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
