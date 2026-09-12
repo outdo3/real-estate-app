@@ -1,5 +1,77 @@
 # 이집 개발 변경 기록
 
+## 2026-09-12
+
+### DOMAIN CUTOVER V1 — 사전 감사: 코드는 준비 완료, DNS는 아직 파킹
+
+e-jip.com으로 프로덕션 identity를 옮기기 위한 사전 감사. 기능 변경 없음.
+**코드 변경 0건** — 감사 결과 바꿀 것이 없었다.
+
+실측한 현재 상태 (2026-09-12)
+
+    nslookup e-jip.com      A     99.83.196.71, 75.2.85.42
+                            NS    ns1~ns4.hosting.co.kr
+    curl http://e-jip.com/  200   Hosting.kr 도메인 파킹 페이지
+    curl https://e-jip.com/ ---   443 연결 타임아웃 (인증서 없음)
+
+도메인은 등록돼 있고 DNS는 Hosting.kr이 관리하지만, A 레코드가 **파킹 서버**를
+가리킨다. Vercel 프로젝트에 연결된 적이 없고 TLS 인증서도 발급된 적이 없다.
+커토버는 아직 시작되지 않았다.
+
+호스트 하드코딩 감사
+
+런타임에 호스트를 박아둔 곳은 **0건**이다. e-jip.com은 주석 6곳과 테스트 8곳에만
+나온다. 레거시 Vercel 호스트는 src/config/site.ts의 폴백 상수 하나뿐이고, 이건
+의도적 롤백 안전판이라 그대로 둔다.
+
+로컬 커토버 시뮬레이션
+
+환경변수 하나로 정말 전부 따라오는지 빌드로 실증했다.
+
+    NEXT_PUBLIC_SITE_URL=https://e-jip.com npm run build
+
+    prerender og:url        https://e-jip.com
+    prerender og:image      https://e-jip.com/brand/og/ejip-og-main-1200x630.jpg
+    prerender robots.txt    Sitemap: https://e-jip.com/sitemap.xml (Disallow: / 없음)
+    .next/static 레거시 호스트    0건
+    .next/server 레거시 호스트    0건 (소스맵 제외)
+
+.next/static에 남은 localhost:3000 1건은 next-auth 라이브러리 내부 기본값이고
+우리 코드가 아니다.
+
+발견 — VERCEL_ENV는 클라이언트에 없다
+
+getBaseUrl()의 2순위 가지가 process.env.VERCEL_ENV를 보는데, 이 변수는
+NEXT_PUBLIC_ 접두사가 없어 클라이언트 번들에 주입되지 않는다. 즉
+NEXT_PUBLIC_SITE_URL을 넣지 않으면 브라우저에서 오리진이 localhost:3000으로
+내려앉는다. 이 환경변수 설정은 선택이 아니라 필수다.
+
+발견 — Kakao 플랫폼 도메인에서 localhost:3000을 지우면 안 된다
+
+서버에서 Kakao Local REST API를 호출할 때 JavaScript 키를 쓰면서
+Origin: http://localhost:3000과 KA 헤더를 함께 보내는 호출부가 7곳 있다
+(주변 학교 조회, 지오코딩, 점수 수집, AI 검색, 재개발 시군구 해석).
+플랫폼 도메인 목록에서 localhost:3000을 지우면 이 기능들이 조용히 실패한다.
+커토버 때 e-jip.com을 **추가**하되 localhost:3000은 남겨야 한다.
+
+지도 키와 공유 SDK 키가 같은 키이므로, Web 플랫폼 도메인 등록 한 번으로
+지도·로드뷰·공유가 함께 해결된다.
+
+OAuth 콜백 (코드에서 도출, NextAuth v4)
+
+    https://e-jip.com/api/auth/callback/google
+    https://e-jip.com/api/auth/callback/kakao
+    https://e-jip.com/api/auth/callback/naver
+
+GA4는 Measurement ID가 코드에 박혀 있지 않고 환경변수에서 온다 — 코드 변경 없이
+콘솔에서 스트림 URL만 바꾸면 된다. G-RHCB04C6XC 유지.
+
+남은 작업은 전부 외부 콘솔(Vercel / Hosting.kr / Google / Kakao / Naver / GA4)의
+사용자 작업이다. 절차·정확한 등록값·검증 체크리스트·롤백 계획은
+docs/development/DOMAIN_CUTOVER_V1.md에 있다.
+
+DNS가 파킹 상태이므로 커토버 후 검증은 아직 불가능하다 — BLOCKED ON USER ACTION.
+
 ## 2026-09-11
 
 ### SHARE CARD UNIFICATION V1 — 공유 카드를 하나로
