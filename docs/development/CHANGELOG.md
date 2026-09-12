@@ -2,17 +2,33 @@
 
 ## 2026-09-12
 
-### INDEXNOW V1 — 변경 통지 연동 (키 대기 중)
+### INDEXNOW V1 — 변경 통지 연동 (완료, 36 URL 제출 HTTP 202)
 
 Bing·Naver 등 IndexNow 참여 검색엔진에 URL 변경을 알리는 연동을 넣었다.
 클라이언트·스크립트·테스트는 끝났고, **키 파일과 초기 제출만 남았다.**
 
 키를 지어내지 않았다
 
-작업 지시문의 INDEXNOW_KEY 자리가 placeholder 그대로 왔다. 사용자가 Bing/IndexNow
-화면에서 이미 발급받은 값이 따로 있으므로, 임의로 키를 만들어 올리면 그 값이 고아가
-된다. 키가 없는 동안 클라이언트는 NOT_CONFIGURED로 동작하며 네트워크 요청을 아예
-보내지 않는다 — 설정되지 않은 상태가 조용히 깨진 상태가 되지 않는다.
+작업 지시문의 INDEXNOW_KEY 자리가 두 번 다 placeholder 문자열 그대로 왔다. 사용자가
+Bing/IndexNow 화면에서 이미 발급받은 값이 따로 있으므로, 임의로 키를 만들어 올리면
+그 값이 고아가 된다. 키가 없는 동안 클라이언트는 NOT_CONFIGURED로 동작하며 네트워크
+요청을 아예 보내지 않았다 — 설정되지 않은 상태가 조용히 깨진 상태가 되지 않는다.
+placeholder 문자열 자체도 키 형식 검증에서 걸러졌다.
+
+실제 키는 사용자가 public/<key>.txt 파일을 직접 만들어 전달했다. 그 파일을 생성
+스크립트로 한 번 다시 만들어(같은 키 + 스크립트가 내는 줄바꿈) 아티팩트가 생성기에서
+재현 가능하도록 맞춘 뒤 커밋했다.
+
+프로덕션 실측
+
+    GET https://e-jip.com/396495517bdb4193ae13ffd0541124f6.txt
+      200 / text/plain; charset=utf-8 / 리다이렉트 0
+      바이트 = 키 + LF (33바이트), 파일 이름 = 파일 내용
+
+    초기 제출  36 URL / 배치 1 / 거부 0 / 범위 밖 0 / HTTP 202
+
+202는 Accepted(접수, 키 검증 대기)이며 IndexNow 규격상 첫 제출의 정상 응답이다.
+오류가 아니다. 그리고 202도 색인됐다는 뜻은 아니다 — 통지가 접수됐다는 뜻이다.
 
 키는 비밀이 아니다
 
@@ -75,7 +91,7 @@ npm run indexnow:submit-sitemap 은 프로덕션 sitemap.xml을 그대로 읽어
     npx tsc --noEmit                                   src/ 오류 0
     npm run build                                      Compiled successfully
 
-Bing Webmaster Tools 화면은 이 환경에서 볼 수 없다 — CONSOLE QA REQUIRED.
+Bing Webmaster Tools 수신 내역은 이 환경에서 볼 수 없다 — CONSOLE QA REQUIRED.
 
 ## 2026-09-12
 

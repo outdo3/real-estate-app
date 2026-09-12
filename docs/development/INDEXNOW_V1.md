@@ -12,13 +12,21 @@ Bing·Naver 등 IndexNow 참여 검색엔진에 URL 변경을 통지하는 연�
 | IndexNow 클라이언트 | **완료** |
 | 사이트맵 일괄 제출 스크립트 | **완료** (dry-run으로 실제 프로덕션 사이트맵 검증) |
 | 테스트 | **완료** (26개) |
-| 키 파일 (`/<key>.txt`) | **대기** — 사용자 키 필요 |
-| 초기 제출 | **대기** — 키 설정 후 1회 실행 |
+| 키 파일 (`/<key>.txt`) | **완료** — 프로덕션 200 확인 |
+| 초기 제출 | **완료** — 36 URL, HTTP 202 |
+| Bing 콘솔 수신 확인 | **대기** — CONSOLE QA REQUIRED |
 
-작업 지시문의 `INDEXNOW_KEY=<여기에 사용자가 생성한 키>` 자리가 placeholder 그대로였다.
-키를 **지어내지 않았다** — 사용자가 Bing/IndexNow 화면에서 이미 발급받은 값이 따로 있고,
-다른 키를 만들어 올리면 그 값이 고아가 된다. 키가 없는 동안 클라이언트는
-`NOT_CONFIGURED`로 동작하며 **네트워크 요청을 아예 보내지 않는다.**
+키는 `396495517bdb4193ae13ffd0541124f6`이다(공개값 — §1).
+
+경위 기록: 지시문의 `INDEXNOW_KEY=...` 자리가 두 번 다 placeholder 문자열 그대로
+전달됐고, 키를 **지어내지 않았다** — 사용자가 Bing/IndexNow 화면에서 이미 발급받은
+값이 따로 있어 다른 키를 만들어 올리면 그 값이 고아가 되기 때문이다. 실제 키는
+사용자가 `public/<key>.txt` 파일을 직접 만들어 전달했고, 그 파일을 생성 스크립트로
+한 번 다시 만들어(같은 키 + 스크립트가 내는 줄바꿈) 아티팩트가 생성기에서 재현
+가능하도록 맞춘 뒤 커밋했다.
+
+참고로 placeholder 문자열은 키 형식 검증(`^[A-Za-z0-9-]{8,128}$`)에서 걸러졌다 —
+잘못된 값이 키 파일이 되거나 제출 페이로드에 실릴 수 있는 경로는 없었다.
 
 ## 1. 키는 비밀이 아니다
 
@@ -169,14 +177,45 @@ npm run indexnow:submit-sitemap                # 실제 통지
 말하면, 데이터 없이 사이트맵만 넓히면 IndexNow도 같이 넓어진다 — 범위 검사가 그때
 멈춰 세우는 안전핀이다.
 
-## 8. 남은 작업 (사용자)
+## 8. 실행 기록 (2026-09-12)
 
-1. `INDEXNOW_KEY`를 알려주거나 `.env.local` / Vercel 환경변수에 설정
-2. `npm run indexnow:write-key` → `public/<key>.txt` 생성 후 **커밋**
-3. 프로덕션 재배포
-4. `https://e-jip.com/<key>.txt` 가 200 / 키 한 줄로 열리는지 확인
-5. `npm run indexnow:submit-sitemap` 1회 실행, HTTP 응답 코드 기록
-6. Bing Webmaster Tools → IndexNow 에서 수신 내역 확인
+### 키 파일 — 프로덕션 실측
+
+```
+GET https://e-jip.com/396495517bdb4193ae13ffd0541124f6.txt
+
+http_code     200
+content_type  text/plain; charset=utf-8
+redirects     0
+바이트         396495517bdb4193ae13ffd0541124f6 + LF  (33바이트)
+```
+
+파일 이름 = 파일 내용. 리다이렉트 없음, HTML 없음. git blob은 LF로 저장돼 있어
+Vercel의 Linux 체크아웃에서 CR이 섞이지 않는다(Windows 작업 트리에서 커밋할 때
+확인함).
+
+### 초기 제출 — 실제 응답
+
+```
+사이트맵 URL   36개
+제출 대상      36개 (거부 0, 범위 밖 0)
+배치           1
+HTTP 응답      202
+```
+
+**HTTP 202 = Accepted, 키 검증 대기.** IndexNow 규격상 첫 제출의 정상 응답이며
+오류가 아니다(200 = 제출 완료, 202 = 접수했고 키 파일을 확인하는 중). 키 파일이
+이미 200으로 공개돼 있으므로 검증에 필요한 조건은 갖춰져 있다.
+
+다시 강조하면 202도 **색인됐다는 뜻이 아니다**(§4).
+
+### 남은 작업 (사용자)
+
+1. Bing Webmaster Tools → IndexNow 에서 수신 내역 확인 — 이 환경에서 볼 수 없다
+2. 런타임에서 제출하려면 Vercel 환경변수에 `INDEXNOW_KEY` 설정
+   (지금 제출은 스크립트에 값을 직접 넘겨 1회 실행했다)
+3. `package.json`의 npm 별칭 2개 커밋 — 사용자 작업물(decimal.js/unzipper 추가)이
+   같은 파일에 있어 이 STEP 커밋에 포함하지 않았다
 
 ## 9. 검증
 
@@ -186,6 +225,8 @@ npx tsx --test "src/**/*.test.ts"                     879/879 PASS
 npx tsc --noEmit                                      src/ 오류 0
 npm run build                                         Compiled successfully
 dry-run (실제 프로덕션 sitemap)                        36 URL, 거부 0, 범위 밖 0
+프로덕션 키 파일                                       HTTP 200, text/plain
+초기 제출                                              36 URL, HTTP 202
 ```
 
 Bing Webmaster Tools 화면은 이 환경에서 볼 수 없다 — **CONSOLE QA REQUIRED**.
