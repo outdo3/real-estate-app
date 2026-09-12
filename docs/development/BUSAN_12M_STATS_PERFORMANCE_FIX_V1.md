@@ -294,18 +294,51 @@ onlyMOLIT rent(현재월)     0      onlyDB rent(현재월)     0
    137ms  HTTP 200  lawdCd=26140&period=7d   (warm)
 ```
 
-Production 기준선(직전 STEP에서 반복 실측): 12m cold **22.39s / 25.46s**, warm 0.85~0.93s.
+### 8.3 Production 실측 (배포 후, `https://e-jip.com`)
 
-| 목표 | 결과(로컬) |
+배포: `a8ef871` → Vercel production Ready. 같은 URL을 `curl -w '%{time_total}'`로 측정했다.
+
+```
+첫 요청(배포 직후, 함수 cold start + Prisma 초기화 포함)   6.21s  HTTP 200
+다른 인스턴스 cold                                        3.76s  HTTP 200
+warm                                                0.81s / 0.56s
+TTL(5분) 만료 후 cold — 인스턴스는 warm, 캐시만 비었음        3.18s  HTTP 200
+그 직후 warm                                        0.57s / 0.56s
+```
+
+기준선(직전 STEP에서 반복 실측): 12m cold **22.39s / 25.46s**, warm 0.85~0.93s.
+
+| 목표 | 결과(production) |
 |---|---|
-| warm ≤ 2s | **297ms — 달성** |
-| cold ≤ 3s(권장) | 3.87s — 미달 |
-| cold ≤ 5s(허용) | **3.87s — 달성** |
-| 반복 10s 초과 = FAIL | **해당 없음(반복 실행에서도 4초 미만)** |
+| warm ≤ 2s | **0.56~0.81s — 달성** |
+| cold ≤ 3s(권장) | 3.18s(반복되는 캐시 만료 cold) — **미달, 0.2초 초과** |
+| cold ≤ 5s(허용) | **3.18~3.76s — 달성** |
+| 반복 10s 초과 = FAIL | **해당 없음** (최악값이 배포 직후 1회성 6.21s) |
 
-로컬 cold의 3.0초는 **row 전송 대역폭**이다(§3.3). 같은 규모의 매매 row 전송을 이미 하는
-`/api/stats/dashboard?sidoCode=26`이 production에서 2.42s인 것을 보면 Vercel(icn1)에서는
-이보다 빠를 가능성이 높지만, **production 실측은 배포 후 별도로 확인해야 한다** — 아래 §11.
+응답 값도 대조했다 — production 응답이 §6.2의 NEW 값과 **완전히 일치**한다:
+
+```
+total 83,216 · verified 82,602 · canceled 614 · recordHigh 12,444 · rise 26,380 · fall 24,538
+apiError false · partial false · failedDistricts []
+topDongs  연산동 3,440 · 대연동 3,211 · 좌동 3,135 · 신호동 2,870 · 우동 2,834
+recordHighWindow 2025-10-01 ~ 2026-09-12
+```
+
+### 8.4 회귀 확인 (production)
+
+```
+sidoCode=26&period=7d                 0.91s  HTTP 200
+sidoCode=26&period=30d                1.15s  HTTP 200
+sidoCode=26&period=12m&dealType=sale  0.67s  HTTP 200
+sidoCode=26&period=12m&offset=50      1.13s  HTTP 200   (페이지네이션 정상)
+lawdCd=26140&period=7d                1.29s  HTTP 200   (무변경 단일 구 경로)
+sidoCode=11&period=7d                 2.99s  HTTP 200   (서울 = 비부산, MOLIT 경로 유지)
+                                      total 1,992 · apiError false · partial false
+/stats (페이지)                         0.47s  HTTP 200
+```
+
+남은 cold 3.2초는 **row 전송**이다(§3.3 — 집계 연산은 전부 합쳐 0.5초 미만). 권장선까지
+0.2초가 남았고, 줄일 수 있는 곳은 전송량뿐이다 — §10-5 참고.
 
 ---
 
@@ -347,8 +380,9 @@ read-only 감사 스크립트 6개(`scripts/audit-stats-feed-12m-*.ts`)를 함�
 
 ## 11. 다음 STEP 후보 (제안만)
 
-1. **production 실측 확인** — 배포 후 `sidoCode=26&period=12m` cold/warm을 2회 이상 측정해
-   목표(≤3s 권장 / ≤5s 허용) 달성 여부를 기록한다. 로컬 3.87s는 대역폭 영향이 섞여 있다.
+1. **cold 3.2s → 3s 미만** — 권장선까지 0.2초다. 전월세에도 좁은 select 전용 fetcher를 두면
+   (§10-5) 전송량 약 20%가 줄어 넘어설 가능성이 있다. 지금은 검증범위 강제를 한 곳에 두는
+   신뢰 이득을 택했으므로, 이 교환을 다시 볼 때 함께 판단한다.
 2. **rent recheck sweep 도입**(cron 추가 — 승인 필요). §10-1의 0.1% 누락을 구조적으로 없애고,
    피드·dashboard·조건검색의 전월세 건수를 원천과 일치시킨다.
 3. **취소 래칫 치유**(production backfill — 승인 필요). occurrence 그룹 단위로 원천과 대조해

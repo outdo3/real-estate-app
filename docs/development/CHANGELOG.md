@@ -61,8 +61,20 @@ MOLIT task가 전월세 한 달뿐이라, 그것만 실패해도 11개월치 DB 
     30d  cold  1,061ms
     단일 구(무변경 경로)  1,797ms / warm 137ms
 
-warm ≤2s 달성, cold ≤5s 허용 범위 달성(≤3s 권장은 미달). 남은 cold 3.0초는 row 전송
-대역폭이고 로컬 회선 영향이 섞여 있다 — production 실측은 배포 후 확인한다.
+Production 실측(배포 후 e-jip.com)
+
+    12m  cold  3.18s  (TTL 만료 후, 인스턴스는 warm)   before 22.39s / 25.46s
+    12m  cold  3.76s  (다른 인스턴스)
+    12m  cold  6.21s  (배포 직후 1회 — 함수 cold start 포함)
+    12m  warm  0.56~0.81s
+    7d 0.91s · 30d 1.15s · offset=50 1.13s · dealType=sale 0.67s
+    단일 구(무변경) 1.29s · 서울(비부산, MOLIT 유지) 2.99s total 1,992 apiError false
+
+production 응답 값이 위 A/B의 NEW 값과 완전히 일치한다(total 83,216 / verified 82,602 /
+canceled 614 / recordHigh 12,444 / rise 26,380 / fall 24,538, topDongs 동일 순서).
+
+warm ≤2s 달성, cold ≤5s 허용 달성, ≤3s 권장은 0.2초 미달. 반복 10초 초과는 없다.
+남은 cold 3.2초는 row 전송이다 — 집계 연산은 8만 건을 다 돌려도 0.5초 미만이다.
 
 검증: 신규 18 tests, src 전체 1045/1045 pass, tsc src 오류 0, eslint 변경 파일 0,
 build Compiled successfully. read-only 감사 스크립트 6개를 함께 커밋했다(모든 숫자 재현 가능).
