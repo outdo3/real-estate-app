@@ -1274,3 +1274,53 @@ GA4의 역할이 유입 분석으로 한정돼 있어 필요가 없고(단지 �
 
 영향: 새 파라미터를 GA4로 보내려면 `ga.ts`의 `GA_PARAM_ALLOWLIST`에 키를 명시적으로
 추가해야 한다. 이 마찰은 의도된 것이다.
+
+---
+
+## 2026-09-13 — 부산 소프트런칭을 CONDITIONAL GO로 freeze하고, 남은 조건을 코드 밖에 둔다
+
+날짜:
+2026-09-13
+
+결정:
+`e867a40`을 BUSAN RELEASE CANDIDATE로 고정한다. 이 시점 이후 신규 기능 개발을
+중단하고, 출시 전에는 P0/P1 bug fix만 허용한다. 판정은 GO가 아니라 **CONDITIONAL GO**
+이며, 남은 조건 3건은 전부 코드가 아닌 영역(실기기 QA, 운영 결정, 외부 프로바이더)에
+둔다. git tag는 만들지 않는다.
+
+배경:
+출시 직전 감사에서 P0 0건, P1 code blocker 0건이 나왔다. production route 40개가
+5xx 없이 응답하고, 인증 경계는 전부 fail-closed이며, 직전 감사의 유일한 성능 P1
+(12개월 부산 전체 22~25초)은 production에서 cold 4.73s / warm 0.65s로 재측정되어
+해소를 확인했다. 테스트 1670/1670, build exit 0.
+
+그럼에도 GO를 쓰지 않은 이유는 이 환경에 실제 device가 없기 때문이다. 지도/로드뷰는
+Kakao JS 키 허용 도메인에 의존하고, 카카오 공유 말풍선과 report의 PNG/PDF export는
+브라우저에서만 확인된다. 서버에서 대체 검증할 방법이 없다.
+
+이유:
+"코드가 준비됐다"와 "출시해도 된다"를 같은 말로 쓰지 않기 위해서다. 세 조건을 코드
+blocker로 분류했다면 잘못된 수정을 유발했을 것이다.
+
+- **Naver 로그인**: PC는 PASS이고 모바일에서만 state cookie 오류가 난다. 서버는 세
+  프로바이더에 동일한 쿠키를 발급하므로 공용 인프라 문제가 아니다. 여기서 auth 전체를
+  건드리면 정상 동작하는 Google·Kakao까지 위험해진다. LIMITED provider로 출시한다.
+- **커뮤니티 게시글 0건**: API도 화면도 정상이고 loading/error/true-empty를 분리해
+  보여준다. 빈 것은 운영 상태지 결함이 아니므로 코드에서 seed를 만들지 않는다.
+- **실기기 QA**: 못 한 것을 PASS로 적지 않는다. 체크리스트로 남긴다.
+
+감사 중 발견한 테스트 실패 1건도 같은 기준으로 갈랐다. `/api/transactions`의 완전성
+가드가 실패했지만 원인은 낡은 정규식이었고 계약 자체는 살아 있었다. 제품 코드를
+테스트에 맞추는 대신 가드를 현재 코드 형태에 맞췄다 — 단, `...completeness`가 빠지면
+여전히 실패하도록 강도는 유지했다.
+
+영향:
+- 출시 판단의 잔여 리스크가 코드가 아니라 QA 1회 + 운영 결정 2건으로 명확해졌다.
+  §15 Android Chrome 체크리스트를 통과시키면 GO로 승격한다.
+- freeze 기간 동안 P0/P1 외의 변경은 들어가지 않는다. Score formula, DB schema,
+  auth 정책은 승인 없이 변경하지 않는다.
+- P2로 미룬 항목(`rel="canonical"` 부재, PWA maskable 아이콘, `www` DNS 미등록)은
+  post-launch 목록에 올렸다. 어느 것도 첫 방문 경로를 막지 않는다.
+
+상태:
+확정. 문서: `docs/development/BUSAN_RELEASE_CANDIDATE_FREEZE_PRELAUNCH_AUDIT_V1.md`

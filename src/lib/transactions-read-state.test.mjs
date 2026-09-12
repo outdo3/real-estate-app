@@ -139,7 +139,7 @@ test('라우트가 월별 판정을 실제로 수행하고 완전성을 응답�
   assert.ok(src.includes('foldMonthResults'), '에러 플레이스홀더가 거래 배열에서 제거되지 않는다');
   assert.ok(src.includes('summarizeTradeCompleteness'));
   assert.ok(
-    /NextResponse\.json\(\{ transactions: data, \.\.\.completeness \}\)/.test(src),
+    /NextResponse\.json\(\s*\{\s*transactions:\s*data,\s*\.\.\.completeness\s*\}/.test(src),
     '완전성이 응답에 실리지 않는다'
   );
   assert.ok(

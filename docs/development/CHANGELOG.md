@@ -1,5 +1,52 @@
 # 이집 개발 변경 기록
 
+## 2026-09-13
+
+### BUSAN RELEASE CANDIDATE FREEZE + PRELAUNCH AUDIT V1 — 출시 직전 게이트
+
+부산 웹 소프트런칭 직전 main을 Release Candidate로 감사했다.
+
+    Release Candidate    e867a40
+    P0                   0건
+    P1 code blocker      0건
+    판정                 CONDITIONAL GO
+
+감사 범위: 코드 정적 감사 + read-only production HTTP + 전체 테스트/빌드.
+DB·schema·migration 0건, production write 0건, auth/provider/env 변경 0건, 신규 기능 0건.
+
+확인한 것
+
+    최근 release fix 13개      전부 commit+코드+테스트로 확인 (NOT FOUND 0건)
+    production route 40개      5xx 0건, redirect loop 0건
+    인증 경계                  /api/my/* 401, /api/admin/* 401, /api/cron/* 401 fail-closed
+    데이터 진실성              요청 aptSeq 외 단지 혼입 0건, 취소 614건 분리,
+                               Unit Master 없을 때 61.08m² 정확 fallback (가짜 평형 0건)
+    성능                       12개월 부산 전체 cold 4.73s / warm 0.65s
+                               (직전 감사의 22~25초 P1 해소를 production에서 재측정)
+
+적용한 수정 1건 — test-only
+
+/api/transactions의 완전성 가드가 실패하고 있었다. 제품 결함이 아니라 낡은 가드였다:
+d1fa766이 한 줄짜리 응답을 정규식으로 고정했는데 2a0f586(캐시 헤더)이 같은 호출을
+여러 줄로 재포맷하면서 가드를 갱신하지 않았다. 완전성은 실제로 응답 envelope에 실려
+있고 주변 행위 테스트는 전부 통과한다. 정규식만 공백 허용형으로 바꿨다 —
+...completeness를 빼면 여전히 실패하는 강도는 그대로다.
+
+    npx tsx --test <src 전체>     1670/1670 pass
+    npx tsc --noEmit              src 오류 0건 (FAIL_EXISTING_SCRIPT_ERRORS)
+    npm run build                 exit 0, warning 0
+
+남은 조건 3건 — 코드가 아니다
+
+    1. 실기기 QA 미수행 (지도/로드뷰, 카카오 공유, report export는 서버 검증 불가)
+    2. 커뮤니티 게시글 0건 — 운영 결정 (seed 생성하지 않음)
+    3. Naver 로그인 LIMITED — PC PASS, 모바일 state cookie 이력. Google·Kakao로 완결
+
+문서: docs/development/BUSAN_RELEASE_CANDIDATE_FREEZE_PRELAUNCH_AUDIT_V1.md
+
+이 STEP 이후 신규 기능 개발 중단. 출시 전에는 P0/P1 bug fix만 허용.
+
+
 ## 2026-09-12
 
 ### STATS REPORT ENTRY AUDIT + FIX V1 — 통계에서 리포트로 가는 길을 잇는다
