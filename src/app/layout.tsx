@@ -31,6 +31,14 @@ const OG_IMAGE_PATH = '/brand/og/ejip-og-main-1200x630.jpg';
  */
 const NAVER_SITE_VERIFICATION = '0de185bf086e886fde6e72e9ff6fb80df5585f83';
 
+/**
+ * YANDEX_WEBMASTER_VERIFICATION_V1 — Yandex 웹마스터 사이트 소유확인 토큰.
+ *
+ * 네이버 토큰과 같은 성격이다 — 비밀이 아니라 **페이지에 실어야 동작하는** 공개값이고,
+ * 사이트 속성별로 발급되므로 도메인이 바뀌면 새로 받아야 한다.
+ */
+const YANDEX_SITE_VERIFICATION = '10952c1f1c3c054e';
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   // /manifest.webmanifest (src/app/manifest.ts가 생성)
@@ -92,7 +100,13 @@ export const metadata: Metadata = {
   // 이 자리에 둔 이유: 루트 layout이 앱 전체 메타데이터의 단일 출처이고, 하위 페이지가
   // 이 필드를 덮어쓰지 않으므로 태그가 문서당 정확히 하나만 나온다. <head>에 직접
   // 태그를 심으면 Next의 메타데이터 파이프라인 밖에 놓여 중복 위험이 생긴다.
+  //
+  // YANDEX_WEBMASTER_VERIFICATION_V1 — Yandex는 Next가 아는 이름이라 전용 키가 있다.
+  // `yandex: '...'`가 곧바로 <meta name="yandex-verification">로 렌더되므로
+  // other에 넣지 않는다(넣어도 같은 태그가 나오지만, 타입이 있는 경로를 쓴다).
+  // 네이버 항목과 **나란히** 둔다 — 둘은 서로 다른 필드라 덮어쓰지 않는다.
   verification: {
+    yandex: YANDEX_SITE_VERIFICATION,
     other: {
       'naver-site-verification': NAVER_SITE_VERIFICATION,
     },

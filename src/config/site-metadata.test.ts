@@ -121,3 +121,34 @@ test('소유확인을 추가하면서 기존 메타데이터를 건드리지 않
   assert.ok(/twitter: \{/.test(LAYOUT));
   assert.ok(/metadataBase: new URL\(siteConfig\.url\)/.test(LAYOUT));
 });
+
+// ── YANDEX_WEBMASTER_VERIFICATION_V1 ──────────────────────────────────────
+
+const YANDEX_TOKEN = '10952c1f1c3c054e';
+
+test('Yandex 소유확인 토큰이 루트 메타데이터에 정확히 한 번 들어 있다', () => {
+  const occurrences = (LAYOUT.match(new RegExp(YANDEX_TOKEN, 'g')) ?? []).length;
+  assert.equal(occurrences, 1, `토큰 선언이 ${occurrences}곳이다(1곳이어야 한다)`);
+});
+
+/** 주석은 렌더 결과를 설명하느라 태그 문자열을 언급한다 — 배선 검사는 코드만 본다. */
+const layoutCode = () => LAYOUT.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+test('Yandex는 Next의 전용 키를 쓴다 — other에 중복으로 넣지 않는다', () => {
+  assert.ok(/yandex: YANDEX_SITE_VERIFICATION/.test(LAYOUT), '전용 yandex 키를 쓰지 않는다');
+  const code = layoutCode();
+  // other에도 넣으면 같은 태그가 두 번 렌더된다.
+  assert.ok(!/'yandex-verification'/.test(code), 'other에 중복 선언돼 있다');
+  assert.ok(!/<meta[^>]*yandex/i.test(code), 'head에 태그를 직접 심었다');
+});
+
+test('두 검색엔진 소유확인이 한 verification 객체에 공존한다 — 서로 덮어쓰지 않는다', () => {
+  const at = LAYOUT.indexOf('verification: {');
+  assert.ok(at > -1, 'verification 블록이 없다');
+  const block = LAYOUT.slice(at, at + 300);
+  assert.ok(/yandex: YANDEX_SITE_VERIFICATION/.test(block), 'Yandex가 verification 안에 없다');
+  assert.ok(/'naver-site-verification': NAVER_SITE_VERIFICATION/.test(block), '네이버가 사라졌다');
+  // verification 객체는 하나뿐이어야 한다(두 번 선언하면 뒤엣것이 앞엣것을 덮는다).
+  const declarations = (LAYOUT.match(/^\s*verification: \{/gm) ?? []).length;
+  assert.equal(declarations, 1, `verification 선언이 ${declarations}개다`);
+});
