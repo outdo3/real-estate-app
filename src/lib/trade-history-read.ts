@@ -391,6 +391,53 @@ export async function getRegionalSaleRowsRawFromDb(lawdCds: string[], from: Date
   return rows;
 }
 
+// BUSAN_12M_STATS_PERFORMANCE_FIX_V1 §4 — /api/stats/feed(실거래 피드) 전용 좁은
+// fetcher. 위 getRegionalSaleRowsRawFromDb를 그대로 쓸 수 없는 이유가 두 가지 있고,
+// 둘 다 **데이터 의미**의 문제라 옵션으로 뭉개지 않고 별도 함수로 분리한다(dashboard의
+// 쿼리 계획·계약을 건드리지 않는다 — blast radius 0, grep으로 확인 가능).
+//
+//  1) 취소 거래를 **포함**해야 한다. 피드는 취소 거래를 지우지 않고 "취소" 배지를 달아
+//     보여주고(summary.cancelledCount), 집계에서만 filterVerifiedTrades()로 제외한다.
+//     dashboard용 함수처럼 SQL에서 deal_canceled=false로 걸러버리면 화면에서 취소
+//     거래가 **조용히 사라지고** 취소 건수도 0이 된다 — MOLIT 경로와 다른 화면이 된다.
+//  2) 상한(to)이 필요하다. 피드의 MOLIT 경로는 "겹치는 달 전체"를 가져오므로, DB 경로도
+//     같은 달 경계로 끊어야 allTrades가 동일해진다(신고가/직전거래 비교 대상이 달라지면
+//     summary의 recordHighCount/riseCount가 달라진다).
+//
+// ORDER BY를 명시하는 것도 의미가 있다: dedupeTrades()의 키에 dealCanceled가 들어가지
+// 않아, 같은 (단지·면적·금액·계약일·층) 형제 행 중 **먼저 온 행**이 살아남는다. 정렬을
+// 고정하지 않으면 같은 요청이 실행마다 다른 형제를 남길 수 있다(MOLIT 경로가 실제로
+// 그렇다 — 응답 순서가 호출마다 뒤바뀐다, APARTMENT_TRADE_SYNC_COVERAGE_AUDIT_V1 §7.2).
+export interface FeedSaleRow {
+  id: number;
+  lawdCd: string;
+  aptSeq: string | null;
+  aptName: string;
+  dong: string;
+  exclusiveArea: string; // Decimal -> string(정밀도 보존, 이 파일의 다른 함수와 동일 관례)
+  dealAmount: number;
+  dealDate: Date;
+  floor: number | null;
+  dealCanceled: boolean;
+}
+
+export async function getRegionalSaleRowsForFeedFromDb(lawdCds: string[], from: Date, to: Date): Promise<FeedSaleRow[]> {
+  if (lawdCds.length === 0) return [];
+  // SUPABASE_EGRESS_P0_FIX_V1과 동일한 이유로 select를 좁힌다 — 피드는 한 요청에
+  // 30,000행 이상을 옮기므로 쓰이지 않는 컬럼(build_year/jibun)을 싣지 않는다.
+  // 아래 컬럼 집합은 toFeedTrade()가 실제로 읽는 필드와 1:1이다.
+  const rows = await prisma.$queryRaw<FeedSaleRow[]>`
+    SELECT id, lawd_cd as "lawdCd", apt_seq as "aptSeq", apt_name as "aptName", dong,
+           exclusive_area::text as "exclusiveArea", deal_amount as "dealAmount", deal_date as "dealDate",
+           floor, deal_canceled as "dealCanceled"
+    FROM apartment_trade_histories
+    WHERE lawd_cd = ANY(${lawdCds}) AND deal_type = 'sale'
+      AND deal_date >= ${from} AND deal_date <= ${to}
+    ORDER BY deal_date, id
+  `;
+  return rows;
+}
+
 export interface YearlySaleAggregateRow {
   year: number;
   count: number;

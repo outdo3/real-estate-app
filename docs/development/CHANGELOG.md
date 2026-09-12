@@ -2,6 +2,71 @@
 
 ## 2026-09-12
 
+### BUSAN 12M STATS PERFORMANCE FIX V1 — 한 요청의 MOLIT 호출 384 → 16
+
+통계 → 실거래 피드에서 "부산광역시 전체 + 최근 12개월"을 고르면 Production 실측
+22.39s / 25.46s가 걸렸다. 캐시(인스턴스 메모리, TTL 5분)가 비는 5분마다 재발했다.
+로딩 문구로 가린 게 아니라 실행 비용을 줄였다.
+
+원인: 한 요청이 외부 API를 384번 호출했다
+
+    16개 구 × 12개월 × (매매 + 전월세) = 384 task
+    전역 스로틀 = 동시 6개, 슬롯당 200ms 페이싱
+    (150ms + 200ms) × 384 / 6 = 22.4초        ← 실측 22.39s와 일치
+
+계측으로 확정했다: 이론값 384 = 실제값 384(중복 호출 0, pagination 증가 0, 재시도 0).
+집계 연산(8만 건 dedupe+신고가+요약+정렬)은 전부 합쳐 0.5초 미만 — 병목이 아니었다.
+
+방법: 이미 DB에 있는 데이터를 DB에서 읽는다
+
+    매매    apartment_trade_histories       창 안 34,914행, 16/16 구  → MOLIT 0회
+    전월세  apartment_rent_histories        검증범위 안 11개월 52,146행 → MOLIT 0회
+    전월세  검증 안 된 1개월(진행 중인 현재월) → MOLIT 16회 (그대로)
+
+새 원천이 아니다. 같은 데이터를 이미 /api/transactions DB-first, /api/stats/dashboard,
+지도 마커, 분위지도가 읽는다 — 피드만 전환에서 빠져 있었다. 전월세 쿼리는 기존
+fetchRentMonthBucketsFromDb를 그대로 재사용했고(새 SQL 0줄), 매매만 피드 전용 좁은
+fetcher를 추가했다(기존 dashboard 함수는 취소 거래를 SQL에서 지우고 상한이 없어 그대로
+쓸 수 없다 — 피드는 취소 거래를 배지와 함께 보여준다).
+
+하지 않은 것: TTL 확대(5분 그대로), 12개월 옵션 제거, 동시성 상향(스로틀 6 그대로),
+새 테이블/뷰/cron/외부 캐시, schema/migration, production write, 통계 공식 변경.
+
+데이터 신뢰 대조(구 단위 A/B, 라우트가 쓰는 함수 그대로)
+
+    첫 페이지 10건        완전 동일(순서·금액·계약일·층·취소 포함)
+    topDongs 상위 5       동일 순서
+    totalCount            83,296 → 83,216   (−0.096%)
+    fallCount             24,890 → 24,538   (−1.4%)
+
+차이의 원인을 코드 수준에서 확정한 뒤 적용했다(추정 아님):
+전월세 지연 등록 누락 약 0.1% — rent-sync의 overlap이 2개월이고 rent recheck sweep이
+없어 완료월이 다시 확인되지 않는다(sale에는 sale-recheck가 있다). 이미 운영 중인 상태로,
+부산 거래량 dashboard가 같은 테이블·같은 검증범위를 읽는다 — 이번 변경으로 두 화면이
+같은 숫자를 말하게 된다. fallCount가 행 차이(80)보다 크게 움직인 것은 annotateTrades가
+그룹 안에서 직전 거래와 짝지어 비교하기 때문이다(누락 행 뒤가 한 칸씩 밀린다).
+나머지 12행은 APARTMENT_TRADE_SYNC_COVERAGE_AUDIT_V1 §7.2/§7.3의 기존 취소 래칫·유령 행이다.
+byte-identical parity는 주장하지 않는다. 두 결함의 수정은 cron 추가/production backfill이
+필요해 승인 사항으로 보고만 한다.
+
+apiError 판정 보정: DB 경로에서는 "모든 구 실패 → 전체 에러"를 적용하지 않는다. 남은
+MOLIT task가 전월세 한 달뿐이라, 그것만 실패해도 11개월치 DB 데이터를 가진 채 화면이
+전부 에러가 된다 — 실패를 0으로 접는 것의 거울상이다. 그 상황은 partial(일부 지역 지연
+배너)이 정확한 표현이고, DB 쿼리가 실패하면 기존 catch가 요청을 에러로 만든다.
+
+결과(로컬 라우트 직접 호출)
+
+    12m  cold  3,866ms  (before 22,390ms)      warm 297ms
+    7d   cold  1,006ms                          warm  62ms
+    30d  cold  1,061ms
+    단일 구(무변경 경로)  1,797ms / warm 137ms
+
+warm ≤2s 달성, cold ≤5s 허용 범위 달성(≤3s 권장은 미달). 남은 cold 3.0초는 row 전송
+대역폭이고 로컬 회선 영향이 섞여 있다 — production 실측은 배포 후 확인한다.
+
+검증: 신규 18 tests, src 전체 1045/1045 pass, tsc src 오류 0, eslint 변경 파일 0,
+build Compiled successfully. read-only 감사 스크립트 6개를 함께 커밋했다(모든 숫자 재현 가능).
+
 ### CONDITIONAL HOME FIND UI HIDE V1 — 진입점만 숨기고 기능은 남긴다
 
 '조건으로 집 찾기'(/ai-search)를 부산 소프트런칭 동안 사용자에게 노출하지 않는다.

@@ -21,6 +21,8 @@ import {
   type PeriodPreset,
 } from '@/lib/regional-feed';
 import { prisma } from '@/lib/prisma';
+import { splitVerifiedMonths, getRentVerifiedRange } from '@/lib/rent-history-read';
+import { isFeedDbBackedSido, loadBusanFeedTradesFromDb } from '@/lib/stats/feed-db-source';
 import { resolveApartmentContextBatch, type PyeongLookupKey as ContextLookupKey } from '@/lib/statistics-pyeong-resolver';
 
 // STATISTICS V2 — REGIONAL TRANSACTION FEED §8/§9/§32. 기존 rankings/dashboard와
@@ -97,46 +99,84 @@ export async function GET(request: Request) {
       const districts = await getSigunguListForSido(sidoCodeParam!);
       const lawdCds = districts.map((d) => d.code.substring(0, 5));
 
-      const cacheKey = `stats-feed-sido:${sidoCodeParam}:${months.join(',')}`;
+      const dbBacked = isFeedDbBackedSido(sidoCodeParam);
+
+      // BUSAN_12M_STATS_PERFORMANCE_FIX_V1 §4 — 캐시 키를 v2로 올린다: 캐시에 담는
+      // 값이 "MOLIT raw 결과 맵"에서 "조립·중복제거까지 끝난 FeedTrade 목록"으로
+      // 바뀌었다(TTL 5분은 그대로 — 데이터 최신성 기준을 바꾸지 않는다).
+      const cacheKey = `stats-feed-sido:v2:${sidoCodeParam}:${months.join(',')}`;
       const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
+        // 전월세는 **검증범위 안 월만** DB로 읽는다. 검증 안 된 월(주로 진행 중인
+        // 현재월)은 기존 MOLIT 경로를 그대로 쓴다 — 검증되지 않은 기간을 "DB에 다
+        // 있다"로 가장하지 않는다(RENT_TRADE_HISTORY_V1 PHASE D §16/§17과 동일 규칙,
+        // 같은 함수를 재사용한다).
+        const rentSplit = dbBacked
+          ? splitVerifiedMonths(months, await getRentVerifiedRange())
+          : { verified: [] as string[], unverified: months };
+
         const tasks: MonthTask[] = [];
         for (const dLawdCd of lawdCds) {
           for (const m of months) {
-            tasks.push({ key: `${dLawdCd}|apt:${m}`, lawdCd: dLawdCd, dealYmd: m, type: 'apt' });
+            // 부산 매매는 DB에서 읽으므로 MOLIT task 자체를 만들지 않는다
+            // (dashboard/yearly가 이미 쓰는 것과 동일한 원칙).
+            if (!dbBacked) tasks.push({ key: `${dLawdCd}|apt:${m}`, lawdCd: dLawdCd, dealYmd: m, type: 'apt' });
+          }
+          for (const m of rentSplit.unverified) {
             tasks.push({ key: `${dLawdCd}|rent:${m}`, lawdCd: dLawdCd, dealYmd: m, type: 'rent' });
           }
         }
-        const results = await fetchMonthsThrottledWithStatus(tasks);
-        // §36 부분 실패 — lawdCd 하나라도 task가 실패했으면 그 구를 실패 목록에 남긴다
+
+        const [results, dbSource] = await Promise.all([
+          fetchMonthsThrottledWithStatus(tasks),
+          dbBacked ? loadBusanFeedTradesFromDb(lawdCds, months, rentSplit.verified) : Promise.resolve(null),
+        ]);
+
+        // §36 부분 실패 — MOLIT task가 하나라도 실패한 구를 실패 목록에 남긴다
         // (엄격하게: 일부 달만 실패해도 그 구 전체를 "부분 실패"로 정직하게 표시).
+        // DB에서 읽은 부분에는 실패 개념이 없다 — 쿼리가 실패하면 아래 catch가
+        // 요청 전체를 에러로 만든다(구별 partial degrade 대상이 아니다).
         const failedSet = new Set<string>();
         for (const dLawdCd of lawdCds) {
           for (const m of months) {
-            if (results[`${dLawdCd}|apt:${m}`]?.failed || results[`${dLawdCd}|rent:${m}`]?.failed) failedSet.add(dLawdCd);
+            const aptFailed = !dbBacked && results[`${dLawdCd}|apt:${m}`]?.failed;
+            if (aptFailed || results[`${dLawdCd}|rent:${m}`]?.failed) failedSet.add(dLawdCd);
           }
         }
-        return { results, failedLawdCds: Array.from(failedSet), lawdCds, months };
+
+        const trades: FeedTrade[] = dbSource ? [...dbSource.trades] : [];
+        for (const dLawdCd of lawdCds) {
+          for (const m of months) {
+            if (!dbBacked) {
+              for (const raw of results[`${dLawdCd}|apt:${m}`]?.items || []) {
+                const t = toFeedTrade(raw, 'sale', dLawdCd);
+                if (t) trades.push(t);
+              }
+            }
+            // 검증범위 안 월은 task 자체가 없어 undefined가 되고, 아래 `|| []`가
+            // 자연히 빈 배열을 준다(부산 매매와 동일 처리).
+            for (const raw of results[`${dLawdCd}|rent:${m}`]?.items || []) {
+              const t = toFeedTrade(raw, raw.monthlyRent > 0 ? 'wolse' : 'jeonse', dLawdCd);
+              if (t) trades.push(t);
+            }
+          }
+        }
+
+        return { trades: dedupeTrades(trades), failedLawdCds: Array.from(failedSet), lawdCds, dbBacked };
       });
 
       partial = cached.failedLawdCds.length > 0;
       failedDistricts = cached.failedLawdCds;
-
-      for (const dLawdCd of cached.lawdCds) {
-        for (const m of cached.months) {
-          for (const raw of cached.results[`${dLawdCd}|apt:${m}`]?.items || []) {
-            const t = toFeedTrade(raw, 'sale', dLawdCd);
-            if (t) allTrades.push(t);
-          }
-          for (const raw of cached.results[`${dLawdCd}|rent:${m}`]?.items || []) {
-            const t = toFeedTrade(raw, raw.monthlyRent > 0 ? 'wolse' : 'jeonse', dLawdCd);
-            if (t) allTrades.push(t);
-          }
-        }
-      }
-      allTrades = dedupeTrades(allTrades);
+      allTrades = cached.trades;
       // TOTAL_FAILURE — 모든 구가 실패했으면(부분이 아니라 전체) 정직하게 API
       // 에러로 보고한다(거래 0건과 절대 혼동하지 않는다).
-      if (cached.failedLawdCds.length === cached.lawdCds.length && cached.lawdCds.length > 0) apiError = true;
+      //
+      // DB 경로에서는 이 판정을 하지 않는다. 매매 전체와 검증범위 안 전월세가 이미
+      // DB에서 왔으므로, 남은 MOLIT task(검증 안 된 월의 전월세)가 16개 구 전부
+      // 실패해도 "데이터가 하나도 없다"는 뜻이 아니다. 그때 apiError로 올리면
+      // 화면이 **있는 데이터를 전부 숨기고** 에러만 띄운다 — 실패를 0으로 접는
+      // 것의 거울상이다. 그 상황은 partial(=일부 지역 지연 배너)이 정확한 표현이고,
+      // DB 쿼리 자체가 실패하면 아래 catch가 요청을 에러로 만든다.
+      if (!cached.dbBacked && cached.failedLawdCds.length === cached.lawdCds.length && cached.lawdCds.length > 0) apiError = true;
     } else {
       // 신고가/직전거래 비교를 위해 조회 기간보다 최대 12개월 넓은 lookback을
       // 한 번에 fetch한다(기존 rankings/dashboard의 "최근 12개월" 관례와 동일한 폭).
