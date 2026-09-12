@@ -1,70 +1,126 @@
-/* PARTNER_LEAD_TRACKING_V1 — 제휴 CTA 카드.
-   톤: 신뢰감 있고 차분하게. 이집의 데이터 카드와 **구별**되도록 중립 회색 표면을
-   쓰고, 브랜드 초록(--primary-color)은 쓰지 않는다 — 초록을 쓰면 이집이 직접
-   제공하는 기능처럼 보인다. */
+/* PARTNER_LEAD_TRACKING_V1 / APT_DETAIL_PARTNER_TRADE_DENSITY_V1 §3·§12 —
+   제휴 CTA 카드의 **공통** 시각 언어.
+
+   법무사 카드(PartnerCtaCard)와 중개사 카드(BrokerCtaCard)가 이 스타일시트 하나를
+   같이 쓴다. 카드마다 CSS를 따로 두면 패딩·글자 크기가 조용히 갈라지고, 상세 화면
+   하단에 서로 다른 크기의 카드가 두 장 쌓인다(§12).
+
+   톤: 이집의 데이터 카드와 **구별**되도록 중립 회색 표면을 쓰고, 브랜드 초록
+   (--primary-color)은 쓰지 않는다 — 초록을 쓰면 이집이 직접 제공하는 기능처럼 보인다.
+
+   밀도: 예전 카드는 배지 + 큰 제목 + 긴 설명 + 큰 CTA + 긴 면책문구로 모바일에서
+   300px 가까이 차지해 데이터보다 더 눈에 띄었다. 데이터가 먼저고 행동은 그다음이다
+   (§11) — 여백과 문구를 줄여 카드를 데이터에 종속된 크기로 되돌린다. */
 
 .card {
   display: block;
-  margin: 1.5rem 0;
-  padding: 1.25rem;
+  margin: 1.25rem 0;
+  padding: 0.85rem 0.9rem;
   background: var(--surface-subtle, #f8fafc);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: 12px;
 }
 
-.badge {
-  display: inline-block;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  background: #eceff3;
-  color: var(--text-muted);
-  font-size: 0.72rem;
+/* 섹션 라벨. 예전 "광고·제휴" 배지 자리에 들어가지만 성격이 다르다 —
+   이 카드가 무엇에 대한 것인지(등기 상담 / 중개 상담)를 말한다. */
+.sectionTitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
 }
 
-.title {
-  margin: 0.7rem 0 0.35rem;
-  font-size: 1.02rem;
-  font-weight: 800;
-  line-height: 1.45;
-  color: var(--text-primary);
+/* 상호 + (중개사의 경우) 아이콘 한 줄. */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.identityIcon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  /* §10 — 프로필 사진도 로고도 없다. 빈 자리처럼 보이지 않도록 중립 아이콘 타일을
+     의도적으로 쓴다(깨진 이미지 폴백처럼 보이면 안 된다). */
+  background: #eceff3;
+  color: var(--text-secondary);
+}
+
+.identityIcon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .partnerName {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
+  margin: 0;
+  font-size: 0.98rem;
   font-weight: 700;
+  line-height: 1.3;
   color: var(--text-primary);
+  word-break: keep-all;
+}
+
+/* 대표 공인중개사 등, 상호 바로 아래 한 줄. */
+.partnerSub {
+  margin: 0.1rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-secondary);
 }
 
 .body {
-  margin: 0;
-  font-size: 0.875rem;
-  line-height: 1.65;
+  margin: 0.5rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
   color: var(--text-secondary);
+  word-break: keep-all;
+}
+
+/* 등록번호/주소 같은 작은 법정·부가 정보. */
+.meta {
+  margin: 0.45rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  word-break: keep-all;
+}
+
+.metaLabel {
+  color: var(--text-muted);
+}
+
+.metaValue {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .actions {
   display: flex;
-  gap: 0.6rem;
-  margin-top: 1rem;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
 }
 
 .button {
   flex: 1 1 0;
-  /* 최소 44px — 손가락 탭 타깃. */
-  min-height: 48px;
+  /* 최소 44px — 손가락 탭 타깃. 밀도를 줄이되 접근성은 줄이지 않는다(§3). */
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 0.7rem 0.6rem;
+  padding: 0.55rem 0.6rem;
   border-radius: 10px;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 700;
   text-decoration: none;
-  /* 버튼 안에서 줄이 접히지 않도록 — 좁은 화면에서는 아래 미디어쿼리가 세로로 쌓는다. */
   white-space: nowrap;
 }
 
@@ -79,60 +135,45 @@
   background: var(--card-bg, #fff);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  /* 번호를 라벨 아래 줄로 내린다. */
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.phoneNumber {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  letter-spacing: 0.01em;
 }
 
 .icon {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
 }
 
 .disclaimer {
-  margin: 0.8rem 0 0;
-  font-size: 0.76rem;
-  line-height: 1.55;
+  margin: 0.55rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
   color: var(--text-muted);
+  word-break: keep-all;
 }
 
-/* 좁은 화면(360px 등): 두 버튼을 나란히 두면 "카카오톡 상담"이 잘린다.
-   실측 기준 400px 이하에서 세로로 쌓는다. 저장소의 기존 관례(finance-fit.module.css가
-   같은 400px 브레이크포인트를 쓴다)를 따랐다. */
-@media (max-width: 400px) {
+/* 예전에는 400px 이하에서 CTA 두 개를 세로로 쌓았다. 라벨이 "카카오톡 상담" + 번호
+   한 줄이라 나란히 두면 잘렸기 때문이다. 라벨이 "카카오 상담" / "전화 상담"으로 짧아지고
+   번호가 빠지면서 360px에서도 나란히 들어간다(실측 폭 합계 약 225px, 360px 뷰포트의
+   카드 내부 가용폭 약 300px). 그래서 쌓는 기준을 340px 미만으로 내려 카드 높이를
+   버튼 한 줄만큼(약 50px) 되찾는다(§3). CTA가 하나뿐인 중개사 카드는 영향이 없다. */
+@media (max-width: 339px) {
   .card {
-    padding: 1.1rem 1rem;
+    padding: 0.8rem;
   }
   .actions {
     flex-direction: column;
-    gap: 0.5rem;
-  }
-  .phone {
-    /* 세로로 쌓이면 가로 폭이 넉넉하므로 번호를 같은 줄로 되돌린다. */
-    flex-direction: row;
     gap: 0.45rem;
   }
 }
 
 /* 데스크톱: 본문 폭이 넓어져도 카드가 과하게 벌어지지 않게 한다. */
 @media (min-width: 768px) {
-  .card {
-    padding: 1.5rem;
-  }
   .actions {
     max-width: 420px;
   }
 }
 
-/* 인쇄물/리포트 내보내기에는 광고를 남기지 않는다(§8).
+/* 인쇄물/리포트 내보내기에는 제휴 카드를 남기지 않는다(§8).
    globals.css의 @media print [data-export-exclude] 규칙과 이중으로 보장한다. */
 @media print {
   .card {

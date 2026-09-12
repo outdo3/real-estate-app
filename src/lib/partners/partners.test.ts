@@ -43,9 +43,13 @@ test('tel 링크는 숫자만 남긴다', () => {
 
 test('카카오 주소는 실제 오픈채팅 링크 그대로다', () => {
   const p = getPartnerForPlacement('apt_detail')!;
-  assert.ok(p.kakaoUrl.startsWith('https://open.kakao.com/'), '외부 오픈채팅으로 바로 간다');
+  // APT_DETAIL_PARTNER_TRADE_DENSITY_V1 §6 — kakaoUrl은 이제 선택 필드다(중개사
+  // 파일럿에는 카카오 채널이 없다). 법무사 파트너에는 반드시 있어야 한다.
+  const kakaoUrl = p.kakaoUrl;
+  assert.ok(kakaoUrl, '법무사 파트너에는 카카오 주소가 있어야 한다');
+  assert.ok(kakaoUrl.startsWith('https://open.kakao.com/'), '외부 오픈채팅으로 바로 간다');
   // 추적 리다이렉트를 끼우지 않는다(§15).
-  assert.ok(!p.kakaoUrl.includes('/api/'), '내부 리다이렉트를 거치면 안 된다');
+  assert.ok(!kakaoUrl.includes('/api/'), '내부 리다이렉트를 거치면 안 된다');
 });
 
 test('비활성 파트너는 어느 자리에도 나오지 않는다', () => {
@@ -100,7 +104,7 @@ test('전화번호/카카오 주소/상호는 분석 페이로드에 실을 수 
   assert.deepEqual(out, { partner_id: 'hwangbo-jaeho-legal' });
 
   const dump = JSON.stringify(out);
-  for (const leak of [p.phone, p.displayPhone, p.kakaoUrl, p.displayName]) {
+  for (const leak of [p.phone, p.displayPhone, p.kakaoUrl ?? '', p.displayName].filter(Boolean)) {
     assert.ok(!dump.includes(leak), `분석 페이로드에 ${leak}가 새면 안 된다`);
   }
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { resolveAreaLabel, type DisplayUnit } from '@/lib/area-utils';
 import { areaMatchesSelection, findUnitForArea } from '@/lib/unit-area-match';
+import { canCollapseTrades, canExpandTrades, visibleTrades } from '@/lib/apt-detail/trade-rows';
 
 interface TimelineTrade {
   id: number;
@@ -21,11 +22,16 @@ interface TradeTimelineListProps {
   // 있으면 목록을 "완전한 결과"로 보여주지 않는다. 값이 없을 때만 "거래 없음"이라고 말한다.
   incompleteMessage: string | null;
   visibleCount: number;
+  /** APT_DETAIL_PARTNER_TRADE_DENSITY_V1 §13/§14 — 접힌 상태의 행 수. 지금보다
+   *  많이 보이고 있으면 "접기"가 나타난다. */
+  collapsedCount?: number;
   onLoadMore: () => void;
+  /** 접기. 없으면 접기 버튼을 렌더하지 않는다(기존 호출부 동작 유지). */
+  onCollapse?: () => void;
   areaLabels?: Map<number, string>;
 }
 
-export default function TradeTimelineList({ trades, loading, incompleteMessage, visibleCount, onLoadMore, areaLabels, unitMaster }: TradeTimelineListProps) {
+export default function TradeTimelineList({ trades, loading, incompleteMessage, visibleCount, collapsedCount, onLoadMore, onCollapse, areaLabels, unitMaster }: TradeTimelineListProps) {
   if (loading) {
     return <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>데이터를 불러오는 중입니다...</div>;
   }
@@ -37,7 +43,10 @@ export default function TradeTimelineList({ trades, loading, incompleteMessage, 
     );
   }
 
-  const visible = trades.slice(0, visibleCount);
+  const visible = visibleTrades(trades, visibleCount);
+  // 더 볼 게 남아 있을 때만 더보기. 접기는 접힌 기준보다 많이 펼쳐져 있을 때만.
+  const canExpand = canExpandTrades(trades.length, visibleCount);
+  const canCollapse = !!onCollapse && collapsedCount !== undefined && canCollapseTrades(visibleCount, collapsedCount);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -108,14 +117,30 @@ export default function TradeTimelineList({ trades, loading, incompleteMessage, 
           </div>
         );
       })}
-      {trades.length > visibleCount && (
-        <div style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-          <button
-            onClick={onLoadMore}
-            style={{ padding: '0.6rem 1.5rem', borderRadius: '999px', border: '1px solid var(--border-color)', background: 'white', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}
-          >
-            더보기 ({trades.length - visibleCount}건 더 있음)
-          </button>
+      {/* APT_DETAIL_PARTNER_TRADE_DENSITY_V1 §13/§14 — 더보기 / 접기.
+          목록은 이미 전부 클라이언트에 있고(이 컴포넌트는 trades를 slice만 한다),
+          펼치고 접는 데 추가 조회가 없다 — 즉시 반응하며 "데이터가 없습니다"가
+          잠깐 스치는 일이 생기지 않는다(§17). 정렬도 범위도 건드리지 않는다(§15). */}
+      {(canExpand || canCollapse) && (
+        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', padding: '0.75rem 1rem' }}>
+          {canExpand && (
+            <button
+              onClick={onLoadMore}
+              aria-label="최근 실거래 더보기"
+              style={{ minHeight: 44, padding: '0.6rem 1.5rem', borderRadius: '999px', border: '1px solid var(--border-color)', background: 'white', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)' }}
+            >
+              더보기 ({trades.length - visibleCount}건 더 있음)
+            </button>
+          )}
+          {canCollapse && (
+            <button
+              onClick={onCollapse}
+              aria-label="최근 실거래 접기"
+              style={{ minHeight: 44, padding: '0.6rem 1.5rem', borderRadius: '999px', border: '1px solid var(--border-color)', background: 'white', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-secondary)' }}
+            >
+              접기
+            </button>
+          )}
         </div>
       )}
     </div>

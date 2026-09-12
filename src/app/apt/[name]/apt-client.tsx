@@ -18,6 +18,8 @@ import CommunityPreview from '@/components/CommunityPreview';
 import StickyActionBar from '@/components/StickyActionBar';
 import AdContainer from '@/components/AdContainer';
 import PartnerCtaCard from '@/components/partner/PartnerCtaCard';
+import BrokerCtaCard from '@/components/partner/BrokerCtaCard';
+import { TRADE_ROWS_COLLAPSED, nextVisibleCount } from '@/lib/apt-detail/trade-rows';
 import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
@@ -129,7 +131,13 @@ export default function ApartmentDetail() {
   const [tradeTypeFilter, setTradeTypeFilter] = useState<'매매' | '전월세'>('매매');
   const [periodFilter, setPeriodFilter] = useState<'1년' | '3년' | '5년' | '전체'>('1년');
   const [saleFilter, setSaleFilter] = useState<'all' | 'sale' | 'rent'>('all');
-  const [visibleCount, setVisibleCount] = useState<number>(15);
+  // APT_DETAIL_PARTNER_TRADE_DENSITY_V1 §13 — 기본 5행.
+  //
+  // 예전 기본값은 15였다. 모바일에서 단지 하나를 보려면 실거래 15줄을 전부 지나야
+  // 했고, 그 아래 지도·학군·리포트까지 가는 스크롤이 길었다. 거래 데이터 자체는
+  // 하나도 바뀌지 않는다 — 같은 신뢰된 목록의 **앞 5건**만 먼저 보여주고 나머지는
+  // 사용자가 요청할 때 편다(§15). 개수 규칙은 @/lib/apt-detail/trade-rows가 갖는다.
+  const [visibleCount, setVisibleCount] = useState<number>(TRADE_ROWS_COLLAPSED);
   // PERCEIVED_PERFORMANCE_V2 §7 — infraTab/visitedInfraTabs 상태는
   // components/apt/InfraTabSection.tsx로 옮겼다. 여기에 두면 탭 클릭 한 번이
   // 이 컴포넌트(1,200여 줄) 전체를 다시 렌더한다. "한 번 연 탭은 계속 마운트"라는
@@ -210,7 +218,9 @@ export default function ApartmentDetail() {
   };
 
   useEffect(() => {
-    setVisibleCount(15);
+    // §16 — 평형/기간/거래유형을 바꾸면 접힌 상태(5행)로 되돌린다. 이전 선택에서 펼친
+    // 길이가 그대로 남으면, 새 조건에서 몇 건인지 가늠하기 어렵고 화면이 갑자기 길어진다.
+    setVisibleCount(TRADE_ROWS_COLLAPSED);
   }, [selectedTradeArea, tradeTypeFilter, periodFilter, saleFilter]);
 
   // 이전에 이 페이지에서 선택했던 면적 단위를 기억만 한다(§10) — 서버 저장/세션 없음.
@@ -1327,7 +1337,9 @@ export default function ApartmentDetail() {
               loading={loading}
               incompleteMessage={tradeIncompleteMessage}
               visibleCount={visibleCount}
-              onLoadMore={() => setVisibleCount((v) => v + 15)}
+              collapsedCount={TRADE_ROWS_COLLAPSED}
+              onLoadMore={() => setVisibleCount(nextVisibleCount)}
+              onCollapse={() => setVisibleCount(TRADE_ROWS_COLLAPSED)}
               areaLabels={areaLabels}
             />
           </div>
@@ -1372,7 +1384,14 @@ export default function ApartmentDetail() {
           만난다. 데이터 구역(가격/실거래/점수) 안이 아니라 전부 지나간 뒤에 두어
           객관적 정보로 오인되지 않게 한다. 상세 페이지 본문은 이미 하단탭바+
           StickyActionBar 높이만큼 padding-bottom을 확보하고 있어 가려지지 않는다. */}
+      {/* APT_DETAIL_PARTNER_TRADE_DENSITY_V1 §11 — DATA FIRST → ACTION SECOND.
+          두 상담 카드는 데이터 구역을 전부 지난 뒤에 온다. 순서는 중개사 → 법무사다:
+          단지를 보던 사용자에게 더 가까운 다음 행동이 "이 단지 상담"이고, 등기는 매매가
+          정해진 뒤의 일이다. 기존 섹션 순서는 건드리지 않았다. */}
       <div className="container">
+        {/* §7 — 영업 구역(부산 서구 검증된 법정동) 안일 때만 렌더된다. 그 밖에서는
+            null이라 카드도 노출 집계도 없다(§21). */}
+        <BrokerCtaCard lawdCd={lawdCdState} dong={urlDong} />
         <PartnerCtaCard placement="apt_detail" />
       </div>
 
