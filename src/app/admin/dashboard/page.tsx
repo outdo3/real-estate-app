@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { BarChart3, Database, Users } from 'lucide-react';
+import { Activity, BarChart3, Database, Users } from 'lucide-react';
 import useSWR from 'swr';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
@@ -101,6 +101,9 @@ export default function AdminDashboardPage() {
               <nav className={styles.adminNav} aria-label="관리자 메뉴">
                 <Link href="/admin/ops" className={styles.adminNavLink}>
                   <Database size={16} aria-hidden="true" /> 운영 현황
+                </Link>
+                <Link href="/admin/system" className={styles.adminNavLink}>
+                  <Activity size={16} aria-hidden="true" /> 시스템 상태
                 </Link>
                 <Link href="/admin/behavior" className={styles.adminNavLink}>
                   <BarChart3 size={16} aria-hidden="true" /> 사용자 행동
@@ -311,6 +314,11 @@ export default function AdminDashboardPage() {
                 {/* 7. 시스템 에러 로그 */}
                 <div className={styles.cardWide}>
                   <div className={styles.cardTitle}>🚨 시스템 에러 로그 (최근 20건)</div>
+                  {/* ADMIN_SYSTEM_HEALTH_V1 — 이 카드는 원문 그대로다(기존 동작 유지).
+                      failed=1과 failed=45를 구분해 보려면 요약 화면으로 보낸다. */}
+                  <Link href="/admin/system" className={styles.adminNavLink}>
+                    <Activity size={14} aria-hidden="true" /> 심각도·지역별 요약 보기
+                  </Link>
                   {d.errors.length === 0 ? (
                     <div className={styles.emptyRow}>최근 기록된 에러가 없습니다.</div>
                   ) : (

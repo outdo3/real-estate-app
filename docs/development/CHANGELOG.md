@@ -2,6 +2,72 @@
 
 ## 2026-09-13
 
+### ADMIN SYSTEM HEALTH V1 — failed 1건과 failed 45건을 구분해서 보여준다
+
+운영자 관찰: 중요한 서버 오류와 부분 실패가 나고 있는데, 관리자 화면에서는 둘 다
+똑같은 SERVER 한 줄로 보인다.
+
+감사 결과: 원시 로그는 이미 DB에 있다
+
+    source              error_logs 테이블 (Prisma model ErrorLog)
+    컬럼                id / source / message / stack / url / createdAt
+    severity 필드       없음
+    type 필드           없음
+    기존 화면           /admin/dashboard의 "최근 20건" 카드 하나, 원문 그대로
+
+운영자가 알고 싶은 것(어느 지역이, 몇 개월 중 몇 개월 실패했고, 왜)은 전부 message
+문자열 안에 이미 들어 있었다. 그래서 schema를 바꾸지 않고 읽는 시점에 파싱한다 —
+새 컬럼을 만들어도 이미 쌓인 과거 로그는 채울 방법이 없고, 과거까지 즉시 요약되는
+쪽은 파싱이다.
+
+    src/lib/admin/system-health.ts
+      MOLIT_PARTIAL 파싱   type/lawdCd/dong/period/months/ok/failed/failedMonths/reason
+      severity            실패 비율 기준 4단계
+      반복 집계            같은 (유형, 지역, 원인)을 한 줄로
+      redaction           표시 직전에 비밀값 제거
+
+severity는 절대 건수가 아니라 비율로 매긴다. 120개월 중 2개월 실패와 3개월 중
+2개월 실패는 전혀 다른 사건이다. 분모를 모르면 비율을 지어내지 않고 "확인 필요"로
+둔다 — 모른다를 괜찮다로 접지 않는다.
+
+    failed == 0          정상
+    ratio < 0.2          확인 필요
+    0.2 <= ratio < 0.5   위험
+    ratio >= 0.5         문제
+
+기존 /admin/ops의 severity 어휘와 pill 배색을 재사용했다(두 화면에서 같은 색이 같은
+뜻이어야 한다). 다만 그 타입은 "시스템 전체 상태"용이라 개념이 달라 per-entry 타입은
+분리했고, 3단계로는 2/60과 27/60이 같은 칸에 들어가 분류가 무의미해진다.
+
+새 화면은 /admin/system이다. 기존 대시보드의 원시 로그 카드는 그대로 두고(regression
+0) 링크 한 줄과 nav 항목 하나만 더했다.
+
+수집하지 않는 것에는 필터를 만들지 않았다. OAuth 콜백 실패와 cron/sync 실패는 현재
+console에만 남고 error_logs에 저장되지 않는다. AUTH 필터를 만들면 "AUTH 0건"이
+"인증은 멀쩡하다"로 읽히는 false empty가 된다 — 대신 이 source가 무엇을 담지 않는지
+화면에 명시했다.
+
+반복 건수도 "발생"이 아니라 "기록"으로 적는다. 부분 실패는 (type, lawdCd)당 5분에
+한 번만 기록되므로 기록 횟수는 실제 발생의 하한이다.
+
+테스트가 실제 누출을 하나 잡았다: authorization: Bearer <token>에서 \S+ 하나만 먹는
+첫 redaction은 Bearer까지만 지우고 토큰 본체를 그대로 남겼다. 스킴 한 낱말까지 함께
+먹도록 고치고 회귀 테스트로 고정했다.
+
+    새 table/schema/migration   0건
+    새 monitoring 인프라        0건 (Sentry/Datadog 등 미도입)
+    production write            0건 (조회 경로는 read-only, 쓰기 호출 부재를 테스트로 고정)
+    MOLIT 호출 로직 변경        0건
+    auth/provider/env 변경      0건
+
+    npx tsx --test <src 전체>     1715/1715 pass (기존 1670 + 신규 45)
+    npx tsc --noEmit              src 오류 0건
+    npm run build                 exit 0
+
+문서: docs/development/ADMIN_SYSTEM_HEALTH_V1.md
+렌더는 브라우저가 필요하므로 ADMIN QA REQUIRED로 남겼다.
+
+
 ### BUSAN RELEASE CANDIDATE FREEZE + PRELAUNCH AUDIT V1 — 출시 직전 게이트
 
 부산 웹 소프트런칭 직전 main을 Release Candidate로 감사했다.

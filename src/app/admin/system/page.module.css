@@ -1,0 +1,447 @@
+/* ADMIN_SYSTEM_HEALTH_V1 — /admin/ops와 같은 토큰·배색을 쓴다. 관리자가 두 화면을
+   오갈 때 같은 색이 같은 뜻이어야 하므로 pill 색상은 그 파일과 일치시킨다. */
+
+.main {
+  min-height: 100vh;
+  background-color: var(--bg-color);
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+
+.emptyState {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.errorState {
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* ── 기간 탭 ─────────────────────────────────────────────────────────────── */
+
+.windowTabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 1.25rem;
+}
+
+.windowTab,
+.windowTabActive {
+  flex: 1 1 auto;
+  min-height: 44px; /* 터치 타깃 */
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.windowTabActive {
+  border-color: var(--brand-color, #10b981);
+  color: var(--brand-color, #10b981);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+/* ── 요약 카드 ───────────────────────────────────────────────────────────── */
+
+.cardRow {
+  display: grid;
+  /* 390px에서도 2열로 떨어지게 — 카드가 한 줄에 하나씩 쌓여 스크롤이 길어지지 않는다. */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.card {
+  padding: 0.85rem 0.9rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  min-width: 0;
+}
+
+.cardAlert {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.cardLabel {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.cardValue {
+  margin-top: 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.cardValueSm {
+  margin-top: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: keep-all;
+}
+
+/* ── 경고 배너 ───────────────────────────────────────────────────────────── */
+
+.warnBanner,
+.warnBannerHigh,
+.noteBanner {
+  margin-top: 0.9rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.warnBanner {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #b45309;
+}
+
+.warnBannerHigh {
+  background: rgba(239, 68, 68, 0.07);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.noteBanner {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+/* ── 섹션 ────────────────────────────────────────────────────────────────── */
+
+.section {
+  margin-top: 1.5rem;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.sectionNote {
+  margin: 0.35rem 0 0.7rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.filterBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.select {
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+
+.checkLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+/* ── 반복 오류 ───────────────────────────────────────────────────────────── */
+
+.repeatRow {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  margin-bottom: 0.45rem;
+}
+
+.repeatSummary {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.repeatMeta {
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* ── 로그 목록 ───────────────────────────────────────────────────────────── */
+
+.logRow {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  margin-bottom: 0.45rem;
+  overflow: hidden;
+}
+
+.logHead {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.7rem 0.8rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.logHeadTop {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.logKind {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.logTime {
+  margin-left: auto;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.chevron,
+.chevronOpen {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.logSummary {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.logReason {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.emptyRow {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+/* ── 상세 ────────────────────────────────────────────────────────────────── */
+
+.logDetail {
+  padding: 0.2rem 0.8rem 0.85rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, auto) 1fr;
+  gap: 0.3rem 0.75rem;
+  margin: 0.7rem 0 0;
+  font-size: 0.8rem;
+}
+
+.detailGrid dt {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.detailGrid dd {
+  margin: 0;
+  color: var(--text-primary);
+  word-break: break-word;
+  min-width: 0;
+}
+
+.failedMonths {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.truncNote {
+  color: var(--text-muted);
+}
+
+.rawBlock {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+}
+
+.rawHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  background: rgba(148, 163, 184, 0.1);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rawText {
+  margin: 0;
+  padding: 0.6rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  /* 원문은 길다 — 가로 스크롤을 만들지 않고 접는다. */
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+/* ── pill (─ /admin/ops와 동일 배색) ─────────────────────────────────────── */
+
+.pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.pillOk {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+
+.pillWarn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
+/* HIGH는 CRITICAL보다 한 단계 낮다 — 주황과 빨강 사이를 확실히 벌린다. */
+.pillHigh {
+  background: rgba(249, 115, 22, 0.16);
+  color: #c2410c;
+}
+
+.pillCritical {
+  background: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
+}
+
+.sourceNote {
+  margin-top: 1.5rem;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.sourceNote code {
+  font-size: 0.74rem;
+  padding: 0.05rem 0.25rem;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.refreshHint {
+  margin-top: 0.6rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 400px) {
+  .cardRow {
+    /* 390px — 2열 유지. 1열로 떨어뜨리면 카드 4개가 화면을 다 먹는다. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .repeatMeta {
+    flex: 1 1 100%;
+  }
+
+  .detailGrid {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+
+  .detailGrid dd {
+    margin-bottom: 0.4rem;
+  }
+}
