@@ -18,6 +18,19 @@ export const viewport: Viewport = {
 /** 대표 OG 이미지 경로. 절대 URL은 siteConfig에서 만든다(호스트를 여기 적지 않는다). */
 const OG_IMAGE_PATH = '/brand/og/ejip-og-main-1200x630.jpg';
 
+/**
+ * NAVER_SEARCH_ADVISOR_VERIFICATION_V1 — 네이버 서치어드바이저 사이트 소유확인 토큰.
+ *
+ * 비밀값이 아니다 — 확인 방식 자체가 "이 문자열을 페이지 HTML에 실어라"이므로 방문자
+ * 누구나 볼 수 있다. 그래서 환경변수로 감추지 않고 여기에 상수로 둔다(감춰도 얻는 게
+ * 없고, 배포마다 값이 비면 소유확인이 조용히 풀린다).
+ *
+ * 도메인은 여기 적지 않는다 — 오리진은 siteConfig 하나가 정한다. 토큰은 서치어드바이저
+ * **사이트 속성별로** 발급되므로, 도메인이 바뀌면 새 속성에서 새 토큰을 받아 이 값을
+ * 갈아끼워야 한다(오리진처럼 환경변수로 따라오지 않는다).
+ */
+const NAVER_SITE_VERIFICATION = '0de185bf086e886fde6e72e9ff6fb80df5585f83';
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   // /manifest.webmanifest (src/app/manifest.ts가 생성)
@@ -68,6 +81,21 @@ export const metadata: Metadata = {
     title: '이집',
     description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
     images: [absoluteUrl(OG_IMAGE_PATH)],
+  },
+  // NAVER_SEARCH_ADVISOR_VERIFICATION_V1 — 검색엔진 소유확인.
+  //
+  // Next가 알고 있는 이름(google/yahoo/yandex/me)은 전용 키가 있지만 네이버는 없다.
+  // `other`에 넣은 키는 **그대로 meta name이 된다**(next/dist/lib/metadata/metadata.js
+  // 확인 — google은 'google-site-verification'을 붙여주지만 other는 키를 그대로 쓴다).
+  // 그래서 키 이름이 'naver-site-verification' 전체여야 한다.
+  //
+  // 이 자리에 둔 이유: 루트 layout이 앱 전체 메타데이터의 단일 출처이고, 하위 페이지가
+  // 이 필드를 덮어쓰지 않으므로 태그가 문서당 정확히 하나만 나온다. <head>에 직접
+  // 태그를 심으면 Next의 메타데이터 파이프라인 밖에 놓여 중복 위험이 생긴다.
+  verification: {
+    other: {
+      'naver-site-verification': NAVER_SITE_VERIFICATION,
+    },
   },
 };
 

@@ -96,3 +96,28 @@ test('§13 프로덕션에 localhost가 새어 나가지 않는다', () => {
   const named = resolveOrigin({ NEXT_PUBLIC_SITE_URL: 'https://e-jip.com' });
   assert.ok(!named.url.includes('localhost'));
 });
+
+// ── NAVER_SEARCH_ADVISOR_VERIFICATION_V1 ──────────────────────────────────
+
+const NAVER_TOKEN = '0de185bf086e886fde6e72e9ff6fb80df5585f83';
+
+test('네이버 소유확인 토큰이 루트 메타데이터에 정확히 한 번 들어 있다', () => {
+  // 문서당 meta 태그가 하나만 나오려면 선언도 한 곳뿐이어야 한다.
+  const occurrences = (LAYOUT.match(new RegExp(NAVER_TOKEN, 'g')) ?? []).length;
+  assert.equal(occurrences, 1, `토큰 선언이 ${occurrences}곳이다(1곳이어야 한다)`);
+});
+
+test('소유확인은 Next 메타데이터 API로 나간다 — head에 태그를 직접 심지 않는다', () => {
+  assert.ok(/verification: \{/.test(LAYOUT), 'verification 필드가 없다');
+  // other의 키는 그대로 meta name이 되므로 이름 전체를 키로 써야 한다
+  // (google처럼 '-site-verification'을 붙여주지 않는다).
+  assert.ok(/'naver-site-verification':/.test(LAYOUT), '키 이름이 정확하지 않다');
+  assert.ok(!/<meta[^>]*naver/i.test(LAYOUT), 'head에 태그를 직접 심었다');
+});
+
+test('소유확인을 추가하면서 기존 메타데이터를 건드리지 않았다', () => {
+  // 이 세 가지가 같은 metadata 객체 안에 그대로 있어야 한다.
+  assert.ok(/openGraph: \{/.test(LAYOUT));
+  assert.ok(/twitter: \{/.test(LAYOUT));
+  assert.ok(/metadataBase: new URL\(siteConfig\.url\)/.test(LAYOUT));
+});
