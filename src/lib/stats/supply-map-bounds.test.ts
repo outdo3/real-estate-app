@@ -3,14 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import {
-  SUPPLY_MAP_BOUNDS_PADDING,
-  SUPPLY_SINGLE_POINT_LEVEL,
-  isValidSupplyCoord,
-  resolveSupplyViewport,
-  supplyViewportKey,
-  validSupplyPoints,
-} from './supply-map-bounds';
+import { isValidMapCoord, mapViewportKey, resolveMapViewport, validMapPoints } from '../map/map-viewport';
+import { SUPPLY_MAP_BOUNDS_PADDING, SUPPLY_SINGLE_POINT_LEVEL } from './supply-map-bounds';
+
+/** 공급 화면의 단일 지점 zoom을 항상 함께 넘긴다 — 화면 조정값과 판정 규칙이 분리됐다
+ *  (판정은 @/lib/map/map-viewport, 조정값은 supply-map-bounds). */
+const resolveSupplyViewport = (points: Parameters<typeof resolveMapViewport>[0]) =>
+  resolveMapViewport(points, SUPPLY_SINGLE_POINT_LEVEL);
 
 /**
  * SUPPLY_MAP_REGION_BOUNDS_FIX_V1 — 공급(입주지도) viewport 계약.
@@ -30,7 +29,8 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 const VIEW = read('src/components/stats/SupplyView.tsx');
-const SOURCE = read('src/lib/stats/supply-map-bounds.ts');
+const SOURCE = read('src/lib/map/map-viewport.ts');
+const SUPPLY_TUNING = read('src/lib/stats/supply-map-bounds.ts');
 
 /** 실측 부산 공급 마커(응답 순서 그대로 — 0번이 기장군 장안지구다). */
 const BUSAN_MARKERS = [
@@ -65,7 +65,7 @@ const BUSAN_MARKERS = [
 // ── 1. 부산 전체: 여러 좌표 → bounds ──────────────────────────────────────────
 
 test('§2 부산 전체는 유효 좌표 전체를 감싸는 bounds가 된다', () => {
-  const points = validSupplyPoints(BUSAN_MARKERS);
+  const points = validMapPoints(BUSAN_MARKERS);
   assert.equal(points.length, 26, '유효 좌표 수가 실측과 다르다');
   const v = resolveSupplyViewport(points);
   assert.equal(v.kind, 'bounds');
@@ -87,7 +87,7 @@ test('§2 부산 전체는 유효 좌표 전체를 감싸는 bounds가 된다', 
 // ── 8. 첫 항목 center 버그 회귀 방지 ──────────────────────────────────────────
 
 test('§3 부산 전체 center가 첫 마커(기장군 장안지구)가 아니다 — 고친 증상 그대로 고정', () => {
-  const v = resolveSupplyViewport(validSupplyPoints(BUSAN_MARKERS));
+  const v = resolveSupplyViewport(validMapPoints(BUSAN_MARKERS));
   assert.equal(v.kind, 'bounds');
   if (v.kind !== 'bounds') return;
   const first = BUSAN_MARKERS[0];
@@ -106,11 +106,11 @@ test('§3 부산 전체 center가 첫 마커(기장군 장안지구)가 아니�
 test('§2 구/군을 고르면 그 구의 좌표만으로 bounds를 잡는다', () => {
   const busanjin = BUSAN_MARKERS.filter((m) => m.gu === '부산진구');
   assert.equal(busanjin.length, 4);
-  const v = resolveSupplyViewport(validSupplyPoints(busanjin));
+  const v = resolveSupplyViewport(validMapPoints(busanjin));
   assert.equal(v.kind, 'bounds');
   if (v.kind !== 'bounds') return;
   // 부산 전체 bounds보다 훨씬 좁다 — 구 선택이 zoom에 반영된다.
-  const wide = resolveSupplyViewport(validSupplyPoints(BUSAN_MARKERS));
+  const wide = resolveSupplyViewport(validMapPoints(BUSAN_MARKERS));
   assert.equal(wide.kind, 'bounds');
   if (wide.kind !== 'bounds') return;
   const span = (b: typeof v.box) => (b.maxLat - b.minLat) * (b.maxLng - b.minLng);
@@ -136,7 +136,7 @@ test('§3 좌표가 여러 개여도 전부 같은 지점이면 bounds가 아니
   // 폭·높이가 0인 bounds를 setBounds에 주면 지도가 최대 배율로 튄다.
   const geumjeong = BUSAN_MARKERS.filter((m) => m.gu === '금정구');
   assert.equal(geumjeong.length, 2);
-  const v = resolveSupplyViewport(validSupplyPoints(geumjeong));
+  const v = resolveSupplyViewport(validMapPoints(geumjeong));
   assert.equal(v.kind, 'center', '같은 좌표 2개가 degenerate bounds로 갔다');
   if (v.kind !== 'center') return;
   assert.equal(v.center.lat, geumjeong[0].lat);
@@ -154,7 +154,7 @@ test('§4 유효 좌표가 0개면 NO DATA다 — 다른 지역/단지 좌표로
 });
 
 test('§4 좌표가 전부 무효한 목록도 NO DATA다 — 0,0으로 지도를 열지 않는다', () => {
-  const v = resolveSupplyViewport(validSupplyPoints([
+  const v = resolveSupplyViewport(validMapPoints([
     { lat: null, lng: null },
     { lat: 0, lng: 0 },
     { lat: NaN, lng: 129.1 },
@@ -175,24 +175,24 @@ test('§4 좌표 상수를 발명하지 않았다 — 이 모듈에 하드코딩
 // ── 5. 좌표 유효성 ────────────────────────────────────────────────────────────
 
 test('§7 유효 좌표만 지도 계산에 쓴다', () => {
-  assert.ok(isValidSupplyCoord(35.1728, 129.07389));
-  assert.ok(isValidSupplyCoord(-33.8, 151.2), '남반구/동경 좌표도 형식상 유효하다');
+  assert.ok(isValidMapCoord(35.1728, 129.07389));
+  assert.ok(isValidMapCoord(-33.8, 151.2), '남반구/동경 좌표도 형식상 유효하다');
   // null/undefined/타입 위반
-  assert.equal(isValidSupplyCoord(null, 129.1), false);
-  assert.equal(isValidSupplyCoord(35.1, undefined), false);
-  assert.equal(isValidSupplyCoord('35.1', '129.1'), false);
+  assert.equal(isValidMapCoord(null, 129.1), false);
+  assert.equal(isValidMapCoord(35.1, undefined), false);
+  assert.equal(isValidMapCoord('35.1', '129.1'), false);
   // finite 위반
-  assert.equal(isValidSupplyCoord(NaN, 129.1), false);
-  assert.equal(isValidSupplyCoord(35.1, Infinity), false);
+  assert.equal(isValidMapCoord(NaN, 129.1), false);
+  assert.equal(isValidMapCoord(35.1, Infinity), false);
   // 범위 위반
-  assert.equal(isValidSupplyCoord(91, 129.1), false);
-  assert.equal(isValidSupplyCoord(35.1, 181), false);
-  assert.equal(isValidSupplyCoord(-90.1, 129.1), false);
+  assert.equal(isValidMapCoord(91, 129.1), false);
+  assert.equal(isValidMapCoord(35.1, 181), false);
+  assert.equal(isValidMapCoord(-90.1, 129.1), false);
   // sentinel
-  assert.equal(isValidSupplyCoord(0, 0), false, '0,0을 실제 좌표로 취급한다');
+  assert.equal(isValidMapCoord(0, 0), false, '0,0을 실제 좌표로 취급한다');
   // 0이 한쪽만이면 실제 좌표일 수 있다(적도/본초자오선) — 무조건 버리지 않는다.
-  assert.ok(isValidSupplyCoord(0, 129.1));
-  assert.ok(isValidSupplyCoord(35.1, 0));
+  assert.ok(isValidMapCoord(0, 129.1));
+  assert.ok(isValidMapCoord(35.1, 0));
 });
 
 test('§7 좌표 없는 항목은 지도에서만 빠진다 — 목록 데이터는 건드리지 않는다', () => {
@@ -201,7 +201,7 @@ test('§7 좌표 없는 항목은 지도에서만 빠진다 — 목록 데이터
     { lat: null, lng: null },
     { lat: 35.2049, lng: 129.06726 },
   ];
-  assert.equal(validSupplyPoints(markers).length, 2);
+  assert.equal(validMapPoints(markers).length, 2);
   // 원본 배열은 변형되지 않는다(목록은 서버 응답 그대로 쓴다).
   assert.equal(markers.length, 3);
 });
@@ -209,20 +209,20 @@ test('§7 좌표 없는 항목은 지도에서만 빠진다 — 목록 데이터
 // ── 6. 필터 변경 → viewport 재계산 ────────────────────────────────────────────
 
 test('§5 지역/기간을 바꾸면 viewport 키가 바뀐다 — 이전 지도 상태가 그대로 남지 않는다', () => {
-  const busan = validSupplyPoints(BUSAN_MARKERS);
-  const dongnae = validSupplyPoints(BUSAN_MARKERS.filter((m) => m.gu === '동래구'));
-  const wide = supplyViewportKey('부산광역시|', busan);
-  const narrow = supplyViewportKey('부산광역시|동래구', dongnae);
+  const busan = validMapPoints(BUSAN_MARKERS);
+  const dongnae = validMapPoints(BUSAN_MARKERS.filter((m) => m.gu === '동래구'));
+  const wide = mapViewportKey('부산광역시|', busan);
+  const narrow = mapViewportKey('부산광역시|동래구', dongnae);
   assert.notEqual(wide, narrow, '구를 바꿔도 같은 키가 나온다');
   // 기간만 바꿔도 키가 갈린다(좌표 집합이 같아도 스코프가 다르다).
-  assert.notEqual(supplyViewportKey('부산광역시||y2', busan), supplyViewportKey('부산광역시||y1', busan));
+  assert.notEqual(mapViewportKey('부산광역시||y2', busan), mapViewportKey('부산광역시||y1', busan));
   // 같은 스코프 + 같은 좌표면 같은 키다(불필요한 재적용을 만들지 않는다).
-  assert.equal(supplyViewportKey('부산광역시|', busan), supplyViewportKey('부산광역시|', validSupplyPoints(BUSAN_MARKERS)));
+  assert.equal(mapViewportKey('부산광역시|', busan), mapViewportKey('부산광역시|', validMapPoints(BUSAN_MARKERS)));
 });
 
 test('§5 구 → 시도 전체로 되돌리면 bounds가 다시 넓어진다', () => {
-  const narrow = resolveSupplyViewport(validSupplyPoints(BUSAN_MARKERS.filter((m) => m.gu === '동래구')));
-  const wide = resolveSupplyViewport(validSupplyPoints(BUSAN_MARKERS));
+  const narrow = resolveSupplyViewport(validMapPoints(BUSAN_MARKERS.filter((m) => m.gu === '동래구')));
+  const wide = resolveSupplyViewport(validMapPoints(BUSAN_MARKERS));
   assert.equal(narrow.kind, 'bounds');
   assert.equal(wide.kind, 'bounds');
   if (narrow.kind !== 'bounds' || wide.kind !== 'bounds') return;
@@ -255,11 +255,11 @@ test('§6 지도와 목록이 같은 응답을 쓴다 — 지도용 별도 fetch
   // fetch/useSWR은 한 곳뿐이다.
   assert.equal((code.match(/useSWR</g) ?? []).length, 1, '지도용 추가 요청이 생겼다');
   // 지도 좌표는 그 응답의 mapMarkers에서만 나온다.
-  assert.ok(/validSupplyPoints\(data\?\.mapMarkers \?\? \[\]\)/.test(code), '지도 좌표 출처가 응답이 아니다');
+  assert.ok(/validMapPoints\(data\?\.mapMarkers \?\? \[\]\)/.test(code), '지도 좌표 출처가 응답이 아니다');
   // 목록은 같은 응답의 list를 그대로 쓴다.
   assert.ok(/data\.list\.map\(/.test(code), '목록 렌더가 사라졌다');
   // 마커는 유효 좌표만 찍는다(무효 좌표를 엉뚱한 위치에 찍지 않는다).
-  assert.ok(/data\.mapMarkers\.filter\(\(m\) => isValidSupplyCoord\(m\.lat, m\.lng\)\)\.map\(/.test(code));
+  assert.ok(/data\.mapMarkers\.filter\(\(m\) => isValidMapCoord\(m\.lat, m\.lng\)\)\.map\(/.test(code));
 });
 
 test('§5 stale 응답이 새 선택을 덮지 않는다 — SWR이 스코프별로 갈라져 있다', () => {
@@ -273,7 +273,7 @@ test('§5 stale 응답이 새 선택을 덮지 않는다 — SWR이 스코프별
   assert.ok(!/keepPreviousData/.test(code), '이전 지역 데이터를 유지해 새 선택을 덮을 수 있다');
   // bounds 적용 effect가 스코프+좌표 키에 묶여 있다.
   assert.ok(/\}, \[mapInstance, viewport, fitKey\]\);/.test(code), 'viewport 재적용이 필터 변경에 묶이지 않았다');
-  assert.ok(/const fitKey = supplyViewportKey\(`\$\{scopeKey\}\|\$\{period\}`, mapPoints\)/.test(code));
+  assert.ok(/const fitKey = mapViewportKey\(`\$\{scopeKey\}\|\$\{period\}`, mapPoints\)/.test(code));
 });
 
 test('§4 유효 좌표 0개면 지도를 그리지 않고 목록으로 안내한다', () => {

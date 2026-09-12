@@ -2,6 +2,70 @@
 
 ## 2026-09-12
 
+### REGION CHANGE MAP BOUNDS FIX V1 — 변동지도도 선택 지역에 맞춰 viewport를 계산한다
+
+직전 STEP(공급 지도, 9413ddf)에서 같은 계열 버그가 여기에도 있다고 보고한 것의 후속이다.
+
+원인 1: center가 "먼저 도착한 geocode 결과"였다
+
+    const center = points[pointEntries[0][0]]
+    zoomLevel={uiLevel === 'sido' ? 9 : 7}
+
+이 화면은 행정경계 polygon이 없어 지역명을 Kakao Geocoder로 좌표화해 버블을 찍는다.
+points는 콜백이 도착한 순서대로 채워지는 객체이므로 첫 항목은 네트워크 경쟁 결과다.
+bucket key 종류에 따라 다르게 틀렸다:
+
+    동 단위  key가 동 이름 → 삽입 순서 보존 → center = 가장 먼저 응답한 동
+             같은 지역을 두 번 열면 지도가 다른 곳을 본다
+    구 단위  key가 lawdCd(정수형 문자열) → V8이 오름차순 재배열
+             → center = 항상 가장 작은 lawdCd의 구(결정적이지만 여전히 아무 구)
+
+원인 2: points가 한 번도 비워지지 않았다
+
+BucketBubbles는 key 없이 같은 위치에 렌더돼 드릴다운해도 state가 유지되고, setPoints는
+병합만 한다. 이전 지역 좌표가 계속 쌓였고, 더 조용한 문제로 동 단위 key가 동 이름이라
+중앙동처럼 여러 구에 같은 이름이 있으면 구를 옮길 때 다른 구의 좌표를 그대로 물려받았다
+(geocode가 도착해 덮어쓰기 전까지 엉뚱한 위치에 버블이 찍히고 bounds도 그 좌표로 계산됐다).
+
+원인 3: 도달 불가 fallback 좌표 { lat: 36.5, lng: 127.8 }가 남아 있었다(위에서 이미
+return null 하는 경로). "좌표 없으면 임의 지점" 형태라 제거했다.
+
+helper 결정: 최소 추출
+
+공급의 supply-map-bounds.ts 로직은 그대로 적합했지만 이름이 resolveSupplyViewport라
+변동지도에서 읽으면 관계를 알 수 없었다. 판정 규칙만 옮기고 조정값은 화면 옆에 남겼다.
+
+    src/lib/map/map-viewport.ts        판정 규칙(공용). SDK·DOM·React import 0,
+                                       위경도 리터럴 0
+    supply-map-bounds.ts               공급 조정값만 — padding 48 / single level 5
+    RegionChangeMapView.tsx            이 화면 조정값 — padding 40 / single level 7
+
+singlePointLevel을 상수에서 파라미터로 올린 것이 유일한 계약 변경이다(분양 단지 한 곳과
+행정구역 버블 하나는 적절한 축척이 다르다). alias 재수출 층은 두지 않았다. 공급 동작은
+그대로이고 공급 테스트 20개가 import 경로만 바뀐 채 전부 통과한다.
+
+방법
+
+    서로 다른 좌표 2개 이상 → 현재 buckets 좌표 전체 setBounds + 40px 여백
+    서로 다른 좌표 1개       → 그 좌표 center + level 7
+    유효 좌표 0개            → return null (목록만 남는다, 기존 동작)
+
+bounds는 현재 buckets를 순회해 모은 좌표만 쓴다 — 이전 지역의 남은 좌표나 별도 subset이
+섞일 수 없다(버블·목록도 같은 buckets 기준, 지도 전용 요청 0). queryPrefix가 바뀌면
+points를 비운다. geocoder는 parseFloat 결과를 그대로 주므로 NaN이 들어올 수 있어
+finite/범위/0,0 가드를 거치고, 무효 좌표는 버블도 찍지 않는다.
+
+zoomLevel prop은 initialLevel로 이름을 바꿨다 — 그 값은 setBounds 적용 전 한 프레임에만
+쓰이고 최종 zoom을 결정하지 않는다(값 9/7은 그대로). 기존 fetch 경합 보호(cancelled
+플래그, setScopedData(null), geocode 콜백의 취소 가드)는 정상이라 그대로 두고 테스트로
+고정했다.
+
+검증: 신규 32 tests(공용 13 + 이 화면 19), 공급 20 tests 회귀 0, src 전체 1097/1097 pass,
+tsc src 오류 0, eslint 변경 파일 7개 0, build Compiled successfully.
+
+지도 실렌더는 브라우저가 필요해 STRUCTURAL PASS / DEVICE QA REQUIRED다 — 확인할 8가지를
+docs/development/REGION_CHANGE_MAP_BOUNDS_FIX_V1.md §9에 남겼다.
+
 ### SUPPLY MAP REGION BOUNDS FIX V1 — 지역 선택과 지도 viewport 일치
 
 통계 → 공급에서 지역이 "부산광역시"인데 목록은 부산 전역을 보여주고 지도만 기장/울산

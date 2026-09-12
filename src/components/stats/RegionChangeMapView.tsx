@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import Empty from '@/components/ui/Empty';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
+import { isValidMapCoord, mapViewportKey, resolveMapViewport, validMapPoints } from '@/lib/map/map-viewport';
 import styles from './RegionChangeMapView.module.css';
 
 // REGION_PRICE_CHANGE_MAP_V2 — "지역 변동지도". docs/development/
@@ -386,7 +387,7 @@ function ScopedLevel({
         buckets={buckets}
         onSelect={uiLevel === 'sido' ? onSelectDistrict : onSelectDong}
         queryPrefix={uiLevel === 'sido' ? data.sidoName || '' : `${data.sidoName || ''} ${data.sigunguName || ''}`.trim()}
-        zoomLevel={uiLevel === 'sido' ? 9 : 7}
+        initialLevel={uiLevel === 'sido' ? 9 : 7}
       />
       <ul className={styles.list}>
         {[...buckets]
@@ -444,21 +445,40 @@ function OverallSummary({
 const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
 const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
+// REGION_CHANGE_MAP_BOUNDS_FIX_V1 §2 — `setBounds` 여백(px). 버블은 `yAnchor 0.5`로
+// 좌표 위에 중앙 정렬되고 최소 44×28px(라벨이 길면 60px대)이라, 경계에 놓인 버블은
+// 절반이 잘린다. 여백은 그 절반(≈32px)보다 커야 하고, 280px 높이 지도에서 상하 합쳐
+// 80px을 쓰는 선(40px)에서 멈춘다 — presale-nearby-map.tsx가 검증해 쓰는 값과 같다.
+const REGION_CHANGE_MAP_BOUNDS_PADDING = 40;
+// 버블이 실질적으로 한 곳뿐일 때의 zoom. 기존 시군구 축척(7)을 그대로 쓴다 — 행정구역
+// 하나를 보여주는 데 적절한 값으로 이 화면이 이미 쓰던 숫자다(새 값 발명 없음).
+const REGION_CHANGE_SINGLE_POINT_LEVEL = 7;
+
 function BucketBubbles({
   buckets,
   onSelect,
   queryPrefix,
-  zoomLevel,
+  initialLevel,
 }: {
   buckets: Bucket[];
   onSelect: (key: string) => void;
   queryPrefix: string;
-  zoomLevel: number;
+  /** 첫 프레임용 초기 zoom. bounds 경로에서는 아래 effect의 `setBounds`가 즉시 덮어쓴다. */
+  initialLevel: number;
 }) {
   const [ready, setReady] = useState(false);
   const [KakaoMap, setKakaoMap] = useState<any>(null);
   const [points, setPoints] = useState<Record<string, { lat: number; lng: number }>>({});
+  const [mapInstance, setMapInstance] = useState<any>(null);
   const geocoderRef = useRef<any>(null);
+
+  // §6 — 지역이 바뀌면 이전 지역에서 채운 좌표를 버린다. `points`는 bucket key로만
+  // 색인되는데 동 단위에서는 그 key가 **동 이름**이라(예: 중앙동), 구를 옮기면 다른
+  // 구의 같은 이름 동이 옛 좌표를 그대로 물려받는다. geocode가 도착하기 전 한 프레임
+  // 동안 엉뚱한 위치에 버블이 찍히고 bounds도 그 좌표로 계산된다.
+  useEffect(() => {
+    setPoints({});
+  }, [queryPrefix]);
 
   useEffect(() => {
     let mounted = true;
@@ -522,17 +542,54 @@ function BucketBubbles({
     };
   }, [ready, buckets, queryPrefix]);
 
-  const pointEntries = Object.entries(points);
-  if (!apiKey || !ready || !KakaoMap || pointEntries.length === 0) return null;
+  // §3 DATA PARITY — bounds 계산 대상은 **지금 화면에 찍히는 버블과 같은 집합**이다.
+  // 현재 buckets에 있는 key의 좌표만 모으므로, 이전 지역의 남은 좌표나 별도 subset이
+  // 섞일 수 없다. §4 — geocoder 응답은 문자열을 parseFloat한 값이라 NaN이 될 수 있어
+  // finite/범위/(0,0)까지 공용 가드로 한 번 더 막는다.
+  const bucketPoints = useMemo(() => {
+    const list: { lat: unknown; lng: unknown }[] = [];
+    for (const b of buckets) {
+      const point = points[b.key];
+      if (point) list.push(point);
+    }
+    return validMapPoints(list);
+  }, [buckets, points]);
 
-  const center = pointEntries.length > 0 ? points[pointEntries[0][0]] : { lat: 36.5, lng: 127.8 };
+  const viewport = useMemo(() => resolveMapViewport(bucketPoints, REGION_CHANGE_SINGLE_POINT_LEVEL), [bucketPoints]);
+  const fitKey = mapViewportKey(queryPrefix, bucketPoints);
+
+  // §2 FIT BOUNDS — 지도 인스턴스와 좌표가 확정된 뒤 viewport를 맞춘다. 고정 zoom이
+  // 아니다. fitKey가 지역과 좌표 집합을 함께 식별하므로, 지역을 바꾸면 이전 viewport가
+  // 그대로 남지 않고 반드시 다시 계산된다.
+  useEffect(() => {
+    if (!mapInstance || !window.kakao?.maps) return;
+    if (viewport.kind === 'bounds') {
+      const bounds = new window.kakao.maps.LatLngBounds();
+      for (const point of viewport.points) {
+        bounds.extend(new window.kakao.maps.LatLng(point.lat, point.lng));
+      }
+      mapInstance.setBounds(bounds, REGION_CHANGE_MAP_BOUNDS_PADDING);
+    } else if (viewport.kind === 'center') {
+      mapInstance.setCenter(new window.kakao.maps.LatLng(viewport.center.lat, viewport.center.lng));
+      mapInstance.setLevel(viewport.level);
+    }
+  }, [mapInstance, viewport, fitKey]);
+
+  // §2 — 유효 좌표가 하나도 없으면 지도를 그리지 않는다(기존 동작 유지: 목록만 보인다).
+  // 다른 지역이나 첫 항목 좌표로 메우지 않는다.
+  if (!apiKey || !ready || !KakaoMap || viewport.kind === 'none') return null;
 
   return (
     <div className={styles.mapBox}>
-      <KakaoMap.Map center={center} style={{ width: '100%', height: '100%' }} level={zoomLevel}>
+      <KakaoMap.Map
+        center={viewport.center}
+        style={{ width: '100%', height: '100%' }}
+        level={viewport.kind === 'center' ? viewport.level : initialLevel}
+        onCreate={setMapInstance}
+      >
         {buckets.map((b) => {
           const point = points[b.key];
-          if (!point) return null;
+          if (!point || !isValidMapCoord(point.lat, point.lng)) return null;
           return (
             <KakaoMap.CustomOverlayMap key={b.key} position={point} yAnchor={0.5}>
               <button

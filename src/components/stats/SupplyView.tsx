@@ -6,13 +6,8 @@ import Empty from '@/components/ui/Empty';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { useRegion } from '@/contexts/RegionContext';
-import {
-  SUPPLY_MAP_BOUNDS_PADDING,
-  isValidSupplyCoord,
-  resolveSupplyViewport,
-  supplyViewportKey,
-  validSupplyPoints,
-} from '@/lib/stats/supply-map-bounds';
+import { isValidMapCoord, mapViewportKey, resolveMapViewport, validMapPoints } from '@/lib/map/map-viewport';
+import { SUPPLY_MAP_BOUNDS_PADDING, SUPPLY_SINGLE_POINT_LEVEL } from '@/lib/stats/supply-map-bounds';
 import styles from './SupplyView.module.css';
 
 // STATISTICS V2.1-4 — SUPPLY(공급). §7/§14 입주지도 + 공급추이 두 탭. Presale에는
@@ -112,14 +107,14 @@ export default function SupplyView() {
 
   // SUPPLY_MAP_REGION_BOUNDS_FIX_V1 §6 LIST/MAP PARITY — 지도 viewport는 목록과 **같은
   // 응답**(같은 지역·기간 필터 결과)의 좌표만 쓴다. 지도용 별도 fetch나 subset이 없다.
-  const mapPoints = useMemo(() => validSupplyPoints(data?.mapMarkers ?? []), [data]);
-  const viewport = useMemo(() => resolveSupplyViewport(mapPoints), [mapPoints]);
+  const mapPoints = useMemo(() => validMapPoints(data?.mapMarkers ?? []), [data]);
+  const viewport = useMemo(() => resolveMapViewport(mapPoints, SUPPLY_SINGLE_POINT_LEVEL), [mapPoints]);
   // §5 — 지역/기간/전국 토글을 식별하는 키. 필터가 바뀌면 이전 viewport가 그대로 남지
   // 않도록 좌표 집합과 함께 묶는다. SWR 키도 이 스코프로 갈라지므로(아래 params) 이전
   // 지역 응답이 새 선택을 덮을 수 없다 — keepPreviousData를 쓰지 않아 전환 중에는
   // data가 undefined이고 로딩 상태로 간다.
   const scopeKey = nationwide ? 'nationwide' : `${region.sido}|${region.lawdCd && region.sigungu ? region.sigungu : ''}`;
-  const fitKey = supplyViewportKey(`${scopeKey}|${period}`, mapPoints);
+  const fitKey = mapViewportKey(`${scopeKey}|${period}`, mapPoints);
 
   // §3 FIT BOUNDS — 지도 인스턴스와 좌표가 확정된 뒤 viewport를 맞춘다. 고정 zoom이 아니다.
   // 서로 다른 좌표가 2개 이상이면 전부 들어오도록 setBounds, 한 지점이면 그 지점을
@@ -210,7 +205,7 @@ export default function SupplyView() {
                 level={viewport.kind === 'center' ? viewport.level : nationwide ? 13 : 9}
                 onCreate={setMapInstance}
               >
-                {data.mapMarkers.filter((m) => isValidSupplyCoord(m.lat, m.lng)).map((m) => (
+                {data.mapMarkers.filter((m) => isValidMapCoord(m.lat, m.lng)).map((m) => (
                   <KakaoMap.CustomOverlayMap key={m.id} position={{ lat: m.lat, lng: m.lng }} yAnchor={0.5}>
                     <button
                       aria-label={`${m.name} 입주예정 단지`}
