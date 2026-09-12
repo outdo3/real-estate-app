@@ -157,12 +157,14 @@ export default function AdminSystemHealthPage() {
   // /admin/ops와 동일 — 서버가 세션에 실어준 isAdmin을 쓰고, 실제 권한은 API가 다시 검증한다.
   const isAdmin = session?.user?.isAdmin === true;
 
-  const [window, setWindow] = React.useState<HealthWindow>('24h');
+  // 전역 `window`를 가리지 않도록 이름을 분리한다 — 이 컴포넌트 안에서 브라우저
+  // window가 필요해질 때 조용히 문자열을 집는 사고를 막는다.
+  const [timeWindow, setTimeWindow] = React.useState<HealthWindow>('24h');
   const [kindFilter, setKindFilter] = React.useState<LogKind | 'ALL'>('ALL');
   const [highOnly, setHighOnly] = React.useState(false);
 
   const { data, isLoading, error: swrError } = useSWR(
-    isAdmin ? `/api/admin/system-health?window=${window}` : null,
+    isAdmin ? `/api/admin/system-health?window=${timeWindow}` : null,
     fetcher,
     { refreshInterval: REFRESH_INTERVAL_MS, revalidateOnFocus: false }
   );
@@ -203,9 +205,9 @@ export default function AdminSystemHealthPage() {
                   key={w}
                   type="button"
                   role="tab"
-                  aria-selected={window === w}
-                  className={window === w ? styles.windowTabActive : styles.windowTab}
-                  onClick={() => setWindow(w)}
+                  aria-selected={timeWindow === w}
+                  className={timeWindow === w ? styles.windowTabActive : styles.windowTab}
+                  onClick={() => setTimeWindow(w)}
                 >
                   {WINDOW_LABELS[w]}
                 </button>

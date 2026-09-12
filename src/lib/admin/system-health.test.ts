@@ -377,8 +377,10 @@ test('§13 조회 실패를 "오류 없음"으로 표시하지 않는다', () =>
 
 test('§12 화면도 비관리자에게 데이터를 요청하지 않는다', () => {
   const code = codeOf(PAGE);
+  // 상태 변수 이름은 바뀔 수 있다(전역 window를 가리지 않으려고 timeWindow로 바꿨다).
+  // 고정할 것은 이름이 아니라 **isAdmin이 아니면 키가 null이 된다**는 계약이다.
   assert.ok(
-    /isAdmin \? `\/api\/admin\/system-health\?window=\$\{window\}` : null/.test(code),
+    /isAdmin \? `\/api\/admin\/system-health\?window=\$\{\w+\}` : null/.test(code),
     '비관리자일 때 SWR 키가 null로 막히지 않는다'
   );
   assert.ok(/관리자만 접근할 수 있는 페이지입니다/.test(code), '비관리자 안내가 없다');
