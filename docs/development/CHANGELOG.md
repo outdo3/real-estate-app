@@ -2,6 +2,80 @@
 
 ## 2026-09-12
 
+### COMPARE SHARE URL COMPACT FIX V1 (감사 확인 + 취소 의미 고정)
+
+감사 결과를 먼저 적는다: **이 STEP은 이미 구현돼 있었다.** 커밋 edfdf7e가
+buildCompareSharePath / resolveCompareSeeds / §A~§H 테스트를 넣었고, 이후
+SHARE_CARD_UNIFICATION_V1이 문구를 공통 헬퍼로 옮겼다. 이번에 새로 고친 것은
+테스트 공백 하나뿐이다.
+
+실측 확인 (NEXT_PUBLIC_SITE_URL=https://e-jip.com)
+
+    해운대역푸르지오더원 vs 해운대경동제이드
+      canonical  https://e-jip.com/stats/compare?a=26350-2611&b=26350-2206   57자
+      legacy                                                                322자  (-82%)
+    대신해모로 vs 대신더샵          57자 / 241자  (-76%)
+    대원아파트 vs 대원              56자 / 223자  (-75%)
+
+    퍼센트 인코딩 문자   0개 (세 케이스 전부)
+    text에 URL           없음
+    kakao 설명에 URL     없음
+    kakao 카드 link      canonical과 동일, CTA "이집에서 비교 보기"
+
+공유 payload
+
+    title : <단지A> vs <단지B> 비교 | 이집
+    text  : 두 단지의 실거래·가격·입지 데이터를 비교해보세요.
+    url   : /stats/compare?a=<aptSeqA>&b=<aptSeqB>
+
+지시문 §3의 권장안은 title을 "이집(e-jip) 단지비교"로 두고 단지명을 text에 넣는
+형태였다. 현재는 반대로 title에 단지명이 들어간다 — 카카오 카드에서 제목이 가장
+크게 보이므로 어느 단지 비교인지가 먼저 읽히고, 하드 규칙(text에 URL 금지, canonical
+URL만 전달)은 그대로 지킨다. 바꾸지 않고 차이만 기록한다.
+
+이미 고정돼 있던 것
+
+    §B/§C  공유 URL에 단지명·법정동·구코드 없음, 키는 a/b뿐
+    §D     퍼센트 인코딩된 한글 없음
+    §10    길이가 legacy의 4분의 1 이하
+    §G     text에 URL을 넣지 않음
+    §E/§F  legacy 긴 URL도 계속 열림(파서 유지)
+    §16    clipboard 폴백이 같은 canonical URL 하나만 복사
+
+메운 공백
+
+공유 시트를 닫았을 때(AbortError) 실패로 취급하지 않는다는 계약에 테스트가 없었다.
+동작은 처음부터 옳았지만(취소 분기가 곧바로 return하고 오류 상태·집계로 가지 않는다)
+고정돼 있지 않아 회귀를 잡을 수 없었다. nativeShare를 직접 호출해
+취소 → 'aborted' / 진짜 실패 → 'failed' / 성공 → 'shared'로 갈리는지 확인하고,
+훅의 취소 분기가 폴백 경로로 흘러가지 않는 것도 함께 고정했다.
+
+OG / canonical
+
+/stats/compare의 alternates.canonical과 og:url이 같은 buildCompareSharePath 결과에서
+나오므로 공유 URL과 canonical의 의미가 일치한다. 오리진은 siteConfig 한 곳에서만 온다
+(서버 메타데이터는 absoluteUrl, 클라이언트 공유 버튼은 absoluteShareUrl —
+클라이언트 번들에서 localhost로 내려앉지 않게 한 SHARE_CARD_UNIFICATION_V1 §10의
+구분이며, NEXT_PUBLIC_SITE_URL이 설정된 프로덕션에서는 두 값이 동일하다).
+
+건드리지 않은 것
+
+compare 점수·거래 데이터·금융·지도·인증·커뮤니티·최근 본 단지·통계 로딩·DB — 무변경.
+이번 변경은 테스트 파일 한 곳뿐이다.
+
+테스트
+
+    npx tsx --test src/lib/compare-v2/url.test.ts        21/21 PASS (기존)
+    npx tsx --test src/lib/share/ejipShareCard.test.ts   28/28 PASS (신규 4 포함)
+    npx tsx --test "src/**/*.test.ts"                    1002/1002 PASS
+    npx tsc --noEmit                                     src/ 오류 0
+    npm run build                                        Compiled successfully
+
+카카오톡 실제 말풍선은 이 환경에서 확인할 수 없다 —
+STRUCTURAL PASS / DEVICE QA REQUIRED.
+
+## 2026-09-12
+
 ### SCORE CANONICAL APTSEQ RESOLUTION FIX V1 (비교 화면 전달 보완)
 
 감사 결과를 먼저 적는다: **해소기 자체는 이미 고쳐져 있었다.** 커밋 0d14a69이

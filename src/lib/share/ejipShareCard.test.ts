@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { nativeShare } from './shareUtils';
 import {
   EJIP_SHARE_CTA,
   EjipShareCardError,
@@ -269,4 +270,68 @@ test('§19 비교 공유 URL은 여전히 aptSeq 둘뿐이다 — 긴 한글 쿼
   }
   assert.ok(/buildCompareSharePath\(/.test(shareLine));
   assert.ok(/absoluteShareUrl\(sharePath\)/.test(COMPARE));
+});
+
+// ── H. 공유 시트 취소(COMPARE_SHARE_URL_COMPACT_FIX_V1 §4) ─────────────────
+
+/**
+ * 사용자가 OS 공유 시트를 닫는 것은 **실패가 아니다.** 이 구분이 없으면 그냥 마음을
+ * 바꿔 닫은 사람에게 "공유 실패" 토스트가 뜬다.
+ *
+ * 동작은 처음부터 옳았지만 고정된 테스트가 없었다 — 여기서 묶는다.
+ */
+async function withNavigatorShare<T>(
+  impl: () => Promise<void>,
+  run: () => Promise<T>
+): Promise<T> {
+  const nav = globalThis.navigator as unknown as Record<string, unknown>;
+  const had = Object.prototype.hasOwnProperty.call(nav, 'share');
+  const prev = nav.share;
+  Object.defineProperty(nav, 'share', { value: impl, configurable: true, writable: true });
+  try {
+    return await run();
+  } finally {
+    if (had) Object.defineProperty(nav, 'share', { value: prev, configurable: true, writable: true });
+    else delete nav.share;
+  }
+}
+
+test('§4 공유 시트를 닫으면(AbortError) 실패가 아니라 정상 취소다', async () => {
+  const result = await withNavigatorShare(
+    async () => {
+      const e = new Error('user cancelled');
+      e.name = 'AbortError';
+      throw e;
+    },
+    () => nativeShare({ title: 'T', text: 'D', url: 'https://e-jip.com/stats/compare?a=1-1&b=1-2' })
+  );
+  assert.equal(result, 'aborted', '취소를 실패로 분류한다');
+});
+
+test('§4 진짜 실패는 failed로 구분된다', async () => {
+  const result = await withNavigatorShare(
+    async () => {
+      throw new Error('NotAllowedError');
+    },
+    () => nativeShare({ title: 'T', text: 'D', url: 'https://e-jip.com/' })
+  );
+  assert.equal(result, 'failed', '실패를 취소로 뭉갠다');
+});
+
+test('§4 공유가 성공하면 shared다', async () => {
+  const result = await withNavigatorShare(
+    async () => {},
+    () => nativeShare({ title: 'T', text: 'D', url: 'https://e-jip.com/' })
+  );
+  assert.equal(result, 'shared');
+});
+
+test('§4 취소는 오류 상태로 넘어가지 않고, 집계도 남기지 않는다', () => {
+  const code = codeOf(HOOK);
+  const at = code.indexOf("nativeResult === 'aborted'");
+  assert.ok(at > -1, '취소 분기가 없다');
+  // 취소 분기는 곧바로 return한다 — 아래의 clipboard/error 경로로 내려가지 않는다.
+  const block = code.slice(at, at + 120);
+  assert.ok(/return;/.test(block), '취소가 폴백 경로로 흘러간다');
+  assert.ok(!/setStatus\('error'\)|trackEvent/.test(block), '취소를 실패로 기록한다');
 });
