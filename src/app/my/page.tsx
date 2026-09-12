@@ -11,6 +11,12 @@ import { useRecentSync } from '@/hooks/useRecentSync';
 import { ALLOWED_PURPOSES, PURPOSE_LABELS, type Purpose } from '@/lib/preferences';
 import styles from './page.module.css';
 import InstallEntry from '@/components/pwa/InstallEntry';
+import {
+  RECENT_ROWS_COLLAPSED,
+  canCollapseRecent,
+  canExpandRecent,
+  visibleRecentItems,
+} from '@/lib/my/recent-rows';
 
 const ROLE_LABELS: Record<string, string> = {
   GUEST: '게스트',
@@ -39,6 +45,9 @@ export default function MyPage() {
   const { data: session, status } = useSession();
   const [favorites, setFavorites] = useState<FavoriteInput[] | null>(null);
   const [recentViews, setRecentViews] = useState<RecentViewItem[] | null>(null);
+  // LOGIN_RECENT_VIEWED_DENSITY_V1 §9 — 진입할 때마다 접힌 상태로 시작한다. 펼침
+  // 여부를 저장하지 않는다(세션을 넘겨 기억하면 다음 방문에 20줄로 다시 열린다).
+  const [recentExpanded, setRecentExpanded] = useState(false);
 
   // [MY-4] 관심 목적 상태
   const [purposes, setPurposes] = useState<Purpose[]>([]);
@@ -183,12 +192,30 @@ export default function MyPage() {
                     <Link href="/map" className={styles.emptyLink}>지도에서 찾아보기</Link>
                   </div>
                 ) : (
-                  recentViews.map((r) => (
-                    <Link key={r.id} href={aptHref(r)} className={styles.aptItem}>
-                      <div className={styles.aptName}>{r.name}</div>
-                      {r.address && <div className={styles.aptAddress}>{r.address}</div>}
-                    </Link>
-                  ))
+                  <>
+                    {/* §2 — 같은 목록의 앞 5건. 정렬·중복·식별자·목적지는 그대로다(§4). */}
+                    {visibleRecentItems(recentViews, recentExpanded).map((r) => (
+                      <Link key={r.id} href={aptHref(r)} className={styles.aptItem}>
+                        <div className={styles.aptName}>{r.name}</div>
+                        {r.address && <div className={styles.aptAddress}>{r.address}</div>}
+                      </Link>
+                    ))}
+                    {/* §3 — 5건 이하이면 버튼 자체를 만들지 않는다. 펼치고 접는 데
+                        추가 조회가 없다(목록은 이미 클라이언트에 다 있다). */}
+                    {canExpandRecent(recentViews.length) && (
+                      <button
+                        type="button"
+                        className={styles.recentToggle}
+                        onClick={() => setRecentExpanded((v) => !v)}
+                        aria-expanded={recentExpanded}
+                        aria-label={canCollapseRecent(recentViews.length, recentExpanded) ? '최근 본 단지 접기' : '최근 본 단지 더보기'}
+                      >
+                        {canCollapseRecent(recentViews.length, recentExpanded)
+                          ? '접기'
+                          : `더보기 (${recentViews.length - RECENT_ROWS_COLLAPSED}개 더 있음)`}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
 

@@ -139,6 +139,33 @@
   margin-top: 0.2rem;
 }
 
+/* LOGIN_RECENT_VIEWED_DENSITY_V1 §3/§10 — "최근 본 단지" 더보기 / 접기.
+
+   목록 카드(.aptItem)와 같은 폭으로 아래에 붙는다. 줄을 접는 것이 목적이므로 버튼
+   자체가 또 하나의 큰 블록이 되면 안 된다 — 카드보다 낮고 조용하게 둔다. 다만 손가락
+   탭 타깃 44px은 지킨다(밀도를 줄이되 접근성은 줄이지 않는다).
+
+   button 요소라 키보드 활성화(Enter/Space)가 기본으로 동작한다. */
+.recentToggle {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 1rem;
+  margin-top: 0.1rem;
+  background: transparent;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recentToggle:hover {
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
+
 /* 빈 상태 박스 */
 .emptyBox {
   background: white;
