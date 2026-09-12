@@ -2,6 +2,73 @@
 
 ## 2026-09-12
 
+### MOBILE DEVICE QA V1 — 서버 측 검증 + 성능 P1 1건 재현 (실기기 QA 미수행)
+
+이 환경에는 브라우저·실기기·에뮬레이터가 없다. 그래서 지시문 §2~§12의 실기기 절차는
+**수행하지 못했다.** 하지 않은 QA를 PASS로 적지 않는다. 대신 브라우저 없이 확인 가능한
+것을 프로덕션에 HTTP로 검증하고, 실기기 체크리스트를 문서로 넘긴다. 코드 변경 없음.
+
+검증된 것
+
+커뮤니티 비로그인 접근이 프로덕션에서 성립한다 — /community와 목록 API 모두 쿠키
+없이 200. 다만 **게시글이 0건**이라 상세·댓글 흐름은 테스트할 콘텐츠가 없다. 실기기
+QA 전에 글을 1~2개 넣어야 §2의 4~11번을 밟을 수 있다.
+
+비교 공유 링크 복원을 이름 충돌 쌍으로 확인했다.
+
+    /stats/compare?a=26230-149&b=26230-1810
+      <title>대원아파트 vs 대원 | 이집</title>
+      canonical / og:url = 공유 URL과 동일, 퍼센트 인코딩 없음
+
+    /stats/compare?a=26140-15&b=26140-63
+      <title>문화 vs 문화 | 이집</title>   ← 둘 다 이름이 "문화"인 다른 단지
+
+정규화 이름이 같은 단지를 aptSeq로 정확히 구분해 복원한다. COMPARE_SHARE_URL_
+COMPACT_FIX_V1과 SCORE_CANONICAL_APTSEQ_RESOLUTION_FIX_V1이 프로덕션에서 동작한다는
+증거다. 카카오톡 말풍선 자체는 실기기 항목이다.
+
+위생: robots Sitemap 정상, sitemap 36 URL·서울 0건, IndexNow 키 200, PWA manifest가
+설치 요건 형태 충족(start_url "/", scope "/", standalone, 아이콘 3).
+
+문서 응답: 8개 주요 경로 전부 200, TTFB 92~387ms. 단 이건 HTML 응답일 뿐이고 JS 실행·
+지도 SDK·API 팬아웃이 빠진 값이라 실사용 체감이 아니다.
+
+재현된 버그 — P1 (성능)
+
+    GET /api/stats/feed?sidoCode=26&period=12m&offset=0&limit=50
+      1차     25.46s
+      직후    0.93s / 0.85s     ← 캐시 적중
+      수 분 후 22.39s            ← 다시 느려짐
+
+일회성 콜드 스타트가 아니라 반복 재현된다(§12의 "3s+ 반복 = P1").
+
+기본 진입은 정상이다. TransactionFeedView의 기본 기간은 7d이고
+sidoCode=26&period=7d는 1.71s → 0.27s다. 문제는 사용자가 기간 칩에서 "최근 12개월"을
+직접 누르고 지역이 부산 전체일 때다.
+
+원인: feed route가 getOrSetCache(key, 5 * 60 * 1000)로 **5분 TTL 인메모리 캐시**를
+쓰고 dynamic = 'force-dynamic'이라 serverless 인스턴스마다 따로 유지된다. 그 키가
+커버하는 작업량은 16개 구·군 × 12개월 × (매매+전월세) = 약 384회 MOLIT 배치 조회다.
+5분이 지나거나 새 인스턴스에 붙은 첫 사용자가 매번 22~25초를 부담한다.
+
+고치지 않은 이유: 가능한 안이 전부 승인 영역이다. TTL 상향은 실거래 신선도 정책
+결정이고, cron 사전 예열은 신규 인프라(이번 STEP의 "새 기능 추가 금지"), 12개월 옵션
+제한은 사용자 선택지를 없애는 제품 결정이다. §13의 STOP 규칙에 따라 측정만 했다.
+
+완화되어 있는 점: 직전 STATS_LOADING_STATE_UX_FIX_V1 덕분에 그 22초 동안 화면은
+"실거래 데이터를 확인하고 있어요"를 보여준다. 예전 코드라면 같은 상황에서 "기간 내
+실거래가 없어요"가 떠서 고장으로 보였을 것이다.
+
+네이버 로그인은 변경하지 않았다. 직전 감사 결론(State cookie was missing, 서버는 세
+프로바이더에 동일하게 쿠키 발급, Google·Kakao는 같은 기기에서 PASS) 그대로이고,
+남은 판별은 데스크톱 Chrome 테스트 1회다. sameSite·provider·secret·callback은 승인
+없이 건드리지 않는다.
+
+실기기 체크리스트 9개 구역(A~I)과 판정표, 남은 블로커, soft launch 권고는
+docs/development/MOBILE_DEVICE_QA_V1.md에 있다.
+
+## 2026-09-12
+
 ### COMMUNITY ANONYMOUS BROWSING UX FIX V1 — 읽기는 공개, 쓰기에서만 로그인
 
 COMMUNITY_LAUNCH_READINESS_V1에서 제품 결정으로 남겨둔 항목을 확정했다.
