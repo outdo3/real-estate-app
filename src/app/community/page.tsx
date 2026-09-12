@@ -6,7 +6,6 @@ import { Building2, MapPin, PenLine, RefreshCw, AlertTriangle } from 'lucide-rea
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import Header from '@/components/Header';
-import AuthGate from '@/components/AuthGate';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -45,8 +44,16 @@ export default function CommunityPage() {
     router.replace('/community');
   };
 
+  // COMMUNITY_ANONYMOUS_BROWSING_UX_V1 §2/§7 — AuthGate를 걷어냈다.
+  //
+  // 예전에는 목록을 AuthGate로 감싸서, 비로그인 방문자가 들어오는 순간 로그인 모달이
+  // 자동으로 떴다. 닫으면 볼 수 있었지만 커뮤니티는 sitemap에 들어가는 공개 화면이라
+  // **검색에서 들어온 첫 방문자가 본문 대신 모달을 먼저 만났다.**
+  //
+  // 읽기는 공개하고 쓰기에서만 인증을 요구한다. 글쓰기 버튼은 /community/write로
+  // 이동하고 그 페이지의 AuthGate가 로그인을 요구하므로, 여기서 모달을 들 필요가 없다.
   return (
-    <AuthGate>
+    <>
       <div className={styles.main}>
         <Header pageTitle="커뮤니티" />
         <div className="container">
@@ -154,6 +161,6 @@ export default function CommunityPage() {
           )}
         </div>
       </div>
-    </AuthGate>
+    </>
   );
 }

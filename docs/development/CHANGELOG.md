@@ -2,6 +2,59 @@
 
 ## 2026-09-12
 
+### COMMUNITY ANONYMOUS BROWSING UX FIX V1 — 읽기는 공개, 쓰기에서만 로그인
+
+COMMUNITY_LAUNCH_READINESS_V1에서 제품 결정으로 남겨둔 항목을 확정했다.
+
+무엇이 문제였나
+
+목록(/community)과 상세(/community/[id])가 AuthGate로 감싸여 있었다. AuthGate는
+비로그인 상태를 감지하면 곧바로 로그인 모달을 띄운다. 닫으면 둘러볼 수 있어서 기능
+자체는 막히지 않았지만, 커뮤니티는 sitemap에 들어가는 공개 화면이다. 즉 검색이나
+카카오 공유 링크로 들어온 **첫 방문자가 본문 대신 모달을 먼저 만났다.**
+
+로그인을 없앤 게 아니다. 인증을 **쓰기 액션 시점으로** 옮겼다.
+
+    이전                          이후
+    /community        AuthGate    래퍼 없음 — 바로 열람
+    /community/[id]   AuthGate    래퍼 없음 — 본문·작성자·시간·댓글 모두 열람
+    /community/write  AuthGate    그대로 유지
+    /my               AuthGate    그대로 유지
+    /admin/*          AuthGate    그대로 유지
+
+쓰기 액션
+
+글쓰기 버튼은 /community/write로 이동하고 그 페이지의 AuthGate가 로그인을 요구한다 —
+목록에서 모달을 따로 들 필요가 없다.
+
+댓글은 상세 화면에서 직접 처리한다. 비로그인 상태로 등록을 누르면 로그인 모달이
+열리고(요청은 보내지 않는다), 로그인 후 `callbackUrl`로 그 글로 돌아온다. 입력창
+placeholder도 비로그인일 때 "로그인 후 댓글을 쓸 수 있어요"로 바뀐다 — 로그인은 OAuth
+리다이렉트라 입력한 내용이 남지 않으므로, 다 쓴 뒤에 막히는 것보다 쓰기 전에 아는
+편이 낫다.
+
+세션이 'loading'일 때는 모달을 띄우지 않는다. 모르는 상태를 비로그인으로 단정하지
+않고, 그대로 보내 서버가 최종 판단하게 둔다.
+
+서버는 그대로
+
+읽기 API(GET 목록/상세)는 원래도 인증을 요구하지 않았고, 쓰기 API는 계속
+requireUser로 막는다 — 클라이언트 모달에 의존하지 않는다. 소유권 검사
+(existing.authorId === user.id 또는 관리자), 403, 차단 계정의 수정 차단도 전부
+무변경이다. AuthGate 컴포넌트도 삭제하지 않았다.
+
+테스트
+
+    npx tsx --test src/lib/community/anonymous-browsing.test.ts   14/14 PASS
+    npx tsx --test "src/**/*.test.ts"                             1016/1016 PASS
+    npx tsc --noEmit                                              src/ 오류 0
+    npm run build                                                 Compiled successfully
+
+브라우저가 없어 360/390/430px 실제 렌더와 모달 동작은 확인하지 못했다 —
+STRUCTURAL PASS / DEVICE QA REQUIRED.
+
+## 2026-09-12
+
 ### COMPARE SHARE URL COMPACT FIX V1 (감사 확인 + 취소 의미 고정)
 
 감사 결과를 먼저 적는다: **이 STEP은 이미 구현돼 있었다.** 커밋 edfdf7e가

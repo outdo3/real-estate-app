@@ -7,7 +7,7 @@ import { AlertTriangle, ArrowLeft, Building2, Pin, RefreshCw } from 'lucide-reac
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import Header from '@/components/Header';
-import AuthGate from '@/components/AuthGate';
+import LoginModal from '@/components/LoginModal';
 import ShareAction from '@/components/ShareAction';
 import styles from './page.module.css';
 
@@ -16,7 +16,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 export default function PostDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const postId = params.id as string;
 
   // §3/§16 — SWR의 error도 본다. 예전에는 fetch 자체가 실패하면(오프라인 등)
@@ -30,6 +30,9 @@ export default function PostDetailPage() {
   const [deletingPost, setDeletingPost] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // §4 — 비로그인 사용자가 **댓글을 쓰려고 할 때만** 로그인을 요구한다.
+  // 페이지 진입만으로는 띄우지 않는다(§3).
+  const [loginOpen, setLoginOpen] = useState(false);
 
   const post = data?.success ? data.data : null;
   const fetchError = swrError ? '게시글을 불러오지 못했습니다.' : data && !data.success ? data.error : null;
@@ -87,6 +90,12 @@ export default function PostDetailPage() {
   };
 
   const handleSubmitComment = async () => {
+    // §4/§8 — 인증 상태가 확정되고 비로그인일 때 로그인 모달을 연다. 'loading' 중에는
+    // 아직 모르는 상태이므로 모달을 띄우지 않고 그대로 보낸다(서버가 최종 판단한다).
+    if (sessionStatus === 'unauthenticated') {
+      setLoginOpen(true);
+      return;
+    }
     // §8 — Enter 연타로 같은 댓글이 여러 번 올라가지 않게 한다. 버튼은 disabled로
     // 막히지만 키보드 경로에는 가드가 없었다.
     if (submitting || !comment.trim()) return;
@@ -112,8 +121,10 @@ export default function PostDetailPage() {
     }
   };
 
+  // §3/§7 — AuthGate를 걷어냈다. 게시글 본문·작성자·시간·댓글은 비로그인도 읽을 수
+  // 있어야 한다. 공유/검색으로 들어온 사람이 본문 대신 모달을 먼저 보는 일이 없도록.
   return (
-    <AuthGate>
+    <>
       <div className={styles.main}>
         <Header pageTitle="게시글" />
         <div className="container">
@@ -225,7 +236,14 @@ export default function PostDetailPage() {
                 <div className={styles.commentForm}>
                   <input
                     className={styles.commentInput}
-                    placeholder="댓글을 입력해주세요"
+                    /* §4 — 비로그인 사용자에게는 먼저 알려준다. 로그인은 OAuth
+                       리다이렉트라 입력한 내용이 남지 않으므로, 다 쓴 뒤에 막히는
+                       것보다 쓰기 전에 아는 편이 낫다. */
+                    placeholder={
+                      sessionStatus === 'unauthenticated'
+                        ? '로그인 후 댓글을 쓸 수 있어요'
+                        : '댓글을 입력해주세요'
+                    }
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmitComment()}
@@ -245,6 +263,12 @@ export default function PostDetailPage() {
           )}
         </div>
       </div>
-    </AuthGate>
+      {/* §4 — 댓글 작성을 시도했을 때만 열린다. 로그인 후 이 글로 돌아온다. */}
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        callbackUrl={`/community/${postId}`}
+      />
+    </>
   );
 }
