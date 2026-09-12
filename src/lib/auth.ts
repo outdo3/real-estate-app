@@ -84,12 +84,37 @@ export const authOptions: NextAuthOptions = {
     strategy: 'jwt',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
         token.banned = (user as any).banned;
       }
+
+      // USER_NICKNAME_EDIT_V1 §5 — 닉네임을 바꾼 직후 화면에 바로 반영한다.
+      //
+      // 세션이 JWT 전략이라 token.name은 **로그인 시점에 구워진다.** DB의 User.name만
+      // 바꾸면 토큰이 갱신될 때까지 헤더와 MY에 옛 이름이 남는다. 그래서 클라이언트가
+      // useSession().update()를 부르면(trigger === 'update') 그때만 이름을 다시 읽는다.
+      //
+      // **update()가 넘긴 값을 쓰지 않고 DB에서 다시 읽는 이유**: update()의 인자는
+      // 클라이언트가 정하는 값이라, 그대로 토큰에 넣으면 저장하지 않은 이름을 자기
+      // 세션에 표시할 수 있다. DB를 진실로 삼으면 그런 경로가 생기지 않는다.
+      // (커뮤니티 작성자명은 원래 User를 live join하므로 이 경로와 무관하게 정확하다.)
+      //
+      // 매 요청이 아니라 명시적 update 때만 조회하므로 평소 인증 비용은 그대로다.
+      if (trigger === 'update' && token.id) {
+        try {
+          const fresh = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { name: true },
+          });
+          if (fresh) token.name = fresh.name;
+        } catch {
+          // 조회 실패는 로그인 상태를 깨뜨릴 이유가 없다 — 이름만 갱신되지 않는다.
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {

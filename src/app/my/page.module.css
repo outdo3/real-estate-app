@@ -53,6 +53,117 @@
   margin-top: 0.25rem;
 }
 
+/* USER_NICKNAME_EDIT_V1 §2/§8 — 프로필 카드 인라인 닉네임 편집.
+
+   카드 높이를 크게 늘리지 않는 것이 목표다. 편집 중에도 한 줄 입력 + 작은 버튼 두 개만
+   추가되고, 아바타와 나란한 기존 레이아웃을 그대로 쓴다. */
+.profileInfo {
+  min-width: 0;
+  flex: 1;
+}
+
+/* "닉네임 변경" — 이름 옆에 붙는 작고 조용한 버튼. 이름보다 세지 않아야 한다. */
+.nicknameEditBtn {
+  /* 터치 타깃은 확보하되 시각적으로는 작게(패딩으로 넓힌다). */
+  min-height: 32px;
+  padding: 0.25rem 0.5rem;
+  background: none;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nicknameEditBtn:hover {
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
+
+.nicknameEdit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.nicknameInput {
+  width: 100%;
+  min-width: 0;
+  /* 모바일 Safari/Chrome은 16px 미만 입력에 자동 확대(zoom)를 건다 — 키보드가 열릴 때
+     화면이 튀지 않도록 16px을 유지한다(§8). */
+  font-size: 16px;
+  font-weight: 700;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: white;
+}
+
+.nicknameInput:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.nicknameInput:disabled {
+  background: #f8fafc;
+  color: var(--text-muted);
+}
+
+.nicknameEditActions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.nicknameSave,
+.nicknameCancel {
+  min-height: 40px;
+  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nicknameSave {
+  background: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  color: white;
+}
+
+.nicknameCancel {
+  background: white;
+  border: 1px solid var(--border-color, #e5e7eb);
+  color: var(--text-secondary);
+}
+
+.nicknameSave:disabled,
+.nicknameCancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.nicknameError {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #b91c1c;
+  word-break: keep-all;
+}
+
+.nicknameSaved {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+/* 360px에서도 이름 + 배지 + 변경 버튼이 한 줄에 안 들어가면 자연스럽게 접힌다
+   (.nickname이 이미 flex-wrap: wrap). 입력은 항상 카드 폭을 채운다. */
+
 .roleBadge {
   font-size: 0.7rem;
   font-weight: 800;

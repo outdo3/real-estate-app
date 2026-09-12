@@ -9,6 +9,7 @@ import AuthGate from '@/components/AuthGate';
 import type { FavoriteInput } from '@/lib/favorites';
 import { useRecentSync } from '@/hooks/useRecentSync';
 import { ALLOWED_PURPOSES, PURPOSE_LABELS, type Purpose } from '@/lib/preferences';
+import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from '@/lib/nickname';
 import styles from './page.module.css';
 import InstallEntry from '@/components/pwa/InstallEntry';
 import {
@@ -42,12 +43,62 @@ interface RecentViewItem {
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function MyPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const [favorites, setFavorites] = useState<FavoriteInput[] | null>(null);
   const [recentViews, setRecentViews] = useState<RecentViewItem[] | null>(null);
   // LOGIN_RECENT_VIEWED_DENSITY_V1 §9 — 진입할 때마다 접힌 상태로 시작한다. 펼침
   // 여부를 저장하지 않는다(세션을 넘겨 기억하면 다음 방문에 20줄로 다시 열린다).
   const [recentExpanded, setRecentExpanded] = useState(false);
+
+  // USER_NICKNAME_EDIT_V1 §2 — 프로필 카드 인라인 닉네임 편집.
+  // 모달을 새로 만들지 않는다. 카드 안에서 바로 고치고 저장/취소만 있으면 된다.
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [nicknameSaving, setNicknameSaving] = useState(false);
+  const [nicknameError, setNicknameError] = useState<string | null>(null);
+  const [nicknameSaved, setNicknameSaved] = useState(false);
+
+
+  const startNicknameEdit = () => {
+    setNicknameDraft(session?.user?.name ?? '');
+    setNicknameError(null);
+    setNicknameSaved(false);
+    setEditingNickname(true);
+  };
+
+  const cancelNicknameEdit = () => {
+    setEditingNickname(false);
+    setNicknameError(null);
+  };
+
+  const saveNickname = async () => {
+    if (nicknameSaving) return;
+    setNicknameSaving(true);
+    setNicknameError(null);
+    try {
+      const res = await fetch('/api/my/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname: nicknameDraft }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        // 서버가 준 문구를 그대로 보여준다 — 클라이언트에서 규칙을 다시 쓰면 둘이 갈라진다.
+        setNicknameError(json.error ?? '닉네임을 저장하지 못했습니다.');
+        return;
+      }
+      // §5 — 세션을 갱신해야 헤더와 이 화면이 새로고침 없이 새 이름을 보여준다.
+      // jwt 콜백이 DB에서 다시 읽으므로 여기서 값을 넘길 필요가 없다.
+      await updateSession();
+      setEditingNickname(false);
+      setNicknameSaved(true);
+      setTimeout(() => setNicknameSaved(false), 2500);
+    } catch {
+      setNicknameError('닉네임을 저장하지 못했습니다.');
+    } finally {
+      setNicknameSaving(false);
+    }
+  };
 
   // [MY-4] 관심 목적 상태
   const [purposes, setPurposes] = useState<Purpose[]>([]);
@@ -140,12 +191,57 @@ export default function MyPage() {
                 ) : (
                   <div className={styles.avatarFallback}>{(session.user.name || '?').slice(0, 1)}</div>
                 )}
-                <div>
-                  <div className={styles.nickname}>
-                    {session.user.name}
-                    <span className={styles.roleBadge}>{ROLE_LABELS[session.user.role] || session.user.role}</span>
-                  </div>
+                <div className={styles.profileInfo}>
+                  {editingNickname ? (
+                    /* §2/§8 — 인라인 편집. 카드 높이가 크게 늘지 않도록 한 줄 입력 +
+                       작은 저장/취소 버튼만 둔다. */
+                    <div className={styles.nicknameEdit}>
+                      <input
+                        className={styles.nicknameInput}
+                        value={nicknameDraft}
+                        onChange={(e) => setNicknameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveNickname();
+                          if (e.key === 'Escape') cancelNicknameEdit();
+                        }}
+                        maxLength={NICKNAME_MAX_LENGTH}
+                        minLength={NICKNAME_MIN_LENGTH}
+                        aria-label="닉네임"
+                        autoFocus
+                        disabled={nicknameSaving}
+                      />
+                      <div className={styles.nicknameEditActions}>
+                        <button
+                          type="button"
+                          className={styles.nicknameSave}
+                          onClick={saveNickname}
+                          disabled={nicknameSaving}
+                        >
+                          {nicknameSaving ? '저장 중...' : '저장'}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.nicknameCancel}
+                          onClick={cancelNicknameEdit}
+                          disabled={nicknameSaving}
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={styles.nickname}>
+                      {session.user.name}
+                      <span className={styles.roleBadge}>{ROLE_LABELS[session.user.role] || session.user.role}</span>
+                      <button type="button" className={styles.nicknameEditBtn} onClick={startNicknameEdit}>
+                        닉네임 변경
+                      </button>
+                    </div>
+                  )}
+                  {/* §2 — 이메일은 읽기 전용이다. 이 STEP에서 수정 기능을 만들지 않는다. */}
                   {session.user.email && <div className={styles.email}>{session.user.email}</div>}
+                  {nicknameError && <p className={styles.nicknameError} role="alert">{nicknameError}</p>}
+                  {nicknameSaved && <p className={styles.nicknameSaved} role="status">닉네임을 변경했습니다.</p>}
                 </div>
               </div>
 
