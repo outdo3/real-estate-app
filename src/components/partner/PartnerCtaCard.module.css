@@ -173,6 +173,144 @@
   }
 }
 
+/* ── E-JIP PARTNER BROKER CARD UI V1 — 중개사 카드 전용 ─────────────────────────
+   흰 배경 + 검정 글자라 상세 하단에서 묻혔다. 법무사 카드(.card 기본)는 그대로 두고,
+   중개사 카드에만 한 단계 짙은 blue-gray 표면과 위계를 준다.
+   - 브랜드 초록은 여전히 쓰지 않는다(이집 기능처럼 보이면 안 된다).
+   - 원색/그라데이션/애니메이션/큰 그림자 없음. 광고 배너가 아니라 상담 카드다.
+   - 전화 상담 버튼은 짙은 슬레이트 채움(흰 글자 대비 약 14:1) — 초록/빨강을 피한 중립 강조. */
+.brokerCard {
+  padding: 1.1rem 1.1rem 1rem;
+  background: #f1f5f9;
+  border-color: #d9e2ec;
+  border-radius: var(--radius-2xl, 16px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.brokerLayout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.brokerMain {
+  min-width: 0;
+}
+
+/* 작은 라벨. "추천/인증" 같은 오해 가능한 표현은 쓰지 않는다. */
+.brokerBadge {
+  display: inline-block;
+  margin: 0 0 0.45rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #334155;
+  background: #e2e8f0;
+  border-radius: var(--radius-pill, 9999px);
+}
+
+.brokerTitle {
+  margin: 0 0 0.75rem;
+  font-size: 1.12rem;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  word-break: keep-all;
+}
+
+.brokerIdentityIcon {
+  background: #ffffff;
+  border: 1px solid #d9e2ec;
+  color: #475569;
+}
+
+/* 전화번호: 본문보다 한 단계 크게, 잘리지 않게. 링크가 아니다 — 탭해서 거는 경로는
+   집계되는 버튼 하나뿐이다. */
+.brokerPhone {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.7rem 0 0;
+}
+
+.brokerPhoneLabel {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.brokerPhoneNumber {
+  font-size: 1.06rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.brokerArea {
+  margin: 0.4rem 0 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  word-break: keep-all;
+}
+
+.brokerActions {
+  display: flex;
+}
+
+.brokerPrimary {
+  min-height: 48px;
+  font-size: 0.95rem;
+  background: #1e293b;
+  color: #ffffff;
+  border: 1px solid #1e293b;
+}
+
+.brokerPrimary:hover {
+  background: #0f172a;
+}
+
+.brokerPrimary:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+/* 등록번호/주소 — 신뢰 정보는 작게, 구분선 아래에. */
+.brokerTrust {
+  margin-top: 0.85rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #d9e2ec;
+}
+
+.brokerTrust .meta:first-child {
+  margin-top: 0;
+}
+
+/* 데스크톱: 텍스트 왼쪽, 전화 상담 버튼 오른쪽(하단 정렬). */
+@media (min-width: 768px) {
+  .brokerCard {
+    padding: 1.25rem 1.4rem 1.1rem;
+  }
+  .brokerLayout {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+  .brokerActions {
+    flex: 0 0 auto;
+  }
+  .brokerPrimary {
+    min-width: 180px;
+    padding: 0.6rem 1.25rem;
+  }
+}
+
 /* 인쇄물/리포트 내보내기에는 제휴 카드를 남기지 않는다(§8).
    globals.css의 @media print [data-export-exclude] 규칙과 이중으로 보장한다. */
 @media print {

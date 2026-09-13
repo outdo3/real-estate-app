@@ -70,15 +70,23 @@ test('§4 법무사 전화번호가 화면·aria 어디에도 쓰이지 않는�
   for (const a of arias) assert.ok(!/\d{3}-?\d{4}/.test(a), `aria에 번호가 있다: ${a}`);
 });
 
-test('§9 중개사 전화번호가 화면·aria 어디에도 쓰이지 않는다', () => {
+// E-JIP PARTNER BROKER CARD UI V1 — 중개사 카드는 이제 번호를 **보인다**(사용자 요청으로 §9 변경).
+// 대신 번호는 링크가 아닌 텍스트이고, 탭해서 거는 경로는 집계되는 버튼 하나뿐이어야 한다.
+// 법무사 카드(§4)는 그대로 비노출이다.
+test('§9 (UI V1) 중개사 번호는 설정값으로 텍스트 표시되고, 거는 경로는 집계 버튼 하나뿐이다', () => {
   const code = codeOf(BROKER_CARD);
-  assert.ok(!code.includes('051-714-2225'));
-  assert.ok(!code.includes('displayPhone'));
-  const arias = code.match(/aria-label=\{?[^}\n]*/g) ?? [];
-  for (const a of arias) assert.ok(!/\d{3}-?\d{4}/.test(a), `aria에 번호가 있다: ${a}`);
+  assert.ok(!code.includes('051-714-2225'), '번호가 하드코딩돼 있다 — 설정(단일 출처)에서 와야 한다');
+  assert.ok(/\{broker\.displayPhone\}/.test(code), '표시용 번호를 설정에서 렌더하지 않는다');
+  // tel 링크는 정확히 하나, 그 링크에 집계 핸들러가 붙어 있다.
+  const telLinks = code.match(/href=\{telHref\(broker\)\}/g) ?? [];
+  assert.equal(telLinks.length, 1, `tel 링크가 ${telLinks.length}개다`);
+  assert.ok(/href=\{telHref\(broker\)\}\s*onClick=\{handleClick\('phone'\)\}/.test(code), 'tel 링크에 집계 핸들러가 없다');
+  assert.ok(!/['"`]tel:/.test(code), '집계 없는 tel: 링크 원문이 있다');
+  // 번호 노드는 링크 안에 있지 않다.
+  assert.ok(!/<a[^>]*>[^<]*\{broker\.displayPhone\}/.test(code), '번호가 링크로 렌더된다');
 });
 
-test('§4/§9 tel: 링크는 그대로 동작한다 — 기능이 아니라 표시만 감췄다', () => {
+test('§4/§9 tel: 링크는 그대로 동작한다', () => {
   const legal = getPartnerForPlacement('apt_detail')!;
   assert.equal(telHref(legal), 'tel:01080264778');
   const broker = getBrokerForLocation({ lawdCd: '26140', dong: '서대신동3가' })!;
@@ -200,11 +208,39 @@ test('§23 중개사는 자금 계획(finance)에 올라가지 않는다', () =>
 
 // ── E. 카드 UI 계약(§8/§10) ────────────────────────────────────────────────
 
-test('§8 중개사 카드 문구가 지정된 대로다', () => {
-  assert.ok(BROKER_CARD.includes('이 단지 상담 가능한 중개사'));
-  assert.ok(BROKER_CARD.includes('공인중개사'));
-  assert.ok(BROKER_CARD.includes('중개사무소 등록번호'));
-  assert.ok(BROKER_CARD.includes('전화 문의'));
+test('§8 중개사 카드 문구가 지정된 대로다 (PARTNER BROKER CARD UI V1)', () => {
+  const code = codeOf(BROKER_CARD);
+  assert.ok(code.includes('이 단지 상담 가능한 중개사'), '카드 aria 설명이 사라졌다');
+  assert.ok(code.includes('지역 중개 상담'), '라벨이 없다');
+  assert.ok(/<h2[^>]*>이 지역 중개가 필요하신가요\?<\/h2>/.test(code), '제목이 semantic heading이 아니다');
+  assert.ok(code.includes('공인중개사'));
+  assert.ok(code.includes('중개사무소 등록번호'));
+  assert.ok(code.includes('전화 상담'));
+  // 오해 가능한 표현/긴급 마케팅 문구 금지.
+  for (const bad of ['추천', '인증 중개사', '공식', '지금 바로', '무료']) {
+    assert.ok(!code.includes(bad), `금지 표현: ${bad}`);
+  }
+  // 문의 채널은 전화뿐이다 — 없는 "중개 문의" 버튼을 만들지 않는다.
+  assert.ok(!code.includes('중개 문의'));
+  // 상담 범위/대표/등록번호/주소는 설정값을 그대로 렌더한다(문구를 새로 만들지 않는다).
+  for (const field of ['broker.displayName', 'broker.representative', 'broker.description', 'broker.registrationNumber', 'broker.address']) {
+    assert.ok(code.includes(`{${field}}`), `${field}를 렌더하지 않는다`);
+  }
+});
+
+test('§8 (UI V1) 과한 광고 표현이 없다 — 애니메이션/그라데이션/원색/브랜드 초록 금지, 탭 타깃 확보', () => {
+  const css = read('src/components/partner/PartnerCtaCard.module.css');
+  const broker = css.slice(css.indexOf('E-JIP PARTNER BROKER CARD UI V1'), css.indexOf('@media print'));
+  assert.ok(broker.length > 0);
+  for (const bad of [/animation/, /@keyframes/, /gradient/, /--primary-color/, /--ejip-green/, /#ff0000|#ef4444|#dc2626/i, /position:\s*(fixed|sticky)/]) {
+    assert.ok(!bad.test(broker), `중개사 카드 CSS에 금지 요소: ${bad}`);
+  }
+  assert.match(broker, /\.brokerPrimary \{[^}]*min-height: 48px/, '전화 상담 버튼 탭 타깃이 부족하다');
+  assert.match(broker, /\.brokerPrimary:focus-visible \{[^}]*outline/, '포커스 표시가 없다');
+  assert.match(broker, /\.brokerPhoneNumber \{[^}]*white-space: nowrap/, '전화번호가 줄바꿈으로 잘릴 수 있다');
+  assert.match(broker, /@media \(min-width: 768px\) \{[\s\S]*\.brokerLayout \{[^}]*flex-direction: row/, '데스크톱 2열 배치가 없다');
+  // 법무사 카드의 기본 .card 표면은 그대로다.
+  assert.match(css, /\.card \{\s*display: block;\s*margin: 1\.25rem 0;\s*padding: 0\.85rem 0\.9rem;\s*background: var\(--surface-subtle, #f8fafc\);/);
 });
 
 test('§8 아직 없는 흐름의 CTA를 넣지 않았다', () => {
