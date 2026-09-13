@@ -1,8 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import styles from './LoginModal.module.css';
+import {
+  SIGN_IN_PENDING_LABEL,
+  createSignInAttemptGuard,
+  releaseSignInAttemptOnPageShow,
+  startProviderSignIn,
+  type SocialProviderId,
+} from '@/lib/login-attempt';
 
 interface LoginModalProps {
   open: boolean;
@@ -14,9 +21,32 @@ interface LoginModalProps {
 // 마이페이지/커뮤니티 진입 시 뜨는 간편 로그인 팝업. 버튼 클릭 시 곧바로 해당
 // 서비스의 OAuth 동의 화면으로 이동한다(별도 로그인 페이지를 거치지 않음).
 export default function LoginModal({ open, onClose, callbackUrl }: LoginModalProps) {
+  // E-JIP FINAL DEVICE UX FIX V1 — 한 번 누르면 이동이 끝날 때까지 모든 로그인 버튼을 잠근다.
+  // 두 번째 탭이 새 OAuth state 쿠키를 발급해 첫 흐름의 콜백을 실패(OAuthCallback)시키던 경로를
+  // 막는다(src/lib/login-attempt.ts). 인증 설정은 바꾸지 않는다.
+  const guardRef = useRef(createSignInAttemptGuard());
+  const [pendingProvider, setPendingProvider] = useState<SocialProviderId | null>(null);
+
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      releaseSignInAttemptOnPageShow(guardRef.current, event, setPendingProvider);
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, []);
+
   if (!open) return null;
 
   const resolvedCallbackUrl = callbackUrl || (typeof window !== 'undefined' ? window.location.href : undefined);
+  const startSignIn = (provider: SocialProviderId) => {
+    void startProviderSignIn(
+      guardRef.current,
+      provider,
+      () => signIn(provider, { callbackUrl: resolvedCallbackUrl }),
+      setPendingProvider
+    );
+  };
+  const isPending = pendingProvider !== null;
 
   return (
     <div className={styles.overlay} onClick={onClose}>
@@ -29,10 +59,12 @@ export default function LoginModal({ open, onClose, callbackUrl }: LoginModalPro
 
         <button
           className={`${styles.socialBtn} ${styles.kakaoBtn}`}
-          onClick={() => signIn('kakao', { callbackUrl: resolvedCallbackUrl })}
+          onClick={() => startSignIn('kakao')}
+          disabled={isPending}
+          aria-busy={pendingProvider === 'kakao'}
         >
           <span className={styles.socialIcon}>💬</span>
-          카카오로 시작하기
+          {pendingProvider === 'kakao' ? SIGN_IN_PENDING_LABEL.kakao : '카카오로 시작하기'}
         </button>
         <p className={styles.kakaoNotice}>
           카카오 2단계 인증을 사용 중인 경우 카카오톡에서 로그인 확인 메시지가 전송될 수 있습니다.
@@ -40,15 +72,19 @@ export default function LoginModal({ open, onClose, callbackUrl }: LoginModalPro
 
         <button
           className={`${styles.socialBtn} ${styles.naverBtn}`}
-          onClick={() => signIn('naver', { callbackUrl: resolvedCallbackUrl })}
+          onClick={() => startSignIn('naver')}
+          disabled={isPending}
+          aria-busy={pendingProvider === 'naver'}
         >
           <span className={styles.socialIcon}>N</span>
-          네이버로 시작하기
+          {pendingProvider === 'naver' ? SIGN_IN_PENDING_LABEL.naver : '네이버로 시작하기'}
         </button>
 
         <button
           className={`${styles.socialBtn} ${styles.googleBtn}`}
-          onClick={() => signIn('google', { callbackUrl: resolvedCallbackUrl })}
+          onClick={() => startSignIn('google')}
+          disabled={isPending}
+          aria-busy={pendingProvider === 'google'}
         >
           <span className={styles.socialIcon}>
             <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
@@ -58,7 +94,7 @@ export default function LoginModal({ open, onClose, callbackUrl }: LoginModalPro
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
           </span>
-          Google로 계속하기
+          {pendingProvider === 'google' ? SIGN_IN_PENDING_LABEL.google : 'Google로 계속하기'}
         </button>
       </div>
     </div>

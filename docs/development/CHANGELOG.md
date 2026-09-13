@@ -2,6 +2,43 @@
 
 ## 2026-09-13
 
+### E-JIP FINAL DEVICE UX FIX V1 — 지도는 위치를 확정한 뒤 그리고, 로그인 버튼은 한 번만 눌린다
+
+Android Chrome 실기기에서 재현된 두 문제만 고쳤다. 새 기능 없음, 인증 설정 무변경.
+
+A. 지도 첫 진입에 부산 서구청이 잠깐 보였다가 현재 위치로 이동
+
+    원인    center 초기값 = DEFAULT_MAP_CENTER(35.0979, 129.0244, 하드코딩 상수)
+            렌더 게이트가 Kakao SDK 준비만 기다리고 geolocation은 기다리지 않았다
+            → SDK가 GPS보다 빠르면 서구청이 먼저 그려지고 setCenter로 이동
+    함께    최초 마커 로드도 기본 center(서구)로 나가고, 위치 도착 뒤 레이어를 다시 부르지 않았다
+            URL 동기화가 기본 center를 먼저 써서 새로고침/뒤로가기 시 서구청이 복원될 수 있었다
+    수정    위치 확정(GPS → IP → 기본 지역, 기존 순서·옵션 그대로) 전에는 "현재 위치를 확인하고 있어요" 로더
+            마커 로드 / URL 동기화 / 안전영역 측정은 확정 뒤에
+            권한 granted면 GPS 최대 4s 대기, 늦은 GPS는 사용자가 지도를 안 움직였을 때만 반영
+            권한 prompt/unknown이면 상한 없음(프롬프트 중에 기본 지역을 먼저 그리지 않는다)
+            IP 조회 3s timeout
+            IP/기본 지역으로 열리면 "현재 위치를 확인하지 못해 …" 안내, 지도를 옮기면 사라짐
+
+B. 로그인 시 "Try signing in with a different account."가 먼저 보이고 Kakao를 한 번 더 누르면 성공
+
+    출처    NextAuth 기본 페이지 /api/auth/signin?error=OAuthCallback 문구. 모달엔 에러 상태가 없다
+            → stale 배너가 아니라 방금 콜백이 실제로 실패한 것
+    확인    프로덕션 POST /api/auth/signin/kakao → kauth.kakao.com 정상 redirect(첫 클릭 OK)
+            POST를 두 번 보내면 state가 새로 발급되고 state 쿠키는 하나만 남는다
+            첫 URL state + 둘째 쿠키로 콜백 → error=OAuthCallback → 그 배너
+            signIn()은 이동 전 providers → csrf → POST 3회 왕복, 그동안 버튼 무반응(중복 탭 유발)
+    수정    LoginModal: 한 번 누르면 세 버튼 모두 잠그고 "카카오로 이동 중…" 표시
+            시작 실패 / bfcache 뒤로가기 시 잠금 해제
+            signIn 호출 형태, 프로바이더, 쿠키, SameSite, checks, pages, callback URL 무변경
+    미해결  앱 전환 중 state 쿠키 자체가 사라지는 경로(같은 OAuthCallback) — 인증 설정 변경이라 승인 필요
+            Naver 모바일 state-cookie 이슈는 건드리지 않음
+
+검증: 신규 16 tests, src 전체 1753/1753, tsc FAIL_EXISTING_SCRIPT_ERRORS(25건 전부 scripts/·tmp/, src 0),
+eslint(변경 파일) exit 0, `npm run build` exit 0. 실기기 없음 — STRUCTURAL PASS / DEVICE QA REQUIRED.
+
+문서: `docs/development/FINAL_DEVICE_UX_FIX_V1.md`
+
 ### E-JIP MOLIT PARTIAL FAILURE REDUCTION V1 — 부분 실패를 숨기지 않고 줄인다
 
 운영 관찰: `/admin/system` 최근 7일 `MOLIT_PARTIAL` 97건, 요청 4,440개월 중 1,721개월

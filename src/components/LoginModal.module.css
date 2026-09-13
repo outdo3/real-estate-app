@@ -69,6 +69,18 @@
   filter: brightness(0.96);
 }
 
+/* E-JIP FINAL DEVICE UX FIX V1 — 로그인 이동 중에는 다른 버튼을 잠근다. 누른 버튼은 진행 중임을 보여준다. */
+.socialBtn:disabled {
+  cursor: default;
+  opacity: 0.55;
+  filter: none;
+}
+
+.socialBtn[aria-busy='true'] {
+  cursor: progress;
+  opacity: 1;
+}
+
 .socialIcon {
   font-size: 1.1rem;
   font-weight: 800;

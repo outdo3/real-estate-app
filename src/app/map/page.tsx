@@ -73,6 +73,17 @@ import BottomNav from '@/components/ui/BottomNav';
 import ShareAction from '@/components/ShareAction';
 import mapMarkerStyles from './map-marker.module.css';
 import OutOfBusanNotice from '@/components/map/OutOfBusanNotice';
+import {
+  IP_LOOKUP_TIMEOUT_MS,
+  MAP_LOCATING_MESSAGE,
+  initialLocationNotice,
+  locateInitialCenter,
+  parseIpLoc,
+  shouldApplyLateGps,
+  type InitialLocationSource,
+  type LatLng as InitialLatLng,
+  type PermissionStateLike,
+} from '@/lib/map-initial-location';
 
 // [DESIGN SYSTEM 3 §9] 지도 페이지는 전체화면 커스텀 UI라 Header를 아예
 // 렌더링하지 않으므로(상단 로고바가 지도를 가리는 걸 막기 위함) 하단탭바만
@@ -516,6 +527,21 @@ export default function FullscreenMapPage() {
   // 아예 없는 지역으로 잘못 조회될 수 있다 — selected identity 복원(matchRestoreIdentity)
   // 이 애초에 매칭될 기회조차 갖지 못하는 문제로 이어진다.
   const initialShareLawdCdRef = useRef(readInitialMapStateFromUrl()?.lawdCd ?? null);
+  // E-JIP FINAL DEVICE UX FIX V1 — 첫 진입 위치가 확정되기 전에는 지도를 그리지 않는다
+  // (map-initial-location.ts). 공유/복원 링크는 URL center가 곧 확정 위치다(지오로케이션 생략,
+  // 기존 §9-b 규칙 그대로). 서버 렌더에서는 URL을 모르므로 'locating'이지만, 첫 렌더는 어차피
+  // isMapReady=false 로더라 hydration 결과가 같다.
+  const [initialLocation, setInitialLocation] = useState<{
+    resolved: boolean;
+    source: InitialLocationSource | null;
+    center: InitialLatLng | null;
+  }>(() => {
+    const fromUrl = readInitialMapStateFromUrl()?.center;
+    return fromUrl
+      ? { resolved: true, source: 'url', center: fromUrl }
+      : { resolved: false, source: null, center: null };
+  });
+  const locationResolved = initialLocation.resolved;
   // PERCEIVED_PERFORMANCE_V2_1 §1 — URL에 layers가 있으면(= back으로 돌아온 경우나
   // 레이어까지 담은 링크) 그 상태로 복원한다. 없으면 기존 기본값 그대로다.
   // 알 수 없는 키는 무시한다(구/신 배포가 섞여도 안전).
@@ -559,7 +585,9 @@ export default function FullscreenMapPage() {
   );
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !isMapReady) return;
+    // E-JIP FINAL DEVICE UX FIX V1 — 위치 확정 전의 기본 center(서구청)를 URL에 쓰면, 그 사이
+    // 새로고침/뒤로가기가 그 값을 복원 상태로 읽어 지오로케이션을 건너뛰고 서구청을 다시 보여준다.
+    if (typeof window === 'undefined' || !isMapReady || !locationResolved) return;
     const timer = window.setTimeout(() => {
       const qs = mapParamsToQueryString(
         buildMapRestoreParams(center, zoomLevel, currentLawdCd, pinnedMarker, layers)
@@ -570,7 +598,7 @@ export default function FullscreenMapPage() {
       window.history.replaceState(window.history.state, '', next);
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [isMapReady, center, zoomLevel, currentLawdCd, layers, pinnedMarker]);
+  }, [isMapReady, locationResolved, center, zoomLevel, currentLawdCd, layers, pinnedMarker]);
 
   const isDetailed = zoomLevel <= DETAIL_ZOOM_LEVEL;
   // MAP_UX_V2 §6/§9 — 확대 단계별 밀도. 두 레이어가 **같은 규칙**(map-property-focus)을
@@ -622,7 +650,8 @@ export default function FullscreenMapPage() {
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [isLoadingData, isMapReady]);
+    // locationResolved — 위치 확정 전에는 컨트롤이 아직 그려지지 않아 측정할 대상이 없다.
+  }, [isLoadingData, isMapReady, locationResolved]);
 
   // MAP MARKER UX V2 §21~24 — pendingRestoreIdentity(위에서 URL로부터 초기화)를
   // 실제 aptMarkers fetch가 끝난 뒤 한 번만 시도해서 매칭한다. isLoadingData가
@@ -1137,7 +1166,10 @@ export default function FullscreenMapPage() {
   }, []);
 
   useEffect(() => {
-    if (!isMapReady) return;
+    // E-JIP FINAL DEVICE UX FIX V1 — 위치 확정까지 기다린다. 예전에는 SDK가 GPS보다 먼저
+    // 준비되면 기본 center(서구) 마커를 불렀고, 뒤이은 지오로케이션 setCenter는 레이어를
+    // 다시 부르지 않아 "지도는 현재 위치, 마커는 서구"가 될 수 있었다.
+    if (!isMapReady || !locationResolved) return;
     // §14 — 매물 레이어가 하나도 켜져 있지 않으면 로딩 표시도 조회도 하지 않는다.
     if (hasNoPropertyLayer(layers)) return;
     if (layers.apt) setIsLoadingData(true);
@@ -1149,7 +1181,7 @@ export default function FullscreenMapPage() {
     const knownLawdCd =
       initialShareLawdCdRef.current ?? (isDefaultMapCenter(center) ? DEFAULT_LAWD_CD : undefined);
     refreshActiveLayers(center.lat, center.lng, knownLawdCd);
-  }, [isMapReady]);
+  }, [isMapReady, locationResolved]);
 
   // react-kakao-maps-sdk의 <Map ref={mapRef}>는 실제 kakao.maps.Map 인스턴스를 자기 내부
   // useEffect에서 비동기로 생성한 뒤에야 ref에 채워준다 — 그래서 "로딩 게이트를 지난 그
@@ -1522,36 +1554,58 @@ export default function FullscreenMapPage() {
   // center를 곧바로 덮어써버려(발견: 실측 — 공유 링크 center가 GPS/IP 위치와 다른
   // 지역이면 마운트 직후 조용히 원래 위치로 되돌아가는 회귀), "선택된 단지가 있는
   // 지역"이 아니라 사용자의 현재 물리적 위치로 지도가 튀는 문제가 있었다.
+  //
+  // E-JIP FINAL DEVICE UX FIX V1 — 순서(GPS → IP → 기본 지역)와 옵션은 그대로 두고, 결과를
+  // "확정" 한 번으로 모은다. 확정 전에는 지도를 그리지 않으므로 서구청이 먼저 보이지 않는다.
+  // 권한이 이미 허용됐는데 GPS가 느리면 상한 뒤 대체 위치로 그리고, 늦게 온 GPS는 사용자가
+  // 아직 지도를 안 움직였을 때만 반영한다(그때는 레이어도 새 위치로 다시 부른다).
+  const initialLocationRef = useRef(initialLocation);
+  const centerRef = useRef(center);
+  // 렌더마다 새로 만들어지는 refreshActiveLayers의 최신 버전을 늦은 GPS 콜백이 쓰게 한다.
+  const refreshActiveLayersRef = useRef<(lat: number, lng: number) => void>(() => {});
+  useEffect(() => {
+    initialLocationRef.current = initialLocation;
+    centerRef.current = center;
+    refreshActiveLayersRef.current = (lat, lng) => { void refreshActiveLayers(lat, lng); };
+  });
+
   useEffect(() => {
     if (initialShareLawdCdRef.current) return;
-    const fallbackToIp = async () => {
-      try {
-        const res = await fetch('https://ipinfo.io/json');
-        const data = await res.json();
-        if (data.loc) {
-          const parts = data.loc.split(',');
-          setCenter({ lat: parseFloat(parts[0]), lng: parseFloat(parts[1]) });
+    const geolocation = typeof navigator !== 'undefined' ? navigator.geolocation : undefined;
+    return locateInitialCenter(DEFAULT_MAP_CENTER, {
+      getCurrentPosition: geolocation ? geolocation.getCurrentPosition.bind(geolocation) : null,
+      queryPermission: async (): Promise<PermissionStateLike> => {
+        try {
+          if (!navigator.permissions?.query) return 'unknown';
+          const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+          return status.state;
+        } catch {
+          return 'unknown';
         }
-      } catch (e) {}
-    };
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCenter({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          });
-        },
-        (error) => {
-          console.log('위치 정보를 가져오지 못했습니다. IP 기반 위치를 시도합니다.', error);
-          fallbackToIp();
-        },
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
-      );
-    } else {
-      fallbackToIp();
-    }
+      },
+      lookupIp: async () => {
+        // 로더가 이 응답을 기다리므로 상한을 둔다(예전엔 없었다 — 멈추면 지도가 영영 안 떴다).
+        const res = await fetch('https://ipinfo.io/json', { signal: AbortSignal.timeout(IP_LOOKUP_TIMEOUT_MS) });
+        const data = await res.json();
+        return parseIpLoc(data?.loc);
+      },
+      setTimer: (fn, ms) => {
+        const id = window.setTimeout(fn, ms);
+        return () => window.clearTimeout(id);
+      },
+    }, {
+      onResolved: (resolvedCenter, source) => {
+        setCenter(resolvedCenter);
+        setInitialLocation({ resolved: true, source, center: resolvedCenter });
+      },
+      onLateGps: (gpsCenter) => {
+        const current = initialLocationRef.current;
+        if (!shouldApplyLateGps(current.source, current.center, centerRef.current)) return;
+        setCenter(gpsCenter);
+        setInitialLocation({ resolved: true, source: 'gps', center: gpsCenter });
+        refreshActiveLayersRef.current(gpsCenter.lat, gpsCenter.lng);
+      },
+    });
   }, []);
 
   // 드래그가 끝나면(연속 드래그 중이 아니라 'dragend' — 한 번만 발생) 바로 그 위치로
@@ -1856,6 +1910,18 @@ export default function FullscreenMapPage() {
     return <FullPageLoader active message="지도 데이터를 불러오는 중입니다..." />;
   }
 
+  // E-JIP FINAL DEVICE UX FIX V1 — SDK는 준비됐지만 첫 진입 위치가 아직 확정되지 않았다.
+  // 여기서 지도를 그리면 기본 center(부산 서구청)가 먼저 보였다가 현재 위치로 튄다.
+  if (!locationResolved) {
+    return <FullPageLoader active message={MAP_LOCATING_MESSAGE} />;
+  }
+
+  const initialLocationFallbackNotice = initialLocationNotice(
+    initialLocation.source,
+    initialLocation.center,
+    center
+  );
+
   // 요청된 순서: 단지 / 오피스텔 / 생숙 / 재개발 / 경·공매 / 학교
   // MAP_UX_V2 §2 — "단지"는 무엇을 뜻하는지 모호했다(아파트 단지? 오피스텔 단지?).
   // 화면 라벨만 "아파트"로 바꾸고 내부 state 키(apt)는 그대로 둔다. 향후 용어 체계는
@@ -2083,6 +2149,22 @@ export default function FullscreenMapPage() {
           강제로 끌어오지 않는다), 데이터가 부산 우선이라는 사실만 정직하게 말한다.
           세션당 한 번, 닫으면 끝 — pan/zoom마다 다시 뜨지 않는다. */}
       <OutOfBusanNotice lat={center.lat} lng={center.lng} />
+
+      {/* E-JIP FINAL DEVICE UX FIX V1 — 현재 위치를 못 받아 IP/기본 지역으로 열었을 때만,
+          지금 보이는 곳이 현재 위치가 아니라는 사실을 말한다. 지도를 옮기면 사라진다. */}
+      {initialLocationFallbackNotice && (
+        <div
+          style={{
+            padding: '0.55rem 1rem', borderRadius: '12px', background: 'rgba(30,41,59,0.92)',
+            color: 'white', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)', maxWidth: '100%',
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          {initialLocationFallbackNotice}
+        </div>
+      )}
 
       {activeComingSoon.length > 0 && (
         <div
