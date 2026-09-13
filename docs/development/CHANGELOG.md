@@ -2,6 +2,68 @@
 
 ## 2026-09-13
 
+### E-JIP MOLIT PARTIAL FAILURE REDUCTION V1 — 부분 실패를 숨기지 않고 줄인다
+
+운영 관찰: `/admin/system` 최근 7일 `MOLIT_PARTIAL` 97건, 요청 4,440개월 중 1,721개월
+(38.8%) 실패. 97건 전부 `/api/apt/[name]`, 사유 93.8%가 "초당 서비스 요청제한 횟수 초과".
+
+root cause: 동시성 6 / 200ms 게이트가 `molit-stats-helpers.ts` 안에만 있었다. 상세
+라우트는 12개월씩 게이트 없이 한꺼번에 보냈고(상세페이지 1회 = 3회 동시 호출), 거래목록·
+학교·분양 라우트도 게이트 밖이었다. 두 풀이 서로를 모른 채 합산됐다.
+
+실측으로 확인한 프로바이더 동작:
+
+    제한을 한 번 넘기면 서비스 키 전체가 약 60초 잠긴다(첫 성공 59.7s)
+    인스턴스 1 × 6/200ms   0% 제한        인스턴스 2 × 6/200ms   83~84% 제한
+    인스턴스 2 × 4/250ms   0% 제한        인스턴스 3 × 4/250ms   93% 제한
+
+old throttle / retry
+
+    통계만 동시성 6 / 슬롯당 200ms, 모든 실패 400ms 뒤 1회 재시도
+    상세·거래목록·학교·분양: 게이트·페이싱·재시도 없음
+
+new throttle / retry (`src/lib/molit-rate-guard.ts`, `fetchMolitData` 한 곳)
+
+    게이트       모든 라이브 MOLIT 호출 공유, 인스턴스당 동시성 4 / 슬롯당 250ms
+    재시도       "초당 요청제한"만. 최대 4회, backoff 500~800 / 1000~1600 / 2000~3200ms + jitter
+                timeout·인증·잘못된 요청·파싱 실패·정상 0건·일일 한도는 재시도하지 않음
+    차단기       제한 시 5초 멈춤 → probe 1건(half-open). 요청당 대기 예산 8초,
+                확인된 잠금이 8초를 넘기면 새 요청은 호출 없이 바로 실패
+    쿨다운       제한 후 잠금 해제+10초 동안 슬롯 간격 +200ms 단계(상한 +800ms)
+    dedup        같은 (유형, lawdCd, 월) 진행 중이면 네트워크 1회, 결과 미저장, 호출자별 사본
+
+통계 헬퍼의 자체 세마포어/재시도는 제거했다(남기면 페이싱 이중 + 재시도 곱).
+
+before / after (MOLIT 실제 호출, DB 0)
+
+    A 부산 서구 60m                     4/60 실패, 1.1s    →  0/60, 5.6~5.8s
+    B 부산 기장군 60m                   60/60 실패, 0.2s   →  0/60, 6.2~6.6s
+    C 서울 강남구 60m                   60/60 실패, 0.2s   →  0/60, 6.8~7.5s
+    60m 3건 동시(180콜)                                     →  0/180, 17.0~17.5s, 재시도 0
+    인스턴스 2개 × 180콜                 6/200: 74~77% 실패 →  0/360, 재시도 0
+    다른 인스턴스 버스트와 충돌          53.2s, outbound 231 →  10.6s, outbound 13 (키 잠김, 정직한 실패)
+
+데이터 신뢰: `partial` / `failedMonths` / `apiError` / `monthsRequested` / `monthsSucceeded`
+의미와 `[MOLIT_PARTIAL]` 로그 조건 무변경. 제한으로 못 받은 월은 FAILED, 정상 0건은
+SUCCESS_EMPTY. 다른 월·지역으로 채우지 않는다. 월 캐시 키/TTL, period 옵션, Cron sync 무변경.
+
+serverless limitation: 게이트·차단기·dedup은 인스턴스 로컬이다. 콜드 스윕을 동시에 도는
+인스턴스가 3개 이상이면 합산이 한도를 넘을 수 있고, 차단기는 인스턴스 사이에 공유되지 않는다.
+
+remaining risk
+
+- 전역 limiter(Redis/KV)는 승인 필요.
+- 통계 경로의 "timeout 1회 재시도"가 사라졌다(제한만 재시도하는 정책).
+- 상세 `type=apt`는 DB로 응답할 때도 MOLIT 스윕을 먼저 수행한다. 생략하려면 DB 응답의
+  `monthsRequested`/`monthsSucceeded` 의미부터 정해야 해서 보류.
+- 콜드 60개월 조회 지연 3.3s(6/200) → 5.6~7.5s(4/250).
+
+검증: `molit-rate-guard.test.ts` 22/22, src 전체 1737/1737, `tsc` FAIL_EXISTING_SCRIPT_ERRORS
+(25건 전부 scripts/·tmp/, src 0), eslint(변경 파일) exit 0, `npm run build` exit 0.
+기존 `feed-db-source.test.ts` 스로틀 가드는 새 위치를 보도록 옮겼다(동시성 6 초과 시 여전히 실패).
+
+문서: `docs/development/MOLIT_PARTIAL_FAILURE_REDUCTION_V1.md`
+
 ### ADMIN SYSTEM HEALTH V1 — failed 1건과 failed 45건을 구분해서 보여준다
 
 운영자 관찰: 중요한 서버 오류와 부분 실패가 나고 있는데, 관리자 화면에서는 둘 다

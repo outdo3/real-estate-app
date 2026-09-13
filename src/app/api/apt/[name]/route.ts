@@ -105,9 +105,12 @@ export async function GET(
       months.push(`${y}${m}`);
     }
 
-    // 공공데이터 API 병렬 호출 (청크 단위로 분할하여 Rate Limit 및 Timeout 방지)
-    // 동시성/재시도 정책은 이번 STEP에서 의도적으로 바꾸지 않는다(§8) — 목적은 실패를
-    // 더 많이 성공시키는 게 아니라, 실패를 정직하게 표현하는 것이다.
+    // 공공데이터 API 병렬 호출 (청크 단위로 분할)
+    // E-JIP MOLIT PARTIAL FAILURE REDUCTION V1 — 예전에는 청크 12개월을 게이트 없이 한꺼번에
+    // 쐈고(상세페이지 1회 = 이 라우트 3회 동시), 이것이 최근 7일 MOLIT_PARTIAL 97건 전부의
+    // 출처였다. 이제 각 월 요청은 fetchMolitData 안의 프로세스 단일 게이트(동시성 4 /
+    // 250ms + 초당 제한 차단기/bounded backoff)를 통과하므로 청크는 큐 길이만 정할 뿐이다.
+    // 실패를 정직하게 표현하는 규칙(partial/failedMonths/apiError)은 그대로다.
     const chunkSize = 12; // 1년에 해당하는 12개월씩 끊어서 요청
     // APT_DETAIL_MOLIT_PARTIAL_FAILURE_TRUST_FIX — 월별 성공/실패를 버리지 않고 모은다.
     // 이전에는 실패 월의 에러 플레이스홀더가 그대로 allTrades에 섞여 들어갔고, 단지명

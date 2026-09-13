@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import { dedupMolitInFlight, runMolitGuarded, type MolitGuardDeps } from './molit-rate-guard';
 
 const API_KEY = process.env.DATA_GO_KR_API_KEY;
 
@@ -84,8 +85,9 @@ export function redactMolitFailureMessage(message: unknown): string {
     .replace(/https?:\/\/\S+/gi, '[redacted-url]');
 }
 
-export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
-  try {
+// 한 번의 HTTP 시도. 실패는 throw로 알린다 — 재시도 여부는 molit-rate-guard가
+// 실패 메시지를 분류해 정한다. URL/타임아웃/캐시/파싱/빈 결과 규칙은 기존과 동일하다.
+async function fetchMolitDataOnce({ lawdCd, dealYmd, type }: FetchParams) {
     if (!API_KEY) {
       throw new Error('DATA_GO_KR_API_KEY is not defined in environment variables.');
     }
@@ -158,29 +160,49 @@ export async function fetchMolitData({ lawdCd, dealYmd, type }: FetchParams) {
     const itemsArray = Array.isArray(items) ? items : [items];
 
     return mapMolitItems(itemsArray, type, lawdCd, dealYmd);
+}
 
-  } catch (error: any) {
-    // 이 메시지는 에러 플레이스홀더 → 라우트 응답(apiError) → 화면/ErrorLog까지 흘러간다.
-    // 실패 원인에 따라 요청 URL(=serviceKey 포함)이 그대로 들어있을 수 있으므로 반드시
-    // 마스킹한 뒤에만 밖으로 내보낸다. 키 일부를 진단용으로 붙이던 info 필드도 없앴다 —
-    // 비밀값 조각을 응답/로그에 남길 이유가 없다.
-    const safeMessage = redactMolitFailureMessage(error?.message);
-    console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${safeMessage}`);
-    // Instead of failing silently, return a special error object so the frontend can display it
-    return [{
-      id: `error-${type}-${lawdCd}-${dealYmd}`,
-      rank: 1,
-      name: `API 에러: ${safeMessage}`,
-      price: '에러',
-      priceChange: '',
-      changeType: 'new',
-      typeLabel: '에러',
-      info: '공공데이터 API 호출 실패',
-      dong: '오류',
-      lat: null,
-      lng: null,
-    }];
-  }
+// E-JIP MOLIT PARTIAL FAILURE REDUCTION V1 — 모든 호출이 프로세스 단일 게이트
+// (인스턴스당 동시성 4 / 슬롯당 250ms + 차단기 + 적응형 쿨다운)를 공유하고, "초당 요청제한"만
+// 실패한 이 월 하나에 대해 bounded backoff로 재시도한다(잠금 중에는 호출 없이 실패). 반환 계약은 그대로다: 성공은 거래 배열,
+// 정상 0건은 [], 최종 실패는 typeLabel:'에러' 플레이스홀더 1건.
+export async function fetchMolitData(params: FetchParams, deps?: MolitGuardDeps & { fetchOnce?: typeof fetchMolitDataOnce }) {
+  return dedupMolitInFlight(`${params.type}:${params.lawdCd}:${params.dealYmd}`, () => fetchMolitDataGuarded(params, deps));
+}
+
+async function fetchMolitDataGuarded(params: FetchParams, deps?: MolitGuardDeps & { fetchOnce?: typeof fetchMolitDataOnce }) {
+  const { lawdCd, dealYmd, type } = params;
+  const once = deps?.fetchOnce ?? fetchMolitDataOnce;
+  const { outcome } = await runMolitGuarded(async () => {
+    try {
+      return { ok: true as const, value: await once(params) };
+    } catch (error: any) {
+      return { ok: false as const, message: String(error?.message ?? '') };
+    }
+  }, deps);
+
+  if (outcome.ok) return outcome.value;
+
+  // 이 메시지는 에러 플레이스홀더 → 라우트 응답(apiError) → 화면/ErrorLog까지 흘러간다.
+  // 실패 원인에 따라 요청 URL(=serviceKey 포함)이 그대로 들어있을 수 있으므로 반드시
+  // 마스킹한 뒤에만 밖으로 내보낸다. 키 일부를 진단용으로 붙이던 info 필드도 없앴다 —
+  // 비밀값 조각을 응답/로그에 남길 이유가 없다.
+  const safeMessage = redactMolitFailureMessage(outcome.message);
+  console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${safeMessage}`);
+  // Instead of failing silently, return a special error object so the frontend can display it
+  return [{
+    id: `error-${type}-${lawdCd}-${dealYmd}`,
+    rank: 1,
+    name: `API 에러: ${safeMessage}`,
+    price: '에러',
+    priceChange: '',
+    changeType: 'new',
+    typeLabel: '에러',
+    info: '공공데이터 API 호출 실패',
+    dong: '오류',
+    lat: null,
+    lng: null,
+  }];
 }
 
 // DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5 §3 — fetchMolitData()의 원본 raw-item→최종

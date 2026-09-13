@@ -29,7 +29,7 @@ const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\
 const ROUTE = read('src/app/api/stats/feed/route.ts');
 const SOURCE = read('src/lib/stats/feed-db-source.ts');
 const TRADE_READ = read('src/lib/trade-history-read.ts');
-const THROTTLE = read('src/lib/molit-stats-helpers.ts');
+const THROTTLE = read('src/lib/molit-rate-guard.ts');
 
 // ── A. 어느 요청이 DB 경로로 가는가 ────────────────────────────────────────────
 
@@ -69,9 +69,16 @@ test('전월세는 검증범위 안 월만 DB로 읽는다 — 검증 안 된 �
 });
 
 test('스로틀 정책을 건드리지 않았다 — 384개를 한꺼번에 쏘는 식으로 "빠르게" 하지 않았다', () => {
+  // E-JIP MOLIT PARTIAL FAILURE REDUCTION V1 — 전역 세마포어는 molit-stats-helpers에서
+  // molit-rate-guard(모든 fetchMolitData 호출 공유)로 옮겨졌고, 다중 인스턴스 합산 실측으로
+  // 동시성을 6 → 4로 **낮췄다**. 이 테스트의 의도("빠르게 하려고 동시성을 올리지 않는다")는
+  // 그대로 지킨다: 단일 전역 세마포어가 있고, 동시성은 6을 넘지 않는다.
   const code = codeOf(THROTTLE);
-  assert.ok(/const GLOBAL_MOLIT_CONCURRENCY = 6;/.test(code), '전역 동시성 값이 바뀌었다');
-  assert.ok(/acquireMolitSlot\(\)/.test(code), '전역 세마포어가 사라졌다');
+  const conc = Number(/export const MOLIT_CONCURRENCY = (\d+);/.exec(code)?.[1]);
+  assert.ok(Number.isInteger(conc) && conc >= 1 && conc <= 6, `전역 동시성 값이 올라갔다: ${conc}`);
+  assert.ok(/await acquire\(\)/.test(code), '전역 세마포어가 사라졌다');
+  // 통계 헬퍼가 다시 자체 풀을 만들면 두 풀이 합산돼 초당 제한을 넘는다.
+  assert.doesNotMatch(codeOf(read('src/lib/molit-stats-helpers.ts')), /GLOBAL_MOLIT_CONCURRENCY|acquireMolitSlot/);
   // DB 소스도 자체 동시성 풀을 만들지 않는다(쿼리 2개 병렬이 전부).
   const src = codeOf(SOURCE);
   const parallel = (src.match(/Promise\.all\(/g) ?? []).length;
