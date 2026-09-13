@@ -2,6 +2,28 @@
 
 ## 2026-09-13
 
+### E-JIP FINAL PRE-LAUNCH REGRESSION AUDIT V2 — 부산 출시 직전 전체 회귀감사(READ-ONLY) + MOLIT 대기열 lane 수정
+
+판정: NO-GO(단일 P1 1건, 격리됨). P0 0, 데이터 신뢰 실패 0. 상세: `docs/development/FINAL_PRELAUNCH_REGRESSION_AUDIT_V2.md`
+
+    production    HEAD 4f57be9 → 8c3d0c5 배포 확인(e-jip.com), www/legacy 308, 페이지 셸 전부 0.08~0.40s
+    데이터 신뢰  상세 매매 DB 12/60m, 전월세 MOLIT 60/60(서구·기장·강남), 마커 12/12, 통계 전부 partial=false
+    인증          최근 3시간 실제 kakao/google 콜백 트래픽, OAUTH_CALLBACK_ERROR 0
+    모바일        390px 9개 화면 가로 넘침 0, 중개사 카드 production 렌더 확인
+    보안          공개 HTML 이메일/토큰/시크릿 0, 관리자·개인 API 401, cron 401
+
+P1-1 수정(8c3d0c5): MOLIT 공유 게이트가 FIFO라 부산 전체 gap-invest 콜드(384건)가 같은 인스턴스의 상세 조회를
+막았다(V1 회귀). interactive/bulk 2 lane, 총 동시성 4·페이싱 불변, 4번째 슬롯마다 bulk, dedup 합류 시 승격.
+production: gap-invest 콜드 중 보낸 상세 전월세 60m 7.88s(단독 5.63s), 60/60.
+
+P1-2 미해결: `/stats/gap-invest` 부산 전체 콜드 34.18s / 37.74s(재현), 웜 0.67s, 데이터 완전. 기본 지역 경로.
+권장: 부산 DB-first(parity 감사 포함) 별도 STEP. TTL 연장·동시성 상향으로 숨기지 않는다.
+
+P2: rel=canonical 부재·og:url 루트, 페이지별 title, /stats "전국" 문구, concentration 3m 콜드 추정 ~9s,
+next-auth url.parse 경고 로그, 미사용 /api/stats/rankings, 배포별 vercel.app URL.
+
+검증: src 1769/1769, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0.
+
 ### E-JIP PARTNER BROKER CARD UI V1 — 중개사 카드를 "지역 중개 상담 카드"로, 전화번호를 보이게
 
 단지 상세의 롯데부동산중개사무소 카드가 흰 배경 + 검정 글자라 하단에서 묻혔다. UI만 바꿨다.
