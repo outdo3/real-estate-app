@@ -99,11 +99,34 @@ export function molitBackoffDelayMs(retryIndex: number, random: () => number = M
   return Math.round(lo + (hi - lo) * r);
 }
 
+// ── 대기열 lane (FINAL PRE-LAUNCH REGRESSION AUDIT V2) ─────────────────────
+//
+// 발견: 게이트가 하나의 FIFO였다. 부산 전체 갭투자 통계 콜드 조회는 MOLIT 384건
+// (16구 × 12개월 × 매매/전월세)을 한꺼번에 줄 세우고(프로덕션 실측 34s), 같은 인스턴스에서
+// 그 뒤에 온 상세페이지의 전월세 60개월 조회는 384건이 다 빠질 때까지 기다렸다 —
+// 게이트를 모든 호출이 공유하게 한 V1이 만든 교차 지연이다.
+//
+// 그래서 대기열을 둘로 나눈다. 동시성 총량(4)과 페이싱은 그대로다 — 순서만 바뀐다.
+//  - interactive: 사용자가 지금 보는 화면 하나의 조회(상세/거래목록/학교/분양 등, 기본값)
+//  - bulk: 여러 구·월을 한꺼번에 도는 통계 집계(molit-stats-helpers)
+// 슬롯이 비면 interactive를 먼저 준다. 단 bulk가 굶지 않도록 둘 다 기다리는 동안에는
+// MOLIT_BULK_SLOT_EVERY번째마다 bulk에 준다.
+export type MolitLane = 'interactive' | 'bulk';
+export const MOLIT_BULK_SLOT_EVERY = 4;
+
+/** 대기열 항목. dedup으로 합류한 interactive 요청이 queued bulk 항목을 끌어올릴 수 있도록 객체로 둔다. */
+export interface MolitTicket {
+  lane: MolitLane;
+  waiter: (() => void) | null;
+}
+
 // ── 게이트 상태 (모듈 레벨 = 프로세스 단일) ───────────────────────────────
 interface GateState {
   active: number;
   peak: number;
-  queue: Array<() => void>;
+  queues: Record<MolitLane, MolitTicket[]>;
+  /** 둘 다 기다릴 때 interactive에 연속으로 준 슬롯 수. */
+  interactiveStreak: number;
   cooldownUntil: number;
   extraPacingMs: number;
   successStreak: number;
@@ -124,7 +147,8 @@ function initialState(): GateState {
   return {
     active: 0,
     peak: 0,
-    queue: [],
+    queues: { interactive: [], bulk: [] },
+    interactiveStreak: 0,
     cooldownUntil: 0,
     extraPacingMs: 0,
     successStreak: 0,
@@ -139,25 +163,55 @@ function initialState(): GateState {
 
 let state: GateState = initialState();
 
-function acquire(): Promise<void> {
+function acquire(ticket: MolitTicket): Promise<void> {
   if (state.active < MOLIT_CONCURRENCY) {
     state.active++;
     state.peak = Math.max(state.peak, state.active);
     return Promise.resolve();
   }
   return new Promise<void>((resolve) => {
-    state.queue.push(() => {
+    ticket.waiter = () => {
+      ticket.waiter = null;
       state.active++;
       state.peak = Math.max(state.peak, state.active);
       resolve();
-    });
+    };
+    state.queues[ticket.lane].push(ticket);
   });
+}
+
+function nextTicket(): MolitTicket | undefined {
+  const { interactive, bulk } = state.queues;
+  if (interactive.length && bulk.length) {
+    if (state.interactiveStreak >= MOLIT_BULK_SLOT_EVERY - 1) {
+      state.interactiveStreak = 0;
+      return bulk.shift();
+    }
+    state.interactiveStreak++;
+    return interactive.shift();
+  }
+  state.interactiveStreak = 0;
+  return interactive.shift() ?? bulk.shift();
 }
 
 function release(): void {
   state.active--;
-  const next = state.queue.shift();
-  if (next) next();
+  const next = nextTicket();
+  if (next?.waiter) next.waiter();
+}
+
+/**
+ * dedup으로 interactive 요청이 이미 줄 서 있는 bulk 요청에 합류하면, 그 항목을 interactive로
+ * 올린다(우선순위 역전 방지 — 상세 조회가 같은 월의 통계 대기 뒤에 묶이지 않게).
+ */
+export function promoteMolitTicket(ticket: MolitTicket): void {
+  if (ticket.lane === 'interactive') return;
+  ticket.lane = 'interactive';
+  const idx = state.queues.bulk.indexOf(ticket);
+  if (idx >= 0) {
+    state.queues.bulk.splice(idx, 1);
+    state.queues.interactive.push(ticket);
+  }
 }
 
 export function currentMolitPacingMs(now: number = Date.now()): number {
@@ -213,6 +267,10 @@ export interface MolitGuardDeps {
   /** 테스트 전용 조정값. 운영 호출부는 넘기지 않는다(기본 상수 사용). */
   breakerProbeMs?: number;
   retryBudgetMs?: number;
+  /** 대기열 lane. 기본 interactive. 여러 구·월을 한꺼번에 도는 통계 집계만 bulk. */
+  lane?: MolitLane;
+  /** dedup이 만든 대기열 항목(우선순위 승격용). 호출부가 직접 넘기지 않는다. */
+  ticket?: MolitTicket;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -274,8 +332,9 @@ export async function runMolitGuarded<T>(
   const probeMs = deps.breakerProbeMs ?? MOLIT_BREAKER_PROBE_MS;
   const budgetMs = deps.retryBudgetMs ?? MOLIT_RETRY_BUDGET_MS;
   const stats: MolitRequestStats = { attempts: 0, rateLimitHits: 0, finalFailureClass: null, shortCircuited: false };
+  const ticket: MolitTicket = deps.ticket ?? { lane: deps.lane ?? 'interactive', waiter: null };
 
-  // 예산은 "제한 때문에 기다리기 시작한 시점"부터 센다. 정상 대기열(동시성 6) 대기는
+  // 예산은 "제한 때문에 기다리기 시작한 시점"부터 센다. 정상 대기열(동시성 4) 대기는
   // 예산을 쓰지 않는다 — 부하가 큰 정상 조회를 실패로 만들면 안 된다.
   let deadline = Number.POSITIVE_INFINITY;
   let last: MolitAttemptOutcome<T> | null = null;
@@ -299,7 +358,7 @@ export async function runMolitGuarded<T>(
     const isProbe = gate === 'probe';
 
     let current: MolitAttemptOutcome<T>;
-    await acquire();
+    await acquire(ticket);
     try {
       stats.attempts++;
       const startedAt = now();
@@ -336,7 +395,9 @@ export async function runMolitGuarded<T>(
 export function molitGateSnapshot() {
   return {
     active: state.active,
-    queued: state.queue.length,
+    queued: state.queues.interactive.length + state.queues.bulk.length,
+    queuedInteractive: state.queues.interactive.length,
+    queuedBulk: state.queues.bulk.length,
     peak: state.peak,
     extraPacingMs: state.extraPacingMs,
     cooldownUntil: state.cooldownUntil,
@@ -360,26 +421,36 @@ export function __resetMolitGateForTest(): void {
 // 각 대기자는 **자기만의 사본**(배열 + 평평한 item 객체 얕은 복사)을 받는다. 예전에는
 // 통계 호출부들이 배열을 독점했으므로, 한 호출부의 in-place 정렬/필드 추가가 다른
 // 호출부에 새지 않도록 한다.
-const inFlight = new Map<string, Promise<unknown>>();
+//
+// 대기열 lane: 먼저 온 요청의 lane으로 줄을 선다. 뒤에 interactive 요청이 합류하면 그 항목을
+// interactive로 올린다 — 상세 조회가 같은 월의 통계(bulk) 대기 뒤에 묶이지 않게.
+const inFlight = new Map<string, { promise: Promise<unknown>; ticket: MolitTicket }>();
 
 function cloneItems<T>(value: T): T {
   if (!Array.isArray(value)) return value;
   return value.map((o) => (o && typeof o === 'object' ? { ...o } : o)) as unknown as T;
 }
 
-export async function dedupMolitInFlight<T>(key: string, run: () => Promise<T>): Promise<T> {
-  let pending = inFlight.get(key) as Promise<T> | undefined;
-  if (!pending) {
-    pending = (async () => {
-      try {
-        return await run();
-      } finally {
-        inFlight.delete(key);
-      }
-    })();
-    inFlight.set(key, pending);
+export async function dedupMolitInFlight<T>(
+  key: string,
+  lane: MolitLane,
+  run: (ticket: MolitTicket) => Promise<T>
+): Promise<T> {
+  const existing = inFlight.get(key);
+  if (existing) {
+    if (lane === 'interactive') promoteMolitTicket(existing.ticket);
+    return cloneItems((await existing.promise) as T);
   }
-  return cloneItems(await pending);
+  const ticket: MolitTicket = { lane, waiter: null };
+  const promise = (async () => {
+    try {
+      return await run(ticket);
+    } finally {
+      inFlight.delete(key);
+    }
+  })();
+  inFlight.set(key, { promise, ticket });
+  return cloneItems(await promise);
 }
 
 export function molitInFlightSize(): number {

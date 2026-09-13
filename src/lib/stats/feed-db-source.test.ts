@@ -76,7 +76,7 @@ test('스로틀 정책을 건드리지 않았다 — 384개를 한꺼번에 쏘�
   const code = codeOf(THROTTLE);
   const conc = Number(/export const MOLIT_CONCURRENCY = (\d+);/.exec(code)?.[1]);
   assert.ok(Number.isInteger(conc) && conc >= 1 && conc <= 6, `전역 동시성 값이 올라갔다: ${conc}`);
-  assert.ok(/await acquire\(\)/.test(code), '전역 세마포어가 사라졌다');
+  assert.ok(/await acquire\(ticket\)/.test(code), '전역 세마포어가 사라졌다'); // 대기열 lane 도입 후에도 슬롯은 같은 세마포어 하나
   // 통계 헬퍼가 다시 자체 풀을 만들면 두 풀이 합산돼 초당 제한을 넘는다.
   assert.doesNotMatch(codeOf(read('src/lib/molit-stats-helpers.ts')), /GLOBAL_MOLIT_CONCURRENCY|acquireMolitSlot/);
   // DB 소스도 자체 동시성 풀을 만들지 않는다(쿼리 2개 병렬이 전부).

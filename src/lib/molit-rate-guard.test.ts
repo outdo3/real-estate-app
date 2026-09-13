@@ -15,6 +15,7 @@ import {
   MOLIT_BASE_PACING_MS,
   MOLIT_BREAKER_PROBE_MS,
   MOLIT_BREAKER_WAIT_MESSAGE,
+  MOLIT_BULK_SLOT_EVERY,
   MOLIT_CONCURRENCY,
   MOLIT_COOLDOWN_MAX_EXTRA_MS,
   MOLIT_COOLDOWN_STEP_MS,
@@ -473,4 +474,102 @@ test('상세 라우트는 여전히 최종 부분 실패를 [MOLIT_PARTIAL]로 �
   // 통계 헬퍼가 자체 세마포어를 다시 만들면 두 풀이 합산돼 제한을 넘는다(이번 원인).
   const stats = readFileSync(path.join(root, 'src/lib/molit-stats-helpers.ts'), 'utf8');
   assert.doesNotMatch(stats, /GLOBAL_MOLIT_CONCURRENCY|molitWaitQueue|acquireMolitSlot/);
+});
+
+// ── FINAL PRE-LAUNCH REGRESSION AUDIT V2 — 대기열 lane ─────────────────────────────
+// 부산 전체 갭투자 통계 콜드 조회(384건)가 같은 인스턴스의 상세 조회를 FIFO로 막던 문제.
+
+const flushMicro = async (n = 20) => { for (let i = 0; i < n; i++) await Promise.resolve(); };
+
+function laneHarness() {
+  const started: string[] = [];
+  const gates = new Map<string, () => void>();
+  const blocking = (id: string, lane: 'interactive' | 'bulk') =>
+    runMolitGuarded(async () => {
+      started.push(id);
+      await new Promise<void>((r) => gates.set(id, r));
+      return { ok: true as const, value: id };
+    }, { sleep: instant, lane });
+  const instantTask = (id: string, lane: 'interactive' | 'bulk') =>
+    runMolitGuarded(async () => { started.push(id); return { ok: true as const, value: id }; }, { sleep: instant, lane });
+  return { started, gates, blocking, instantTask };
+}
+
+test('lane: 슬롯이 비면 줄 서 있던 통계(bulk)보다 상세(interactive)가 먼저 나간다', async () => {
+  const h = laneHarness();
+  const blockers = Array.from({ length: MOLIT_CONCURRENCY }, (_, i) => h.blocking(`block${i}`, 'interactive'));
+  await flushMicro();
+  const bulk = Array.from({ length: 8 }, (_, i) => h.instantTask(`bulk${i}`, 'bulk'));
+  await flushMicro();
+  const interactive = [h.instantTask('detail0', 'interactive'), h.instantTask('detail1', 'interactive')];
+  await flushMicro();
+  assert.equal(molitGateSnapshot().queuedBulk, 8);
+  assert.equal(molitGateSnapshot().queuedInteractive, 2);
+
+  h.gates.get('block0')!();
+  await flushMicro(200);
+  const afterBlockers = h.started.slice(MOLIT_CONCURRENCY);
+  assert.deepEqual(afterBlockers.slice(0, 3), ['detail0', 'detail1', 'bulk0'], `순서: ${afterBlockers.join(',')}`);
+
+  for (let i = 1; i < MOLIT_CONCURRENCY; i++) h.gates.get(`block${i}`)!();
+  await Promise.all([...blockers, ...bulk, ...interactive]);
+  assert.equal(molitGateSnapshot().queued, 0);
+  assert.ok(molitGateSnapshot().peak <= MOLIT_CONCURRENCY, '총 동시성은 그대로다');
+});
+
+test('lane: 둘 다 기다리면 bulk도 MOLIT_BULK_SLOT_EVERY번째마다 슬롯을 받는다(통계가 굶지 않는다)', async () => {
+  const h = laneHarness();
+  const blockers = Array.from({ length: MOLIT_CONCURRENCY }, (_, i) => h.blocking(`block${i}`, 'interactive'));
+  await flushMicro();
+  const bulk = Array.from({ length: 8 }, (_, i) => h.instantTask(`B${i}`, 'bulk'));
+  const inter = Array.from({ length: 12 }, (_, i) => h.instantTask(`I${i}`, 'interactive'));
+  await flushMicro();
+
+  h.gates.get('block0')!();
+  await flushMicro(400);
+  const order = h.started.slice(MOLIT_CONCURRENCY).map((id) => id[0]).join('');
+  // 둘 다 기다리는 동안: I I I B 반복(4번째마다 bulk), interactive가 다 빠지면 남은 bulk.
+  assert.equal(MOLIT_BULK_SLOT_EVERY, 4);
+  assert.equal(order, 'IIIBIIIBIIIBIIIBBBBB', `순서: ${order}`);
+
+  for (let i = 1; i < MOLIT_CONCURRENCY; i++) h.gates.get(`block${i}`)!();
+  await Promise.all([...blockers, ...bulk, ...inter]);
+});
+
+test('lane: 줄 서 있던 bulk 요청에 같은 월의 상세 요청이 합류하면 interactive로 승격된다(우선순위 역전 없음)', async () => {
+  const h = laneHarness();
+  const lawdCd = uniqueLawdCd();
+  const blockers = Array.from({ length: MOLIT_CONCURRENCY }, (_, i) => h.blocking(`block${i}`, 'interactive'));
+  await flushMicro();
+  const calls: string[] = [];
+  const fetchOnce = (async ({ dealYmd }: { dealYmd: string }) => { calls.push(dealYmd); h.started.push(`net:${dealYmd}`); return [OK_ROW(dealYmd)]; }) as never;
+  const statsJobs = ['202601', '202602', '202603'].map((dealYmd) =>
+    fetchMolitData({ type: 'rent', lawdCd, dealYmd }, { sleep: instant, lane: 'bulk', fetchOnce }));
+  await flushMicro();
+  assert.equal(molitGateSnapshot().queuedBulk, 3);
+
+  // 상세페이지가 같은 지역의 202603 전월세를 요청 — 새 네트워크 호출 없이 합류 + 승격.
+  const detail = fetchMolitData({ type: 'rent', lawdCd, dealYmd: '202603' }, { sleep: instant, fetchOnce });
+  await flushMicro();
+  assert.equal(molitGateSnapshot().queuedBulk, 2);
+  assert.equal(molitGateSnapshot().queuedInteractive, 1);
+
+  h.gates.get('block0')!();
+  await flushMicro(200);
+  assert.equal(h.started[MOLIT_CONCURRENCY], 'net:202603', `승격된 요청이 먼저 나가야 한다: ${h.started.join(',')}`);
+
+  for (let i = 1; i < MOLIT_CONCURRENCY; i++) h.gates.get(`block${i}`)!();
+  const [detailRows] = await Promise.all([detail, ...statsJobs, ...blockers]);
+  assert.equal(classifyMolitMonthResult(detailRows as unknown[]), 'SUCCESS_WITH_DATA');
+  assert.equal(calls.filter((c) => c === '202603').length, 1, '같은 월을 두 번 부르지 않는다');
+});
+
+test('lane 배선: 통계 헬퍼는 bulk, 상세 월 캐시와 그 밖의 호출은 기본 interactive', () => {
+  const root = path.resolve(__dirname, '..', '..');
+  const stats = readFileSync(path.join(root, 'src/lib/molit-stats-helpers.ts'), 'utf8');
+  assert.match(stats, /fetchMolitData\(\{ type, lawdCd, dealYmd \}, \{ lane: 'bulk' \}\)/);
+  const monthCache = readFileSync(path.join(root, 'src/lib/molit-month-cache.ts'), 'utf8');
+  assert.doesNotMatch(monthCache, /lane/, '상세 월 캐시가 bulk로 줄 서면 안 된다');
+  const api = readFileSync(path.join(root, 'src/lib/api-molit.ts'), 'utf8');
+  assert.match(api, /deps\?\.lane \?\? 'interactive'/);
 });

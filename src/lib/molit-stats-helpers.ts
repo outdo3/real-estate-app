@@ -59,7 +59,9 @@ export const isValidTrade = (item: any) => item && item.typeLabel !== '에러' &
 // 재시도가 곱해지므로(retry storm) 이 파일은 더 이상 자체 게이트/재시도를 두지 않는다.
 async function fetchMonthGated(lawdCd: string, dealYmd: string, type: 'apt' | 'rent'): Promise<{ items: any[]; failed: boolean }> {
   try {
-    const result = await fetchMolitData({ type, lawdCd, dealYmd });
+    // FINAL PRE-LAUNCH REGRESSION AUDIT V2 — 여러 구·월을 한꺼번에 도는 집계는 bulk lane으로 줄 선다.
+    // 같은 인스턴스의 상세페이지 조회(interactive)가 수백 건의 통계 대기 뒤에 묶이지 않게 한다.
+    const result = await fetchMolitData({ type, lawdCd, dealYmd }, { lane: 'bulk' });
     const failed = result.length === 1 && result[0]?.typeLabel === '에러';
     return failed ? { items: [], failed: true } : { items: result, failed: false };
   } catch {

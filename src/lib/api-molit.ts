@@ -167,7 +167,9 @@ async function fetchMolitDataOnce({ lawdCd, dealYmd, type }: FetchParams) {
 // 실패한 이 월 하나에 대해 bounded backoff로 재시도한다(잠금 중에는 호출 없이 실패). 반환 계약은 그대로다: 성공은 거래 배열,
 // 정상 0건은 [], 최종 실패는 typeLabel:'에러' 플레이스홀더 1건.
 export async function fetchMolitData(params: FetchParams, deps?: MolitGuardDeps & { fetchOnce?: typeof fetchMolitDataOnce }) {
-  return dedupMolitInFlight(`${params.type}:${params.lawdCd}:${params.dealYmd}`, () => fetchMolitDataGuarded(params, deps));
+  return dedupMolitInFlight(`${params.type}:${params.lawdCd}:${params.dealYmd}`, deps?.lane ?? 'interactive', (ticket) =>
+    fetchMolitDataGuarded(params, { ...deps, ticket })
+  );
 }
 
 async function fetchMolitDataGuarded(params: FetchParams, deps?: MolitGuardDeps & { fetchOnce?: typeof fetchMolitDataOnce }) {
