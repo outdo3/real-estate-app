@@ -2,6 +2,42 @@
 
 ## 2026-09-13
 
+### E-JIP CANONICAL HOST REDIRECT V1 — 기본 Vercel 호스트를 e-jip.com으로 308, 로그인은 정규 호스트에서만 시작된다
+
+사용자 승인 변경. 모바일 첫 로그인 실패(Google·Kakao 공통)의 근본 원인 수정.
+
+root cause (Vercel 로그로 확정, MULTI_PROVIDER_FIRST_LOGIN_CALLBACK_AUDIT_V1)
+
+    real-estate-app-park11.vercel.app  POST /api/auth/signin/*     state(+PKCE) 쿠키가 vercel.app host-only로 발급
+    e-jip.com                          GET  /api/auth/callback/*   State cookie was missing → OAuthCallback
+    실패 2건은 전부 vercel.app에서 시작, 성공 2건은 전부 e-jip.com에서 시작. 기기가 아니라 진입 호스트 문제
+
+    legacy host     https://real-estate-app-park11.vercel.app  (수정 전 200, redirect 없음)
+    canonical host  https://e-jip.com
+
+OAuth cookie impact: 두 호스트는 서로 다른 등록 도메인이라 쿠키를 공유할 수 없다. 쿠키 Domain/SameSite 완화로는
+고칠 수 없고, 로그인 시작을 정규 호스트로 모으는 것이 해결책이다. 인증 설정은 하나도 바꾸지 않았다
+(쿠키, SameSite, Domain, checks, NEXTAUTH_URL, callback URL, 세션 전략).
+
+변경
+
+    next.config.ts redirects()   host == real-estate-app-park11.vercel.app(정확 일치) → https://e-jip.com/:path, 308
+                                 경로·쿼리 보존, 프리뷰/배포별 vercel.app URL은 대상 아님
+    cron exception               /api/cron과 하위만 제외. Vercel Cron 호출 호스트를 로그 보존 기간 밖이라 확인 못 해
+                                 안전하게 뺐다(cron은 CRON_SECRET Bearer로만 열림). 스케줄 변경 없음
+    src/config/site.ts           NEXT_PUBLIC_SITE_URL 누락 시 프로덕션 폴백 vercel.app → e-jip.com
+                                 (공유/OG/sitemap/robots가 레거시 호스트를 다시 퍼뜨리지 않게)
+
+검증: 로컬 프로덕션 빌드에 Host 헤더로 매트릭스 확인 — legacy `/`, `/map?…`, `/stats/…`, `/report/…?…`,
+한글 인코딩 `/apt/…`, `/api/auth/*`(POST 포함) 전부 308 → e-jip.com 같은 경로·쿼리, legacy에서 Set-Cookie 없음,
+legacy `/api/cron/*` 401(redirect 안 됨), e-jip.com/프리뷰/localhost 200(루프 없음).
+신규 7 tests + site-metadata 갱신, src 전체 1761/1761, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0.
+
+device: 기존 홈 화면 PWA가 vercel.app에서 설치됐다면 삭제 후 e-jip.com에서 다시 설치를 권장
+(설치 앱 scope가 레거시 호스트라 redirect 후 브라우저 UI로 열릴 수 있다). 레거시 호스트 세션은 옮겨지지 않아 한 번 재로그인.
+
+문서: `docs/development/CANONICAL_HOST_REDIRECT_V1.md`, `docs/development/MULTI_PROVIDER_FIRST_LOGIN_CALLBACK_AUDIT_V1.md`
+
 ### E-JIP FINAL DEVICE UX FIX V1 — 지도는 위치를 확정한 뒤 그리고, 로그인 버튼은 한 번만 눌린다
 
 Android Chrome 실기기에서 재현된 두 문제만 고쳤다. 새 기능 없음, 인증 설정 무변경.

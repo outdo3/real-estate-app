@@ -26,9 +26,10 @@ test('§10 layout.tsx에 호스트 하드코딩이 없다', () => {
 });
 
 test('§10 오리진을 정하는 곳은 site.ts 하나뿐이다', () => {
-  // 폴백 상수는 여기 하나만 존재해야 한다.
-  const occurrences = (SITE.match(new RegExp(LEGACY_HOST, 'g')) ?? []).length;
-  assert.equal(occurrences, 1, `site.ts의 폴백 상수는 1개여야 한다(현재 ${occurrences})`);
+  // E-JIP CANONICAL HOST REDIRECT V1 — 폴백은 이제 정규 오리진(canonical-host.ts)이다.
+  // 레거시 Vercel 호스트가 site.ts로 돌아오면 env 누락 시 공유 링크가 다시 그 호스트를 퍼뜨린다.
+  assert.ok(!SITE.includes(LEGACY_HOST), 'site.ts에 레거시 호스트 폴백이 남아 있다');
+  assert.ok(/const CANONICAL_PRODUCTION_URL = CANONICAL_ORIGIN;/.test(SITE), '프로덕션 폴백이 정규 오리진이 아니다');
   assert.ok(/NEXT_PUBLIC_SITE_URL/.test(SITE), 'NEXT_PUBLIC_SITE_URL 우선 규칙이 없다');
 });
 
@@ -75,10 +76,18 @@ test('§11 NEXT_PUBLIC_SITE_URL=https://e-jip.com 이면 메타데이터가 e-ji
   assert.equal(r.ogImage, 'https://e-jip.com/brand/og/ejip-og-main-1200x630.jpg');
 });
 
-test('§13 환경변수가 없어도 프로덕션은 고정 도메인으로 떨어진다(현 Vercel 배포 보존)', () => {
+test('§13 환경변수가 없어도 프로덕션은 정규 도메인(e-jip.com)으로 떨어진다', () => {
   const r = resolveOrigin({ NEXT_PUBLIC_SITE_URL: '', VERCEL_ENV: 'production' });
-  assert.equal(r.url, `https://${LEGACY_HOST}`);
-  assert.ok(r.ogImage.startsWith(`https://${LEGACY_HOST}/`), '현 배포의 OG 이미지가 깨진다');
+  assert.equal(r.url, 'https://e-jip.com');
+  assert.ok(r.ogImage.startsWith('https://e-jip.com/'), 'OG 이미지가 정규 도메인을 쓰지 않는다');
+  assert.ok(!r.url.includes(LEGACY_HOST), '레거시 Vercel 호스트가 프로덕션 메타데이터로 나간다');
+});
+
+test('§13 프리뷰/로컬 동작은 그대로다(VERCEL_URL / localhost)', () => {
+  const preview = resolveOrigin({ NEXT_PUBLIC_SITE_URL: '', VERCEL_ENV: 'preview', NEXT_PUBLIC_VERCEL_URL: '', VERCEL_URL: 'real-estate-app-git-x-park11.vercel.app' });
+  assert.equal(preview.url, 'https://real-estate-app-git-x-park11.vercel.app');
+  const local = resolveOrigin({ NEXT_PUBLIC_SITE_URL: '', VERCEL_ENV: '', NEXT_PUBLIC_VERCEL_URL: '', VERCEL_URL: '' });
+  assert.equal(local.url, 'http://localhost:3000');
 });
 
 test('§13 URL이 이중 슬래시나 undefined로 깨지지 않는다', () => {
