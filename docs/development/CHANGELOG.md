@@ -14,6 +14,10 @@
               사용자가 글을 누르거나 입력하면 그 커서가 우선. 삭제 후 DOM 포커스 이동 없음(모바일 키보드)
     불변      schema·migration·API·저장 직렬화·영수증·권한·409·Storage·사진 조작 UI 스타일
     검증      V2.1A+V2.1 35/35, src 1878/1878, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+    배포 QA   93a552a: 남은 포커스 입력칸 때문에 교체 사진이 끝에 들어감(FAIL) → 494661d 보강 후 production 실제 UI PASS:
+              TEXT–IMAGE–TEXT 교체 → A/B 사이, IMAGE–TEXT → 맨 앞, TEXT–IMAGE → 맨 뒤, 삭제 뒤 탭한 위치 우선, 여러 장 순서,
+              수정 화면 기존 사진 교체(맨 앞 포함) → 저장 후 상세·익명 API·DB 순서 일치, 지운 사진은 저장 전 유지·저장 후 Storage 삭제.
+              QA 글 삭제 후 DB(글 1·사진 2·블록 0)/Storage(2, 미참조 0) 정리, 애슐리 글 무변경, Data API OFF. 실제 기기 QA는 남음
 
 ### E-JIP COMMUNITY EDITOR V2.1 — 단순 인라인 작성기(커서 위치 사진 삽입)
 
