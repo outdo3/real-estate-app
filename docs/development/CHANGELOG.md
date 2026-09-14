@@ -2,6 +2,18 @@
 
 ## 2026-09-14
 
+### E-JIP SUPABASE DATA API DISABLE V1 — Data API(REST) 외부 노출 차단 (사용자 대시보드 적용)
+
+사용자 승인 후 Supabase Dashboard에서 Enable Data API OFF. 상세: `docs/development/SUPABASE_DATA_API_DISABLE_V1.md`
+
+    의존성    운영 런타임(앱·API·cron) Data API 사용 0 — 전부 Prisma 직접 연결. 수동 스크립트 crawl_facilities.py만 사용
+    변경 후   Data API 서버 키로도 503(PGRST002, 게시 경로 0), 유효하지 않은 키 401 → 하위 권한 REST 조회 불가
+    분리 확인 Storage API 200(bucket 0 유지), Prisma read 정상, 앱 smoke 9개 200(응답 크기 동일),
+              NextAuth providers/csrf/session 200, cron 무인증 401 · vercel.json 변경 없음
+    secret    .env 미추적, 서버 키 git 이력·번들 일치 0 → 교체 필요 증거 없음
+    범위 밖   DB grant·RLS 변경 없음(최소 권한 정리 별도), DB 자격증명·service role 키 관리, Storage policy 설계
+    코드      앱 코드 변경 없음. read-only 점검 스크립트 scripts/audit-supabase-data-api-exposure.ts 추가(status/개수만 출력)
+
 ### E-JIP COMMUNITY IMAGE UPLOAD V1 — 감사 + 승인 요청안 (APPROVAL_REQUIRED, 구현 없음)
 
 게시글 사진 업로드(최대 5장) 설계 감사. 상세: `docs/development/COMMUNITY_IMAGE_UPLOAD_V1.md`
