@@ -1,0 +1,192 @@
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+}
+
+.photoButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0 0.95rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--card-bg, #fff);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.photoButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.count {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.hiddenInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 본문 전체가 하나의 입력 상자처럼 보인다. 내부 글 입력칸은 테두리·배경이 없다. */
+.body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 14rem;
+  padding: 0.35rem 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--card-bg, #fff);
+}
+
+.body:focus-within {
+  border-color: var(--primary-color, #2563eb);
+}
+
+/* 16px 이상: iOS 입력 확대 방지. 폭은 부모를 넘지 않는다. */
+.textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.45rem 0.85rem;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.imageCard {
+  position: relative;
+  margin: 0.35rem 0.85rem;
+  min-width: 0;
+}
+
+.imageButton {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.imageButton:focus-visible,
+.photoButton:focus-visible,
+.control:focus-visible {
+  outline: 2px solid var(--primary-color, #2563eb);
+  outline-offset: 2px;
+}
+
+/* 게시글과 같은 모습: 폭 100%, 원본 비율, 자르지 않음(너무 긴 세로 사진은 높이만 제한). */
+.image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 12px;
+  background: var(--surface-subtle, #f1f5f9);
+}
+
+.imageSelected .image {
+  outline: 3px solid var(--primary-color, #2563eb);
+  outline-offset: -3px;
+}
+
+/* 사진을 탭했을 때만 보이는 작은 조작 버튼(각 44px). */
+.imageControls {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.control {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.control:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.controlDanger {
+  color: #fca5a5;
+}
+
+.processing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 160px;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  background: var(--surface-subtle, #f1f5f9);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+.limit {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}

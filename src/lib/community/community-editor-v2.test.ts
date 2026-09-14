@@ -235,7 +235,8 @@ test('14·15·16. 블록 이동(텍스트·사진 동일), 텍스트 삭제, 사
   const resolved = resolveImageBlock(many, 'p2', { status: 'ready', source: 'existing', imageId: 'img', url: 'u', width: 1, height: 1 });
   assert.equal((resolved[2] as Extract<EditorBlock, { kind: 'image' }>).image.status, 'ready');
 
-  const editorSrc = codeOf(read('src/components/community/CommunityBlockEditor.tsx'));
+  // COMMUNITY_EDITOR_V2.1 — 편집 화면은 단순 인라인 작성기로 바뀌었다(같은 상태 함수 사용).
+  const editorSrc = codeOf(read('src/components/community/SimpleInlineComposer.tsx'));
   assert.ok(!/fetch\(/.test(editorSrc), '편집기 조작 중 서버 요청이 있으면 안 된다');
 });
 
@@ -511,7 +512,7 @@ test('38. HTML/스크립트 문자열은 텍스트로만 저장·렌더(해석·
   const renderer = codeOf(read('src/components/community/CommunityPostContent.tsx'));
   assert.ok(!/dangerouslySetInnerHTML|innerHTML/.test(renderer));
   assert.ok(/\{block\.text\}/.test(renderer));
-  for (const f of ['src/components/community/CommunityBlockEditor.tsx', 'src/app/community/[id]/post-client.tsx', 'src/app/community/[id]/edit/page.tsx']) {
+  for (const f of ['src/components/community/SimpleInlineComposer.tsx', 'src/app/community/[id]/post-client.tsx', 'src/app/community/[id]/edit/page.tsx']) {
     assert.ok(!/dangerouslySetInnerHTML/.test(read(f)), f);
   }
 });
@@ -558,13 +559,13 @@ test('41·42. cascade·같은 글 FK: 복합 FK(NO ACTION) + 글 cascade, schema
 // ── 추가: 모바일·이탈 경고·배선 ────────────────────────────────────────────────
 
 test('모바일 CSS 계약: 입력 16px·폭 100%·넘침 방지, 조작 버튼 44px, 미리보기 원본 비율', () => {
-  const css = read('src/components/community/CommunityBlockEditor.module.css');
+  const css = read('src/components/community/SimpleInlineComposer.module.css');
   const rule = (sel: string) => css.slice(css.indexOf(`${sel} {`), css.indexOf('}', css.indexOf(`${sel} {`)));
   assert.ok(/font-size: 16px/.test(rule('.textarea')) && /width: 100%/.test(rule('.textarea')) && /box-sizing: border-box/.test(rule('.textarea')));
   assert.ok(/width: 44px/.test(rule('.control')) && /height: 44px/.test(rule('.control')));
-  assert.ok(/min-height: 44px/.test(rule('.insertButton')) && /min-height: 44px/.test(rule('.insertChoice')));
-  assert.ok(/object-fit: contain/.test(rule('.preview')) && /height: auto/.test(rule('.preview')));
-  assert.ok(/min-width: 0/.test(rule('.block')));
+  assert.ok(/min-height: 44px/.test(rule('.photoButton')));
+  assert.ok(/object-fit: contain/.test(rule('.image')) && /height: auto/.test(rule('.image')));
+  assert.ok(/min-width: 0/.test(rule('.body')) && /min-width: 0/.test(rule('.imageCard')));
 });
 
 test('이탈 경고: beforeunload·링크 클릭·뒤로 가기(popstate) + 저장 성공 시 해제 후 replace', () => {

@@ -12,8 +12,8 @@ import { useSWRConfig } from 'swr';
 import { AlertTriangle, ArrowLeft, Building2, RefreshCw } from 'lucide-react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
-import CommunityBlockEditor, { newBlockKey } from '@/components/community/CommunityBlockEditor';
-import { editorBlocksFromViews, editorSnapshot, type EditorBlock } from '@/lib/community/block-editor-state';
+import SimpleInlineComposer, { newBlockKey } from '@/components/community/SimpleInlineComposer';
+import { editorBlocksFromViews, editorSnapshot, normalizeComposerBlocks, type EditorBlock } from '@/lib/community/block-editor-state';
 import type { ContentBlockView } from '@/lib/community/content-blocks';
 import { submitBlockPost } from '@/lib/community/submit-block-post';
 import { useLeaveGuard } from '@/lib/community/use-leave-guard';
@@ -57,8 +57,8 @@ export default function EditPostPage() {
           return;
         }
         const data = json.data as EditablePostResponse;
-        const loaded = editorBlocksFromViews(data.blocks ?? [], newBlockKey);
-        const initialBlocks: EditorBlock[] = loaded.length > 0 ? loaded : [{ key: newBlockKey(), kind: 'text', text: '' }];
+        // V2.1 — 작성기 모양(인접 글 합치기, 마지막 사진 뒤 이어 쓰기 칸)으로 맞춘 뒤 비교 스냅샷을 만든다.
+        const initialBlocks: EditorBlock[] = normalizeComposerBlocks(editorBlocksFromViews(data.blocks ?? [], newBlockKey), newBlockKey);
         setPost(data);
         setTitle(data.title);
         setBlocks(initialBlocks);
@@ -142,7 +142,7 @@ export default function EditPostPage() {
                 maxLength={200}
                 aria-label="제목"
               />
-              <CommunityBlockEditor blocks={blocks} onBlocksChange={setBlocks} onError={setError} disabled={submitting} />
+              <SimpleInlineComposer blocks={blocks} onBlocksChange={setBlocks} onError={setError} disabled={submitting} />
               {status && (
                 <p className={styles.uploadStatus} role="status" aria-live="polite">
                   {status}

@@ -2,6 +2,20 @@
 
 ## 2026-09-14
 
+### E-JIP COMMUNITY EDITOR V2.1 — 단순 인라인 작성기(커서 위치 사진 삽입)
+
+편집 화면 UX만 변경. 상세: `docs/development/COMMUNITY_EDITOR_V2_1_SIMPLE_INLINE_COMPOSER.md`
+
+    화면      본문 위 "사진 추가 n/5" 버튼 하나 + 하나의 본문 상자. "+ 내용 추가"·상시 ↑↓삭제·"블록 n/25" 제거,
+              사진을 탭할 때만 이미지 위로/아래로/삭제(44px). 블록 25 상한은 내부 유지, 닿을 때만 안내
+    삽입      커서 위치에서 글을 나눠 사진 삽입(선택 영역은 지우지 않고 selectionEnd 뒤), 경계 줄바꿈 1개만 대체,
+              여러 장은 선택 순서대로, 사진부터 시작 가능, 삽입 후 사진 아래로 커서 이동
+    합치기    사진 삭제·이동 후 인접 글 자동 합치기(삭제하면 원래 글과 동일), 마지막 사진 뒤 이어 쓰기 칸
+    커서      select/keyup/click/focus/blur마다 기억, 사진 선택창 복귀 후 입력칸의 현재 선택 위치 재확인
+    IME       조합 중 구조 변경 없음, 조합 중 선택이 끝나면 compositionend 후 삽입
+    불변      schema·migration·저장 직렬화·API·영수증·권한·409·Storage 수명주기·이탈 경고 무변경. CommunityBlockEditor 제거
+    검증      V2.1 22/22, 커뮤니티 99/99, src 1865/1865, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+
 ### E-JIP COMMUNITY EDITOR V2 — 글/사진 블록 순서 자유 작성 + 게시글 수정 화면
 
 승인 구현. 상세: `docs/development/COMMUNITY_EDITOR_V2.md` (설계: `COMMUNITY_EDITOR_V2_DESIGN.md`)

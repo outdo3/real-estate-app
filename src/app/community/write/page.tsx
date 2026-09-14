@@ -6,7 +6,7 @@ import { AlertTriangle, Building2 } from 'lucide-react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import ApartmentAutocomplete from '@/components/ApartmentAutocomplete';
-import CommunityBlockEditor, { newBlockKey } from '@/components/community/CommunityBlockEditor';
+import SimpleInlineComposer, { newBlockKey } from '@/components/community/SimpleInlineComposer';
 import type { EditorBlock } from '@/lib/community/block-editor-state';
 import { submitBlockPost } from '@/lib/community/submit-block-post';
 import { useLeaveGuard } from '@/lib/community/use-leave-guard';
@@ -37,7 +37,7 @@ export default function WritePostPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  // COMMUNITY_EDITOR_V2 — 본문은 텍스트/사진 블록 목록. 처음에는 빈 글 블록 하나.
+  // COMMUNITY_EDITOR_V2 / V2.1 — 본문은 텍스트/사진 블록 목록(저장 형식). 화면은 하나의 본문 + 커서 위치 사진으로 보인다.
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => [{ key: newBlockKey(), kind: 'text', text: '' }]);
 
   useEffect(() => {
@@ -49,11 +49,8 @@ export default function WritePostPage() {
     }
   }, []);
 
-  // 이탈 경고 대상: 제목·글·사진 중 하나라도 있거나 블록 구성을 바꾼 경우.
-  const dirty = useMemo(
-    () => title.trim().length > 0 || blocks.length !== 1 || blocks.some((b) => b.kind === 'image' || b.text.trim().length > 0),
-    [title, blocks]
-  );
+  // 이탈 경고 대상: 제목·글·사진 중 하나라도 있는 경우(작성기가 자동으로 두는 빈 입력칸은 제외).
+  const dirty = useMemo(() => title.trim().length > 0 || blocks.some((b) => b.kind === 'image' || b.text.trim().length > 0), [title, blocks]);
   const { release, requestLeave } = useLeaveGuard(dirty || submitting);
 
   const handleSubmit = async () => {
@@ -112,7 +109,7 @@ export default function WritePostPage() {
               onChange={(e) => setTitle(e.target.value)}
               maxLength={200}
             />
-            <CommunityBlockEditor blocks={blocks} onBlocksChange={setBlocks} onError={setError} disabled={submitting} />
+            <SimpleInlineComposer blocks={blocks} onBlocksChange={setBlocks} onError={setError} disabled={submitting} />
             {status && (
               <p className={styles.uploadStatus} role="status" aria-live="polite">
                 {status}
