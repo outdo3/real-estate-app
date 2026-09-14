@@ -83,9 +83,15 @@ export default function EditPostPage() {
     const result = await submitBlockPost({ mode: 'edit', postId: post.id, title, expectedUpdatedAt: post.updatedAt, blocks, onStatus: setStatus });
     if (result.ok) {
       release();
-      // 상세 화면은 SWR 캐시로 이 글을 기억하고 있다. 돌아가기 전에 캐시를 새로 받아 두지 않으면
-      // 수정 전 내용이 보인다(Production QA에서 확인 — 캐시 재검증이 requestAnimationFrame 뒤로 미뤄진다).
-      await mutate(`/api/community/posts/${post.id}`).catch(() => undefined);
+      // 상세 화면은 SWR 캐시로 이 글을 기억하고 있다. 돌아가기 전에 캐시에 **저장된 최신 글을 직접 넣는다**.
+      // (Production QA에서 두 번 확인: 데이터 없이 mutate(key)만 부르면 SWR은 "지금 마운트된" 훅만 재검증하는데
+      //  수정 화면에서는 상세가 언마운트 상태라 캐시가 그대로 남고, 상세의 마운트 재검증은 requestAnimationFrame 뒤로 미뤄진다.)
+      const detailKey = `/api/community/posts/${post.id}`;
+      await mutate(
+        detailKey,
+        fetch(detailKey, { cache: 'no-store' }).then((res) => res.json()),
+        { revalidate: false }
+      ).catch(() => undefined);
       router.replace(`/community/${post.id}`);
       return;
     }

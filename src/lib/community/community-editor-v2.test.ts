@@ -576,7 +576,7 @@ test('이탈 경고: beforeunload·링크 클릭·뒤로 가기(popstate) + 저�
   for (const f of ['src/app/community/write/page.tsx', 'src/app/community/[id]/edit/page.tsx']) {
     const src = codeOf(read(f));
     assert.ok(/useLeaveGuard\(dirty \|\| submitting\)/.test(src), f);
-    assert.ok(/release\(\);[\s\S]{0,160}router\.replace\(/.test(src), f);
+    assert.ok(/release\(\);[\s\S]{0,400}router\.replace\(/.test(src), f);
     assert.ok(/requestLeave\(\(\) => router\.back\(\)\)/.test(src), f);
   }
 });
@@ -585,7 +585,11 @@ test('수정 저장 후 상세 캐시 갱신: 이동 전에 SWR 캐시를 다시
   const edit = codeOf(read('src/app/community/[id]/edit/page.tsx'));
   assert.ok(/const \{ mutate \} = useSWRConfig\(\);/.test(edit));
   const save = edit.slice(edit.indexOf('if (result.ok) {'));
-  const m = save.indexOf('await mutate(`/api/community/posts/${post.id}`)');
+  // 데이터 없이 mutate(key)만 부르면 언마운트된 상세 캐시는 갱신되지 않는다(SWR 2.5 internalMutate: args.length < 3 → 마운트된 훅만).
+  // 반드시 새로 받은 글을 데이터로 넣어야 한다.
+  assert.ok(/const detailKey = `\/api\/community\/posts\/\$\{post\.id\}`;/.test(save));
+  assert.ok(/await mutate\(\s*detailKey,\s*fetch\(detailKey, \{ cache: 'no-store' \}\)\.then\(\(res\) => res\.json\(\)\),\s*\{ revalidate: false \}\s*\)/.test(save), '캐시에 최신 데이터를 직접 넣어야 한다');
+  const m = save.indexOf('await mutate(');
   const r = save.indexOf('router.replace(`/community/${post.id}`)');
   assert.ok(m > 0 && r > m, '캐시 갱신이 이동보다 먼저여야 한다');
   const detail = codeOf(read('src/app/community/[id]/post-client.tsx'));
