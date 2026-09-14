@@ -129,7 +129,7 @@ test('7. 삭제 후 사용자가 다른 글을 누르면 그 커서가 우선한
   assert.ok(/const rememberCursor = [\s\S]*?source: 'user' \};/.test(src));
   assert.ok(/cursorRef\.current = anchor \? \{ cursor: anchor, source: 'delete-anchor' \} : null;/.test(src));
   // 합쳐진 입력칸에 포커스가 남아 있을 때 값 변경으로 나는 select, 버튼을 누를 때의 blur는 anchor를 덮지 않는다. 사용자 조작 이벤트는 덮는다.
-  assert.ok(/if \(passive && cursorRef\.current\?\.source === 'delete-anchor'\) return;/.test(src));
+  assert.ok(/if \(passive && isComposerAnchor\(cursorRef\.current\)\) return;/.test(src)); // (V2.2: 이동 anchor도 같은 규칙)
   assert.ok(/onSelect=\{trackPassive\}/.test(src) && /onBlur=\{trackPassive\}/.test(src));
   assert.ok(/onFocus=\{track\}/.test(src) && /onClick=\{track\}/.test(src) && /onKeyUp=\{track\}/.test(src) && /onCursor\(e\.target, false\)/.test(src));
   assert.ok(/const el = cursor && pending\?\.rereadLive \? textareasRef\.current\.get\(cursor\.key\) : undefined;/.test(src));

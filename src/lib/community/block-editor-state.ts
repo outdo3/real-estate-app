@@ -257,11 +257,19 @@ export function removeComposerImageWithAnchor(blocks: EditorBlock[], key: string
   return { blocks: normalizeComposerBlocks(withPlaceholder, newKey), anchor: at(placeholderKey, 0) };
 }
 
-/** 작성기가 기억하는 마지막 삽입 위치. 사용자가 직접 둔 커서인지, 사진 삭제가 남긴 anchor인지 구분한다. */
-export type ComposerCursorMemory = { cursor: ComposerCursor; source: 'user' | 'delete-anchor' } | null;
+/**
+ * 작성기가 기억하는 마지막 삽입 위치. 사용자가 직접 둔 커서인지, 구조 변경이 남긴 anchor인지 구분한다.
+ *  - 'delete-anchor': 사진 삭제 자리(V2.1A)
+ *  - 'move-anchor': 사진 이동으로 합쳐진 글 안으로 옮긴 커서(V2.2). 합쳐진 입력칸은 값이 바뀌어 DOM 커서가 글 끝에 가 있으므로
+ *    삭제 anchor와 똑같이 다룬다(다시 읽지 않음, select·blur로 덮지 않음, 사용자 조작은 덮음).
+ */
+export type ComposerCursorMemory = { cursor: ComposerCursor; source: 'user' | 'delete-anchor' | 'move-anchor' } | null;
+
+/** 구조 변경(삭제·이동)이 남긴 위치인가 — 사용자가 글을 누르거나 입력하기 전까지 우선한다. */
+export const isComposerAnchor = (memory: ComposerCursorMemory) => !!memory && memory.source !== 'user';
 
 /**
- * [사진 추가]를 누른 순간 삽입 기준 결정. 우선순위: 선택한 사진 > 삭제 anchor > 포커스가 있는 입력칸의 실제 커서 > 기억한 사용자 커서.
+ * [사진 추가]를 누른 순간 삽입 기준 결정. 우선순위: 선택한 사진 > 삭제·이동 anchor > 포커스가 있는 입력칸의 실제 커서 > 기억한 사용자 커서.
  * 사용자가 삭제 뒤 글을 누르거나 입력하면(focus/click/select/keyup/change) 기억 자체가 'user'로 바뀌므로 manual cursor > delete anchor다.
  * anchor가 포커스 입력칸보다 앞서는 이유: 삭제 전에 포커스가 있던 입력칸이 사진을 누른 뒤에도 포커스를 유지하는 환경
  * (버튼이 포커스를 가져가지 않는 브라우저, Production QA 자동화)에서는 그 입력칸이 사용자가 고른 위치가 아니다.
@@ -274,7 +282,7 @@ export function pickComposerInsertCursor(
   selectedImageKey: string | null
 ): { cursor: ComposerCursor | null; rereadLive: boolean } {
   if (selectedImageKey) return { cursor: { key: selectedImageKey, selectionStart: 0, selectionEnd: 0 }, rereadLive: false };
-  if (memory?.source === 'delete-anchor') return { cursor: memory.cursor, rereadLive: false };
+  if (memory && isComposerAnchor(memory)) return { cursor: memory.cursor, rereadLive: false };
   if (activeCursor) return { cursor: activeCursor, rereadLive: true };
   if (!memory) return { cursor: null, rereadLive: false };
   return { cursor: memory.cursor, rereadLive: memory.source === 'user' };

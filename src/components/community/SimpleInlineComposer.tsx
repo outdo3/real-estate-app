@@ -20,6 +20,7 @@ import {
   composerImageMoveState,
   countImages,
   insertImagesAtCursor,
+  isComposerAnchor,
   moveComposerImageWithCursor,
   pickComposerInsertCursor,
   remainingImageSlots,
@@ -58,7 +59,7 @@ interface Props {
 export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, disabled }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const textareasRef = useRef<Map<string, HTMLTextAreaElement>>(new Map());
-  // 마지막 삽입 위치: 사용자가 둔 커서('user') 또는 사진 삭제가 남긴 삭제 자리('delete-anchor'). 사용자가 글을 누르면 'user'로 덮인다.
+  // 마지막 삽입 위치: 사용자가 둔 커서('user') 또는 사진 삭제·이동이 남긴 자리('delete-anchor'·'move-anchor'). 사용자가 글을 누르면 'user'로 덮인다.
   const cursorRef = useRef<ComposerCursorMemory>(null);
   const pendingCursorRef = useRef<{ cursor: ComposerCursor | null; rereadLive: boolean } | null>(null);
   const composingRef = useRef(false);
@@ -167,7 +168,7 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
     // V2.1A — 삭제 anchor가 있는 동안 select·blur만으로는 덮지 않는다. 합쳐진 입력칸에 포커스가 남아 있으면 React가 값을 바꾸며
     // DOM 커서를 글 끝으로 옮겨 select가 나고, 그 뒤 버튼을 누를 때 blur가 난다 — 둘 다 사용자가 고른 위치가 아니다.
     // 사용자의 탭·키 이동·입력(focus/click/keyup/change)은 바로 덮는다(manual cursor > delete anchor).
-    if (passive && cursorRef.current?.source === 'delete-anchor') return;
+    if (passive && isComposerAnchor(cursorRef.current)) return;
     cursorRef.current = { cursor: { key, selectionStart: el.selectionStart ?? el.value.length, selectionEnd: el.selectionEnd ?? el.value.length }, source: 'user' };
   };
 
@@ -277,7 +278,8 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
     const memory = cursorRef.current;
     if (memory) {
       const { cursor } = moveComposerImageWithCursor(blocks, key, direction, keySource(pool), memory.cursor);
-      cursorRef.current = cursor ? { cursor, source: memory.source } : null;
+      // 옮긴 커서는 anchor로 둔다: 합쳐진 입력칸의 DOM 커서는 값 변경으로 글 끝에 가 있어 다시 읽으면 위치를 잃는다(Production QA에서 확인).
+      cursorRef.current = cursor ? { cursor, source: memory.source === 'delete-anchor' ? 'delete-anchor' : 'move-anchor' } : null;
     }
     revealImageRef.current = key;
     onBlocksChange((prev) => moveComposerImageWithCursor(prev, key, direction, keySource(pool), null).blocks);

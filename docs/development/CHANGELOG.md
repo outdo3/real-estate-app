@@ -11,7 +11,8 @@
               길게 누르면 메뉴 대신 사진 선택. 게시글 상세 사진은 변경 없음
     사진 추가  같은 버튼 하나를 모바일(≤900px, 하단 탭바 폭)에서 본문 아래·탭바 위(60px + safe-area + 8px)에 sticky.
               키보드가 뜨면 visualViewport 기준으로 키보드 위로 올림(작성기 상자 밖으로는 안 올림). 데스크톱은 본문 위 그대로
-    커서      삽입 핸들러 동일(커서·삭제 anchor·여러 장·5장). 사진 이동 뒤 합쳐진 글 칸 커서를 같은 글자 위치로 보정(P2 해소)
+    커서      삽입 핸들러 동일(커서·삭제 anchor·여러 장·5장). 사진 이동 뒤 합쳐진 글 칸 커서를 같은 글자 위치로 보정하고
+              'move-anchor'로 기억(복귀 후 DOM 커서 재읽기 제외 — QA에서 끝으로 들어가는 것 발견 후 보강, P2 해소)
     불변      schema·migration·API·저장 직렬화·영수증·권한·409·Storage
     검증      작성기 79/79, src 1891/1891, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
 

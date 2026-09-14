@@ -7,6 +7,7 @@ import {
   buildBlocksPayload,
   composerImageMoveState,
   insertImagesAtCursor,
+  isComposerAnchor,
   moveComposerImage,
   moveComposerImageWithCursor,
   normalizeComposerBlocks,
@@ -140,7 +141,14 @@ test('12(P2). 사진 이동 뒤 [사진 추가]: 합쳐져 사라지는 글 칸�
   const afterMove = moveComposerImageWithCursor(removed.blocks, 'i2', -1, newKey, removed.anchor);
   assert.deepEqual(shape(insertImagesAtCursor(afterMove.blocks, afterMove.cursor, ['new'], newKey).blocks), ['I:i2', 'T:A', 'I:new', 'T:B\nC'], '사진이 맨 앞으로 가도 지운 자리(A와 B 사이)는 유지');
   // 작성기 배선: 이동 시 기억한 커서를 source 그대로 옮긴다
-  assert.ok(/const \{ cursor \} = moveComposerImageWithCursor\(blocks, key, direction, keySource\(pool\), memory\.cursor\);\s*cursorRef\.current = cursor \? \{ cursor, source: memory\.source \} : null;/.test(src()));
+  // 작성기 배선: 옮긴 커서는 anchor — 합쳐진 입력칸의 DOM 커서(값 변경으로 글 끝)를 다시 읽지 않는다(Production QA에서 발견)
+  assert.ok(/const \{ cursor \} = moveComposerImageWithCursor\(blocks, key, direction, keySource\(pool\), memory\.cursor\);\s*cursorRef\.current = cursor \? \{ cursor, source: memory\.source === 'delete-anchor' \? 'delete-anchor' : 'move-anchor' \} : null;/.test(src()));
+  assert.ok(/if \(passive && isComposerAnchor\(cursorRef\.current\)\) return;/.test(src()));
+  const moveAnchor = { cursor: moved.cursor!, source: 'move-anchor' as const };
+  assert.deepEqual(pickComposerInsertCursor(moveAnchor, cursorAt('c', 0), null), { cursor: moved.cursor, rereadLive: false }, '이동 anchor: 다시 읽지 않고 남은 포커스 입력칸보다 우선');
+  assert.deepEqual(pickComposerInsertCursor(moveAnchor, null, 'i1'), { cursor: cursorAt('i1', 0), rereadLive: false }, '선택한 사진이 있으면 그 뒤');
+  assert.equal(isComposerAnchor(moveAnchor), true);
+  assert.equal(isComposerAnchor({ cursor: cursorAt('a', 0), source: 'user' }), false);
   assert.ok(/onBlocksChange\(\(prev\) => moveComposerImageWithCursor\(prev, key, direction, keySource\(pool\), null\)\.blocks\);/.test(src()));
 });
 

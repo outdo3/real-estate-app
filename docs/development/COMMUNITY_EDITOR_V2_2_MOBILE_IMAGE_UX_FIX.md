@@ -74,6 +74,9 @@
     - 뒤가 빈 칸: 앞 글 끝
     - 둘 다 내용: 앞 글 길이 + 1 + 위치
   - 기존 `normalizeComposerBlocks`·`moveComposerImage` 결과는 같다(래퍼).
+  - 옮긴 커서는 `'move-anchor'`로 기억한다. 삭제 anchor와 같이 다룬다: 선택창 복귀 후 다시 읽지 않고, select·blur로 덮이지 않으며, 사용자가 글을 누르거나 입력하면 덮인다.
+    - 이유: 첫 배포(`1fbd79a`) Production QA에서 이동 뒤 추가한 사진이 합쳐진 글의 **끝**에 들어갔다.
+    - 옮긴 위치 계산은 맞았지만 `'user'` 커서라 복귀 후 입력칸의 DOM 커서를 다시 읽었고, 합쳐진 입력칸은 값이 바뀌어 DOM 커서가 글 끝에 가 있었다(V2.1A 원인 5와 같은 함정).
 - 옮긴 사진이 화면 밖으로 사라지지 않게 `scrollIntoView({ block: 'nearest' })`를 한다.
 
 ## 4. 글쓰기·수정
