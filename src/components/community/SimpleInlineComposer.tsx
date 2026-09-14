@@ -20,7 +20,7 @@ import {
   composerImageMoveState,
   countImages,
   insertImagesAtCursor,
-  moveComposerImage,
+  moveComposerImageWithCursor,
   pickComposerInsertCursor,
   remainingImageSlots,
   removeComposerImage,
@@ -34,6 +34,11 @@ import {
 import styles from './SimpleInlineComposer.module.css';
 
 export const BLOCK_LIMIT_MESSAGE = '내용을 더 추가할 수 없어요.';
+
+/** V2.2 — 하단 고정 [사진 추가]가 켜지는 폭. 하단 탭바(Header .menuList·BottomNav)가 보이는 폭과 같다. CSS 모듈의 미디어 쿼리와 맞춘다. */
+export const STICKY_TOOLBAR_QUERY = '(max-width: 900px)';
+/** 키보드 위로 올릴 때 버튼과 키보드 사이 간격. */
+const KEYBOARD_GAP_PX = 8;
 
 export const newBlockKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
@@ -64,6 +69,8 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
   const urlsRef = useRef<Set<string>>(new Set());
   const codecRef = useRef<ReturnType<typeof createBrowserImageCodec> | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const revealImageRef = useRef<string | null>(null);
 
   useEffect(() => {
     liveKeysRef.current = new Set(blocks.map((b) => b.key));
@@ -88,6 +95,62 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
     el.setSelectionRange(target.position, target.position);
     cursorRef.current = { cursor: { key: target.key, selectionStart: target.position, selectionEnd: target.position }, source: 'user' };
   }, [blocks]);
+
+  // V2.2 — 사진을 옮기면 옮겨진 사진이 화면 밖으로 사라지지 않게 가까운 방향으로만 스크롤한다.
+  useEffect(() => {
+    const key = revealImageRef.current;
+    if (!key) return;
+    revealImageRef.current = null;
+    const card = Array.from(document.querySelectorAll<HTMLElement>('[data-composer-image]')).find((el) => el.dataset.composerImage === key);
+    card?.scrollIntoView({ block: 'nearest' });
+  }, [blocks]);
+
+  // V2.2 — 모바일 하단 고정 [사진 추가]가 키보드에 가리지 않게 한다.
+  // 모바일 브라우저는 키보드가 떠도 레이아웃 뷰포트를 줄이지 않아(visual viewport만 줄어듦) sticky 버튼이 키보드 뒤로 간다.
+  // 버튼 아래 끝이 보이는 영역(visual viewport) 아래로 내려가 있을 때만 그만큼 위로 올린다. 하단 고정은 모바일 CSS에서만 켜진다.
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const el = toolbarRef.current;
+    if (!vv || !el) return;
+    const mobile = window.matchMedia(STICKY_TOOLBAR_QUERY);
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const current = Number(el.dataset.keyboardShift || 0);
+      if (!mobile.matches) {
+        if (current !== 0) {
+          el.style.transform = '';
+          el.dataset.keyboardShift = '0';
+        }
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const naturalBottom = rect.bottom - current;
+      const visibleBottom = vv.offsetTop + vv.height - KEYBOARD_GAP_PX;
+      // sticky처럼 작성기 상자 밖(위)으로는 올리지 않는다 — 제목 입력 중 작성기가 화면 아래에 있으면 버튼도 따라오지 않는다.
+      const composerTop = el.parentElement?.getBoundingClientRect().top ?? -Infinity;
+      const limit = Math.min(0, composerTop - (rect.top - current));
+      const shift = Math.round(Math.max(limit, Math.min(0, visibleBottom - naturalBottom)));
+      if (shift === current) return;
+      el.style.transform = shift === 0 ? '' : `translateY(${shift}px)`;
+      el.dataset.keyboardShift = String(shift);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    vv.addEventListener('resize', schedule);
+    vv.addEventListener('scroll', schedule);
+    window.addEventListener('scroll', schedule, { passive: true });
+    mobile.addEventListener('change', schedule);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      vv.removeEventListener('resize', schedule);
+      vv.removeEventListener('scroll', schedule);
+      window.removeEventListener('scroll', schedule);
+      mobile.removeEventListener('change', schedule);
+    };
+  }, []);
 
   // 사진 선택 해제: 사진 카드 밖을 누르면 조작 버튼을 숨긴다.
   useEffect(() => {
@@ -208,11 +271,24 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
     onError(null);
   };
 
+  // V2.2 — 사진 이동. 기억한 커서(사용자 커서·삭제 anchor)가 합쳐져 사라지는 글 칸을 가리키면 합쳐진 글의 같은 위치로 옮긴다.
+  const moveImage = (key: string, direction: -1 | 1) => {
+    const pool = [newBlockKey(), newBlockKey()];
+    const memory = cursorRef.current;
+    if (memory) {
+      const { cursor } = moveComposerImageWithCursor(blocks, key, direction, keySource(pool), memory.cursor);
+      cursorRef.current = cursor ? { cursor, source: memory.source } : null;
+    }
+    revealImageRef.current = key;
+    onBlocksChange((prev) => moveComposerImageWithCursor(prev, key, direction, keySource(pool), null).blocks);
+  };
+
   const firstTextKey = blocks.find((b) => b.kind === 'text')?.key;
 
   return (
     <div className={styles.composer}>
-      <div className={styles.toolbar}>
+      {/* V2.2 — 같은 버튼 하나. 데스크톱은 본문 위, 모바일(하단 탭바가 있는 폭)은 CSS로 본문 아래 하단 고정(탭바 위). */}
+      <div ref={toolbarRef} className={styles.toolbar}>
         <button
           type="button"
           className={styles.photoButton}
@@ -266,7 +342,18 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
           const move = composerImageMoveState(blocks, block.key);
           const image = block.image;
           return (
-            <figure key={block.key} className={`${styles.imageCard} ${selected ? styles.imageSelected : ''}`} data-composer-image={block.key}>
+            <figure
+              key={block.key}
+              className={`${styles.imageCard} ${selected ? styles.imageSelected : ''}`}
+              data-composer-image={block.key}
+              // V2.2 — 편집기 사진에서만 브라우저 기본 이미지 메뉴(복사·다운로드·공유)와 끌기를 막는다.
+              // 길게 누르면 메뉴 대신 사진을 선택한다. 게시글 상세의 사진은 이 컴포넌트가 아니라 영향이 없다.
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (image.status === 'ready' && !disabled) setSelectedImage(block.key);
+              }}
+              onDragStart={(e) => e.preventDefault()}
+            >
               {image.status === 'processing' ? (
                 <div className={styles.processing} role="status">
                   <Loader2 size={20} className={styles.spin} aria-hidden="true" />
@@ -287,15 +374,16 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
                     width={image.source === 'new' ? image.prepared.width : image.width}
                     height={image.source === 'new' ? image.prepared.height : image.height}
                     alt="본문 사진"
+                    draggable={false}
                   />
                 </button>
               )}
               {selected && image.status === 'ready' && (
                 <div className={styles.imageControls} role="group" aria-label="사진 조작">
-                  <button type="button" className={styles.control} onClick={() => onBlocksChange((prev) => moveComposerImage(prev, block.key, -1, newBlockKey))} disabled={disabled || !move.canUp} aria-label="이미지 위로 이동">
+                  <button type="button" className={styles.control} onClick={() => moveImage(block.key, -1)} disabled={disabled || !move.canUp} aria-label="이미지 위로 이동">
                     <ArrowUp size={18} aria-hidden="true" />
                   </button>
-                  <button type="button" className={styles.control} onClick={() => onBlocksChange((prev) => moveComposerImage(prev, block.key, 1, newBlockKey))} disabled={disabled || !move.canDown} aria-label="이미지 아래로 이동">
+                  <button type="button" className={styles.control} onClick={() => moveImage(block.key, 1)} disabled={disabled || !move.canDown} aria-label="이미지 아래로 이동">
                     <ArrowDown size={18} aria-hidden="true" />
                   </button>
                   <button type="button" className={`${styles.control} ${styles.controlDanger}`} onClick={() => removeImage(block)} disabled={disabled} aria-label="이미지 삭제">

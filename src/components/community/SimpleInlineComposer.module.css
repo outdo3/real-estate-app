@@ -190,3 +190,57 @@
   font-size: 0.82rem;
   color: var(--text-secondary);
 }
+
+/* ── COMMUNITY_EDITOR_V2.2 ─────────────────────────────────────────────────
+   편집기 사진에서만: 길게 누를 때 브라우저 이미지 메뉴(iOS callout)·텍스트 선택·끌기를 막는다.
+   게시글 상세(CommunityPostContent)의 사진에는 적용되지 않는다. */
+.imageCard {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.imageButton,
+.control {
+  /* 두 번 탭 확대 대기 없이 바로 탭으로 처리(스크롤·핀치 확대는 그대로). */
+  touch-action: manipulation;
+}
+
+.image {
+  -webkit-user-drag: none;
+  /* 길게 누름·탭의 대상이 <img>가 아니라 선택 버튼이 되게 한다(안드로이드 이미지 메뉴가 붙는 대상 제거). */
+  pointer-events: none;
+}
+
+/* 모바일(하단 탭바가 보이는 폭 — Header .menuList·BottomNav와 같은 900px):
+   [사진 추가]를 본문 아래로 옮겨 화면 하단(탭바 바로 위)에 붙인다. 작성기가 화면에 있는 동안만 붙고, 버튼 하나를 그대로 쓴다.
+   키보드가 뜨면 SimpleInlineComposer가 visual viewport 기준으로 키보드 위로 올린다. */
+@media (max-width: 900px) {
+  .composer {
+    /* 하단 탭바 높이(Header.module.css .menuList / BottomNav.module.css .nav의 60px) */
+    --composer-bottom-nav-height: 60px;
+  }
+
+  .body {
+    order: 1;
+  }
+
+  .toolbar {
+    order: 2;
+    position: sticky;
+    bottom: calc(var(--composer-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 8px);
+    z-index: 5;
+    justify-content: flex-end;
+    /* 버튼 옆 빈 영역은 아래 글을 누를 수 있게 통과시킨다. */
+    pointer-events: none;
+  }
+
+  .toolbar .photoButton {
+    pointer-events: auto;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+  }
+
+  .limit {
+    order: 3;
+  }
+}

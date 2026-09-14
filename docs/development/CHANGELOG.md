@@ -2,6 +2,19 @@
 
 ## 2026-09-14
 
+### E-JIP COMMUNITY EDITOR V2.2 — 모바일 사진 UX(사진 탭 조작 + 하단 고정 사진 추가)
+
+작성기 UI/UX만 변경. 상세: `docs/development/COMMUNITY_EDITOR_V2_2_MOBILE_IMAGE_UX_FIX.md`
+
+    사진 탭    편집기 사진에서만 브라우저 이미지 메뉴(복사·다운로드·공유)·끌기 차단: contextmenu/dragstart preventDefault,
+              draggable=false, touch-callout/user-select/user-drag none, img pointer-events none, touch-action manipulation.
+              길게 누르면 메뉴 대신 사진 선택. 게시글 상세 사진은 변경 없음
+    사진 추가  같은 버튼 하나를 모바일(≤900px, 하단 탭바 폭)에서 본문 아래·탭바 위(60px + safe-area + 8px)에 sticky.
+              키보드가 뜨면 visualViewport 기준으로 키보드 위로 올림(작성기 상자 밖으로는 안 올림). 데스크톱은 본문 위 그대로
+    커서      삽입 핸들러 동일(커서·삭제 anchor·여러 장·5장). 사진 이동 뒤 합쳐진 글 칸 커서를 같은 글자 위치로 보정(P2 해소)
+    불변      schema·migration·API·저장 직렬화·영수증·권한·409·Storage
+    검증      작성기 79/79, src 1891/1891, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+
 ### E-JIP COMMUNITY EDITOR V2.1A — 사진 교체 삽입 위치 수정
 
 작성기 UI 상태만 변경. 상세: `docs/development/COMMUNITY_EDITOR_V2_1A_PHOTO_REPLACE_INSERTION_FIX.md`

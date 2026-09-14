@@ -124,11 +124,30 @@ export interface ComposerCursor {
 const TEXT_JOIN = '\n';
 
 export function normalizeComposerBlocks(blocks: EditorBlock[], newKey: () => string): EditorBlock[] {
+  return normalizeComposerBlocksWithCursor(blocks, newKey, null).blocks;
+}
+
+/**
+ * COMMUNITY_EDITOR_V2.2 — normalizeComposerBlocks와 같은 합치기를 하면서, 합쳐져 사라지는 글 블록을 가리키던 커서를
+ * 합쳐진 글 안의 같은 글자 위치로 옮긴다(사진 이동 뒤 [사진 추가]가 본문 끝으로 가지 않게).
+ */
+export function normalizeComposerBlocksWithCursor(
+  blocks: EditorBlock[],
+  newKey: () => string,
+  cursor: ComposerCursor | null
+): { blocks: EditorBlock[]; cursor: ComposerCursor | null } {
   const merged: EditorBlock[] = [];
+  let mapped = cursor;
   for (const b of blocks) {
     const prev = merged[merged.length - 1];
     if (b.kind === 'text' && prev && prev.kind === 'text') {
       const text = prev.text.length === 0 ? b.text : b.text.length === 0 ? prev.text : `${prev.text}${TEXT_JOIN}${b.text}`;
+      if (mapped && mapped.key === b.key) {
+        // 앞이 빈 칸: 뒤 글이 그대로 앞 key로 / 뒤가 빈 칸: 앞 글 끝 / 둘 다 내용: 앞 글 + 줄바꿈 뒤
+        const shift = prev.text.length === 0 ? 0 : b.text.length === 0 ? prev.text.length : prev.text.length + TEXT_JOIN.length;
+        const clamp = (n: number) => (b.text.length === 0 ? shift : shift + Math.max(0, Math.min(n, b.text.length)));
+        mapped = { key: prev.key, selectionStart: clamp(mapped.selectionStart), selectionEnd: clamp(mapped.selectionEnd) };
+      }
       merged[merged.length - 1] = { ...prev, text };
     } else {
       merged.push(b);
@@ -136,7 +155,7 @@ export function normalizeComposerBlocks(blocks: EditorBlock[], newKey: () => str
   }
   const last = merged[merged.length - 1];
   if (!last || last.kind === 'image') merged.push({ key: newKey(), kind: 'text', text: '' });
-  return merged;
+  return { blocks: merged, cursor: mapped };
 }
 
 export interface CursorInsertResult {
@@ -263,10 +282,21 @@ export function pickComposerInsertCursor(
 
 /** 작성기에서 사진 이동: 앞/뒤 블록과 자리를 바꾸고 인접 글을 합친다(글 블록 단위로 한 칸). */
 export function moveComposerImage(blocks: EditorBlock[], key: string, direction: -1 | 1, newKey: () => string): EditorBlock[] {
+  return moveComposerImageWithCursor(blocks, key, direction, newKey, null).blocks;
+}
+
+/** COMMUNITY_EDITOR_V2.2 — 사진 이동 + 기억한 커서(사용자 커서·삭제 anchor)를 합쳐진 글 안의 같은 위치로 옮긴다. */
+export function moveComposerImageWithCursor(
+  blocks: EditorBlock[],
+  key: string,
+  direction: -1 | 1,
+  newKey: () => string,
+  cursor: ComposerCursor | null
+): { blocks: EditorBlock[]; cursor: ComposerCursor | null } {
   const target = blocks.find((b) => b.key === key);
-  if (!target || target.kind !== 'image') return blocks;
+  if (!target || target.kind !== 'image') return { blocks, cursor };
   const moved = moveBlock(blocks, key, direction);
-  return moved === blocks ? blocks : normalizeComposerBlocks(moved, newKey);
+  return moved === blocks ? { blocks, cursor } : normalizeComposerBlocksWithCursor(moved, newKey, cursor);
 }
 
 /** 사진을 위/아래로 옮길 수 있는가(첫/마지막 위치 판단). 이어 쓰기용 빈 입력칸은 경계로 치지 않는다. */
