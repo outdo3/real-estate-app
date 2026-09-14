@@ -66,7 +66,7 @@ import {
   type PropertyTypeLayer,
 } from '@/lib/map-property-focus';
 import { Building2, Home } from 'lucide-react';
-import { LAYER_PILL_ICON_SIZE, layerHitButtonStyle, layerPillStyle, layerStackStyle } from '@/lib/map/map-layer-pill-style';
+import { LAYER_PILL_ICON_SIZE, layerHitButtonStyle, layerPillIconSlotStyle, layerPillStyle, layerStackStyle } from '@/lib/map/map-layer-pill-style';
 import FullPageLoader from '@/components/FullPageLoader';
 import KakaoPreconnect from '@/components/KakaoPreconnect';
 import AdContainer from '@/components/AdContainer';
@@ -1927,14 +1927,18 @@ export default function FullscreenMapPage() {
   // MAP_UX_V2 §2 — "단지"는 무엇을 뜻하는지 모호했다(아파트 단지? 오피스텔 단지?).
   // 화면 라벨만 "아파트"로 바꾸고 내부 state 키(apt)는 그대로 둔다. 향후 용어 체계는
   // 아파트 / 오피스텔 / 생활형숙박시설 / 전체이며, 뒤의 둘은 이 STEP 범위가 아니다.
+  // MAP_LAYER_PILL_UNIFIED_COMPACT_UI_V2 — 같은 폭 알약에 들어가도록 **표시 라벨만** 줄인다: 오피스텔→오피, 경·공매→경공매
+  // (재개발은 그대로). 레이어 키·상태·URL은 그대로다. 줄인 "오피"만 보조기기에 전체 이름을 준다
+  // (보이는 글자를 포함하는 이름 — WCAG 2.5.3).
   const LAYER_LABEL: Record<LayerKey, string> = {
     apt: '아파트',
-    officetel: '오피스텔',
+    officetel: '오피',
     livingLodging: '생숙',
     redevelopment: '재개발',
-    auction: '경·공매',
+    auction: '경공매',
     school: '학교',
   };
+  const LAYER_ARIA_LABEL: Partial<Record<LayerKey, string>> = { officetel: '오피스텔' };
   const LAYER_ORDER: LayerKey[] = ['apt', 'officetel', 'livingLodging', 'redevelopment', 'auction', 'school'];
   // OFFICETEL_MAP_LAYER_V1 §6 — officetel은 더 이상 준비중이 아니다(부산 5,048개 저장
   // 좌표로 실제 마커를 그린다). 나머지 셋은 여전히 연동된 데이터 소스가 없다.
@@ -2110,11 +2114,14 @@ export default function FullscreenMapPage() {
               // role="radio" / aria-checked(배타)를 쓰지 않고 프로젝트의 기존 관례인
               // aria-pressed로 통일한다.
               aria-pressed={active}
+              aria-label={LAYER_ARIA_LABEL[key]}
             >
               <span style={layerPillStyle(active, layerActiveBg(key))}>
-                {key === 'officetel' && <Building2 size={LAYER_PILL_ICON_SIZE} aria-hidden="true" style={{ flexShrink: 0 }} />}
-                {key === 'apt' && <Home size={LAYER_PILL_ICON_SIZE} aria-hidden="true" style={{ flexShrink: 0 }} />}
-                {LAYER_LABEL[key]}
+                <span style={layerPillIconSlotStyle} aria-hidden="true">
+                  {key === 'officetel' && <Building2 size={LAYER_PILL_ICON_SIZE} />}
+                  {key === 'apt' && <Home size={LAYER_PILL_ICON_SIZE} />}
+                </span>
+                <span>{LAYER_LABEL[key]}</span>
               </span>
             </button>
           );

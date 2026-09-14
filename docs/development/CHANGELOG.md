@@ -2,6 +2,17 @@
 
 ## 2026-09-14
 
+### E-JIP MAP LAYER PILL UNIFIED COMPACT UI V2 — 레이어 알약 같은 폭으로 정렬
+
+UI만 변경(지도 로직·레이어 키·URL·aria-pressed·선택 상태 무변경). V1의 가변 폭(44~81px)이 정리되지 않아 보여 정렬감을 우선했다.
+
+    라벨      표시만 오피스텔→오피, 경·공매→경공매(재개발·아파트·생숙·학교 그대로). 줄인 "오피"는 aria-label "오피스텔"
+    크기      모든 알약 72×32px(border-box), 왼쪽 여백 12px + 아이콘 칸 12px(아이콘 없는 라벨도 비워 둠) + 간격 4px →
+              아이콘·글자 시작선 일치. 폭 근거: Pretendard 700 12.5px 세 글자 32.4px(대체 글꼴 37.5px 가정에도 여유)
+    유지      누르는 영역 38px(보이는 간격 6px, 빈틈 0), 스택 오른쪽 정렬·화면 끝 12px, 선택 색(아파트 green·오피스텔 teal)
+    가림      V0 93×44×6 ≈ 24,550px² → V1 ≈ 11,230px² → V2 72×32×6 = 13,824px²
+    검증      src 1906/1906, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+
 ### E-JIP MAP LAYER PILL COMPACT UI V1 — 지도 우측 레이어 알약 축소
 
 UI만 변경(지도 로직·토글 동작·레이어 상태·마커 데이터·API 무변경).
