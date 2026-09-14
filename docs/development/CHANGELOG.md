@@ -15,7 +15,11 @@
               단일 트랜잭션, 제거 사진 Storage 삭제는 커밋 후, 실패 시 새 업로드만 정리. 관련 단지 수정 불가 유지
     UI        공용 블록 편집기(+ 내용 추가, ↑↓삭제 44px), 공용 렌더러, 관리자 버튼은 세션 isAdmin(서버 규칙),
               이탈 경고(beforeunload·링크·뒤로 가기). V1 CommunityImagePicker는 편집기로 대체되어 제거
-    검증      신규 30/30, src 1842/1842, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0, 번들 유출 0
+    검증      신규 31/31, src 1843/1843, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0, 번들 유출 0
+    production 글→사진→글→사진 작성, 수정으로 사진→글→사진→글(기존 사진 삭제·새 사진 추가·글 수정·같은 imageId 유지),
+              제거 사진 Storage 삭제, 409 동시 수정, 익명·새로고침 확인 후 QA 글 삭제(미참조 객체 0), 애슐리 글 불변.
+              QA 결함: 수정 저장 직후 상세가 수정 전 캐시를 표시 → 1b44f60(mutate(key), 불충분) → 1ace3ec(저장본을 캐시에 직접 기록)로 수정·재확인.
+              기기(Android) QA 미실시
 
 ### E-JIP COMMUNITY IMAGE UPLOAD V1 — 게시글 사진 최대 5장(압축 저장·상세 표시·삭제 정리)
 
