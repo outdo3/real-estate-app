@@ -2,6 +2,19 @@
 
 ## 2026-09-14
 
+### E-JIP COMMUNITY IMAGE UPLOAD V1 — 감사 + 승인 요청안 (APPROVAL_REQUIRED, 구현 없음)
+
+게시글 사진 업로드(최대 5장) 설계 감사. 상세: `docs/development/COMMUNITY_IMAGE_UPLOAD_V1.md`
+
+    현재      Post에 이미지 필드 없음, 업로드 코드 0, Supabase JS 의존성 0, 앱 코드의 SUPABASE_* 참조 0,
+              Storage bucket 0 / storage policy 0, 인증은 NextAuth JWT(Supabase Auth 아님), posts 0 · comments 0
+    제안      클라이언트 압축(긴 변 1600, WebP q0.80 → JPEG q0.82 폴백, ≤1.5MB) → 이미지별 서버 경유 업로드
+              (requireUser, 매직바이트·헤더 크기 재검증, service role) → Post + PostImage 트랜잭션
+    승인 필요 PostImage 테이블(additive migration), public bucket community-images(2MB, webp/jpeg),
+              Storage policy 추가 없음(서버 전용 쓰기), Vercel env SUPABASE_SERVICE_ROLE_KEY,
+              orphan sweeper 실행, 별도 보고한 DB 노출 설정 보안 검토 결론
+    변경      코드·DB·Storage 변경 없음. read-only 조회만 수행
+
 ### E-JIP GAP INVEST BUSAN DB-FIRST V1 — 부산 전체 갭투자 콜드 384 MOLIT 호출 → 32
 
 P1-2(부산 전체 `/stats/gap-invest` 콜드 34~38s) 수정. 상세: `docs/development/GAP_INVEST_BUSAN_DB_FIRST_V1.md`
