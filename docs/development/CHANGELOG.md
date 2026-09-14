@@ -1,5 +1,29 @@
 # 이집 개발 변경 기록
 
+## 2026-09-14
+
+### E-JIP GAP INVEST BUSAN DB-FIRST V1 — 부산 전체 갭투자 콜드 384 MOLIT 호출 → 32
+
+P1-2(부산 전체 `/stats/gap-invest` 콜드 34~38s) 수정. 상세: `docs/development/GAP_INVEST_BUSAN_DB_FIRST_V1.md`
+
+    원인      16구 × 12개월 × 매매/전월세 = 384 MOLIT 호출, 공유 게이트 4/250ms (로컬 재현 44.98s / 47.99s)
+    설계      검증된 셀만 DB: 매매 = sync_coverage_cells(SALE) (구,월) COMPLETE/EMPTY_VALID,
+              전월세 = getRentVerifiedRange(피드·대시보드와 같은 기준). 현재월은 항상 MOLIT. 부산 외 시도 불변
+    호출      384 → 32(현재월 매매 16 + 전월세 16), bulk lane·동시성 4 불변. 단일 구 경로(24) 불변
+    취소      DB 행의 dealCanceled 원값 유지, 제외는 기존 toGapInputs 한 곳. 취소 부활 0건(parity 확인)
+    실패      MOLIT 실패 구 → partial(기존), apiError = 전 구 실패 && DB 셀 0, coverage 조회 실패 → MOLIT으로 좁힘,
+              DB 쿼리 실패 → 500(숨은 fallback 없음)
+    응답      기존 필드 전부 유지 + 추가 전용 dataSource(시도 전체만)
+    parity    부산 전체 3m(기본) 판매 6,633→6,630 / 갭 4,318→4,310 / 65.1→65.0%, 지역 순서·TOP30 동일.
+              원인 전부 행 단위 식별: 매매 과다취소 래칫 16행, DB 전용(회수/정정) 활성 9행,
+              전월세 원천 전용 122행(DB 셀 마지막 수집 2026-09-02). 모두 기존 DB 결함 계열, 이번 STEP write 0
+    로컬      next start 부산 3m 콜드 5.85s / 웜 1.21s, 12m 콜드 5.63s / 웜 1.38s
+
+집계 코드는 라우트에서 `src/lib/stats/gap-invest-insights.ts`로 의미 불변 이동(두 소스를 같은 함수로 대조하기 위함).
+DB schema/migration/write/cron 없음.
+
+검증: 신규 15/15, src 1784/1784, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint(변경 파일) exit 0, build exit 0.
+
 ## 2026-09-13
 
 ### E-JIP FINAL PRE-LAUNCH REGRESSION AUDIT V2 — 부산 출시 직전 전체 회귀감사(READ-ONLY) + MOLIT 대기열 lane 수정

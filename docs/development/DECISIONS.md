@@ -1390,3 +1390,34 @@ APT_DETAIL_PARTNER_TRADE_DENSITY_V1 §4/§9는 번호를 화면·aria에서 모�
 
 상태:
 확정. 문서: `docs/development/CHANGELOG.md` (E-JIP PARTNER BROKER CARD UI V1)
+
+---
+
+## 2026-09-14 — 갭투자 부산 전체는 "DB에 있는 행"이 아니라 "검증된 셀"만 DB로 읽는다
+
+날짜:
+2026-09-14
+
+결정:
+`/api/stats/gap-invest` 부산 전체는 매매를 sync_coverage_cells(SALE)의 (구, 월) 셀이 COMPLETE/EMPTY_VALID일 때만,
+전월세를 기존 검증범위 안의 월일 때만 DB에서 읽는다. 진행 중인 현재월과 나머지 셀은 MOLIT으로 읽는다.
+DB 결과는 기존 DB 결함(매매 취소 래칫, 회수 행 잔존, 전월세 bootstrap 이후 원천 증가분)을 물려받는 것을
+문서화된 한계로 받아들인다.
+
+배경:
+부산 전체 콜드가 384 MOLIT 호출로 34~38초(출시 P1). 피드는 같은 문제를 부산 매매 전체 DB로 풀었지만,
+이번 STEP 요구는 "DB에 있으니까 충분" 추정 금지였다.
+
+이유:
+- 셀 단위 증거는 이미 sync가 기록하고 있어 새 write 없이 쓸 수 있다.
+- 현재월은 sync가 절대 검증 완료로 기록하지 않으므로 증거 기반 규칙과 자연히 일치한다.
+- parity 차이(부산 전체 3m 갭 −8건, 지역 순서 동일)는 전부 행 단위로 식별됐고 취소 부활은 0건이다.
+
+영향:
+- 부산 전체 MOLIT 호출 384 → 32. 월초 직전 달 셀이 미검증이면 그 달도 MOLIT.
+- 매매 과다취소 16행은 집계에서 빠진다(과소 방향). cancellation ratchet repair / RENT RECHECK SWEEP이
+  끝나면 자동으로 해소된다(코드 변경 불필요).
+- 피드·대시보드의 매매 DB 정책(월 구분 없음)과는 다르다. 그쪽은 이번에 바꾸지 않았다.
+
+상태:
+확정. 문서: `docs/development/GAP_INVEST_BUSAN_DB_FIRST_V1.md`

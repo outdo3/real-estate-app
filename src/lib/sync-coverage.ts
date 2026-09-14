@@ -16,6 +16,7 @@ import {
   BUSAN_LAWDCD_16,
   LEGACY_BOOTSTRAP_FALLBACK,
   computeVerifiedRangeFromCoverage,
+  isVerifiedCellStatus,
   type CoverageCellStatusMap,
   type VerifiedRange,
 } from './rent-verified-range';
@@ -78,6 +79,30 @@ export async function getRentVerifiedRange(): Promise<VerifiedRange> {
       return bootstrap;
     }
   });
+}
+
+/**
+ * GAP_INVEST_BUSAN_DB_FIRST_V1 — 요청한 (구 × 월) 중 SALE coverage가 **검증된** 셀의 키
+ * (`${lawdCd}:${dealYmd}`) 집합.
+ *
+ * 판정은 RENT와 같은 규칙(isVerifiedCellStatus — COMPLETE/EMPTY_VALID만)을 쓴다. 셀이 없거나
+ * PARTIAL/INVALID면 집합에 넣지 않는다 — 호출부는 그 셀을 MOLIT으로 읽는다. sync 엔진은
+ * 진행 중인 현재월을 절대 기록하지 않으므로(sale-sync-core §15) 현재월은 여기서 항상 빠진다.
+ *
+ * 캐시하지 않는다: 이 조회는 호출부의 5분 결과 캐시가 비었을 때만 한 번 일어나고(192행),
+ * 여기서 한 번 더 캐시하면 cron 직후 반영이 최대 10분으로 늘어난다.
+ */
+export async function loadVerifiedSaleCellKeys(lawdCds: string[], months: string[]): Promise<Set<string>> {
+  if (lawdCds.length === 0 || months.length === 0) return new Set();
+  const rows = await prisma.syncCoverageCell.findMany({
+    where: { dataset: 'SALE', lawdCd: { in: lawdCds }, dealYmd: { in: months } },
+    select: { lawdCd: true, dealYmd: true, status: true },
+  });
+  const keys = new Set<string>();
+  for (const r of rows) {
+    if (isVerifiedCellStatus(r.status)) keys.add(`${r.lawdCd}:${r.dealYmd}`);
+  }
+  return keys;
 }
 
 export interface CoverageCellRecord {
