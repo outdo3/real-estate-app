@@ -98,6 +98,8 @@ model Post {
   author   User        @relation(fields: [authorId], references: [id])
   comments Comment[]
   images   PostImage[]
+  // COMMUNITY_EDITOR_V2 — 순서 있는 텍스트/사진 블록. 0개면 V1(legacy) 글이다(content + images).
+  blocks   PostContentBlock[]
 
   @@index([pinned, createdAt])
   @@index([aptName, createdAt])
@@ -119,10 +121,39 @@ model PostImage {
   mimeType  String   @map("mime_type") // image/webp | image/jpeg
   createdAt DateTime @default(now()) @map("created_at")
 
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post  Post              @relation(fields: [postId], references: [id], onDelete: Cascade)
+  block PostContentBlock?
 
   @@unique([postId, sortOrder])
+  // COMMUNITY_EDITOR_V2 — 블록의 복합 FK 대상(사진 블록은 같은 글의 사진만 참조).
+  @@unique([id, postId])
   @@map("post_images")
+}
+
+// COMMUNITY_EDITOR_V2 — 게시글 본문 블록. docs/development/COMMUNITY_EDITOR_V2.md
+// DB 제약(migration): 같은 글 안 순번 unique, 사진 블록은 복합 FK로 **같은 글의** PostImage만 참조, 사진은 한 블록에서만,
+// CHECK로 TEXT(공백만 불가·사진 없음)/IMAGE(사진 필수·텍스트 없음) 모양 강제. API 역할 grant 회수 + RLS(owner 전용).
+enum PostContentBlockType {
+  TEXT
+  IMAGE
+}
+
+model PostContentBlock {
+  id          String               @id @default(cuid())
+  postId      String               @map("post_id")
+  sortOrder   Int                  @map("sort_order")
+  type        PostContentBlockType
+  text        String?              @db.Text
+  postImageId String?              @map("post_image_id")
+  createdAt   DateTime             @default(now()) @map("created_at")
+
+  post  Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  // NoAction(=문장 끝 검사): 글 삭제 cascade는 사진·블록이 함께 지워져 통과하고, 블록이 쓰는 사진만 지우는 것은 거부된다.
+  image PostImage? @relation(fields: [postImageId, postId], references: [id, postId], onDelete: NoAction)
+
+  @@unique([postId, sortOrder])
+  @@unique([postImageId, postId])
+  @@map("post_content_blocks")
 }
 
 model Comment {

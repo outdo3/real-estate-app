@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/auth-helpers';
 import { cleanupAfterFailedPostCreate, resolvePostImages, type PostImageRow } from '@/lib/community/image-handlers';
 import { buildImageHandlerDeps } from '@/lib/supabase/community-image-deps';
+import { handleCreateBlockPost } from '@/lib/community/post-write-handlers';
+import { persistCreateBlockPost } from '@/lib/community/post-write-db';
 
 const PAGE_SIZE = 20;
 
@@ -40,18 +42,29 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+    const aptName = typeof body.aptName === 'string' ? body.aptName.trim() || null : null;
+    if (aptName && aptName.length > 100) {
+      return NextResponse.json({ success: false, error: '단지명은 100자 이내로 입력해주세요.' }, { status: 400 });
+    }
+
+    // COMMUNITY_EDITOR_V2 — 블록 편집기에서 온 요청(순서 있는 텍스트/사진). content는 서버가 텍스트 블록에서 파생한다.
+    if (body.blocks !== undefined) {
+      const result = await handleCreateBlockPost(
+        { user: user!, title: body.title, blocks: body.blocks },
+        { ...buildImageHandlerDeps(), persistCreate: (plan) => persistCreateBlockPost({ authorId: user!.id, aptName }, plan) }
+      );
+      return NextResponse.json(result.body, { status: result.status });
+    }
+
+    // 이하 V1 요청 형태(content + images) — 배포 직후 이전 화면 번들에서 오는 요청을 그대로 받는다.
     const title = (body.title || '').trim();
     const content = (body.content || '').trim();
-    const aptName = (body.aptName || '').trim() || null;
 
     if (!title || !content) {
       return NextResponse.json({ success: false, error: '제목과 내용을 모두 입력해주세요.' }, { status: 400 });
     }
     if (title.length > 200) {
       return NextResponse.json({ success: false, error: '제목은 200자 이내로 입력해주세요.' }, { status: 400 });
-    }
-    if (aptName && aptName.length > 100) {
-      return NextResponse.json({ success: false, error: '단지명은 100자 이내로 입력해주세요.' }, { status: 400 });
     }
 
     // COMMUNITY_IMAGE_UPLOAD_V1 — images는 업로드 API가 발급한 영수증 토큰 배열이다. 없으면 기존과 완전히 같다.

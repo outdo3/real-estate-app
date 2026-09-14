@@ -2,6 +2,21 @@
 
 ## 2026-09-14
 
+### E-JIP COMMUNITY EDITOR V2 — 글/사진 블록 순서 자유 작성 + 게시글 수정 화면
+
+승인 구현. 상세: `docs/development/COMMUNITY_EDITOR_V2.md` (설계: `COMMUNITY_EDITOR_V2_DESIGN.md`)
+
+    DB        post_content_blocks migration 적용(enum, 같은 글 사진만 참조하는 복합 FK, unique, CHECK, grant 회수 + RLS)
+              + TEXT 공백만 금지 CHECK 보정 migration(설계 btrim이 줄바꿈·탭을 못 걸러냄, 행 0에서 교체)
+              적용 전후 posts/comments/post_images 불변, "광복 롯데 애슐리" 글·사진 불변·블록 0. 제약 실동작 12/12(롤백)
+    호환      블록 0개 글은 [글, 사진…] adapter로 같은 렌더러. 일괄 변환 없음. Post.content = 글 블록 파생 평문
+    규칙      블록 25, 글 블록 10,000자, 합계 20,000자, 사진 5장(V1 파이프라인 그대로), 빈 글 블록 제거
+    수정      /community/[id]/edit, 작성자·관리자. expectedUpdatedAt 409, 기존 사진은 같은 글만·새 사진은 본인 영수증만,
+              단일 트랜잭션, 제거 사진 Storage 삭제는 커밋 후, 실패 시 새 업로드만 정리. 관련 단지 수정 불가 유지
+    UI        공용 블록 편집기(+ 내용 추가, ↑↓삭제 44px), 공용 렌더러, 관리자 버튼은 세션 isAdmin(서버 규칙),
+              이탈 경고(beforeunload·링크·뒤로 가기). V1 CommunityImagePicker는 편집기로 대체되어 제거
+    검증      신규 30/30, src 1842/1842, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0, 번들 유출 0
+
 ### E-JIP COMMUNITY IMAGE UPLOAD V1 — 게시글 사진 최대 5장(압축 저장·상세 표시·삭제 정리)
 
 승인 인프라 적용 + 구현. 상세: `docs/development/COMMUNITY_IMAGE_UPLOAD_V1.md`

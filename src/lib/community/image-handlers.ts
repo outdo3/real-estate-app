@@ -161,32 +161,47 @@ export async function resolvePostImages(
   if (!Array.isArray(input.images)) return { ok: false, status: 400, error: IMAGE_ERROR_MESSAGES.UPLOAD_FAILED };
   if (input.images.length === 0) return { ok: true, rows: [] };
   if (input.images.length > MAX_IMAGES_PER_POST) return { ok: false, status: 400, error: IMAGE_ERROR_MESSAGES.TOO_MANY };
+  const verified = await verifyUploadReceipts({ userId: input.userId, tokens: input.images.map((item) => (item as { token?: unknown } | null)?.token) }, deps);
+  if (!verified.ok) return verified;
+  return { ok: true, rows: verified.images.map((img, i) => ({ ...img, sortOrder: i })) };
+}
+
+export type VerifiedUpload = Omit<PostImageRow, 'sortOrder'>;
+
+/**
+ * 업로드 영수증 토큰들을 검증한다(V1 게시글 생성과 COMMUNITY_EDITOR_V2 블록 생성·수정 공용).
+ * 서명·만료 → 현재 사용자 본인 영수증·본인 경로 → 경로 중복 없음 → Storage에 실제 존재. 클라이언트 경로·크기는 쓰지 않는다.
+ */
+export async function verifyUploadReceipts(
+  input: { userId: string; tokens: unknown[] },
+  deps: Pick<ImageHandlerDeps, 'verify' | 'storage'>
+): Promise<{ ok: true; images: VerifiedUpload[] } | { ok: false; status: number; error: string }> {
+  if (input.tokens.length === 0) return { ok: true, images: [] };
   if (!deps.storage) return { ok: false, status: 503, error: IMAGE_ERROR_MESSAGES.UPLOAD_FAILED };
 
-  const rows: PostImageRow[] = [];
+  const images: VerifiedUpload[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < input.images.length; i++) {
-    const item = input.images[i] as { token?: unknown } | null;
-    const receipt = deps.verify(item?.token);
+  for (const token of input.tokens) {
+    const receipt = deps.verify(token);
     if (!receipt) return { ok: false, status: 400, error: IMAGE_ERROR_MESSAGES.UPLOAD_FAILED };
     if (receipt.userId !== input.userId || !isOwnedImagePath(receipt.path, input.userId)) {
       return { ok: false, status: 403, error: IMAGE_ERROR_MESSAGES.UPLOAD_FAILED };
     }
     if (seen.has(receipt.path)) return { ok: false, status: 400, error: IMAGE_ERROR_MESSAGES.UPLOAD_FAILED };
     seen.add(receipt.path);
-    rows.push({ path: receipt.path, sortOrder: i, width: receipt.width, height: receipt.height, bytes: receipt.bytes, mimeType: receipt.mimeType });
+    images.push({ path: receipt.path, width: receipt.width, height: receipt.height, bytes: receipt.bytes, mimeType: receipt.mimeType });
   }
   // 정리(cleanup)로 이미 지워진 객체를 게시글에 붙이지 않는다.
-  for (const row of rows) {
+  for (const img of images) {
     let present = false;
     try {
-      present = await deps.storage.exists(row.path);
+      present = await deps.storage.exists(img.path);
     } catch {
       return { ok: false, status: 502, error: IMAGE_ERROR_MESSAGES.UPLOAD_FAILED };
     }
     if (!present) return { ok: false, status: 400, error: IMAGE_ERROR_MESSAGES.UPLOAD_FAILED };
   }
-  return { ok: true, rows };
+  return { ok: true, images };
 }
 
 /** 게시글 생성이 실패했을 때 이미 올라간 이 요청의 이미지를 지운다. */

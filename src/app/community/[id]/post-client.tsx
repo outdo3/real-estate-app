@@ -9,17 +9,11 @@ import useSWR from 'swr';
 import Header from '@/components/Header';
 import LoginModal from '@/components/LoginModal';
 import ShareAction from '@/components/ShareAction';
+import CommunityPostContent from '@/components/community/CommunityPostContent';
+import type { ContentBlockView } from '@/lib/community/content-blocks';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-// COMMUNITY_IMAGE_UPLOAD_V1 — 상세 API가 내보내는 사진 표시 정보(url은 서버 Storage 설정이 없으면 null).
-interface PostImageView {
-  url: string | null;
-  width: number;
-  height: number;
-  sortOrder: number;
-}
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -44,7 +38,9 @@ export default function PostDetailPage() {
 
   const post = data?.success ? data.data : null;
   const fetchError = swrError ? '게시글을 불러오지 못했습니다.' : data && !data.success ? data.error : null;
-  const isAdmin = session?.user?.role === 'ADMIN';
+  // COMMUNITY_EDITOR_V2 — 관리자 표시는 서버와 같은 규칙(role 또는 ADMIN_EMAIL)으로 세션에 계산된 isAdmin을 쓴다.
+  // 버튼 노출은 편의일 뿐이고 수정·삭제·고정 권한은 각 API가 서버에서 다시 판정한다.
+  const isAdmin = session?.user?.isAdmin === true;
   const isOwner = session?.user?.id === post?.authorId;
 
   const handleDeletePost = async () => {
@@ -194,33 +190,21 @@ export default function PostDetailPage() {
                       </button>
                     )}
                     {(isOwner || isAdmin) && (
+                      <Link href={`/community/${postId}/edit`} className={styles.actionBtn}>
+                        수정
+                      </Link>
+                    )}
+                    {(isOwner || isAdmin) && (
                       <button className={styles.dangerBtn} onClick={handleDeletePost} disabled={deletingPost}>
                         {deletingPost ? '삭제 중...' : '삭제'}
                       </button>
                     )}
                   </div>
                 </div>
-                <div className={styles.postContent}>{post.content}</div>
-                {Array.isArray(post.images) && post.images.some((img: PostImageView) => img.url) && (
-                  <ul className={styles.postImages}>
-                    {(post.images as PostImageView[])
-                      .filter((img) => img.url)
-                      .map((img, index) => (
-                        <li key={img.url!}>
-                          {/* Supabase 공개 URL을 그대로 쓴다(Vercel 이미지 최적화·remotePatterns 불필요) */}
-                          <img
-                            src={img.url!}
-                            alt={`게시글 이미지 ${index + 1}`}
-                            width={img.width}
-                            height={img.height}
-                            loading="lazy"
-                            decoding="async"
-                            className={styles.postImage}
-                          />
-                        </li>
-                      ))}
-                  </ul>
-                )}
+                {/* COMMUNITY_EDITOR_V2 — 블록 순서 그대로. V1 글은 서버 adapter가 [글, 사진…]으로 만든 같은 형태로 온다. */}
+                <div className={styles.postContent}>
+                  <CommunityPostContent blocks={Array.isArray(post.blocks) ? (post.blocks as ContentBlockView[]) : [{ type: 'text', text: post.content }]} />
+                </div>
                 {actionError && (
                   <p className={styles.actionError} role="alert">{actionError}</p>
                 )}

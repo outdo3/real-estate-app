@@ -1,0 +1,30 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.figure {
+  margin: 0;
+}
+
+/* 원본 비율 유지, 자르지 않는다. */
+.image {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+  border-radius: 12px;
+  background: var(--surface-subtle, #f1f5f9);
+}

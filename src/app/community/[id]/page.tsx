@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
 import { siteConfig, buildOpenGraph, absoluteUrl } from '@/config/site';
+import { buildPostDescription } from '@/lib/community/content-blocks';
 import PostDetailPageClient from './post-client';
 
 type Props = {
@@ -25,7 +26,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  const description = post.content.replace(/\s+/g, ' ').trim().slice(0, 120);
+  // COMMUNITY_EDITOR_V2 — content는 텍스트 블록에서 파생된 평문이다. 사진만 있는 글은 제목으로 대체한다.
+  const description = buildPostDescription(post.content, post.title);
   const title = `${post.title} - ${siteConfig.name} 커뮤니티`;
 
   // COMMUNITY_LAUNCH_READINESS_V1 — canonical/og:url을 **이 글**로 맞춘다.

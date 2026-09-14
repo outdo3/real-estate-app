@@ -3,6 +3,10 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUser, isAdminSessionUser, requireUser } from '@/lib/auth-helpers';
 import { deletePostWithImages } from '@/lib/community/image-handlers';
 import { getCommunityImageStorage } from '@/lib/supabase/server-storage';
+import { buildImageHandlerDeps } from '@/lib/supabase/community-image-deps';
+import { toContentBlockViews } from '@/lib/community/content-blocks';
+import { handleEditBlockPost } from '@/lib/community/post-write-handlers';
+import { persistEditBlockPost } from '@/lib/community/post-write-db';
 
 function toPublicImages(images: { path: string; width: number; height: number; sortOrder: number }[]) {
   if (images.length === 0) return [];
@@ -22,7 +26,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           include: { author: { select: { name: true, image: true, role: true } } },
         },
         // COMMUNITY_IMAGE_UPLOAD_V1 — 표시에 필요한 값만(바이트 수·MIME 등 저장 메타데이터는 내보내지 않는다).
-        images: { orderBy: { sortOrder: 'asc' }, select: { path: true, width: true, height: true, sortOrder: true } },
+        images: { orderBy: { sortOrder: 'asc' }, select: { id: true, path: true, width: true, height: true, sortOrder: true } },
+        // COMMUNITY_EDITOR_V2 — 순서 있는 본문 블록. 0개면 V1 글(아래 adapter가 content + images로 만든다).
+        blocks: { orderBy: { sortOrder: 'asc' }, select: { type: true, text: true, postImageId: true, sortOrder: true } },
       },
     });
 
@@ -30,8 +36,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: '게시글을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const { images, ...rest } = post;
-    return NextResponse.json({ success: true, data: { ...rest, images: toPublicImages(images) } });
+    const { images, blocks, ...rest } = post;
+    const storage = getCommunityImageStorage();
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...rest,
+        images: toPublicImages(images),
+        blocks: toContentBlockViews({ content: post.content, images, blocks }, (path) => (storage ? storage.publicUrl(path) : null)),
+      },
+    });
   } catch (error) {
     console.error('Failed to load post:', error);
     return NextResponse.json({ success: false, error: '게시글을 불러오지 못했습니다.' }, { status: 500 });
@@ -50,7 +64,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     const { id } = await params;
-    const existing = await prisma.post.findUnique({ where: { id } });
+    const existing = await prisma.post.findUnique({
+      where: { id },
+      select: { id: true, authorId: true, updatedAt: true, images: { select: { id: true, path: true } }, _count: { select: { blocks: true } } },
+    });
     if (!existing) return NextResponse.json({ success: false, error: '게시글을 찾을 수 없습니다.' }, { status: 404 });
 
     const isOwner = existing.authorId === user!.id;
@@ -63,8 +80,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const body = await request.json();
+
+    // COMMUNITY_EDITOR_V2 — 블록 편집기 저장. 권한은 위에서 확인했고 핸들러가 한 번 더 확인한다.
+    // 관련 단지(aptName)는 이 요청으로 바꿀 수 없다(정책 유지 — 필드를 읽지 않는다).
+    if (body.blocks !== undefined) {
+      const deps = buildImageHandlerDeps();
+      const result = await handleEditBlockPost(
+        { auth: { error: null, status: 200, user: user! }, post: existing, title: body.title, blocks: body.blocks, expectedUpdatedAt: body.expectedUpdatedAt },
+        {
+          ...deps,
+          storage: deps.storage ?? getCommunityImageStorage(),
+          isAdmin: (u) => isAdminSessionUser(u as { role?: string | null; email?: string | null }),
+          persistEdit: persistEditBlockPost,
+        }
+      );
+      return NextResponse.json(result.body, { status: result.status });
+    }
+
+    // 이하 V1 요청 형태(title/content). 블록으로 저장된 글의 본문을 content로만 바꾸면 블록과 어긋나므로 거부한다.
     const title = body.title != null ? String(body.title).trim() : undefined;
     const content = body.content != null ? String(body.content).trim() : undefined;
+    if (content !== undefined && existing._count.blocks > 0) {
+      return NextResponse.json({ success: false, error: '이 글은 편집 화면에서 수정해주세요.' }, { status: 409 });
+    }
     if (title === '' || content === '') {
       return NextResponse.json({ success: false, error: '제목과 내용은 비워둘 수 없습니다.' }, { status: 400 });
     }

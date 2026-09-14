@@ -454,8 +454,9 @@ test('18. 업로드 실패 시 세션 정리: 본인 세션의 미연결 객체�
   assert.equal((await handleImageSessionCleanup({ auth: { error: 'x', status: 401, user: null }, sessionId: SESSION }, d)).status, 401);
   assert.equal((await handleImageSessionCleanup({ auth: authOk(), sessionId: '../../etc' }, d)).status, 400);
 
-  const page = codeOf(read('src/app/community/write/page.tsx'));
-  assert.ok((page.match(/await cleanupUploadSession\(sessionId\)/g) || []).length >= 3, '업로드 실패·글 생성 실패·예외 모두 정리');
+  // COMMUNITY_EDITOR_V2 — 저장 흐름은 글쓰기·수정 공용 모듈로 옮겨졌다(계약 동일).
+  const submit = codeOf(read('src/lib/community/submit-block-post.ts'));
+  assert.ok((submit.match(/await cleanupUploadSession\(sessionId, fetchImpl\)/g) || []).length >= 3, '업로드 실패·글 생성 실패·예외 모두 정리');
 });
 
 // ── 21. 공개 읽기 ──────────────────────────────────────────────────────────────
@@ -464,7 +465,7 @@ test('21. 공개 읽기: 상세 API는 공개 URL·가로·세로·순서만 내
   const storage = createCommunityImageStorage({ url: 'https://proj.supabase.co/', serviceRoleKey: 'k' }, async () => new Response(null));
   assert.equal(storage.publicUrl(`posts/${USER}/${SESSION}/${SESSION}.webp`), `https://proj.supabase.co/storage/v1/object/public/community-images/posts/${USER}/${SESSION}/${SESSION}.webp`);
   const route = codeOf(read('src/app/api/community/posts/[id]/route.ts'));
-  assert.ok(/images: \{ orderBy: \{ sortOrder: 'asc' \}, select: \{ path: true, width: true, height: true, sortOrder: true \} \}/.test(route));
+  assert.ok(/images: \{ orderBy: \{ sortOrder: 'asc' \}, select: \{ id: true, path: true, width: true, height: true, sortOrder: true \} \}/.test(route));
   assert.ok(/url: storage \? storage\.publicUrl\(img\.path\) : null, width: img\.width, height: img\.height, sortOrder: img\.sortOrder/.test(route));
   assert.ok(!/bytes: true|mimeType: true/.test(route));
 });
@@ -498,7 +499,7 @@ test('22·23. 작성자 삭제: DB 경로로 글 삭제(PostImage cascade) 후 S
   assert.deepEqual(x.deleted, ['p1']);
   assert.deepEqual(calls.remove, [[P1, P2]]);
   const schema = read('prisma/schema.prisma');
-  assert.ok(/post Post @relation\(fields: \[postId\], references: \[id\], onDelete: Cascade\)/.test(schema));
+  assert.ok(/post\s+Post\s+@relation\(fields: \[postId\], references: \[id\], onDelete: Cascade\)/.test(schema));
   const mig = read('prisma/migrations/20260914100000_community_post_images_v1/migration.sql');
   assert.ok(/ON DELETE CASCADE/.test(mig));
 });
@@ -546,13 +547,14 @@ test('26. 사진 없는 기존 글 삭제: Storage 호출 0, 기존과 같은 �
 // ── 27. 상세 렌더 ──────────────────────────────────────────────────────────────
 
 test('27. 상세 렌더: lazy·async decode, 저장된 width/height, "게시글 이미지 N", 원본 비율(자르지 않음)', () => {
-  const page = read('src/app/community/[id]/post-client.tsx');
+  // COMMUNITY_EDITOR_V2 — 상세 사진 렌더는 공용 렌더러로 옮겨졌다(계약 동일).
+  const page = read('src/components/community/CommunityPostContent.tsx');
   assert.ok(/loading="lazy"/.test(page));
   assert.ok(/decoding="async"/.test(page));
-  assert.ok(/alt=\{`게시글 이미지 \$\{index \+ 1\}`\}/.test(page));
-  assert.ok(/width=\{img\.width\}/.test(page) && /height=\{img\.height\}/.test(page));
-  const css = read('src/app/community/[id]/page.module.css');
-  const block = css.slice(css.indexOf('.postImage {'));
+  assert.ok(/alt=\{`게시글 이미지 \$\{imageNumbers\.get\(index\)\}`\}/.test(page));
+  assert.ok(/width=\{block\.width\}/.test(page) && /height=\{block\.height\}/.test(page));
+  const css = read('src/components/community/CommunityPostContent.module.css');
+  const block = css.slice(css.indexOf('.image {'));
   assert.ok(/width: 100%;/.test(block) && /height: auto;/.test(block));
   assert.ok(!/object-fit/.test(block.slice(0, block.indexOf('}'))));
 });
