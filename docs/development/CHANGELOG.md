@@ -14,6 +14,9 @@
               [id]/layout.tsx 서버 확인(조회 성공 + 없음일 때만 redirect, DB 오류는 redirect 안 함), pageshow persisted 때만 재확인
     불변      schema·migration·API 404 의미·삭제 권한·이미지/Storage 정리·정상 상세/수정·목록
     검증      커뮤니티 155/155, src 1899/1899, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+    배포 QA   a1b8dc2 production 실제 UI PASS: 사용자 재현 기록 [목록, 상세, 수정, 상세]에서 삭제 → /community(replace, 목록에서 제거),
+              뒤로 3·앞으로 3 모두 /community·중간 문구·삭제 글 제목·"글 수정" 헤더 0회, 삭제된 상세·수정·잘못된 id 직접 열기 서버 307 → /community,
+              API 404 유지, 기존 글 정상. QA 글(사진 포함) 삭제 정리 DB/Storage 확인, 애슐리 무변경, Data API OFF. Android 기기 QA는 남음
 
 ### E-JIP COMMUNITY EDITOR V2.2 — 모바일 사진 UX(사진 탭 조작 + 하단 고정 사진 추가)
 
