@@ -576,9 +576,20 @@ test('이탈 경고: beforeunload·링크 클릭·뒤로 가기(popstate) + 저�
   for (const f of ['src/app/community/write/page.tsx', 'src/app/community/[id]/edit/page.tsx']) {
     const src = codeOf(read(f));
     assert.ok(/useLeaveGuard\(dirty \|\| submitting\)/.test(src), f);
-    assert.ok(/release\(\);\s*router\.replace\(/.test(src), f);
+    assert.ok(/release\(\);[\s\S]{0,160}router\.replace\(/.test(src), f);
     assert.ok(/requestLeave\(\(\) => router\.back\(\)\)/.test(src), f);
   }
+});
+
+test('수정 저장 후 상세 캐시 갱신: 이동 전에 SWR 캐시를 다시 받아 수정 전 내용이 보이지 않는다(Production QA 회귀)', () => {
+  const edit = codeOf(read('src/app/community/[id]/edit/page.tsx'));
+  assert.ok(/const \{ mutate \} = useSWRConfig\(\);/.test(edit));
+  const save = edit.slice(edit.indexOf('if (result.ok) {'));
+  const m = save.indexOf('await mutate(`/api/community/posts/${post.id}`)');
+  const r = save.indexOf('router.replace(`/community/${post.id}`)');
+  assert.ok(m > 0 && r > m, '캐시 갱신이 이동보다 먼저여야 한다');
+  const detail = codeOf(read('src/app/community/[id]/post-client.tsx'));
+  assert.ok(/useSWR\(`\/api\/community\/posts\/\$\{postId\}`, fetcher\)/.test(detail), '상세 SWR 키가 바뀌면 캐시 갱신 키도 같이 바꿔야 한다');
 });
 
 test('편집 스냅샷: 내용이 같으면 dirty 아님, 순서만 바꿔도 dirty', () => {

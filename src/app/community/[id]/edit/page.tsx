@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { useSWRConfig } from 'swr';
 import { AlertTriangle, ArrowLeft, Building2, RefreshCw } from 'lucide-react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
@@ -32,6 +33,7 @@ export default function EditPostPage() {
   const postId = params.id as string;
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
+  const { mutate } = useSWRConfig();
 
   const [post, setPost] = useState<EditablePostResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -81,6 +83,9 @@ export default function EditPostPage() {
     const result = await submitBlockPost({ mode: 'edit', postId: post.id, title, expectedUpdatedAt: post.updatedAt, blocks, onStatus: setStatus });
     if (result.ok) {
       release();
+      // 상세 화면은 SWR 캐시로 이 글을 기억하고 있다. 돌아가기 전에 캐시를 새로 받아 두지 않으면
+      // 수정 전 내용이 보인다(Production QA에서 확인 — 캐시 재검증이 requestAnimationFrame 뒤로 미뤄진다).
+      await mutate(`/api/community/posts/${post.id}`).catch(() => undefined);
       router.replace(`/community/${post.id}`);
       return;
     }
