@@ -21,11 +21,14 @@ import {
   countImages,
   insertImagesAtCursor,
   moveComposerImage,
+  pickComposerInsertCursor,
   remainingImageSlots,
   removeComposerImage,
+  removeComposerImageWithAnchor,
   resolveImageBlock,
   updateTextBlock,
   type ComposerCursor,
+  type ComposerCursorMemory,
   type EditorBlock,
 } from '@/lib/community/block-editor-state';
 import styles from './SimpleInlineComposer.module.css';
@@ -50,8 +53,9 @@ interface Props {
 export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, disabled }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const textareasRef = useRef<Map<string, HTMLTextAreaElement>>(new Map());
-  const cursorRef = useRef<ComposerCursor | null>(null);
-  const pendingCursorRef = useRef<ComposerCursor | null>(null);
+  // 마지막 삽입 위치: 사용자가 둔 커서('user') 또는 사진 삭제가 남긴 삭제 자리('delete-anchor'). 사용자가 글을 누르면 'user'로 덮인다.
+  const cursorRef = useRef<ComposerCursorMemory>(null);
+  const pendingCursorRef = useRef<{ cursor: ComposerCursor | null; rereadLive: boolean } | null>(null);
   const composingRef = useRef(false);
   const deferredInsertRef = useRef<(() => void) | null>(null);
   const focusRef = useRef<{ key: string; position: number } | null>(null);
@@ -82,7 +86,7 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
     focusRef.current = null;
     el.focus({ preventScroll: false });
     el.setSelectionRange(target.position, target.position);
-    cursorRef.current = { key: target.key, selectionStart: target.position, selectionEnd: target.position };
+    cursorRef.current = { cursor: { key: target.key, selectionStart: target.position, selectionEnd: target.position }, source: 'user' };
   }, [blocks]);
 
   // 사진 선택 해제: 사진 카드 밖을 누르면 조작 버튼을 숨긴다.
@@ -97,7 +101,7 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
   }, [selectedImage]);
 
   const rememberCursor = (key: string, el: HTMLTextAreaElement) => {
-    cursorRef.current = { key, selectionStart: el.selectionStart ?? el.value.length, selectionEnd: el.selectionEnd ?? el.value.length };
+    cursorRef.current = { cursor: { key, selectionStart: el.selectionStart ?? el.value.length, selectionEnd: el.selectionEnd ?? el.value.length }, source: 'user' };
   };
 
   const imageCount = countImages(blocks);
@@ -133,12 +137,11 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
     }
     // 버튼을 누르는 순간의 커서를 확정한다. 입력칸에 포커스가 남아 있으면 그 입력칸의 실제 선택 위치가 가장 정확하다.
     const active = typeof document !== 'undefined' ? document.activeElement : null;
-    let cursor = cursorRef.current;
+    let activeCursor: ComposerCursor | null = null;
     for (const [key, el] of textareasRef.current) {
-      if (el === active) cursor = { key, selectionStart: el.selectionStart, selectionEnd: el.selectionEnd };
+      if (el === active) activeCursor = { key, selectionStart: el.selectionStart, selectionEnd: el.selectionEnd };
     }
-    if (selectedImage) cursor = { key: selectedImage, selectionStart: 0, selectionEnd: 0 };
-    pendingCursorRef.current = cursor;
+    pendingCursorRef.current = pickComposerInsertCursor(cursorRef.current, activeCursor, selectedImage);
     fileRef.current?.click();
   };
 
@@ -161,8 +164,10 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
         return;
       }
       // 사진 선택창에서 돌아온 시점에 입력칸이 그대로 있으면 그 입력칸의 현재 선택 위치를 다시 읽는다.
-      let cursor = pendingCursorRef.current;
-      const el = cursor ? textareasRef.current.get(cursor.key) : undefined;
+      // 사진 삭제 자리(anchor)는 다시 읽지 않는다 — 합쳐진 입력칸의 DOM 커서는 글 끝에 가 있다.
+      const pending = pendingCursorRef.current;
+      let cursor = pending?.cursor ?? null;
+      const el = cursor && pending?.rereadLive ? textareasRef.current.get(cursor.key) : undefined;
       if (cursor && el) cursor = { key: cursor.key, selectionStart: el.selectionStart, selectionEnd: el.selectionEnd };
       pendingCursorRef.current = null;
 
@@ -191,7 +196,11 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
       urlsRef.current.delete(block.image.previewUrl);
     }
     setSelectedImage(null);
-    onBlocksChange((prev) => removeComposerImage(prev, block.key, newBlockKey));
+    // V2.1A — 지운 자리를 다음 [사진 추가] 위치로 기억한다(사진 교체). DOM 포커스는 옮기지 않는다(모바일 키보드가 뜨지 않게).
+    const pool = [newBlockKey(), newBlockKey()];
+    const { anchor } = removeComposerImageWithAnchor(blocks, block.key, keySource(pool));
+    cursorRef.current = anchor ? { cursor: anchor, source: 'delete-anchor' } : null;
+    onBlocksChange((prev) => removeComposerImageWithAnchor(prev, block.key, keySource(pool)).blocks);
     onError(null);
   };
 

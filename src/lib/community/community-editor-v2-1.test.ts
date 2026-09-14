@@ -128,8 +128,9 @@ test('11. 사진 최대 5장: 넘는 사진은 넣지 않고 알려준다', () =
 test('12. 사진 선택창에서 돌아와도 버튼 누르기 전 커서에 삽입(작성기 배선)', () => {
   const src = codeOf(read(COMPOSER));
   // 버튼 누르는 순간 커서 확정 → 선택창 → 돌아와 그 입력칸의 현재 선택 위치로 삽입
-  assert.ok(/pendingCursorRef\.current = cursor;\s*fileRef\.current\?\.click\(\);/.test(src));
-  assert.ok(/let cursor = pendingCursorRef\.current;/.test(src));
+  // (V2.1A: 기준 결정은 pickComposerInsertCursor, 사진 삭제 자리는 다시 읽지 않음)
+  assert.ok(/pendingCursorRef\.current = pickComposerInsertCursor\(cursorRef\.current, activeCursor, selectedImage\);\s*fileRef\.current\?\.click\(\);/.test(src));
+  assert.ok(/const pending = pendingCursorRef\.current;\s*let cursor = pending\?\.cursor \?\? null;/.test(src));
   assert.ok(/insertImagesAtCursor\(prev, cursor, acceptedKeys, keySource\(pool\)\)/.test(src));
   // 모바일: 버튼 탭으로 입력칸이 blur돼도 마지막 커서를 기억한다
   assert.ok(/onBlur=\{track\}/.test(src) && /onSelect=\{track\}/.test(src) && /onKeyUp=\{track\}/.test(src) && /onClick=\{track\}/.test(src));

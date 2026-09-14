@@ -203,6 +203,61 @@ export function removeComposerImage(blocks: EditorBlock[], key: string, newKey: 
   return normalizeComposerBlocks(removeBlock(blocks, key), newKey);
 }
 
+/**
+ * COMMUNITY_EDITOR_V2.1A — 사진 삭제 + 삭제 자리를 다음 삽입 위치(anchor)로 돌려준다("사진 교체" 흐름).
+ *
+ * 삭제로 뒤 글이 앞 글에 합쳐지면 뒤 글 입력칸(key)이 사라져, 그 칸을 가리키던 커서로는 삽입 위치를 찾을 수 없다.
+ * 그래서 삭제 결과 블록에서 **삭제 자리**를 직접 계산해 준다. anchor에 바로 insertImagesAtCursor를 적용하면
+ * 사진이 지웠던 자리로 들어가고 앞뒤 글은 삭제 전과 같게 나뉜다.
+ *
+ *  - 앞 글 + 뒤 글이 합쳐짐: 합쳐진 글에서 **뒤 글이 시작하는 위치**(앞 글 길이 + 연결 줄바꿈 1). 삽입 규칙이 경계 줄바꿈 1개를
+ *    사진으로 대신하므로, 앞·뒤 글의 줄바꿈·공백이 그대로 원래 두 글로 돌아간다.
+ *  - 한쪽이 빈 칸이라 그대로 합쳐짐: 앞 글 끝(뒤가 빈 칸) / 0(앞이 빈 칸).
+ *  - 앞이 글, 뒤가 사진: 앞 글 끝.
+ *  - 앞이 사진·없음, 뒤가 글: 뒤 글 맨 앞(0).
+ *  - 양옆에 글이 없음(사진 사이·맨 앞 사진 앞): 그 자리에 빈 입력칸을 두고 거기를 가리킨다.
+ */
+export function removeComposerImageWithAnchor(blocks: EditorBlock[], key: string, newKey: () => string): { blocks: EditorBlock[]; anchor: ComposerCursor | null } {
+  const index = blocks.findIndex((b) => b.key === key);
+  if (index < 0 || blocks[index].kind !== 'image') return { blocks, anchor: null };
+  const prev = index > 0 ? blocks[index - 1] : null;
+  const next = index + 1 < blocks.length ? blocks[index + 1] : null;
+  const at = (k: string, position: number): ComposerCursor => ({ key: k, selectionStart: position, selectionEnd: position });
+
+  if (prev?.kind === 'text') {
+    let position = prev.text.length;
+    if (next?.kind === 'text' && prev.text.length === 0) position = 0;
+    else if (next?.kind === 'text' && next.text.length > 0) position = prev.text.length + TEXT_JOIN.length;
+    return { blocks: normalizeComposerBlocks(removeBlock(blocks, key), newKey), anchor: at(prev.key, position) };
+  }
+  if (next?.kind === 'text') {
+    return { blocks: normalizeComposerBlocks(removeBlock(blocks, key), newKey), anchor: at(next.key, 0) };
+  }
+  const placeholderKey = newKey();
+  const withPlaceholder: EditorBlock[] = [...blocks.slice(0, index), { key: placeholderKey, kind: 'text', text: '' }, ...blocks.slice(index + 1)];
+  return { blocks: normalizeComposerBlocks(withPlaceholder, newKey), anchor: at(placeholderKey, 0) };
+}
+
+/** 작성기가 기억하는 마지막 삽입 위치. 사용자가 직접 둔 커서인지, 사진 삭제가 남긴 anchor인지 구분한다. */
+export type ComposerCursorMemory = { cursor: ComposerCursor; source: 'user' | 'delete-anchor' } | null;
+
+/**
+ * [사진 추가]를 누른 순간 삽입 기준 결정. 우선순위: 선택한 사진 > 포커스가 있는 입력칸의 실제 커서 > 기억한 위치.
+ * 사용자가 삭제 뒤 글을 누르면 기억한 위치 자체가 'user'로 바뀌므로 manual cursor > delete anchor가 된다.
+ * rereadLive: 선택창에서 돌아왔을 때 입력칸의 현재 선택 위치를 다시 읽을지. anchor는 읽지 않는다 —
+ * 합쳐진 입력칸의 DOM 커서는 값이 바뀌며 글 끝으로 가 있어 삭제 자리를 덮어쓰기 때문이다.
+ */
+export function pickComposerInsertCursor(
+  memory: ComposerCursorMemory,
+  activeCursor: ComposerCursor | null,
+  selectedImageKey: string | null
+): { cursor: ComposerCursor | null; rereadLive: boolean } {
+  if (selectedImageKey) return { cursor: { key: selectedImageKey, selectionStart: 0, selectionEnd: 0 }, rereadLive: false };
+  if (activeCursor) return { cursor: activeCursor, rereadLive: true };
+  if (!memory) return { cursor: null, rereadLive: false };
+  return { cursor: memory.cursor, rereadLive: memory.source === 'user' };
+}
+
 /** 작성기에서 사진 이동: 앞/뒤 블록과 자리를 바꾸고 인접 글을 합친다(글 블록 단위로 한 칸). */
 export function moveComposerImage(blocks: EditorBlock[], key: string, direction: -1 | 1, newKey: () => string): EditorBlock[] {
   const target = blocks.find((b) => b.key === key);
