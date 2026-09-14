@@ -66,6 +66,7 @@ import {
   type PropertyTypeLayer,
 } from '@/lib/map-property-focus';
 import { Building2, Home } from 'lucide-react';
+import { LAYER_PILL_ICON_SIZE, layerHitButtonStyle, layerPillStyle, layerStackStyle } from '@/lib/map/map-layer-pill-style';
 import FullPageLoader from '@/components/FullPageLoader';
 import KakaoPreconnect from '@/components/KakaoPreconnect';
 import AdContainer from '@/components/AdContainer';
@@ -2094,40 +2095,27 @@ export default function FullscreenMapPage() {
       {/* 우측 세로 카테고리 플로팅 바: 예전에는 상단을 가로로 가리던 걸 오른쪽 세로 알약
           칩으로 옮겨서 검색창/지도 상단이 안 가려지게 한다. rightControlRef는 이 영역을
           right safe-zone으로 측정하는 기준이다(§7/§10). */}
-      {/* 터치 타깃 44px(MAP_UX_V2 §17). MAP_LAYER_TOGGLE_V1 §4 — 여섯 칩이 모두
-          독립 토글이므로 접근성 의미도 aria-pressed 하나로 통일한다. */}
-      <div ref={rightControlRef} style={{ position: 'absolute', right: '12px', top: '64px', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+      {/* MAP_LAYER_TOGGLE_V1 §4 — 여섯 칩이 모두 독립 토글이므로 접근성 의미도 aria-pressed 하나로 통일한다.
+          MAP_LAYER_PILL_COMPACT_UI_V1 — 누르는 영역(투명 버튼, 세로 38px)과 보이는 알약(32px, 글자 폭만큼)을 나눠
+          지도를 덜 가린다. 모양 값은 src/lib/map/map-layer-pill-style.ts. */}
+      <div ref={rightControlRef} style={layerStackStyle}>
         {LAYER_ORDER.map((key) => {
           const active = layers[key];
           return (
             <button
               key={key}
               onClick={() => toggleLayer(key)}
-              style={{
-                minHeight: 44,
-                padding: '0 1rem',
-                borderRadius: '99px',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '0.8rem',
-                background: active ? layerActiveBg(key) : 'rgba(255,255,255,0.95)',
-                color: active ? 'white' : 'var(--text-secondary)',
-                whiteSpace: 'nowrap',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-              }}
+              style={layerHitButtonStyle}
               // §4 — 매물 레이어도 이제 배타 그룹이 아니라 독립 토글이다.
               // role="radio" / aria-checked(배타)를 쓰지 않고 프로젝트의 기존 관례인
               // aria-pressed로 통일한다.
               aria-pressed={active}
             >
-              {key === 'officetel' && <Building2 size={13} aria-hidden="true" style={{ flexShrink: 0 }} />}
-              {key === 'apt' && <Home size={13} aria-hidden="true" style={{ flexShrink: 0 }} />}
-              {LAYER_LABEL[key]}
+              <span style={layerPillStyle(active, layerActiveBg(key))}>
+                {key === 'officetel' && <Building2 size={LAYER_PILL_ICON_SIZE} aria-hidden="true" style={{ flexShrink: 0 }} />}
+                {key === 'apt' && <Home size={LAYER_PILL_ICON_SIZE} aria-hidden="true" style={{ flexShrink: 0 }} />}
+                {LAYER_LABEL[key]}
+              </span>
             </button>
           );
         })}

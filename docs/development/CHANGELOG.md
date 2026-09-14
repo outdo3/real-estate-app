@@ -2,6 +2,17 @@
 
 ## 2026-09-14
 
+### E-JIP MAP LAYER PILL COMPACT UI V1 — 지도 우측 레이어 알약 축소
+
+UI만 변경(지도 로직·토글 동작·레이어 상태·마커 데이터·API 무변경).
+
+    문제      세로 스택이 align-items: stretch + 버튼 좌우 16px → 여섯 칩 모두 93×44px(가장 긴 "오피스텔" 폭), 스택 93×292px
+    수정      누르는 영역(투명 버튼, 세로 38px)과 보이는 알약(32px, 좌우 10px, 12.5px, 아이콘 12px·간격 4px)을 분리,
+              스택 오른쪽 정렬(글자 폭만큼), 버튼 사이 간격 0(보이는 간격 6px), 알약 화면 끝 여백 12px 유지.
+              선택 색(아파트 green·오피스텔 teal)·aria-pressed·toggleLayer·안전영역 측정 ref 그대로
+    파일      src/lib/map/map-layer-pill-style.ts(신규), src/app/map/page.tsx(레이어 스택 JSX만), 테스트 7
+    검증      src 1906/1906, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+
 ### E-JIP COMMUNITY DELETE NAVIGATION CLEANUP V1 — 삭제된 게시글 중간 화면 제거
 
 탐색·캐시·라우트만 변경. 상세: `docs/development/COMMUNITY_DELETE_NAVIGATION_CLEANUP_V1.md`
