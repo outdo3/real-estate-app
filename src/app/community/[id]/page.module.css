@@ -268,3 +268,22 @@
   opacity: 0.6;
   cursor: default;
 }
+
+/* COMMUNITY_IMAGE_UPLOAD_V1 — 본문 아래 사진. 모바일 세로 목록, 원본 비율 유지(자르지 않는다). */
+.postImages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.postImage {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+  border-radius: 12px;
+  background: var(--surface-subtle, #f1f5f9);
+}

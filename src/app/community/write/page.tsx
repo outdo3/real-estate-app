@@ -6,6 +6,8 @@ import { AlertTriangle, Building2 } from 'lucide-react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import ApartmentAutocomplete from '@/components/ApartmentAutocomplete';
+import CommunityImagePicker, { type PickedImage } from '@/components/community/CommunityImagePicker';
+import { IMAGE_ERROR_MESSAGES } from '@/lib/community/image-rules';
 import styles from './page.module.css';
 
 const APT_INPUT_STYLE: React.CSSProperties = {
@@ -33,6 +35,8 @@ export default function WritePostPage() {
   const [aptLocked, setAptLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [images, setImages] = useState<PickedImage[]>([]);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -43,6 +47,26 @@ export default function WritePostPage() {
     }
   }, []);
 
+  // COMMUNITY_IMAGE_UPLOAD_V1 — 등록 중에 창을 닫거나 뒤로 가면 확인을 받는다(업로드가 끊기면 글이 저장되지 않는다).
+  useEffect(() => {
+    if (!submitting) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [submitting]);
+
+  const cleanupUploadSession = async (sessionId: string | null) => {
+    if (!sessionId) return;
+    try {
+      await fetch(`/api/community/images?session=${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+    } catch {
+      // 서버가 이미 정리했거나 네트워크 오류 — 서버 로그(orphan)로 추적된다.
+    }
+  };
+
   const handleSubmit = async () => {
     // §6 — 중복 제출 방지. 버튼 disabled가 1차 방어지만 가드를 한 겹 더 둔다.
     if (submitting) return;
@@ -50,25 +74,54 @@ export default function WritePostPage() {
       setError('제목과 내용을 모두 입력해주세요.');
       return;
     }
+    if (images.some((img) => img.status === 'processing')) {
+      setError('사진을 준비하고 있어요. 잠시 후 다시 눌러주세요.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
+    // 사진이 있으면: 전부 순차 업로드 성공 → 그 영수증으로 글 생성. 하나라도 실패하면 글을 만들지 않고 올린 사진을 지운다.
+    const ready = images.filter((img) => img.prepared);
+    const sessionId = ready.length > 0 ? crypto.randomUUID() : null;
     try {
+      const imageTokens: { token: string }[] = [];
+      for (let i = 0; i < ready.length; i++) {
+        setUploadStatus(`사진을 업로드하고 있어요 (${i + 1}/${ready.length})`);
+        const prepared = ready[i].prepared!;
+        const res = await fetch(`/api/community/images?session=${encodeURIComponent(sessionId!)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': prepared.mimeType },
+          body: prepared.blob,
+        });
+        const json = await res.json().catch(() => null);
+        if (!json?.success) {
+          await cleanupUploadSession(sessionId);
+          setError(json?.error || IMAGE_ERROR_MESSAGES.UPLOAD_FAILED);
+          return;
+        }
+        imageTokens.push({ token: json.data.token });
+      }
+      setUploadStatus(ready.length > 0 ? '게시글을 등록하고 있어요' : null);
+
       const res = await fetch('/api/community/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content, aptName: aptName.trim() || undefined }),
+        body: JSON.stringify({ title, content, aptName: aptName.trim() || undefined, ...(imageTokens.length > 0 && { images: imageTokens }) }),
       });
-      const json = await res.json();
-      if (!json.success) {
-        setError(json.error || '게시글을 작성하지 못했습니다.');
+      const json = await res.json().catch(() => null);
+      if (!json?.success) {
+        await cleanupUploadSession(sessionId);
+        setError(json?.error || '게시글을 작성하지 못했습니다.');
         return;
       }
       router.push(`/community/${json.data.id}`);
     } catch (e) {
       console.error(e);
-      setError('게시글을 작성하지 못했습니다.');
+      await cleanupUploadSession(sessionId);
+      setError(sessionId ? IMAGE_ERROR_MESSAGES.UPLOAD_FAILED : '게시글을 작성하지 못했습니다.');
     } finally {
       setSubmitting(false);
+      setUploadStatus(null);
     }
   };
 
@@ -119,6 +172,12 @@ export default function WritePostPage() {
               value={content}
               onChange={(e) => setContent(e.target.value)}
             />
+            <CommunityImagePicker images={images} onImagesChange={setImages} onError={setError} disabled={submitting} />
+            {uploadStatus && (
+              <p className={styles.uploadStatus} role="status" aria-live="polite">
+                {uploadStatus}
+              </p>
+            )}
             {error && (
               <div className={styles.errorText} role="alert">
                 <AlertTriangle size={15} aria-hidden="true" />
@@ -126,11 +185,11 @@ export default function WritePostPage() {
               </div>
             )}
             <div className={styles.actions}>
-              <button className={styles.cancelBtn} onClick={() => router.back()}>
+              <button className={styles.cancelBtn} onClick={() => router.back()} disabled={submitting}>
                 취소
               </button>
               <button className={styles.submitBtn} onClick={handleSubmit} disabled={submitting}>
-                {submitting ? '등록 중...' : '등록하기'}
+                {submitting ? (images.length > 0 ? '업로드 중...' : '등록 중...') : '등록하기'}
               </button>
             </div>
           </div>

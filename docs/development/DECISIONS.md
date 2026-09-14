@@ -1421,3 +1421,33 @@ DB 결과는 기존 DB 결함(매매 취소 래칫, 회수 행 잔존, 전월세
 
 상태:
 확정. 문서: `docs/development/GAP_INVEST_BUSAN_DB_FIRST_V1.md`
+---
+
+## 2026-09-14 — 커뮤니티 사진은 서버 경유로만 Storage에 쓰고, 새 테이블은 API 역할 권한 없이 만든다
+
+날짜:
+2026-09-14
+
+결정:
+게시글 사진은 브라우저가 압축한 뒤 우리 API(NextAuth 세션)를 거쳐 서버가 service role로 `community-images`
+bucket에 저장한다. bucket은 공개 읽기 전용이며 Storage policy를 두지 않는다. 글 생성은 업로드 API가 서명한
+영수증만 신뢰한다. 새 `post_images` 테이블은 anon/authenticated/service_role grant를 회수하고 RLS를 켠 상태로 만든다.
+
+배경:
+사용자는 Supabase Auth가 아니라 NextAuth 사용자라 Storage RLS의 authenticated 역할로 "작성자만 업로드"를
+표현할 수 없다. public schema default privileges는 새 테이블을 API 역할에 자동 부여한다.
+
+이유:
+- 권한 판정을 NextAuth 세션 한 곳으로 모으고, 저장 전에 서버가 바이트를 검증할 수 있다.
+- signed upload URL을 쓰면 서버가 저장 전 내용을 볼 수 없다. 압축본은 1.5MB 이하라 요청 본문 한도 안이다.
+- 영수증 서명으로 글 생성 시 이미지를 다시 내려받지 않고도 경로·크기 위조를 막는다(새 secret 없음).
+- 앱은 테이블 owner로 접근하므로 API 역할 권한은 불필요한 노출면이다.
+
+영향:
+- 사진 바이트가 Vercel 함수를 한 번 통과한다(압축본 기준).
+- 공개 URL은 삭제 후 최대 1시간 CDN 캐시될 수 있다.
+- 기존 테이블의 grant·RLS는 이번에 바꾸지 않았다(별도 정리 과제).
+
+상태:
+확정. 문서: `docs/development/COMMUNITY_IMAGE_UPLOAD_V1.md`
+

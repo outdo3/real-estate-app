@@ -95,12 +95,34 @@ model Post {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  author   User      @relation(fields: [authorId], references: [id])
+  author   User        @relation(fields: [authorId], references: [id])
   comments Comment[]
+  images   PostImage[]
 
   @@index([pinned, createdAt])
   @@index([aptName, createdAt])
   @@map("posts")
+}
+
+// COMMUNITY_IMAGE_UPLOAD_V1 — 게시글 사진. 바이트는 Supabase Storage(community-images bucket)에 있고
+// 여기에는 서버가 발급한 경로와 검증된 메타데이터만 둔다. 게시글 삭제 시 행은 cascade로 지워지고,
+// Storage 객체는 삭제 API가 이 경로로 정리한다(docs/development/COMMUNITY_IMAGE_UPLOAD_V1.md).
+// 권한: migration에서 anon/authenticated/service_role grant를 회수하고 RLS를 켠다(앱은 owner로 접근).
+model PostImage {
+  id        String   @id @default(cuid())
+  postId    String   @map("post_id")
+  path      String   @unique @map("path") // posts/{userId}/{uploadSession}/{uuid}.webp|jpg
+  sortOrder Int      @map("sort_order") // 0..4, 선택 순서
+  width     Int
+  height    Int
+  bytes     Int
+  mimeType  String   @map("mime_type") // image/webp | image/jpeg
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, sortOrder])
+  @@map("post_images")
 }
 
 model Comment {

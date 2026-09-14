@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser, isAdminSessionUser, requireUser } from '@/lib/auth-helpers';
+import { deletePostWithImages } from '@/lib/community/image-handlers';
+import { getCommunityImageStorage } from '@/lib/supabase/server-storage';
+
+function toPublicImages(images: { path: string; width: number; height: number; sortOrder: number }[]) {
+  if (images.length === 0) return [];
+  const storage = getCommunityImageStorage();
+  return images.map((img) => ({ url: storage ? storage.publicUrl(img.path) : null, width: img.width, height: img.height, sortOrder: img.sortOrder }));
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,6 +21,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           orderBy: { createdAt: 'asc' },
           include: { author: { select: { name: true, image: true, role: true } } },
         },
+        // COMMUNITY_IMAGE_UPLOAD_V1 — 표시에 필요한 값만(바이트 수·MIME 등 저장 메타데이터는 내보내지 않는다).
+        images: { orderBy: { sortOrder: 'asc' }, select: { path: true, width: true, height: true, sortOrder: true } },
       },
     });
 
@@ -20,7 +30,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: '게시글을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, data: post });
+    const { images, ...rest } = post;
+    return NextResponse.json({ success: true, data: { ...rest, images: toPublicImages(images) } });
   } catch (error) {
     console.error('Failed to load post:', error);
     return NextResponse.json({ success: false, error: '게시글을 불러오지 못했습니다.' }, { status: 500 });
@@ -76,7 +87,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params;
-    const existing = await prisma.post.findUnique({ where: { id } });
+    const existing = await prisma.post.findUnique({ where: { id }, select: { id: true, authorId: true, images: { select: { path: true } } } });
     if (!existing) return NextResponse.json({ success: false, error: '게시글을 찾을 수 없습니다.' }, { status: 404 });
 
     const isOwner = existing.authorId === user.id;
@@ -85,7 +96,21 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       return NextResponse.json({ success: false, error: '삭제 권한이 없습니다.' }, { status: 403 });
     }
 
-    await prisma.post.delete({ where: { id } });
+    // COMMUNITY_IMAGE_UPLOAD_V1 — 권한 → DB에서 사진 경로 확보 → 글 삭제(PostImage cascade) → Storage 삭제.
+    // 지울 경로는 항상 DB에서 읽는다(클라이언트가 보낸 경로로는 절대 지우지 않는다). 핸들러도 권한을 다시 확인한다.
+    const result = await deletePostWithImages(
+      { user, postId: id },
+      {
+        findPost: async () => ({ id: existing.id, authorId: existing.authorId, imagePaths: existing.images.map((i) => i.path) }),
+        deletePost: async (postId) => {
+          await prisma.post.delete({ where: { id: postId } });
+        },
+        isAdmin: (u) => isAdminSessionUser(u as { role?: string | null; email?: string | null }),
+        storage: getCommunityImageStorage(),
+        log: (message, meta) => console.error(message, meta ?? ''),
+      }
+    );
+    if (!result.body.success) return NextResponse.json(result.body, { status: result.status });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to delete post:', error);

@@ -127,3 +127,10 @@
   align-items: center;
   gap: 0.35rem;
 }
+
+/* COMMUNITY_IMAGE_UPLOAD_V1 — 업로드 진행 안내 */
+.uploadStatus {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}

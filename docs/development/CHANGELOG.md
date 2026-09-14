@@ -2,6 +2,22 @@
 
 ## 2026-09-14
 
+### E-JIP COMMUNITY IMAGE UPLOAD V1 — 게시글 사진 최대 5장(압축 저장·상세 표시·삭제 정리)
+
+승인 인프라 적용 + 구현. 상세: `docs/development/COMMUNITY_IMAGE_UPLOAD_V1.md`
+
+    인프라    Vercel SUPABASE_SERVICE_ROLE_KEY 추가(Production·Preview, sensitive), post_images migration 적용
+              (API 역할 grant 회수 + RLS, owner 전용), community-images bucket(public, 2MB, webp/jpeg, policy 0)
+    업로드    클라이언트 순차 전처리: 헤더 검사(10MB·50MP) → 방향 보정 디코드 → 긴 변 1600 → WebP q0.80(JPEG q0.82 폴백)
+              → 800KB 초과 q0.70 → 1.5MB 초과 거부. 원본·EXIF·GPS 저장 안 함
+    서버      POST /api/community/images: requireUser, 매직바이트·헤더 크기·EXIF 검사, 세션당 5장, 서버 결정 경로,
+              HMAC 서명 영수증(NEXTAUTH_SECRET 파생). 글 생성은 영수증만 신뢰, Post+PostImage 단일 nested create
+    실패      업로드/글 생성 실패 시 글 미생성 + 세션 객체 정리. 삭제는 DB 경로 → cascade → Storage 삭제(재시도, orphan 로그)
+    화면      글쓰기 "사진 추가 n/5"·미리보기·개별 삭제·진행 문구, 상세 본문 아래 세로 목록(lazy, width/height, alt)
+    범위 밖   목록 썸네일, 글 수정 시 사진 편집, orphan 자동 정리, 속도 제한
+    검증      신규 28/28, src 1812/1812, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0,
+              Storage 실측 13/13, Chrome 153 방향·EXIF 제거·실제 헤더 통과, 번들 키 유출 0
+
 ### E-JIP SUPABASE DATA API DISABLE V1 — Data API(REST) 외부 노출 차단 (사용자 대시보드 적용)
 
 사용자 승인 후 Supabase Dashboard에서 Enable Data API OFF. 상세: `docs/development/SUPABASE_DATA_API_DISABLE_V1.md`
