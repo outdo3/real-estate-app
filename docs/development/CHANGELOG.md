@@ -15,6 +15,11 @@
               'move-anchor'로 기억(복귀 후 DOM 커서 재읽기 제외 — QA에서 끝으로 들어가는 것 발견 후 보강, P2 해소)
     불변      schema·migration·API·저장 직렬화·영수증·권한·409·Storage
     검증      작성기 79/79, src 1891/1891, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+    배포 QA   1fbd79a: 이동 뒤 추가가 합쳐진 글 끝으로(FAIL) → 9c23b58 보강 후 production 실제 UI(784px 모바일 레이아웃) PASS:
+              하단 고정 버튼 탭바와 8px·화면 안·hit test, 깊게 스크롤한 커서 위치 삽입, 길게 누름 메뉴 차단·선택, 끌기 차단,
+              위/아래 이동, 이동 뒤 기억한 자리 삽입, 수정 화면 동일(기존 사진 교체·커서 삽입) → 저장 순서 일치.
+              상세 사진 contextmenu/drag 그대로. QA 글 삭제 후 DB(글 1·사진 2·블록 0)/Storage(2, 미참조 0) 정리, 애슐리 무변경,
+              Data API OFF. 실제 Android·iOS(길게 누름·키보드·360~390px) 기기 QA는 남음
 
 ### E-JIP COMMUNITY EDITOR V2.1A — 사진 교체 삽입 위치 수정
 
