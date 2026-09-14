@@ -17,6 +17,8 @@
     범위 밖   목록 썸네일, 글 수정 시 사진 편집, orphan 자동 정리, 속도 제한
     검증      신규 28/28, src 1812/1812, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0,
               Storage 실측 13/13, Chrome 153 방향·EXIF 제거·실제 헤더 통과, 번들 키 유출 0
+    production 0685583: 실제 번들 글쓰기로 6장 선택→5장·방향 보정·등록·익명 읽기(EXIF/GPS 없음)·삭제(DB 0, 객체 0) 확인,
+              위장 SVG 415·위조 영수증 400·세션 정리 확인. 테스트 글 즉시 삭제. 기기(Android/iOS)·실사진 크기·360~390px QA 미실시
 
 ### E-JIP SUPABASE DATA API DISABLE V1 — Data API(REST) 외부 노출 차단 (사용자 대시보드 적용)
 
