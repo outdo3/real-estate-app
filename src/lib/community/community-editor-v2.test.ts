@@ -594,7 +594,9 @@ test('수정 저장 후 상세 캐시 갱신: 이동 전에 SWR 캐시를 다시
   const r = save.indexOf('router.replace(`/community/${post.id}`)');
   assert.ok(m > 0 && r > m, '캐시 갱신이 이동보다 먼저여야 한다');
   const detail = codeOf(read('src/app/community/[id]/post-client.tsx'));
-  assert.ok(/useSWR\(`\/api\/community\/posts\/\$\{postId\}`, fetcher\)/.test(detail), '상세 SWR 키가 바뀌면 캐시 갱신 키도 같이 바꿔야 한다');
+  // (COMMUNITY_DELETE_NAVIGATION_CLEANUP_V1: 키는 communityPostDetailKey로, 삭제 확인된 글은 null 키)
+  assert.ok(/const detailKey = communityPostDetailKey\(postId\);/.test(detail) && /useSWR\(knownDeleted \? null : detailKey, fetcher\)/.test(detail), '상세 SWR 키가 바뀌면 캐시 갱신 키도 같이 바꿔야 한다');
+  assert.ok(/export const communityPostDetailKey = \(postId: string\) => `\/api\/community\/posts\/\$\{postId\}`;/.test(read('src/lib/community/deleted-post-navigation.ts')));
 });
 
 test('편집 스냅샷: 내용이 같으면 dirty 아님, 순서만 바꿔도 dirty', () => {

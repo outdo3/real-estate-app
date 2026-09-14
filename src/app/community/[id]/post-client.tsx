@@ -1,19 +1,34 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, Building2, Pin, RefreshCw } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import Header from '@/components/Header';
 import LoginModal from '@/components/LoginModal';
 import ShareAction from '@/components/ShareAction';
 import CommunityPostContent from '@/components/community/CommunityPostContent';
 import type { ContentBlockView } from '@/lib/community/content-blocks';
+import {
+  COMMUNITY_LIST_PATH,
+  communityPostDetailKey,
+  isCommunityListKey,
+  isMissingPostStatus,
+  isPostDeleted,
+  markPostDeleted,
+  removePostFromListData,
+} from '@/lib/community/deleted-post-navigation';
 import styles from './page.module.css';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+// COMMUNITY_DELETE_NAVIGATION_CLEANUP_V1 — HTTP 상태를 함께 넘긴다. 404(없는 글)만 목록으로 보내고, 통신 실패·500은 기존 오류 화면을 쓴다.
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (isMissingPostStatus(res.status)) return { success: false, httpStatus: res.status };
+  return { ...(await res.json()), httpStatus: res.status };
+};
+const noSubscribe = () => () => {};
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -24,7 +39,16 @@ export default function PostDetailPage() {
   // §3/§16 — SWR의 error도 본다. 예전에는 fetch 자체가 실패하면(오프라인 등)
   // data가 undefined로 남아 "게시글을 찾을 수 없습니다"가 떴다 — 연결 실패를
   // 글이 없는 것으로 말하는 false empty다. 404와 통신 실패는 다른 상태다.
-  const { data, isLoading, error: swrError, mutate } = useSWR(`/api/community/posts/${postId}`, fetcher);
+  //
+  // COMMUNITY_DELETE_NAVIGATION_CLEANUP_V1 — 삭제됐거나 없는 글은 중간 화면 없이 바로 목록으로 간다.
+  // 이 탭에서 삭제(또는 404)를 이미 확인한 글이면 요청도 하지 않는다(뒤로·앞으로 가기에서 옛 화면이 번쩍이지 않게).
+  // 서버 렌더에서는 false(수화 불일치 없음), 클라이언트에서는 탭 기억을 읽는다.
+  const knownDeleted = useSyncExternalStore(noSubscribe, () => isPostDeleted(postId), () => false);
+  const detailKey = communityPostDetailKey(postId);
+  const { data, isLoading, error: swrError, mutate } = useSWR(knownDeleted ? null : detailKey, fetcher);
+  const { mutate: mutateCache } = useSWRConfig();
+  const missing = knownDeleted || isMissingPostStatus(data?.httpStatus);
+  const leavingRef = useRef(false);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   // §7/§8 — 진행 중 중복 실행 방지. 예전에는 삭제에 in-flight 상태가 없어
@@ -36,8 +60,26 @@ export default function PostDetailPage() {
   // 페이지 진입만으로는 띄우지 않는다(§3).
   const [loginOpen, setLoginOpen] = useState(false);
 
+  useEffect(() => {
+    if (!missing || leavingRef.current) return;
+    leavingRef.current = true;
+    markPostDeleted(postId);
+    router.replace(COMMUNITY_LIST_PATH);
+  }, [missing, postId, router]);
+
+  // 모바일 BFCache로 이 화면이 통째로 되살아나면(다른 탭·기기에서 삭제된 경우 포함) 한 번 다시 확인한다.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      if (isPostDeleted(postId)) router.replace(COMMUNITY_LIST_PATH);
+      else mutate();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, [postId, router, mutate]);
+
   const post = data?.success ? data.data : null;
-  const fetchError = swrError ? '게시글을 불러오지 못했습니다.' : data && !data.success ? data.error : null;
+  const fetchError = missing ? null : swrError ? '게시글을 불러오지 못했습니다.' : data && !data.success ? data.error : null;
   // COMMUNITY_EDITOR_V2 — 관리자 표시는 서버와 같은 규칙(role 또는 ADMIN_EMAIL)으로 세션에 계산된 isAdmin을 쓴다.
   // 버튼 노출은 편의일 뿐이고 수정·삭제·고정 권한은 각 API가 서버에서 다시 판정한다.
   const isAdmin = session?.user?.isAdmin === true;
@@ -52,7 +94,13 @@ export default function PostDetailPage() {
       const res = await fetch(`/api/community/posts/${postId}`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) {
-        router.push('/community');
+        // COMMUNITY_DELETE_NAVIGATION_CLEANUP_V1 — 삭제한 글 화면이 기록에 남아 뒤로 가기로 돌아오지 않게 replace.
+        // 이 탭에 삭제를 기억하고, 상세 캐시는 비우고, 목록 캐시에서는 이 글을 뺀다(목록은 다시 열릴 때 재검증된다).
+        leavingRef.current = true;
+        markPostDeleted(postId);
+        router.replace(COMMUNITY_LIST_PATH);
+        void mutateCache(detailKey, undefined, { revalidate: false });
+        void mutateCache(isCommunityListKey, (current: unknown) => removePostFromListData(current, postId), { revalidate: false });
         return;
       }
       setActionError(json.error || '삭제하지 못했습니다.');
@@ -127,6 +175,9 @@ export default function PostDetailPage() {
 
   // §3/§7 — AuthGate를 걷어냈다. 게시글 본문·작성자·시간·댓글은 비로그인도 읽을 수
   // 있어야 한다. 공유/검색으로 들어온 사람이 본문 대신 모달을 먼저 보는 일이 없도록.
+  // 없는 글: 중간 화면("게시글을 찾을 수 없습니다" 등)을 그리지 않고 목록으로 이동하는 동안 아무것도 그리지 않는다.
+  if (missing) return null;
+
   return (
     <>
       <div className={styles.main}>
@@ -144,13 +195,7 @@ export default function PostDetailPage() {
               </button>
             </div>
           ) : !post ? (
-            <div className={styles.emptyState}>
-              <span>게시글을 찾을 수 없습니다.</span>
-              <Link href="/community" className={styles.backLink}>
-                <ArrowLeft size={15} aria-hidden="true" />
-                커뮤니티로 돌아가기
-              </Link>
-            </div>
+            <div className={styles.emptyState} role="status">불러오는 중입니다...</div>
           ) : (
             <>
               <div className={styles.postCard}>

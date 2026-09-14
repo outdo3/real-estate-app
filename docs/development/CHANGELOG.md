@@ -2,6 +2,19 @@
 
 ## 2026-09-14
 
+### E-JIP COMMUNITY DELETE NAVIGATION CLEANUP V1 — 삭제된 게시글 중간 화면 제거
+
+탐색·캐시·라우트만 변경. 상세: `docs/development/COMMUNITY_DELETE_NAVIGATION_CLEANUP_V1.md`
+
+    결정      삭제된/없는 글의 사용자 화면은 /community 하나. "게시글을 찾을 수 없습니다"·다시 시도·돌아가기·404 카드·추가 알림 없음
+              (통신 실패·500은 없는 글이 아니므로 기존 오류·다시 시도 유지 — HTTP 404만 목록으로)
+    원인      삭제가 router.push, 이탈 경고 항목 때문에 기록에 [상세, 수정, 상세]가 남음, 404를 오류 카드로 렌더, 상세 SWR 캐시 잔존
+    수정      삭제 성공 router.replace('/community') + 상세 캐시 비움 + 목록 캐시(모든 페이지)에서 글 제거·재검증,
+              탭 기억(모듈 Set + sessionStorage)으로 삭제/404 확인된 글은 요청 없이 즉시 replace, 상세·수정 404 → replace·렌더 null,
+              [id]/layout.tsx 서버 확인(조회 성공 + 없음일 때만 redirect, DB 오류는 redirect 안 함), pageshow persisted 때만 재확인
+    불변      schema·migration·API 404 의미·삭제 권한·이미지/Storage 정리·정상 상세/수정·목록
+    검증      커뮤니티 155/155, src 1899/1899, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+
 ### E-JIP COMMUNITY EDITOR V2.2 — 모바일 사진 UX(사진 탭 조작 + 하단 고정 사진 추가)
 
 작성기 UI/UX만 변경. 상세: `docs/development/COMMUNITY_EDITOR_V2_2_MOBILE_IMAGE_UX_FIX.md`
