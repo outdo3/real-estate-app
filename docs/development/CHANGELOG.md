@@ -15,6 +15,11 @@
     IME       조합 중 구조 변경 없음, 조합 중 선택이 끝나면 compositionend 후 삽입
     불변      schema·migration·저장 직렬화·API·영수증·권한·409·Storage 수명주기·이탈 경고 무변경. CommunityBlockEditor 제거
     검증      V2.1 22/22, 커뮤니티 99/99, src 1865/1865, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+    배포 QA   dde7d9d production 실제 UI: 글→사진→글→사진→글(끝 커서, 포커스 유지·blur 두 경로), 글 중간 커서 → 글→사진→글,
+              사진부터 → 사진→글, 편집기 안 사진 삭제 → 원래 글로 합쳐짐. 등록·새로고침·익명 API·색 표식으로 사진 순서 확인.
+              수정: 사진 삭제 + 글 중간 커서에 새 사진 → 저장 후 상세·DB 블록 순서 일치, 지운 사진 Storage 삭제.
+              QA 글 2개 삭제 후 DB(글 1·사진 2·블록 0)/Storage(2, 미참조 0) 정리 확인, 애슐리 글 무변경, Data API OFF 유지.
+              실제 Android·iOS(한글 IME·갤러리 복귀) 기기 QA는 남음
 
 ### E-JIP COMMUNITY EDITOR V2 — 글/사진 블록 순서 자유 작성 + 게시글 수정 화면
 
