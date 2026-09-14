@@ -100,7 +100,11 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [selectedImage]);
 
-  const rememberCursor = (key: string, el: HTMLTextAreaElement) => {
+  const rememberCursor = (key: string, el: HTMLTextAreaElement, passive: boolean) => {
+    // V2.1A — 삭제 anchor가 있는 동안 select·blur만으로는 덮지 않는다. 합쳐진 입력칸에 포커스가 남아 있으면 React가 값을 바꾸며
+    // DOM 커서를 글 끝으로 옮겨 select가 나고, 그 뒤 버튼을 누를 때 blur가 난다 — 둘 다 사용자가 고른 위치가 아니다.
+    // 사용자의 탭·키 이동·입력(focus/click/keyup/change)은 바로 덮는다(manual cursor > delete anchor).
+    if (passive && cursorRef.current?.source === 'delete-anchor') return;
     cursorRef.current = { cursor: { key, selectionStart: el.selectionStart ?? el.value.length, selectionEnd: el.selectionEnd ?? el.value.length }, source: 'user' };
   };
 
@@ -244,7 +248,7 @@ export default function SimpleInlineComposer({ blocks, onBlocksChange, onError, 
                   else textareasRef.current.delete(block.key);
                 }}
                 onChange={(value) => onBlocksChange((prev) => updateTextBlock(prev, block.key, value))}
-                onCursor={(el) => rememberCursor(block.key, el)}
+                onCursor={(el, passive) => rememberCursor(block.key, el, passive)}
                 onCompositionStart={() => {
                   composingRef.current = true;
                 }}
@@ -319,7 +323,8 @@ interface TextareaProps {
   label: string;
   register: (el: HTMLTextAreaElement | null) => void;
   onChange: (value: string) => void;
-  onCursor: (el: HTMLTextAreaElement) => void;
+  /** passive: select·blur처럼 사용자가 커서를 직접 옮기지 않아도 나는 이벤트. */
+  onCursor: (el: HTMLTextAreaElement, passive: boolean) => void;
   onCompositionStart: () => void;
   onCompositionEnd: () => void;
 }
@@ -332,7 +337,8 @@ function ComposerTextarea({ value, placeholder, disabled, label, register, onCha
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
-  const track = (e: React.SyntheticEvent<HTMLTextAreaElement>) => onCursor(e.currentTarget);
+  const track = (e: React.SyntheticEvent<HTMLTextAreaElement>) => onCursor(e.currentTarget, false);
+  const trackPassive = (e: React.SyntheticEvent<HTMLTextAreaElement>) => onCursor(e.currentTarget, true);
   return (
     <textarea
       ref={(el) => {
@@ -348,13 +354,13 @@ function ComposerTextarea({ value, placeholder, disabled, label, register, onCha
       disabled={disabled}
       onChange={(e) => {
         onChange(e.target.value);
-        onCursor(e.target);
+        onCursor(e.target, false);
       }}
-      onSelect={track}
+      onSelect={trackPassive}
       onKeyUp={track}
       onClick={track}
       onFocus={track}
-      onBlur={track}
+      onBlur={trackPassive}
       onCompositionStart={onCompositionStart}
       onCompositionEnd={onCompositionEnd}
     />

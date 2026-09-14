@@ -9,8 +9,9 @@
     문제      사진 삭제 직후 글을 누르지 않고 [사진 추가] → 본문 끝에 삽입될 수 있음
     원인      삭제 합치기로 커서가 가리키던 뒤 글 입력칸 key가 사라짐 + 선택창 복귀 후 합쳐진 입력칸의 DOM 커서(글 끝)를 다시 읽음
     수정      removeComposerImageWithAnchor: 삭제 자리를 커서로 반환(합쳐진 글은 뒤 글 시작 위치 → 교체 시 앞뒤 글 원래대로),
-              커서 기억에 source(user | delete-anchor), pickComposerInsertCursor: 선택 사진 > 포커스 입력칸 > 기억 위치, anchor는 재읽기 제외.
-              사용자가 글을 누르면 그 커서가 우선. 삭제 후 DOM 포커스 이동 없음(모바일 키보드)
+              커서 기억에 source(user | delete-anchor), pickComposerInsertCursor: 선택 사진 > 삭제 anchor > 포커스 입력칸 > 사용자 커서,
+              anchor는 재읽기 제외, select·blur는 anchor를 덮지 않음(QA에서 남은 포커스 입력칸이 anchor를 이기는 것 발견 → 보강).
+              사용자가 글을 누르거나 입력하면 그 커서가 우선. 삭제 후 DOM 포커스 이동 없음(모바일 키보드)
     불변      schema·migration·API·저장 직렬화·영수증·권한·409·Storage·사진 조작 UI 스타일
     검증      V2.1A+V2.1 35/35, src 1878/1878, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
 

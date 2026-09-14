@@ -242,8 +242,10 @@ export function removeComposerImageWithAnchor(blocks: EditorBlock[], key: string
 export type ComposerCursorMemory = { cursor: ComposerCursor; source: 'user' | 'delete-anchor' } | null;
 
 /**
- * [사진 추가]를 누른 순간 삽입 기준 결정. 우선순위: 선택한 사진 > 포커스가 있는 입력칸의 실제 커서 > 기억한 위치.
- * 사용자가 삭제 뒤 글을 누르면 기억한 위치 자체가 'user'로 바뀌므로 manual cursor > delete anchor가 된다.
+ * [사진 추가]를 누른 순간 삽입 기준 결정. 우선순위: 선택한 사진 > 삭제 anchor > 포커스가 있는 입력칸의 실제 커서 > 기억한 사용자 커서.
+ * 사용자가 삭제 뒤 글을 누르거나 입력하면(focus/click/select/keyup/change) 기억 자체가 'user'로 바뀌므로 manual cursor > delete anchor다.
+ * anchor가 포커스 입력칸보다 앞서는 이유: 삭제 전에 포커스가 있던 입력칸이 사진을 누른 뒤에도 포커스를 유지하는 환경
+ * (버튼이 포커스를 가져가지 않는 브라우저, Production QA 자동화)에서는 그 입력칸이 사용자가 고른 위치가 아니다.
  * rereadLive: 선택창에서 돌아왔을 때 입력칸의 현재 선택 위치를 다시 읽을지. anchor는 읽지 않는다 —
  * 합쳐진 입력칸의 DOM 커서는 값이 바뀌며 글 끝으로 가 있어 삭제 자리를 덮어쓰기 때문이다.
  */
@@ -253,6 +255,7 @@ export function pickComposerInsertCursor(
   selectedImageKey: string | null
 ): { cursor: ComposerCursor | null; rereadLive: boolean } {
   if (selectedImageKey) return { cursor: { key: selectedImageKey, selectionStart: 0, selectionEnd: 0 }, rereadLive: false };
+  if (memory?.source === 'delete-anchor') return { cursor: memory.cursor, rereadLive: false };
   if (activeCursor) return { cursor: activeCursor, rereadLive: true };
   if (!memory) return { cursor: null, rereadLive: false };
   return { cursor: memory.cursor, rereadLive: memory.source === 'user' };

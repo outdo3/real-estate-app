@@ -52,16 +52,25 @@ TEXT B
 
 ### 3.2 커서 기억: `ComposerCursorMemory = { cursor, source: 'user' | 'delete-anchor' }`
 
-- 입력칸 이벤트(select/keyup/click/focus/blur/change)와 삽입 후 포커스 이동 → `source: 'user'`.
+- 입력칸 이벤트와 삽입 후 포커스 이동 → `source: 'user'`.
 - 사진 삭제 → `source: 'delete-anchor'`.
+- **passive 이벤트(select·blur)는 anchor를 덮지 않는다.** 합쳐진 입력칸에 포커스가 남아 있으면 React가 값을 바꿀 때 DOM 커서가 글 끝으로 가며
+  select가 나고, 그 뒤 버튼을 누르면 blur가 난다. 둘 다 사용자가 고른 위치가 아니다.
+  사용자 조작(focus·click·keyup·입력 change)은 바로 덮는다. anchor가 없을 때는 V2.1 그대로 select·blur도 커서를 기억한다(모바일 blur 경로).
 
 ### 3.3 `pickComposerInsertCursor(memory, activeCursor, selectedImageKey) → { cursor, rereadLive }`
 
 [사진 추가]를 누르는 순간 삽입 기준을 정한다. 우선순위는 다음과 같다(선택한 사진 기준 삽입은 V2.1 그대로).
 
 1. 선택한 사진이 있으면 그 뒤
-2. 포커스가 있는 입력칸의 실제 커서
-3. 기억한 위치(사용자 커서 또는 삭제 anchor)
+2. **삭제 anchor**
+3. 포커스가 있는 입력칸의 실제 커서
+4. 기억한 사용자 커서
+
+anchor가 포커스 입력칸보다 앞서는 이유: 첫 배포(`93a552a`)에서는 포커스 입력칸이 먼저였다. Production QA에서 삭제 전에 포커스가 있던
+빈 이어 쓰기 칸이 사진·삭제 버튼을 누른 뒤에도 `document.activeElement`로 남아 새 사진이 끝에 들어갔다.
+자동화의 `.click()`은 포커스를 옮기지 않기 때문이지만, 버튼 클릭이 포커스를 가져가지 않는 브라우저에서도 같은 일이 생길 수 있다.
+사용자가 삭제 뒤 글을 실제로 누르거나 입력하면 기억이 `'user'`가 되므로 anchor 우선이 manual cursor 우선을 깨지 않는다.
 
 - **manual cursor > delete anchor**: 삭제 뒤 사용자가 글을 누르거나 입력하면 기억이 `'user'`로 덮이므로 그 위치가 이긴다.
 - `rereadLive`: 선택창 복귀 후 입력칸의 현재 선택 위치를 다시 읽을지. 사용자 커서는 다시 읽고(V2.1 그대로), **anchor는 읽지 않는다**(원인 5).
@@ -89,9 +98,9 @@ TEXT B
 | 파일 | 변경 |
 |---|---|
 | `src/lib/community/block-editor-state.ts` | `removeComposerImageWithAnchor`, `ComposerCursorMemory`, `pickComposerInsertCursor` 추가 |
-| `src/components/community/SimpleInlineComposer.tsx` | 커서 기억에 source 추가, 삭제 시 anchor 기억, [사진 추가] 기준 결정·anchor 재읽기 제외 |
+| `src/components/community/SimpleInlineComposer.tsx` | 커서 기억에 source 추가, 삭제 시 anchor 기억, select·blur는 passive(anchor를 덮지 않음), [사진 추가] 기준 결정·anchor 재읽기 제외 |
 | `src/lib/community/community-editor-v2-1a.test.ts` | 신규 13 tests(요청 16항목 매핑) |
-| `src/lib/community/community-editor-v2-1.test.ts` | 작성기 배선 테스트 12의 코드 패턴만 새 배선으로 갱신 |
+| `src/lib/community/community-editor-v2-1.test.ts` | 작성기 배선 테스트 12·15의 코드 패턴만 새 배선으로 갱신 |
 
 ## 8. 검증
 

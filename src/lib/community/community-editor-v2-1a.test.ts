@@ -114,16 +114,24 @@ test('7. 삭제 후 사용자가 다른 글을 누르면 그 커서가 우선한
   const { picked, inserted } = deleteThenAdd(before, 'old', ['new'], () => cursorAt('a', 2));
   assert.equal(picked.rereadLive, true, '사용자 커서는 선택창에서 돌아온 뒤 실제 선택 위치를 다시 읽는다');
   assert.deepEqual(shape(inserted.blocks), ['T:AA', 'I:new', 'T:AA', 'I:i1', 'T:BBBB\nCCCC']);
-  // 포커스가 있는 입력칸·선택한 사진은 기억한 anchor보다 우선
+  // 선택한 사진 > 삭제 anchor > 포커스 입력칸 > 기억한 사용자 커서
   const memory: ComposerCursorMemory = { cursor: cursorAt('b', 3), source: 'delete-anchor' };
-  assert.deepEqual(pickComposerInsertCursor(memory, cursorAt('a', 1), null), { cursor: cursorAt('a', 1), rereadLive: true });
+  // (Production QA에서 발견) 삭제 전 포커스가 남아 있는 입력칸은 anchor를 이기지 못한다 — 사용자가 그 뒤 글을 누르면 memory가 'user'가 된다
+  assert.deepEqual(pickComposerInsertCursor(memory, cursorAt('a', 1), null), { cursor: cursorAt('b', 3), rereadLive: false });
   assert.deepEqual(pickComposerInsertCursor(memory, cursorAt('a', 1), 'i1'), { cursor: cursorAt('i1', 0), rereadLive: false });
   assert.deepEqual(pickComposerInsertCursor(memory, null, null), { cursor: cursorAt('b', 3), rereadLive: false });
+  const user: ComposerCursorMemory = { cursor: cursorAt('b', 3), source: 'user' };
+  assert.deepEqual(pickComposerInsertCursor(user, cursorAt('a', 1), null), { cursor: cursorAt('a', 1), rereadLive: true }, '사용자 커서끼리는 V2.1 그대로 포커스 입력칸 우선');
+  assert.deepEqual(pickComposerInsertCursor(user, null, null), { cursor: cursorAt('b', 3), rereadLive: true });
   assert.deepEqual(pickComposerInsertCursor(null, null, null), { cursor: null, rereadLive: false });
   // 작성기 배선: 글 입력칸 이벤트는 'user'로 덮고, 사진 삭제는 'delete-anchor'를 남긴다
   const src = codeOf(read(COMPOSER));
   assert.ok(/const rememberCursor = [\s\S]*?source: 'user' \};/.test(src));
   assert.ok(/cursorRef\.current = anchor \? \{ cursor: anchor, source: 'delete-anchor' \} : null;/.test(src));
+  // 합쳐진 입력칸에 포커스가 남아 있을 때 값 변경으로 나는 select, 버튼을 누를 때의 blur는 anchor를 덮지 않는다. 사용자 조작 이벤트는 덮는다.
+  assert.ok(/if \(passive && cursorRef\.current\?\.source === 'delete-anchor'\) return;/.test(src));
+  assert.ok(/onSelect=\{trackPassive\}/.test(src) && /onBlur=\{trackPassive\}/.test(src));
+  assert.ok(/onFocus=\{track\}/.test(src) && /onClick=\{track\}/.test(src) && /onKeyUp=\{track\}/.test(src) && /onCursor\(e\.target, false\)/.test(src));
   assert.ok(/const el = cursor && pending\?\.rereadLive \? textareasRef\.current\.get\(cursor\.key\) : undefined;/.test(src));
 });
 
@@ -191,7 +199,7 @@ test('13·14. 기존 커서 삽입·IME 계약 유지: 삽입 함수 규칙 불�
   assert.deepEqual(shape(insertImagesAtCursor([text('t', '위\n\n아래')], cursorAt('t', 2), ['i1'], newKey).blocks), ['T:위', 'I:i1', 'T:\n아래']);
   const src = codeOf(read(COMPOSER));
   assert.ok(/if \(composingRef\.current\) deferredInsertRef\.current = run;\s*else run\(\);/.test(src));
-  const onChange = src.slice(src.indexOf('onChange={(value) =>'), src.indexOf('onCursor={(el) =>'));
+  const onChange = src.slice(src.indexOf('onChange={(value) =>'), src.indexOf('onCursor={(el, passive) =>'));
   assert.ok(/updateTextBlock\(prev, block\.key, value\)/.test(onChange));
   assert.ok(!/removeComposerImageWithAnchor|insertImagesAtCursor|normalizeComposerBlocks/.test(onChange));
   // 삭제는 DOM 포커스를 옮기지 않는다(모바일 키보드) — removeImage 안에 focus 호출 없음

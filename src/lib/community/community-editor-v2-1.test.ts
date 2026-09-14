@@ -133,7 +133,8 @@ test('12. 사진 선택창에서 돌아와도 버튼 누르기 전 커서에 삽
   assert.ok(/const pending = pendingCursorRef\.current;\s*let cursor = pending\?\.cursor \?\? null;/.test(src));
   assert.ok(/insertImagesAtCursor\(prev, cursor, acceptedKeys, keySource\(pool\)\)/.test(src));
   // 모바일: 버튼 탭으로 입력칸이 blur돼도 마지막 커서를 기억한다
-  assert.ok(/onBlur=\{track\}/.test(src) && /onSelect=\{track\}/.test(src) && /onKeyUp=\{track\}/.test(src) && /onClick=\{track\}/.test(src));
+  // (V2.1A: select·blur는 passive — 사진 삭제 anchor가 있을 때만 무시)
+  assert.ok(/onBlur=\{trackPassive\}/.test(src) && /onSelect=\{trackPassive\}/.test(src) && /onKeyUp=\{track\}/.test(src) && /onClick=\{track\}/.test(src));
   // 데스크톱: 버튼 mousedown이 입력칸 포커스를 뺏지 않는다
   assert.ok(/onMouseDown=\{\(e\) => e\.preventDefault\(\)\}/.test(src));
 });
@@ -169,7 +170,7 @@ test('15. 한글 IME 안전 계약: 조합 중에는 나누지 않고 조합이 
   assert.ok(/composingRef\.current = false;\s*const deferred = deferredInsertRef\.current;\s*deferredInsertRef\.current = null;\s*if \(deferred\) deferred\(\);/.test(src));
   assert.ok(/if \(composingRef\.current\) deferredInsertRef\.current = run;\s*else run\(\);/.test(src));
   // 입력 onChange는 updateTextBlock(값 교체)만 — 구조 변경 함수 호출 없음
-  const onChange = src.slice(src.indexOf('onChange={(value) =>'), src.indexOf('onCursor={(el) =>'));
+  const onChange = src.slice(src.indexOf('onChange={(value) =>'), src.indexOf('onCursor={(el, passive) =>'));
   assert.ok(/updateTextBlock\(prev, block\.key, value\)/.test(onChange));
   assert.ok(!/insertImagesAtCursor|normalizeComposerBlocks|removeComposerImage|moveComposerImage/.test(onChange));
   // 한글 자모·조합 결과 문자열이 나누기에서 깨지지 않는다(UTF-16 코드 단위 기준 위치)
