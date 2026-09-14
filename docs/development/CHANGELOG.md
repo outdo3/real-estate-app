@@ -18,6 +18,8 @@ P1-2(부산 전체 `/stats/gap-invest` 콜드 34~38s) 수정. 상세: `docs/deve
               원인 전부 행 단위 식별: 매매 과다취소 래칫 16행, DB 전용(회수/정정) 활성 9행,
               전월세 원천 전용 122행(DB 셀 마지막 수집 2026-09-02). 모두 기존 DB 결함 계열, 이번 STEP write 0
     로컬      next start 부산 3m 콜드 5.85s / 웜 1.21s, 12m 콜드 5.63s / 웜 1.38s
+    production 7a8c965: 부산 3m 콜드 5.09s(TTL 만료 단독) / 5.35s(배포 직후) / 7.01s(상세 60m 동시), 웜 0.70~0.99s, partial=false.
+              상세 전월세 60m을 gap 콜드 1초 뒤 보냄 → 7.75s, 60/60(기존 384 콜드 중 7.88s). 표본 구 단일 경로 불변(콜드 2.2~3.0s)
 
 집계 코드는 라우트에서 `src/lib/stats/gap-invest-insights.ts`로 의미 불변 이동(두 소스를 같은 함수로 대조하기 위함).
 DB schema/migration/write/cron 없음.
