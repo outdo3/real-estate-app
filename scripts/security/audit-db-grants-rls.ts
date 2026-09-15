@@ -13,6 +13,7 @@
  *   ALLOW_PROD_DB_READ=1 npx tsx scripts/security/audit-db-grants-rls.ts            # 요약 + 테이블별 표
  *   ALLOW_PROD_DB_READ=1 npx tsx scripts/security/audit-db-grants-rls.ts --json     # 기계용 JSON
  *   ALLOW_PROD_DB_READ=1 npx tsx scripts/security/audit-db-grants-rls.ts --snapshot # 롤백용 SQL(출력만)
+ *   ... --snapshot --tables=users,accounts  # 지정 테이블 구간만(시퀀스·기본 권한 제외)
  */
 import * as dotenv from 'dotenv';
 import * as path from 'path';
@@ -186,13 +187,17 @@ function quoteIdent(s: string) {
   return `"${s.replace(/"/g, '""')}"`;
 }
 
-function snapshotSql(d: Awaited<ReturnType<typeof collect>>): string {
+function snapshotSql(d: Awaited<ReturnType<typeof collect>>, only: Set<string> | null = null): string {
   const lines: string[] = [];
+  const keep = (name: unknown) => !only || only.has(String(name));
   lines.push('-- SUPABASE_DB_SECURITY_HARDENING_V2 rollback snapshot (generated, NOT executed)');
   lines.push(`-- generated_at: ${new Date().toISOString()}`);
   lines.push('-- Restores public-schema table/view privileges for API roles, RLS flags, and policies to this snapshot.');
   lines.push('BEGIN;');
-  const rels = d.relations as Row[];
+  if (only) lines.push(`-- tables: ${[...only].join(', ')} (sequences/default privileges omitted)`);
+  const rels = (d.relations as Row[]).filter((r) => keep(r.name));
+  const missing = only ? [...only].filter((t) => !rels.some((r) => r.name === t)) : [];
+  if (missing.length) throw new Error(`unknown tables: ${missing.join(', ')}`);
   const acl = d.explicitAcl as Row[];
   for (const r of rels) {
     const t = `public.${quoteIdent(String(r.name))}`;
@@ -209,7 +214,7 @@ function snapshotSql(d: Awaited<ReturnType<typeof collect>>): string {
       lines.push(`ALTER TABLE ${t} ${r.force_rls ? 'FORCE' : 'NO FORCE'} ROW LEVEL SECURITY;`);
     }
   }
-  const pol = d.policies as Row[];
+  const pol = (d.policies as Row[]).filter((p) => keep(p.tablename));
   if (pol.length) {
     lines.push('-- policies (drop any added later, then recreate these)');
     for (const p of pol) {
@@ -224,7 +229,7 @@ function snapshotSql(d: Awaited<ReturnType<typeof collect>>): string {
       );
     }
   }
-  const seqAcl = d.sequenceAcl as Row[];
+  const seqAcl = only ? [] : (d.sequenceAcl as Row[]);
   const seqNames = [...new Set(seqAcl.map((x) => String(x.name)))];
   if (seqNames.length) lines.push('-- sequences');
   for (const name of seqNames) {
@@ -236,7 +241,7 @@ function snapshotSql(d: Awaited<ReturnType<typeof collect>>): string {
     }
     for (const [g, privs] of grants) lines.push(`GRANT ${[...new Set(privs)].join(', ')} ON SEQUENCE ${t} TO ${g};`);
   }
-  const defAcl = (d.defaultAcl as Row[]).filter((x) => (API_ROLES as readonly string[]).includes(String(x.grantee)));
+  const defAcl = (only ? [] : (d.defaultAcl as Row[])).filter((x) => (API_ROLES as readonly string[]).includes(String(x.grantee)));
   if (defAcl.length) {
     lines.push('-- default privileges for future objects (supabase_admin entries can only be changed by supabase_admin; listed for reference)');
     const objWord: Record<string, string> = { r: 'TABLES', S: 'SEQUENCES', f: 'FUNCTIONS', T: 'TYPES', n: 'SCHEMAS' };
@@ -266,7 +271,8 @@ async function main() {
   const d = await collect();
 
   if (mode === 'snapshot') {
-    console.log(snapshotSql(d));
+    const arg = process.argv.find((a) => a.startsWith('--tables='));
+    console.log(snapshotSql(d, arg ? new Set(arg.slice('--tables='.length).split(',').filter(Boolean)) : null));
     return;
   }
   const api = await dataApiStatus();

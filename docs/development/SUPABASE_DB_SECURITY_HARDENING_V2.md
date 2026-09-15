@@ -4,6 +4,7 @@
 - 범위: public schema 앱 테이블의 API 역할(anon/authenticated/service_role) 권한·RLS 현황 감사 + PHASE 2 설계.
 - **실제 변경 0**: GRANT/REVOKE/RLS/POLICY/migration/Data API/auth/bucket 무변경. 모든 DB 조회는 `SET TRANSACTION READ ONLY`(실측 `transaction_read_only=on`)에서 카탈로그만 읽었다(행 값 조회 없음).
 - **판정: READY_FOR_HARDENING** — PHASE 2 적용은 배치별 사용자 승인 후에만.
+- **PHASE 2 진행 상황**: Batch A **적용 완료**(2026-09-15 03:58Z, §12). Batch B / C1 / C2 미적용(승인 대기).
 
 > 저장소가 공개(GitHub API 비인증 조회 HTTP 200)이므로, SUPABASE_DATA_API_DISABLE_V1과 같은 원칙으로
 > **테이블별 현재 권한 행렬은 이 문서에 싣지 않는다.** 집계와 계획만 기록하고, 상세는 감사 스크립트로 운영자 터미널에서 재현한다.
@@ -154,3 +155,49 @@ Data API OFF는 완화 장치일 뿐 위험도를 낮추는 근거로 쓰지 않
 
 - `scripts/security/audit-db-grants-rls.ts` — 읽기 전용 감사(요약 표 / `--json` / `--snapshot`). `_prod-db-guard` DIAGNOSTIC.
 - 검증: `npx eslint` exit 0, `npx tsc --noEmit` FAIL_EXISTING_SCRIPT_ERRORS(기존 25건, 이 파일 0). 앱 코드 변경 없음 → build 생략.
+
+## 12. PHASE 2 — Batch A 적용 결과 (2026-09-15)
+
+- 승인: 사용자 "PHASE 2 — BATCH A … PRODUCTION PERMISSION HARDENING APPROVED" (범위: CRITICAL 7개 테이블만)
+- 대상: `users`, `accounts`, `sessions`, `verification_tokens`, `favorites`, `recent_views`, `user_preferences`
+- migration: `prisma/migrations/20260915100000_security_hardening_v2_batch_a/migration.sql` — `prisma migrate deploy` 1회(03:58:40Z, exit 0, `applied_steps_count` 1, rolled_back 없음)
+
+### 적용 방식
+- 단일 `DO` 블록: 사전 조건(적용 역할이 RLS 우회 가능, 7개 테이블 존재·소유자 = 적용 역할) 불만족 시 예외로 **아무것도 바꾸지 않고** 중단.
+- 7개 × anon/authenticated/service_role `REVOKE ALL PRIVILEGES`, `ENABLE ROW LEVEL SECURITY`. 정책·FORCE·GRANT·시퀀스·기본 권한·데이터 변경 없음.
+- `lock_timeout` 3s(트랜잭션 로컬). 적용 직전 5초 이상 열린 트랜잭션 0, 대상 테이블 잠금 0, cron 시간대 아님. 대상 테이블 권한 부여자는 전부 소유자(= REVOKE로 제거 가능) 확인.
+- 적용 전 migration 대기 목록이 이 1건뿐임을 `migrate status`로 확인.
+- 적용 직전 상태 스냅샷(JSON)과 Batch A 롤백 SQL을 **저장소 밖**에 저장(공개 저장소에 커밋하지 않음).
+
+### 검증 (적용 전·후 동일 절차)
+
+| 항목 | 결과 |
+|---|---|
+| 카탈로그 비교(`verify-hardening-batch.ts --batch=A`) | **PASS** — 대상 7개: API 역할 권한 0, RLS on, FORCE off, 정책 0, 소유자 불변, 소유자 ACL 불변 / 나머지 36개 관계·ACL·정책·시퀀스 ACL·기본 권한 **변화 없음** |
+| 집계 | RLS 켜짐 2 → **9** / 43, FORCE 0, 정책 0 |
+| Prisma(앱 경로) 읽기 + 롤백 쓰기(`verify-prisma-batch-a.ts`) | 전 10/10 → 후 **10/10** (7개 테이블 count·조회, QA 사용자와 연결 행 생성·수정·upsert·삭제 11단계 후 롤백, count 동일, 잔여 0) |
+| Production smoke 34건(홈·지도·통계·커뮤니티 목록/상세·MY·도구·분양·재개발·학교·단지 상세·리포트 3·관리자 페이지, NextAuth session/providers/csrf/signin, 커뮤니티 API, MY API 3(비로그인 401), 관리자 API 3(401), 단지·통계·검색·분양 API, cron 401, 사진 업로드 비로그인 401) | 적용 전후 **상태 코드·응답 크기 전부 동일** |
+| 적용 후 error_logs | 적용 이후 0건(권한 오류 0) — 적용 직후 트래픽이 적어 약한 신호 |
+| Data API | `/rest/v1/` 503, 민감 테이블 6개 503, `/graphql/v1` 503 |
+| migration 상태 | `Database schema is up to date` |
+
+### 롤백
+필요 시 저장소 밖에 보관한 Batch A 롤백 SQL(적용 직전 스냅샷에서 생성, `BEGIN … ROLLBACK`으로 감쌈)을 검토 후 `COMMIT`으로 바꿔 실행한다.
+추측 SQL로 복구하지 않는다. 현재 롤백 조건(세션/OAuth 오류, 권한 오류, MY 오류, 예상 밖 500, 무관 테이블 변경, 부분 적용) **해당 없음**.
+
+### 사용자 기기 QA 필요
+1. Google 로그인 2. Kakao 로그인 3. MY 페이지 4. 관심 단지(추가·삭제) 5. 최근 본 단지 6. 사용자 설정(목적 선택) 7. 커뮤니티 진입(로그인 상태)
+Naver 로그인은 별도 LIMITED 상태라 Batch A 판정에 포함하지 않는다.
+
+### 산출물(이번 배치)
+- `scripts/security/hardening-batches.ts` — 배치 정의, 적용 전/후 비교, migration 정적 검사(순수 함수)
+- `scripts/security/hardening-batches.test.ts` — 7개 테스트
+- `scripts/security/verify-hardening-batch.ts` — before/after JSON 비교 CLI
+- `scripts/security/verify-prisma-batch-a.ts` — Prisma 읽기 + 롤백 쓰기 확인
+- `scripts/security/audit-db-grants-rls.ts` — `--snapshot --tables=` 추가
+
+### Batch B 권고
+Batch A와 같은 패턴(단일 DO 블록 + 사전 조건 + 저장소 밖 스냅샷 + 전후 비교 + Prisma 롤백 쓰기 + smoke)으로 진행 가능.
+대상 8개 중 `page_views`·`active_sessions`·`search_logs`·`error_logs`는 비로그인 요청마다 쓰이는 로그 테이블이라, 적용 후 `/api/log/*` 쓰기 경로를
+롤백 트랜잭션으로 확인하고 적용 직후 error_logs 증가 여부를 관찰하는 항목을 추가한다. Batch A 기기 QA 확인 후 승인 요청 권장.
+

@@ -2,6 +2,18 @@
 
 ## 2026-09-15
 
+### E-JIP SUPABASE DB SECURITY HARDENING V2 — PHASE 2 Batch A 적용 (CRITICAL 7개 테이블)
+
+Production DB 권한 변경(승인 범위: users, accounts, sessions, verification_tokens, favorites, recent_views, user_preferences만).
+상세: `docs/development/SUPABASE_DB_SECURITY_HARDENING_V2.md` §12
+
+    변경      migration 20260915100000_security_hardening_v2_batch_a — 7개 테이블 anon/authenticated/service_role 권한 회수 + RLS 활성화
+              (정책·FORCE·시퀀스·기본 권한·데이터 변경 없음, 사전 조건 불만족 시 전체 중단, lock_timeout 3s). migrate deploy 1회 exit 0
+    검증      카탈로그 전후 비교 PASS(대상 7 목표 상태, 나머지 36 불변), RLS 2→9/43, Prisma 읽기+롤백 쓰기 10/10(전·후 동일),
+              Production smoke 34건 상태·크기 전후 동일, 적용 후 권한 오류 0, Data API·GraphQL 503 유지
+    롤백      적용 직전 스냅샷·롤백 SQL은 저장소 밖 보관(미실행). 롤백 조건 해당 없음
+    남은 것   사용자 기기 QA(Google·Kakao 로그인, MY·관심·최근·설정, 커뮤니티). Batch B/C 미진행
+
 ### E-JIP SUPABASE DB SECURITY HARDENING V2 — PHASE 1 읽기 전용 권한/RLS 감사
 
 감사 도구·문서만 추가(GRANT/REVOKE/RLS/정책/migration/Data API 무변경). 상세: `docs/development/SUPABASE_DB_SECURITY_HARDENING_V2.md`
