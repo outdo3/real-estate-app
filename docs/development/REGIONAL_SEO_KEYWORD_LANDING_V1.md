@@ -562,3 +562,16 @@ tsc                                                     FAIL_EXISTING_SCRIPT_ERR
 npm run build                                           exit 0
 ```
 
+
+### 25.5 Production (2026-09-16 02:52 KST 배포)
+
+```
+push          9299b36..15979d7 main (docs d86aef7·44feef8 포함) 1회
+배포          dpl_DakbBy48cfdMif6WbDT4xftQKXS7 Ready, alias e-jip.com / www.e-jip.com
+11개 zero-30d 동  전부 200·index·self canonical, 설명 HISTORICAL, 화면에 없는 섹션 약속 0
+정상 동 3·구 3·부산  rich 설명 유지(약속 섹션 전부 화면에 존재), ?period=90도 같은 설명·canonical
+가짜동        noindex·canonical 없음·일반 설명
+사이트맵      139, 중복·쿼리 0, URL 집합 패치 전과 동일
+지역 URL 133개 전수  설명 약속 섹션 미표시 0, RICH 122 · HISTORICAL 11 · SPARSE 0, 전부 index, canonical = loc
+로그          Vercel 5xx/error/fatal/warning 0(배포 후 1시간), error_logs 0
+```
