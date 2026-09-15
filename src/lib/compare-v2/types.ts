@@ -57,6 +57,11 @@ export interface CompareApartment {
   regionLabel: string | null;
   metrics: CompareMetric[];
   score: CompareScore | null;
+  /**
+   * PERSONALIZED_SCORE_V1 P2-D — 같은 점수 응답의 원본 V2 결과(`_shadowV2`). 나에게 맞는 점수 계산에만 읽는다.
+   * 새 요청 없음(이미 받은 score 응답에서 꺼낸 값). 없으면 null/undefined.
+   */
+  scoreV2?: unknown;
   loadError: boolean;
 }
 

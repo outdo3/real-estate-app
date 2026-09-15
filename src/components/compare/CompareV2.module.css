@@ -196,6 +196,140 @@
   border-top: 1px solid var(--border-color);
 }
 
+/* PERSONALIZED_SCORE_V1 P2-D — 공통 분석 아래 "나에게 맞는 점수". A/B 칸은 domainRow와 같은 44px | 1fr | 1fr 격자로 정렬 */
+.fitBlock {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.fitHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.fitTitle {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.fitBadge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--primary-hover);
+  background: rgba(19, 163, 103, 0.1);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  white-space: nowrap;
+}
+
+.fitPlaceholder {
+  height: 44px;
+  margin-top: 0.4rem;
+  border-radius: 8px;
+  background: var(--bg-secondary, #f8f9fa);
+}
+
+.fitMessage {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  word-break: keep-all;
+}
+
+.fitCta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 0.5rem;
+  padding: 0 12px;
+  border: 1px solid var(--primary-color);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--primary-hover);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.fitRow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+  align-items: start;
+}
+
+.fitSide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+  text-align: center;
+}
+
+.fitScore {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.fitUnit {
+  margin-left: 1px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.fitLimited {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  white-space: nowrap;
+}
+
+.fitUnavailable {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+.fitCoverage {
+  max-width: 100%;
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fitDisclaimer {
+  margin: 0.5rem 0 0;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  word-break: keep-all;
+}
+
 .metricTable {
   width: 100%;
   table-layout: fixed;

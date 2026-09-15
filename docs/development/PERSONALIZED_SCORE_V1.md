@@ -307,3 +307,61 @@ P2-A 범위 테스트("중요도 사용처") 목록에 `personalized-score.ts`�
 | 저장 여부 | 이후 GET: `fitImportance` null 유지, purposes 배열 유지 — **계정 설정 변경 없음** |
 
 FULL/LIMITED 카드와 저장 후 상세 반영은 실계정 값을 바꾸지 않기 위해 Production에서 실행하지 않았다(단위 테스트 + P2-A 롤백 DB 검증으로 대체) → 기기 QA 필요.
+
+## P2-D — 비교 화면 연동 (2026-09-15)
+
+- 기준 HEAD: `bd54269` (main)
+- 범위: 비교 화면(`/stats/compare`, `CompareV2`)만. schema·`fit_importance`·계산식·공통 점수·검색·analytics·선호 API 변경 없음, 외부 API·LLM 없음.
+
+### 1. 기존 비교 구조(코드 기준)
+
+| 항목 | 실제 |
+|---|---|
+| 화면 | `src/components/compare/CompareV2.tsx`, 슬롯 **최대 2개**(`[null, null]`) |
+| 단지 데이터 | `fetchCompareApartment` → 단지당 trades + `/api/apt/[name]/score?aptSeq=` 병렬 1회씩 → `CompareApartment` |
+| 공통 점수 표시 | `ScoreSection`: 제목 "이집 분석 (절대 평가 — 순위 아님)" + 교통·생활·교육·단지 **도메인 막대 4줄**(격자 `44px 1fr 1fr`) + peer 줄. 종합 숫자 줄은 없음. 두 단지 모두 점수가 없으면 섹션 렌더 안 함 |
+| `_shadowV2` | `buildScore`가 도메인만 매핑하고 원본은 `CompareApartment`에 남기지 않았음 |
+
+### 2. 변경
+
+- `CompareApartment.scoreV2?: unknown` 추가 — `fetch.ts`가 **이미 받은** score 응답의 `_shadowV2`를 그대로 담는다(새 요청 없음, 공통 `buildScore` 매핑 불변). 선택 필드라 리포트 비교(`compare-read.ts`) 등 기존 생성부 영향 없음.
+- `deriveComparePersonalFit`(`src/lib/personal-fit-ui.ts`): 두 단지 각각 상세 카드와 **같은 판정**(`derivePersonalFitCard` → P2-B `calculatePersonalFit`)에 **같은 사용자 중요도**를 넣는다. 가중합·임계값을 새로 쓰지 않는다.
+- `ScoreSection` 안, peer 줄 **바로 아래** `PersonalFitCompareBlock` 한 블록(별도 카드 추가 없음).
+
+### 3. 상태
+
+| 상태 | 조건 | 화면 |
+|---|---|---|
+| 숨김 | 두 단지 모두 공통 점수 없음 | 렌더 안 함(기존 ScoreSection도 이 경우 렌더 안 함) |
+| 자리 유지 | 로그인 사용자 선호 조회 중 | 44px 빈 칸 |
+| 비로그인 | — | 섹션 전체에 한 번: "로그인하면 나에게 맞는 점수로 비교할 수 있어요" + [로그인하고 비교](기존 `LoginModal`, 현재 비교 URL로 복귀). **선호 요청 없음** |
+| 미설정 | 로그인 + `fitImportance` null | 섹션 전체에 한 번: "중요하게 보는 조건을 설정하면 나에게 맞는 점수로 비교할 수 있어요" + [내 중요도 설정하기] → `/my#fit-score-settings` |
+| 조회 실패 | 선호 GET 실패 | "내 중요도를 불러오지 못했어요." |
+| 점수 | 설정됨 | 제목 + [내 중요도 반영], A/B 칸(도메인 막대와 같은 `44px \| 1fr \| 1fr` 정렬): 쪽마다 독립 |
+
+쪽별 표시:
+- FULL: `NN점` + "전체 조건 반영"
+- LIMITED: `NN점` + [일부 정보 부족] + 제외 사유(예: "교통 정보 없음, 주차 정보 없음")
+- FULL이지만 제외 축 있음: `NN점` + 제외 사유
+- 계산 불가: "정보 부족"(숫자 없음). **한쪽이 계산 불가여도 다른 쪽 점수는 그대로.**
+
+제외 사유는 점수 대신 글자로만(0점처럼 보이지 않음), 최대 2줄. 두 점수가 서로 다른 조건으로 계산됐을 수 있음을 쪽마다 드러낸다.
+면책 "개인 선호를 반영한 적합도이며, 투자 판단이나 가격 전망을 의미하지 않습니다."는 블록 하단 **한 번**.
+잘 맞는 점/아쉬운 점 문장은 비교에 넣지 않고 상세에만 둔다(제안: 추후 쪽별 "가장 잘 맞는 축" 1개 — 이번 STEP 미구현).
+
+### 4. 캐시·개인정보·성능
+
+- 선호는 P2-C/E의 `useFitPreference`(탭 메모리·사용자 id별·로그아웃 비움·실패 미캐시)를 그대로 사용. 비교 전용 fetch/cache 없음, 비교 화면이 선호 API를 직접 부르지 않음.
+- 계산은 순수 함수 2회. 추가 네트워크는 캐시되지 않은 경우의 선호 GET 1회뿐. 공통 비교 렌더는 기다리지 않는다.
+- 중요도 값 analytics·URL·저장소 전송 없음. 기존 비교 analytics 호출(`compare_start`·`compare_add`·`compare_remove`·`compare_detail_click`×2·`finance_fit_from_compare`×2) 이름·횟수 불변. 비교 URL·공유(`compare-v2/*`)에 중요도 없음.
+
+### 5. 검증
+
+| 항목 | 결과 |
+|---|---|
+| `src/lib/personal-fit-compare.test.ts` | 16/16 — 요청 22개 항목(비로그인 CTA 1회·요청 없음·미설정 CTA 1회·A/B 점수·같은 중요도·FULL/FULL·FULL/LIMITED·FULL/UNAVAILABLE·LIMITED/LIMITED·UNAVAILABLE/UNAVAILABLE·한쪽 불가·쪽별 제외 축·0점 표시 없음·공통 점수 불변·P2-B 재사용·공식 중복 없음·캐시 재사용·analytics/URL·학군 없음·모바일 CSS·최대 2곳) |
+| src 전체 | 2035/2035 |
+| `npx tsc --noEmit` | FAIL_EXISTING_SCRIPT_ERRORS(기존 25건, 신규 0) |
+| eslint(변경 파일) | exit 0 |
+| `npm run build` | exit 0 |
+| 로컬 production 빌드(비로그인, `/stats/compare?a=26350-9&b=26110-837`, 360/375/390px iframe) | 블록이 "이집 분석" 패널 안 peer 줄 아래, 도메인 막대 4줄 유지, CTA 1개(44px·블록 전체 폭), 가로 넘침 없음, `/api/my/preferences` 요청 0 |

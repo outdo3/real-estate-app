@@ -19,6 +19,9 @@ import { absoluteShareUrl } from '@/lib/share/shareUtils';
 import { compareShareCopy } from '@/lib/share/ejipShareCard';
 import { compareReportHref, REPORT_LABELS } from '@/lib/report/report-links';
 import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
+import LoginModal from '@/components/LoginModal';
+import { useFitPreference } from '@/hooks/useFitPreference';
+import { FIT_SETTINGS_HREF, PERSONAL_FIT_COPY, deriveComparePersonalFit, type ComparePersonalFitSide } from '@/lib/personal-fit-ui';
 import styles from './CompareV2.module.css';
 
 interface SlotState {
@@ -357,6 +360,84 @@ function ScoreSection({ a, b }: { a: CompareApartment; b: CompareApartment }) {
         <span>{a.score?.peer ? scoreDomainSummary(a.score.peer.percentile, a.score.peer.confidence) : '비교군 정보 부족'}</span>
         <span>{b.score?.peer ? scoreDomainSummary(b.score.peer.percentile, b.score.peer.confidence) : '비교군 정보 부족'}</span>
       </div>
+      <PersonalFitCompareBlock a={a} b={b} />
+    </div>
+  );
+}
+
+// PERSONALIZED_SCORE_V1 P2-D — 공통 이집 분석 바로 아래 "나에게 맞는 점수" 줄. 공통 막대·값·peer 문구는 그대로다.
+// 각 단지의 이미 받은 score 응답(scoreV2 = _shadowV2)과 같은 사용자 중요도를 P2-B 엔진에 넣은 결과만 렌더한다
+// (deriveComparePersonalFit). 선호는 상세와 같은 세션 캐시(useFitPreference)에서 읽고, 비로그인은 요청하지 않는다.
+// 잘 맞는 점/아쉬운 점 문장은 상세페이지에만 둔다. 중요도 값은 analytics·URL로 보내지 않는다.
+function PersonalFitCompareBlock({ a, b }: { a: CompareApartment; b: CompareApartment }) {
+  const { state } = useFitPreference();
+  const [loginOpen, setLoginOpen] = useState(false);
+  const model = deriveComparePersonalFit({ shadowA: a.scoreV2, shadowB: b.scoreV2, preference: state });
+  if (model.kind === 'HIDDEN') return null;
+
+  return (
+    <div className={styles.fitBlock} data-personal-fit-compare={model.kind.toLowerCase()}>
+      <div className={styles.fitHeader}>
+        <span className={styles.fitTitle}>{PERSONAL_FIT_COPY.title}</span>
+        {model.kind === 'SCORES' && <span className={styles.fitBadge}>{PERSONAL_FIT_COPY.badgeFull}</span>}
+      </div>
+
+      {model.kind === 'PLACEHOLDER' && <div className={styles.fitPlaceholder} aria-hidden="true" />}
+
+      {model.kind === 'LOGGED_OUT' && (
+        <>
+          <p className={styles.fitMessage}>{PERSONAL_FIT_COPY.compareLoggedOut}</p>
+          <button type="button" className={styles.fitCta} onClick={() => setLoginOpen(true)}>
+            {PERSONAL_FIT_COPY.compareLoggedOutCta}
+          </button>
+          <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+        </>
+      )}
+
+      {model.kind === 'NO_SETTINGS' && (
+        <>
+          <p className={styles.fitMessage}>{PERSONAL_FIT_COPY.compareNoSettings}</p>
+          <Link href={FIT_SETTINGS_HREF} className={styles.fitCta}>
+            {PERSONAL_FIT_COPY.noSettingsCta}
+          </Link>
+        </>
+      )}
+
+      {model.kind === 'ERROR' && <p className={styles.fitMessage}>{PERSONAL_FIT_COPY.loadError}</p>}
+
+      {model.kind === 'SCORES' && (
+        <>
+          <div className={styles.fitRow}>
+            <span aria-hidden="true" />
+            <PersonalFitCompareSide side={model.a} name={a.displayName} />
+            <PersonalFitCompareSide side={model.b} name={b.displayName} />
+          </div>
+          <p className={styles.fitDisclaimer}>{PERSONAL_FIT_COPY.disclaimer}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PersonalFitCompareSide({ side, name }: { side: ComparePersonalFitSide; name: string }) {
+  if (side.kind === 'UNAVAILABLE') {
+    return (
+      <div className={styles.fitSide} aria-label={`${name} ${PERSONAL_FIT_COPY.title} ${PERSONAL_FIT_COPY.compareUnavailable}`}>
+        <span className={styles.fitUnavailable}>{PERSONAL_FIT_COPY.compareUnavailable}</span>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.fitSide} aria-label={`${name} ${PERSONAL_FIT_COPY.title} ${side.score}점`}>
+      <span className={styles.fitScore}>
+        {side.score}
+        <span className={styles.fitUnit}>점</span>
+      </span>
+      {side.status === 'LIMITED' && <span className={styles.fitLimited}>{PERSONAL_FIT_COPY.badgeLimited}</span>}
+      {/* 두 단지가 서로 다른 조건으로 계산됐을 수 있음을 숨기지 않는다. 제외 축은 점수 대신 사유로만 보인다. */}
+      <span className={styles.fitCoverage}>
+        {side.excludedTexts.length > 0 ? side.excludedTexts.join(', ') : PERSONAL_FIT_COPY.compareAllIncluded}
+      </span>
     </div>
   );
 }

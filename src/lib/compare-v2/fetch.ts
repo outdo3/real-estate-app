@@ -87,6 +87,7 @@ export async function fetchCompareApartment(query: CompareApartmentQuery): Promi
     regionLabel: resolvedDong || null,
     metrics: [priceMetric, ...factMetrics, ...locationMetrics],
     score,
+    scoreV2: scoreJson?._shadowV2 ?? null,
     loadError: !tradesJson && !scoreJson,
   };
 }

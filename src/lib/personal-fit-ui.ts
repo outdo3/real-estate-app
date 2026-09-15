@@ -39,6 +39,11 @@ export const PERSONAL_FIT_COPY = {
   settingsTitle: '나에게 맞는 점수 설정',
   settingsDesc: '아파트를 볼 때 중요하게 생각하는 조건을 알려주세요. 이 설정은 나에게 맞는 점수를 계산할 때만 사용됩니다.',
   settingsIncomplete: '5개 항목을 모두 선택하면 저장할 수 있어요.',
+  compareLoggedOut: '로그인하면 나에게 맞는 점수로 비교할 수 있어요',
+  compareLoggedOutCta: '로그인하고 비교',
+  compareNoSettings: '중요하게 보는 조건을 설정하면 나에게 맞는 점수로 비교할 수 있어요',
+  compareUnavailable: '정보 부족',
+  compareAllIncluded: '전체 조건 반영',
   save: '저장하기',
   saving: '저장 중...',
   saved: '저장했어요',
@@ -105,6 +110,39 @@ export type PersonalFitCardModel =
       goodFit: PersonalFitExplanation[];
       weakFit: PersonalFitExplanation[];
     };
+
+// ── 비교 화면(P2-D) ───────────────────────────────────────────────────────────
+
+export type ComparePersonalFitSide =
+  | { kind: 'SCORE'; status: 'FULL' | 'LIMITED'; score: number; excludedTexts: string[] }
+  | { kind: 'UNAVAILABLE' };
+
+export type ComparePersonalFitModel =
+  | { kind: 'HIDDEN' }
+  | { kind: 'PLACEHOLDER' }
+  | { kind: 'LOGGED_OUT' }
+  | { kind: 'NO_SETTINGS' }
+  | { kind: 'ERROR' }
+  | { kind: 'SCORES'; a: ComparePersonalFitSide; b: ComparePersonalFitSide };
+
+/**
+ * 비교 두 단지 각각에 **같은 사용자 중요도**로 상세 카드와 같은 판정(derivePersonalFitCard → P2-B)을 적용한다.
+ * 로그인·설정 안내는 비교 섹션 전체에 한 번만. 한쪽이 계산 불가여도 다른 쪽 점수는 그대로 보인다.
+ * 둘 다 공통 점수가 없으면 HIDDEN(계산 대상이 없음).
+ */
+export function deriveComparePersonalFit(input: { shadowA: unknown; shadowB: unknown; preference: FitPreferenceState }): ComparePersonalFitModel {
+  const a = derivePersonalFitCard({ scoreLoading: false, shadowV2: input.shadowA, preference: input.preference });
+  const b = derivePersonalFitCard({ scoreLoading: false, shadowV2: input.shadowB, preference: input.preference });
+  if (!isCommonScoreAvailable(input.shadowA) && !isCommonScoreAvailable(input.shadowB)) return { kind: 'HIDDEN' };
+  const pref = input.preference;
+  if (pref.kind === 'LOGGED_OUT') return { kind: 'LOGGED_OUT' };
+  if (pref.kind === 'LOADING') return { kind: 'PLACEHOLDER' };
+  if (pref.kind === 'ERROR') return { kind: 'ERROR' };
+  if (pref.fitImportance === null) return { kind: 'NO_SETTINGS' };
+  const side = (m: PersonalFitCardModel): ComparePersonalFitSide =>
+    m.kind === 'SCORE' ? { kind: 'SCORE', status: m.status, score: m.score, excludedTexts: m.excludedTexts } : { kind: 'UNAVAILABLE' };
+  return { kind: 'SCORES', a: side(a), b: side(b) };
+}
 
 export function exclusionText(axis: FitAxis, exclusion: PersonalAxisExclusion | null): string | null {
   if (!exclusion) return null;

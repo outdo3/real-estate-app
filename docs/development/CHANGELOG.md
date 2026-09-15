@@ -2,6 +2,16 @@
 
 ## 2026-09-15
 
+### E-JIP PERSONALIZED SCORE V1 — P2-D 비교 화면 연동
+
+비교 화면만(schema·계산식·공통 점수·선호 API·analytics 변경 없음). 상세: `docs/development/PERSONALIZED_SCORE_V1.md` P2-D
+
+    위치      ScoreSection "이집 분석" 막대·peer 줄 바로 아래 "나에게 맞는 점수" 블록(A/B 칸은 막대와 같은 격자)
+    상태      비로그인 로그인 CTA 1회(선호 요청 없음) / 미설정 설정 CTA 1회 / 쪽별 FULL·LIMITED 점수 + 제외 사유 또는 "전체 조건 반영",
+              계산 불가 쪽 "정보 부족"(다른 쪽 점수 유지), 둘 다 공통 점수 없으면 숨김, 면책 1회
+    재사용    CompareApartment.scoreV2(이미 받은 _shadowV2) + deriveComparePersonalFit(상세 카드 판정 = P2-B) + useFitPreference 캐시
+    검증      신규 16/16, src 2035/2035, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0, 로컬 360/375/390px 비로그인 확인
+
 ### E-JIP PERSONALIZED SCORE V1 — P2-C 상세 카드 + P2-E MY 중요도 설정
 
 사용자 노출 MVP. schema·계산식·공통 점수·검색·analytics 변경 없음. 상세: `docs/development/PERSONALIZED_SCORE_V1.md` P2-C + P2-E
