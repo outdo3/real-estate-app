@@ -2,6 +2,18 @@
 
 ## 2026-09-15
 
+### E-JIP SUPABASE DB SECURITY HARDENING V2 — PHASE 1 읽기 전용 권한/RLS 감사
+
+감사 도구·문서만 추가(GRANT/REVOKE/RLS/정책/migration/Data API 무변경). 상세: `docs/development/SUPABASE_DB_SECURITY_HARDENING_V2.md`
+
+    결과      public 43테이블, RLS ON 2 / OFF 41, 정책 0, OFF 41개 전부 anon·authenticated 광범위 grant, 시퀀스 28 API 역할 UPDATE,
+              원인 = public 기본 권한이 새 객체에 API 역할 전 권한 부여. Data API·GraphQL 503(OFF 유지)
+    역할      앱·cron·migration·scripts = postgres(소유자·BYPASSRLS), API 역할은 로그인 불가 → 회수·RLS가 Prisma에 영향 없음
+    위험      CRITICAL 7 · HIGH 7 · MEDIUM 27 · LOW 2, REST 의존 scripts/crawl_facilities.py 쓰기 BROKEN
+    계획      배치 A(auth/사용자) → B(커뮤니티·로그) → C1(공개 데이터) → C2(시스템·legacy·시퀀스·기본 권한), 적용 전 --snapshot 롤백 SQL
+    도구      scripts/security/audit-db-grants-rls.ts (READ ONLY 트랜잭션, 카탈로그만)
+    검증      eslint exit 0, tsc FAIL_EXISTING_SCRIPT_ERRORS(이 파일 0), 앱 코드 변경 없음
+
 ### E-JIP COMMUNITY IMAGE UPLOAD RATE LIMIT V1 — 사진 업로드 사용자별 한도
 
 `POST /api/community/images`만 변경(편집기 UI·schema·bucket policy·Data API·auth 무변경, 새 저장소·서비스·secret 없음).
