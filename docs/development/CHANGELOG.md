@@ -2,6 +2,16 @@
 
 ## 2026-09-15
 
+### E-JIP PERSONALIZED SCORE V1 — P2-A 사용자 중요도 저장 + API
+
+Production migration 1건(additive) + 선호 API 확장. 점수 계산·UI 없음. 상세: `docs/development/PERSONALIZED_SCORE_V1.md`
+
+    schema    user_preferences.fit_importance JSONB NULL 추가(default 없음, purposes 불변). migrate deploy 1회 exit 0
+    값        transport·living·newness·parking·elementarySchoolAccess 5개 모두 정수 1~5(부분·빈 객체·추가 key·문자열·소수 거부), NULL=미설정
+    API       GET에 fitImportance 추가 / PUT은 purposes·fitImportance 중 온 필드만 갱신, {fitImportance:null} 초기화, no-store
+    보안      세션 사용자만, 오류 로그는 코드만, analytics·URL 전송 없음. 43개 테이블 grant·RLS 전후 동일, Data API 503
+    검증      신규 20/20, src 1982/1982, Production 롤백 쓰기 13/13(기존 2행 지문 동일), tsc FAIL_EXISTING_SCRIPT_ERRORS, eslint·build exit 0
+
 ### E-JIP PERSONALIZED SCORE V1 — PHASE 1 데이터·모델 감사
 
 감사 도구·문서만 추가(구현·schema·Production 쓰기·공통 점수 변경 없음). 상세: `docs/development/PERSONALIZED_SCORE_V1_PHASE1_AUDIT.md`

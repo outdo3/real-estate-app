@@ -1184,6 +1184,9 @@ model RecentView {
 model UserPreference {
   userId    String   @id @map("user_id")
   purposes  Json     @default("[]")
+  // PERSONALIZED_SCORE_V1 P2-A — 나에게 맞는 점수 중요도. NULL = 미설정.
+  // 값: {transport, living, newness, parking, elementarySchoolAccess} 각 정수 1~5(검증: src/lib/fit-importance.ts).
+  fitImportance Json?  @map("fit_importance")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
