@@ -11,6 +11,7 @@
               A URL에 검색 결과 lawdCd 누락 → 전체 로드여도 기본 서구(26140) 마커
     수정      buildRegionMapUrl(lat·lng 그대로 + 5자리 lawdCd, 좌표 0,0이면 /map) + window.location.assign
     검증      신규 10/10, src 2066/2066, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0
+    QA        Production 06cf0b2: 홈 2·빠른 검색 2 모두 선택 동 좌표 + 해당 구 lawdCd·마커, 안내·ipinfo 없음, back 1회 복귀, /map 직접 진입·단지 결과 이동 회귀 없음
 
 ### E-JIP APT DETAIL → MAP CONTEXT PRESERVATION V1 — "지도에서 주변 단지와 보기" 단지 중심 유지
 
