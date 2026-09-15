@@ -453,3 +453,16 @@ FULL/LIMITED 카드와 저장 후 상세 반영은 실계정 값을 바꾸지 �
 ### 7. 남은 기기 QA
 
 P2-C/E/D의 로그인 사용자 흐름: 중요도 저장 → 상세 FULL/LIMITED 카드 → 설정 변경 반영 → 비교 A/B 점수(FULL·LIMITED·정보 부족) → 로그아웃/다른 계정 격리, 모바일 360~390px 실제 화면.
+
+### 8. Production QA (배포 `3a248e9`, 2026-09-15)
+
+로그인된 실제 계정(중요도 미설정), 저장·설정 변경 없음. GA DebugView 접근이 없어 **페이지의 `fetch`를 가로채 `/api/log/*` 요청 본문을 기록하고 서버로 보내지 않는** 방식으로 확인했다(분석 행 생성 없음).
+
+| 확인 | 결과 |
+|---|---|
+| 상세(그린시티 `26110-837`) [내 중요도 설정하기] 클릭(이동은 막음) | `{ name: "personal_fit_settings_cta_click", actionType: "DETAIL", aptName: null, complexId: null }` — 본문 키는 기존 형식(name·sessionId·complexId·aptName·actionType·qaSuppressed) 그대로, 중요도·점수 없음 |
+| 비교(롯데 vs 그린시티) [내 중요도 설정하기] 클릭(이동은 막음) | `{ name: "personal_fit_settings_cta_click", actionType: "COMPARE", aptName: null, complexId: null }` |
+| 비교 공통 막대 | 62·54 / 37·71 / 55·84 / 52·53 — P2-D 때와 동일 |
+| 카드·블록 상태 | 둘 다 미설정 → view 이벤트 대상 아님(설계대로 전송 없음) |
+
+한계: 마운트 시점 view 이벤트(`card_view`·`compare_view`)와 로그인 CTA·저장 이벤트는 페이지 이동이 전체 로드로 일어나 가로채기를 먼저 걸 수 없었고, 로그인 상태·실계정 저장이 필요해 Production에서 관찰하지 않았다 → 단위 테스트(상태 enum·중복 방지·호출 위치·payload) + 기기 QA.
