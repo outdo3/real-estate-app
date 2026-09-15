@@ -10,6 +10,7 @@
     재현      학교 상세(?lat&lng&lawdCd) → 헤더 "지도"(router.push) 2/2: 지도가 학교 쿼리를 공유 링크로 읽어 학교 좌표로 열림(GPS/IP 흐름 생략)
     수정      readInitialMapStateFromUrl: pathname이 /map일 때만 URL 컨텍스트로 인정(클라이언트 전환 중 이전 페이지 주소 무시)
     검증      신규 9/9, src 2075/2075, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0
+    QA        Production d03ea36: 학교 2곳 → "지도" 일반 흐름으로 수정 확인, 일반 2·단지 2·지역 2·지도 하단 카드→상세→back 복원 정상, 뒤로가기 1회 복귀
 
 ### E-JIP SEARCH → MAP CONTEXT PRESERVATION V1 — 홈·빠른 검색 "📍 지역" 결과가 선택한 지역으로 열림
 
