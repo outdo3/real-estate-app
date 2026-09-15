@@ -504,3 +504,13 @@ Yeti UA와 Chrome UA로 37개 경로를 요청 — title/canonical/robots 동일
 - 기존 `/stats?sido=`·`/school?sido=` 색인 URL이 canonical로 정리되는지
 - 순위 변화 주장 금지 — 2~4주 관찰 후 판단
 
+### 24.12 재확인 (02:36~02:39 KST, 재승인 요청 시)
+
+- `9299b36`·`b9daa17`은 이미 origin/main에 있어 **다시 push하지 않았다**(로컬은 docs `d86aef7`만 앞섬, src 변경 없음). 배포 kodp0a3i0 Ready 유지
+- www.e-jip.com → 308 `https://e-jip.com{경로+쿼리}`, 레거시 vercel 호스트 → 308 e-jip.com
+- 연제구 연산동(서로 다른 구 3번째 동): index·self canonical·H1·거래건수 77건·단지 링크 10개 전부 lawdCd 26470+dong 연산동·경로 이집>부산>연제구.
+  연제구 페이지 동 링크 2개(연산동·거제동) 모두 26470
+- 홈 실제 JSON-LD script 태그 2개(WebSite·Organization) — 원문에 문자열이 4번 보이는 것은 RSC payload 직렬화이며 중복 태그 아님
+- sitemap 139(중복·쿼리 0, 구 16·동 116), Vercel 로그 5xx/error/fatal/warning 0, error_logs 배포 후 0
+- 테스트 재실행: SEO 관련 80/80, src 2141/2141. IndexNow는 02:1x 제출(139, HTTP 200) 이후 재제출하지 않음
+
