@@ -247,7 +247,8 @@ test('20. analytics·URL·로그로 중요도 값이 나가지 않는다', () =>
   }
 });
 
-test('P2-A 범위: 개인화 점수 계산·UI는 아직 없다', () => {
+test('범위: 중요도 사용처는 API·계산 엔진(P2-B)뿐, UI는 아직 없다', () => {
   const users = walk(join(ROOT, 'src')).filter((f) => /fit-importance|fit_importance|[fF]itImportance/.test(readFileSync(f, 'utf8'))).map((f) => f.replace(/\\/g, '/').slice(f.replace(/\\/g, '/').indexOf('src/')));
-  assert.deepEqual(users.sort(), ['src/app/api/my/preferences/route.ts', 'src/lib/fit-importance.ts', 'src/lib/preferences-handlers.ts', 'src/lib/preferences-prisma-store.ts'].sort());
+  assert.deepEqual(users.sort(), ['src/app/api/my/preferences/route.ts', 'src/lib/fit-importance.ts', 'src/lib/personalized-score.ts', 'src/lib/preferences-handlers.ts', 'src/lib/preferences-prisma-store.ts'].sort());
+  assert.ok(!users.some((f) => f.endsWith('.tsx')), 'UI(P2-C 이후) 없음');
 });

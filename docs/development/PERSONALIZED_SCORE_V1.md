@@ -130,3 +130,94 @@ END $$;
 - 중요도를 설정하는 UI가 아직 없어 실제 사용자 값은 0건(P2-E).
 - 로그인 세션으로 GET을 호출하는 Production 확인은 자동화 세션이 없어 하지 않았다(DB 롤백 검증으로 대체).
 - 역방향 선호(예: 구축 선호)는 1~5 중요도로 표현할 수 없다(PHASE 1 결정).
+
+## P2-B — 순수 계산 엔진 + 설명 항목 (2026-09-15)
+
+- 기준 HEAD: `356166a` (main)
+- 범위: `src/lib/personalized-score.ts`(순수 함수) + 테스트 + 실데이터 동등성 스크립트. **schema·Production 쓰기·공통 점수·UI·analytics·LLM 변경 없음**. 아직 어떤 화면도 이 모듈을 호출하지 않는다(P2-C).
+
+### 1. 입력(실제 score 응답 기준)
+
+`GET /api/apt/[name]/score` 응답의 `_shadowV2` = V2 엔진 `ScoreV2Result` JSON.
+
+| 축 | 출처 | 확인 |
+|---|---|---|
+| `transport` 교통 | `domains.transport.score` | 0~100, 결측 시 null |
+| `living` 생활편의 | `domains.living.score` | 〃 |
+| `newness` 신축 | `domains.complex.evidence.ageScore` | 요소 점수, buildYear 없으면 null |
+| `parking` 주차 | `domains.complex.evidence.parkingScore` | **`parkingRawStatus === 'KNOWN'` 이고 `parkingModelTreatment === 'KNOWN_VALUE'`일 때만** |
+| `elementarySchoolAccess` 초등학교 접근성 | `domains.education.score` | 초등학교 직선거리 기반 |
+
+주차 실측/중립 구분: 공통 단지 도메인은 결측 시 `parkingScore: null`, `parkingModelTreatment: 'P-D_ERA_CONDITIONED'`, `parkingEraNeutralUsed: 65/68/53/22`를 기록하고 합성에는 중립값을 쓴다(`score-v2/complex.ts`). 개인화는 두 상태 표식이 모두 실측일 때만 점수를 읽고, 표식이 어긋나면 값이 있어도 쓰지 않는다.
+
+공통 점수 사용 가능 = `_shadowV2`가 객체 + `eligibility !== 'NOT_ENOUGH_DATA'` + `overallScore`가 유한 숫자(비교 화면 `buildScore`·peer universe와 같은 기준, 공통 LIMITED 포함).
+
+### 2. 계산
+
+```
+personalScore = Σ(axisScore × importance) / Σ(importance of included axes)
+coverage      = Σ(importance of included axes) / Σ(importance of all 5 axes)
+```
+
+- 중요도는 정수 1~5 그대로(합계 100 변환 없음 — 비율이 같아 결과 동일).
+- 계산하지 않음(`status: 'UNAVAILABLE'`): `NO_PREFERENCE`(중요도 없음·무효) / `NO_COMMON_SCORE` / `NO_INCLUDED_AXES`(포함 축 0개).
+- 결측 축: 0점 처리 없이 분모에서 제외, `excludedAxes`와 축별 `exclusion`(`NO_DATA` · `PARKING_NOT_MEASURED` · `INVALID_SCORE`(숫자 아님·0~100 밖)).
+- `coverage < 0.60` → `LIMITED`, `≥ 0.60` → `FULL`(정확히 0.60은 FULL).
+- 반올림: 기존 점수 카드와 같은 `Math.round`. 결과에 `score`(정수)와 `rawScore`(반올림 전) 둘 다.
+
+### 3. 설명 항목(규칙 기반, LLM 없음)
+
+- 후보: **중요도 4~5**인 포함 축만.
+- 판정은 **표시 정수 점수**(`Math.round`) 기준 — 화면에 보이는 숫자와 판정이 어긋나지 않게(예: 74.5 → 75 GOOD, 45.5 → 46 중립).
+- `GOOD`: ≥ 75 / `WEAK`: ≤ 45 / 46~74 중립·결측 축은 설명 안 함.
+- 정렬: 중요도 내림차순 → (GOOD은 점수 높은 순, WEAK는 낮은 순) → 축 고정 순서.
+
+| 축 | GOOD | WEAK |
+|---|---|---|
+| 교통 | 교통 접근성이 선호에 잘 맞아요 | 교통 접근성은 선호보다 아쉬워요 |
+| 생활편의 | 생활편의시설 접근성이 잘 맞아요 | 생활편의시설 접근성은 선호보다 아쉬워요 |
+| 신축 | 신축 선호에 잘 맞아요 | 건물 연식은 신축 선호보다 아쉬워요 |
+| 주차 | 주차 여건이 선호에 잘 맞아요 | 주차 여건은 선호보다 아쉬워요 |
+| 초등학교 접근성 | 초등학교 접근성이 선호에 잘 맞아요 | 초등학교 접근성은 선호보다 아쉬워요 |
+
+최고·우수·투자·미래가치·추천·학군 표현 없음(테스트 고정).
+
+### 4. 출력 타입
+
+```ts
+type PersonalFitResult =
+  | { status: 'UNAVAILABLE'; reason: 'NO_PREFERENCE' | 'NO_COMMON_SCORE' | 'NO_INCLUDED_AXES' }
+  | { status: 'FULL' | 'LIMITED'; score: number; rawScore: number; coverage: number;
+      includedAxes: FitAxis[]; excludedAxes: FitAxis[];
+      axisResults: { axis; label; importance; score: number | null; included; exclusion }[];
+      goodFit: { axis; label; importance; displayScore; text }[]; weakFit: [...] };
+```
+
+### 5. 불변·결정성·호환
+
+- 공통 점수 객체는 읽기만 한다(깊게 동결한 실제 엔진 결과로 계산해도 오류·변화 없음).
+- 시간·난수·env·네트워크·DB·React 없음. 같은 입력 → 같은 결과.
+- 입력은 API 응답 `_shadowV2` JSON 그대로 — 상세(`apt-client`)·비교(`compare-v2/metrics` `buildScore`와 같은 객체) 모두 재사용 가능.
+
+### 6. 검증
+
+| 항목 | 결과 |
+|---|---|
+| `src/lib/personalized-score.test.ts` | 21/21 — 요청 22개 항목 포함(주차 신뢰 회귀는 **실제 V2 엔진** 결과로: 공통 단지 점수는 중립값 합성, 개인화는 주차 제외) |
+| PHASE 1 동등성(단위) | 실제 엔진 출력 5단지 × 4프로필 20건 일치 |
+| PHASE 1 동등성(실데이터, `scripts/personal-score/verify-engine-parity.ts`, READ ONLY) | 부산 점수 산출 2,833단지 × 4프로필 = 11,332건: 상태·표시 점수·coverage 불일치 **0**, rawScore 최대 차 2.8e-14, LIMITED 수 PHASE 1과 동일(51/2/18/1). 공통 점수가 주차 중립값을 쓴 808단지에서 개인화가 주차를 포함한 경우 **0** |
+| 성능 | 단위 테스트 1만 회 평균 < 0.1ms 조건 통과, 실데이터 스크립트 호출당 약 0.008ms |
+| src 전체 | 2003/2003 |
+| `npx tsc --noEmit` | FAIL_EXISTING_SCRIPT_ERRORS(기존 25건, 신규 0) |
+| eslint(변경 파일) | exit 0 |
+| `npm run build` | exit 0 |
+
+rawScore 미세 차이 원인: PHASE 1 프로토타입은 교통·생활·초등·신축·주차 순, 모듈은 교통·생활·신축·주차·초등 순으로 더한다 — 수식은 같고 부동소수 합산 순서만 다르다.
+
+P2-A 범위 테스트("중요도 사용처") 목록에 `personalized-score.ts`를 추가하고 UI(tsx) 사용 없음을 함께 고정했다.
+
+### 7. 한계
+
+- 공통 점수 응답이 `_shadowV2`를 `any`로 넘기므로 모듈이 형태를 방어적으로 검사한다(형태가 바뀌면 해당 축은 `NO_DATA`/`INVALID_SCORE`로 빠진다).
+- 설명은 축 점수 구간만 말하고 원자료(거리·대수·연식)를 문장에 넣지 않는다 — 원자료 병기는 P2-C UI에서 공통 점수 카드의 근거 값 재사용으로 검토.
+- 역방향 선호 표현 불가, 가격·향후가치 축 없음(PHASE 1 결정).

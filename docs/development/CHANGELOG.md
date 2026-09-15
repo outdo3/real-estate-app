@@ -2,6 +2,16 @@
 
 ## 2026-09-15
 
+### E-JIP PERSONALIZED SCORE V1 — P2-B 순수 계산 엔진 + 설명 항목
+
+순수 모듈·테스트·READ ONLY 동등성 스크립트만(schema·Production 쓰기·공통 점수·UI 변경 없음). 상세: `docs/development/PERSONALIZED_SCORE_V1.md` P2-B
+
+    모듈      src/lib/personalized-score.ts — _shadowV2 + fitImportance → score(Math.round)·rawScore·coverage·FULL/LIMITED·포함/제외 축·GOOD/WEAK 설명
+    규칙      Σ(축점수×중요도)/Σ(포함 중요도), 결측 축 제외(0점 금지), 주차는 KNOWN+KNOWN_VALUE만(중립값 미사용), coverage<0.60 LIMITED,
+              설명은 중요도 4~5·표시 정수 ≥75 GOOD / ≤45 WEAK, 승인 문구만
+    검증      신규 21/21(실제 V2 엔진 주차 회귀 포함), 실데이터 2,833단지×4프로필 PHASE 1과 불일치 0·중립 주차 포함 0,
+              src 2003/2003, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0
+
 ### E-JIP PERSONALIZED SCORE V1 — P2-A 사용자 중요도 저장 + API
 
 Production migration 1건(additive) + 선호 API 확장. 점수 계산·UI 없음. 상세: `docs/development/PERSONALIZED_SCORE_V1.md`
