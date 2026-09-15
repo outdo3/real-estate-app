@@ -2,6 +2,17 @@
 
 ## 2026-09-15
 
+### E-JIP APT DETAIL → MAP CONTEXT PRESERVATION V1 — "지도에서 주변 단지와 보기" 단지 중심 유지
+
+상세 버튼 이동 방식만 변경(지도 코어·마커·레이어·지오로케이션·식별 규칙 무변경). 상세: `docs/development/APT_DETAIL_MAP_CONTEXT_V1.md`
+
+    재현      Production 3단지(롯데 26350·그린시티 26110·연산자이 26470) 모두 올바른 URL(aptSeq·lat·lng)을 만들었지만
+              지도가 IP 접속 지역(중구 26110)으로 열리고 aptSeq·선택 소실. 같은 URL 직접 열기는 정상
+    원인      router.push 클라이언트 전환 중 지도 초기 상태가 window.location.search(아직 상세 쿼리, lat 없음)를 읽음
+              → 공유 링크로 인식 안 됨 → GPS→IP 흐름이 컨텍스트를 덮음
+    수정      handleViewOnMap: router.push → window.location.assign(같은 URL, 기존 딥링크 경로 재사용)
+    검증      신규 8/8, src 2056/2056, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0
+
 ### E-JIP PERSONALIZED SCORE V1 — P2-F analytics + 릴리스 QA
 
 개인화 최소 이벤트 5종(1st-party 전용). schema·계산식·선호 API·auth 변경 없음. 상세: `docs/development/PERSONALIZED_SCORE_V1.md` P2-F

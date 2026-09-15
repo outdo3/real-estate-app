@@ -607,12 +607,20 @@ export default function ApartmentDetail() {
   // 지오코딩했다(실패 시 키워드 검색 첫 결과 채택). 이제 서버가 준 canonical 좌표를
   // 그대로 쓴다 — 클릭 즉시 이동하고, 지도가 다른 단지를 가리킬 여지가 없다.
   // 좌표가 없으면 lat/lng 없이 이동한다(기존과 동일하게 지역 기준으로 열린다).
+  //
+  // APT_DETAIL_MAP_CONTEXT_V1 — **전체 페이지 이동**으로 연다(router.push 아님).
+  // 재현(Production 3단지): 이 URL은 aptSeq·lat·lng를 정확히 담는데, router.push(클라이언트 전환)로 가면
+  // 지도 페이지의 초기 상태 읽기(readInitialMapStateFromUrl — useState 초기화 안에서 window.location.search)가
+  // 새 URL이 history에 반영되기 **전에** 실행돼 상세페이지의 쿼리(lat 없음)를 읽었다. 그 결과 공유/복원 링크로
+  // 인식되지 않아 GPS→IP→기본 지역 흐름이 돌았고, aptSeq·선택·중심이 모두 IP 지역으로 덮였다.
+  // 같은 URL을 전체 로드로 열면 기존 공유 링크 경로 그대로 해당 단지 중심·선택으로 열린다(Production 확인).
+  // 지도 초기화 구조는 바꾸지 않는다(map core refactor 금지).
   const handleViewOnMap = async () => {
     if (mapCtaLoading) return;
     setMapCtaLoading(true);
     const coords = canonicalCoord;
     setMapCtaLoading(false);
-    router.push(
+    window.location.assign(
       buildDetailMapUrl({
         lawdCd: lawdCdState,
         dong: urlDong || undefined,
