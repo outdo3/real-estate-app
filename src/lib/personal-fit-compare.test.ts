@@ -80,7 +80,7 @@ test('1·2. 비로그인 → 비교 섹션 전체에 로그인 CTA 한 번, 선�
 test('3. 로그인 + 미설정 → 설정 CTA 한 번(/my#fit-score-settings), 숫자 없음', () => {
   assert.deepEqual(deriveComparePersonalFit({ shadowA: FULL_A, shadowB: FULL_B, preference: ready(null) }), { kind: 'NO_SETTINGS' });
   assert.equal(PERSONAL_FIT_COPY.compareNoSettings, '중요하게 보는 조건을 설정하면 나에게 맞는 점수로 비교할 수 있어요');
-  assert.equal((COMPARE.match(/<Link href=\{FIT_SETTINGS_HREF\} className=\{styles\.fitCta\}>/g) ?? []).length, 1);
+  assert.equal((COMPARE.match(/<Link href=\{FIT_SETTINGS_HREF\} className=\{styles\.fitCta\}[^>]*>/g) ?? []).length, 1);
   assert.equal(FIT_SETTINGS_HREF, '/my#fit-score-settings');
 });
 

@@ -22,6 +22,8 @@ import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
 import LoginModal from '@/components/LoginModal';
 import { useFitPreference } from '@/hooks/useFitPreference';
 import { FIT_SETTINGS_HREF, PERSONAL_FIT_COPY, deriveComparePersonalFit, type ComparePersonalFitSide } from '@/lib/personal-fit-ui';
+import { compareViewAction, shouldLogImpression } from '@/lib/analytics/personal-fit-events';
+import { trackPersonalFit } from '@/lib/analytics/track-personal-fit';
 import styles from './CompareV2.module.css';
 
 interface SlotState {
@@ -373,6 +375,16 @@ function PersonalFitCompareBlock({ a, b }: { a: CompareApartment; b: CompareApar
   const { state } = useFitPreference();
   const [loginOpen, setLoginOpen] = useState(false);
   const model = deriveComparePersonalFit({ shadowA: a.scoreV2, shadowB: b.scoreV2, preference: state });
+
+  // P2-F — 점수 상태로 그려졌을 때 같은 두 점수 응답당 한 번만, 상태 enum만(점수·중요도·단지 식별자 없음).
+  const viewAction = compareViewAction(model);
+  const lastViewKeys = useRef<unknown[] | null>(null);
+  useEffect(() => {
+    if (viewAction === null || !shouldLogImpression(lastViewKeys.current, [a.scoreV2, b.scoreV2], viewAction)) return;
+    lastViewKeys.current = [a.scoreV2, b.scoreV2];
+    trackPersonalFit('personal_fit_compare_view', viewAction);
+  }, [a.scoreV2, b.scoreV2, viewAction]);
+
   if (model.kind === 'HIDDEN') return null;
 
   return (
@@ -387,7 +399,14 @@ function PersonalFitCompareBlock({ a, b }: { a: CompareApartment; b: CompareApar
       {model.kind === 'LOGGED_OUT' && (
         <>
           <p className={styles.fitMessage}>{PERSONAL_FIT_COPY.compareLoggedOut}</p>
-          <button type="button" className={styles.fitCta} onClick={() => setLoginOpen(true)}>
+          <button
+            type="button"
+            className={styles.fitCta}
+            onClick={() => {
+              trackPersonalFit('personal_fit_login_cta_click', 'COMPARE');
+              setLoginOpen(true);
+            }}
+          >
             {PERSONAL_FIT_COPY.compareLoggedOutCta}
           </button>
           <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
@@ -397,7 +416,7 @@ function PersonalFitCompareBlock({ a, b }: { a: CompareApartment; b: CompareApar
       {model.kind === 'NO_SETTINGS' && (
         <>
           <p className={styles.fitMessage}>{PERSONAL_FIT_COPY.compareNoSettings}</p>
-          <Link href={FIT_SETTINGS_HREF} className={styles.fitCta}>
+          <Link href={FIT_SETTINGS_HREF} className={styles.fitCta} onClick={() => trackPersonalFit('personal_fit_settings_cta_click', 'COMPARE')}>
             {PERSONAL_FIT_COPY.noSettingsCta}
           </Link>
         </>

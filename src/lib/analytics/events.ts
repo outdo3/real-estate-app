@@ -63,12 +63,41 @@ export const ANALYTICS_EVENT_NAMES = [
   'detail_map_view',
   'detail_roadview_open',
   'detail_map_return',
+  // PERSONALIZED_SCORE_V1 P2-F — 나에게 맞는 점수 기능 사용 여부만 잰다(1st-party 전용, GA4 매핑 없음 —
+  // next_action_click·finance_fit_*와 같은 제품 분석 계열). 중요도 값·점수·coverage 숫자·제외 축·단지 식별자는
+  // 절대 싣지 않는다. 분해 축은 아래 PERSONAL_FIT_EVENT_ACTIONS의 고정 enum 하나(actionType)뿐이다.
+  'personal_fit_settings_cta_click',
+  'personal_fit_login_cta_click',
+  'personal_fit_settings_save',
+  'personal_fit_card_view',
+  'personal_fit_compare_view',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];
 
 export function isAnalyticsEventName(value: string): value is AnalyticsEventName {
   return (ANALYTICS_EVENT_NAMES as readonly string[]).includes(value);
+}
+
+/**
+ * PERSONALIZED_SCORE_V1 P2-F — 개인화 이벤트별로 허용하는 actionType(고정 enum). 목록 밖 값은 서버가 버린다.
+ * 값은 위치(DETAIL/COMPARE) 또는 화면 상태뿐 — 사용자 중요도·점수·coverage를 담을 자리가 없다.
+ */
+export const PERSONAL_FIT_EVENT_ACTIONS = {
+  personal_fit_settings_cta_click: ['DETAIL', 'COMPARE'],
+  personal_fit_login_cta_click: ['DETAIL', 'COMPARE'],
+  personal_fit_settings_save: [],
+  personal_fit_card_view: ['FULL', 'LIMITED', 'UNAVAILABLE'],
+  personal_fit_compare_view: ['FULL_FULL', 'FULL_LIMITED', 'LIMITED_LIMITED', 'HAS_UNAVAILABLE'],
+} as const satisfies Partial<Record<AnalyticsEventName, readonly string[]>>;
+
+export type PersonalFitEventName = keyof typeof PERSONAL_FIT_EVENT_ACTIONS;
+
+/** 개인화 이벤트의 actionType 검증. 해당 이벤트의 enum에 있는 값만 통과, 그 외(다른 이벤트 포함) null. */
+export function personalFitActionType(name: string, raw: string | null | undefined): string | null {
+  if (!raw || !Object.prototype.hasOwnProperty.call(PERSONAL_FIT_EVENT_ACTIONS, name)) return null;
+  const allowed = PERSONAL_FIT_EVENT_ACTIONS[name as PersonalFitEventName] as readonly string[];
+  return allowed.includes(raw) ? raw : null;
 }
 
 export const ANALYTICS_EVENT_URL_PREFIX = '/__event__/';

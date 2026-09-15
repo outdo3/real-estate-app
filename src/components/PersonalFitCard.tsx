@@ -5,11 +5,13 @@
 // 계산은 P2-B 엔진(src/lib/personalized-score.ts)을 거친 화면 모델(derivePersonalFitCard)을 그대로 렌더한다.
 // 이 컴포넌트는 점수·잘 맞는 점/아쉬운 점을 다시 판정하지 않는다. 공통 점수 응답(_shadowV2)은 읽기만 한다.
 // 중요도 값은 화면 표시와 계산에만 쓰고 analytics·URL·로그로 보내지 않는다.
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import LoginModal from './LoginModal';
 import { useFitPreference } from '@/hooks/useFitPreference';
 import { FIT_SETTINGS_HREF, PERSONAL_FIT_COPY as COPY, derivePersonalFitCard } from '@/lib/personal-fit-ui';
+import { trackPersonalFit } from '@/lib/analytics/track-personal-fit';
+import { cardViewAction, shouldLogImpression } from '@/lib/analytics/personal-fit-events';
 import styles from './PersonalFitCard.module.css';
 
 interface Props {
@@ -33,6 +35,16 @@ export default function PersonalFitCard({ shadowV2, scoreLoading }: Props) {
   const [loginOpen, setLoginOpen] = useState(false);
   const model = derivePersonalFitCard({ scoreLoading, shadowV2, preference: state });
 
+  // P2-F — 결과 상태(FULL/LIMITED/UNAVAILABLE)로 그려졌을 때 같은 점수 응답당 한 번만. 로딩·안내 상태는 보내지 않는다.
+  // 상태 enum만 보낸다(점수·중요도·coverage·단지 식별자 없음). 실패해도 화면에 영향 없음(fire-and-forget).
+  const viewAction = cardViewAction(model);
+  const lastViewKeys = useRef<unknown[] | null>(null);
+  useEffect(() => {
+    if (viewAction === null || !shouldLogImpression(lastViewKeys.current, [shadowV2], viewAction)) return;
+    lastViewKeys.current = [shadowV2];
+    trackPersonalFit('personal_fit_card_view', viewAction);
+  }, [shadowV2, viewAction]);
+
   if (model.kind === 'HIDDEN') return null;
 
   if (model.kind === 'PLACEHOLDER') {
@@ -46,7 +58,14 @@ export default function PersonalFitCard({ shadowV2, scoreLoading }: Props) {
           <Header />
           <p className={styles.message}>{COPY.loggedOut}</p>
         </div>
-        <button type="button" className={styles.ctaButton} onClick={() => setLoginOpen(true)}>
+        <button
+          type="button"
+          className={styles.ctaButton}
+          onClick={() => {
+            trackPersonalFit('personal_fit_login_cta_click', 'DETAIL');
+            setLoginOpen(true);
+          }}
+        >
           {COPY.loggedOutCta}
         </button>
         {/* 기존 로그인 모달 — 콜백은 현재 상세 URL(모달 기본값) */}
@@ -62,7 +81,7 @@ export default function PersonalFitCard({ shadowV2, scoreLoading }: Props) {
           <Header />
           <p className={styles.message}>{COPY.noSettings}</p>
         </div>
-        <Link href={FIT_SETTINGS_HREF} className={styles.ctaButton}>
+        <Link href={FIT_SETTINGS_HREF} className={styles.ctaButton} onClick={() => trackPersonalFit('personal_fit_settings_cta_click', 'DETAIL')}>
           {COPY.noSettingsCta}
         </Link>
       </section>

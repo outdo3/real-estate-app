@@ -2,6 +2,18 @@
 
 ## 2026-09-15
 
+### E-JIP PERSONALIZED SCORE V1 — P2-F analytics + 릴리스 QA
+
+개인화 최소 이벤트 5종(1st-party 전용). schema·계산식·선호 API·auth 변경 없음. 상세: `docs/development/PERSONALIZED_SCORE_V1.md` P2-F
+
+    이벤트    personal_fit_settings_cta_click·login_cta_click(DETAIL|COMPARE), settings_save(성공 후, 값 없음),
+              card_view(FULL|LIMITED|UNAVAILABLE), compare_view(FULL_FULL|FULL_LIMITED|LIMITED_LIMITED|HAS_UNAVAILABLE)
+    payload   이름 + 고정 enum 하나(trackPersonalFit 시그니처로 강제). 중요도·점수·coverage·제외 축·단지 식별자 없음, GA4 매핑 없음
+    중복      같은 점수 응답 객체당 1회(리렌더 재전송 없음), 로딩·안내 상태는 전송 안 함, 전송 실패는 화면에 영향 없음
+    기존      기존 28개 이벤트 이름·순서·GA4 매핑·next_action_click 검증 불변
+    감사      엔진 동등성 재확인 PASS, 선호 API 롤백 검증 13/13, Batch A 권한 상태 유지, Data API 503
+    검증      신규 13/13, src 2048/2048, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0
+
 ### E-JIP PERSONALIZED SCORE V1 — P2-D 비교 화면 연동
 
 비교 화면만(schema·계산식·공통 점수·선호 API·analytics 변경 없음). 상세: `docs/development/PERSONALIZED_SCORE_V1.md` P2-D

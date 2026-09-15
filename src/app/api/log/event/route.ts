@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth-helpers';
-import { isAnalyticsEventName, eventUrl } from '@/lib/analytics/events';
+import { isAnalyticsEventName, eventUrl, personalFitActionType } from '@/lib/analytics/events';
 import { NEXT_ACTION_TYPES } from '@/lib/decision-journey/types';
 import { classifyTraffic } from '@/lib/analytics/traffic-classification';
 
@@ -45,7 +45,8 @@ export async function POST(request: Request) {
     const actionType =
       name === 'next_action_click' && rawActionType && (NEXT_ACTION_TYPES as readonly string[]).includes(rawActionType)
         ? rawActionType
-        : null;
+        : // PERSONALIZED_SCORE_V1 P2-F — 개인화 이벤트만 자기 고정 enum(위치/상태)을 받는다. 다른 이벤트는 기존과 같이 null.
+          personalFitActionType(name, rawActionType);
 
     await prisma.pageView.create({
       data: { url: eventUrl(name, actionType), complexId, aptName, sessionId, userId: user?.id ?? null },

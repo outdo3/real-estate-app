@@ -125,7 +125,7 @@ test('2b. 조회 실패는 캐시하지 않고, 사용자 전환 중 늦게 온 
 test('3. 로그인 + 미설정 → 설정 CTA(MY 섹션 앵커, 값 없는 URL)', () => {
   assert.deepEqual(derivePersonalFitCard({ scoreLoading: false, shadowV2: wire(v2()), preference: ready(null) }), { kind: 'NO_SETTINGS' });
   assert.equal(FIT_SETTINGS_HREF, '/my#fit-score-settings');
-  assert.match(CARD, /<Link href=\{FIT_SETTINGS_HREF\} className=\{styles\.ctaButton\}>\s*\{COPY\.noSettingsCta\}/);
+  assert.match(CARD, /<Link href=\{FIT_SETTINGS_HREF\} className=\{styles\.ctaButton\}[\s\S]{0,120}?\)\}>\s*\{COPY\.noSettingsCta\}/);
   assert.equal(PERSONAL_FIT_COPY.noSettingsCta, '내 중요도 설정하기');
 });
 

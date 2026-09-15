@@ -20,6 +20,7 @@ import {
   type FitImportanceDraft,
 } from '@/lib/personal-fit-ui';
 import { useFitPreference } from '@/hooks/useFitPreference';
+import { trackPersonalFit } from '@/lib/analytics/track-personal-fit';
 import styles from './FitImportanceSettings.module.css';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -65,6 +66,8 @@ export default function FitImportanceSettings() {
       updateCache(stored);
       setDraft(draftFromSaved(stored));
       setSaveState('saved');
+      // P2-F — 저장 **성공 후에만**, 이름만 보낸다(중요도 값·payload 없음).
+      trackPersonalFit('personal_fit_settings_save');
       setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 3000);
     } catch {
       setSaveState('error');

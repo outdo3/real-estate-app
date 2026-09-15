@@ -379,3 +379,77 @@ FULL/LIMITED 카드와 저장 후 상세 반영은 실계정 값을 바꾸지 �
 | 이동 | 설정 링크 → `/my#fit-score-settings`, 섹션 상단(108px)으로 스크롤 |
 
 비로그인 상태는 로컬 production 빌드 360/375/390px에서 확인(§5). A/B 점수 칸(FULL·LIMITED·정보 부족)은 실계정 값을 저장하지 않기 위해 Production에서 보지 않았다 → 기기 QA.
+
+## P2-F — Analytics + 릴리스 QA (2026-09-15)
+
+- 기준 HEAD: `3c9f427` (main)
+- 승인: analytics allowlist 변경(개인화 최소 이벤트). schema·계산식·선호 API·auth·식별·검색·URL 변경 없음.
+
+### 1. 기존 analytics 구조(코드 기준)
+
+| 항목 | 실제 |
+|---|---|
+| allowlist | `src/lib/analytics/events.ts` `ANALYTICS_EVENT_NAMES`(변경 전 28개) — 목록 밖 이름은 `/api/log/event`가 저장하지 않음 |
+| 전송 | `trackEvent(name, context)` → 1st-party POST(`name·sessionId·complexId·aptName·actionType`) + GA4는 `GA_EVENT_MAP`에 있는 이름만 |
+| 저장 | `page_views.url = /__event__/<name>[?action=<enum>]`. `actionType`은 `next_action_click`만 `NEXT_ACTION_TYPES`로 검증해 저장 |
+| GA4 원칙 | 제품 여정 분석(`next_action_click`·`finance_fit_*`)은 1st-party 전용, GA4는 유입/획득만 |
+| impression 선례 | `partner_cta_impression`, `detail_map_view`(마운트 1회) |
+| QA 제외 | `isQaSuppressed()`·관리자/봇 세션은 서버에서 저장 안 함 |
+
+### 2. 이벤트(1st-party 전용, GA4 매핑 없음)
+
+| 이벤트 | 발생 | actionType(고정 enum) |
+|---|---|---|
+| `personal_fit_settings_cta_click` | [내 중요도 설정하기] 클릭 | `DETAIL` · `COMPARE` |
+| `personal_fit_login_cta_click` | 개인화 로그인 CTA 클릭 | `DETAIL` · `COMPARE` |
+| `personal_fit_settings_save` | MY 중요도 저장 **성공 후** | 없음 |
+| `personal_fit_card_view` | 상세 카드가 결과 상태로 그려짐 | `FULL` · `LIMITED` · `UNAVAILABLE` |
+| `personal_fit_compare_view` | 비교 블록이 점수 상태로 그려짐 | `FULL_FULL` · `FULL_LIMITED` · `LIMITED_LIMITED` · `HAS_UNAVAILABLE`(한쪽이라도 계산 불가) |
+
+- 저장 URL 예: `/__event__/personal_fit_card_view?action=FULL`.
+- `/api/log/event`: `next_action_click` 판정은 그대로 두고, 개인화 이벤트만 `personalFitActionType`로 **자기 enum**을 검증(목록 밖 값·다른 이벤트는 null).
+- 관리자 집계의 기존 `LIKE '/__event__/<이름>%'` 접두사와 겹치지 않는다.
+- "중요도 수정" 링크 클릭·1~5 선택·축 선택·점수 변화·선호 조회·로딩/안내 상태는 이벤트를 만들지 않는다.
+
+### 3. payload 규칙
+
+허용: 이벤트 이름 + 위 enum 하나(`actionType`). 그 외 필드 없음(`aptName`·`complexId`·GA 파라미터도 보내지 않음 — 기능 사용 여부 측정에 필요 없음).
+금지: 5축 중요도 값, 개인화·공통 점수 숫자, coverage 숫자, 제외 축 목록, 사용자 id/이메일, 예산·가족·통근 정보.
+
+구조적 보장: 개인화 파일은 `trackEvent`를 직접 부르지 않고 `trackPersonalFit(name, action?)`(`src/lib/analytics/track-personal-fit.ts`)만 쓴다. 이 함수의 인자는 이벤트 이름과 **그 이벤트의 enum 타입** 하나뿐이라 다른 값을 넘길 수 없다. 전송 실패(스토리지 차단 등)는 삼킨다.
+
+### 4. 노출 중복 방지
+
+- 상태 판정: `cardViewAction` / `compareViewAction`(`src/lib/analytics/personal-fit-events.ts`) — 결과 상태가 아니면 null(전송 안 함).
+- 컴포넌트는 `useRef`에 마지막으로 보낸 점수 응답 객체(상세: `[_shadowV2]`, 비교: `[A.scoreV2, B.scoreV2]`)를 기억하고 `shouldLogImpression`이 참일 때만 1회 전송.
+- 리렌더(같은 객체) → 재전송 없음. 로딩 → FULL은 FULL 한 번. 다른 단지로 바뀌어 새 응답 객체가 오면 그 단지 기준 1회.
+
+### 5. 검증
+
+| 항목 | 결과 |
+|---|---|
+| `src/lib/personal-fit-analytics.test.ts` | 13/13 — 요청 18개 항목(CTA 4종·저장 성공만·실패 시 없음·FULL/LIMITED/UNAVAILABLE 1회·비교 enum·중복 방지·중요도/점수/coverage payload 없음·기존 28개 이벤트 이름·순서 불변·GA4 매핑 없음·비교 기존 호출 불변·공통 점수 불변·URL 형식) |
+| 기존 개인화 테스트 | P2-C/P2-D 테스트의 설정 링크 정규식 2건을 `onClick` 추가에 맞게 조정 |
+| src 전체 | 2048/2048 |
+| `npx tsc --noEmit` | FAIL_EXISTING_SCRIPT_ERRORS(기존 25건, 신규 0) |
+| eslint(변경 파일) | exit 0 |
+| `npm run build` | exit 0 |
+
+### 6. PERSONALIZED SCORE V1 릴리스 감사(P2-A ~ P2-F)
+
+| 단계 | 상태 | 근거(이번 재확인 포함) |
+|---|---|---|
+| P2-A 저장/API | 적용·검증 | `verify-preferences-rollback.ts` 재실행 13/13(롤백), `user_preferences` RLS on·FORCE off·정책 0·API 역할 권한 0, Data API 503 |
+| P2-B 계산 엔진 | 검증 | `verify-engine-parity.ts` 재실행 PASS — 2,833단지×4프로필 불일치 0, 주차 중립값 808단지에서 주차 포함 0 |
+| P2-C 상세 카드 | 배포 | 비로그인·미설정 Production 확인, FULL/LIMITED 기기 QA 대기 |
+| P2-D 비교 | 배포 | 미설정 Production 확인(공통 막대 = API 값), A/B 점수 기기 QA 대기 |
+| P2-E MY 설정 | 배포 | 5축·기본값 없음·저장 비활성 Production 확인, 실제 저장 기기 QA 대기 |
+| P2-F analytics | 이 단계 | 위 표 |
+
+불변식(테스트로 고정): 공통 점수 불변 · 비로그인 동작(요청·계산 없음) · 미설정이면 가짜 점수 없음 · 결측 ≠ 0점 · 주차 중립값 제외 · 가격/향후가치 축 없음 · "학군" 없음 · 사용자 간 선호 캐시 격리 · 중요도 값 URL·analytics 없음.
+
+참고: 재확인 시점 `user_preferences` 2행 중 1행에 `fit_importance`가 저장돼 있었다(이번 작업에서 저장한 적 없음 — 사용자 기기 QA로 추정).
+
+### 7. 남은 기기 QA
+
+P2-C/E/D의 로그인 사용자 흐름: 중요도 저장 → 상세 FULL/LIMITED 카드 → 설정 변경 반영 → 비교 A/B 점수(FULL·LIMITED·정보 부족) → 로그아웃/다른 계정 격리, 모바일 360~390px 실제 화면.
