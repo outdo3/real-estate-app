@@ -2,6 +2,17 @@
 
 ## 2026-09-15
 
+### E-JIP APT DETAIL REPORT CTA FLOW V1 — 지도 → 상세 → 한장 리포트
+
+UI·내비게이션만(리포트 엔진·route·PNG/PDF/공유·API·DB·지도 마커 로직 무변경). 상세: `docs/development/APT_DETAIL_REPORT_CTA_FLOW_V1.md`
+
+    지도      단지 선택 카드의 [한장 리포트] 제거 → [상세보기] 단일 primary(폭 100%, 48px, green). 상세 이동 URL 그대로
+    상세      상단 다음 행동에서 REPORT 제거(지도 보기가 primary 복귀) → 시세추이·투자지표·위치 뒤, 실거래 타임라인 앞에
+              AptReportEntryCard 1개("이 단지, 한 장으로 정리해 볼까요?" / "이집 한장 리포트 보기"). 고정·팝업 없음
+    위치      실측 문서 높이 대비 360/375/390px 54%, 1280px 61% (이전 상단 버튼 약 33%)
+    분석      클릭은 기존 next_action_click / REPORT 그대로. 지도 버튼은 원래 이벤트 없음. source 차원은 analytics 규칙 변경 필요로 보류
+    검증      신규 12/12, src 1962/1962, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+
 ### E-JIP SUPABASE DB SECURITY HARDENING V2 — PHASE 2 Batch A 적용 (CRITICAL 7개 테이블)
 
 Production DB 권한 변경(승인 범위: users, accounts, sessions, verification_tokens, favorites, recent_views, user_preferences만).

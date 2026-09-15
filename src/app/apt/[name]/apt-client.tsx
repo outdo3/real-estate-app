@@ -32,7 +32,8 @@ import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } fr
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import type { NextAction } from '@/lib/decision-journey/types';
 import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
-import { aptReportHref, REPORT_LABELS } from '@/lib/report/report-links';
+import { aptReportHref } from '@/lib/report/report-links';
+import AptReportEntryCard from '@/components/report/AptReportEntryCard';
 import { fetchDetailTrades } from '@/lib/detail-trade-cache';
 import { fetchCachedResource, DETAIL_RESOURCE_TTL_MS } from '@/lib/detail-resource-cache';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
@@ -626,25 +627,17 @@ export default function ApartmentDetail() {
   // (이름 기반 식별 금지 — aptSeq가 없으면 CTA 자체를 만들지 않는다).
   const reportHref = aptReportHref(canonicalAptSeq);
 
+  // APT_DETAIL_REPORT_CTA_FLOW_V1 — 리포트 진입은 여기(상단 다음 행동)에서 빼고, 가격·위치 구역을 지난
+  // 중후반의 AptReportEntryCard 하나로 옮겼다. 페이지 안에 리포트 CTA를 두 번 두지 않는다.
   const nextActions: NextAction[] = addressReady
     ? [
-        ...(reportHref
-          ? [
-              {
-                type: 'REPORT' as const,
-                label: REPORT_LABELS.apt,
-                priority: 'primary' as const,
-                href: reportHref,
-              },
-            ]
-          : []),
         {
           type: 'MAP',
           // §12 — 상세 안 위치 카드가 이 단지의 위치를 이미 보여준다. 이 행동이
           // 주는 것은 "주변 단지와 함께 보기"이므로 라벨로 그 차이를 드러낸다.
           label: '지도에서 주변 단지와 보기',
-          // 리포트가 primary가 되면서 지도는 secondary로 내려간다(primary 1개 규칙).
-          priority: reportHref ? 'secondary' : 'primary',
+          // 리포트가 중후반 카드로 옮겨가 이 섹션의 primary는 지도다(primary 1개 규칙).
+          priority: 'primary',
           onClick: handleViewOnMap,
           loading: mapCtaLoading,
         },
@@ -1328,6 +1321,15 @@ export default function ApartmentDetail() {
           </div>
         </div>
       </div>
+
+      {/* APT_DETAIL_REPORT_CTA_FLOW_V1 — 한장 리포트 진입. 가격·점수·브리핑·시세 추이·투자지표·위치를
+          본 뒤(실측 약 58~60% 지점), 실거래 타임라인·생활정보로 내려가기 전에 둔다.
+          고정/팝업이 아닌 본문 카드이며 canonical aptSeq가 있을 때만 렌더한다. */}
+      {addressReady && reportHref && (
+        <div className={`container ${styles.sectionBlock}`}>
+          <AptReportEntryCard href={reportHref} aptName={displayName || aptName} />
+        </div>
+      )}
 
       {/* ══════════ 3구역: TIER 3 (근거 데이터) ══════════ */}
       <div className={`container ${styles.sectionBlock}`}>

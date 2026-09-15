@@ -11,7 +11,6 @@ import { loadKakaoMapsSdk } from '@/lib/kakao/maps-sdk';
 import type { AptMarker, AptCluster } from '@/lib/map-selected-marker';
 import { buildPendingSelectedApt, resolveSelectedMarker, isPendingStillNeeded } from '@/lib/map-selected-marker';
 import { isStaleMarkerResponse, isMarkerCacheFresh } from '@/lib/map-marker-fetch-guard';
-import { REPORT_LABELS } from '@/lib/report/report-links';
 import { resolveTransactionsReadState } from '@/lib/trade-read-state';
 import { formatMarkerPriceAreaLine, formatMarkerAreaLabel } from '@/lib/map-marker-format';
 import {
@@ -2744,22 +2743,13 @@ export default function FullscreenMapPage() {
               const aptSeqParam = selectedMarker.aptSeq ? `&aptSeq=${encodeURIComponent(selectedMarker.aptSeq)}` : '';
               router.push(`/apt/${encodeURIComponent(selectedMarker.name)}?lawdCd=${currentLawdCd}&dong=${encodeURIComponent(selectedMarker.dong)}${aptSeqParam}`);
             }}
-            style={{ marginTop: '0.75rem', width: '100%', padding: '0.7rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+            // APT_DETAIL_REPORT_CTA_FLOW_V1 — 지도 → 상세 → 리포트 흐름. 선택 카드의 CTA는 상세보기 하나다
+            // (한장 리포트 바로가기는 상세페이지 중후반 카드로 옮겼다. 리포트 route 자체는 그대로).
+            // 단일 primary라 터치 타깃 48px·조금 큰 글자로 분명하게 한다.
+            style={{ marginTop: '0.75rem', width: '100%', minHeight: 48, padding: '0.7rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
           >
             상세보기
           </button>
-          {/* REPORT-7 §5 — 선택된 단지 카드 안에서는 단지 리포트가 지역 브리핑보다
-              우선한다. canonical aptSeq가 있을 때만 노출해 이름 기반 식별을 피한다.
-              팝업을 더 무겁게 만들지 않도록 보조 버튼 하나만 추가한다. */}
-          {selectedMarker.aptSeq && (
-            <button
-              type="button"
-              onClick={() => router.push(`/report/apt/${encodeURIComponent(selectedMarker.aptSeq!)}`)}
-              style={{ marginTop: '0.5rem', width: '100%', padding: '0.7rem', background: '#fff', color: 'var(--primary-color)', border: '1px solid var(--primary-color)', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
-            >
-              {REPORT_LABELS.aptShort}
-            </button>
-          )}
           <AdContainer variant="agent" slot="map-marker-summary-agent" label="추천 지역 중개사" />
         </div>
       )}
