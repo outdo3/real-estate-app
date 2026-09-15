@@ -398,3 +398,109 @@ npm run build                                                        exit 0
 - 미확인 동 리포트 본문 처리(InvalidScope) — 라우팅 변경이라 승인 필요
 - 지역 리포트 전월세 섹션(데이터 신뢰 기준 확인 후) → 전세/월세 의도 충족
 - 단지 상세 사이트맵(식별 완전 URL, 분할)
+
+---
+
+## 24. Production 적용 (2026-09-16 KST)
+
+판정: **PASS** — 중단 규칙(지역 식별 오류·가짜 지역 색인·canonical 오류 확산·sitemap 파손·5xx·리포트 식별 회귀) 해당 없음.
+새 SEO 기능·라우팅 변경 없음. 아래 §24.9에 P2 후속 1건.
+
+### 24.1 배포
+
+```
+push 전 검증   SEO 관련 테스트 80/80, src 2141/2141, 변경 파일 eslint exit 0, tsc src 0(scripts 21·tmp 4 기존), build exit 0
+push          05583bc..9299b36 main (b9daa17 docs 포함) 1회
+배포          dpl_HBpLdPfEdJQWDeA43u87Wn3qRpQH, 02:08:34 KST 생성 → Ready, alias e-jip.com / www.e-jip.com
+```
+
+### 24.2 메인 (Yeti·Chrome UA 동일)
+
+title·description 각 1개가 확정값과 **정확히 일치**, og:title/og:description·twitter:title/description 일치, twitter:card summary_large_image,
+application-name·og:site_name `이집`, canonical `https://e-jip.com`, JSON-LD `WebSite`(name 이집, alternateName E-JIP/이집(E-JIP), url https://e-jip.com/)
+· `Organization`(logo https://e-jip.com/brand/icon/ejip-app-icon-512.png).
+
+### 24.3 지역 페이지
+
+| URL | title | robots | canonical | H1 | BreadcrumbList | 데이터 |
+|---|---|---|---|---|---|---|
+| /report/city/busan | 부산 아파트 시세·실거래가·거래량 \| 이집 | index | self | 1개 | 이집>부산 | KPI O |
+| /report/district/26140 | 부산 서구 … | index | self | 1개 | 이집>부산>서구 | KPI O |
+| /report/district/26380 | 부산 사하구 … | index | self | 1개 | 이집>부산>사하구 | KPI O |
+| /report/district/26350 | 부산 해운대구 … | index | self | 1개 | 이집>부산>해운대구 | KPI O |
+| /report/dong/26140/암남동 | 부산 서구 암남동 아파트 시세·실거래가 \| 이집 | index | self | 1개 | …>서구>암남동 | KPI O |
+| /report/dong/26380/괴정동 | 부산 사하구 괴정동 … | index | self | 1개 | …>사하구>괴정동 | KPI O |
+| /report/dong/26350/우동 | 부산 해운대구 우동 … | index | self | 1개 | …>해운대구>우동 | KPI O |
+| /report/dong/26710/기장읍 교리 | 부산 기장군 기장읍 교리 … | index | self | 1개 | …>기장군>기장읍 교리 | KPI O |
+| /report/dong/26140/아미동2가 (1년 6건) | 부산 서구 아미동2가 … | noindex,follow | self | 1개 | O | — |
+| /report/dong/26140/가짜동 | 지역 리포트 \| 이집 | noindex,follow | 없음 | (기존 시트 제목) | 없음 | 0건 |
+| /report/district/11680 | 지역 리포트 \| 이집 | noindex,follow | 없음 | InvalidScope | 없음 | — |
+
+색인 지역 페이지 title·description 모두 고유, BreadcrumbList 마지막 item = canonical. 단지 링크는 전부 aptSeq+lawdCd+dong을 갖고
+해당 구·동과 일치. 지역·단지 링크 68개 모두 200(깨진 링크 0).
+
+### 24.4 canonical / robots
+
+- `?period=90`, `?period=365` → 깨끗한 지역 경로
+- `/stats?sido&sigungu` → /stats, `/school?sido&sigungu` → /school, `/map?lat&lng&lawdCd` → /map, /community self, /report self, /stats/volume self
+- `/apt/{name}?lawdCd&dong&aptSeq` 및 순서가 다르고 `area=84`가 붙은 URL → 같은 정규화 canonical, 이름만 있는 `/apt/{name}` → canonical 없음
+- `/report/apt/26140-1361` self, `/community/{id}` self(기존)
+- noindex,nofollow: /my, /community/write, /community/{id}/edit, /feedback · noindex,follow: /stats/compare?a&b, /report/compare, /ai-search?q, /stats/population
+- /admin/dashboard: 비로그인 307 → /my(기존 보호 동작, robots.txt Disallow 유지)
+- 공개 핵심 페이지(/ /stats /school /map /community /report 지역 브리핑) robots 제한 없음
+
+### 24.5 sitemap
+
+`sitemap.xml` 200 application/xml, **139 URL**(정적 5 · 부산 1 · 구 16 · 동 116 · 커뮤니티 글 1), 중복 0, 쿼리 URL 0, `/stats?`·`/school?` 0,
+오리진 전부 https://e-jip.com. **전 URL 139개 요청**: 전부 200, 138개 canonical = loc(나머지 1개는 홈 `https://e-jip.com/` ↔ canonical
+`https://e-jip.com` 루트 슬래시 표기 차이), 지역 URL 전부 index, title 139개 고유. robots.txt 변경 없음.
+
+### 24.6 크롤러 렌더링
+
+Yeti UA와 Chrome UA로 37개 경로를 요청 — title/canonical/robots 동일, 메타는 `<head>`, 지역 H1·KPI·링크가 서버 HTML에 있음.
+크롤러 전용 분기 없음(같은 응답).
+
+### 24.7 리포트 회귀 · 모바일
+
+- 부산 사하구(브라우저): H1 "부산 사하구 아파트 시세·실거래가", 태그 "한장 브리핑"
+- 이미지: 실제 버튼으로 캡처 파이프라인 실행, 다운로드 클릭만 가로채 파일 저장 없이 확인 — `e-jip-district-26380-2026-09-14.png` 1080×1528,
+  448,805 bytes. 새 헤더 문구, 경로 표시·하위 링크 없음, 레이아웃 정상(육안)
+- PDF: 버튼이 `window.print()`를 호출함까지 확인(대화상자 차단용으로 가로챔). **인쇄 미리보기 결과물은 이 환경에서 보지 못했다** — 인쇄 CSS는 경로·하위 링크를 숨김
+- 카카오/공유 제목: 페이지 payload에 기존 "부산 사하구 부동산 한장 브리핑" 유지
+- 360/390px(부산·사하구·괴정동·기장읍 교리): 가로 넘침 0, 경로 링크 36px(12.8px 글자), 동 칩 36px, 콘텐츠 하단 632px < 액션바 691px
+
+### 24.8 로그 · IndexNow
+
+- Vercel 로그(해당 배포, 배포 후 1시간): 5xx 0, level error 0, warning 0. 샘플 100건 중 416 2건은 `GET /` 정적 캐시 HIT(Range 요청), 오류 아님
+- `error_logs`(읽기 전용): 배포 후 0, 최근 24시간 0
+- IndexNow: 기존 `scripts/indexnow/submit-sitemap.ts`(2026-09-12와 같은 방식, 공개 키 파일 값 전달). 키 파일 200·내용 일치 확인 →
+  dry-run 139/거부 0/범위 밖 0 → 제출 **139 URL, HTTP 200**. 색인됐다는 뜻이 아니다
+
+### 24.9 발견 사항 (P2, 미수정 — 새 SEO 기능 금지 범위)
+
+색인 대상 동 116개 중 **11개**는 기본 기간(최근 30일) 거래가 0건이라 화면에 거래건수 0건·중앙 거래가 "정보 없음"·최근 실거래/거래 많은 단지
+섹션 없음, 최근 2년 최고가만 있다. 그런데 description은 "최근 실거래, 중앙 거래가·㎡당 가격, 거래건수, 거래가 많은 단지…를 한 장에
+정리했습니다"로 **화면에 없는 섹션을 약속한다**(§7.3 원칙 위반, 표시 데이터 자체는 정직).
+대상: 중구 대청동1가·보수동2가, 서구 남부민동·동대신동2가·동대신동3가·충무동1가·토성동1가, 영도구 봉래동1가·2가·3가, 금정구 금사동.
+원인: 색인 기준은 최근 1년 표본인데 페이지 기본 기간은 30일. 선택지(결정 필요): (a) 설명 문구를 기간 데이터 유무에 맞게 조건화,
+(b) 30일 0건이면 noindex, (c) 동 기본 기간 조정(리포트 동작 변경).
+
+### 24.10 네이버 수동 작업 (사용자)
+
+1. 서치어드바이저 → 요청 → 사이트맵 제출: `https://e-jip.com/sitemap.xml` 상태 확인, 필요 시 재제출
+2. 요청 → 웹 페이지 수집: `https://e-jip.com/`
+3. 같은 메뉴: `https://e-jip.com/report/district/26140`, `/report/district/26380`, `/report/district/26350`
+4. 같은 메뉴: `https://e-jip.com/report/dong/26140/%EC%95%94%EB%82%A8%EB%8F%99`(암남동), `/report/dong/26380/%EA%B4%B4%EC%A0%95%EB%8F%99`(괴정동),
+   `/report/dong/26350/%EC%9A%B0%EB%8F%99`(우동)
+5. (선택) 설정 → 사이트 이름 확인. Google Search Console sitemap 재제출·URL 검사 동일
+
+139개 전부 수동 요청하지 않는다.
+
+### 24.11 모니터링 항목 (지금 판단하지 않음)
+
+- 네이버 사이트 이름 표시("e-jip.com · e-jip.com") 변화 — 재수집 후
+- 서치어드바이저/Search Console 색인 페이지 수(지역 브리핑 134개 중 몇 개가 색인되는지)
+- 지역 키워드 노출·클릭(서치어드바이저 검색 반영, Search Console 실적)
+- 기존 `/stats?sido=`·`/school?sido=` 색인 URL이 canonical로 정리되는지
+- 순위 변화 주장 금지 — 2~4주 관찰 후 판단
+

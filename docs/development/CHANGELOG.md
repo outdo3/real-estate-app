@@ -2,6 +2,19 @@
 
 ## 2026-09-16
 
+### E-JIP REGIONAL SEO V1 — Production 적용: PASS (P2 후속 1건)
+
+`9299b36`(+`b9daa17`) push·배포 Ready 후 Production 실측. 코드 변경 없음. 상세: `docs/development/REGIONAL_SEO_KEYWORD_LANDING_V1.md` §24
+
+    메인      title·description 확정값 정확 일치, og/twitter/application-name/site_name, WebSite·Organization JSON-LD, canonical
+    지역      부산·서구·사하구·해운대구·암남동·괴정동·우동·기장읍 교리: 고유 title/description, H1 1개, self canonical, BreadcrumbList, KPI 서버 렌더
+    무효      가짜동·11680 noindex·canonical 없음·지역명 없음, 아미동2가(1년 6건) noindex
+    canonical ?period·stats/school/map 쿼리·apt 파라미터 순서/area 변형 → 정규 경로, 이름만 apt는 없음
+    sitemap   139 URL(정적5·부산1·구16·동116·글1), 중복·쿼리 0, 전 URL 200, canonical=loc(홈 슬래시 표기만 차이), 링크 68개 200
+    회귀      PNG 캡처 1080×1528 새 헤더·경로 미포함, PDF는 print 호출까지(미리보기 미확인), 공유 제목 유지, 360/390px 넘침 0
+    로그      5xx 0·error 0, error_logs 배포 후 0 · IndexNow 139 URL HTTP 200
+    P2        30일 0건 동 11개가 description에서 화면에 없는 섹션을 약속 — 처리 방식 결정 필요
+
 ### E-JIP REGIONAL SEO KEYWORD & LANDING ARCHITECTURE V1 — 지역 SEO 구조 로컬 구현, Production 미적용(승인 대기)
 
 새 route·DB/schema·통계 계산·식별·지도 코어·인증 변경 0건. 상세: `docs/development/REGIONAL_SEO_KEYWORD_LANDING_V1.md`
