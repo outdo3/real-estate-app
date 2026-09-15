@@ -247,8 +247,22 @@ test('20. analytics·URL·로그로 중요도 값이 나가지 않는다', () =>
   }
 });
 
-test('범위: 중요도 사용처는 API·계산 엔진(P2-B)뿐, UI는 아직 없다', () => {
+test('범위: 중요도 사용처는 API·계산 엔진(P2-B)·상세 카드/MY 설정(P2-C/E)뿐', () => {
   const users = walk(join(ROOT, 'src')).filter((f) => /fit-importance|fit_importance|[fF]itImportance/.test(readFileSync(f, 'utf8'))).map((f) => f.replace(/\\/g, '/').slice(f.replace(/\\/g, '/').indexOf('src/')));
-  assert.deepEqual(users.sort(), ['src/app/api/my/preferences/route.ts', 'src/lib/fit-importance.ts', 'src/lib/personalized-score.ts', 'src/lib/preferences-handlers.ts', 'src/lib/preferences-prisma-store.ts'].sort());
-  assert.ok(!users.some((f) => f.endsWith('.tsx')), 'UI(P2-C 이후) 없음');
+  assert.deepEqual(
+    users.sort(),
+    [
+      'src/app/api/my/preferences/route.ts',
+      'src/app/my/page.tsx', // FitImportanceSettings 렌더만(값은 만지지 않음)
+      'src/components/my/FitImportanceSettings.tsx',
+      'src/hooks/useFitPreference.ts',
+      'src/lib/fit-importance.ts',
+      'src/lib/fit-preference-cache.ts',
+      'src/lib/personal-fit-ui.ts',
+      'src/lib/personalized-score.ts',
+      'src/lib/preferences-handlers.ts',
+      'src/lib/preferences-prisma-store.ts',
+    ].sort()
+  );
+  assert.ok(!users.some((f) => /compare|search|report|admin/.test(f)), '비교·검색·리포트·관리자에는 아직 없음(P2-D 이후)');
 });

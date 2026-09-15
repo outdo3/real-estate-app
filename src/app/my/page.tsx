@@ -12,6 +12,8 @@ import { ALLOWED_PURPOSES, PURPOSE_LABELS, type Purpose } from '@/lib/preference
 import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from '@/lib/nickname';
 import styles from './page.module.css';
 import InstallEntry from '@/components/pwa/InstallEntry';
+import FitImportanceSettings from '@/components/my/FitImportanceSettings';
+import { fitPreferenceCache } from '@/lib/fit-preference-cache';
 import {
   RECENT_ROWS_COLLAPSED,
   canCollapseRecent,
@@ -351,6 +353,9 @@ export default function MyPage() {
                 )}
               </div>
 
+              {/* PERSONALIZED_SCORE_V1 P2-E — 나에게 맞는 점수 중요도(관심 목적과 별개 설정) */}
+              <FitImportanceSettings />
+
               {/* 바로가기 */}
               <div className={styles.section}>
                 <div className={styles.sectionTitle}>바로가기</div>
@@ -371,7 +376,14 @@ export default function MyPage() {
                 </Link>
               </div>
 
-              <button className={styles.logoutBtn} onClick={() => signOut({ callbackUrl: '/' })}>
+              <button
+                className={styles.logoutBtn}
+                onClick={() => {
+                  // 로그아웃 전에 탭 메모리의 내 중요도 캐시를 비운다(다음 사용자에게 남지 않게).
+                  fitPreferenceCache.clear();
+                  signOut({ callbackUrl: '/' });
+                }}
+              >
                 로그아웃
               </button>
             </>

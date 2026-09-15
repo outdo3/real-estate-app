@@ -23,6 +23,7 @@ import { TRADE_ROWS_COLLAPSED, nextVisibleCount } from '@/lib/apt-detail/trade-r
 import ApartmentQuickSearch from '@/components/ApartmentQuickSearch';
 import ApartmentSearchTrigger from '@/components/ApartmentSearchTrigger';
 import ApartmentScoreCard from '@/components/ApartmentScoreCard';
+import PersonalFitCard from '@/components/PersonalFitCard';
 import InfraTabSection from '@/components/apt/InfraTabSection';
 import AptLocationCard from '@/components/apt/AptLocationCard';
 import { shouldShowActionBar } from '@/lib/apt-detail/action-bar-visibility';
@@ -1270,6 +1271,9 @@ export default function ApartmentDetail() {
       {/* TIER 1: Score & Briefing */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <ApartmentScoreCard result={scoreResult} loading={scoreLoading} />
+                {/* PERSONALIZED_SCORE_V1 P2-C — 공통 이집점수 카드 바로 아래 별도 카드. 같은 응답의 _shadowV2만 읽고
+                    공통 점수 렌더를 기다리게 하지 않는다(선호 조회는 카드 안에서 따로). */}
+                <PersonalFitCard shadowV2={scoreResult?._shadowV2} scoreLoading={scoreLoading} />
               </div>
 
               <div style={{ marginBottom: '1.5rem' }}>

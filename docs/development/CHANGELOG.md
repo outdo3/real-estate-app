@@ -2,6 +2,16 @@
 
 ## 2026-09-15
 
+### E-JIP PERSONALIZED SCORE V1 — P2-C 상세 카드 + P2-E MY 중요도 설정
+
+사용자 노출 MVP. schema·계산식·공통 점수·검색·analytics 변경 없음. 상세: `docs/development/PERSONALIZED_SCORE_V1.md` P2-C + P2-E
+
+    상세      이집점수 카드 바로 아래 "나에게 맞는 점수" 별도 카드 — 비로그인 로그인 CTA(선호 요청 없음) / 미설정 설정 CTA /
+              FULL·LIMITED(점수·5축 행·잘 맞는 점/아쉬운 점·반영 제외 사유·중요도 수정·면책) / 계산 불가 문구(숫자 없음)
+    MY        "나에게 맞는 점수 설정" — 5축 × 1~5, 기본값 없음, 5개 모두 골라야 저장, fitImportance만 PUT(관심 목적 유지)
+    캐시      탭 메모리·사용자 id별·요청 합침·실패 미캐시·로그아웃 시 비움, 중요도 값 analytics·URL·저장소 전송 없음
+    검증      신규 16/16, src 2019/2019, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0, 로컬 360/375/390px 비로그인 카드 확인
+
 ### E-JIP PERSONALIZED SCORE V1 — P2-B 순수 계산 엔진 + 설명 항목
 
 순수 모듈·테스트·READ ONLY 동등성 스크립트만(schema·Production 쓰기·공통 점수·UI 변경 없음). 상세: `docs/development/PERSONALIZED_SCORE_V1.md` P2-B

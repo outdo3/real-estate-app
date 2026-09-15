@@ -1,0 +1,136 @@
+/* PERSONALIZED_SCORE_V1 P2-E — MY 섹션 톤(page.module.css .section/.sectionTitle/.sectionDesc)과 맞춘다. */
+.section {
+  margin-top: 1.5rem;
+  scroll-margin-top: 72px;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.desc {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  word-break: keep-all;
+}
+
+.loading,
+.loadError {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.axisList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.axisItem {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.axisHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.axisLabel {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.meaning {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary-hover);
+  white-space: nowrap;
+}
+
+.meaningEmpty {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* 1~5 버튼: 폭을 5등분해 한 손으로 누르기 쉽게(최소 44px 높이) */
+.levels {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.level {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1.5px solid #e2e8f0;
+  background: white;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.level:hover {
+  border-color: var(--primary-color);
+}
+
+.levelActive {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  color: white;
+}
+
+.footer {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.saveButton {
+  min-height: 48px;
+  border-radius: 12px;
+  border: none;
+  background: var(--primary-color);
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.saveButton:disabled {
+  background: #e2e8f0;
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.status {
+  min-height: 1.25rem;
+  font-size: 0.82rem;
+}
+
+.saved {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.error {
+  color: #dc2626;
+}
+
+.hint {
+  color: var(--text-muted);
+}

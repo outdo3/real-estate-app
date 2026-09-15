@@ -221,3 +221,74 @@ P2-A 범위 테스트("중요도 사용처") 목록에 `personalized-score.ts`�
 - 공통 점수 응답이 `_shadowV2`를 `any`로 넘기므로 모듈이 형태를 방어적으로 검사한다(형태가 바뀌면 해당 축은 `NO_DATA`/`INVALID_SCORE`로 빠진다).
 - 설명은 축 점수 구간만 말하고 원자료(거리·대수·연식)를 문장에 넣지 않는다 — 원자료 병기는 P2-C UI에서 공통 점수 카드의 근거 값 재사용으로 검토.
 - 역방향 선호 표현 불가, 가격·향후가치 축 없음(PHASE 1 결정).
+
+## P2-C + P2-E — 상세 카드 + MY 중요도 설정 (2026-09-15)
+
+- 기준 HEAD: `405ef06` (main)
+- 범위: 사용자에게 보이는 첫 MVP. schema·`fit_importance` 구조·P2-B 계산식·공통 점수·검색 정렬·analytics 변경 없음.
+
+### 1. 기존 화면(코드 기준)
+
+| 항목 | 실제 |
+|---|---|
+| 공통 점수 카드 | `apt-client.tsx` `<ApartmentScoreCard result={scoreResult} loading={scoreLoading} />`(TIER 1, 브리핑 위). `scoreLoading` 초기값 true, 점수 요청마다 true → 완료 후 false |
+| 점수 응답 | `scoreResult._shadowV2`(V2 결과 JSON) — 브리핑·비교가 같은 값 사용 |
+| 세션 | NextAuth JWT, 클라이언트 `useSession()`, `session.user.id` 제공 |
+| 선호 API 사용처 | MY 페이지만(관심 목적 GET/PUT) |
+| 로그인 CTA 패턴 | `LoginModal`(기본 콜백 = 현재 URL) — FavoriteButton·AuthGate·커뮤니티가 사용 |
+| 로그아웃 | MY 페이지 `signOut({ callbackUrl: '/' })`(전체 이동) |
+
+### 2. 상세 카드 (`src/components/PersonalFitCard.tsx`)
+
+위치: `ApartmentScoreCard` **바로 아래 별도 카드**(12px 간격). 공통 카드 내부는 바꾸지 않았다.
+판정: `derivePersonalFitCard`(`src/lib/personal-fit-ui.ts`) → P2-B `calculatePersonalFit` 결과를 그대로 화면 모델로. 카드는 점수·GOOD/WEAK를 다시 판정하지 않는다.
+
+| 상태 | 조건 | 화면 |
+|---|---|---|
+| 자리 유지 | 공통 점수 로딩 중, 또는 로그인 사용자의 선호 조회 중 | 높이 72px 빈 카드(큰 skeleton 없음) |
+| 숨김 | 비로그인 + 공통 점수 없음 | 렌더 안 함(계산할 수 없는 단지에서 로그인을 권하지 않음) |
+| 비로그인 | 공통 점수 있음 | "로그인하면 나에게 맞는 점수를 확인할 수 있어요" + [로그인하고 확인] → 기존 `LoginModal`(현재 상세 URL로 복귀). **선호 요청·계산 없음** |
+| 미설정 | 로그인 + `fitImportance` null | "중요하게 보는 조건을 설정하면 나에게 맞는 점수를 계산해 드려요" + [내 중요도 설정하기] → `/my#fit-score-settings` |
+| 계산 불가 | 설정 있음 + 공통 점수 없음(또는 포함 축 0) | "현재 이 단지는 나에게 맞는 점수를 계산할 정보가 부족해요." 숫자 없음 |
+| 조회 실패 | 선호 GET 실패 | "내 중요도를 불러오지 못했어요." |
+| FULL | P2-B `FULL` | 제목·[내 중요도 반영]·[중요도 수정]·보조문구·점수(1.9rem, 본문색 — 공통 2.5rem green과 구분)·5축 행(축·중요도 n·n점)·잘 맞는 점/아쉬운 점·면책 |
+| LIMITED | P2-B `LIMITED` | 점수 표시 + [일부 정보 부족] + "일부 정보가 없어 확인 가능한 조건만 반영했어요. 반영 제외: 주차 정보 없음" |
+
+- 제외 축 행은 점수 대신 "반영 제외"(0점처럼 보이지 않게). FULL이어도 제외 축이 있으면 "반영 제외: …" 한 줄.
+- 제외 사유 문구: 주차 실측 없음 "주차 정보 없음", 데이터 없음 "{축} 정보 없음", 값 이상 "{축} 정보 확인 필요".
+- 면책(작게): "개인 선호를 반영한 적합도이며, 투자 판단이나 가격 전망을 의미하지 않습니다."
+- 금지 표현(추천 점수·투자 점수·투자가치·미래가치·수익) 없음, "학군" 없음(테스트 고정).
+
+### 3. MY 설정 (`src/components/my/FitImportanceSettings.tsx`)
+
+- 섹션 "나에게 맞는 점수 설정"(관심 목적 섹션 다음, `id="fit-score-settings"`). 설명: "아파트를 볼 때 중요하게 생각하는 조건을 알려주세요. 이 설정은 나에게 맞는 점수를 계산할 때만 사용됩니다."
+- 교통 · 생활편의 · 신축 · 주차 · 초등학교 접근성 × [1][2][3][4][5] (`role="radiogroup"`, 5등분 폭, 44px 이상). 선택 의미: 1 중요하지 않음 · 2 조금 중요 · 3 보통 · 4 중요 · 5 매우 중요, 미선택은 "선택 안 함".
+- **기본값 없음**: 처음엔 전부 미선택. 5개 모두 골라야 [저장하기] 활성화("5개 항목을 모두 선택하면 저장할 수 있어요.").
+- 기존 값이 있으면 그 값으로 채우고, 바뀌었을 때만 저장 가능.
+- 저장: `PUT /api/my/preferences` `{ fitImportance }`만 → 관심 목적 유지(P2-A 필드별 갱신). 성공: "저장했어요" + 세션 캐시 갱신(새로고침 없이 상세 반영). 실패: 저장된 값 유지 + "저장하지 못했어요. 다시 시도해 주세요."
+- 상세의 링크로 들어오면 섹션으로 스크롤(MY 본문이 세션 확인 뒤에 그려져 기본 앵커 이동이 안 되기 때문, `scroll-margin-top` 적용).
+
+### 4. 선호 조회·캐시·개인정보
+
+- `useFitPreference` 훅: `status === 'authenticated'`일 때만 조회. `unauthenticated`이면 요청 없이 캐시 비움.
+- `fitPreferenceCache`(`src/lib/fit-preference-cache.ts`): **탭 메모리**, 사용자 id로 묶음(다른 id 조회 시 이전 값 폐기), 동시 요청 1회로 합침, 실패는 캐시 안 함, 사용자 전환 중 늦게 온 응답은 버림, `cache: 'no-store'`. localStorage·쿠키·URL 없음.
+- MY 로그아웃 버튼은 `signOut` 전에 캐시를 비운다.
+- 중요도 값: analytics·URL·console·저장소로 보내지 않음(값을 다루는 파일 전체 소스 검사). 상세·MY 페이지 파일은 값을 직접 만지지 않는다.
+
+### 5. 성능
+
+- 공통 점수 요청·렌더 흐름 무변경. 카드는 같은 응답의 `_shadowV2`만 읽고, 선호 조회는 카드 안에서 따로(공통 카드를 기다리게 하지 않음).
+- 추가 네트워크: 로그인 사용자 탭당 선호 GET 최대 1회(상세 간 이동 재조회 없음). 계산은 P2-B 순수 함수(~0.01ms).
+- 참고: MY 첫 진입에서는 기존 관심 목적 GET과 중요도 캐시 GET이 각각 1회 나간다(같은 API 2회, 기존 MY 로직 무변경을 우선).
+
+### 6. 검증
+
+| 항목 | 결과 |
+|---|---|
+| `src/lib/personal-fit-ui.test.ts` | 16/16 — 요청 24개 항목(비로그인 CTA·요청 없음·미설정·FULL·LIMITED·제외 축·UNAVAILABLE·공통 점수 불변·5축·학군 없음·기본값 없음·5개 전 저장 비활성·저장·재로드·수정·purposes 유지·캐시 격리·로그아웃 비움·analytics/URL 없음·P2-B 결과 재사용·모바일 CSS) |
+| P2-A 범위 테스트 | 중요도 사용처 목록에 P2-C/E 파일 반영, 비교·검색·리포트·관리자 미사용 고정 |
+| src 전체 | 2019/2019 |
+| `npx tsc --noEmit` | FAIL_EXISTING_SCRIPT_ERRORS(기존 25건, 신규 0) |
+| eslint(변경 파일) | exit 0(경고 2건은 기존 `apt-client.tsx` eslint-disable 주석) |
+| `npm run build` | exit 0 |
+| 로컬 production 빌드(비로그인, 360/375/390px iframe) | 카드 상태 logged-out, 공통 점수 카드 바로 다음 형제 요소(간격 12px), 가로 넘침 없음, CTA 44px·카드 폭, `/api/my/preferences` 요청 0 |
