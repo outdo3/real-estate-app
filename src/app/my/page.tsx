@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
-import { Shield } from 'lucide-react';
+import { MessageSquareText, Shield } from 'lucide-react';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import type { FavoriteInput } from '@/lib/favorites';
@@ -388,6 +388,15 @@ export default function MyPage() {
               </button>
             </>
           )}
+
+          {/* USER_FEEDBACK_V1 — 의견 보내기. 로그인 여부와 무관하게 보인다(비로그인 제출 허용). */}
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>고객 의견</div>
+            <Link href="/feedback?from=%2Fmy" className={`${styles.linkCard} ${styles.feedbackLink}`}>
+              <MessageSquareText size={18} aria-hidden="true" />
+              의견 보내기
+            </Link>
+          </div>
 
           {/* 로그인 여부와 무관하게 항상 접근 가능해야 하는 정책 링크 */}
           <div className={styles.section}>

@@ -71,6 +71,10 @@ export const ANALYTICS_EVENT_NAMES = [
   'personal_fit_settings_save',
   'personal_fit_card_view',
   'personal_fit_compare_view',
+  // USER_FEEDBACK_V1 — 의견 보내기 사용 여부만 잰다(1st-party 전용, GA4 매핑 없음). feedback_submit의 분해 축은
+  // 의견 유형(고정 enum) 하나뿐이다. 메시지·사용자·단지·페이지·IP·UA는 절대 싣지 않는다.
+  'feedback_open',
+  'feedback_submit',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];
@@ -97,6 +101,21 @@ export type PersonalFitEventName = keyof typeof PERSONAL_FIT_EVENT_ACTIONS;
 export function personalFitActionType(name: string, raw: string | null | undefined): string | null {
   if (!raw || !Object.prototype.hasOwnProperty.call(PERSONAL_FIT_EVENT_ACTIONS, name)) return null;
   const allowed = PERSONAL_FIT_EVENT_ACTIONS[name as PersonalFitEventName] as readonly string[];
+  return allowed.includes(raw) ? raw : null;
+}
+
+/** USER_FEEDBACK_V1 — 의견 이벤트의 고정 enum. feedback-rules의 FEEDBACK_CATEGORIES와 같은 목록(테스트로 고정). */
+export const FEEDBACK_EVENT_ACTIONS = {
+  feedback_open: [],
+  feedback_submit: ['BUG', 'DATA_ERROR', 'FEATURE_REQUEST', 'USABILITY', 'OTHER'],
+} as const satisfies Partial<Record<AnalyticsEventName, readonly string[]>>;
+
+export type FeedbackEventName = keyof typeof FEEDBACK_EVENT_ACTIONS;
+
+/** 의견 이벤트의 actionType 검증. 해당 이벤트 enum에 있는 값만 통과, 그 외(다른 이벤트 포함) null. */
+export function feedbackActionType(name: string, raw: string | null | undefined): string | null {
+  if (!raw || !Object.prototype.hasOwnProperty.call(FEEDBACK_EVENT_ACTIONS, name)) return null;
+  const allowed = FEEDBACK_EVENT_ACTIONS[name as FeedbackEventName] as readonly string[];
   return allowed.includes(raw) ? raw : null;
 }
 

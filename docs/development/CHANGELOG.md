@@ -2,6 +2,20 @@
 
 ## 2026-09-15
 
+### E-JIP USER FEEDBACK V1 — 의견 보내기(DB 저장·관리자·Resend 알림) 로컬 구현, Production 미적용
+
+migration은 **로컬 Docker DB에서만** 검증했다. Production migration·env·배포·테스트 데이터 없음. 상세: `docs/development/USER_FEEDBACK_V1.md` §5~§8
+
+    스키마    user_feedback(TEXT+CHECK: category 5·status 3, 기본 NEW, users FK 없음), 같은 migration에서 API role 권한 회수 + RLS ON
+    제출      POST /api/feedback — 비로그인 허용, trim 5~3000자, 경로·허용 쿼리만, aptSeq는 master 정확 일치만, 원문 IP 없음(일별 HMAC)
+    한도      DB 공유 10분 5건(로그인 user_id / 익명 ip_hash) + 인스턴스 로컬 보조, 429 안내
+    관리자    /admin/feedback + GET/PATCH API(requireAdmin), 상태 처리전/확인중/완료, resolvedAt 결정 규칙, 운영 메모
+    메일      저장 후 after()로 Resend HTTPS(패키지 없음), 성공 시만 notified_at, 실패는 로그만
+    진입      MY 하단 "의견 보내기"(비로그인 포함) → /feedback
+    analytics feedback_open, feedback_submit(유형만), GA4 없음
+    검증      신규 26/26, src 2115/2115, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint·build exit 0,
+              로컬 Postgres 21개 migration 적용·user_feedback RLS ON·API role 권한 0·permission denied 실측, 로컬 앱 201/400/401/429·개인정보 필터·360/390px
+
 ### E-JIP BUSAN LAUNCH FINAL RELEASE GATE V1 — 재실행(통계 기간 변경 배포 후): GO_WITH_KNOWN_LIMITATIONS 유지
 
 코드 수정 없음. 상세: `docs/development/BUSAN_LAUNCH_FINAL_RELEASE_GATE_V1.md` §23

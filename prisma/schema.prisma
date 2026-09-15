@@ -798,6 +798,44 @@ model ErrorLog {
   @@map("error_logs")
 }
 
+// USER_FEEDBACK_V1 — 사용자 의견(오류·데이터 오류·기능 건의·이용 불편·기타). DB가 canonical 원천이고
+// 메일은 저장 성공 후 best-effort 알림일 뿐이다. docs/development/USER_FEEDBACK_V1.md
+// - category/status는 PG enum이 아니라 TEXT + CHECK 제약(migration)이다 — 초기 제품에서 값 추가·롤백을 가볍게.
+//   허용 값은 src/lib/feedback/feedback-rules.ts와 migration CHECK가 같은 목록을 쓴다(테스트로 고정).
+// - users FK 없음(Batch A 테이블에 제약을 걸지 않는다). 원문 IP·쿼리 원문·토큰은 저장하지 않는다.
+// - 단지 context는 서버가 ApartmentMaster로 정확히 확인한 aptSeq일 때만 채운다.
+// - API role(anon/authenticated/service_role) 권한 0 + RLS ON(정책 0). 앱은 Prisma(소유자)로만 접근.
+model UserFeedback {
+  id       String @id @default(cuid())
+  category String
+  message  String @db.Text
+  status   String @default("NEW")
+
+  userId    String? @map("user_id")
+  pagePath  String? @map("page_path")
+  pageQuery String? @map("page_query")
+
+  aptSeq        String? @map("apt_seq")
+  apartmentName String? @map("apartment_name")
+  lawdCd        String? @map("lawd_cd")
+
+  userAgent String? @map("user_agent")
+  ipHash    String? @map("ip_hash")
+
+  notifiedAt DateTime? @map("notified_at")
+  adminNote  String?   @map("admin_note") @db.Text
+  resolvedAt DateTime? @map("resolved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@index([category, createdAt])
+  @@index([userId, createdAt])
+  @@index([ipHash, createdAt])
+  @@map("user_feedback")
+}
+
 // 커뮤니티 신고 — 아직 유저가 신고를 접수하는 UI는 없어 이 테이블은 현재 항상 비어
 // 있다(그래서 대시보드의 "미처리 신고 건수"는 실제로 항상 0으로 나온다). 신고 버튼을
 // 나중에 붙일 때 이 테이블에 INSERT만 하면 대시보드 카드가 바로 실제 값을 반영한다.

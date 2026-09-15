@@ -1,7 +1,9 @@
-# USER FEEDBACK V1 — 감사 + 스키마·메일 제안 (STOP: 승인 대기)
+# USER FEEDBACK V1 — 로컬 구현 완료 (Production migration 승인 대기)
 
 - 기준 HEAD: `baff846` (main = origin/main), 사용자 파일(`package.json`·`package-lock.json`·untracked 24) 보존
-- 상태: **감사·설계만.** schema/migration 파일 생성·적용 없음, 앱 코드 변경 없음, Production write 없음.
+- 상태: **로컬 구현·검증 완료.** Production migration 미적용, Production env 미변경, 의견 코드 push/배포 없음, Production 테스트 데이터 없음.
+- PM 결정(구현 승인): A 스키마 승인 — PG enum 대신 TEXT + CHECK / B 메일 Resend(HTTPS fetch, 패키지 없음) / C analytics `feedback_open`·`feedback_submit`(category만) 승인.
+- 아래 §1~§4는 승인 전 감사·제안 기록(§2의 enum 안은 TEXT+CHECK로 대체됨). 최종 구현은 §5부터.
 
 ## 1. 감사 결과
 
@@ -184,3 +186,102 @@ V1 제외: 첨부 이미지, 사용자 답변함, 메일 스레드, 푸시/카�
 - "EMAIL: 안 1 Resend (계정·도메인 인증은 운영자가 진행) / 안 2 Gmail SMTP / 안 3 메일 후속"
 - "ANALYTICS feedback_open/submit: 포함 / 제외"
 - Production migration 적용 승인은 구현·로컬 검증 후 별도로 요청한다.
+
+---
+
+## 5. 최종 구현 (승인 반영)
+
+### 5.1 스키마 — `UserFeedback` / `user_feedback`
+
+§2 제안에서 **enum만 TEXT + CHECK로 변경**. 나머지 필드(adminNote·ipHash·notifiedAt·resolvedAt·pageQuery·userAgent) 유지, users FK 없음, status 기본 `NEW`. Prisma 모델은 `prisma/schema.prisma`(additive +38줄, 기존 줄 변경 0).
+
+### 5.2 Migration — `prisma/migrations/20260916090000_user_feedback_v1/migration.sql`
+
+- 하나의 `DO` 블록(원자적), `lock_timeout 3s`(트랜잭션 로컬).
+- `CREATE TABLE "user_feedback"` — TEXT 컬럼, `user_feedback_category_check`(BUG·DATA_ERROR·FEATURE_REQUEST·USABILITY·OTHER), `user_feedback_status_check`(NEW·REVIEWING·DONE), 인덱스 4개(status·category·user_id·ip_hash + created_at).
+- 같은 블록에서 `anon`·`authenticated`·`service_role`에 `REVOKE ALL ON TABLE`(role이 있을 때만) + `ENABLE ROW LEVEL SECURITY`. 정책·FORCE·GRANT·FK·enum·다른 테이블 변경 없음.
+- **의도한 결과 상태**: `user_feedback` — RLS **ON**, FORCE **OFF**, policies **0**, anon grants **0**, authenticated grants **0**, service_role grants **0**, owner = 앱 Prisma 역할(BYPASSRLS).
+- **롤백**: (필요 시 데이터 export 후) `DROP TABLE "user_feedback";` + `npx prisma migrate resolve --rolled-back 20260916090000_user_feedback_v1`. 다른 객체 의존 없음(enum 타입도 없음).
+
+### 5.3 코드
+
+| 파일 | 역할 |
+|---|---|
+| `src/lib/feedback/feedback-rules.ts` | 유형·상태·문구, 입력 검증(trim 5~3000자), 경로·허용 쿼리 정리, aptSeq 형식, UA 300자, resolvedAt 규칙, 한도 상수(10분 5건) |
+| `src/lib/feedback/ip-hash.ts` | 요청자 IP → `v1:` + HMAC-SHA256(key, "KST 날짜 + ip"). key = `FEEDBACK_HASH_SECRET` 또는 `NEXTAUTH_SECRET`에서 라벨로 파생(원 비밀 미반환·미출력), 둘 다 없으면 null |
+| `src/lib/feedback/feedback-email.ts` | 메일 본문(유형·내용·발생 화면·확인된 단지·로그인 여부·접수 시각 KST·관리자 링크 — 이메일·user id·UA·ipHash·쿼리 없음), Resend `POST https://api.resend.com/emails`(8초 timeout, 2xx만 성공, 실패는 고정 코드) |
+| `src/lib/feedback/feedback-service.ts` | 제출 흐름(검증 → 로컬 가드 → DB 공유 한도 → aptSeq master 정확 확인 → INSERT → 응답 뒤 알림, 성공 시만 notifiedAt), 관리자 필터·상태 변경·목록 직렬화(ipHash·userId 원값 제외) — 의존성 주입 |
+| `src/lib/feedback/feedback-repo-prisma.ts` | Prisma 구현(`server-only`) — count·create·markNotified, ApartmentMaster `findUnique({ aptSeq })`, 관리자 list·update |
+| `src/app/api/feedback/route.ts` | `POST` — 16KB 본문 상한, 선택 세션(user id), 로그인 시 IP 해시 생성 안 함, `after()`로 메일 |
+| `src/app/api/admin/feedback/route.ts` · `[id]/route.ts` | `GET` 목록(최신순·status·category·30건 페이지) / `PATCH` 상태·메모 — 둘 다 `requireAdmin()` 선행 |
+| `src/app/feedback/*` | 의견 보내기 화면(noindex). 유형 5개 2열(44px), textarea 16px·3000자·글자 수, 제출 중 비활성("보내는 중..."), 성공/실패 문구, `from`(앱 내부 경로)·`aptSeq`(후보) 쿼리 지원 |
+| `src/app/my/page.tsx` | 로그인 분기 밖 "고객 의견 → 의견 보내기"(`/feedback?from=/my`) — 비로그인에게도 보임 |
+| `src/app/admin/feedback/*` | 관리자 목록(상태·유형 필터, 처리전/확인중/완료 배지, 미리보기·페이지·단지·로그인 여부·메일 알림 여부, 펼침: 전문·aptSeq·단지명·lawdCd·허용 쿼리·UA·접수/알림/완료/수정 시각·운영 메모·상태 버튼). `/admin/*`는 proxy에서도 차단 |
+| `src/app/admin/dashboard/page.tsx` | 관리자 메뉴에 "사용자 의견" 링크 |
+| `src/lib/analytics/events.ts` · `track-feedback.ts` · `api/log/event/route.ts` | 이벤트 2개 + `FEEDBACK_EVENT_ACTIONS`(submit = 유형 enum) + 서버 enum 검증. GA4 매핑 없음 |
+
+**resolvedAt 규칙(결정적)**: DONE으로 → 이전이 DONE이 아니면 now, 이미 DONE이면 기존 값 유지(없으면 now) / DONE 밖으로 → null.
+
+**rate limit**: 기준 = DB 공유 한도(로그인 `user_id`, 익명 일별 `ip_hash`, 최근 10분 5건, 6번째 429 "짧은 시간에 의견을 여러 번 보내셨어요. 잠시 후 다시 시도해 주세요."). 보조 = 인스턴스 로컬(식별 10건/10분, 식별값 없는 익명 공유 버킷 30건/10분). DB 조회 실패 시 fail-open(로컬 가드 유지).
+
+**단지 context**: 쿼리의 `aptSeq`는 후보. 형식 확인 → `ApartmentMaster.aptSeq` 정확 일치일 때만 aptSeq·master.name·master.sggCd 저장. 불일치·오류면 단지 정보 없이 저장(이름·유사 매칭 없음, 클라이언트가 보낸 이름/lawdCd 무시). 현재 진입점은 MY뿐이라 실제 단지 context는 향후 단지 상세 진입점이 생길 때 채워진다.
+
+## 6. 검증
+
+### 6.1 테스트
+
+`src/lib/feedback/feedback.test.ts` 26건(요청 24항목 + Resend 호출 + 모바일 폼). `personal-fit-analytics.test.ts` 2건을 승인된 이벤트 2개 추가에 맞게 갱신.
+
+| 명령 | 결과 |
+|---|---|
+| feedback 테스트 | 26/26 |
+| analytics 관련 | 76/76 |
+| src 전체 | **2115/2115** |
+| `npx tsc --noEmit` | FAIL_EXISTING_SCRIPT_ERRORS(scripts/·tmp/ 25건, src 0) |
+| eslint(변경·신규 파일) | exit 0 |
+| `npm run build` | exit 0 (`/feedback`·`/admin/feedback` 정적, API 3개 동적) |
+
+### 6.2 로컬 DB에서 migration 실측 (Docker `postgres:16-alpine`, 일회용, 검증 후 삭제)
+
+Supabase와 같은 조건을 만들기 위해 `anon`·`authenticated`·`service_role` role과 `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES`를 먼저 설정한 뒤 **전체 21개 migration**을 `prisma migrate deploy`로 적용(`localhost:55432` 확인).
+
+| 확인 | 결과 |
+|---|---|
+| 적용 | 21개 성공, `migrate status` up to date |
+| `user_feedback` | RLS **t**, FORCE **f**, policies **0**, anon/authenticated/service_role grants **0/0/0**, owner postgres |
+| 대조(기본 권한이 실제로 주는 것) | 같은 조건에서 `reports`·`error_logs`는 role마다 7개 권한 → 회수가 필요하다는 근거 |
+| CHECK | category·status 허용 목록 = 코드 상수. `SPAM`·`CLOSED` INSERT 거절 |
+| role 직접 접근 | `SET ROLE anon` SELECT / `authenticated` INSERT / `service_role` SELECT → 모두 `permission denied` |
+| enum 타입 | 0개 |
+| 스키마 drift | `prisma migrate diff --from-url(로컬) --to-schema-datamodel` = 빈 migration |
+| Prisma repo 실제 호출 | create·countRecent·markNotified·admin list(필터)·DONE update(resolvedAt·memo) 정상, 잘못된 status는 CHECK로 거절, master 정확 일치만 반환 |
+
+### 6.3 로컬 앱(`next start`, DATABASE_URL = 로컬 컨테이너)
+
+- `/feedback` 200, `/my` 200, `/admin/feedback` 비관리자 307 → `/my`, `GET /api/admin/feedback` 401, `PATCH` 401.
+- 400: 잘못된 유형("의견 유형을 선택해 주세요."), 공백 메시지("5자 이상 입력해 주세요."), 3001자("3,000자 이하로 입력해 주세요."), 잘못된 JSON.
+- 익명 같은 IP 5건 201 → 6번째 **429**, 다른 IP 201.
+- 저장 행 전수: 원문 IP 포함 0행, `code`·`token`·`callbackUrl` 포함 0행, 클라이언트가 보낸 단지 이름 0행. `page_query`는 허용 키만, 존재하지 않는 aptSeq(`99999-1`)는 단지 정보 없음, ipHash `v1:` 67자.
+- 메일 env 없음 → 응답 201 유지, 로그 `[FEEDBACK_NOTIFY_FAILED] id=… reason=NOT_CONFIGURED`(메시지 원문 없음), notified_at null.
+- 브라우저 제출(390px): "데이터 오류" 선택 → 한글·줄바꿈 UTF-8 저장, `from=/apt/롯데?lawdCd=26350&code=SECRET` → page_path `/apt/롯데`, page_query `lawdCd=26350`, 후보 aptSeq `26350-9` → 롯데·26350. 제출 중 버튼 비활성 "보내는 중...", 성공 문구, analytics `feedback_submit` payload = 이름 + `actionType: FEATURE_REQUEST`만(complexId·aptName null). 네트워크 실패 강제 → 실패 문구, submit 이벤트 없음. (로컬 이벤트 저장은 기존 분류기가 `NON_PRODUCTION`으로 제외 — 설계대로.)
+- 360·390px: MY 진입 링크(비로그인) 58px, 유형 버튼 44px×5, textarea 16px, 제출 48px·초기 비활성, 문서 넘침 0.
+- 로그인 사용자 제출·관리자 로그인 화면은 로컬 OAuth 로그인이 불가해 **단위 테스트로만** 확인(세션 위조는 하지 않음).
+
+## 7. Production 적용 절차 (승인 후, 이 순서로)
+
+1. **사전 스냅샷(읽기 전용)**: `ALLOW_PROD_DB_READ=1 npx tsx scripts/security/audit-db-grants-rls.ts --json > <저장소 밖 경로>/before.json`, `npx prisma migrate status`로 **대기 migration이 `20260916090000_user_feedback_v1` 1개뿐**인지 확인.
+2. **Migration 적용**: `npx prisma migrate deploy` (Production `DATABASE_URL`). 이 명령은 대기 중인 migration만 적용한다 — 1번에서 1개임을 확인한 뒤 실행.
+3. **사후 확인**: 같은 audit를 `after.json`으로 → `user_feedback` RLS ON·FORCE OFF·policy 0·API role 권한 0, 다른 테이블 권한 변화 0, Data API 503 유지, `migrate status` up to date.
+4. **Env 설정(Vercel Production, 값 출력 금지)**: `RESEND_API_KEY`, `FEEDBACK_NOTIFICATION_EMAIL`, `FEEDBACK_EMAIL_FROM`(Resend에서 인증한 도메인 주소), 선택 `FEEDBACK_HASH_SECRET`. Resend 발신 도메인 DNS 인증(운영자). env는 배포 시점에 반영되므로 5번 전에 넣으면 재배포가 한 번으로 끝난다.
+5. **코드 push/배포**: migration 적용 확인 **후에만**. 반대 순서면 `/api/feedback`이 테이블 없음으로 500.
+6. **Production QA**: `[TEST]` 표시 익명 1건·로그인 1건, 관리자 목록/펼침/상태 변경, 메일 수신(env·도메인 준비 후). 테스트 행 삭제는 별도 승인.
+
+## 8. 위험·한계
+
+- 메일은 env·도메인 인증 전까지 발송되지 않는다(저장·관리자 화면은 정상, `notified_at` null로 보임).
+- ipHash 키를 `NEXTAUTH_SECRET`에서 파생하면 그 비밀을 회전할 때 당일 한도 카운트가 초기화된다(보안 영향 없음). 전용 `FEEDBACK_HASH_SECRET` 권장.
+- Vercel 프록시 헤더(`x-forwarded-for` 첫 값)를 신뢰한다. 헤더가 없으면 익명은 인스턴스 로컬 공유 버킷(30건/10분)만 적용.
+- DB 한도 조회 실패 시 fail-open.
+- 단지 상세 등 다른 진입점은 이번 범위 밖(MY만) — 단지 context가 실제로 채워지려면 진입점 추가가 필요.
+- 유형 추가 시 CHECK 제약 교체 migration(가벼움) 필요.
+- 관리자 화면의 로그인 상태 렌더는 Production 적용 후 실제 관리자 세션으로 확인해야 한다.

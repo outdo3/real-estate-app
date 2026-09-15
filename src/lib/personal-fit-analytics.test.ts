@@ -75,9 +75,11 @@ const PREVIOUS_EVENTS = [
 
 test('15. allowlist: 기존 28개 이름·순서 그대로 + 개인화 5개만 추가, GA4 매핑 없음', () => {
   assert.deepEqual([...ANALYTICS_EVENT_NAMES].slice(0, PREVIOUS_EVENTS.length), PREVIOUS_EVENTS);
-  assert.deepEqual([...ANALYTICS_EVENT_NAMES].slice(PREVIOUS_EVENTS.length), [
+  assert.deepEqual([...ANALYTICS_EVENT_NAMES].slice(PREVIOUS_EVENTS.length, PREVIOUS_EVENTS.length + 5), [
     'personal_fit_settings_cta_click', 'personal_fit_login_cta_click', 'personal_fit_settings_save', 'personal_fit_card_view', 'personal_fit_compare_view',
   ]);
+  // 이후 추가는 USER_FEEDBACK_V1(승인됨)의 2개뿐 — 개인화 이벤트 순서·이름은 그대로.
+  assert.deepEqual([...ANALYTICS_EVENT_NAMES].slice(PREVIOUS_EVENTS.length + 5), ['feedback_open', 'feedback_submit']);
   assert.ok(!Object.keys(GA_EVENT_MAP).some((k) => k.startsWith('personal_fit_')), '제품 분석 계열 — GA4로 보내지 않음');
   assert.ok(!read('src/lib/analytics/ga.ts').includes('fit_'), 'GA4 파라미터 allowlist 확장 없음');
   // 관리자 집계의 LIKE 접두사와 겹치지 않는다
@@ -98,7 +100,8 @@ test('route: 개인화 이벤트는 자기 enum만 actionType으로, next_action
   ] as const) {
     assert.equal(personalFitActionType(name, raw), null, `${name}:${raw}`);
   }
-  assert.match(ROUTE, /name === 'next_action_click' && rawActionType && \(NEXT_ACTION_TYPES as readonly string\[\]\)\.includes\(rawActionType\)\s*\? rawActionType\s*:[^;]*?personalFitActionType\(name, rawActionType\);/);
+  // USER_FEEDBACK_V1 — 개인화 enum 판정 뒤에 의견 이벤트 enum 판정이 이어진다(서로 다른 이벤트 이름이라 겹치지 않음).
+  assert.match(ROUTE, /name === 'next_action_click' && rawActionType && \(NEXT_ACTION_TYPES as readonly string\[\]\)\.includes\(rawActionType\)\s*\? rawActionType\s*:[^;]*?personalFitActionType\(name, rawActionType\) \?\?[^;]*?feedbackActionType\(name, rawActionType\);/);
   assert.equal(eventUrl('personal_fit_card_view', 'FULL'), '/__event__/personal_fit_card_view?action=FULL');
   assert.ok(NEXT_ACTION_TYPES.every((t) => personalFitActionType('next_action_click', t) === null), 'next_action_click은 기존 분기로만');
   assert.ok(!Object.values(PERSONAL_FIT_EVENT_ACTIONS).flat().some((v) => /\d/.test(v)), 'enum에 숫자 없음');

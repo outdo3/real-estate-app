@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { Activity, BarChart3, Database, Users } from 'lucide-react';
+import { Activity, BarChart3, Database, Users, MessageSquareText } from 'lucide-react';
 import useSWR from 'swr';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
@@ -110,6 +110,10 @@ export default function AdminDashboardPage() {
                 </Link>
                 <Link href="/admin/users" className={styles.adminNavLink}>
                   <Users size={16} aria-hidden="true" /> 사용자 관리
+                </Link>
+                {/* USER_FEEDBACK_V1 */}
+                <Link href="/admin/feedback" className={styles.adminNavLink}>
+                  <MessageSquareText size={16} aria-hidden="true" /> 사용자 의견
                 </Link>
               </nav>
 

@@ -219,6 +219,15 @@
   font-weight: 600;
 }
 
+/* USER_FEEDBACK_V1 — 아이콘 + 문구 한 줄 */
+.feedbackLink {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  box-sizing: border-box;
+}
+
 .linkCard:hover {
   border-color: var(--primary-color);
 }
