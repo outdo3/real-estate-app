@@ -1,5 +1,20 @@
 # 이집 개발 변경 기록
 
+## 2026-09-15
+
+### E-JIP COMMUNITY IMAGE ORPHAN CLEANUP V1 — PHASE 1 Production DRY-RUN 감사
+
+감사 도구·문서만 추가(앱 런타임·DB·Storage·cron 무변경, Production 삭제 0). 상세: `docs/development/COMMUNITY_IMAGE_ORPHAN_CLEANUP_V1.md`
+
+    정의      Storage 존재 + PostImage.path 없음 + posts/{userId}/{uuid}/{uuid}.{webp|jpg} + 메타데이터·소유자 확인 + 생성 후 ≥ 24h
+              (영수증 TTL 6h 뒤에는 새 참조가 불가능 → 창 하한 12h 강제)
+    결과      Storage 2개 343.2 KB, PostImage 2, REFERENCED 2, RECENT 0, 후보 0(0 B), DB 누락 0, REVIEW 0 → CLEAN
+              storage.objects 읽기 전용 교차 확인: 2행·351,396 bytes 일치. Data API /rest/v1 HTTP 503(OFF)
+    도구      scripts/community/audit-image-orphans.ts (ALLOW_PROD_DB_READ=1, --apply는 PHASE 1에서 거부)
+              src/lib/community/image-orphan-audit.ts (순수 분류·읽기 전용 프로브·PHASE 2 plan/apply 설계: 100/run, >500개·>500MB STOP,
+              삭제 직전 DB 재조회, 청크 2회 재시도, exists 검증)
+    검증      신규 26/26, src 1932/1932, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+
 ## 2026-09-14
 
 ### E-JIP MAP LAYER PILL UNIFIED COMPACT UI V2 — 레이어 알약 같은 폭으로 정렬
