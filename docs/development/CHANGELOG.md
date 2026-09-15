@@ -2,6 +2,20 @@
 
 ## 2026-09-16
 
+### E-JIP SEOUL / GYEONGGI EXPANSION DATA AUDIT V1 — ARCHITECTURE_WORK_REQUIRED (READ-ONLY)
+
+Production write·schema·sync·region enable 0. 앱 코드 변경 0(read-only 감사 스크립트 1개 추가). 상세: `docs/development/SEOUL_GYEONGGI_EXPANSION_DATA_AUDIT_V1.md`
+
+    데이터    서울/경기 마스터 0·매매 서울 46행(11680 파일럿, 커버리지 셀 0)·경기 0·전월세/오피스텔/학교/위치피처 0 — 전 도메인 DATA_GAP
+              부산 기준선: 마스터 3,438(aptSeq 100%, 좌표 98.9%, exact 82.4%), 매매 864,879(마스터 미연결 4.6%), 취소 래칫 의심 324행
+    지역코드  서울 leaf 25 · 경기 48 중 부모 시 6 제외 leaf 42 · 읍면동 467/746(+리 1,415)
+    구조      리포트 allowlist·/report/city/busan·'26' DB-first ≥7곳·부산 코드 사본 3·cron 기본값·peer '부산' 풀·학교 C10/배정구역·오피스텔 스크립트 부산 고정,
+              경기 시+구 계층은 SEO 빌더·프록시만 표현
+    결함      live MOLIT numOfRows=1000 페이징 없음(1,000건 초과 조용히 절단), 통계 maxDuration 없음·시도 fan-out 초당 4회,
+              무제한 인메모리 캐시, 검색 take 없는 contains 스캔, (name,dong) 무 lawdCd 식별 키, sync 고정 순서로 뒤쪽 구 미처리
+    사용가능  분양(서울 96·경기 365), 재개발 목록(서울 644·경기 241, 좌표 0), SEO 템플릿
+    검증      감사 스크립트 READ ONLY 트랜잭션 39쿼리 49.7s exit 0, eslint exit 0
+
 ### E-JIP REGIONAL SEO DATA-AWARE DESCRIPTION PATCH V1 — 지역 설명이 실제 값 있는 섹션만 약속
 
 route·title·canonical·robots·색인 기준·사이트맵·리포트 계산·기본 기간 변경 0. 상세: `docs/development/REGIONAL_SEO_KEYWORD_LANDING_V1.md` §25
