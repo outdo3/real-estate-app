@@ -145,6 +145,7 @@ function deps(storage: CommunityImageStorage | null, extra: Partial<ImageHandler
     newUuid: () => `aaaaaaaa-bbbb-4ccc-8ddd-${String(++n).padStart(12, '0')}`,
     now: () => NOW,
     referencedPaths: async () => new Set(),
+    rateLimit: async () => ({ allowed: true }),
     log: (message, meta) => logs.push({ message, meta }),
     ...extra,
   };

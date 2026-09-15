@@ -17,6 +17,7 @@ import {
 } from './image-rules';
 import { removeWithRetry, type CommunityImageStorage } from './image-storage-core';
 import { UPLOAD_TOKEN_TTL_MS, type UploadReceipt } from './image-upload-token';
+import { IMAGE_UPLOAD_RATE_LIMIT_MESSAGE, type RateLimitDecision } from './image-upload-rate-limit';
 
 export interface SessionUser {
   id: string;
@@ -34,6 +35,7 @@ export interface AuthResult {
 export interface HandlerResult<T = unknown> {
   status: number;
   body: { success: true; data?: T } | { success: false; error: string };
+  headers?: Record<string, string>;
 }
 
 const fail = (status: number, error: string): HandlerResult<never> => ({ status, body: { success: false, error } });
@@ -46,6 +48,8 @@ export interface ImageHandlerDeps {
   now: () => number;
   /** DB(PostImage)에 이미 연결된 경로 집합. */
   referencedPaths: (paths: string[]) => Promise<Set<string>>;
+  /** COMMUNITY_IMAGE_UPLOAD_RATE_LIMIT_V1 — 서버 세션 사용자 id로만 호출한다. */
+  rateLimit: (userId: string) => Promise<RateLimitDecision>;
   log: (message: string, meta?: Record<string, unknown>) => void;
 }
 
@@ -76,6 +80,13 @@ export async function handleImageUpload(
   }
   // 본문을 읽기 전에 선언 길이로 먼저 막는다.
   if (input.contentLength != null && input.contentLength > MAX_STORED_BYTES) return fail(413, IMAGE_ERROR_MESSAGES.TOO_LARGE);
+
+  // 본문을 읽고 Storage를 부르기 전에 사용자별 한도를 본다. 키는 세션 사용자 id(클라이언트 입력 아님), 관리자도 동일.
+  const limit = await deps.rateLimit(user.id);
+  if (!limit.allowed) {
+    deps.log('[community-images] rate limited', { reason: limit.reason });
+    return { ...fail(429, IMAGE_UPLOAD_RATE_LIMIT_MESSAGE), headers: { 'Retry-After': String(limit.retryAfterSec) } };
+  }
 
   const bytes = await input.readBytes();
   const checked = checkStoredImage(bytes);

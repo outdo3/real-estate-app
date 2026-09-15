@@ -2,6 +2,19 @@
 
 ## 2026-09-15
 
+### E-JIP COMMUNITY IMAGE UPLOAD RATE LIMIT V1 — 사진 업로드 사용자별 한도
+
+`POST /api/community/images`만 변경(편집기 UI·schema·bucket policy·Data API·auth 무변경, 새 저장소·서비스·secret 없음).
+상세: `docs/development/COMMUNITY_IMAGE_UPLOAD_RATE_LIMIT_V1.md`
+
+    한도      저장된 사진(storage.objects 읽기, 인스턴스 공유) 20장/10분·100장/24시간 + 업로드 요청(메모리, 인스턴스 로컬) 40회/10분
+              키 community-image-upload:{세션 userId}, 관리자 동일, 본문 읽기·Storage 호출 전에 판정
+    응답      429 "사진 업로드 요청이 많습니다. 잠시 후 다시 시도해 주세요." + Retry-After(초). 로그는 사유만(info)
+    한계      요청 한도는 인스턴스 로컬(best-effort), 저장 한도는 비원자적, 사용량 조회 실패 시 fail-open + error 로그
+    파일      src/lib/community/image-upload-rate-limit.ts, image-upload-usage-db.ts(신규), image-handlers.ts(한 단계),
+              src/lib/supabase/community-image-deps.ts, src/app/api/community/images/route.ts(헤더 전달), 테스트 18
+    검증      신규 18/18, src 1950/1950, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint exit 0, build exit 0
+
 ### E-JIP COMMUNITY IMAGE ORPHAN CLEANUP V1 — PHASE 1 Production DRY-RUN 감사
 
 감사 도구·문서만 추가(앱 런타임·DB·Storage·cron 무변경, Production 삭제 0). 상세: `docs/development/COMMUNITY_IMAGE_ORPHAN_CLEANUP_V1.md`

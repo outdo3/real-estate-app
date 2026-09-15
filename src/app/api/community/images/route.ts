@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     },
     buildImageHandlerDeps()
   );
-  return NextResponse.json(result.body, { status: result.status });
+  return NextResponse.json(result.body, { status: result.status, headers: result.headers });
 }
 
 export async function DELETE(request: Request) {
