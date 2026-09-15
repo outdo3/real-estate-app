@@ -14,6 +14,8 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   return {
     title,
     description,
+    // REGIONAL_SEO_KEYWORD_LANDING_V1 §14 — 진입점이 닫힌 기능이고 ?q=마다 생기는 검색 결과 화면이다. 색인하지 않는다.
+    robots: { index: false, follow: true },
     openGraph: buildOpenGraph({ title, description }),
   };
 }

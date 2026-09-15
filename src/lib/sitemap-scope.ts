@@ -15,6 +15,8 @@
 // 그대로 쓴다 — 전국 확장 시 그 목록만 늘리면 사이트맵이 따라온다.
 
 import { BUSAN_DISTRICTS } from '@/lib/report/region-scope';
+import { cityReportHref, districtReportHref, dongReportHref } from '@/lib/report/report-links';
+import { indexableDongs, type DongTradeCount } from '@/lib/seo/report-region-seo';
 
 export const LAUNCH_SIDO = '부산광역시';
 
@@ -40,17 +42,31 @@ export interface SitemapRegionRoute {
 }
 
 /**
- * §2 — 출시 범위(부산 16개 자치구·군)의 통계/학군 지역 경로.
+ * §2 — 출시 범위(부산)의 지역 경로.
  *
- * 사이트맵에서 빠진다고 해서 접근이 막히는 것은 아니다(§2 마지막 줄). 서울 URL을 직접
- * 열면 지금도 그대로 열린다 — 사이트맵은 색인을 정할 뿐 접근을 정하지 않는다.
+ * REGIONAL_SEO_KEYWORD_LANDING_V1 §15 — 예전에는 구마다 `/stats?sido=&sigungu=`와
+ * `/school?sido=&sigungu=`(32개)를 실었다. 둘 다 클라이언트 화면이라 서버 HTML에는 지역 내용이
+ * 없고(실측: 서구 URL의 H1/본문이 "시장 통계·분석"/"부산광역시 전체"), 쿼리는 공유용 상태 복원일
+ * 뿐이라 canonical이 `/stats`·`/school`이다. canonical이 아닌 쿼리 변형은 사이트맵에 싣지 않는다.
+ *
+ * 대신 **서버에서 실제 거래 데이터를 렌더하는** 지역 한장 브리핑을 싣는다:
+ * 부산 전체 1개 + 검증된 16개 자치구·군. 동은 DB 표본 판정이 필요해 buildDongRoutes가 따로 만든다.
+ *
+ * 사이트맵에서 빠진다고 해서 접근이 막히는 것은 아니다 — 사이트맵은 색인을 정할 뿐 접근을 정하지 않는다.
  */
 export function buildLaunchRegionRoutes(): SitemapRegionRoute[] {
-  const routes: SitemapRegionRoute[] = [];
+  const routes: SitemapRegionRoute[] = [{ path: cityReportHref(), changeFrequency: 'daily', priority: 0.8 }];
   for (const district of BUSAN_DISTRICTS) {
-    const query = regionQuery(LAUNCH_SIDO, district.name);
-    routes.push({ path: `/stats?${query}`, changeFrequency: 'daily', priority: 0.5 });
-    routes.push({ path: `/school?${query}`, changeFrequency: 'weekly', priority: 0.4 });
+    const path = districtReportHref(district.lawdCd);
+    if (path) routes.push({ path, changeFrequency: 'daily', priority: 0.7 });
   }
   return routes;
+}
+
+/** §8/§15 — 최근 1년 표본이 있는 동만(indexableDongs와 같은 판정 — 동 페이지 robots와 갈라지지 않는다). */
+export function buildDongRoutes(rows: readonly DongTradeCount[]): SitemapRegionRoute[] {
+  return indexableDongs(rows)
+    .map((r) => dongReportHref(r.lawdCd, r.dong))
+    .filter((p): p is string => !!p)
+    .map((path) => ({ path, changeFrequency: 'weekly' as const, priority: 0.5 }));
 }

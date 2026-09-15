@@ -12,7 +12,8 @@ import styles from './ReportSheet.module.css';
 import type { ReportEnvelope, ReportMetric, ReportSection } from '@/lib/report/types';
 import ReportActions from './ReportActions';
 import { complexCountLabel, complexRowLabels } from '@/lib/report/complex-row-labels';
-import { aptDetailHref } from '@/lib/report/report-links';
+import { aptDetailHref, districtReportHref, dongReportHref } from '@/lib/report/report-links';
+import type { BreadcrumbItem } from '@/lib/seo/site-seo';
 import { KpiCard, ReportHeader, SectionHead, TrustFooter } from './ReportPrimitives';
 
 /** KPI로 띄울 지표 키와 순서. 스코프별로 의미 있는 것만 고른다. */
@@ -23,7 +24,18 @@ const KPI_KEYS_BY_TYPE: Record<string, string[]> = {
   REGION_DONG: ['transactionCount', 'medianDealAmount', 'medianPricePerM2', 'latestDealDate'],
 };
 
-function DistributionSection({ section }: { section: ReportSection }) {
+/**
+ * REGIONAL_SEO_KEYWORD_LANDING_V1 §12 — 분포 행의 하위 지역 링크(부산 → 구, 구 → 동).
+ * 행 자체가 이미 envelope의 실제 거래에서 나온 지역이라 이름을 지어내지 않는다.
+ * 경로는 리포트 경로 단일 정의(report-links)만 쓴다.
+ */
+function distributionHref(envelope: ReportEnvelope, cells: Record<string, string | number | null>): string | null {
+  if (envelope.scope.level === 'CITY' && cells.lawdCd != null) return districtReportHref(String(cells.lawdCd));
+  if (envelope.scope.level === 'DISTRICT' && cells.dong != null) return dongReportHref(envelope.scope.lawdCd, String(cells.dong));
+  return null;
+}
+
+function DistributionSection({ section, envelope }: { section: ReportSection; envelope: ReportEnvelope }) {
   const top = section.rows.slice(0, 8);
   const max = Math.max(1, ...top.map((r) => Number(r.cells.count ?? 0)));
   return (
@@ -31,9 +43,17 @@ function DistributionSection({ section }: { section: ReportSection }) {
       <SectionHead title={section.title} meta={`상위 ${top.length}곳`} />
       {top.map((r) => {
         const count = Number(r.cells.count ?? 0);
+        const href = distributionHref(envelope, r.cells);
+        const name = String(r.cells.name ?? '');
         return (
           <div key={r.key} className={styles.barRow}>
-            <span className={styles.barName}>{String(r.cells.name ?? '')}</span>
+            {href ? (
+              <Link href={href} className={`${styles.barName} ${styles.barNameLink}`}>
+                {name}
+              </Link>
+            ) : (
+              <span className={styles.barName}>{name}</span>
+            )}
             <span className={styles.barTrack} data-export-fixed-size="">
               <span
                 className={styles.barFill}
@@ -162,7 +182,28 @@ function formatManwon(manwon: number): string {
   return `${manwon.toLocaleString('ko-KR')}만`;
 }
 
-export default function RegionReportSheet({ envelope }: { envelope: ReportEnvelope }) {
+export interface RegionSubNav {
+  title: string;
+  links: readonly { name: string; href: string }[];
+}
+
+export default function RegionReportSheet({
+  envelope,
+  heading = null,
+  breadcrumbs = [],
+  subRegionNav = null,
+}: {
+  envelope: ReportEnvelope;
+  /**
+   * REGIONAL_SEO_KEYWORD_LANDING_V1 §10 — 페이지 H1(지역 SEO 템플릿). 없으면 기존 제목을 쓴다.
+   * 공유/내보내기 제목(`title`)은 바꾸지 않는다 — 카카오 공유 카드 문구가 그대로 유지된다.
+   */
+  heading?: string | null;
+  /** §12 — 이집 › 부산 › 서구 › 암남동. 시트 바깥(내보내기 이미지 밖)에 렌더한다. */
+  breadcrumbs?: readonly BreadcrumbItem[];
+  /** §12 — 하위 지역 브리핑 링크(부산 → 16개 구·군, 구 → 색인 대상 동). */
+  subRegionNav?: RegionSubNav | null;
+}) {
   const kpiKeys = KPI_KEYS_BY_TYPE[envelope.reportType] ?? [];
   const kpis = kpiKeys
     .map((k) => envelope.metrics.find((m) => m.key === k))
@@ -173,14 +214,27 @@ export default function RegionReportSheet({ envelope }: { envelope: ReportEnvelo
   const recent = envelope.sections.find((s) => s.key === 'recentTrades');
   const showDong = envelope.scope.level !== 'DONG';
   const title = `${envelope.scope.displayName} 부동산 한장 브리핑`;
+  const h1 = heading ?? title;
 
   return (
     <div className={styles.page}>
+      {breadcrumbs.length > 1 && (
+        <nav aria-label="지역 경로" className={styles.regionCrumbs}>
+          <ol>
+            {breadcrumbs.map((c, i) => (
+              <li key={c.path}>
+                {i < breadcrumbs.length - 1 ? <Link href={c.path}>{c.name}</Link> : <span aria-current="page">{c.name}</span>}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
       <article className={styles.sheet} data-export-root="">
         <ReportHeader
-          title={title}
+          title={h1}
           subtitle={envelope.subtitle}
-          tags={['지역 브리핑', envelope.period.label]}
+          // H1이 지역 검색어로 바뀌어도 진입 CTA("서구 한장 브리핑")와 같은 제품 이름이 보이게 한다.
+          tags={[heading ? '한장 브리핑' : '지역 브리핑', envelope.period.label]}
           completeness={envelope.trust.completeness}
           stamp={envelope.dataAsOf ? `데이터 기준 ${envelope.dataAsOf.slice(0, 10).replace(/-/g, '.')}` : null}
         />
@@ -201,7 +255,7 @@ export default function RegionReportSheet({ envelope }: { envelope: ReportEnvelo
             </div>
 
             <div className={styles.col}>
-              {distribution && distribution.rows.length > 0 && <DistributionSection section={distribution} />}
+              {distribution && distribution.rows.length > 0 && <DistributionSection section={distribution} envelope={envelope} />}
 
               {envelope.highlights.length > 0 && (
                 <section className={styles.section}>
@@ -233,6 +287,21 @@ export default function RegionReportSheet({ envelope }: { envelope: ReportEnvelo
           sourceNote="국토교통부 실거래가 · 취소 거래 제외 · 부산 16개 자치구·군 기준 · 전용면적(㎡) 기준"
         />
       </article>
+
+      {subRegionNav && subRegionNav.links.length > 0 && (
+        <nav aria-label={subRegionNav.title} className={styles.regionNav}>
+          <h2 className={styles.regionNavTitle}>{subRegionNav.title}</h2>
+          <ul className={styles.regionNavList}>
+            {subRegionNav.links.map((l) => (
+              <li key={l.href}>
+                <Link href={l.href} className={styles.regionNavLink}>
+                  {l.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
 
       <ReportActions title={title} envelope={envelope} />
     </div>

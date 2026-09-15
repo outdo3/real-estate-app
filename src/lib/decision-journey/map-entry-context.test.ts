@@ -48,6 +48,7 @@ const INVENTORY: Record<string, { count: number; kind: string }> = {
   'src/lib/decision-journey/registry.ts': { count: 3, kind: 'B buildDetailMapUrl · C buildRegionMapUrl(+좌표 없음 /map) — assign' },
   'src/app/map/page.tsx': { count: 1, kind: '지도 자신: URL 읽기 가드(pathname === /map)' },
   'src/lib/admin-analytics/query.ts': { count: 1, kind: '진입점 아님: 관리자 집계 SQL' },
+  'src/app/map/layout.tsx': { count: 1, kind: '진입점 아님: 지도 SEO canonical/og:url 경로(메타데이터, REGIONAL_SEO_KEYWORD_LANDING_V1)' },
 };
 
 const GENERIC = { lat: 35.1907501823457, lng: 129.08614968725 };

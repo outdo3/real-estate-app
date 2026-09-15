@@ -1,5 +1,25 @@
 # 이집 개발 변경 기록
 
+## 2026-09-16
+
+### E-JIP REGIONAL SEO KEYWORD & LANDING ARCHITECTURE V1 — 지역 SEO 구조 로컬 구현, Production 미적용(승인 대기)
+
+새 route·DB/schema·통계 계산·식별·지도 코어·인증 변경 0건. 상세: `docs/development/REGIONAL_SEO_KEYWORD_LANDING_V1.md`
+
+    감사      canonical 거의 없음, og:url 전 페이지 루트, 사이트맵 37개 중 32개가 서버 HTML이 지역과 무관한 쿼리 변형,
+              실데이터 SSR 지역 브리핑은 사이트맵 0, JSON-LD 0, /map·/community·/my 제목이 홈과 같음
+    메인      사용자 확정 title/description → site-seo 단일 출처, og/twitter/siteConfig 통일, WebSite·Organization JSON-LD, application-name
+    템플릿    buildRegionSeoMetadata(시도+구 / 시도+시+구, 17개 시도 표) — 제목 32자 상한·보조 키워드 축약,
+              설명은 실제 섹션에서만 생성(전세·월세·신고가 문구 없음), H1 "{지역} 아파트 시세·실거래가"
+    지역      /report/city|district|dong: 템플릿 메타·self canonical(?period 무시)·BreadcrumbList·경로 nav·하위 지역 칩·분포 행 링크,
+              동은 최근 1년 실거래로 확인된 이름만, 10건 이상만 index(리포트 표본 게이트 재사용), 미확인·부산 밖 noindex
+    canonical /stats·/school(지역 쿼리)·/stats/[type]·/map·/community·/report, /apt 식별 완전 URL, /report/apt 마스터 확인 시
+    noindex   /my·/admin·/community/write·edit(메타 전용 layout), /report/compare, /stats/compare 두 단지 상태, /ai-search, 준비 중 통계 메뉴
+    사이트맵  37 → 139: 쿼리 변형 32 제거, /report + 부산 1 + 구 16 + 동 116(DB 실측) 추가, 중복·쿼리 0, IndexNow 안전핀 리포트 경로 확장
+    영향      지역 브리핑 공유 이미지/PDF 헤더 문구 변경(공유 제목 유지), /stats·/school 기본 제목 "전국" 제거
+    검증      신규 22/22, src 2141/2141, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), 변경 파일 eslint exit 0, build exit 0,
+              로컬 next start Yeti/Chrome UA head 메타·H1·JSON-LD, sitemap 139·canonical 일치, 360/375/390px 넘침 0
+
 ## 2026-09-15
 
 ### E-JIP USER FEEDBACK V1 — Production 적용: FUNCTIONAL_WITH_EMAIL_PENDING

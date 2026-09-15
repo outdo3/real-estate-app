@@ -14,7 +14,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const item = getStatsMenuItem(type);
   const title = item ? `${item.icon} ${item.title} - ${siteConfig.name}` : `시장 통계 - ${siteConfig.name}`;
   const description = item ? item.subtitle : '시장 통계·분석';
-  return { title, description, openGraph: buildOpenGraph({ title, description }) };
+  // REGIONAL_SEO_KEYWORD_LANDING_V1 §13 — 지역 쿼리(공유 복원용)를 뺀 깨끗한 경로가 canonical이다.
+  const path = item ? `/stats/${encodeURIComponent(type)}` : null;
+  return {
+    title,
+    description,
+    ...(path ? { alternates: { canonical: path } } : {}),
+    // §14 — 준비 중 메뉴는 데이터 없이 안내만 있다. 색인하지 않는다.
+    ...(item?.status === 'soon' ? { robots: { index: false, follow: true } } : {}),
+    openGraph: buildOpenGraph({ title, description, path }),
+  };
 }
 
 export default async function StatsTypePage({ params }: Props) {

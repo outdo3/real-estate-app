@@ -824,3 +824,53 @@
   /* 푸터는 통째로 보호하지 않는다 — 그러다 1페이지 하단이 통으로 비었다.
      다만 서명 줄만은 붙여 둔다(위 .signature). */
 }
+
+/* ── REGIONAL_SEO_KEYWORD_LANDING_V1 §12 — 지역 경로 · 하위 지역 링크 ─────────────
+ * 둘 다 시트(data-export-root) **바깥**에 있다 — 공유 이미지/PDF에는 들어가지 않고,
+ * 화면에서만 부산 → 구 → 동 → 단지로 이동하는 길을 준다. */
+.regionCrumbs {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: #5b6b7a;
+}
+.regionCrumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; margin: 0; padding: 0; list-style: none; }
+.regionCrumbs li { display: inline-flex; align-items: center; min-width: 0; }
+.regionCrumbs li + li::before { content: '›'; margin: 0 6px; color: #9aa9b6; }
+.regionCrumbs a { display: inline-flex; align-items: center; min-height: 36px; color: #0b7a4d; font-weight: 700; text-decoration: none; }
+.regionCrumbs [aria-current='page'] { color: #10202b; font-weight: 700; word-break: keep-all; }
+
+.regionNav {
+  width: 100%;
+  max-width: 1000px;
+  margin-top: 14px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 4px 16px rgba(16, 32, 43, 0.06);
+}
+.regionNavTitle { margin: 0 0 10px; font-size: 0.95rem; font-weight: 800; color: #10202b; }
+.regionNavList { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.regionNavLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #e8f6ef;
+  color: #0b7a4d;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: none;
+  word-break: keep-all;
+}
+
+/* 분포 행 이름 링크 — 모양은 기존 이름 그대로(내보내기 이미지가 달라 보이지 않게). */
+.barNameLink { text-decoration: none; }
+.barNameLink:hover { text-decoration: underline; }
+
+@media print {
+  .regionCrumbs,
+  .regionNav { display: none !important; }
+}

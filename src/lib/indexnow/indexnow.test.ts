@@ -227,8 +227,20 @@ test('§4 빈 사이트맵을 안전하게 처리한다', () => {
 test('§4 현재 사이트맵 정책에는 부산 밖 지역 URL이 없다', () => {
   // 사이트맵의 지역 경로를 만드는 바로 그 함수를 쓴다 — 별도 목록을 만들지 않는다.
   const urls = buildLaunchRegionRoutes().map((r) => `https://e-jip.com${r.path.replace(/&amp;/g, '&')}`);
-  assert.equal(urls.length, 32, '부산 16개 × (통계/학군)');
+  // REGIONAL_SEO_KEYWORD_LANDING_V1 §15 — 지역 경로가 쿼리 변형 32개에서 지역 브리핑 17개로 바뀌었다.
+  assert.equal(urls.length, 17, '부산 전체 1 + 16개 구·군 브리핑');
   assert.deepEqual(findOutOfScopeRegionUrls(urls), []);
+});
+
+test('§15 부산 밖 lawdCd의 지역 리포트 URL도 잡아낸다', () => {
+  const ok = [
+    'https://e-jip.com/report/district/26140',
+    `https://e-jip.com/report/dong/26380/${encodeURIComponent('괴정동')}`,
+    'https://e-jip.com/report/city/busan',
+    'https://e-jip.com/report/apt/26140-1361',
+  ];
+  const bad = ['https://e-jip.com/report/district/11680', `https://e-jip.com/report/dong/27110/${encodeURIComponent('남산동')}`];
+  assert.deepEqual(findOutOfScopeRegionUrls([...ok, ...bad]), bad);
 });
 
 test('§4 부산 밖 지역 URL이 섞이면 잡아낸다 — 조용히 통과시키지 않는다', () => {

@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
+import { siteConfig, buildOpenGraph } from '@/config/site';
 import { kakaoMapsSdkUrl, KAKAO_SDK_SCRIPT_ID } from '@/lib/kakao/maps-sdk';
 import { DEFAULT_LAWD_CD, aptMarkerRequestPath } from '@/lib/map-marker-share';
 
@@ -78,6 +80,19 @@ return r.ok?r.json().then(function(b){return{ok:true,body:b}}):{ok:false,body:nu
 // URL은 로더와 같은 함수(kakaoMapsSdkUrl)로 만들어 두 번 받는 일이 없게 한다.
 //
 // 이 layout은 `/map` 하위에만 적용된다 — 지도를 쓰지 않는 화면에서 SDK를 내려받지 않는다.
+// REGIONAL_SEO_KEYWORD_LANDING_V1 §17 — 지도 화면이 'use client'라 자기 제목이 없어 홈과 같은 제목이
+// 나갔다. 지도 전용 제목과 self canonical(쿼리로 넘어오는 위치·단지 상태 제외)을 싣는다.
+const MAP_PATH = '/map';
+const MAP_TITLE = `아파트 지도 - ${siteConfig.name}`;
+const MAP_DESCRIPTION = '지도에서 아파트 단지 위치와 실거래가를 한눈에 확인하세요.';
+
+export const metadata: Metadata = {
+  title: MAP_TITLE,
+  description: MAP_DESCRIPTION,
+  alternates: { canonical: MAP_PATH },
+  openGraph: buildOpenGraph({ title: MAP_TITLE, description: MAP_DESCRIPTION, path: MAP_PATH }),
+};
+
 export default function MapLayout({ children }: { children: ReactNode }) {
   const sdkUrl = kakaoMapsSdkUrl();
   return (

@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
-import { siteConfig, buildOpenGraph } from '@/config/site';
+import { siteConfig, buildOpenGraph, buildTwitter } from '@/config/site';
 import RegionReportSheet from '@/components/report/RegionReportSheet';
 import InvalidScope from '@/components/report/InvalidScope';
+import JsonLd from '@/components/seo/JsonLd';
 import { readRegionReport } from '@/lib/report/region-read';
-import { districtName, isBusanCurrentLawdCd, normalizeDong } from '@/lib/report/region-scope';
+import { isBusanCurrentLawdCd, normalizeDong } from '@/lib/report/region-scope';
 import { parsePeriodParam, resolvePeriod } from '@/lib/report/report-period';
+import { dongReportSeo } from '@/lib/seo/report-region-seo';
+import { readDongTrailingYearTrades } from '@/lib/seo/region-seo-read';
+import { buildBreadcrumbJsonLd } from '@/lib/seo/site-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,17 +17,29 @@ type Props = {
   searchParams: Promise<{ period?: string | string[] }>;
 };
 
+function safeDecode(v: string): string {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
+// REGIONAL_SEO_KEYWORD_LANDING_V1 §8 — 동 이름은 최근 1년 실거래에서 확인될 때만 제목에 쓰고,
+// 표본(10건 이상)이 있을 때만 색인한다. 확인 못 한 동은 일반 제목 + noindex.
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { lawdCd, dong } = await params;
-  const name = districtName(lawdCd);
-  const dongName = decodeURIComponent(dong);
-  const title = name
-    ? `부산 ${name} ${dongName} 부동산 한장 브리핑 - ${siteConfig.name}`
-    : `지역 리포트 - ${siteConfig.name}`;
-  const description = name
-    ? `부산 ${name} ${dongName} 아파트 실거래 거래량·중앙 거래가를 한 장으로 확인하세요.`
-    : '이집 지역 리포트';
-  return { title, description, openGraph: buildOpenGraph({ title, description }) };
+  const dongName = normalizeDong(safeDecode(dong));
+  const trades = isBusanCurrentLawdCd(lawdCd) && dongName ? await readDongTrailingYearTrades(lawdCd, dongName) : null;
+  const seo = dongReportSeo(lawdCd, dongName ?? '', trades);
+  return {
+    title: seo.title,
+    description: seo.description,
+    ...(seo.canonicalPath ? { alternates: { canonical: seo.canonicalPath } } : {}),
+    robots: seo.robots,
+    openGraph: buildOpenGraph({ title: seo.title, description: seo.description, path: seo.canonicalPath }),
+    twitter: buildTwitter({ title: seo.title, description: seo.description }),
+  };
 }
 
 export default async function DongReportPage({ params, searchParams }: Props) {
@@ -37,13 +53,23 @@ export default async function DongReportPage({ params, searchParams }: Props) {
   }
   const sp = await searchParams;
   const period = resolvePeriod(parsePeriodParam(sp?.period));
-  const envelope = await readRegionReport({
-    level: 'DONG',
-    lawdCd,
-    dong: dongName,
-    start: period.start,
-    end: period.end,
-    periodLabel: period.label,
-  });
-  return <RegionReportSheet envelope={envelope} />;
+  const [envelope, trades] = await Promise.all([
+    readRegionReport({
+      level: 'DONG',
+      lawdCd,
+      dong: dongName,
+      start: period.start,
+      end: period.end,
+      periodLabel: period.label,
+    }),
+    readDongTrailingYearTrades(lawdCd, dongName),
+  ]);
+  const seo = dongReportSeo(lawdCd, dongName, trades);
+  return (
+    <>
+      <JsonLd data={buildBreadcrumbJsonLd(siteConfig.url, seo.breadcrumbs)} />
+      {/* 확인되지 않은 동이면 heading/breadcrumbs가 비어 시트는 기존 제목을 그대로 쓴다. */}
+      <RegionReportSheet envelope={envelope} heading={seo.heading} breadcrumbs={seo.breadcrumbs} />
+    </>
+  );
 }

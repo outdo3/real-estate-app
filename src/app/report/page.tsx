@@ -14,7 +14,13 @@ export const dynamic = 'force-dynamic';
 export async function generateMetadata(): Promise<Metadata> {
   const title = `한장 리포트 - ${siteConfig.name}`;
   const description = '부산 부동산을 한 장으로 정리한 브리핑과 단지 리포트를 확인하세요.';
-  return { title, description, openGraph: buildOpenGraph({ title, description }) };
+  // REGIONAL_SEO_KEYWORD_LANDING_V1 §12/§13 — 부산 → 구 → 동 브리핑으로 내려가는 허브. self canonical.
+  return {
+    title,
+    description,
+    alternates: { canonical: '/report' },
+    openGraph: buildOpenGraph({ title, description, path: '/report' }),
+  };
 }
 
 /**

@@ -54,6 +54,9 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     title,
     description,
     alternates: { canonical },
+    // REGIONAL_SEO_KEYWORD_LANDING_V1 §14 — 두 단지가 담긴 비교 상태는 조합마다 생기는 임시 화면이라
+    // 색인하지 않는다(링크는 따라간다). 빈 비교 도구 화면은 그대로 색인 대상이다. 공유 카드는 영향 없다.
+    ...(a && b ? { robots: { index: false, follow: true } } : {}),
     // 오리진은 siteConfig 한 곳에서만 나온다(§8) — buildOpenGraph가 그 계약을 쓴다.
     openGraph: { ...buildOpenGraph({ title, description }), url: canonical },
   };

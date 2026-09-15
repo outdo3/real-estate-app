@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import AppProviders from '@/components/AppProviders';
 import { siteConfig, absoluteUrl } from '@/config/site';
+import { BRAND_NAME, MAIN_DESCRIPTION, MAIN_TITLE } from '@/lib/seo/site-seo';
 import './globals.css';
 
 /**
@@ -48,8 +49,11 @@ export const metadata: Metadata = {
     title: '이집',
     statusBarStyle: 'default',
   },
-  title: '이집',
-  description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
+  // REGIONAL_SEO_KEYWORD_LANDING_V1 §3 — 메인 title/description(사용자 확정값)을 기본값으로 둔다.
+  // 자기 메타데이터가 없는 화면도 옛 문구("언제 어디서나…")가 아니라 같은 브랜드 문구를 받는다.
+  applicationName: BRAND_NAME,
+  title: MAIN_TITLE,
+  description: MAIN_DESCRIPTION,
   icons: {
     icon: [
       { url: '/brand/icon/ejip-favicon-16.png', sizes: '16x16', type: 'image/png' },
@@ -70,10 +74,10 @@ export const metadata: Metadata = {
   // src/config/site.ts의 getBaseUrl() 하나뿐이고, 거기서 NEXT_PUBLIC_SITE_URL →
   // 프로덕션 고정 도메인 → 프리뷰 호스트 → localhost 순으로 결정된다.
   openGraph: {
-    title: '이집',
-    description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
+    title: MAIN_TITLE,
+    description: MAIN_DESCRIPTION,
     url: siteConfig.url,
-    siteName: '이집',
+    siteName: BRAND_NAME,
     images: [
       {
         url: absoluteUrl(OG_IMAGE_PATH),
@@ -84,10 +88,11 @@ export const metadata: Metadata = {
     ],
     type: 'website',
   },
+  // REGIONAL_SEO_KEYWORD_LANDING_V1 §3 — twitter title/description은 루트에 두지 않는다. 루트에 두면
+  // 자기 twitter를 선언하지 않는 모든 화면(/stats, /map …)이 메인 제목을 싣는다. 비워 두면 카드가
+  // 각 화면의 og:title/og:description으로 떨어진다. 메인은 page.tsx가 같은 값을 명시한다.
   twitter: {
     card: 'summary_large_image',
-    title: '이집',
-    description: '언제 어디서나 쉽게 부산 아파트 실거래가와 현장 팁을 확인하세요.',
     images: [absoluteUrl(OG_IMAGE_PATH)],
   },
   // NAVER_SEARCH_ADVISOR_VERIFICATION_V1 — 검색엔진 소유확인.

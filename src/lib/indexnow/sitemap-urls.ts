@@ -5,6 +5,9 @@
 // 목록을 따로 만들면 두 정책이 조용히 갈라지고, 사이트맵에서 뺀 지역이 IndexNow로는
 // 계속 나가는 상황이 생긴다. 사이트맵이 곧 색인 대상이다.
 
+// scripts/indexnow가 tsx로 직접 import하므로 경로 alias(@/)를 쓰지 않는다.
+import { isBusanCurrentLawdCd } from '../report/region-scope';
+
 /**
  * `<loc>` 값을 뽑아 XML 엔티티를 디코드한다.
  *
@@ -48,13 +51,22 @@ export const LAUNCH_SIDO = '부산광역시';
 export function findOutOfScopeRegionUrls(urls: readonly string[]): string[] {
   const offenders: string[] = [];
   for (const url of urls) {
-    let sido: string | null = null;
+    let parsed: URL;
     try {
-      sido = new URL(url).searchParams.get('sido');
+      parsed = new URL(url);
     } catch {
       continue;
     }
-    if (sido && sido !== LAUNCH_SIDO) offenders.push(url);
+    const sido = parsed.searchParams.get('sido');
+    if (sido && sido !== LAUNCH_SIDO) {
+      offenders.push(url);
+      continue;
+    }
+    // REGIONAL_SEO_KEYWORD_LANDING_V1 §15 — 사이트맵의 지역 경로가 쿼리(sido)에서 리포트 경로
+    // (/report/district/{lawdCd}, /report/dong/{lawdCd}/{dong})로 바뀌었다. 안전핀도 같이 따라간다:
+    // 부산 현행 16개 lawdCd가 아닌 지역 리포트 URL은 제출하지 않는다.
+    const m = /^\/report\/(?:district|dong)\/([^/]+)/.exec(parsed.pathname);
+    if (m && !isBusanCurrentLawdCd(decodeURIComponent(m[1]))) offenders.push(url);
   }
   return offenders;
 }

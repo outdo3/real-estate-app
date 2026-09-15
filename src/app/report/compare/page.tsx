@@ -11,7 +11,8 @@ type Props = { searchParams: Promise<{ a?: string | string[]; b?: string | strin
 export async function generateMetadata(): Promise<Metadata> {
   const title = `단지 비교 한장 리포트 - ${siteConfig.name}`;
   const description = '두 아파트 단지의 실거래가, 이집 점수, 교통·생활 조건을 한 장으로 비교하세요.';
-  return { title, description, openGraph: buildOpenGraph({ title, description }) };
+  // REGIONAL_SEO_KEYWORD_LANDING_V1 §14 — 비교 리포트는 a/b 조합마다 생기는 임시 상태다. 색인하지 않는다.
+  return { title, description, robots: { index: false, follow: true }, openGraph: buildOpenGraph({ title, description }) };
 }
 
 const first = (v: string | string[] | undefined): string => (Array.isArray(v) ? v[0] ?? '' : v ?? '');

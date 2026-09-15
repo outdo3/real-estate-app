@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { siteConfig, buildOpenGraph } from '@/config/site';
+import { aptReportHref } from '@/lib/report/report-links';
 import ApartmentReportSheet from '@/components/report/ApartmentReportSheet';
 import InvalidScope from '@/components/report/InvalidScope';
 import { readApartmentReport, AptReportNotFound } from '@/lib/report/apt-read';
@@ -19,7 +20,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = m?.name
     ? `${m.name}의 최근 실거래, 12개월 거래량, 이집 점수를 한 장으로 확인하세요.`
     : '이집 단지 리포트';
-  return { title, description, openGraph: buildOpenGraph({ title, description }) };
+  // REGIONAL_SEO_KEYWORD_LANDING_V1 §13/§14 — 단지 마스터에서 확인된 aptSeq만 self canonical + 색인.
+  // 확인되지 않은 식별자는 이름을 지어내지 않는 일반 제목이고, 색인하지 않는다.
+  const path = m?.name ? aptReportHref(decodeURIComponent(aptSeq)) : null;
+  return {
+    title,
+    description,
+    ...(path ? { alternates: { canonical: path } } : { robots: { index: false, follow: true } }),
+    openGraph: buildOpenGraph({ title, description, path }),
+  };
 }
 
 export default async function ApartmentReportPage({ params }: Props) {

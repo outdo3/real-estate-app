@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { LAUNCH_SIDO, buildLaunchRegionRoutes, regionQuery } from './sitemap-scope';
+import { LAUNCH_SIDO, buildDongRoutes, buildLaunchRegionRoutes, regionQuery } from './sitemap-scope';
 import { BUSAN_DISTRICTS } from './report/region-scope';
 import { isInsideBusanBounds, BUSAN_BBOX } from './busan-bounds';
 
@@ -19,23 +19,27 @@ const BUSAN = '부산광역시';
 const SEOUL = '서울특별시';
 
 // ── A. 부산은 들어가고, 그 외는 빠진다 ─────────────────────────────────────
+//
+// REGIONAL_SEO_KEYWORD_LANDING_V1 §15 — 지역 경로는 `/stats?sido=&sigungu=`·`/school?...` 쿼리 변형(32개)에서
+// 서버 렌더 지역 한장 브리핑(부산 전체 1 + 16개 구·군)으로 바뀌었다. 쿼리 변형은 canonical이 아니다.
 
-test('§2 출시 범위 16개 자치구·군이 통계/학군 경로로 모두 들어간다', () => {
+test('§2 출시 범위 16개 자치구·군이 지역 브리핑 경로로 모두 들어간다 + 부산 전체 1개', () => {
   const routes = buildLaunchRegionRoutes();
   assert.equal(BUSAN_DISTRICTS.length, 16, '부산 현행 자치구·군은 16개다');
-  assert.equal(routes.length, 16 * 2, 'stats + school 두 경로가 구마다 하나씩');
-
+  assert.equal(routes.length, 1 + 16, '부산 전체 + 구·군마다 하나씩');
+  assert.equal(routes[0].path, '/report/city/busan');
   for (const d of BUSAN_DISTRICTS) {
-    const encoded = encodeURIComponent(d.name);
-    assert.ok(
-      routes.some((r) => r.path.startsWith('/stats?') && r.path.includes(`sigungu=${encoded}`)),
-      `${d.name} 통계 경로가 없다`
-    );
-    assert.ok(
-      routes.some((r) => r.path.startsWith('/school?') && r.path.includes(`sigungu=${encoded}`)),
-      `${d.name} 학군 경로가 없다`
-    );
+    assert.ok(routes.some((r) => r.path === `/report/district/${d.lawdCd}`), `${d.name} 브리핑 경로가 없다`);
   }
+});
+
+test('§15 사이트맵 지역 경로에 쿼리 변형이 없다 — canonical 경로만', () => {
+  for (const r of buildLaunchRegionRoutes()) {
+    assert.ok(!r.path.includes('?'), `쿼리 변형이 들어갔다: ${r.path}`);
+    assert.ok(!/^\/(stats|school)\?/.test(r.path));
+  }
+  const paths = buildLaunchRegionRoutes().map((r) => r.path);
+  assert.equal(new Set(paths).size, paths.length, '중복 경로');
 });
 
 test('§8 서울이 사이트맵에서 빠진다 — 이 STEP의 핵심 증거', () => {
@@ -45,25 +49,43 @@ test('§8 서울이 사이트맵에서 빠진다 — 이 STEP의 핵심 증거',
     assert.ok(!p.includes(seoulEncoded), `서울 URL이 남아 있다: ${p}`);
     assert.ok(!p.includes(SEOUL), `서울 URL이 남아 있다(raw): ${p}`);
   }
-  // 강남구는 부산에 없는 이름이므로 단독으로도 검증 가능하다.
-  assert.ok(!paths.some((p) => p.includes(encodeURIComponent('강남구'))));
+  // 강남구(11680)는 부산 코드가 아니다.
+  assert.ok(!paths.some((p) => p.includes('11680') || p.includes(encodeURIComponent('강남구'))));
 });
 
-test('§7 부산 외 시도는 하나도 들어가지 않는다', () => {
-  const paths = buildLaunchRegionRoutes().map((r) => r.path);
-  const others = [
-    '서울특별시', '경기도', '인천광역시', '대구광역시', '대전광역시', '광주광역시',
-    '울산광역시', '세종특별자치시', '강원특별자치도', '충청북도', '충청남도',
-    '전북특별자치도', '전라남도', '경상북도', '경상남도', '제주특별자치도',
-  ];
-  for (const sido of others) {
-    const enc = encodeURIComponent(sido);
-    assert.ok(!paths.some((p) => p.includes(enc)), `${sido}가 사이트맵에 남아 있다`);
+test('§7 부산 외 lawdCd는 하나도 들어가지 않는다', () => {
+  const codes = new Set(BUSAN_DISTRICTS.map((d) => d.lawdCd));
+  for (const r of buildLaunchRegionRoutes()) {
+    const m = /^\/report\/district\/(\d{5})$/.exec(r.path);
+    if (!m) {
+      assert.equal(r.path, '/report/city/busan');
+      continue;
+    }
+    assert.ok(codes.has(m[1]), `부산이 아닌 코드: ${r.path}`);
   }
-  // 모든 경로의 sido는 부산 하나뿐이다.
-  const busanEnc = encodeURIComponent(BUSAN);
-  for (const p of paths) assert.ok(p.includes(`sido=${busanEnc}`), `부산이 아닌 경로: ${p}`);
   assert.equal(LAUNCH_SIDO, BUSAN);
+});
+
+test('§8/§15 동 경로는 최근 1년 10건 이상인 부산 동만 — 중복·스코프 밖·빈 이름 제외', () => {
+  const routes = buildDongRoutes([
+    { lawdCd: '26140', dong: '암남동', count: 25 },
+    { lawdCd: '26140', dong: '암남동', count: 25 },
+    { lawdCd: '26140', dong: '아미동2가', count: 9 },
+    { lawdCd: '26380', dong: '괴정동', count: 10 },
+    { lawdCd: '11680', dong: '역삼동', count: 400 },
+    { lawdCd: '27110', dong: '남산동', count: 50 },
+    { lawdCd: '26710', dong: '기장읍 교리', count: 12 },
+    { lawdCd: '26140', dong: '   ', count: 99 },
+  ]);
+  assert.deepEqual(
+    routes.map((r) => r.path),
+    [
+      `/report/dong/26140/${encodeURIComponent('암남동')}`,
+      `/report/dong/26380/${encodeURIComponent('괴정동')}`,
+      `/report/dong/26710/${encodeURIComponent('기장읍 교리')}`,
+    ]
+  );
+  for (const r of routes) assert.ok(!/[가-힣]/.test(r.path), `인코딩되지 않은 한글: ${r.path}`);
 });
 
 // ── B. 쿼리 이스케이프(회귀 방지) ──────────────────────────────────────────
@@ -96,6 +118,14 @@ const ROBOTS = read('src/app/robots.ts');
 test('§1 sitemap.ts가 더 이상 전국 REGION_DATA를 돌지 않는다', () => {
   assert.ok(!/REGION_DATA/.test(codeOf(SITEMAP)), 'sitemap이 아직 전국 지역 목록을 쓴다');
   assert.ok(/buildLaunchRegionRoutes/.test(SITEMAP), 'sitemap이 출시 범위 빌더를 쓰지 않는다');
+});
+
+test('§15 sitemap.ts가 동 브리핑을 표본 판정 빌더로만 싣는다', () => {
+  const code = codeOf(SITEMAP);
+  assert.ok(/buildDongRoutes\(rows\)/.test(code), '동 경로가 공용 판정을 거치지 않는다');
+  assert.ok(/readBusanDongTradeCounts\(\)/.test(code), '동 표본 조회가 공용 읽기 함수가 아니다');
+  // 조회 실패면 동만 빠진다 — 사이트맵 전체를 깨지 않는다.
+  assert.ok(/if \(!rows\) return \[\];/.test(code));
 });
 
 test('§9 사이트맵 URL 오리진은 siteConfig에서 나온다 — 호스트를 박지 않는다', () => {
