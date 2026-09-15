@@ -20,7 +20,10 @@ interface PeriodOption {
   preset: string;
   label: string;
 }
+// STATISTICS_PERIOD_TRADE_UX_V1 — 거래량 카드의 "더보기"가 같은 기간으로 열리도록 오늘/어제를 함께 둔다(계약일·KST).
 const PERIOD_OPTIONS: PeriodOption[] = [
+  { preset: 'today', label: '오늘' },
+  { preset: 'yesterday', label: '어제' },
   { preset: '7d', label: '최근 7일' },
   { preset: '30d', label: '최근 30일' },
   { preset: '3m', label: '최근 3개월' },
@@ -37,6 +40,7 @@ const SORT_OPTIONS: { value: string; label: string }[] = [
 ];
 
 interface ConcentrationEntry {
+  aptSeq?: string | null;
   rank: number;
   name: string;
   dong: string;
@@ -113,6 +117,7 @@ export default function ConcentrationView({
   const goToApt = (e: ConcentrationEntry) => {
     const qs = new URLSearchParams({ lawdCd: e.lawdCd });
     if (e.dong) qs.set('dong', e.dong);
+    if (e.aptSeq) qs.set('aptSeq', e.aptSeq);
     router.push(`/apt/${encodeURIComponent(e.name)}?${qs.toString()}`);
   };
 

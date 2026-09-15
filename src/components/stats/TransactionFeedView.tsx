@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 // PERFORMANCE_V2 §10 — 목록 누적은 순수 로직으로 분리했다(회귀 테스트 있음).
 import {
@@ -153,8 +153,12 @@ export default function TransactionFeedView({
   displayRegionName: string;
 }) {
   const router = useRouter();
-  const [preset, setPreset] = useState('7d');
-  const [dealType, setDealType] = useState('');
+  // STATISTICS_PERIOD_TRADE_UX_V1 — 거래량 카드의 "실거래 목록 보기"가 넘긴 기간·거래유형으로 연다(허용 값만).
+  const searchParams = useSearchParams();
+  const initialPeriod = searchParams.get('period');
+  const initialDealType = searchParams.get('dealType');
+  const [preset, setPreset] = useState(PERIOD_OPTIONS.some((p) => p.preset === initialPeriod) ? initialPeriod! : '7d');
+  const [dealType, setDealType] = useState(initialDealType === 'sale' || initialDealType === 'jeonse' || initialDealType === 'wolse' ? initialDealType : '');
   const [offset, setOffset] = useState(0);
 
   // PERFORMANCE_V2 §10 — 누적본은 "그것을 만든 쿼리 키"와 함께 들고 다닌다.

@@ -6,7 +6,7 @@ import { getSigunguListForSido } from '@/lib/region-utils';
 import { buildGapCandidates, normalizeAptName } from '@/lib/gap-invest-calc';
 import { prisma, warmupConnections } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
-import { resolvePriceRankingPeriod, type PriceRankingPeriodPreset } from '@/lib/price-ranking';
+import { kstDateString, resolveVolumePeriod, type VolumePeriodPreset } from '@/lib/stats/volume-period';
 import { previousPeriodRange } from '@/lib/regional-feed';
 import { getRegionalSaleRowsRawFromDb, type StoredTrade } from '@/lib/trade-history-read';
 import {
@@ -169,7 +169,10 @@ export async function GET(request: Request) {
     // 배포 시 자연히 새로 채워지지만, 혹시 모를 warm-인스턴스 재사용에 대비해
     // key에 버전을 추가해 이전 코드가 만든 응답과 절대 섞이지 않게 한다(global
     // cache flush infra 없이 가능한 최소 대응).
-    const cacheKey = isSidoAll ? `stats-dashboard-sido:v2:${sidoCodeParam}` : `stats-dashboard:v2:${lawdCd}`;
+    // STATISTICS_PERIOD_TRADE_UX_V1 — 기간(오늘/어제/최근 N일)이 KST 날짜에 묶이므로 캐시도 KST 날짜별로 가른다.
+    // 날짜가 없으면 자정을 넘긴 뒤 최대 TTL(30분) 동안 어제 기준 '오늘'이 남는다.
+    const kstToday = kstDateString(new Date());
+    const cacheKey = isSidoAll ? `stats-dashboard-sido:v3:${sidoCodeParam}:${kstToday}` : `stats-dashboard:v3:${lawdCd}:${kstToday}`;
     // PERFORMANCE_V1 §21/§33 / PHASE D / PHASE D.2 — sido-wide(전체 시/도) 요청은
     // 매매(sale)+전세/월세 verified 개월 모두 DB-first다(Busan 한정). 검증범위
     // 밖(주로 진행 중인 현재월 1개월)만 여전히 MOLIT 호출이 필요하다. 스키마
@@ -342,7 +345,8 @@ export async function GET(request: Request) {
       // MOLIT로 받아둔 소량의 row)만 JS로 보충한다(hybrid, 이중 카운트 방지는
       // clipDateRangeToVerified의 배타적 경계로 보장됨). 비부산은 rent DB 자체가
       // 없으므로 기존 row 전체 기반 계산을 그대로 쓴다(동작 변경 없음).
-      const VOLUME_COMPARISON_PRESETS: PriceRankingPeriodPreset[] = ['7d', '30d', '3m'];
+      // STATISTICS_PERIOD_TRADE_UX_V1 — 오늘/어제 추가, 모든 기간을 KST 계약일 기준으로 해석(resolveVolumePeriod).
+      const VOLUME_COMPARISON_PRESETS: VolumePeriodPreset[] = ['today', 'yesterday', '7d', '30d', '3m'];
       const verifiedApt = allAptTrades.filter((t: any) => !t.dealCanceled);
       const countInRange = (trades: any[], range: { from: string; to: string }) =>
         trades.filter((t: any) => t.dealDate >= range.from && t.dealDate <= range.to).length;
@@ -387,7 +391,7 @@ export async function GET(request: Request) {
         // 쓴다 — verified-and-row-level 달의 row를 섞으면 이중 카운트가 된다.
         const unverifiedRentRowsFlat = last12Months.flatMap((ym, i) => (verifiedRentMonthsFlag.includes(ym) ? [] : rentMonthly[i]));
         for (const preset of VOLUME_COMPARISON_PRESETS) {
-          const current = resolvePriceRankingPeriod(preset, now);
+          const current = resolveVolumePeriod(preset, now);
           const previous = previousPeriodRange(current);
           const currentFromDate = toUtcDateFromYmd(current.from);
           const currentToDate = toUtcDateFromYmd(current.to);
@@ -416,7 +420,7 @@ export async function GET(request: Request) {
         const verifiedJeonse = verifiedRentAll.filter((t: any) => !t.monthlyRent || t.monthlyRent === 0);
         const verifiedWolse = verifiedRentAll.filter((t: any) => t.monthlyRent && t.monthlyRent > 0);
         for (const preset of VOLUME_COMPARISON_PRESETS) {
-          const current = resolvePriceRankingPeriod(preset, now);
+          const current = resolveVolumePeriod(preset, now);
           const previous = previousPeriodRange(current);
           volumeSummaryByPeriod[preset] = {
             period: current,

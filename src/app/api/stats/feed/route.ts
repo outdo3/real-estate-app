@@ -21,6 +21,7 @@ import {
   type PeriodPreset,
 } from '@/lib/regional-feed';
 import { prisma } from '@/lib/prisma';
+import { resolveVolumePeriod } from '@/lib/stats/volume-period';
 import { splitVerifiedMonths, getRentVerifiedRange } from '@/lib/rent-history-read';
 import { isFeedDbBackedSido, loadBusanFeedTradesFromDb } from '@/lib/stats/feed-db-source';
 import { resolveApartmentContextBatch, type PyeongLookupKey as ContextLookupKey } from '@/lib/statistics-pyeong-resolver';
@@ -78,7 +79,12 @@ export async function GET(request: Request) {
     }
 
     const now = new Date();
-    const periodRange = resolvePeriodRange(preset, now, customFrom && customTo ? { from: customFrom, to: customTo } : undefined);
+    // STATISTICS_PERIOD_TRADE_UX_V1 — 거래량 카드에서 내려오는 기간(오늘/어제/7일/30일)은 카드와 같은 KST 규칙으로
+    // 해석한다(UTC로 해석하면 한국 오전에 하루 밀려 카드 건수와 목록이 어긋난다). 나머지 preset은 기존 그대로.
+    const periodRange =
+      preset === 'today' || preset === 'yesterday' || preset === '7d' || preset === '30d'
+        ? resolveVolumePeriod(preset, now)
+        : resolvePeriodRange(preset, now, customFrom && customTo ? { from: customFrom, to: customTo } : undefined);
 
     let allTrades: FeedTrade[] = [];
     let apiError = false;

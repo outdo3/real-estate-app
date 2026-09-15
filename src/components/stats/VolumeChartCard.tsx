@@ -1,14 +1,25 @@
 'use client';
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from 'recharts';
-import { BarChart3, Table2 } from 'lucide-react';
+import { BarChart3, ChevronRight, FileText, Table2 } from 'lucide-react';
+import Link from 'next/link';
 import FilterChip from '@/components/ui/FilterChip';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { findNearestIndex, type IndexedPosition } from '@/lib/chart-crosshair';
+import {
+  DEFAULT_VOLUME_PERIOD,
+  VOLUME_PERIOD_OPTIONS,
+  briefingPeriodFor,
+  feedPresetFor,
+  hasComparablePreviousPeriod,
+  needsReportingLagNotice,
+  volumePeriodLabel,
+  type VolumePeriodPreset,
+} from '@/lib/stats/volume-period';
+import { buildTopComplexHref, topComplexRows, type ConcentrationEntryLike } from '@/lib/stats/volume-top-complexes';
 import pageStyles from '@/app/stats/page.module.css';
 import styles from './VolumeChartCard.module.css';
 
@@ -31,13 +42,20 @@ const DEAL_TYPE_OPTIONS: { key: DealType; label: string; indexLabel: string }[] 
   { key: 'wolse', label: '월세', indexLabel: '월세가격지수' },
 ];
 
-// STATISTICS V2.1-2 §13~§18 — dashboard route가 이미 계산해준
-// volumeSummaryByPeriod[preset]만 읽는다(새 fetch 없음, 데이터 계약 무변경).
-const VOLUME_COMPARISON_OPTIONS: { key: string; label: string }[] = [
-  { key: '7d', label: '최근 7일' },
-  { key: '30d', label: '최근 30일' },
-  { key: '3m', label: '최근 3개월' },
-];
+// STATISTICS_PERIOD_TRADE_UX_V1 — 기간 선택은 이 카드의 **Master Filter**다. 요약(dashboard의
+// volumeSummaryByPeriod[preset])·거래 많은 단지(concentration)·실거래 목록(feed)·한장 브리핑 링크가
+// 같은 preset을 받는다. 기간 규칙(KST 계약일)은 src/lib/stats/volume-period.ts 한 곳에 있다.
+const TOP_COMPLEX_LIMIT = 5;
+
+interface ConcentrationResponse {
+  status: 'OK' | 'ERROR';
+  period?: { preset: string; from: string; to: string };
+  entries?: ConcentrationEntryLike[];
+  complexCount?: number;
+  apiError?: boolean;
+  partial?: boolean;
+  failedDistricts?: string[];
+}
 
 const VOLUME_COLOR = 'var(--primary-color)';
 const INDEX_COLOR = '#3152d6';
@@ -52,15 +70,18 @@ export default function VolumeChartCard({
   lawdCd,
   sidoCode,
   displayRegionName,
+  reportEntry = null,
 }: {
   lawdCd: string | null;
   sidoCode: string;
   displayRegionName: string;
+  /** 선택 지역의 한장 브리핑(없으면 링크를 만들지 않는다). 기간은 이 카드가 붙인다. */
+  reportEntry?: { href: string; label: string } | null;
 }) {
-  const router = useRouter();
   const [chartView, setChartView] = useState<'graph' | 'table'>('graph');
   const [dealType, setDealType] = useState<DealType>('sale');
-  const [comparisonPreset, setComparisonPreset] = useState('30d');
+  const [comparisonPreset, setComparisonPreset] = useState<VolumePeriodPreset>(DEFAULT_VOLUME_PERIOD);
+  const [tableHint, setTableHint] = useState(false);
 
   const dashboardQuery = lawdCd ? `lawdCd=${lawdCd}` : `sidoCode=${sidoCode}`;
   const { data: apiResponse, isLoading } = useSWR(
@@ -82,6 +103,24 @@ export default function VolumeChartCard({
 
   const byPeriod = data?.volumeSummaryByPeriod?.[comparisonPreset];
   const metric = byPeriod?.[dealType];
+  const periodLabel = volumePeriodLabel(comparisonPreset);
+  const comparable = hasComparablePreviousPeriod(comparisonPreset);
+
+  // 거래 많은 단지 — 요약과 같은 지역 범위(시도 전체 또는 시군구, 동 필터 없음)·같은 기간·같은 거래유형.
+  // 파라미터 순서는 /stats/top-traded(ConcentrationView)와 같게 둬 SWR 캐시를 공유한다.
+  const concentrationParams = lawdCd
+    ? new URLSearchParams({ lawdCd, dong: 'all', period: comparisonPreset, dealType, sort: 'count' })
+    : new URLSearchParams({ sidoCode, period: comparisonPreset, dealType, sort: 'count' });
+  const { data: concentration, isLoading: concentrationLoading, error: concentrationError } = useSWR<ConcentrationResponse>(
+    `/api/stats/concentration?${concentrationParams.toString()}`,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 60 * 1000 }
+  );
+  const topRows = concentration?.status === 'OK' ? topComplexRows(concentration.entries ?? [], TOP_COMPLEX_LIMIT) : [];
+  const moreQuery = new URLSearchParams({ period: comparisonPreset, dealType }).toString();
+  const feedPreset = feedPresetFor(comparisonPreset);
+  const briefing = reportEntry ? briefingPeriodFor(comparisonPreset) : null;
+  const briefingHref = reportEntry && briefing ? (briefing.periodDays === 30 ? reportEntry.href : `${reportEntry.href}?period=${briefing.periodDays}`) : null;
   const changeColor = !metric ? 'var(--text-secondary)' : metric.changeCount > 0 ? 'var(--up-color)' : metric.changeCount < 0 ? 'var(--down-color)' : 'var(--text-secondary)';
 
   // DETAIL PRICE CHART INTERACTION P1 패턴 재사용 — activeIndex를 Recharts의
@@ -211,22 +250,25 @@ export default function VolumeChartCard({
       )}
       <div className={styles.header}>
         <h3 className={styles.title}>거래량·시세 추이</h3>
-        <div className={styles.viewToggle} role="group" aria-label="그래프/표 보기 전환">
-          <button type="button" className={styles.viewToggleBtn} aria-pressed={chartView === 'graph'} onClick={() => setChartView('graph')}>
+        <div className={styles.viewToggle} role="group" aria-label="그래프/연도별 표 보기 전환">
+          <button type="button" className={styles.viewToggleBtn} aria-pressed={chartView === 'graph'} onClick={() => { setChartView('graph'); setTableHint(false); }}>
             <BarChart3 size={13} aria-hidden="true" />그래프
           </button>
+          {/* STATISTICS_PERIOD_TRADE_UX_V1 — 아이콘만 있던 버튼은 실제로 동작하는 "연도별 표"다(시군구 선택 시).
+              이름을 붙이고, 시도 전체에서는 비활성 이유를 툴팁(모바일에서 안 보임) 대신 화면에 한 줄로 알린다. */}
           <button
             type="button"
             className={styles.viewToggleBtn}
             aria-pressed={chartView === 'table'}
-            onClick={() => lawdCd && setChartView('table')}
-            disabled={!lawdCd}
-            title={!lawdCd ? '연도별 표는 시/군/구를 선택하면 볼 수 있어요' : undefined}
+            aria-disabled={!lawdCd}
+            data-unavailable={!lawdCd ? '' : undefined}
+            onClick={() => (lawdCd ? setChartView('table') : setTableHint(true))}
           >
-            <Table2 size={13} aria-hidden="true" />
+            <Table2 size={13} aria-hidden="true" />연도별 표
           </button>
         </div>
       </div>
+      {tableHint && !lawdCd && <p className={styles.inlineHint} role="status">연도별 표는 구·군을 선택하면 볼 수 있어요.</p>}
 
       <div className={styles.chipRow}>
         {DEAL_TYPE_OPTIONS.map((opt) => (
@@ -236,37 +278,116 @@ export default function VolumeChartCard({
         ))}
       </div>
 
-      {byPeriod && metric && (
-        <>
-          <div className={styles.summary}>
-            <div className={styles.summaryLabel}>{displayRegionName} · {dealTypeMeta.label} · {VOLUME_COMPARISON_OPTIONS.find((p) => p.key === comparisonPreset)?.label}</div>
-            <div className={styles.summaryRow}>
-              <span className={styles.summaryValue}>{metric.currentCount.toLocaleString('ko-KR')}건</span>
-              {metric.previousCount > 0 ? (
-                <span className={styles.summaryChange} style={{ color: changeColor }}>
-                  이전 {metric.previousCount.toLocaleString('ko-KR')}건 대비 {metric.changeCount > 0 ? '▲' : metric.changeCount < 0 ? '▼' : ''}
-                  {Math.abs(metric.changeCount).toLocaleString('ko-KR')}건{metric.changePct != null ? ` (${metric.changePct > 0 ? '+' : ''}${metric.changePct}%)` : ''}
-                </span>
-              ) : (
-                <span className={styles.summaryEmpty}>이전 동일 기간에는 거래가 없었어요.</span>
-              )}
-            </div>
-            <div className={styles.summaryPeriodNote}>이전 동일 기간: {byPeriod.previousPeriod.from}~{byPeriod.previousPeriod.to}</div>
-          </div>
+      <div className={styles.chipRow} role="group" aria-label="집계 기간">
+        {VOLUME_PERIOD_OPTIONS.map((p) => (
+          <FilterChip key={p.key} active={comparisonPreset === p.key} onClick={() => setComparisonPreset(p.key)}>
+            {p.label}
+          </FilterChip>
+        ))}
+      </div>
 
-          <div className={styles.chipRow}>
-            {VOLUME_COMPARISON_OPTIONS.map((p) => (
-              <FilterChip key={p.key} active={comparisonPreset === p.key} onClick={() => setComparisonPreset(p.key)}>
-                {p.label}
-              </FilterChip>
+      {byPeriod && metric ? (
+        <div className={styles.summary}>
+          <div className={styles.summaryLabel}>{displayRegionName} · {dealTypeMeta.label} · {periodLabel}</div>
+          <div className={styles.summaryRow}>
+            {metric.currentCount > 0 ? (
+              <span className={styles.summaryValue}>{metric.currentCount.toLocaleString('ko-KR')}건</span>
+            ) : (
+              <span className={styles.summaryNone}>해당 기간에 확인된 거래가 없습니다.</span>
+            )}
+            {comparable && (metric.previousCount > 0 ? (
+              <span className={styles.summaryChange} style={{ color: changeColor }}>
+                이전 {metric.previousCount.toLocaleString('ko-KR')}건 대비 {metric.changeCount > 0 ? '▲' : metric.changeCount < 0 ? '▼' : ''}
+                {Math.abs(metric.changeCount).toLocaleString('ko-KR')}건{metric.changePct != null ? ` (${metric.changePct > 0 ? '+' : ''}${metric.changePct}%)` : ''}
+              </span>
+            ) : (
+              <span className={styles.summaryEmpty}>이전 동일 기간에는 거래가 없었어요.</span>
             ))}
           </div>
-
-          <button className={styles.crossLinkBtn} onClick={() => router.push(`/stats/top-traded?period=${comparisonPreset}&dealType=${dealType}`)}>
-            이 기간 거래가 많은 단지 보기
-          </button>
-        </>
+          <div className={styles.summaryPeriodNote}>
+            계약일 {byPeriod.period.from === byPeriod.period.to ? byPeriod.period.from : `${byPeriod.period.from}~${byPeriod.period.to}`}
+            {comparable ? ` · 이전 동일 기간 ${byPeriod.previousPeriod.from}~${byPeriod.previousPeriod.to}` : ''}
+          </div>
+          {!comparable && <div className={styles.summaryPeriodNote}>하루 단위는 신고 시차가 커서 전날과 증감을 비교하지 않아요.</div>}
+          {needsReportingLagNotice(comparisonPreset) && (
+            <p className={styles.lagNotice}>
+              실거래 신고 시차에 따라 이후 거래가 추가될 수 있어요.
+              {comparisonPreset === 'today' ? ' 오늘 계약 거래는 신고 후 매일 새벽 업데이트에서 반영돼요.' : ''}
+            </p>
+          )}
+          {feedPreset && metric.currentCount > 0 && (
+            <Link href={`/stats/feed?period=${feedPreset}&dealType=${dealType}`} className={styles.drillLink}>
+              {periodLabel} 실거래 {metric.currentCount.toLocaleString('ko-KR')}건 목록 보기
+              <ChevronRight size={15} aria-hidden="true" />
+            </Link>
+          )}
+        </div>
+      ) : (
+        <p className={styles.summaryNone}>이 기간의 거래량을 아직 계산하지 못했어요.</p>
       )}
+
+      <section className={styles.topSection} aria-label="거래가 많은 단지">
+        <div className={styles.topHeader}>
+          <h4 className={styles.topTitle}>거래가 많은 단지</h4>
+          <span className={styles.topBasis}>{periodLabel} 기준</span>
+        </div>
+        {concentration?.partial && (
+          <div className={styles.partialBanner}>일부 지역 데이터 조회가 지연되고 있어요. 나머지 지역 결과만 표시합니다.</div>
+        )}
+        {concentrationLoading && !concentration ? (
+          <InlineLoading message="단지를 집계하고 있어요..." />
+        ) : concentrationError || concentration?.status !== 'OK' || concentration.apiError ? (
+          <ErrorState variant="inline" message="거래가 많은 단지를 불러오지 못했어요." />
+        ) : topRows.length === 0 ? (
+          <p className={styles.topEmpty}>해당 기간에 확인된 거래가 없습니다.</p>
+        ) : (
+          <>
+            <ol className={styles.topList}>
+              {topRows.map((row) => {
+                const href = buildTopComplexHref(row);
+                const body = (
+                  <>
+                    <span className={styles.topRank}>{row.rank}</span>
+                    <span className={styles.topName}>
+                      <span className={styles.topNameText}>{row.name}</span>
+                      {row.dong && <span className={styles.topDong}>{row.dong}</span>}
+                    </span>
+                    <span className={styles.topCount}>{row.currentCount.toLocaleString('ko-KR')}건</span>
+                    {href && <ChevronRight size={16} className={styles.topChevron} aria-hidden="true" />}
+                  </>
+                );
+                return (
+                  <li key={`${row.rank}-${row.lawdCd}-${row.dong}-${row.name}`}>
+                    {href ? <Link href={href} className={styles.topRow}>{body}</Link> : <div className={styles.topRow}>{body}</div>}
+                  </li>
+                );
+              })}
+            </ol>
+            <Link href={`/stats/top-traded?${moreQuery}`} className={styles.moreLink}>
+              더보기
+            </Link>
+          </>
+        )}
+      </section>
+
+      {reportEntry && briefing && briefingHref && (
+        <Link href={briefingHref} className={styles.briefingLink}>
+          <FileText size={15} aria-hidden="true" />
+          <span className={styles.briefingText}>
+            <span className={styles.briefingLabel}>{reportEntry.label}</span>
+            <span className={styles.briefingBasis}>
+              {briefing.basisLabel}
+              {!briefing.matchesSelection ? ' · 선택 기간과 기준이 달라요' : ''}
+            </span>
+          </span>
+          <ChevronRight size={15} aria-hidden="true" />
+        </Link>
+      )}
+
+      <div className={styles.trendHeader}>
+        <h4 className={styles.topTitle}>월별 추이</h4>
+        <span className={styles.topBasis}>최근 12개월 · 선택 기간과 별도</span>
+      </div>
 
       {chartView === 'graph' ? (
         <>

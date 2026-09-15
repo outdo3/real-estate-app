@@ -225,7 +225,9 @@ test('§7-8 통계의 기존 액션이 그대로다', () => {
   const type = codeOf(STATS_TYPE);
   // 상세: 공유 액션, 지역 트리거, change-map 예외, 각 뷰 분기.
   assert.ok(/<ShareAction shareType="stats"/.test(type), '공유 액션이 사라졌다');
-  assert.ok(/slug !== 'change-map' && item\.status === 'live'/.test(type), 'CTA 노출 조건이 바뀌었다');
+  // STATISTICS_PERIOD_TRADE_UX_V1 — 거래량 화면만 선택 기간·브리핑 기준을 함께 보여주려고 카드 안에서 렌더한다.
+  assert.ok(/slug !== 'change-map' && slug !== 'volume' && item\.status === 'live'/.test(type), 'CTA 노출 조건이 바뀌었다');
+  assert.ok(/reportEntry=\{\(\(\) => \{ const e = resolveStatsReportEntry\(region\);/.test(type), '거래량 카드에 같은 리포트 판정이 전달되지 않는다');
   assert.ok(/<TransactionFeedView/.test(type) && /<SupplyView \/>/.test(type) && /<RegionChangeMapView \/>/.test(type),
     '통계 뷰 분기가 바뀌었다');
   assert.ok(/<ComingSoonCard/.test(type), '준비중 처리가 사라졌다');

@@ -4,6 +4,9 @@ import { getOrSetCache } from '@/lib/server-cache';
 import { resolveLawdCd, fetchMonthsThrottled, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { prisma } from '@/lib/prisma';
+import { isVolumePeriodPreset, resolveVolumePeriod } from '@/lib/stats/volume-period';
+import { isFeedDbBackedSido, loadBusanFeedTradesFromDb } from '@/lib/stats/feed-db-source';
+import { splitVerifiedMonths, getRentVerifiedRange } from '@/lib/rent-history-read';
 import { resolveApartmentContextBatch, resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import {
   resolvePriceRankingPeriod,
@@ -27,7 +30,7 @@ import {
 // (regional-feed.ts)를 그대로 재사용한다 — 새 fetch 메커니즘을 만들지 않는다.
 export const dynamic = 'force-dynamic';
 
-const VALID_PRESETS: PriceRankingPeriodPreset[] = ['7d', '30d', '3m', '6m', '12m'];
+const VALID_PRESETS: (PriceRankingPeriodPreset | 'today' | 'yesterday')[] = ['today', 'yesterday', '7d', '30d', '3m', '6m', '12m'];
 const MAX_ENTRIES = 30;
 
 export async function GET(request: Request) {
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
   const gungu = searchParams.get('gungu') || '서구';
   const dong = searchParams.get('dong') || 'all';
   const presetParam = searchParams.get('period') || '30d';
-  const preset: PriceRankingPeriodPreset = (VALID_PRESETS as string[]).includes(presetParam) ? (presetParam as PriceRankingPeriodPreset) : '30d';
+  const preset = ((VALID_PRESETS as string[]).includes(presetParam) ? presetParam : '30d') as (typeof VALID_PRESETS)[number];
   const dealTypeParam = searchParams.get('dealType');
   const dealType: 'sale' | 'jeonse' | 'wolse' = dealTypeParam === 'jeonse' || dealTypeParam === 'wolse' ? dealTypeParam : 'sale';
   const sortParam = searchParams.get('sort');
@@ -55,7 +58,9 @@ export async function GET(request: Request) {
     }
 
     const now = new Date();
-    const currentRange = resolvePriceRankingPeriod(preset, now);
+    // STATISTICS_PERIOD_TRADE_UX_V1 — 거래량 카드와 같은 기간 규칙(KST 계약일, 오늘/어제 포함).
+    // 6m/12m은 이 카드가 쓰지 않는 기존 preset이라 기존 해석을 그대로 둔다.
+    const currentRange = isVolumePeriodPreset(preset) ? resolveVolumePeriod(preset, now) : resolvePriceRankingPeriod(preset, now);
     const previousRange = previousPeriodRange(currentRange);
     // §18/§32 — 이전 기간까지 한 번에 커버하는 fetch 범위(끊기지 않는 연속 구간).
     const fetchRange = { from: previousRange.from, to: currentRange.to };
@@ -66,8 +71,47 @@ export async function GET(request: Request) {
     let partial = false;
     let failedDistricts: string[] = [];
 
-    if (isSidoAll) {
-      const months = monthsForRange(fetchRange);
+    // STATISTICS_PERIOD_TRADE_UX_V1 — 부산은 거래량 카드(dashboard)·실거래 피드와 **같은 DB 원장**에서 센다.
+    // 예전에는 이 화면만 16개 구 MOLIT를 매번 불러(3개월 콜드 9.4s) 카드 합계와 다른 원천을 봤다.
+    // 매매는 전부 DB, 전월세는 검증범위 안 월만 DB이고 밖(진행 중인 월)은 기존 MOLIT 경로 — 피드와 같은 규칙.
+    const dbBacked = isFeedDbBackedSido(isSidoAll ? sidoCodeParam : lawdCd ? lawdCd.substring(0, 2) : null);
+    const months = monthsForRange(fetchRange);
+
+    if (dbBacked) {
+      const lawdCds = isSidoAll ? (await getSigunguListForSido(sidoCodeParam!)).map((d) => d.code.substring(0, 5)) : [lawdCd!];
+      const cacheKey = `stats-concentration-db:v1:${lawdCds.join(',')}:${apiType}:${fetchRange.from}:${fetchRange.to}`;
+      const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
+        const rentSplit = apiType === 'rent'
+          ? splitVerifiedMonths(months, await getRentVerifiedRange())
+          : { verified: [] as string[], unverified: [] as string[] };
+        const tasks: MonthTask[] = [];
+        for (const dLawdCd of lawdCds) {
+          for (const m of rentSplit.unverified) tasks.push({ key: `${dLawdCd}|rent:${m}`, lawdCd: dLawdCd, dealYmd: m, type: 'rent' });
+        }
+        const [results, dbSource] = await Promise.all([
+          tasks.length > 0 ? fetchMonthsThrottledWithStatus(tasks) : Promise.resolve({} as Awaited<ReturnType<typeof fetchMonthsThrottledWithStatus>>),
+          loadBusanFeedTradesFromDb(lawdCds, months, rentSplit.verified),
+        ]);
+        const failedSet = new Set<string>();
+        const trades: FeedTrade[] = [...dbSource.trades];
+        for (const dLawdCd of lawdCds) {
+          for (const m of rentSplit.unverified) {
+            const r = results[`${dLawdCd}|rent:${m}`];
+            if (r?.failed) failedSet.add(dLawdCd);
+            for (const raw of r?.items || []) {
+              const t = toFeedTrade(raw, raw.monthlyRent > 0 ? 'wolse' : 'jeonse', dLawdCd);
+              if (t) trades.push(t);
+            }
+          }
+        }
+        return { trades: dedupeTrades(trades), failedLawdCds: Array.from(failedSet) };
+      });
+      allTrades = cached.trades;
+      // DB가 기본 원천이므로 남은 MOLIT(검증 안 된 전월세 월) 실패는 전체 실패가 아니라 부분 지연이다.
+      partial = cached.failedLawdCds.length > 0;
+      failedDistricts = cached.failedLawdCds;
+      if (!isSidoAll && dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
+    } else if (isSidoAll) {
       const districts = await getSigunguListForSido(sidoCodeParam!);
       const lawdCds = districts.map((d) => d.code.substring(0, 5));
 
@@ -99,7 +143,6 @@ export async function GET(request: Request) {
       allTrades = dedupeTrades(allTrades);
       if (cached.failedLawdCds.length === cached.lawdCds.length && cached.lawdCds.length > 0) apiError = true;
     } else {
-      const months = monthsForRange(fetchRange);
       const cacheKey = `stats-concentration:${lawdCd}:${apiType}:${months.join(',')}`;
       const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
         const tasks: MonthTask[] = months.map((m) => ({ key: m, lawdCd: lawdCd!, dealYmd: m, type: apiType }));
@@ -161,6 +204,8 @@ export async function GET(request: Request) {
       const pyung = e.latestExcluUseArea != null ? pyeongMap.get(pyeongLookupKeyId({ name: e.name, dong: e.dong, aptSeq: e.aptSeq, rawAreaM2: e.latestExcluUseArea })) ?? null : null;
       return {
         rank: i + 1,
+        // 상세 링크 canonical 식별(lawdCd+dong+aptSeq)용 — 없으면 null(추측 없음).
+        aptSeq: e.aptSeq,
         name: e.name,
         dong: e.dong,
         lawdCd: e.lawdCd,

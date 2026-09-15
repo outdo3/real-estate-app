@@ -470,7 +470,8 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
             아예 보이지 않았다** — 시 리포트(/report/city/busan)는 살아 있는데 통계에서
             연결된 적이 없었다. 지역 identity가 불충분하면 여전히 null이고, 그때는 다른
             지역 리포트로 보내지 않고 CTA를 만들지 않는다. */}
-        {slug !== 'change-map' && item.status === 'live' && (() => {
+        {/* STATISTICS_PERIOD_TRADE_UX_V1 — 거래량 화면은 선택 기간과 브리핑 기준을 함께 보여줘야 해서 카드 안에서 렌더한다. */}
+        {slug !== 'change-map' && slug !== 'volume' && item.status === 'live' && (() => {
           const entry = resolveStatsReportEntry(region);
           if (!entry) return null;
           return (
@@ -501,7 +502,12 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
         ) : slug === 'top-traded' ? (
           <ConcentrationView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'volume' ? (
-          <VolumeChartCard lawdCd={region.lawdCd} sidoCode={region.sidoCode} displayRegionName={region.displayRegionName} />
+          <VolumeChartCard
+            lawdCd={region.lawdCd}
+            sidoCode={region.sidoCode}
+            displayRegionName={region.displayRegionName}
+            reportEntry={(() => { const e = resolveStatsReportEntry(region); return e ? { href: e.href, label: e.label } : null; })()}
+          />
         ) : slug === 'gap-invest' ? (
           <GapInvestView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'supply' ? (

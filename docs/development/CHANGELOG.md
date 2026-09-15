@@ -2,6 +2,19 @@
 
 ## 2026-09-15
 
+### E-JIP STATISTICS PERIOD & TRADE UX V1 — 거래량 카드 기간 Master Filter·오늘/어제·거래 많은 단지 즉시 노출
+
+schema·migration·Production write 0건. 상세: `docs/development/STATISTICS_PERIOD_TRADE_UX_V1.md`
+
+    감사      기간은 계약일 기준이지만 UTC로 계산(한국 새벽 하루 밀림), 기본값 실제 30일, 아이콘은 동작하는 연도별 표,
+              거래 많은 단지는 16개 구 MOLIT 실시간(3개월 콜드 9.4s), 브리핑은 리포트 엔진이 어제까지 30/90/365일만 지원
+    기간      lib/stats/volume-period(KST) — 오늘·어제·7일·30일·3개월, dashboard/concentration/feed 공통, 캐시 KST 날짜별
+    카드      요약·거래 많은 단지 상위 5·실거래 목록·브리핑 링크가 같은 기간, 하루 단위 증감 비교 없음, 신고 시차 안내,
+              0건은 "해당 기간에 확인된 거래가 없습니다.", 브리핑 실제 기준 표시, "연도별 표" 라벨, 12개월 차트는 "선택 기간과 별도"
+    원천      부산 거래 많은 단지 = 카드·피드와 같은 DB 원장(0.10~0.49s), 상세 링크 lawdCd+dong+aptSeq
+    검증      신규 10/10, src 2089/2089, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0,
+              로컬 next start 5개 기간 건수·단지 수 = 독립 SQL 일치, 360/390px 넘침 0
+
 ### E-JIP BUSAN LAUNCH FINAL RELEASE GATE V1 — GO_WITH_KNOWN_LIMITATIONS (P1 1건 수정)
 
 출시 전 최종 게이트. 새 기능·schema·Production write 0건. 상세: `docs/development/BUSAN_LAUNCH_FINAL_RELEASE_GATE_V1.md`
