@@ -1,4 +1,4 @@
-# USER FEEDBACK V1 — 로컬 구현 완료 (Production migration 승인 대기)
+# USER FEEDBACK V1 — Production 적용 (메일 수신 확인 대기)
 
 - 기준 HEAD: `baff846` (main = origin/main), 사용자 파일(`package.json`·`package-lock.json`·untracked 24) 보존
 - 상태: **로컬 구현·검증 완료.** Production migration 미적용, Production env 미변경, 의견 코드 push/배포 없음, Production 테스트 데이터 없음.
@@ -285,3 +285,58 @@ Supabase와 같은 조건을 만들기 위해 `anon`·`authenticated`·`service_
 - 단지 상세 등 다른 진입점은 이번 범위 밖(MY만) — 단지 context가 실제로 채워지려면 진입점 추가가 필요.
 - 유형 추가 시 CHECK 제약 교체 migration(가벼움) 필요.
 - 관리자 화면의 로그인 상태 렌더는 Production 적용 후 실제 관리자 세션으로 확인해야 한다.
+
+---
+
+## 9. Production 적용 (2026-09-15 23:4x KST ~ 09-16)
+
+**판정: FUNCTIONAL_WITH_EMAIL_PENDING** — 저장·관리자·보안·배포 PASS, Resend API 발송 수락(`notified_at`) 확인. 수신함 도착·Resend 대시보드 기록은 사용자 확인 필요.
+
+| 단계 | 결과 |
+|---|---|
+| 시작 상태 | main `05583bc`(origin `baff846` + 승인 커밋 `d5f4efa`·`05583bc`), 사용자 파일 보존 |
+| env(이름만) | Vercel Production `RESEND_API_KEY`·`FEEDBACK_NOTIFICATION_EMAIL`·`FEEDBACK_EMAIL_FROM`·`FEEDBACK_HASH_SECRET` 존재 |
+| 대기 migration | 정확히 1개 `20260916090000_user_feedback_v1` |
+| migration 파일 | 승인 커밋과 동일, 기대 속성 전부 일치(추가 테이블 1·TEXT+CHECK·기본 NEW·인덱스 4·API role REVOKE·RLS ON·정책/FORCE/GRANT/FK/enum/DROP 0) |
+| 사전 스냅샷 | 저장소 밖 저장. Batch A 7테이블 RLS ON·FORCE OFF·정책 0·API role 권한 0, Data API 503, relation 43, user_feedback 없음 |
+| 적용 | `npx prisma migrate deploy` → 해당 1개만 적용, exit 0, status up to date |
+| 사후 감사 | `user_feedback` RLS **ON**·FORCE **OFF**·정책 **0**·anon **0**·authenticated **0**·service_role **0**(ACL은 소유자 postgres만). 다른 relation 43개 변화 0, 명시 권한 추가/삭제 0, policies·sequenceAcl·defaultAcl·schemaUsage·roles·memberships 동일, Batch A 유지, Data API 503 동일 |
+| push 전 기준 | feedback 26/26, src 2115/2115, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint 0, build 0 |
+| 배포 | push 1회(`baff846..05583bc`) → 23:49:58 KST 배포 Ready, e-jip.com·www alias |
+| 스모크 | `/` `/feedback` `/my` `/community` `/map` `/stats/volume` `/report` 200, `/admin/feedback` 비로그인 307 → `/my`, 관리자 API 비로그인 401, 잘못된 제출 400(행 생성 없음), `/feedback` noindex |
+
+### 제출 테스트(각 1건, 총 2건)
+
+| 항목 | 익명 `cmu2sj0gv000087ip5q1o83u4` | 로그인 `cmu2skjx000007koa7vnyt4h2` |
+|---|---|---|
+| 경로 | 공개 API에 쿠키 없는 Node fetch | 운영자 실제 세션으로 `/feedback` 화면 제출(390px) |
+| 응답 | 201 | 201(화면 성공 문구) |
+| 저장 | FEATURE_REQUEST · NEW · 메시지 한글 원문 | DATA_ERROR · NEW · 메시지 한글 원문 |
+| 사용자 | user_id 없음 | user_id 있음(값 미출력) |
+| ipHash | `v1:` 67자 | 없음 |
+| 페이지 | `/my`, 쿼리 `period=7d`만(보낸 `code`·`state`·`token`·`callbackUrl` 제거) | `/my`, 쿼리 없음 |
+| 민감 정보 스캔 | 행 전체 JSON에 next-auth·session-token·callbackUrl·code=·token=·state=·password·cookie 없음, IPv4 문자열 없음 | 동일 |
+| 알림 | `notified_at` 생성 0.36초 후 기록 | 0.38초 후 기록 |
+
+### 화면·관리자
+
+- MY "의견 보내기": 로그인 상태 58px 노출(비로그인 노출은 HTML·로컬 확인), `/feedback?from=/my`.
+- `/feedback` 360px: 유형 5개 44px, textarea 16px·maxLength 3000, 제출 48px·초기 비활성, 넘침 0. 390px 제출 중 "보내는 중..." 비활성 → 성공 문구.
+- analytics(브라우저 캡처): `feedback_submit` = 이름 + `actionType: DATA_ERROR`, complexId·aptName null. 서버 저장 행 0 — 운영자(관리자) 세션 트래픽은 기존 분류기가 제외(설계). 실제 사용자 트래픽에서 확인 필요.
+- `/admin/feedback`(관리자 세션): 2건 최신순, 처리전 배지·유형·로그인/비로그인·KST 시각·미리보기·페이지, 메일 알림 없음 경고 없음(둘 다 notified). 필터: 유형 기능 건의 → 1건, 오류 신고 → 빈 상태, 상태 완료 → 빈 상태, 처리전 → 2건. 펼침: 전문·단지(-)·시군구 코드(-)·페이지·허용 쿼리·UA·접수/알림/완료/수정 시각·운영 메모·상태 버튼. 목록 API 항목에 userId·ipHash 없음.
+- 상태(익명 테스트 행 1건만): NEW → 확인중(resolvedAt null) → 완료+메모(resolvedAt 기록, 메모 저장) → 확인중(resolvedAt null, 메모 유지) → 완료(resolvedAt 새 시각). 최종 배지 완료, 로그인 테스트 행은 NEW 그대로.
+
+### 로그
+
+- Vercel(조회 창 약 5분, 57건): 2xx만, `POST /api/feedback` 201·`PATCH` 200×4·목록 200, `FEEDBACK_`·Prisma·permission·Resend 오류 줄 0.
+- `error_logs` 배포 이후 0건.
+
+### 사용자 확인 필요
+
+- 운영자 수신함 도착(제목 `[이집 새 의견] 기능 건의` / `[이집 새 의견] 데이터 오류`, 발신 e-jip.com, 본문 유형·내용·발생 화면 `/my`·관리자 링크, user id·IP·ipHash·UA 없음).
+- Resend 대시보드 Emails/Logs의 발송·전달 상태 — 자동화 탭에서 대시보드 목록이 로드되지 않아(2회 "Loading...") 확인하지 못함.
+- 로그인한 **비관리자** 계정의 `/admin/feedback` 차단(비로그인 307/401과 코드·테스트는 확인).
+
+### Production 테스트 행
+
+위 2건(`[TEST][ANONYMOUS]`, `[TEST][LOGGED_IN]`) 보존. 익명 행은 상태 QA로 완료·메모 상태. **삭제는 별도 승인 후.**

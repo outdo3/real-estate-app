@@ -2,6 +2,19 @@
 
 ## 2026-09-15
 
+### E-JIP USER FEEDBACK V1 — Production 적용: FUNCTIONAL_WITH_EMAIL_PENDING
+
+migration 1개 적용·보안 감사 PASS·배포·익명/로그인 테스트 각 1건·관리자 상태 QA. 상세: `docs/development/USER_FEEDBACK_V1.md` §9
+
+    migration  20260916090000_user_feedback_v1만 적용(exit 0, up to date)
+    보안       user_feedback RLS ON·FORCE OFF·정책 0·anon/authenticated/service_role 권한 0, 다른 relation·권한·정책 변화 0, Batch A 유지, Data API 503
+    배포       05583bc push 1회, 23:49:58 KST Ready, 스모크 200/307/401/400
+    제출       익명 201(ipHash v1:, 쿼리 period=7d만, OAuth 파라미터 제거) · 로그인 201(user_id, ipHash 없음), 민감정보 스캔 0
+    관리자     목록·필터·펼침, 상태 NEW→확인중→완료→확인중→완료(resolvedAt 기록/해제), 다른 행 영향 없음
+    메일       두 건 모두 notified_at 기록(Resend 2xx). 수신함·Resend 대시보드 확인은 사용자 몫
+    로그       5xx 0, FEEDBACK/Prisma/permission/Resend 오류 0, error_logs 0
+    테스트 행  2건 보존, 삭제는 승인 후
+
 ### E-JIP USER FEEDBACK V1 — 의견 보내기(DB 저장·관리자·Resend 알림) 로컬 구현, Production 미적용
 
 migration은 **로컬 Docker DB에서만** 검증했다. Production migration·env·배포·테스트 데이터 없음. 상세: `docs/development/USER_FEEDBACK_V1.md` §5~§8
