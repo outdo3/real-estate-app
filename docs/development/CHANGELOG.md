@@ -2,6 +2,19 @@
 
 ## 2026-09-15
 
+### E-JIP BUSAN LAUNCH FINAL RELEASE GATE V1 — GO_WITH_KNOWN_LIMITATIONS (P1 1건 수정)
+
+출시 전 최종 게이트. 새 기능·schema·Production write 0건. 상세: `docs/development/BUSAN_LAUNCH_FINAL_RELEASE_GATE_V1.md`
+
+    기준      main 32d27b4 배포 Ready, migrate status up to date, Data API OFF(503), Batch A 7테이블 RLS ON·권한 0 유지
+    스모크    도메인/308, 핵심 라우트·stats 19·API 200, 권한 API 비로그인 401, OAuth 3사 canonical redirect_uri, 지도 5게이트,
+              상세 3단지(26470·26350·26170), 비교·오피스텔·분양·재개발·커뮤니티, orphan CLEAN, error_logs 24h 0건
+    P1 수정   리포트 → 상세 링크가 이름+aptSeq만 실어 동명 다른 단지를 열던 문제(우동 롯데 → 다른 롯데, 연산동 삼익 → 연천 삼익)
+              → report-links.aptDetailHref(lawdCd+dong+aptSeq, 불완전하면 링크 없음)로 단지·비교·지역 리포트 통일 (2ca0a64)
+    재검증    Production 2단지 돌아가기 동일 단지, 리포트 HTML 링크 비교 2/2·구 10/10·동 10/10·시 10/10 canonical
+    검증      src 2079/2079, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0
+    남음      P2: aptSeq 단독 옛 상세 URL 식별 보강 등 / KNOWN: Naver LIMITED, Batch B/C, 콜드 첫 요청 / 실기기 10항목
+
 ### E-JIP MAP ENTRY POINT CONTEXT AUDIT V1 — /map 진입점 전수 감사 + 일반 "지도" 탭의 이전 페이지 좌표 상속 수정
 
 진입점 11종 분류(일반 6·단지 1·지역 2·공유 링크·뒤로가기). 지오로케이션·마커·레이어·식별 규칙 무변경. 상세: `docs/development/MAP_ENTRY_POINT_CONTEXT_AUDIT_V1.md`
