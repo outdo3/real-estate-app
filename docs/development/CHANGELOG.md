@@ -2,6 +2,16 @@
 
 ## 2026-09-15
 
+### E-JIP SEARCH → MAP CONTEXT PRESERVATION V1 — 홈·빠른 검색 "📍 지역" 결과가 선택한 지역으로 열림
+
+두 검색의 지역 분기 이동만 변경(지도 코어·지오로케이션·마커·검색 랭킹·결과 매핑·단지 이동 무변경). 상세: `docs/development/SEARCH_MAP_CONTEXT_V1.md`
+
+    재현      Production 홈 2(연산동·명지동)·빠른 검색 2(우동·화명동) 모두 선택 동 좌표 URL을 만들었지만 중구(IP) + 폴백 안내
+    원인      B router.push 전환 중 지도 초기 상태가 이전 페이지 쿼리를 읽음(계측: /·빈 쿼리 9회 읽기 후 /map)
+              A URL에 검색 결과 lawdCd 누락 → 전체 로드여도 기본 서구(26140) 마커
+    수정      buildRegionMapUrl(lat·lng 그대로 + 5자리 lawdCd, 좌표 0,0이면 /map) + window.location.assign
+    검증      신규 10/10, src 2066/2066, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0
+
 ### E-JIP APT DETAIL → MAP CONTEXT PRESERVATION V1 — "지도에서 주변 단지와 보기" 단지 중심 유지
 
 상세 버튼 이동 방식만 변경(지도 코어·마커·레이어·지오로케이션·식별 규칙 무변경). 상세: `docs/development/APT_DETAIL_MAP_CONTEXT_V1.md`

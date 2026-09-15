@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ApartmentAutocomplete, { ApartmentSearchResult } from './ApartmentAutocomplete';
+import { buildRegionMapUrl } from '@/lib/decision-journey/registry';
 import { getRecentApartments, RecentApartment } from '@/lib/recent-apartments';
 
 interface ApartmentQuickSearchProps {
@@ -95,7 +96,9 @@ export default function ApartmentQuickSearch({ currentApt, onClose }: ApartmentQ
   const handleSelect = (result: ApartmentSearchResult) => {
     setConnectFailed(null);
     if (result.type === 'REGION') {
-      router.push(`/map?lat=${result.lat}&lng=${result.lng}`);
+      // SEARCH_MAP_CONTEXT_V1 — router.push로 가면 지도 초기 상태가 새 URL 반영 전에 읽혀
+      // 선택한 지역 대신 GPS/IP 위치로 열렸다. 상세 → 지도와 같은 방식으로 전체 이동한다.
+      window.location.assign(buildRegionMapUrl(result));
       return;
     }
 

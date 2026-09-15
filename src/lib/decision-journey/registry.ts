@@ -36,6 +36,19 @@ export function buildDetailMapUrl(params: {
   return `/map?${qs.toString()}`;
 }
 
+// SEARCH_MAP_CONTEXT_V1 — 검색의 "📍 지역" 결과 → /map. 좌표는 ApartmentAutocomplete가
+// 지오코딩해 넘긴 값 그대로, lawdCd는 검색 API가 준 시군구 코드 그대로 싣는다(없으면
+// 파서가 기본 서구 코드로 채워 다른 구 마커를 불렀다). 좌표를 못 얻었으면(0,0) 가짜
+// 중심을 만들지 않고 기존 기본 진입(/map)으로 보낸다.
+export function buildRegionMapUrl(params: { lat: number; lng: number; lawdCd?: string | null }): string {
+  const hasCoords =
+    Number.isFinite(params.lat) && Number.isFinite(params.lng) && !(params.lat === 0 && params.lng === 0);
+  if (!hasCoords) return '/map';
+  const qs = new URLSearchParams({ lat: String(params.lat), lng: String(params.lng) });
+  if (params.lawdCd && /^\d{5}$/.test(params.lawdCd)) qs.set('lawdCd', params.lawdCd);
+  return `/map?${qs.toString()}`;
+}
+
 export function buildDetailCompareUrl(params: {
   name: string;
   lawdCd: string;

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import ApartmentAutocomplete, { ApartmentSearchResult } from './ApartmentAutocomplete';
+import { buildRegionMapUrl } from '@/lib/decision-journey/registry';
 import styles from '@/app/home-client.module.css';
 
 // [MAIN UI-B1] 홈 첫 화면의 Primary 검색. ApartmentAutocomplete(카카오 키워드 검색,
@@ -38,7 +39,9 @@ export default function HomeApartmentSearch() {
 
     // If it's a REGION, go to map
     if (result.type === 'REGION') {
-      router.push(`/map?lat=${result.lat}&lng=${result.lng}`);
+      // SEARCH_MAP_CONTEXT_V1 — router.push로 가면 지도 초기 상태가 새 URL 반영 전에 읽혀
+      // 선택한 지역 대신 GPS/IP 위치로 열렸다. 상세 → 지도와 같은 방식으로 전체 이동한다.
+      window.location.assign(buildRegionMapUrl(result));
       return;
     }
 

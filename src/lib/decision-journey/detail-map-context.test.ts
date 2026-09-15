@@ -73,9 +73,9 @@ test('9. 특정 단지 하드코딩 없음', () => {
 });
 
 test('7·10. 다른 지도 진입·지도 코어는 이번 변경 범위 밖(그대로)', () => {
-  // 지도 하단 카드 상세보기, 검색 결과 → 지도 이동은 기존 router.push 그대로(이번 STEP에서 건드리지 않음)
-  assert.match(code('src/components/HomeApartmentSearch.tsx'), /router\.push\(`\/map\?lat=\$\{result\.lat\}&lng=\$\{result\.lng\}`\);/);
-  assert.match(code('src/components/ApartmentQuickSearch.tsx'), /router\.push\(`\/map\?lat=\$\{result\.lat\}&lng=\$\{result\.lng\}`\);/);
+  // 검색 결과 → 지도 이동은 SEARCH_MAP_CONTEXT_V1에서 같은 방식으로 고쳤다(search-map-context.test.ts)
+  assert.match(code('src/components/HomeApartmentSearch.tsx'), /window\.location\.assign\(buildRegionMapUrl\(result\)\);/);
+  assert.match(code('src/components/ApartmentQuickSearch.tsx'), /window\.location\.assign\(buildRegionMapUrl\(result\)\);/);
   // 지도 레이어·마커 우선순위·지오로케이션 정책 코드가 그대로 있다
   assert.match(MAP, /const \[layers, setLayers\] = useState<Record<LayerKey, boolean>>\(\(\) => \{/);
   assert.match(MAP, /return locateInitialCenter\(DEFAULT_MAP_CENTER, \{/);
