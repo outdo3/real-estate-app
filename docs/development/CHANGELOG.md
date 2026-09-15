@@ -2,6 +2,18 @@
 
 ## 2026-09-15
 
+### E-JIP PERSONALIZED SCORE V1 — PHASE 1 데이터·모델 감사
+
+감사 도구·문서만 추가(구현·schema·Production 쓰기·공통 점수 변경 없음). 상세: `docs/development/PERSONALIZED_SCORE_V1_PHASE1_AUDIT.md`
+
+    구조      공통 점수 V2 = 교통·생활·교육·단지 4×25, absolute curve, 요청마다 계산·미저장, 도메인·요소 점수가 이미 응답에 포함
+    coverage  점수 산출 2,833/3,438(82.4%) 중 교통 98.2%·생활 100%·초등거리 99.4%·신축 100%·주차 실측 71.5%
+    판정      READY 교통·생활편의·신축 / LIMITED 주차·초등학교 접근성("학군" 아님) / V1 제외 가격(예산 입력 필요)·향후가치(NOT_READY)
+    모델      중요도 1~5 → 정규화, 결측 축 제외 재정규화(0점 금지, 주차 중립값 미사용), coverage<0.6 LIMITED, 미설정·비로그인 계산 안 함
+    시뮬      실데이터 4프로필 결정적, 전체 2,833단지 3.6~7.8ms, 공통 대비 순위상관 0.68~0.92
+    저장      user_preferences.purposes는 배열 전용 → nullable fit_importance 열 추가 권장(additive, 승인 필요)
+    도구      scripts/personal-score/audit-axis-coverage.ts, simulate-personal-fit.ts (READ ONLY)
+
 ### E-JIP APT DETAIL REPORT CTA FLOW V1 — 지도 → 상세 → 한장 리포트
 
 UI·내비게이션만(리포트 엔진·route·PNG/PDF/공유·API·DB·지도 마커 로직 무변경). 상세: `docs/development/APT_DETAIL_REPORT_CTA_FLOW_V1.md`
