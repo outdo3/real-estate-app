@@ -107,6 +107,14 @@ END $$;
 잘못된 값 400·기존 값 유지 → 다른 사용자 조회 불가 → 다른 사용자 body에 userId 넣어도 영향 없음 → null 초기화(SQL NULL, purposes 유지) → 롤백.
 **13/13 PASS**, 전후 행 지문 동일, QA 사용자 잔여 0.
 
+### 9-1. Production API smoke (배포 `df8786f`)
+
+| 요청(비로그인) | 결과 |
+|---|---|
+| `GET /api/my/preferences` | 401 `{"success":false,"error":"로그인이 필요합니다."}`, `Cache-Control: private, no-store` |
+| `PUT /api/my/preferences` (유효한 fitImportance body) | 401 동일, 저장 없음 |
+| `/my` 페이지 | 200 |
+
 ### 10. 테스트·검증
 
 | 명령 | 결과 |
