@@ -130,11 +130,12 @@ test('§11 이미지/PDF는 아이콘 전용 버튼이 아니다 — 보이는 �
 
 // ── §9/§10 동작 보존 ────────────────────────────────────────────────────────
 
-test('§9 돌아갈 경로가 그대로다 — aptSeq를 들고 단지 상세로 간다', () => {
+test('§9 돌아갈 경로 — canonical 상세 계약(lawdCd+dong+aptSeq)으로 단지 상세로 간다', () => {
   assert.ok(
-    /href: `\/apt\/\$\{encodeURIComponent\(m\.name\)\}\?aptSeq=\$\{encodeURIComponent\(m\.aptSeq\)\}`/.test(APT_REPORT),
-    '돌아갈 경로가 바뀌었다'
+    /const detailHref = aptDetailHref\(\{ name: m\.name, aptSeq: m\.aptSeq, lawdCd: m\.sggCd, dong: m\.umdName \}\);/.test(APT_REPORT),
+    '돌아갈 경로가 canonical 식별을 쓰지 않는다'
   );
+  assert.ok(/\.\.\.\(detailHref \? \[\{ label: '단지로 돌아가기', href: detailHref \}\] : \[\]\)/.test(APT_REPORT), '라벨/조건이 바뀌었다');
 });
 
 test('§10 액션 바는 내보내기에서 제외된 채로 남아 있다', () => {

@@ -173,6 +173,8 @@ export interface ComplexActivity {
   aptSeq: string | null;
   aptName: string;
   dong: string | null;
+  /** 그 단지 거래 행의 시군구 코드(상세 링크 canonical 식별용). */
+  lawdCd: string;
   count: number;
   latestDealDate: string;
 }
@@ -185,7 +187,7 @@ export function representativeComplexes(rows: readonly TradeRow[], limit: number
     const key = r.aptSeq ? `id:${r.aptSeq}` : `nd:${r.aptName}|${normalizeDong(r.dong) ?? ''}`;
     const cur = m.get(key);
     if (!cur) {
-      m.set(key, { aptSeq: r.aptSeq, aptName: r.aptName, dong: normalizeDong(r.dong), count: 1, latestDealDate: r.dealDate });
+      m.set(key, { aptSeq: r.aptSeq, aptName: r.aptName, dong: normalizeDong(r.dong), lawdCd: r.lawdCd, count: 1, latestDealDate: r.dealDate });
     } else {
       cur.count += 1;
       if (r.dealDate > cur.latestDealDate) cur.latestDealDate = r.dealDate;

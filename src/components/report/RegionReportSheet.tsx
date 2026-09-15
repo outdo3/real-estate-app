@@ -12,6 +12,7 @@ import styles from './ReportSheet.module.css';
 import type { ReportEnvelope, ReportMetric, ReportSection } from '@/lib/report/types';
 import ReportActions from './ReportActions';
 import { complexCountLabel, complexRowLabels } from '@/lib/report/complex-row-labels';
+import { aptDetailHref } from '@/lib/report/report-links';
 import { KpiCard, ReportHeader, SectionHead, TrustFooter } from './ReportPrimitives';
 
 /** KPI로 띄울 지표 키와 순서. 스코프별로 의미 있는 것만 고른다. */
@@ -52,14 +53,12 @@ function DistributionSection({ section }: { section: ReportSection }) {
 }
 
 /**
- * 대표 거래는 canonical aptSeq가 있을 때만 상세로 링크한다.
- * 이름만으로 링크를 만들지 않는다(다른 단지로 보낼 위험).
+ * 대표 거래는 canonical 식별(aptSeq + 그 거래의 lawdCd·dong)이 모두 있을 때만 상세로 링크한다.
+ * 이름(+aptSeq)만으로 링크를 만들지 않는다 — 상세가 동명 다른 단지를 열었다(Production 재현).
  */
 function aptHref(cells: Record<string, string | number | null>): string | null {
-  const aptSeq = cells.aptSeq;
-  const name = cells.aptName;
-  if (!aptSeq || typeof name !== 'string') return null;
-  return `/apt/${encodeURIComponent(name)}?aptSeq=${encodeURIComponent(String(aptSeq))}`;
+  const str = (v: string | number | null | undefined) => (v == null ? null : String(v));
+  return aptDetailHref({ name: str(cells.aptName), aptSeq: str(cells.aptSeq), lawdCd: str(cells.lawdCd), dong: str(cells.dong) });
 }
 
 /**

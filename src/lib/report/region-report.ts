@@ -223,7 +223,7 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
     rows: complexes.map((c) => ({
       key: c.aptSeq ? `id:${c.aptSeq}` : `nd:${c.aptName}|${c.dong ?? ''}`,
       enriched: !!c.aptSeq,
-      cells: { aptSeq: c.aptSeq, aptName: c.aptName, dong: c.dong, count: c.count, latestDealDate: c.latestDealDate },
+      cells: { aptSeq: c.aptSeq, aptName: c.aptName, dong: c.dong, lawdCd: c.lawdCd, count: c.count, latestDealDate: c.latestDealDate },
     })),
     trust: complexes.length > 0 ? (gate.sampleSufficient ? 'SAFE' : 'LIMITED') : 'MISSING',
     note: gate.sampleSufficient ? null : gate.reason,

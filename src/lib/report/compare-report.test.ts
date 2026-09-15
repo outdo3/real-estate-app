@@ -72,12 +72,21 @@ test('종합 승자를 만들지 않는다', () => {
   assert.ok(e.interpretation.text!.includes('우선순위'));
 });
 
-test('identity는 aptSeq이고 딥링크 2개가 각각 aptSeq를 보존한다', () => {
-  const e = buildCompareReport(base());
+test('identity는 aptSeq이고 딥링크 2개가 각각 canonical 식별(lawdCd+dong+aptSeq)을 보존한다', () => {
+  const e = buildCompareReport(base({
+    sides: [side({ lawdCd: '26470', dong: '연산동' }), side({ aptSeq: 'B-1', name: 'B단지', lawdCd: '26350', dong: '우동' })],
+  }));
   assert.deepEqual(e.scope.aptSeqs, ['A-1', 'B-1']);
   assert.equal(e.navigationTargets.length, 2);
-  assert.ok(e.navigationTargets[0].href.includes('aptSeq=A-1'));
-  assert.ok(e.navigationTargets[1].href.includes('aptSeq=B-1'));
+  const [a, b] = e.navigationTargets.map((t) => new URL(t.href, 'https://e-jip.com').searchParams);
+  assert.deepEqual([a.get('lawdCd'), a.get('dong'), a.get('aptSeq')], ['26470', '연산동', 'A-1']);
+  assert.deepEqual([b.get('lawdCd'), b.get('dong'), b.get('aptSeq')], ['26350', '우동', 'B-1']);
+});
+
+test('RELEASE_GATE — lawdCd/dong이 없는 쪽은 상세 링크를 만들지 않는다(이름+aptSeq만으로 동명 다른 단지를 열던 링크)', () => {
+  const e = buildCompareReport(base({ sides: [side({ lawdCd: '26470', dong: '연산동' }), side({ aptSeq: 'B-1', name: 'B단지' })] }));
+  assert.equal(e.navigationTargets.length, 1);
+  assert.ok(e.navigationTargets.every((t) => /[?&]lawdCd=\d{5}&dong=[^&]+&aptSeq=/.test(t.href)));
 });
 
 test('한쪽 점수가 없으면 점수 비교를 MISSING으로 두고 도메인 섹션을 만들지 않는다', () => {

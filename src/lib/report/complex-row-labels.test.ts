@@ -202,7 +202,8 @@ test('§7 섹션 정의(제목·행 수·trust·cells)가 그대로다', () => {
   const code = codeOf(REGION_REPORT);
   assert.ok(/const complexes = representativeComplexes\(rows, 5\);/.test(code), '상위 개수가 바뀌었다');
   assert.ok(/title: '거래가 많은 단지'/.test(code), '섹션 제목이 바뀌었다');
-  assert.ok(/cells: \{ aptSeq: c\.aptSeq, aptName: c\.aptName, dong: c\.dong, count: c\.count, latestDealDate: c\.latestDealDate \}/.test(code),
+  // RELEASE_GATE — 상세 링크 canonical 식별용 lawdCd만 추가(표시·집계 무변경)
+  assert.ok(/cells: \{ aptSeq: c\.aptSeq, aptName: c\.aptName, dong: c\.dong, lawdCd: c\.lawdCd, count: c\.count, latestDealDate: c\.latestDealDate \}/.test(code),
     '섹션이 내려주는 cells가 바뀌었다(UI 변경이 데이터 계약을 건드렸다)');
   assert.ok(/trust: complexes\.length > 0 \? \(gate\.sampleSufficient \? 'SAFE' : 'LIMITED'\) : 'MISSING'/.test(code),
     'trust 판정이 바뀌었다');
@@ -210,8 +211,9 @@ test('§7 섹션 정의(제목·행 수·trust·cells)가 그대로다', () => {
 
 test('§7 identity는 여전히 aptSeq다 — 이름으로 상세를 링크하지 않는다', () => {
   const code = codeOf(SHEET);
-  assert.ok(/if \(!aptSeq \|\| typeof name !== 'string'\) return null;/.test(code), 'aptSeq 없이 링크를 만든다');
-  assert.ok(/aptSeq=\$\{encodeURIComponent\(String\(aptSeq\)\)\}/.test(code), '링크가 aptSeq를 싣지 않는다');
+  // RELEASE_GATE — aptSeq·lawdCd·dong이 모두 있을 때만 canonical 상세 링크(report-links.aptDetailHref)
+  assert.ok(/return aptDetailHref\(\{ name: str\(cells\.aptName\), aptSeq: str\(cells\.aptSeq\), lawdCd: str\(cells\.lawdCd\), dong: str\(cells\.dong\) \}\);/.test(code), '링크가 canonical 식별을 쓰지 않는다');
+  assert.ok(!/\?aptSeq=/.test(code), '이름+aptSeq만 싣는 링크가 남아 있다');
   // 새 섹션도 같은 함수를 쓴다(별도 링크 규칙을 만들지 않았다).
   const at = code.indexOf('function ComplexCountSection');
   const body = code.slice(at, code.indexOf('function TradeSection'));

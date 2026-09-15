@@ -17,6 +17,7 @@ import type {
 } from '@/lib/compare-v2/types';
 import type { MetricSource, ReportEnvelope, ReportMetric, ReportPeriod, ReportSection } from './types';
 import { summarizeTrust } from './types';
+import { aptDetailHref } from './report-links';
 
 export const COMPARE_REPORT_VERSION = 'report-4.0.0';
 
@@ -26,6 +27,9 @@ export interface CompareSideInfo {
   aptSeq: string;
   name: string;
   regionLabel: string | null;
+  /** 상세 링크용 canonical 식별(master sggCd·umdName). 없으면 상세 링크를 만들지 않는다. */
+  lawdCd?: string | null;
+  dong?: string | null;
   buildYear: number | null;
   totalHouseholds: number | null;
   parkingCount: number | null;
@@ -300,10 +304,10 @@ export function buildCompareReport(input: CompareReportInput): ReportEnvelope<Ap
     highlights: [],
     interpretation,
     sourceNotes: [{ source: SOURCE, dataAsOf: input.dataAsOf }],
-    navigationTargets: [
-      { label: `${sa.name} 자세히`, href: `/apt/${encodeURIComponent(sa.name)}?aptSeq=${encodeURIComponent(sa.aptSeq)}` },
-      { label: `${sb.name} 자세히`, href: `/apt/${encodeURIComponent(sb.name)}?aptSeq=${encodeURIComponent(sb.aptSeq)}` },
-    ],
+    navigationTargets: [sa, sb].flatMap((side) => {
+      const href = aptDetailHref({ name: side.name, aptSeq: side.aptSeq, lawdCd: side.lawdCd, dong: side.dong });
+      return href ? [{ label: `${side.name} 자세히`, href }] : [];
+    }),
     data: {
       aptSeqs: [sa.aptSeq, sb.aptSeq],
       sides: [sa, sb],

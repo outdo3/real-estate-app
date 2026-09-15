@@ -21,6 +21,7 @@ import type {
   ReportSection,
 } from './types';
 import { summarizeTrust } from './types';
+import { aptDetailHref } from './report-links';
 
 export const APT_REPORT_VERSION = 'report-3.0.0';
 
@@ -323,6 +324,7 @@ export function buildApartmentReport(input: AptReportInput): ReportEnvelope<Apar
   if (!scoreDisplayable) notes.push('이집 점수는 데이터가 충분해지면 표시됩니다.');
 
   const regionLabel = [districtName(m.sggCd) ?? m.sigungu, m.umdName].filter(Boolean).join(' ');
+  const detailHref = aptDetailHref({ name: m.name, aptSeq: m.aptSeq, lawdCd: m.sggCd, dong: m.umdName });
 
   return {
     reportType: 'APARTMENT_DETAIL',
@@ -359,8 +361,8 @@ export function buildApartmentReport(input: AptReportInput): ReportEnvelope<Apar
     ],
     navigationTargets: [
       // REPORT_BOTTOM_ACTION_BAR_COMPACT_FIX_V1 §1 — 라벨만 짧게 바꾼다.
-      // href(돌아갈 단지 상세 경로)는 그대로다 — aptSeq를 들고 간다(§9).
-      { label: '단지로 돌아가기', href: `/apt/${encodeURIComponent(m.name)}?aptSeq=${encodeURIComponent(m.aptSeq)}` },
+      // href는 canonical 상세 계약(lawdCd+dong+aptSeq) — 식별이 불완전하면 링크를 만들지 않는다.
+      ...(detailHref ? [{ label: '단지로 돌아가기', href: detailHref }] : []),
     ],
     data: {
       aptSeq: m.aptSeq,

@@ -8,6 +8,26 @@
 //   canonical identity가 없으면 **null**을 돌려준다. 이름으로 지어내지 않는다.
 //   호출부는 null이면 CTA 자체를 렌더하지 않는다 — 깨진 링크를 만들지 않기 위해.
 
+/**
+ * 리포트 → 단지 상세. BUSAN_LAUNCH_FINAL_RELEASE_GATE_V1 — 예전 `/apt/{name}?aptSeq=`만 싣던 링크는
+ * 상세가 이름(+동 없음)으로 거래를 찾아 **동명 다른 단지**를 열었다(Production: 우동 롯데 → 서울 롯데,
+ * 연산동 삼익 → 경기 연천 삼익). 검색·지도와 같은 canonical 계약(lawdCd+dong+aptSeq)으로만 만들고,
+ * 하나라도 없으면 null — 틀린 단지로 보내는 링크보다 링크 없음이 낫다.
+ */
+export function aptDetailHref(params: {
+  name: string | null | undefined;
+  aptSeq: string | null | undefined;
+  lawdCd: string | null | undefined;
+  dong: string | null | undefined;
+}): string | null {
+  const name = (params.name || '').trim();
+  const aptSeq = (params.aptSeq || '').trim();
+  const lawdCd = (params.lawdCd || '').trim();
+  const dong = (params.dong || '').trim();
+  if (!name || !aptSeq || !dong || !/^\d{5}$/.test(lawdCd)) return null;
+  return `/apt/${encodeURIComponent(name)}?${new URLSearchParams({ lawdCd, dong, aptSeq }).toString()}`;
+}
+
 /** 부산 시 리포트는 단일 경로다. */
 export function cityReportHref(): string {
   return '/report/city/busan';

@@ -157,6 +157,8 @@ async function loadSide(aptSeq: string): Promise<SideLoad | null> {
       aptSeq: master.aptSeq,
       name: master.name,
       regionLabel: apt.regionLabel,
+      lawdCd: master.sggCd,
+      dong: master.umdName,
       buildYear: master.buildYear,
       totalHouseholds: master.totalHouseholds,
       parkingCount: master.parkingCount,
