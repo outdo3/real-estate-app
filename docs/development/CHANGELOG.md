@@ -2,6 +2,17 @@
 
 ## 2026-09-15
 
+### E-JIP BUSAN LAUNCH FINAL RELEASE GATE V1 — 재실행(통계 기간 변경 배포 후): GO_WITH_KNOWN_LIMITATIONS 유지
+
+코드 수정 없음. 상세: `docs/development/BUSAN_LAUNCH_FINAL_RELEASE_GATE_V1.md` §23
+
+    기준      live 56e372d Ready, migrate up to date, Data API 503, Batch A 유지, orphan CLEAN
+    스모크    핵심 라우트 30·보호 API 16(401)·OAuth 3사 canonical, 상세 3단지 식별·리포트 링크 canonical,
+              지도 단지/지역/일반(학교) 진입 Production 재확인, 통계 기간 QA PASS
+    로그      5xx 0, error_logs 24h 0(7일 84건 전부 MOLIT_PARTIAL), level error 1 = url.parse DeprecationWarning
+    P2 추가   yearly 콜드 11~12s, 피드 오늘/어제 시차 문구, 기타 통계 KST 새벽 밀림
+    검증      src 2089/2089, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), build exit 0
+
 ### E-JIP STATISTICS PERIOD & TRADE UX V1 — 거래량 카드 기간 Master Filter·오늘/어제·거래 많은 단지 즉시 노출
 
 schema·migration·Production write 0건. 상세: `docs/development/STATISTICS_PERIOD_TRADE_UX_V1.md`

@@ -207,3 +207,53 @@
 3. P2 1순위: 상세의 aptSeq 단독 URL 식별 보강(옛 링크 방어).
 4. Supabase Batch B/C 계획 재개(Data API OFF 유지 전제로 일정 조정).
 5. SEO P2(title "전국" 정리, Yandex/Daum 후속).
+
+---
+
+## 23. 재실행 — 통계 기간 변경(`56e372d`) 배포 후 (2026-09-15 22:05~22:30 KST)
+
+**판정: GO_WITH_KNOWN_LIMITATIONS 유지** — 새 P0/P1 0건, 코드 수정 없음.
+
+| 항목 | 결과 |
+|---|---|
+| 기준 | main HEAD `e64ae93`(문서만, 코드 = `56e372d`), live Production `56e372d` Ready(21:42:31 KST, e-jip.com/www), 사용자 파일 보존 |
+| 1차 게이트 이후 코드 변경 | `aeeb4de..56e372d` = 통계(dashboard·concentration·feed API, 거래량/거래집중/피드 화면, lib/stats) + 테스트 1개뿐. 지도·상세·리포트·커뮤니티·MY·비교·오피스텔·인증 코드는 1차 게이트와 동일 |
+| 마이그레이션 / Data API | 20개 up to date / 503(OFF), Prisma ok |
+| Batch A | 7테이블 RLS ON·FORCE OFF·policies 0·anon/authenticated/service_role 0 유지. 기타 36개 중 RLS ON 2·anon SELECT 34(Batch B/C 미적용 KNOWN) |
+| Storage | orphan 감사 objects 2 / refs 2 / 후보 0 / 누락 0 CLEAN |
+| 라우트 | 핵심 30개 200, 없는 경로 404, www/http/legacy 호스트 308 canonical |
+| SEO | robots·sitemap(37)·Naver/Yandex meta·Google DNS TXT·IndexNow 키 200 |
+| 인증 | providers 3종 canonical callback, csrf·익명 session `{}`, google/kakao/naver signin 302 + canonical redirect_uri + state, signout 200 |
+| 권한 | 보호 API 16개 비로그인 401 |
+| 상세 데이터 | 연산자이 223건·롯데 67건·하이츠빌리지-1 1건, 각각 자기 aptSeq만, 점수 V2 OK·브리핑·학교 OK |
+| 리포트 링크 | 단지 2·비교 2·구 10·시 10 전부 lawdCd+dong+aptSeq |
+| 지도(브라우저) | 롯데 상세 → 지도: 전체 로드·canonical 좌표·26350·aptSeq·선택 카드·안내/ipinfo 없음·리포트 shortcut 없음, back → 상세. 홈 화명동 → 26320 좌표·마커 26320·안내 없음. 학교 상세 → "지도" → 일반 흐름(IP 26110, 학교 좌표 아님) |
+| 상세(브라우저) | 롯데: 37건·점수 51·개인화 설정 CTA(가짜 점수 없음)·브리핑·학교·교통·지도·비교·예산·법무사 카드·리포트 `26350-9`, 넘침 0 |
+| 통계 | 거래량 기간 Production QA(같은 날, `STATISTICS_PERIOD_TRADE_UX_V1.md` §4) PASS — 5개 기간 = 독립 SQL. 신고가·84㎡·갭투자·rankings·yearly API 200 |
+| 로그 | Vercel(조회 창 약 25분, 1,550건) 5xx 0. level error 1건 = 게이트 로그인 프로브의 Node `url.parse` DeprecationWarning(stderr, 기능 영향 없음). 4xx는 게이트 401 프로브(CLI가 같은 로그 id를 중복 반환). `error_logs` 24h 0건, 7일 84건 전부 `[MOLIT_PARTIAL]`(마지막 09-11). sync coverage 마지막 검증 SALE 09-15 08:30 KST·RENT 09-15 06:57 KST |
+| 테스트/빌드 | src 2089/2089, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), eslint(변경 영역) 0, build 0 |
+
+### 추가 분류
+
+- **P2 POSTLAUNCH**
+  - `/api/stats/yearly`(구·군 연도별 표) 콜드 11.2~12.1s / warm 0.18s — PERFORMANCE_V2 기록(콜드 6.7s)보다 느림. 보조 뷰(버튼 탭 시)라 blocker 아님. 라우트는 이번 게이트 기간 무변경.
+  - 실거래 피드 오늘/어제 빈 상태·해석 문장이 신고 시차를 언급하지 않음.
+  - 신고가·상승·하락·84㎡·갭투자 기간의 한국 새벽 하루 밀림(KST 기간 lib로 이전).
+  - Node `url.parse` DeprecationWarning(인증 라이브러리 경로) — 의존성 업데이트 시 정리.
+- **KNOWN LIMITED 추가**: 전월세 현재월은 MOLIT 실시간이라 거래량이 조회 시점마다 변할 수 있음(카드·단지 목록은 같은 시점에 일치).
+- **CLOSED 추가**: 통계 거래량 기간 Master Filter(`56e372d`, Production QA PASS).
+
+### 실기기 체크리스트(갱신, 10개)
+
+1. GPS ON 지도 — 지도 탭 현재 위치, 학교 상세 → 지도 탭이 현재 위치로
+2. Google 로그인 → 로그아웃 → 재로그인
+3. Kakao 로그인 → 로그아웃 → 재로그인
+4. MY 관심/최근 본 → 같은 단지로 이동
+5. 개인화 점수: 5개 중요도 저장 → 상세 FULL/LIMITED·변경 시 점수 변화
+6. 비교 A/B 개인화 블록
+7. 커뮤니티 사진 작성 → 수정 → 삭제 후 목록 복귀
+8. 지도 pill/마커 터치·정렬(360/390px)
+9. 리포트 PNG/PDF/공유 → "단지로 돌아가기" 같은 단지
+10. 로그아웃 후 다른 계정 로그인 시 이전 사용자 중요도·관심 미노출(+ 통계 거래량 칩 가로 스크롤 터치 함께 확인)
+
+완료(기준선, 사용자 실기기 PASS): 지도 첫 현재위치, 로드뷰, 리포트, 최근 본 단지, 커뮤니티 진입, Google/Kakao 로그인(canonical 수정 후), PWA 재설치.
