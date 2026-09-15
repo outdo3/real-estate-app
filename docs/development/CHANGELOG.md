@@ -14,6 +14,8 @@ schema·migration·Production write 0건. 상세: `docs/development/STATISTICS_P
     원천      부산 거래 많은 단지 = 카드·피드와 같은 DB 원장(0.10~0.49s), 상세 링크 lawdCd+dong+aptSeq
     검증      신규 10/10, src 2089/2089, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0,
               로컬 next start 5개 기간 건수·단지 수 = 독립 SQL 일치, 360/390px 넘침 0
+    Production 56e372d: 5개 기간 건수·단지 수 = 독립 SQL(어제 21/18·7일 238/187·30일 1,854/851·3개월 6,769/1,649), 연제구 일치,
+              Top→상세 aptSeq 유지, 더보기·실거래 목록 같은 기간, 브리핑 30/90일 기준 표시, 360/390px 넘침 0, 회귀 5개 화면 OK, 5xx·error_logs 0
 
 ### E-JIP BUSAN LAUNCH FINAL RELEASE GATE V1 — GO_WITH_KNOWN_LIMITATIONS (P1 1건 수정)
 
