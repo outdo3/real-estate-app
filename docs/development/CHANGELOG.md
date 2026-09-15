@@ -2,6 +2,15 @@
 
 ## 2026-09-15
 
+### E-JIP MAP ENTRY POINT CONTEXT AUDIT V1 — /map 진입점 전수 감사 + 일반 "지도" 탭의 이전 페이지 좌표 상속 수정
+
+진입점 11종 분류(일반 6·단지 1·지역 2·공유 링크·뒤로가기). 지오로케이션·마커·레이어·식별 규칙 무변경. 상세: `docs/development/MAP_ENTRY_POINT_CONTEXT_AUDIT_V1.md`
+
+    감사      명시 진입(상세 지도 보기·홈/빠른 검색 지역)은 모두 전체 이동 + 완전한 URL. 학교·오피스텔·재개발·비교에서 지도로 가는 진입 없음
+    재현      학교 상세(?lat&lng&lawdCd) → 헤더 "지도"(router.push) 2/2: 지도가 학교 쿼리를 공유 링크로 읽어 학교 좌표로 열림(GPS/IP 흐름 생략)
+    수정      readInitialMapStateFromUrl: pathname이 /map일 때만 URL 컨텍스트로 인정(클라이언트 전환 중 이전 페이지 주소 무시)
+    검증      신규 9/9, src 2075/2075, tsc FAIL_EXISTING_SCRIPT_ERRORS(신규 0), eslint·build exit 0
+
 ### E-JIP SEARCH → MAP CONTEXT PRESERVATION V1 — 홈·빠른 검색 "📍 지역" 결과가 선택한 지역으로 열림
 
 두 검색의 지역 분기 이동만 변경(지도 코어·지오로케이션·마커·검색 랭킹·결과 매핑·단지 이동 무변경). 상세: `docs/development/SEARCH_MAP_CONTEXT_V1.md`

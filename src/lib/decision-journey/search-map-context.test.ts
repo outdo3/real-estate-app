@@ -104,7 +104,7 @@ test('9. 뒤로가기: 새 history 항목으로 이동(assign) — replace 없�
 });
 
 test('10. 지도 코어는 그대로(초기 상태 읽기·지오로케이션·레이어 복원), 특정 지역 하드코딩 없음', () => {
-  assert.match(MAP, /function readInitialMapStateFromUrl\(\) \{\s*if \(typeof window === 'undefined'\) return null;\s*return parseMapStateFromSearchParams\(new URLSearchParams\(window\.location\.search\)\);/);
+  assert.match(MAP, /function readInitialMapStateFromUrl\(\) \{\s*if \(typeof window === 'undefined'\) return null;\s*if \(window\.location\.pathname !== '\/map'\) return null;\s*return parseMapStateFromSearchParams\(new URLSearchParams\(window\.location\.search\)\);/);
   assert.match(MAP, /return locateInitialCenter\(DEFAULT_MAP_CENTER, \{/);
   assert.match(MAP, /const restored = readInitialMapStateFromUrl\(\)\?\.layers;/);
   assert.ok(!/\d{5}|연산동|35\.\d{3}|129\.\d{3}/.test(regionBranch(HOME) + regionBranch(QUICK)));

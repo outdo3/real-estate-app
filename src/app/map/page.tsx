@@ -206,8 +206,13 @@ const classifySchoolLevel = (name: string): SchoolMarker['level'] | null => {
 // STEP에서 완성한다. 실제 파싱/매칭 로직은 src/lib/map-marker-share.ts의 순수 함수로
 // 분리해 단위 테스트한다 — 이 함수는 window.location.search를 읽어 그 함수에 넘기기만
 // 한다.
+// MAP_ENTRY_POINT_CONTEXT_AUDIT_V1 — 클라이언트 전환(router.push/Link)으로 마운트되면 이 시점의
+// window.location은 아직 **이전 페이지**다. 학교 상세(`/school/…?lat&lng&lawdCd`)에서 하단 탭
+// "지도"를 누르면 그 쿼리를 공유 링크로 읽어 학교 좌표로 열렸다(Production 재현). 주소가 이미
+// /map일 때(전체 로드·뒤로/앞으로)만 URL 컨텍스트로 인정한다 — 명시적 진입은 전체 이동을 쓴다.
 function readInitialMapStateFromUrl() {
   if (typeof window === 'undefined') return null;
+  if (window.location.pathname !== '/map') return null;
   return parseMapStateFromSearchParams(new URLSearchParams(window.location.search));
 }
 

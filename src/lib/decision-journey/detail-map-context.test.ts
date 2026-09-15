@@ -52,7 +52,7 @@ test('원인 고정: 상세 버튼은 router.push(클라이언트 전환)가 아
   assert.match(handler, /window\.location\.assign\(\s*buildDetailMapUrl\(\{/);
   assert.ok(!/router\.(push|replace)\(/.test(handler), '지도 초기 상태가 이전 페이지 URL을 읽는 전환 경로를 쓰지 않음');
   // 지도 페이지는 여전히 초기화 시점에 window.location.search를 읽는다 — 그래서 전체 이동이 필요하다(구조 무변경)
-  assert.match(MAP, /function readInitialMapStateFromUrl\(\) \{\s*if \(typeof window === 'undefined'\) return null;\s*return parseMapStateFromSearchParams\(new URLSearchParams\(window\.location\.search\)\);/);
+  assert.match(MAP, /function readInitialMapStateFromUrl\(\) \{\s*if \(typeof window === 'undefined'\) return null;\s*if \(window\.location\.pathname !== '\/map'\) return null;\s*return parseMapStateFromSearchParams\(new URLSearchParams\(window\.location\.search\)\);/);
 });
 
 test('6. 좌표가 없으면 추측하지 않는다: lat/lng 없는 URL → 공유 링크로 보지 않고 기존 안전 폴백', () => {
