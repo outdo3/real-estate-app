@@ -2,6 +2,16 @@
 
 ## 2026-09-16
 
+### E-JIP REGIONAL SEO DATA-AWARE DESCRIPTION PATCH V1 — 지역 설명이 실제 값 있는 섹션만 약속
+
+route·title·canonical·robots·색인 기준·사이트맵·리포트 계산·기본 기간 변경 0. 상세: `docs/development/REGIONAL_SEO_KEYWORD_LANDING_V1.md` §25
+
+    원인      설명 입력이 구조상 섹션 상수 — 1년 표본은 있고 30일 0건인 동 11개가 빈 섹션을 약속
+    수정      envelope 실제 값 ∩ 구조 상한으로 가용성 판정, RICH/HISTORICAL/SPARSE 문구(지역 하드코딩 없음),
+              metadata·page가 React cache로 같은 envelope 공유, 조회 실패는 일반 설명
+    결과      11개 동 index·canonical·title 유지 + "매매 실거래 기록 … 최근 2년 최고 거래가", 정상 동·구 rich 설명 유지
+    검증      신규 14/14, src 2155/2155, eslint·build exit 0, tsc FAIL_EXISTING_SCRIPT_ERRORS(src 0), 로컬 next start 18경로
+
 ### E-JIP REGIONAL SEO V1 — Production 적용: PASS (P2 후속 1건)
 
 `9299b36`(+`b9daa17`) push·배포 Ready 후 Production 실측. 코드 변경 없음. 상세: `docs/development/REGIONAL_SEO_KEYWORD_LANDING_V1.md` §24

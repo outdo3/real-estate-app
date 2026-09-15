@@ -86,7 +86,7 @@ test('3 메인 OG/twitter가 같은 title·description을 쓰고 og:url이 홈�
 // ── 4~7. 지역 ──────────────────────────────────────────────────────────────
 
 test('4 부산 서구 구 메타데이터', () => {
-  const seo = districtReportSeo('26140');
+  const seo = districtReportSeo('26140', REPORT_AVAILABLE_DATA.DISTRICT);
   assert.equal(seo.title, '부산 서구 아파트 시세·실거래가·거래량 | 이집');
   assert.equal(seo.heading, '부산 서구 아파트 시세·실거래가');
   assert.equal(
@@ -102,7 +102,7 @@ test('4 부산 서구 구 메타데이터', () => {
 });
 
 test('5 부산 사하구 구 메타데이터', () => {
-  const seo = districtReportSeo('26380');
+  const seo = districtReportSeo('26380', REPORT_AVAILABLE_DATA.DISTRICT);
   assert.equal(seo.title, '부산 사하구 아파트 시세·실거래가·거래량 | 이집');
   assert.ok(seo.description.startsWith('부산 사하구 아파트 매매 시세를'));
   assert.equal(seo.canonicalPath, '/report/district/26380');
@@ -110,14 +110,14 @@ test('5 부산 사하구 구 메타데이터', () => {
 });
 
 test('6 부산 해운대구 구 메타데이터', () => {
-  const seo = districtReportSeo('26350');
+  const seo = districtReportSeo('26350', REPORT_AVAILABLE_DATA.DISTRICT);
   assert.equal(seo.title, '부산 해운대구 아파트 시세·실거래가·거래량 | 이집');
   assert.equal(seo.heading, '부산 해운대구 아파트 시세·실거래가');
   assert.equal(seo.canonicalPath, '/report/district/26350');
 });
 
 test('7 동 메타데이터 — 실거래로 확인된 동만 이름을 쓰고, 표본이 있을 때만 색인', () => {
-  const ok = dongReportSeo('26140', '암남동', 25);
+  const ok = dongReportSeo('26140', '암남동', 25, REPORT_AVAILABLE_DATA.DONG);
   assert.equal(ok.title, '부산 서구 암남동 아파트 시세·실거래가 | 이집');
   assert.equal(ok.heading, '부산 서구 암남동 아파트 시세·실거래가');
   assert.equal(ok.canonicalPath, `/report/dong/26140/${encodeURIComponent('암남동')}`);
@@ -361,10 +361,12 @@ test('17 구조화 데이터에 부동산 가격·평점을 넣지 않고, 스�
 
 test('18 제목·H1·설명에 키워드 나열/없는 데이터가 없다', () => {
   const all = [
-    cityReportSeo(),
-    ...BUSAN_DISTRICTS.map((d) => districtReportSeo(d.lawdCd)),
-    dongReportSeo('26140', '암남동', 25),
-    dongReportSeo('26710', '기장읍 교리', 12),
+    cityReportSeo(REPORT_AVAILABLE_DATA.CITY),
+    ...BUSAN_DISTRICTS.map((d) => districtReportSeo(d.lawdCd, REPORT_AVAILABLE_DATA.DISTRICT)),
+    dongReportSeo('26140', '암남동', 25, REPORT_AVAILABLE_DATA.DONG),
+    dongReportSeo('26710', '기장읍 교리', 12, REPORT_AVAILABLE_DATA.DONG),
+    // 데이터 없는 상태의 설명도 같은 규칙(스터핑·없는 데이터 약속 없음)을 지킨다.
+    dongReportSeo('26110', '대청동1가', 12, null),
   ];
   for (const s of all) {
     assert.ok(s.title.length <= MAX_REGION_TITLE_CHARS, `제목이 길다(${s.title.length}): ${s.title}`);
@@ -378,7 +380,7 @@ test('18 제목·H1·설명에 키워드 나열/없는 데이터가 없다', () 
     assert.equal(s.description.split('아파트').length - 1, 1, `설명에 "아파트" 반복: ${s.description}`);
   }
   // 16개 구 제목은 지역명만 다르다는 이유로 설명까지 복사되지 않는다 — 지역명이 들어간 자리가 실제로 다르다.
-  const descs = BUSAN_DISTRICTS.map((d) => districtReportSeo(d.lawdCd).description);
+  const descs = BUSAN_DISTRICTS.map((d) => districtReportSeo(d.lawdCd, REPORT_AVAILABLE_DATA.DISTRICT).description);
   assert.equal(new Set(descs).size, 16);
 });
 

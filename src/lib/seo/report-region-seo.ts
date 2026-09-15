@@ -7,10 +7,12 @@
 
 import { BUSAN_DISTRICTS, districtName, isBusanCurrentLawdCd, normalizeDong } from '@/lib/report/region-scope';
 import { cityReportHref, districtReportHref, dongReportHref } from '@/lib/report/report-links';
+import type { ReportEnvelope } from '@/lib/report/types';
 import {
   buildRegionSeoMetadata,
   decideRegionRobots,
   DONG_INDEX_MIN_TRADES_1Y,
+  NO_REGION_DATA,
   type RegionAvailableData,
   type RegionSeoLevel,
   type RobotsDecision,
@@ -21,8 +23,11 @@ import { BRAND_NAME, TITLE_BRAND_SUFFIX, type BreadcrumbItem } from './site-seo'
 export const REPORT_REGION_SIDO = '부산광역시';
 
 /**
- * 지역 한장 브리핑이 렌더하는 섹션(RegionReportSheet / buildRegionReport 기준).
+ * 지역 한장 브리핑이 **구조상** 렌더할 수 있는 섹션의 상한(RegionReportSheet / buildRegionReport 기준).
  * 매매 실거래만 있다 — 전세·월세는 없으므로 설명에 넣지 않는다.
+ *
+ * REGIONAL_SEO_DATA_AWARE_DESCRIPTION_PATCH_V1 — 설명은 이 상한을 그대로 쓰지 않는다.
+ * `regionAvailableDataFromEnvelope`가 이 상한과 **실제 envelope 값**을 함께 만족하는 섹션만 남긴다.
  */
 export const REPORT_AVAILABLE_DATA: Record<RegionSeoLevel, RegionAvailableData> = {
   CITY: {
@@ -80,14 +85,42 @@ function invalid(): ReportRegionSeo {
   };
 }
 
+/**
+ * 페이지가 실제로 보여줄 값이 있는 섹션 = 구조상 상한 ∩ envelope 값.
+ * 새 DB 조회 없이 페이지가 이미 읽는 리포트 envelope만 본다. 판정은 RegionReportSheet의 렌더 조건과 같다
+ * (섹션 행이 1개 이상, 지표 값이 null이 아님, 하이라이트 존재).
+ */
+export function regionAvailableDataFromEnvelope(level: RegionSeoLevel, envelope: ReportEnvelope | null): RegionAvailableData {
+  if (!envelope) return NO_REGION_DATA;
+  const cap = REPORT_AVAILABLE_DATA[level];
+  const metric = (key: string) => envelope.metrics.find((m) => m.key === key) ?? null;
+  const rows = (key: string) => envelope.sections.find((sec) => sec.key === key)?.rows.length ?? 0;
+  const count = Number(metric('transactionCount')?.value ?? 0);
+  const distribution = envelope.sections.find((sec) => sec.kind === 'DISTRIBUTION');
+  return {
+    recentTrades: cap.recentTrades && rows('recentTrades') > 0,
+    medianPrice: cap.medianPrice && metric('medianDealAmount')?.value != null,
+    tradeCount: cap.tradeCount && Number.isFinite(count) && count > 0,
+    // 증감률은 계산됐을 때만(비교 불가 = value null) 약속한다.
+    tradeCountDelta: cap.tradeCountDelta && metric('transactionCountDelta')?.value != null,
+    topComplexes: cap.topComplexes && rows('representativeComplexes') > 0,
+    subRegionDistribution: cap.subRegionDistribution && distribution && distribution.rows.length > 0 ? cap.subRegionDistribution : null,
+    twoYearHigh: cap.twoYearHigh && envelope.highlights.length > 0,
+  };
+}
+
 const HOME_CRUMB: BreadcrumbItem = { name: BRAND_NAME, path: '/' };
 const CITY_CRUMB: BreadcrumbItem = { name: '부산', path: cityReportHref() };
 
-export function cityReportSeo(): ReportRegionSeo {
+/**
+ * `data`는 페이지가 실제로 보여줄 값(regionAvailableDataFromEnvelope). 모르면 null → 일반 설명(과장하지 않음).
+ * title·canonical·robots·breadcrumbs는 data와 무관하다(이번 패치는 설명만 바꾼다).
+ */
+export function cityReportSeo(data: RegionAvailableData | null = null): ReportRegionSeo {
   const meta = buildRegionSeoMetadata({
     level: 'CITY',
     region: { sido: REPORT_REGION_SIDO },
-    availableData: REPORT_AVAILABLE_DATA.CITY,
+    availableData: data ?? NO_REGION_DATA,
   });
   if (!meta) return invalid();
   return {
@@ -100,7 +133,7 @@ export function cityReportSeo(): ReportRegionSeo {
   };
 }
 
-export function districtReportSeo(lawdCd: string): ReportRegionSeo {
+export function districtReportSeo(lawdCd: string, data: RegionAvailableData | null = null): ReportRegionSeo {
   if (!isBusanCurrentLawdCd(lawdCd)) return invalid();
   const name = districtName(lawdCd);
   const path = districtReportHref(lawdCd);
@@ -108,7 +141,7 @@ export function districtReportSeo(lawdCd: string): ReportRegionSeo {
     ? buildRegionSeoMetadata({
         level: 'DISTRICT',
         region: { sido: REPORT_REGION_SIDO, district: name },
-        availableData: REPORT_AVAILABLE_DATA.DISTRICT,
+        availableData: data ?? NO_REGION_DATA,
       })
     : null;
   if (!meta || !path || !name) return invalid();
@@ -131,7 +164,12 @@ export function districtReportSeo(lawdCd: string): ReportRegionSeo {
  *   - 1..9: 실제 동이지만 표본이 얇다 → 이름은 쓰되 noindex
  *   - ≥10: 색인
  */
-export function dongReportSeo(lawdCd: string, rawDong: string, trailingYearTrades: number | null): ReportRegionSeo {
+export function dongReportSeo(
+  lawdCd: string,
+  rawDong: string,
+  trailingYearTrades: number | null,
+  data: RegionAvailableData | null = null
+): ReportRegionSeo {
   if (!isBusanCurrentLawdCd(lawdCd)) return invalid();
   const dong = normalizeDong(rawDong);
   const district = districtName(lawdCd);
@@ -140,7 +178,7 @@ export function dongReportSeo(lawdCd: string, rawDong: string, trailingYearTrade
   const meta = buildRegionSeoMetadata({
     level: 'DONG',
     region: { sido: REPORT_REGION_SIDO, district, dong },
-    availableData: REPORT_AVAILABLE_DATA.DONG,
+    availableData: data ?? NO_REGION_DATA,
   });
   const path = dongReportHref(lawdCd, dong);
   const districtPath = districtReportHref(lawdCd);

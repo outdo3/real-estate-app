@@ -3,10 +3,10 @@ import { siteConfig, buildOpenGraph, buildTwitter } from '@/config/site';
 import RegionReportSheet from '@/components/report/RegionReportSheet';
 import InvalidScope from '@/components/report/InvalidScope';
 import JsonLd from '@/components/seo/JsonLd';
-import { readRegionReport } from '@/lib/report/region-read';
+import { readRegionReportForPeriod } from '@/lib/report/region-read-cached';
 import { isBusanCurrentLawdCd, normalizeDong } from '@/lib/report/region-scope';
-import { parsePeriodParam, resolvePeriod } from '@/lib/report/report-period';
-import { dongReportSeo } from '@/lib/seo/report-region-seo';
+import { DEFAULT_PERIOD_DAYS, parsePeriodParam } from '@/lib/report/report-period';
+import { dongReportSeo, regionAvailableDataFromEnvelope } from '@/lib/seo/report-region-seo';
 import { readDongTrailingYearTrades } from '@/lib/seo/region-seo-read';
 import { buildBreadcrumbJsonLd } from '@/lib/seo/site-seo';
 
@@ -27,11 +27,17 @@ function safeDecode(v: string): string {
 
 // REGIONAL_SEO_KEYWORD_LANDING_V1 §8 — 동 이름은 최근 1년 실거래에서 확인될 때만 제목에 쓰고,
 // 표본(10건 이상)이 있을 때만 색인한다. 확인 못 한 동은 일반 제목 + noindex.
+// REGIONAL_SEO_DATA_AWARE_DESCRIPTION_PATCH_V1 — 설명은 기본 기간 envelope의 실제 섹션 값에서 만든다.
+// 확인된 동일 때만 envelope을 읽는다(미확인 동은 어차피 일반 설명이다).
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { lawdCd, dong } = await params;
   const dongName = normalizeDong(safeDecode(dong));
   const trades = isBusanCurrentLawdCd(lawdCd) && dongName ? await readDongTrailingYearTrades(lawdCd, dongName) : null;
-  const seo = dongReportSeo(lawdCd, dongName ?? '', trades);
+  const envelope =
+    dongName && trades != null && trades > 0
+      ? await readRegionReportForPeriod('DONG', lawdCd, dongName, DEFAULT_PERIOD_DAYS).catch(() => null)
+      : null;
+  const seo = dongReportSeo(lawdCd, dongName ?? '', trades, regionAvailableDataFromEnvelope('DONG', envelope));
   return {
     title: seo.title,
     description: seo.description,
@@ -52,16 +58,8 @@ export default async function DongReportPage({ params, searchParams }: Props) {
     return <InvalidScope reason="동 이름이 비어 있어 리포트를 만들 수 없습니다." />;
   }
   const sp = await searchParams;
-  const period = resolvePeriod(parsePeriodParam(sp?.period));
   const [envelope, trades] = await Promise.all([
-    readRegionReport({
-      level: 'DONG',
-      lawdCd,
-      dong: dongName,
-      start: period.start,
-      end: period.end,
-      periodLabel: period.label,
-    }),
+    readRegionReportForPeriod('DONG', lawdCd, dongName, parsePeriodParam(sp?.period)),
     readDongTrailingYearTrades(lawdCd, dongName),
   ]);
   const seo = dongReportSeo(lawdCd, dongName, trades);

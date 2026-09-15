@@ -26,10 +26,17 @@ export interface RegionSeoName {
   dong?: string | null;
 }
 
-/** 지역 페이지가 실제로 렌더하는 데이터 섹션. 설명 문구는 이 값에서만 나온다. */
+/**
+ * 지역 페이지가 **실제로 값을 보여주는** 데이터 섹션. 설명 문구는 이 값에서만 나온다.
+ *
+ * REGIONAL_SEO_DATA_AWARE_DESCRIPTION_PATCH_V1 — "섹션이 구조상 존재한다"가 아니라 "이번 페이지에
+ * 값이 있다"를 뜻한다. 예: 기본 기간 거래가 0건이면 recentTrades·medianPrice·tradeCount·topComplexes는
+ * 모두 false다(화면에 0건·"정보 없음"만 있으므로 설명이 그것을 약속하지 않는다).
+ */
 export interface RegionAvailableData {
   recentTrades: boolean;
   medianPrice: boolean;
+  /** 기본 기간 거래가 1건 이상일 때만 true. 0건은 사실이지만 "거래건수를 정리했다"로 약속하지 않는다. */
   tradeCount: boolean;
   tradeCountDelta: boolean;
   topComplexes: boolean;
@@ -37,6 +44,17 @@ export interface RegionAvailableData {
   subRegionDistribution: 'DISTRICT' | 'DONG' | null;
   twoYearHigh: boolean;
 }
+
+/** 아무 섹션도 값이 없는 상태(조회 실패 포함). 설명은 일반 문구로 떨어진다. */
+export const NO_REGION_DATA: RegionAvailableData = {
+  recentTrades: false,
+  medianPrice: false,
+  tradeCount: false,
+  tradeCountDelta: false,
+  topComplexes: false,
+  subRegionDistribution: null,
+  twoYearHigh: false,
+};
 
 /**
  * 검색결과 제목이 잘리지 않게 두는 상한(글자 수). 네이버/구글 모두 공식 글자 수를 공개하지
@@ -108,7 +126,23 @@ const SUB_REGION_LABEL: Record<'DISTRICT' | 'DONG', string> = {
   DONG: '동별 거래 분포',
 };
 
-/** §7 — 실제 섹션에서만 설명을 만든다. */
+export type RegionDescriptionKind = 'RICH' | 'HISTORICAL' | 'SPARSE';
+
+/**
+ * 설명 문구의 종류 — 값이 있는 섹션으로만 정한다.
+ *   RICH       기간 가격(중앙 거래가)이 있다 → "매매 시세" 표현 가능
+ *   HISTORICAL 기간 가격은 없지만 과거 거래 기록(예: 최근 2년 최고 거래가)이 있다 → "시세"·"최근" 약속 없음
+ *   SPARSE     보여줄 거래 값이 없다 → 일반 문구
+ */
+export function regionDescriptionKind(data: RegionAvailableData): RegionDescriptionKind {
+  if (data.medianPrice) return 'RICH';
+  if (data.recentTrades || data.topComplexes || data.tradeCount || data.twoYearHigh || data.subRegionDistribution) {
+    return 'HISTORICAL';
+  }
+  return 'SPARSE';
+}
+
+/** §7 — 값이 있는 섹션에서만 설명을 만든다. 없는 섹션·0건 기간을 약속하지 않는다. */
 export function buildRegionSeoDescription(name: string, data: RegionAvailableData): string {
   const items: string[] = [];
   if (data.recentTrades) items.push('최근 실거래');
@@ -118,8 +152,21 @@ export function buildRegionSeoDescription(name: string, data: RegionAvailableDat
   if (data.topComplexes) items.push('거래가 많은 단지');
   if (data.subRegionDistribution) items.push(SUB_REGION_LABEL[data.subRegionDistribution]);
   if (data.twoYearHigh) items.push('최근 2년 최고 거래가');
-  const lead = `${name} 아파트 매매 시세를 국토교통부 실거래가로 확인하세요.`;
-  return items.length ? `${lead} ${items.join(', ')}를 한 장에 정리했습니다.` : lead;
+
+  const kind = regionDescriptionKind(data);
+  if (kind === 'SPARSE') return `${name} 아파트 매매 실거래 정보를 이집에서 확인하세요.`;
+  const lead =
+    kind === 'RICH'
+      ? `${name} 아파트 매매 시세를 국토교통부 실거래가로 확인하세요.`
+      : `${name} 아파트 매매 실거래 기록을 국토교통부 실거래가로 확인하세요.`;
+  const list = items.join(', ');
+  return `${lead} ${list}${objectParticle(list)} 한 장에 정리했습니다.`;
+}
+
+/** 목적격 조사(을/를). 마지막 글자에 받침이 있으면 "을". 한글이 아니면 "를". */
+function objectParticle(text: string): '을' | '를' {
+  const code = text.charCodeAt(text.length - 1) - 0xac00;
+  return code >= 0 && code <= 11171 && code % 28 !== 0 ? '을' : '를';
 }
 
 export type RobotsDecision = { index: boolean; follow: boolean };

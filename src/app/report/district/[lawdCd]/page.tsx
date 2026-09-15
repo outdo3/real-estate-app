@@ -3,10 +3,10 @@ import { siteConfig, buildOpenGraph, buildTwitter } from '@/config/site';
 import RegionReportSheet from '@/components/report/RegionReportSheet';
 import InvalidScope from '@/components/report/InvalidScope';
 import JsonLd from '@/components/seo/JsonLd';
-import { readRegionReport } from '@/lib/report/region-read';
+import { readRegionReportForPeriod } from '@/lib/report/region-read-cached';
 import { isBusanCurrentLawdCd } from '@/lib/report/region-scope';
-import { parsePeriodParam, resolvePeriod } from '@/lib/report/report-period';
-import { districtReportSeo, dongNavLinks } from '@/lib/seo/report-region-seo';
+import { DEFAULT_PERIOD_DAYS, parsePeriodParam } from '@/lib/report/report-period';
+import { districtReportSeo, dongNavLinks, regionAvailableDataFromEnvelope } from '@/lib/seo/report-region-seo';
 import { readBusanDongTradeCounts } from '@/lib/seo/region-seo-read';
 import { buildBreadcrumbJsonLd } from '@/lib/seo/site-seo';
 
@@ -19,9 +19,13 @@ type Props = {
 
 // REGIONAL_SEO_KEYWORD_LANDING_V1 §6/§13/§14 — 검증된 16개 lawdCd만 지역 제목·색인을 받는다.
 // 모르는 코드는 일반 제목 + noindex(지역 이름을 지어내지 않는다).
+// REGIONAL_SEO_DATA_AWARE_DESCRIPTION_PATCH_V1 — 설명은 기본 기간 envelope의 실제 섹션 값에서 만든다.
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { lawdCd } = await params;
-  const seo = districtReportSeo(lawdCd);
+  const envelope = isBusanCurrentLawdCd(lawdCd)
+    ? await readRegionReportForPeriod('DISTRICT', lawdCd, null, DEFAULT_PERIOD_DAYS).catch(() => null)
+    : null;
+  const seo = districtReportSeo(lawdCd, regionAvailableDataFromEnvelope('DISTRICT', envelope));
   return {
     title: seo.title,
     description: seo.description,
@@ -39,15 +43,8 @@ export default async function DistrictReportPage({ params, searchParams }: Props
     return <InvalidScope reason={`요청하신 지역코드 ${lawdCd} 는 부산광역시 자치구·군이 아닙니다.`} />;
   }
   const sp = await searchParams;
-  const period = resolvePeriod(parsePeriodParam(sp?.period));
   const [envelope, dongCounts] = await Promise.all([
-    readRegionReport({
-      level: 'DISTRICT',
-      lawdCd,
-      start: period.start,
-      end: period.end,
-      periodLabel: period.label,
-    }),
+    readRegionReportForPeriod('DISTRICT', lawdCd, null, parsePeriodParam(sp?.period)),
     // 동 링크 목록은 보조 내비게이션이다 — 조회가 실패하면 목록만 빠진다(리포트는 그대로).
     readBusanDongTradeCounts(),
   ]);

@@ -514,3 +514,51 @@ Yeti UA와 Chrome UA로 37개 경로를 요청 — title/canonical/robots 동일
 - sitemap 139(중복·쿼리 0, 구 16·동 116), Vercel 로그 5xx/error/fatal/warning 0, error_logs 배포 후 0
 - 테스트 재실행: SEO 관련 80/80, src 2141/2141. IndexNow는 02:1x 제출(139, HTTP 200) 이후 재제출하지 않음
 
+---
+
+## 25. DATA-AWARE DESCRIPTION PATCH V1 (2026-09-16)
+
+§24.9 P2 수정. 설명(description)만 바뀐다 — route·title·H1·canonical·robots·색인 기준(1년 10건)·사이트맵·리포트 계산·기본 기간 변경 없음.
+
+### 25.1 원인
+
+설명 입력(`REPORT_AVAILABLE_DATA`)이 **구조상 섹션 목록**(상수)이었다. 페이지가 이번 기간에 값을 갖는지는 보지 않았다.
+색인 기준은 최근 1년인데 페이지 기본 기간은 30일이라, 1년 표본은 있고 30일은 0건인 동에서 설명이 빈 섹션을 약속했다.
+
+### 25.2 설계
+
+- `regionAvailableDataFromEnvelope(level, envelope)` = 구조상 상한 ∩ envelope 실제 값(새 DB 조회 없음, 시트 렌더 조건과 동일)
+  - recentTrades: 최근 실거래 행 ≥1 · medianPrice: 중앙 거래가 값 있음 · tradeCount: 기간 건수 ≥1
+  - tradeCountDelta: 증감률 값 있음(비교 불가 제외, 동은 상한 false) · topComplexes: 거래 많은 단지 행 ≥1
+  - subRegionDistribution: 분포 행 ≥1 · twoYearHigh: 하이라이트 존재
+- 설명 종류(`regionDescriptionKind`, 지역 문자열 없음 — 서울·경기 동일 적용)
+
+| 종류 | 조건 | 문구 |
+|---|---|---|
+| RICH | 중앙 거래가 있음 | `{지역} 아파트 매매 시세를 국토교통부 실거래가로 확인하세요. {값 있는 섹션}을/를 한 장에 정리했습니다.` (기존과 동일) |
+| HISTORICAL | 가격은 없고 과거 기록(예: 최근 2년 최고 거래가) 있음 | `{지역} 아파트 매매 실거래 기록을 국토교통부 실거래가로 확인하세요. {값 있는 섹션}을/를 한 장에 정리했습니다.` |
+| SPARSE | 보여줄 거래 값 없음 / 조회 실패 | `{지역} 아파트 매매 실거래 정보를 이집에서 확인하세요.` |
+
+- 설명은 **canonical 페이지(기본 30일)** 기준 — `?period=`와 무관(canonical과 같은 원칙)
+- `src/lib/report/region-read-cached.ts`: React `cache`로 generateMetadata와 page가 같은 요청에서 envelope을 한 번만 읽는다
+  (Next 16 문서 Metadata §Memoizing data requests). `?period=90` 요청은 메타(30일)·본문(90일) 두 번 읽는다
+- 메타데이터 조회 실패는 `.catch(() => null)` → SPARSE 설명(과장하지 않음). 본문 실패 동작은 기존과 같다
+- 목적격 조사는 마지막 항목 받침으로 을/를 결정
+
+### 25.3 로컬 결과 (next start, Yeti UA)
+
+- 11개 zero-30d 동: 전부 index·self canonical 유지, 설명 = HISTORICAL(`… 최근 2년 최고 거래가를 한 장에 정리했습니다.`), 화면에 없는 섹션 약속 0
+- 암남동(25건)·괴정동(17건)·연산동(77건)·부산·서구·사하구·해운대구: 기존 rich 설명 그대로, 약속 섹션 전부 화면에 존재
+- 가짜동: noindex·canonical 없음·일반 설명 유지
+
+### 25.4 테스트
+
+```
+npx tsx --test src/lib/seo/region-description.test.ts   14/14 pass (신규: rich/zero-30d/sparse/11개 동/색인·canonical·사이트맵 불변/가짜 최근 약속 없음/배선/서울/경기/조사)
+SEO·리포트 관련 8파일                                    163/163 pass
+src 전체 154파일                                         2155/2155 pass
+eslint 변경 파일                                          exit 0
+tsc                                                     FAIL_EXISTING_SCRIPT_ERRORS (src 0, scripts 21, tmp 4)
+npm run build                                           exit 0
+```
+
