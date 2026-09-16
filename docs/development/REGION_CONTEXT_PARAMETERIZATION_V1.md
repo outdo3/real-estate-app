@@ -182,6 +182,55 @@ npm run build                                                   Compiled success
 
 ---
 
+## 12. Production QA (배포 후)
+
+커밋 `c7aec0e` push → Vercel Production 배포 완료.
+
+### 부산 parity — 8/8 완전 동일
+
+배포 전(§8) 기록과 배포 후 응답을 `overallScore · peerAvailable · peerLevel · peerPercentile · peerCount · peerComparisonCount · peerConfidence · basis.sigungu` **8개 필드 전부** 비교:
+
+| aptSeq | 단지 | score | level | percentile | cmp | basis | 결과 |
+|---|---|---|---|---|---|---|---|
+| 26140-1321 | 힐스테이트이진베이시티 | 41 | SIGUNGU_DECADE | 4.2 | 12 | 서구 | **IDENTICAL** |
+| 26140-1361 | e편한세상송도더퍼스트비치 | 56 | SIGUNGU_DECADE | 29.2 | 12 | 서구 | **IDENTICAL** |
+| 26380-1617 | 다대동롯데캐슬몰운대 | 61 | SIGUNGU_DECADE_SIZE | 73.3 | 15 | 사하구 | **IDENTICAL** |
+| 26380-130 | 가락타운3 | 57 | SIGUNGU_DECADE_SIZE | 76.1 | 46 | 사하구 | **IDENTICAL** |
+| 26350-2093 | 더샵센텀파크1차 | 69 | SIGUNGU_DECADE_SIZE | 87.9 | 29 | 해운대구 | **IDENTICAL** |
+| 26350-2285 | 해운대힐스테이트위브 | 50 | SIGUNGU_DECADE_SIZE | 18.0 | 25 | 해운대구 | **IDENTICAL** |
+| 26470-3048 | 레이카운티(2단지) | 74 | SIGUNGU_DECADE_SIZE | 72.7 | 11 | 연제구 | **IDENTICAL** |
+| 26470-3049 | 레이카운티(3단지) | 74 | SIGUNGU_DECADE_SIZE | 72.7 | 11 | 연제구 | **IDENTICAL** |
+
+**BUSAN PARITY: PASS** — Score 값이 한 자리도 바뀌지 않았다.
+
+### no-fallback 동작 실측
+
+| 시나리오 | 결과 |
+|---|---|
+| 부산 단지 + `lawdCd` 있음 | `trades=125 lawdCd=26140 regionUnresolved=false` |
+| **부산 단지 + `lawdCd` 없음** | `trades=125 lawdCd=26140 regionUnresolved=false` — DB/지오코딩 확정 경로가 그대로 동작 |
+| **확정 불가 이름 + `lawdCd` 없음** | `trades=0 lawdCd=null regionUnresolved=true apiError=set` — 이전에는 **강남구 거래**가 나왔다 |
+| info + `lawdCd` 없음 | `info=null regionUnresolved=true` — 이전에는 **강남구 건축물대장**이 나왔다 |
+| info + 부산 `lawdCd` | `infoKeys=5 regionUnresolved=false` |
+
+두 번째 행이 핵심이다 — **fallback만 없앴고 정상적인 지역 확정(URL → DB 캐시 → 지오코딩)은 그대로 살아 있다.**
+
+### 페이지·라우트 상태
+
+| 경로 | http | 응답시간 | "강남구" 문자열 |
+|---|---|---|---|
+| `/report/apt/26140-1361` | 200 | 2.40s | 없음 |
+| `/report/apt/26350-2093` | 200 | 2.52s | 없음 |
+| `/report/compare?a=…&b=…` | 200 | 0.32s | 없음 |
+| `/apt/e편한세상송도더퍼스트비치` | 200 | 0.11s | 없음 |
+| `/` · `/map` · `/stats` | 200 | 0.08~0.46s | 없음 |
+
+5xx 0건. `error_logs` 최근 2시간/24시간 **0건**(최신 항목은 2026-09-11, 배포 5일 전).
+
+서울·경기 페이지는 공개·색인하지 않았다.
+
+---
+
 ## 14. 남은 하드코딩 재스캔
 
 | 분류 | 위치 | 비고 |
