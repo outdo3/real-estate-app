@@ -1,3 +1,4 @@
+import { isTradeDbFirstLawdCd, isTradeDbFirstSido } from '@/lib/region/enablement';
 import { NextResponse } from 'next/server';
 import { fetchMolitData, formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
@@ -78,11 +79,12 @@ const MAX_LIMIT = 100;
 // 권고)은 docs/development/TRADE_DB_FIRST_V1_STEP_E.md §TRUST VERDICT 참고.
 // 이번 STEP은 과거 취소 재동기화를 수행하지 않으며(범위 밖), UI 문구도 임의로
 // 바꾸지 않는다(기존 buildRecordHighInterpretation을 그대로 재사용).
-const BUSAN_SIDO_CODE = '26';
-
+// STATS_REGION_ENABLEMENT_MIGRATION_V1 — 지역 판정을 canonical registry/enablement로 옮겼다.
+// 의미는 그대로다: "실거래를 DB에 유지하는 지역(현재 부산)만 DB-first". 비부산 요청은
+// 여전히 기존 live 경로를 그대로 탄다(동작 변화 0).
 function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
-  if (isSidoAll) return sidoCodeParam === BUSAN_SIDO_CODE;
-  return !!lawdCd && lawdCd.startsWith(BUSAN_SIDO_CODE);
+  if (isSidoAll) return isTradeDbFirstSido(sidoCodeParam);
+  return isTradeDbFirstLawdCd(lawdCd);
 }
 
 // PERFORMANCE_V1_1_B — area84 전용이던 fetchArea84TradesFromDb()/

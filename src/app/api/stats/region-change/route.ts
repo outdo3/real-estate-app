@@ -1,3 +1,4 @@
+import { isTradeDbFirstLawdCd, isTradeDbFirstSido } from '@/lib/region/enablement';
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
@@ -28,11 +29,12 @@ import {
 // 애초에 데이터가 존재하는 지역(부산)만 DB 경로를 타도록 하는 고정된 지역
 // 라우팅이다(STEP B/C와 동일 원칙). 非부산 사용자 동작은 이번 STEP으로
 // 전혀 바뀌지 않는다.
-const BUSAN_SIDO_CODE = '26';
-
+// STATS_REGION_ENABLEMENT_MIGRATION_V1 — 지역 판정을 canonical registry/enablement로 옮겼다.
+// 의미는 그대로다: "실거래를 DB에 유지하는 지역(현재 부산)만 DB-first". 비부산 요청은
+// 여전히 기존 live 경로를 그대로 탄다(동작 변화 0).
 function isBusanScopedRequest(lawdCd: string | null, sidoCode: string | null): boolean {
-  if (sidoCode) return sidoCode === BUSAN_SIDO_CODE;
-  return !!lawdCd && lawdCd.startsWith(BUSAN_SIDO_CODE);
+  if (sidoCode) return isTradeDbFirstSido(sidoCode);
+  return isTradeDbFirstLawdCd(lawdCd);
 }
 
 // DB 집계 결과(RegionChangeBucketRow)를 기존 aggregateChangeByBucket()이

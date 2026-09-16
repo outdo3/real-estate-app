@@ -1,3 +1,4 @@
+import { isTradeDbFirstLawdCd } from '@/lib/region/enablement';
 import { NextResponse } from 'next/server';
 import { fetchMolitData, formatKoreanPrice, redactMolitFailureMessage, DataType } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
@@ -53,7 +54,9 @@ function cacheHeaders(fullySuccessful: boolean) {
   return { 'Cache-Control': fullySuccessful ? MARKER_SUCCESS_CACHE_CONTROL : NO_STORE_CACHE_CONTROL };
 }
 
-const BUSAN_SIDO_CODE = '26';
+// STATS_REGION_ENABLEMENT_MIGRATION_V1 — 지역 판정을 canonical registry/enablement로 옮겼다.
+// 의미는 그대로다: "실거래를 DB에 유지하는 지역(현재 부산)만 DB-first". 비부산 요청은
+// 여전히 기존 live 경로를 그대로 탄다(동작 변화 0).
 
 async function fetchApt12MonthsFromDb(lawdCd: string): Promise<any[]> {
   const from = new Date();
@@ -108,7 +111,7 @@ export async function GET(request: Request) {
       // getOrSetCache 재사용(신규 인프라 없음), TTL 30분 — Score/area84가 이미 쓰는
       // "배치 갱신 데이터라 30분 지연은 문제 없음" 원칙과 동일.
       const isMapMarkerShape = type === 'apt' && monthsParam === '12' && loadMore === 0 && (!dong || dong === 'all');
-      const isDbFirstEligible = isMapMarkerShape && lawdCd.startsWith(BUSAN_SIDO_CODE);
+      const isDbFirstEligible = isMapMarkerShape && isTradeDbFirstLawdCd(lawdCd);
 
       let data: any[];
       let usedDbFirst = false;

@@ -2,6 +2,27 @@
 
 ## 2026-09-16
 
+### E-JIP STATS REGION ENABLEMENT MIGRATION V1 — stats 지역 판정이 registry/enablement 한 곳에서 나온다
+
+DB write 0 · schema/migration 0 · 서울/경기 stats enable 0 · sitemap/SEO 0 · stats 공식 0 · route 재설계 0.
+상세: `docs/development/STATS_REGION_ENABLEMENT_MIGRATION_V1.md`
+
+    제거      BUSAN_SIDO_CODE 선언 6곳(dashboard·price-rankings·region-change·yearly·transactions·large-complex)과
+              FEED_DB_SIDO_CODE='26' 리터럴을 registry/enablement 파생으로 교체 — stats 런타임에 '26' 매직 스트링 0
+    의미보존  그 판정은 "출시 여부"가 아니라 "실거래를 DB에 유지해 DB-first를 타도 되는가"였다(라우트 주석·실측으로 확인)
+              그래서 stats 축이 아니라 cronSync 축에서 파생하는 isTradeDbFirstSido/isTradeDbFirstLawdCd로 분리
+    개선      registry에 없는 26xxx 코드는 이제 DB-first가 아니다(접두사 추측 제거). 실데이터에 그런 코드는 0건이라 부산 영향 없음
+    게이트    large-complex만 진짜 기능 게이트(ApartmentMaster 전용) — isStatsEnabledSido로 옮기고 UNSUPPORTED 계약·응답 shape 유지
+              where의 sido:'부산'도 registry shortName 파생으로 교체
+    미수행    §7/§8의 "비부산 stats → UNSUPPORTED" 전환은 하지 않았다
+              실측상 서울 stats는 현재 live MOLIT로 200 정상 응답 중이며(yearly/dashboard/price-rankings/region-change),
+              UNSUPPORTED로 바꾸면 서울뿐 아니라 전국 비부산 지역의 기존 기능을 제거하는 제품 변경이 된다 → 승인 대상으로 문서화
+    유지      stats 7개 라우트의 sido||'부산광역시' 랜딩 기본값은 제품 정책(§5)이라 유지 — 데이터 경로는 해석된 lawdCd+registry로 분리됨
+              캐시 키는 이미 lawdCd/sidoCode를 포함해 region-aware라 변경 0
+    parity    부산 대표 18개 stats 요청 Production 전/후 signature 비교 — 전부 동일
+    검증      신규 테스트 15 pass · src 2,233 pass · scripts 135 pass · 0 fail
+              eslint exit 0 · tsc src 오류 0(기존 25건 scripts/tmp) · next build 성공 · sitemap 139 불변
+
 ### E-JIP REGION REGISTRY V1 — 시도/시군구/일반구 계층의 단일 정본, 서울·경기는 존재하되 미출시
 
 DB write 0 · schema/migration 0 · region enable 0 · sitemap 0 · SEO index 0 · 서울/경기 수집·노출 0 · Score 0.

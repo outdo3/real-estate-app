@@ -73,3 +73,47 @@ export function getEnabledRegions(
 ): readonly RegionNode[] {
   return nodes.filter((n) => getSidoEnablement(n.sidoCode)[feature]);
 }
+
+// ── STATS_REGION_ENABLEMENT_MIGRATION_V1 ─────────────────────────────────────
+//
+// stats 라우트들이 각자 `const BUSAN_SIDO_CODE = '26'` + `lawdCd.startsWith('26')`로
+// 판정하던 것을 여기로 모은다. **그 판정의 의미를 정확히 옮기는 것**이 중요하다:
+//
+//   그 코드는 "이 지역이 출시됐는가"가 아니라
+//   "이 지역 실거래를 우리 DB에 적재·유지하고 있어서 DB-first 경로를 타도 되는가"였다.
+//   (route 주석: "애초에 데이터가 존재하는 지역(부산)만 DB 경로를 타도록 하는 고정된
+//    지역 라우팅이다. 非부산 사용자 동작은 전혀 바뀌지 않는다")
+//
+// 그래서 stats 지원 여부(`stats` 축)와 **별개의 이름**으로 둔다. 둘을 같은 축으로
+// 뭉뚱그리면 지금 live MOLIT로 정상 동작 중인 비부산 요청을 조용히 막게 된다.
+//
+// 정책을 두 벌로 만들지 않기 위해 `cronSync` 축에서 파생한다 — 정기 수집을 하는 지역만
+// DB가 최신이고, 그 지역이 곧 DB-first가 안전한 지역이다.
+
+/** 이 시도의 실거래를 DB에 유지하고 있는가(= DB-first 경로 적격). */
+export function isTradeDbFirstSido(sidoCode: string | null | undefined): boolean {
+  return getSidoEnablement(sidoCode).cronSync;
+}
+
+/**
+ * 이 시군구 코드가 DB-first 적격인가. registry에 없는 코드는 **false**다 —
+ * 접두사만 보고 추측하지 않는다(모르는 지역을 DB 경로로 보내면 빈 결과가 "0건"처럼 보인다).
+ */
+export function isTradeDbFirstLawdCd(lawdCd: string | null | undefined): boolean {
+  return getRegionEnablement(lawdCd).cronSync;
+}
+
+/** 통계 기능이 이 시도를 지원하는가(large-complex처럼 DB 전용 기능의 게이트). */
+export function isStatsEnabledSido(sidoCode: string | null | undefined): boolean {
+  return getSidoEnablement(sidoCode).stats;
+}
+
+/** 통계가 지원되는 시도 코드 목록. 현재는 부산 하나뿐이며, 기본값 산출에 쓴다. */
+export function getStatsEnabledSidoCodes(): readonly string[] {
+  return Object.keys(ENABLEMENT_BY_SIDO).filter((code) => ENABLEMENT_BY_SIDO[code].stats);
+}
+
+/** 실거래를 DB에 유지하는 시도 코드 목록(현재 부산뿐). 기본값/상수 파생에 쓴다. */
+export function getTradeDbFirstSidoCodes(): readonly string[] {
+  return Object.keys(ENABLEMENT_BY_SIDO).filter((code) => ENABLEMENT_BY_SIDO[code].cronSync);
+}

@@ -1,3 +1,4 @@
+import { isTradeDbFirstLawdCd, isTradeDbFirstSido } from '@/lib/region/enablement';
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
@@ -45,11 +46,12 @@ import {
 // gapInvest/jeonseRate만 apartment name+area row-level 매칭이 필요해 row를 계속
 // 옮기지만, "최근 3개월 슬라이스와 겹치는 verified 월"만 좁혀서 가져온다(최대
 // 24개월 대신 최대 2~3개월) — fetchRentMonthBucketsFromDb 호출 범위 축소.
-const BUSAN_SIDO_CODE = '26';
-
+// STATS_REGION_ENABLEMENT_MIGRATION_V1 — 지역 판정을 canonical registry/enablement로 옮겼다.
+// 의미는 그대로다: "실거래를 DB에 유지하는 지역(현재 부산)만 DB-first". 비부산 요청은
+// 여전히 기존 live 경로를 그대로 탄다(동작 변화 0).
 function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
-  if (isSidoAll) return sidoCodeParam === BUSAN_SIDO_CODE;
-  return !!lawdCd && lawdCd.startsWith(BUSAN_SIDO_CODE);
+  if (isSidoAll) return isTradeDbFirstSido(sidoCodeParam);
+  return isTradeDbFirstLawdCd(lawdCd);
 }
 
 function storedTradeToDashboardTrade(t: StoredTrade): any {

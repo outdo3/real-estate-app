@@ -1,3 +1,5 @@
+import { getStatsEnabledSidoCodes, isStatsEnabledSido } from '@/lib/region/enablement';
+import { getSido } from '@/lib/region/registry';
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
@@ -10,7 +12,11 @@ import { dedupeByRegistryGroup } from '@/lib/large-complex-dedup';
 // "0건"처럼 보여주지 않고 정직하게 UNSUPPORTED를 반환한다(§40).
 export const dynamic = 'force-dynamic';
 
-const BUSAN_SIDO_CODE = '26';
+// STATS_REGION_ENABLEMENT_MIGRATION_V1 — 지원 시도를 canonical enablement에서 가져온다.
+// 이 기능은 ApartmentMaster(DB)만 쓰므로 데이터가 있는 시도에서만 의미가 있고, 그 밖의
+// 시도에는 예전처럼 UNSUPPORTED를 정직하게 돌려준다(빈 결과를 "0건"으로 위장하지 않음).
+const SUPPORTED_SIDO_CODE = getStatsEnabledSidoCodes()[0];
+const SUPPORTED_SIDO_NAME = getSido(SUPPORTED_SIDO_CODE)?.name ?? '';
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 50;
 const RECENT_TRADE_MONTHS = 3;
@@ -24,7 +30,7 @@ function monthsBack(count: number, now: Date): string[] {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const sidoCodeParam = searchParams.get('sidoCode') || BUSAN_SIDO_CODE;
+  const sidoCodeParam = searchParams.get('sidoCode') || SUPPORTED_SIDO_CODE;
   const lawdCdParam = searchParams.get('lawdCd');
   const dongParam = searchParams.get('dong');
   const minHouseholdsParam = parseInt(searchParams.get('minHouseholds') || '0', 10);
@@ -33,17 +39,18 @@ export async function GET(request: Request) {
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT));
 
   // §21/§22 — 부산 외 시도는 데이터가 아예 없다(빈 결과를 "0건"처럼 보여주지 않음).
-  if (sidoCodeParam !== BUSAN_SIDO_CODE) {
+  if (!isStatsEnabledSido(sidoCodeParam)) {
     return NextResponse.json({
       status: 'UNSUPPORTED',
       message: '대단지 순위는 현재 부산 지역부터 제공하고 있어요.',
-      supportedSidoCode: BUSAN_SIDO_CODE,
-      supportedSidoName: '부산광역시',
+      supportedSidoCode: SUPPORTED_SIDO_CODE,
+      supportedSidoName: SUPPORTED_SIDO_NAME,
     });
   }
 
   try {
-    const where: any = { sido: '부산', totalHouseholds: { not: null } };
+    // sido는 ApartmentMaster가 쓰는 축약 표기('부산')다 — registry의 shortName에서 가져온다.
+    const where: any = { sido: getSido(sidoCodeParam)?.shortName, totalHouseholds: { not: null } };
     if (minHouseholds > 0) where.totalHouseholds = { gte: minHouseholds };
     if (lawdCdParam && /^\d{5}$/.test(lawdCdParam)) where.sggCd = lawdCdParam;
     if (dongParam && dongParam !== 'all') where.umdName = dongParam;
@@ -170,7 +177,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       status: 'OK',
-      scope: { sidoCode: BUSAN_SIDO_CODE, sidoName: '부산광역시', lawdCd: lawdCdParam || null, dong: dongParam && dongParam !== 'all' ? dongParam : null, scopeLabel },
+      scope: { sidoCode: sidoCodeParam, sidoName: getSido(sidoCodeParam)?.name ?? '', lawdCd: lawdCdParam || null, dong: dongParam && dongParam !== 'all' ? dongParam : null, scopeLabel },
       minHouseholds,
       total,
       items,

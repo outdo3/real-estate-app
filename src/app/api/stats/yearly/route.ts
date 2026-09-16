@@ -1,3 +1,4 @@
+import { isTradeDbFirstLawdCd } from '@/lib/region/enablement';
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
@@ -20,7 +21,9 @@ interface YearlyRow {
 // area84 전환과 동일 원칙). raw row를 Node로 끌어와 reduce하지 않고
 // getYearlySaleAggregate(DB-side GROUP BY year)를 쓴다 — 실측(해운대구 13년,
 // 69,025 row): raw fetch 12.9초 → DB aggregate로 교체.
-const BUSAN_SIDO_CODE = '26';
+// STATS_REGION_ENABLEMENT_MIGRATION_V1 — 지역 판정을 canonical registry/enablement로 옮겼다.
+// 의미는 그대로다: "실거래를 DB에 유지하는 지역(현재 부산)만 DB-first". 비부산 요청은
+// 여전히 기존 live 경로를 그대로 탄다(동작 변화 0).
 
 async function fetchYearlySaleTableFromDb(lawdCd: string, startYear: number, currentYear: number): Promise<YearlyRow[]> {
   const aggregates = await getYearlySaleAggregate(lawdCd, startYear);
@@ -51,7 +54,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` });
     }
 
-    const isBusan = lawdCd.startsWith(BUSAN_SIDO_CODE);
+    const isBusan = isTradeDbFirstLawdCd(lawdCd);
 
     const yearlyTableByType = await getOrSetCache(`stats-yearly:${lawdCd}:${isBusan ? 'db' : 'live'}`, 10 * 60 * 1000, async () => {
       const now = new Date();

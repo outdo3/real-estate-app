@@ -25,17 +25,24 @@
 //  · 집계 공식·기간 옵션·신고가 정의를 바꾸지 않는다. 이 파일이 만드는 것은 `toFeedTrade()`가
 //    먹는 것과 **동일한 모양의 raw item**뿐이고, 그 뒤 로직(dedupe/annotate/summary/정렬)은
 //    한 줄도 바뀌지 않는다.
+import { getTradeDbFirstSidoCodes, isTradeDbFirstSido } from '@/lib/region/enablement';
 import { toFeedTrade, type FeedTrade } from '@/lib/regional-feed';
 import { getRegionalSaleRowsForFeedFromDb, type FeedSaleRow } from '@/lib/trade-history-read';
 import { fetchRentMonthBucketsFromDb, type StoredRentTrade } from '@/lib/rent-history-read';
 import { warmupConnections } from '@/lib/prisma';
 
-/** DB에 실거래 이력이 적재된 시도. 소프트런칭 범위와 동일하게 부산뿐이다. */
-export const FEED_DB_SIDO_CODE = '26';
+// STATS_REGION_ENABLEMENT_MIGRATION_V1 — '26' 리터럴 대신 canonical enablement에서 파생한다.
+// 정책은 한 곳(region/enablement.ts)에만 있고, 여기서는 그것을 읽기만 한다.
+
+/**
+ * DB에 실거래 이력이 적재된 시도. 소프트런칭 범위와 동일하게 현재 부산뿐이며,
+ * 값은 enablement의 `cronSync` 축(= 정기 수집으로 DB를 유지하는 지역)에서 나온다.
+ */
+export const FEED_DB_SIDO_CODE = getTradeDbFirstSidoCodes()[0];
 
 /** 이 sidoCode의 "시도 전체" 피드를 DB로 처리할 수 있는가. */
 export function isFeedDbBackedSido(sidoCode: string | null | undefined): boolean {
-  return sidoCode === FEED_DB_SIDO_CODE;
+  return isTradeDbFirstSido(sidoCode);
 }
 
 /** YYYYMM 목록이 커버하는 달 경계(UTC). MOLIT 경로가 "겹치는 달 전체"를 가져오는 것과
