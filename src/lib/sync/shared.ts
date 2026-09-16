@@ -39,6 +39,13 @@ export interface CellReport {
   registryUpdated: number;
   /** 형제 occurrence의 registryDate가 엇갈려 보충을 건너뛴 row 수(§4). */
   registryAmbiguousSkipped: number;
+  /** CANCELLATION_RATCHET_PREVENTION_FIX_V1 — 과다 취소를 원천에 맞춰 되돌린 row 수.
+   * `updated`(취소 flip)와 **절대 합치지 않는다** — 서로 반대 방향의 사건이다. */
+  cancelRestored?: number;
+  /** 형제 수 불일치/identity 충돌/등기일자 존재로 취소 대조를 건너뛴 그룹 수. */
+  cancelReconcileSkipped?: number;
+  /** §15 — 치유가 꺼져 있어 쓰지 않고 남겨둔 과다 취소 row 수(승인 대기). */
+  cancelRestorePending?: number;
   /** RENT_OCCURRENCE_SAFETY_V1 §5 — Option E group guard가 보류한 INSERT 수(RENT 전용).
    * `blocked`(aptSeq 없어 정규화 단계에서 걸러진 행)와 **절대 합치지 않는다** — 서로 다른
    * 사건이다. SALE 경로에는 이 가드가 없어 항상 undefined다(0건이 아니라 "해당 없음"). */
@@ -63,6 +70,12 @@ export interface SyncSummary {
   registryAmbiguousSkipped: number;
   /** RENT_OCCURRENCE_SAFETY_V1 §5 — group guard가 보류한 INSERT 총합(RENT 전용, CellReport 참고). */
   guardedInsertsSkipped?: number;
+  /** CANCELLATION_RATCHET_PREVENTION_FIX_V1 — 과다 취소를 원천에 맞춰 되돌린 총합(SALE 전용). */
+  cancelRestored?: number;
+  /** 취소 대조를 건너뛴 그룹 총합(형제 수 불일치·identity 충돌·등기일자 존재). */
+  cancelReconcileSkipped?: number;
+  /** §15 — 치유가 꺼져 있어 남겨둔 과다 취소 row 총합(승인 대기). */
+  cancelRestorePending?: number;
   coverageRecorded: number;
   durationMs: number;
   needsReview: ReviewItem[];

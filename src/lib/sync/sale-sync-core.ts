@@ -17,6 +17,7 @@ import { normalizeMolitItemsToTradeRows, type TradeRowInput } from '../../../scr
 import {
   buildRegistryOnlyUpdateFields,
   classifyRow,
+  reconcileGroupCancellation,
   isRegistrySupplementUnambiguous,
   occurrenceGroupKey,
 } from '../../../scripts/write-policy-logic';
@@ -31,6 +32,14 @@ export { SALE_DEFAULT_OVERLAP_MONTHS } from './shared';
 // 17 cells / 13.5s). 재시도 폭주 셀은 훨씬 오래 걸릴 수 있어 여유를 크게 잡는다.
 const ESTIMATED_CELL_MS = 2500;
 const CHUNK_SIZE = 500;
+
+/**
+ * CANCELLATION_RATCHET_PREVENTION_FIX_V1 §15 — 과다 취소 치유(true→false) 쓰기 스위치.
+ * 기본 꺼짐. 예방(새 과다 취소 방지)은 이 값과 무관하게 항상 동작한다.
+ */
+function isCancelRestoreEnabled(): boolean {
+  return process.env.SALE_CANCEL_RESTORE_ENABLED === '1';
+}
 
 function naturalKeyStr(row: { groupKeyStr: string; dealAmount: number; dealDate: string; floor: number | null; occurrenceIndex: number }): string {
   return `${row.groupKeyStr}|${row.dealAmount}|${row.dealDate}|${row.floor}|${row.occurrenceIndex}`;
@@ -109,8 +118,11 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
       failed: a.failed + (r.status === 'INVALID' || r.status === 'PARTIAL' ? 1 : 0),
       registryUpdated: a.registryUpdated + r.registryUpdated,
       registryAmbiguousSkipped: a.registryAmbiguousSkipped + r.registryAmbiguousSkipped,
+      cancelRestored: a.cancelRestored + (r.cancelRestored ?? 0),
+      cancelRestorePending: a.cancelRestorePending + (r.cancelRestorePending ?? 0),
+      cancelReconcileSkipped: a.cancelReconcileSkipped + (r.cancelReconcileSkipped ?? 0),
     }),
-    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0, registryUpdated: 0, registryAmbiguousSkipped: 0 }
+    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0, registryUpdated: 0, registryAmbiguousSkipped: 0, cancelRestored: 0, cancelRestorePending: 0, cancelReconcileSkipped: 0 }
   );
 
   let status: SyncRunStatus = 'SUCCESS';
@@ -133,6 +145,7 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
   };
   log(
     `DONE sale status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} ` +
+      `cancelRestored=${totals.cancelRestored} cancelRestorePending=${totals.cancelRestorePending} cancelReconcileSkipped=${totals.cancelReconcileSkipped} ` +
       `registryUpdated=${totals.registryUpdated} registryAmbiguousSkipped=${totals.registryAmbiguousSkipped} ` +
       `blocked=${totals.blocked} failed=${totals.failed} coverageRecorded=${recorded} durationMs=${summary.durationMs}`
   );
@@ -174,7 +187,7 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
   const existing = await prisma.apartmentTradeHistory.findMany({
     where: { lawdCd, dealYmd },
     // TRADE_REGISTRY_DATA_V1.1 — registryDate는 self-heal 판정에 필수라 반드시 select한다.
-    select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, aptName: true, dong: true, registryDate: true },
+    select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, cancelDate: true, aptName: true, dong: true, registryDate: true },
   });
   const existingMap = new Map<string, (typeof existing)[number]>();
   for (const e of existing) {
@@ -192,18 +205,73 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     else siblingsByGroup.set(key, [row]);
   }
 
+  // CANCELLATION_RATCHET_PREVENTION_FIX_V1 — DB 형제도 그룹 키로 모은다(occurrenceIndex 제외).
+  // 원천/DB 양쪽을 **순서 무관**하게 그룹으로 세워야 취소 개수를 대조할 수 있다.
+  const existingSiblingsByGroup = new Map<string, typeof existing>();
+  for (const e of existing) {
+    if (e.floor == null) continue;
+    const key = occurrenceGroupKey({
+      groupKeyStr: e.groupKeyStr,
+      dealAmount: e.dealAmount,
+      dealDate: e.dealDate.toISOString().slice(0, 10),
+      floor: e.floor,
+    });
+    const list = existingSiblingsByGroup.get(key);
+    if (list) list.push(e);
+    else existingSiblingsByGroup.set(key, [e]);
+  }
+
+  // 취소 상태는 **그룹 단위 개수**로만 정한다(결함 A 근절). 원천 응답 순서에 의존하지 않으므로
+  // 순서가 흔들려도 결과가 바뀌지 않는다. 이 시점에서 셀은 이미 COMPLETE/EMPTY_VALID다(§11 가드).
+  const restoreEnabled = isCancelRestoreEnabled();
+  const cancelFlips: { id: number; cancelDate: string | null }[] = [];
+  const cancelRestores: number[] = [];
+  const reconcileTouched = new Set<number>();
+  let cancelReconcileSkipped = 0;
+  for (const [key, srcSiblings] of siblingsByGroup) {
+    const dbSiblings = existingSiblingsByGroup.get(key);
+    // 아직 적재되지 않은 그룹(insert 대기)은 이번 실행에서 판정하지 않는다 — insert가
+    // 원천 상태를 그대로 넣으므로 개수는 맞고, 다음 실행부터 정상적으로 대조된다.
+    if (!dbSiblings || dbSiblings.length === 0) continue;
+    // identity가 어긋난 그룹은 손대지 않는다(기존 conflict 원칙과 동일).
+    const srcName = srcSiblings[0].aptName;
+    const srcDong = srcSiblings[0].dong;
+    if (
+      srcSiblings.some((r) => r.aptName !== srcName || r.dong !== srcDong) ||
+      dbSiblings.some((e) => e.aptName !== srcName || e.dong !== srcDong)
+    ) {
+      base.reviewCandidates++;
+      cancelReconcileSkipped++;
+      continue;
+    }
+    const result = reconcileGroupCancellation(srcSiblings, dbSiblings);
+    if (result.kind === 'skipped') {
+      cancelReconcileSkipped++;
+      continue;
+    }
+    if (result.kind === 'noChange') continue;
+    for (const c of result.toCancel) {
+      cancelFlips.push(c);
+      reconcileTouched.add(c.id);
+    }
+    for (const r of result.toRestore) {
+      cancelRestores.push(r.id);
+      reconcileTouched.add(r.id);
+    }
+  }
+
   const inserts: TradeRowInput[] = [];
-  const flips: { id: number; row: TradeRowInput }[] = [];
   const registrySupplements: { id: number; registryDate: string }[] = [];
   for (const row of rows) {
     const match = existingMap.get(naturalKeyStr(row));
     const kind = classifyRow(row, match);
     // §10 — aptSeq 없는 새 row는 insert하지 않는다(reviewRequired). name+dong fallback으로
-    // canonical identity를 만들지 않는다. conflict/updateTrueToFalseSkipped도 손대지 않는다.
+    // canonical identity를 만들지 않는다.
+    // 취소 관련 분류(updateFalseToTrue / updateTrueToFalseSkipped)는 더 이상 쓰기를 만들지
+    // 않는다 — 취소는 위 그룹 reconciliation이 전담한다.
     if (kind === 'insert') inserts.push(row);
-    else if (kind === 'updateFalseToTrue' && match) flips.push({ id: match.id, row });
     else if (kind === 'reviewRequired' || kind === 'conflict') base.reviewCandidates++;
-    else if (kind === 'updateRegistryOnly' && match) {
+    else if (kind === 'updateRegistryOnly' && match && !reconcileTouched.has(match.id)) {
       // §4 OCCURRENCE SAFETY — 형제 registryDate가 전부 같을 때만 보충한다.
       if (!isRegistrySupplementUnambiguous(siblingsByGroup.get(occurrenceGroupKey(row)) ?? [row])) {
         base.registryAmbiguousSkipped++;
@@ -254,19 +322,50 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
       });
       base.inserted += result.count;
     }
-    // §10 — 승인된 유일한 UPDATE: 이미 검증된 취소 flip(false→true). 자연키는 불변이고
-    // true→false 되돌리기는 write-policy-logic에서 이미 차단된다.
-    for (let i = 0; i < flips.length; i += CHUNK_SIZE) {
-      const chunk = flips.slice(i, i + CHUNK_SIZE);
+    // CANCELLATION_RATCHET_PREVENTION_FIX_V1 — 취소 UPDATE는 그룹 reconciliation 결과만
+    // 반영한다. 자연키(groupKey/금액/계약일/층/occurrenceIndex)는 여전히 불변이고,
+    // deal_canceled와 cancel_date **둘만** 쓴다.
+    //
+    // registryDate를 함께 쓰지 않는 이유: 어떤 형제를 취소로 둘지는 이제 원천 응답의
+    // 특정 행이 아니라 그룹 개수로 정해지므로, 그 행에 특정 원천 행의 등기일자를 옮겨
+    // 적을 근거가 없다(등기일자 보충은 아래 전용 경로가 형제 전원 동일할 때만 한다).
+    for (let i = 0; i < cancelFlips.length; i += CHUNK_SIZE) {
+      const chunk = cancelFlips.slice(i, i + CHUNK_SIZE);
       await prisma.$transaction(
         chunk.map((f) =>
           prisma.apartmentTradeHistory.update({
             where: { id: f.id },
-            data: { dealCanceled: true, cancelDate: f.row.cancelDate, registryDate: f.row.registryDate, sourceFetchedAt: new Date() },
+            data: { dealCanceled: true, cancelDate: f.cancelDate, sourceFetchedAt: new Date() },
           })
         )
       );
       base.updated += chunk.length;
+    }
+    // 과다 취소 치유(true→false). 원천이 COMPLETE이고 형제 수가 일치할 때만 여기 도달한다.
+    //
+    // CANCELLATION_RATCHET_PREVENTION_FIX_V1 §15 — 치유는 **기본 꺼짐**이다.
+    // 이 정책은 본질적으로 자가 치유적이라, 켜두면 배포 직후 cron이 기존 과다 취소
+    // (REPAIR_AUDIT_V1 확정 21행)를 자동으로 되돌린다. 예방과 기존 데이터 repair는
+    // 분리해 승인받기로 했으므로, 예방만 먼저 배포하고 치유는 명시적으로 켠다.
+    // 끈 상태에서도 **예방은 완전히 동작한다** — toCancel이 원천 취소 개수를 넘을 수
+    // 없으므로 새로운 과다 취소가 생기지 않는다. 대기 건수는 metric으로만 남긴다.
+    if (!restoreEnabled) {
+      base.cancelRestorePending = cancelRestores.length;
+      if (cancelRestores.length > 0) {
+        log(`CANCEL_RESTORE_PENDING ${lawdCd}:${dealYmd} rows=${cancelRestores.length} — SALE_CANCEL_RESTORE_ENABLED=1 이 아니라 쓰지 않음`);
+      }
+    }
+    for (let i = 0; restoreEnabled && i < cancelRestores.length; i += CHUNK_SIZE) {
+      const chunk = cancelRestores.slice(i, i + CHUNK_SIZE);
+      await prisma.$transaction(
+        chunk.map((id) =>
+          prisma.apartmentTradeHistory.update({
+            where: { id },
+            data: { dealCanceled: false, cancelDate: null, sourceFetchedAt: new Date() },
+          })
+        )
+      );
+      base.cancelRestored = (base.cancelRestored ?? 0) + chunk.length;
     }
     // TRADE_REGISTRY_DATA_V1.1 §3 — 승인된 두 번째 UPDATE: registryDate NULL→value 보충.
     // data에 registryDate 외 어떤 필드도 넣지 않는다(취소 필드/자연키/sourceFetchedAt 전부 제외)
@@ -285,13 +384,17 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     }
   } else {
     base.inserted = inserts.length; // dry-run 예상치
-    base.updated = flips.length;
+    base.updated = cancelFlips.length;
+    if (restoreEnabled) base.cancelRestored = cancelRestores.length;
+    else base.cancelRestorePending = cancelRestores.length;
     base.registryUpdated = registrySupplements.length;
   }
+  base.cancelReconcileSkipped = cancelReconcileSkipped;
 
   log(
     `${fetchResult.status} ${lawdCd}:${dealYmd} fetched=${base.fetched} blocked=${base.blocked} inserted=${base.inserted} ` +
-      `flips=${base.updated} registry=${base.registryUpdated} registryAmbiguous=${base.registryAmbiguousSkipped} review=${base.reviewCandidates}`
+      `flips=${base.updated} cancelRestored=${base.cancelRestored ?? 0} cancelRestorePending=${base.cancelRestorePending ?? 0} cancelReconcileSkipped=${cancelReconcileSkipped} ` +
+      `registry=${base.registryUpdated} registryAmbiguous=${base.registryAmbiguousSkipped} review=${base.reviewCandidates}`
   );
   return base;
 }

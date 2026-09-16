@@ -2,6 +2,26 @@
 
 ## 2026-09-16
 
+### E-JIP CANCELLATION RATCHET PREVENTION FIX V1 — 취소 판정이 응답 순서에 더 이상 의존하지 않는다
+
+schema/migration 0 · Production 데이터 repair 0 · 기존 21행 그대로 · cron 스케줄 변경 0.
+상세: `docs/development/CANCELLATION_RATCHET_PREVENTION_FIX_V1.md`
+
+    변경      취소 판정을 행 단위 → occurrence 그룹 단위 "취소 개수" 정합으로 교체(reconcileGroupCancellation, 순수 함수)
+              원천 취소 C건이면 DB도 정확히 C건. 개수는 응답 순서와 무관하므로 순서가 뒤집혀도 결과가 불변 = 래칫 성립 불가
+              단방향(false→true only) 제거 — 양방향 가능. 자연키·occurrenceIndex·schema 불변, classifyRow 자체는 변경 0
+    가드      원천 COMPLETE/EMPTY_VALID일 때만 대조(기존 §11 가드가 reconciliation보다 앞선다는 순서까지 테스트로 고정)
+              형제 수 불일치 → 추측 없이 skip · registry_date 있는 행은 되돌리지 않음
+              취소 쓰기는 deal_canceled+cancel_date만. 취소와 registry_date를 같은 UPDATE에서 쓰지 않는다
+    게이트    이 정책은 자가 치유적이라 그대로 두면 cron(매일 실제 가동 중)이 기존 21행을 자동 복구한다
+              §15 준수를 위해 치유 쓰기를 SALE_CANCEL_RESTORE_ENABLED=1 일 때만 수행하도록 분리 — 기본 꺼짐
+              꺼진 상태에서도 예방은 100% 동작(toCancel이 원천 취소 개수를 넘을 수 없음). 대기 건수는 cancelRestorePending으로 관측
+    replay    Production 스냅샷 7,929그룹/1,118셀(전부 COMPLETE): noChange 7,907 · reconcile 21 · skip 1(결함 B)
+              잔여 false-cancel 0 · 진짜 취소 오작동 0 · 잘못된 신규 취소 0
+    dry-run   운영 syncOneSaleCell mode=dry-run 8셀: 셀별 기대 치유 건수 정확히 일치(3/2/1/1/1/1, 대조군 0/0), 쓰기 0
+    검증      신규 정책 테스트 18 pass · ingest 계약 테스트 8 pass · src 2,179 pass · scripts 135 pass · 전부 0 fail
+              eslint exit 0, tsc src 오류 0(기존 25건 scripts/tmp), next build 성공
+
 ### E-JIP CANCELLATION RATCHET DEFECT A — REPAIR AUDIT V1 — READY_FOR_REPAIR_APPROVAL (READ-ONLY)
 
 Production write 0(INSERT/UPDATE/DELETE 0)·migration 0·schema 0·앱 코드 변경 0. MOLIT은 조회만(1,118셀).
