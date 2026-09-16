@@ -222,6 +222,44 @@ npm run build                                                      Compiled succ
 
 ---
 
+## 8.5. Production 배포 후 QA (read-only)
+
+커밋 `e51b31c` push → Vercel Production 배포 완료. 2026-09-16 12:35 KST 측정.
+
+### 앱 상태
+
+| 확인 | 결과 |
+|---|---|
+| `/` | 200 (0.16s) |
+| `/api/transactions?type=apt&lawdCd=26350&months=12` | 200 (2.0s) |
+| `/api/transactions?type=rent&lawdCd=26140&months=3` | 200 (0.72s) |
+| 5xx | **0** |
+| `/api/cron/sale-sync` (인증 없이) | **401** — 게이트 정상, 우발적 쓰기 불가 |
+| `error_logs` 최근 2시간 / 24시간 | **0 / 0** (최신 항목은 2026-09-11, 배포 5일 전) |
+
+### §19 — 기존 21행이 그대로인지
+
+| 지표 | 배포 전 | 배포 후 |
+|---|---|---|
+| 전체 행 | 865,120 | **865,120** |
+| 취소 행 | 16,308 | **16,308** |
+| 형제 전원 취소 그룹 | 266 | **266** |
+| 과다 취소 의심 상한 | 327 | **327** |
+| 자연키 중복 | 0 | **0** |
+| 확정 21행 상태 | 21/21 취소 | **21/21 취소 (has_registry_date 0)** |
+
+**데이터가 한 행도 바뀌지 않았다.** §15 요구(이번 배포에서 21행을 건드리지 않는다)를 충족한다.
+
+### 아직 확인하지 못한 것 — 정직하게 기록
+
+cron은 **19:00 UTC(sale-sync) / 23:00 UTC(sale-recheck)**에 돈다. 배포 시각이 03:35 UTC라 **배포 후 cron 실행은 아직 일어나지 않았다.** 따라서:
+
+- "새 sync가 실제로 한 번 돈 뒤 false-cancel 그룹이 늘지 않았는지"는 **다음 실행 후에 확인해야 한다**.
+- 대신 운영 `syncOneSaleCell()`을 Production 데이터로 dry-run해 동일 판정 경로를 검증했다(§8).
+- 다음 실행 후 확인할 것: `cancelRestorePending` 합계 ≈ 해당 셀들의 확정 건수 · `cancelRestored` = 0(게이트 꺼짐) · `cancelReconcileSkipped` 이상 없음 · 상한 327이 더 늘지 않음.
+
+---
+
 ## 9. 변경 파일
 
 | 파일 | 변경 |
