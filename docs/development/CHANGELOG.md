@@ -2,6 +2,28 @@
 
 ## 2026-09-16
 
+### E-JIP CANCELLATION RATCHET DEFECT A — REPAIR AUDIT V1 — READY_FOR_REPAIR_APPROVAL (READ-ONLY)
+
+Production write 0(INSERT/UPDATE/DELETE 0)·migration 0·schema 0·앱 코드 변경 0. MOLIT은 조회만(1,118셀).
+상세: `docs/development/CANCELLATION_RATCHET_DEFECT_A_REPAIR_AUDIT_V1.md`
+
+    규모      상한 추정 327행 → 원천 전수 대조 결과 확정 21행(약 15배 과대추정이었다)
+              대조 범위: 취소 ≥1인 다형제 그룹 7,929개·16,410행·1,118셀 — 셀 1,118개 전부 COMPLETE로 확보
+    분류      CONFIRMED_FALSE_CANCEL 21그룹/21행 · CONFIRMED_CANCEL 7,907그룹/16,364행
+              SIBLING_COUNT_MISMATCH 1그룹(결함 B, repair 제외) · SOURCE_UNAVAILABLE 0 · DB_UNDER_CANCELED 0
+    원인      occurrenceIndex가 MOLIT 응답 순서로 부여되는데 순서가 호출마다 뒤바뀌고,
+              classifyRow가 false→true만 허용(updateTrueToFalseSkipped)해 그룹이 단조적으로 전부 취소로 물든다
+    증거      21그룹 전부 형제가 동일한 cancel_date를 공유(해제일 복사 흔적). 해제일이 2개 이상인 157그룹은 전부 진짜 취소
+              21행 모두 최근 12개월 이내(sync 4개월 + recheck 3~12개월 band와 일치). 2020~2021 상한 180행은 전부 진짜 이중취소
+    영향      집계는 미미(활성 848,812→848,833 = +0.0025%, 2026-08 +0.489%)
+              단지 단위는 실질적: 최근 실거래가 바뀌는 단지 10곳(최대 8개월 차이), 신고가 변경 2건,
+              래미안포레스티지2단지는 활성 거래 0건 → 1건(현재 거래가 없는 것처럼 보인다)
+    repair    safe 21행 · ambiguous 2행 제외 · leave-as-is 16,387행. deal_canceled=false, cancel_date=NULL만 변경
+              제안본 scripts/repair-cancel-ratchet-defect-a.PROPOSAL.ts — dry-run 기본, apply에 승인 env 필요,
+              apply 시점 원천 재대조, --expect assertion, 멱등 WHERE, 배치 롤백, 스냅샷 선행
+    재발방지  행 단위 취소 매칭 → occurrence 그룹 단위 취소 개수 정합으로 변경 제안(별도 승인, 이번 STEP 코드 수정 0)
+    검증      감사 스크립트 4개 READ ONLY 트랜잭션 exit 0, mutation grep 0건, eslint exit 0, tsc 신규 오류 0
+
 ### E-JIP MOLIT LIVE PAGING FIX V1 — 라이브 조회가 1,000건 초과 셀을 더 이상 조용히 자르지 않는다
 
 DB/schema/migration·bulk backfill·cron·coverage cell·region enable·Score·auth 변경 0. 소비자 18곳 수정 0.
