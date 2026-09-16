@@ -13,6 +13,7 @@ import { summarizeManifest, computeOverallHealth, computeCancellationVerdict, OV
 import { getRentVerifiedRange, readLegacyBootstrap, summarizeCoverage, summarizeSaleRunKinds } from '@/lib/sync-coverage';
 import { readCronRegistration } from '@/lib/cron-schedule';
 import { SALE_RECHECK_MAX_MONTHS_BACK, SALE_RECHECK_MIN_MONTHS_BACK } from '@/lib/sync/shared';
+import { getMolitLeafRegions } from '@/lib/region/registry';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,10 +25,8 @@ export const dynamic = 'force-dynamic';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-const BUSAN_16 = [
-  '26110', '26140', '26170', '26200', '26230', '26260', '26290', '26320',
-  '26350', '26380', '26410', '26440', '26470', '26500', '26530', '26710',
-];
+// REGION_REGISTRY_V1 §12 — canonical registry에서 파생(중복 하드코딩 제거).
+const BUSAN_16: string[] = getMolitLeafRegions('26').map((r) => r.lawdCd);
 
 const NATIONWIDE_MANIFEST_PATH = path.join(process.cwd(), 'data/trade-history/nationwide-sync-manifest.json');
 const CANCELLATION_24M_SNAPSHOT_PATH = path.join(process.cwd(), 'data/trade-history/cancellation-24m-verification-snapshot.json');

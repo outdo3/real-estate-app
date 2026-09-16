@@ -2,6 +2,29 @@
 
 ## 2026-09-16
 
+### E-JIP REGION REGISTRY V1 — 시도/시군구/일반구 계층의 단일 정본, 서울·경기는 존재하되 미출시
+
+DB write 0 · schema/migration 0 · region enable 0 · sitemap 0 · SEO index 0 · 서울/경기 수집·노출 0 · Score 0.
+상세: `docs/development/REGION_REGISTRY_V1.md`
+
+    registry  src/lib/region/registry.ts 신설 — 부산 16 · 서울 25 · 경기 48 = 89 노드
+              데이터는 프로젝트가 이미 쓰는 법정동코드 프록시 실측(2026-09-16)으로 생성, 코드/이름 추측 0
+              RegionNode: lawdCd·name·fullName·sidoCode·type·parentLawdCd·isMolitLeaf (과설계 없음)
+    계층      경기 시+일반구 구분 가능 — 성남시(41130, 부모)와 성남시 분당구(41135, 일반구 leaf)
+              경기 48 = 부모 시 6 + 일반구 17 + 단일 시군 25, MOLIT leaf 42 — 이전 audit 수치를 독립 재도출해 일치 확인
+    leaf      일반구를 가진 시 6곳(수원·성남·안양·안산·고양·용인) 부모 코드는 isMolitLeaf=false — 중복 수집 구조적 차단
+    lookup    getRegionByLawdCd / getSidoRegions / getRegionChildren / getMolitLeafRegions / getRegionContext
+              모르는 코드는 전부 null — fuzzy 매칭 0, 특정 지역 fallback 0 (27110도 null)
+    enable    enablement.ts로 "존재"와 "출시"를 분리 — app/report/stats/sitemap/seoIndex/cronSync 6축
+              부산만 전부 true, 서울·경기·미등록 코드는 전부 false(기본값이 닫힘이라 registry 추가=출시 아님)
+    중복제거  부산 16코드 사본 3곳(rent-verified-range·admin/ops·report/region-scope)을 registry 파생으로 교체
+              값은 한 글자도 불변 — 기존 리터럴과 deepEqual로 고정. 리포트 스코프 의미도 그대로(allowlist 유지)
+    호환      REGION_DATA는 전국 UI 소스라 유지하고, 3개 시도 이름 집합이 registry와 일치하는지 드리프트 테스트 추가
+              (부산 16·서울 25·경기 31 — 경기는 일반구 제외라 부모 시+단일 시군과 정확히 대응)
+    안전      sitemap 139 불변 · 서울/경기 URL 0 · buildLaunchRegionRoutes 17 · cron 대상 부산 16 (전부 테스트 고정)
+    검증      registry 테스트 25 pass(요구 20케이스 전부) · src 2,218 pass · scripts 135 pass · 0 fail
+              eslint exit 0 · tsc src 오류 0(기존 25건 scripts/tmp) · next build 성공
+
 ### E-JIP REGION CONTEXT PARAMETERIZATION V1 — peer pool과 상세 진입이 더 이상 특정 지역으로 떨어지지 않는다
 
 DB write 0 · schema/migration 0 · 서울/경기 데이터 수집·공개·색인 0 · Score 공식 0 · route semantics 0.

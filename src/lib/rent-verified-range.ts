@@ -14,6 +14,8 @@
 // 검증범위는 "오늘 기준 최근 N개월"이 아니라 **실제 sync/completeness 증거로 확정된 범위**다
 // — sale(2006-01~, nationwide incremental sync 존재)과 근본적으로 다르다.
 
+import { getMolitLeafRegions } from './region/registry';
+
 export interface VerifiedRange {
   from: string; // YYYYMM
   to: string; // YYYYMM
@@ -24,10 +26,10 @@ export interface CoverageCellStatusMap {
   [key: string]: { status: string } | undefined;
 }
 
-export const BUSAN_LAWDCD_16 = [
-  '26110', '26140', '26170', '26200', '26230', '26260', '26290', '26320',
-  '26350', '26380', '26410', '26440', '26470', '26500', '26530', '26710',
-];
+// REGION_REGISTRY_V1 §12 — 같은 16개 코드를 여기서 다시 적지 않는다. canonical registry에서
+// 파생한다(값과 순서는 기존 리터럴과 완전히 동일하며 테스트가 이를 고정한다).
+// registry는 순수 config라 이 파일의 "fs/DB/네트워크 없음" 성질을 깨지 않는다.
+export const BUSAN_LAWDCD_16: string[] = getMolitLeafRegions('26').map((r) => r.lawdCd);
 
 /**
  * DATA_FRESHNESS_AUTOMATION_V1_PHASE2 §14 — "검증됨"으로 인정되는 cell 상태.

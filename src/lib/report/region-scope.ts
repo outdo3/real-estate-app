@@ -12,6 +12,8 @@
 // 다른 시도 코드가 들어올 때 조용히 깨진다. 그래서 **검증된 16개를 그대로 적는다.**
 // 아래 이름은 Production `apartment_masters`의 sgg_cd/sigungu 실측값이다(추정 아님).
 
+import { getMolitLeafRegions } from '../region/registry';
+
 export interface BusanDistrict {
   lawdCd: string;
   name: string;
@@ -19,25 +21,20 @@ export interface BusanDistrict {
   kind: 'GU' | 'GUN';
 }
 
-/** 부산광역시 현행 자치구·군 16개. 순서는 lawdCd 오름차순(결정론적 출력 보장). */
-export const BUSAN_DISTRICTS: readonly BusanDistrict[] = [
-  { lawdCd: '26110', name: '중구', kind: 'GU' },
-  { lawdCd: '26140', name: '서구', kind: 'GU' },
-  { lawdCd: '26170', name: '동구', kind: 'GU' },
-  { lawdCd: '26200', name: '영도구', kind: 'GU' },
-  { lawdCd: '26230', name: '부산진구', kind: 'GU' },
-  { lawdCd: '26260', name: '동래구', kind: 'GU' },
-  { lawdCd: '26290', name: '남구', kind: 'GU' },
-  { lawdCd: '26320', name: '북구', kind: 'GU' },
-  { lawdCd: '26350', name: '해운대구', kind: 'GU' },
-  { lawdCd: '26380', name: '사하구', kind: 'GU' },
-  { lawdCd: '26410', name: '금정구', kind: 'GU' },
-  { lawdCd: '26440', name: '강서구', kind: 'GU' },
-  { lawdCd: '26470', name: '연제구', kind: 'GU' },
-  { lawdCd: '26500', name: '수영구', kind: 'GU' },
-  { lawdCd: '26530', name: '사상구', kind: 'GU' },
-  { lawdCd: '26710', name: '기장군', kind: 'GUN' },
-] as const;
+/**
+ * 부산광역시 현행 자치구·군 16개. 순서는 lawdCd 오름차순(결정론적 출력 보장).
+ *
+ * REGION_REGISTRY_V1 §12 — 코드/이름을 여기서 다시 적지 않고 canonical registry에서
+ * 파생한다. **스코프 의미는 그대로다**: 이 목록은 여전히 "부산 리포트가 다루는 지역"의
+ * 명시 allowlist이고, 27110/11680 같은 코드는 registry에 있든 없든 여기에 들어오지
+ * 않는다(`LIKE '26%'`로 바꾼 게 아니라, 시도 코드 '26'의 MOLIT leaf만 가져온다).
+ * 값이 기존 리터럴과 한 글자도 다르지 않다는 것은 region-registry.test.ts가 고정한다.
+ */
+export const BUSAN_DISTRICTS: readonly BusanDistrict[] = getMolitLeafRegions('26').map((r) => ({
+  lawdCd: r.lawdCd,
+  name: r.name,
+  kind: r.type === 'COUNTY' ? 'GUN' : 'GU',
+}));
 
 export const BUSAN_CURRENT_LAWD_CODES: readonly string[] = BUSAN_DISTRICTS.map((d) => d.lawdCd);
 
