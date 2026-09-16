@@ -71,7 +71,7 @@ export async function GET(
     if (shadowV2 && shadowV2.eligibility !== 'NOT_ENOUGH_DATA' && shadowV2.overallScore != null) {
       const targetMaster = await prisma.apartmentMaster.findUnique({
         where: { aptSeq: resolvedAptSeq },
-        select: { sigungu: true, buildYear: true, totalHouseholds: true },
+        select: { sido: true, sigungu: true, buildYear: true, totalHouseholds: true },
       });
       if (targetMaster) {
         peerContext = await getPeerContext({
@@ -80,7 +80,7 @@ export async function GET(
           buildYear: targetMaster.buildYear,
           totalHouseholds: targetMaster.totalHouseholds,
           v2Score: Math.round(shadowV2.overallScore),
-        });
+        }, targetMaster.sido);
       }
     }
 

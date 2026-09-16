@@ -30,17 +30,27 @@ import { getOrSetCache } from '@/lib/server-cache';
 import { calculateScoreV2 } from '@/lib/score-v2/engine';
 import { adaptToV2Input } from '@/lib/score-v2/adapter';
 import { getApartmentEducationZone } from '@/lib/education/attendance-zone';
-import { computePeerContext, type PeerContext, type PeerContextTarget, type PeerUniverseRow } from './peer-context-pure';
+import { computePeerContext, UNAVAILABLE_PEER_CONTEXT, type PeerContext, type PeerContextTarget, type PeerUniverseRow } from './peer-context-pure';
 
 export type { PeerContext, PeerContextTarget, PeerUniverseRow, SizeBand, PeerLevel, PeerConfidence } from './peer-context-pure';
 export { sizeBandOf, decadeOf, percentileRank, confidenceFor, computePeerContext, UNAVAILABLE_PEER_CONTEXT } from './peer-context-pure';
 
-const SIDO_VALUE = '부산';
+// REGION_CONTEXT_PARAMETERIZATION_V1 — peer pool의 시도를 더 이상 '부산'으로 고정하지
+// 않는다. 대상 단지가 속한 시도를 호출부가 **명시적으로** 넘겨야 한다.
+//
+// 왜 기본값을 두지 않는가: 기본값('부산')이 있으면 서울 단지를 부산 단지들과 비교해
+// percentile을 만들어버린다 — 사용자가 보고 있는 단지와 다른 지역 데이터가 섞이는 것은
+// "비교 데이터 없음"보다 나쁘다(AGENTS.md 데이터 진실성). 그래서 시도를 모르면
+// UNAVAILABLE_PEER_CONTEXT를 돌려주고, 어떤 지역으로도 fallback하지 않는다.
+//
 // calculate.ts:150과 반드시 동일한 값이어야 한다 — 여기서 계산한 peer universe의
 // v2Score가 개별 단지 상세 API가 보여주는 v2Score와 어긋나면(cross-check 실패)
 // PHASE 2 QA §32가 요구하는 "mismatch = 0" 조건이 깨진다.
 const V2_REFERENCE_YEAR = 2026;
-const PEER_UNIVERSE_CACHE_KEY = 'score-v2-peer-universe:busan';
+/** 시도별로 분리된 캐시 키 — 지역이 섞인 universe가 캐시에 남지 않게 한다. */
+function peerUniverseCacheKey(sido: string): string {
+  return `score-v2-peer-universe:${sido}`;
+}
 const PEER_UNIVERSE_TTL_MS = 60 * 60 * 1000; // 1시간 — 등록된 registry/location 배치 갱신 주기에 비해 충분히 김
 
 /**
@@ -50,9 +60,9 @@ const PEER_UNIVERSE_TTL_MS = 60 * 60 * 1000; // 1시간 — 등록된 registry/l
  * 조회하고, 순수 함수인 calculateScoreV2를 직접 호출한다 — DB round-trip은
  * 이 함수 전체에서 2회 고정(N+1 없음).
  */
-async function buildPeerUniverse(): Promise<PeerUniverseRow[]> {
+async function buildPeerUniverse(sido: string): Promise<PeerUniverseRow[]> {
   const masters = await prisma.apartmentMaster.findMany({
-    where: { sido: SIDO_VALUE, aptSeq: { not: null } },
+    where: { sido, aptSeq: { not: null } },
     select: {
       aptSeq: true, sggCd: true, sigungu: true, umdName: true,
       buildYear: true, totalHouseholds: true, parkingCount: true,
@@ -86,8 +96,8 @@ async function buildPeerUniverse(): Promise<PeerUniverseRow[]> {
   return rows;
 }
 
-async function getPeerUniverse(): Promise<PeerUniverseRow[]> {
-  return getOrSetCache(PEER_UNIVERSE_CACHE_KEY, PEER_UNIVERSE_TTL_MS, buildPeerUniverse);
+async function getPeerUniverse(sido: string): Promise<PeerUniverseRow[]> {
+  return getOrSetCache(peerUniverseCacheKey(sido), PEER_UNIVERSE_TTL_MS, () => buildPeerUniverse(sido));
 }
 
 /**
@@ -96,8 +106,21 @@ async function getPeerUniverse(): Promise<PeerUniverseRow[]> {
  * route가 이미 계산한 값을 그대로 전달). 실제 fallback/percentile/confidence
  * 로직은 peer-context-pure.ts의 computePeerContext()에 있다.
  */
-export async function getPeerContext(target: PeerContextTarget): Promise<PeerContext> {
-  const universe = await getPeerUniverse();
+export interface PeerContextDeps {
+  /** 테스트 전용 주입 지점 — 운영 호출부는 넘기지 않는다(기본 DB+캐시 경로 사용). */
+  loadUniverse?: (sido: string) => Promise<PeerUniverseRow[]>;
+}
+
+export async function getPeerContext(
+  target: PeerContextTarget,
+  regionSido: string | null,
+  deps: PeerContextDeps = {}
+): Promise<PeerContext> {
+  // 시도를 모르면 비교하지 않는다. 기본 지역으로 떨어뜨리면 다른 지역 단지들과
+  // 비교한 percentile을 사실처럼 보여주게 된다(필수 인자라 호출부가 빠뜨리면 컴파일 실패).
+  const sido = regionSido?.trim();
+  if (!sido) return UNAVAILABLE_PEER_CONTEXT;
+  const universe = await (deps.loadUniverse ?? getPeerUniverse)(sido);
   // 자기 자신을 정확히 하나만 포함시킨다 — universe에 target이 이미 있으면
   // 중복 집계하지 않고, 없으면(예: 아직 캐시가 갱신 안 됨) 직접 추가한다.
   // percentile denominator는 반드시 self-included(PHASE 1.6 §2/§3)이므로 이

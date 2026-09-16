@@ -2,6 +2,26 @@
 
 ## 2026-09-16
 
+### E-JIP REGION CONTEXT PARAMETERIZATION V1 — peer pool과 상세 진입이 더 이상 특정 지역으로 떨어지지 않는다
+
+DB write 0 · schema/migration 0 · 서울/경기 데이터 수집·공개·색인 0 · Score 공식 0 · route semantics 0.
+상세: `docs/development/REGION_CONTEXT_PARAMETERIZATION_V1.md`
+
+    peer      peer-context의 sido:'부산' 고정 제거 — getPeerContext(target, regionSido)로 시도를 필수 인자화
+              기본값/silent fallback 없음(빠뜨리면 컴파일 실패). universe 캐시 키도 시도별로 분리
+              시도를 모르면 UNAVAILABLE_PEER_CONTEXT — universe 조회 자체를 하지 않는다
+              호출부 4곳이 ApartmentMaster.sido를 select해 전달(상세 score·리포트 apt-read·compare·crosscheck 스크립트)
+    강남기본값 11680 runtime fallback 7곳 제거 — apt 라우트·info 라우트·apt-client 3곳·RankCard·TableList
+              지역 미확정 시 regionUnresolved:true + 빈 거래(apiError 채널 사용 — "0건"으로 읽히지 않음), info:null
+              RankCard/TableList는 파싱 실패 시 링크에서 lawdCd를 생략(잘못된 지역을 넘기지 않음)
+    parity    부산 대표 8단지 Production 실측 baseline 기록(score·level·percentile·comparisonCount) — 배포 후 동일 확인
+    fixture   서울 강남/송파·경기 분당/김포 fixture로 지역 전파 검증: 부산 universe 조회 0, 시+일반구 표기 보존
+              pool 오염 테스트 — 부산 pool을 썼다면 하위권이 될 점수가 서울 pool 기준 상위권으로 나오는 것을 값으로 증명
+    재스캔    runtime dangerous hardcode 0. 남은 11680은 전부 주석(테스트로 고정)
+              FOLLOW_UP: stats/large-complex의 부산 UNSUPPORTED, PeerLevel enum의 BUSAN_* 이름, RegionContext GPS 폴백
+    검증      신규 region 테스트 14 pass · src 2,193 pass 0 fail · eslint 0 error(경고 2건은 HEAD에도 존재)
+              tsc src 오류 0(기존 25건 scripts/tmp) · next build 성공
+
 ### E-JIP CANCELLATION RATCHET PREVENTION FIX V1 — 취소 판정이 응답 순서에 더 이상 의존하지 않는다
 
 schema/migration 0 · Production 데이터 repair 0 · 기존 21행 그대로 · cron 스케줄 변경 0.

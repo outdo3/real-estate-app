@@ -14,9 +14,25 @@ export async function GET(
     const aptName = decodeURIComponent(name);
 
     const { searchParams } = new URL(request.url);
-    const lawdCd = searchParams.get('lawdCd') || '11680';
+    // REGION_CONTEXT_PARAMETERIZATION_V1 — lawdCd가 없을 때 기본 지역(서울 강남구
+    // '11680')으로 떨어뜨리던 동작을 제거했다. 이 값은 아래에서 `sggCd: lawdCd`로 DB를
+    // 조회하고 건축물대장 API 인자로도 쓰이므로, 기본값을 쓰면 **다른 지역 단지의 세대수·
+    // 준공일·주차대수**를 지금 보고 있는 단지의 정보인 것처럼 돌려주게 된다
+    // (AGENTS.md: 다른 아파트의 데이터를 fallback으로 노출 금지).
+    // 지역을 모르면 어떤 지역으로도 추측하지 않고 "정보 없음"을 정직하게 돌려준다.
+    const lawdCd = searchParams.get('lawdCd') || '';
     const dong = searchParams.get('dong') || '';
     const jibun = searchParams.get('jibun') || '';
+
+    if (!lawdCd) {
+      return NextResponse.json({
+        success: true,
+        aptName,
+        info: null,
+        unitTypes: null,
+        regionUnresolved: true,
+      });
+    }
 
     const info: Record<string, string> = {};
 

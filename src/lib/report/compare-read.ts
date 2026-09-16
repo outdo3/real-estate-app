@@ -70,7 +70,7 @@ async function loadSide(aptSeq: string): Promise<SideLoad | null> {
   const master = await prisma.apartmentMaster.findUnique({
     where: { aptSeq },
     select: {
-      aptSeq: true, name: true, sigungu: true, umdName: true, sggCd: true,
+      aptSeq: true, name: true, sido: true, sigungu: true, umdName: true, sggCd: true,
       buildYear: true, totalHouseholds: true, parkingCount: true,
     },
   });
@@ -112,7 +112,7 @@ async function loadSide(aptSeq: string): Promise<SideLoad | null> {
         buildYear: master.buildYear,
         totalHouseholds: master.totalHouseholds,
         v2Score: Math.round(shadowV2.overallScore),
-      }).catch(() => null);
+      }, master.sido).catch(() => null);
     }
     scoreJson = { ...scoreResult, _shadowV2: shadowV2, peerContext };
   }

@@ -21,8 +21,10 @@ const TableList: React.FC<TableListProps> = ({ title, titleHighlight, highlightC
     const idStr = String(item.id || '');
     const parts = idStr.split('-');
     const type = parts.length > 1 ? parts[0] : 'apt';
-    const lawdCd = parts.length > 1 ? parts[1] : '11680';
-    let url = `/apt/${encodeURIComponent(item.name)}?type=${type}&lawdCd=${lawdCd}`;
+    // REGION_CONTEXT_PARAMETERIZATION_V1 — RankCard와 같은 이유로 강남구 fallback 제거.
+    const lawdCd = parts.length > 1 ? parts[1] : '';
+    let url = `/apt/${encodeURIComponent(item.name)}?type=${type}`;
+    if (lawdCd) url += `&lawdCd=${lawdCd}`;
     if (regionName) {
       url += `&region=${encodeURIComponent(regionName)}`;
     }

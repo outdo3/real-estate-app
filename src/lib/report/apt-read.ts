@@ -99,7 +99,7 @@ export async function readScore(aptSeq: string): Promise<AptScoreView> {
     if (v2 && v2.eligibility !== 'NOT_ENOUGH_DATA' && v2.overallScore != null) {
       const target = await prisma.apartmentMaster.findUnique({
         where: { aptSeq },
-        select: { sigungu: true, buildYear: true, totalHouseholds: true },
+        select: { sido: true, sigungu: true, buildYear: true, totalHouseholds: true },
       });
       if (target) {
         peerContext = await getPeerContext({
@@ -108,7 +108,7 @@ export async function readScore(aptSeq: string): Promise<AptScoreView> {
           buildYear: target.buildYear,
           totalHouseholds: target.totalHouseholds,
           v2Score: Math.round(v2.overallScore),
-        });
+        }, target.sido);
       }
     }
 

@@ -37,7 +37,7 @@ async function main() {
   for (const s of samples) {
     const master = await prisma.apartmentMaster.findUnique({
       where: { aptSeq: s.aptSeq },
-      select: { aptSeq: true, name: true, sigungu: true, umdName: true, buildYear: true, totalHouseholds: true },
+      select: { aptSeq: true, name: true, sido: true, sigungu: true, umdName: true, buildYear: true, totalHouseholds: true },
     });
     if (!master) {
       results.push({ aptSeq: s.aptSeq, name: s.name, error: 'ApartmentMaster not found' });
@@ -51,7 +51,7 @@ async function main() {
       buildYear: master.buildYear,
       totalHouseholds: master.totalHouseholds,
       v2Score: s.v2Score,
-    });
+    }, master.sido);
 
     const expectedLevel = LEVEL_MAP[s.level] ?? null;
     const checks = {

@@ -113,7 +113,11 @@ export default function ApartmentDetail() {
   const [ledgerType, setLedgerType] = useState<'전유부' | '표제부'>('전유부');
   const [aptInfo, setAptInfo] = useState<Record<string, string> | null>(null);
   const [unitMaster, setUnitMaster] = useState<DisplayUnit[] | null>(null);
-  const [lawdCdState, setLawdCdState] = useState('11680');
+  // REGION_CONTEXT_PARAMETERIZATION_V1 — 초기값이 '11680'(서울 강남구)이었다. 이 값은
+  // 자식 컴포넌트(실거래 차트·투자지표·건축물대장·Score)로 그대로 전달되므로, 지역이
+  // 확정되기 전에 강남구로 조회가 나가 **다른 지역 단지의 데이터**가 화면에 먼저 채워질 수
+  // 있었다. 지역을 모르는 동안에는 빈 문자열로 두고, 서버가 확정해 준 lawdCd로만 채운다.
+  const [lawdCdState, setLawdCdState] = useState('');
   const [regionName, setRegionName] = useState<string>('');
   const [urlDong, setUrlDong] = useState<string>('');
   // 사용자가 검색/진입에 쓴 이름(아실 "금호어울림" vs 네이버 "서대신금호어울림" 같은 표기
@@ -198,10 +202,11 @@ export default function ApartmentDetail() {
     if (queryType === 'rent') setTradeTypeFilter('전월세');
 
     // lawdCd/dong도 여기서 미리 읽어둔다 — InvestmentMetrics/PriceTrendChart가 부모의
-    // fetchTrades 이펙트보다 먼저 마운트/실행되므로, 이걸 하지 않으면 하드코딩된 기본값
-    // ('11680')이나 dong 없이 한 번 잘못(너무 넓게) 조회된다.
+    // fetchTrades 이펙트보다 먼저 마운트/실행되므로, 이걸 하지 않으면 dong 없이 한 번
+    // 잘못(너무 넓게) 조회된다.
     const queryLawdCd = searchParams.get('lawdCd');
-    setLawdCdState(queryLawdCd || '11680');
+    // 없으면 비워 둔다 — 기본 지역으로 추측하지 않는다(서버가 DB/지오코딩으로 확정한다).
+    setLawdCdState(queryLawdCd || '');
     const queryDong = searchParams.get('dong');
     if (queryDong) setUrlDong(queryDong);
     const queryAptSeq = searchParams.get('aptSeq');
@@ -314,7 +319,7 @@ export default function ApartmentDetail() {
         });
         if (cancelled) return;
 
-        let resolvedLawdCd = urlLawdCd || '11680';
+        let resolvedLawdCd = urlLawdCd || '';
         let resolvedDong = urlDongParam || '';
 
         if (responseOk) {

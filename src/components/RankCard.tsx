@@ -38,8 +38,12 @@ const RankCard: React.FC<RankCardProps> = ({ data, regionName }) => {
   const idStr = String(data.id || '');
   const parts = idStr.split('-');
   const type = parts.length > 1 ? parts[0] : 'apt';
-  const lawdCd = parts.length > 1 ? parts[1] : '11680'; // fallback
-  let detailUrl = `/apt/${encodeURIComponent(data.name)}?type=${type}&lawdCd=${lawdCd}`;
+  // REGION_CONTEXT_PARAMETERIZATION_V1 — id에서 lawdCd를 못 읽으면 '11680'(서울 강남구)을
+  // 붙이던 fallback을 없앴다. 잘못된 지역을 넘기면 상세페이지가 그 지역 실거래를 보여준다.
+  // 모르면 링크에서 빼고, 상세 라우트가 DB/지오코딩으로 직접 확정하게 둔다.
+  const lawdCd = parts.length > 1 ? parts[1] : '';
+  let detailUrl = `/apt/${encodeURIComponent(data.name)}?type=${type}`;
+  if (lawdCd) detailUrl += `&lawdCd=${lawdCd}`;
   if (regionName) {
     detailUrl += `&region=${encodeURIComponent(regionName)}`;
   }

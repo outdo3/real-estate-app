@@ -88,7 +88,26 @@ export async function GET(
         if (!dong && geo.lawdCd === lawdCd) dong = geo.dong;
       }
     }
-    lawdCd = lawdCd || '11680';
+    // REGION_CONTEXT_PARAMETERIZATION_V1 — 여기에는 `lawdCd = lawdCd || '11680'`이 있었다.
+    // URL·DB 캐시·지오코딩이 모두 실패했을 때 서울 강남구로 조회하면, 실제로는 다른 지역에
+    // 있는 단지의 화면에 **강남구 실거래**가 채워진다(그리고 응답의 lawdCd도 강남구로 나가
+    // 이후 요청까지 오염된다). 지역을 확정하지 못하면 추측하지 않고 "지역 미확정"을
+    // 명시적으로 돌려준다 — 잘못된 지역 데이터보다 데이터 없음이 우선이다.
+    if (!lawdCd) {
+      return NextResponse.json({
+        trades: [],
+        apiError: '단지의 지역(시군구)을 확인하지 못해 실거래를 조회하지 못했습니다.',
+        lawdCd: null,
+        dong: dong || null,
+        regionUnresolved: true,
+        tradeDataSource: null,
+        canceledExcluded: true,
+        partial: false,
+        failedMonths: [],
+        monthsRequested: 0,
+        monthsSucceeded: 0,
+      });
+    }
 
     const type = searchParams.get('type') || 'apt';
 
