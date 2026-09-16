@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import { dedupMolitInFlight, runMolitGuarded, type MolitGuardDeps } from './molit-rate-guard';
+import { dedupMolitInFlight, runMolitGuarded, type MolitAttemptOutcome, type MolitGuardDeps } from './molit-rate-guard';
 
 const API_KEY = process.env.DATA_GO_KR_API_KEY;
 
@@ -85,9 +85,21 @@ export function redactMolitFailureMessage(message: unknown): string {
     .replace(/https?:\/\/\S+/gi, '[redacted-url]');
 }
 
+// MOLIT_LIVE_PAGING_FIX_V1 — 한 페이지에 담기는 최대 행 수. 기존 라이브 경로가 써 온
+// 값이자 대량 sync fetcher(scripts/sale-molit-fetch.ts, rent-molit-fetch.ts)와 같은
+// 관행값이다. 서버는 이 값을 그대로 존중하고 응답 body에 echo한다(실측 확인).
+export const MOLIT_PAGE_SIZE = 1000;
+
+/** 한 페이지의 원본 응답. 매핑 전 raw item과 서버가 알려준 전체 건수. */
+export interface MolitRawPage {
+  rawItems: any[];
+  /** 서버가 준 totalCount. 파싱할 수 없으면 null — "0건"과 절대 혼동하지 않는다. */
+  totalCount: number | null;
+}
+
 // 한 번의 HTTP 시도. 실패는 throw로 알린다 — 재시도 여부는 molit-rate-guard가
 // 실패 메시지를 분류해 정한다. URL/타임아웃/캐시/파싱/빈 결과 규칙은 기존과 동일하다.
-async function fetchMolitDataOnce({ lawdCd, dealYmd, type }: FetchParams) {
+async function fetchMolitPageRaw({ lawdCd, dealYmd, type }: FetchParams, pageNo: number): Promise<MolitRawPage> {
     if (!API_KEY) {
       throw new Error('DATA_GO_KR_API_KEY is not defined in environment variables.');
     }
@@ -123,7 +135,10 @@ async function fetchMolitDataOnce({ lawdCd, dealYmd, type }: FetchParams) {
   const cleanKey = API_KEY.trim().replace(/['"]/g, '');
   const decodedKey = decodeURIComponent(cleanKey);
   const finalKey = encodeURIComponent(decodedKey);
-  const url = `${endpoint}?serviceKey=${finalKey}&LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}&numOfRows=1000`;
+  // MOLIT_LIVE_PAGING_FIX_V1 — pageNo를 명시한다. 서버 기본값이 1이라 pageNo=1은 기존
+  // 요청과 동일한 응답을 주고(대량 fetcher가 이미 같은 형태로 호출해 검증됨), 2페이지
+  // 이상을 실제로 읽을 수 있게 된다.
+  const url = `${endpoint}?serviceKey=${finalKey}&LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}&pageNo=${pageNo}&numOfRows=${MOLIT_PAGE_SIZE}`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -147,41 +162,150 @@ async function fetchMolitDataOnce({ lawdCd, dealYmd, type }: FetchParams) {
       throw new Error(`OpenAPI Error: ${jsonObj.OpenAPI_ServiceResponse.cmmMsgHeader.returnAuthMsg}`);
     }
 
+    // MOLIT_LIVE_PAGING_FIX_V1 — 서버가 준 전체 건수. 숫자로 읽히지 않으면 null로 두고
+    // 절대 0으로 떨어뜨리지 않는다("모르는 것"과 "0건"은 다르다).
+    const totalCountRaw = jsonObj.response?.body?.totalCount;
+    const totalCount =
+      totalCountRaw != null && Number.isFinite(Number(totalCountRaw)) ? Number(totalCountRaw) : null;
+
     const items = jsonObj.response?.body?.items?.item;
 
     if (!items) {
       // If items is empty but resultCode is 00 (Normal), just return empty array
       if (jsonObj.response?.header?.resultCode === '00' || jsonObj.response?.header?.resultCode === 0) {
-        return [];
+        return { rawItems: [], totalCount };
       }
       throw new Error(`No items found. Response: ${textData.substring(0, 100)}...`);
     }
 
     const itemsArray = Array.isArray(items) ? items : [items];
 
-    return mapMolitItems(itemsArray, type, lawdCd, dealYmd);
+    return { rawItems: itemsArray, totalCount };
+}
+
+/**
+ * MOLIT_LIVE_PAGING_FIX_V1 §3 — 한 (유형, lawdCd, 월) 셀의 **전체** 행을 읽는다.
+ *
+ * 기존 라이브 경로는 `numOfRows=1000`만 붙이고 pageNo도 totalCount도 쓰지 않아,
+ * 1,000건을 넘는 셀을 조용히 잘라 "이게 전부"인 것처럼 돌려줬다(실측: 서울 강남구
+ * 전월세 2026-03 totalCount 2,091 중 1,000건만 노출 — 52.2% 누락). 대량 sync
+ * fetcher가 이미 쓰고 있는 검증된 패턴(pageNo → totalCount → 필요한 페이지만)을
+ * 그대로 가져온다. 새 아키텍처를 만들지 않는다.
+ *
+ * 계약:
+ * - 1,000건 이하 셀: 페이지 1회 = 수정 전과 완전히 동일한 요청·결과.
+ * - 1,000건 초과 셀: 필요한 페이지를 **순서대로** 다 읽어 concat한다.
+ * - 페이지 하나라도 최종 실패하면 **부분 결과를 정상처럼 돌려주지 않고** 실패로 알린다
+ *   (silent truncation 금지 — 호출부는 기존 '에러' 플레이스홀더 계약으로 부분 실패를 본다).
+ * - 각 페이지는 호출부가 준 동일 게이트(runMolitGuarded + ticket)를 **개별로** 통과한다.
+ *   ungated Promise.all로 한꺼번에 내보내지 않는다 — 초당 제한 버스트를 악화시키지 않기 위해.
+ */
+async function fetchAllPagesGuarded(
+  params: FetchParams,
+  deps: (MolitGuardDeps & { fetchPage?: typeof fetchMolitPageRaw }) | undefined
+): Promise<MolitAttemptOutcome<any[]>> {
+  const { lawdCd, dealYmd, type } = params;
+  const fetchPage = deps?.fetchPage ?? fetchMolitPageRaw;
+
+  // 페이지 1장 = 게이트 1회 통과(슬롯 + 페이싱 + 차단기 + rate-limit 재시도).
+  const guardedPage = async (pageNo: number): Promise<MolitAttemptOutcome<MolitRawPage>> => {
+    const { outcome } = await runMolitGuarded<MolitRawPage>(async () => {
+      try {
+        return { ok: true as const, value: await fetchPage(params, pageNo) };
+      } catch (error: any) {
+        return { ok: false as const, message: String(error?.message ?? '') };
+      }
+    }, deps);
+    return outcome;
+  };
+
+  const first = await guardedPage(1);
+  if (!first.ok) return first;
+
+  const { rawItems: firstItems, totalCount } = first.value;
+
+  // totalCount를 못 읽은 경우. 1페이지가 상한 미만이면 더 있을 수 없으므로 수정 전과
+  // 동일하게 그대로 쓴다. 상한에 닿아 있으면 잘렸는지 아닌지 알 수 없으므로 —
+  // 모르는 것을 "전부"라고 말하지 않는다 — 실패로 처리한다.
+  if (totalCount === null) {
+    if (firstItems.length < MOLIT_PAGE_SIZE) {
+      return { ok: true, value: mapMolitItems(firstItems, type, lawdCd, dealYmd) };
+    }
+    return {
+      ok: false,
+      message: `MOLIT totalCount를 읽을 수 없어 전체 건수를 확인하지 못했습니다(${firstItems.length}건 수신, 절단 가능).`,
+    };
+  }
+
+  if (totalCount <= firstItems.length) {
+    return { ok: true, value: mapMolitItems(firstItems, type, lawdCd, dealYmd) };
+  }
+
+  // 2페이지 이상. 페이지는 순차로만 읽는다(중복 요청 없음, 순서 결정적).
+  const totalPages = Math.ceil(totalCount / MOLIT_PAGE_SIZE);
+  let rawItems = firstItems;
+  for (let pageNo = 2; pageNo <= totalPages; pageNo++) {
+    const page = await guardedPage(pageNo);
+    if (!page.ok) return page;
+    rawItems = rawItems.concat(page.value.rawItems);
+  }
+
+  // 페이지를 다 읽었는데도 모자라면 부분이다. 절대 완전한 결과로 위장하지 않는다.
+  if (rawItems.length < totalCount) {
+    return {
+      ok: false,
+      message: `MOLIT 응답이 불완전합니다(${rawItems.length}/${totalCount}건, ${totalPages}페이지).`,
+    };
+  }
+
+  // §13 — 비밀값 없는 계측. 여러 페이지를 실제로 읽은 셀만 남긴다(정상 단일 페이지는 조용히).
+  console.log(
+    `[molit] paged fetch type=${type} lawdCd=${lawdCd} dealYmd=${dealYmd} totalCount=${totalCount} pagesFetched=${totalPages} fetchedCount=${rawItems.length}`
+  );
+
+  // 매핑은 합쳐진 전체 배열에 **한 번만** 적용한다 — id/rank 인덱스가 0..N-1로 이어지도록.
+  return { ok: true, value: mapMolitItems(rawItems, type, lawdCd, dealYmd) };
 }
 
 // E-JIP MOLIT PARTIAL FAILURE REDUCTION V1 — 모든 호출이 프로세스 단일 게이트
 // (인스턴스당 동시성 4 / 슬롯당 250ms + 차단기 + 적응형 쿨다운)를 공유하고, "초당 요청제한"만
 // 실패한 이 월 하나에 대해 bounded backoff로 재시도한다(잠금 중에는 호출 없이 실패). 반환 계약은 그대로다: 성공은 거래 배열,
 // 정상 0건은 [], 최종 실패는 typeLabel:'에러' 플레이스홀더 1건.
-export async function fetchMolitData(params: FetchParams, deps?: MolitGuardDeps & { fetchOnce?: typeof fetchMolitDataOnce }) {
+export async function fetchMolitData(params: FetchParams, deps?: MolitFetchDeps) {
+  // dedup 키는 **셀 단위**(유형:지역:월)다 — 한 셀의 페이지들은 아래에서 순차로 읽으므로
+  // 같은 페이지를 두 번 요청하는 일이 없고, 동시에 같은 셀을 원한 호출부들은 여전히
+  // 네트워크 시퀀스 하나를 공유한다.
   return dedupMolitInFlight(`${params.type}:${params.lawdCd}:${params.dealYmd}`, deps?.lane ?? 'interactive', (ticket) =>
     fetchMolitDataGuarded(params, { ...deps, ticket })
   );
 }
 
-async function fetchMolitDataGuarded(params: FetchParams, deps?: MolitGuardDeps & { fetchOnce?: typeof fetchMolitDataOnce }) {
+export type MolitFetchDeps = MolitGuardDeps & {
+  /**
+   * 레거시 주입 지점(단일 페이지, 이미 매핑된 행 배열을 반환). 기존 테스트가 쓰는 계약을
+   * 그대로 유지한다 — 주입되면 페이지네이션 없이 그 결과를 쓴다.
+   */
+  fetchOnce?: (params: FetchParams) => Promise<any[]>;
+  /** 페이지 단위 주입 지점(raw item + totalCount). 페이지네이션 동작을 검증할 때 쓴다. */
+  fetchPage?: typeof fetchMolitPageRaw;
+};
+
+async function fetchMolitDataGuarded(params: FetchParams, deps?: MolitFetchDeps) {
   const { lawdCd, dealYmd, type } = params;
-  const once = deps?.fetchOnce ?? fetchMolitDataOnce;
-  const { outcome } = await runMolitGuarded(async () => {
-    try {
-      return { ok: true as const, value: await once(params) };
-    } catch (error: any) {
-      return { ok: false as const, message: String(error?.message ?? '') };
-    }
-  }, deps);
+
+  // 레거시 단일 페이지 주입이 있으면 기존 경로 그대로(페이지네이션 없음).
+  const once = deps?.fetchOnce;
+  const outcome = once
+    ? (
+        await runMolitGuarded<any[]>(async () => {
+          try {
+            return { ok: true as const, value: await once(params) };
+          } catch (error: any) {
+            return { ok: false as const, message: String(error?.message ?? '') };
+          }
+        }, deps)
+      ).outcome
+    : await fetchAllPagesGuarded(params, deps);
 
   if (outcome.ok) return outcome.value;
 

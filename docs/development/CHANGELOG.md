@@ -2,6 +2,25 @@
 
 ## 2026-09-16
 
+### E-JIP MOLIT LIVE PAGING FIX V1 — 라이브 조회가 1,000건 초과 셀을 더 이상 조용히 자르지 않는다
+
+DB/schema/migration·bulk backfill·cron·coverage cell·region enable·Score·auth 변경 0. 소비자 18곳 수정 0.
+상세: `docs/development/MOLIT_LIVE_PAGING_FIX_V1.md`
+
+    결함      src/lib/api-molit.ts가 numOfRows=1000만 붙이고 pageNo·totalCount를 쓰지 않아 첫 페이지만 읽었다
+              서울 강남구 전월세 202603 = totalCount 2,091 중 1,000건만 노출(52.2% 누락). 소비자 18곳(상세·거래·통계 4·학교·피드·점수 collector)
+    수정      fetchMolitPageRaw(params, pageNo) + fetchAllPagesGuarded — page1 → totalCount → ceil(total/1000) → 순차 수집 → 합친 배열에 mapMolitItems 1회
+              대량 sync fetcher가 쓰던 검증된 패턴 재사용, 새 아키텍처 없음. MOLIT_PAGE_SIZE 상수 노출
+    진실성    페이지 하나라도 최종 실패하거나 합계<totalCount면 기존 '에러' 플레이스홀더로 실패 표시 — 부분을 완전한 결과로 위장하지 않음
+              totalCount 없음+1페이지가 상한까지 참 → 절단 가능으로 실패 처리. totalCount 0 + items 없음은 그대로 빈 배열(실패 아님)
+    게이트    페이지마다 runMolitGuarded 개별 통과(동시 4·250ms·차단기·재시도 그대로), ungated Promise.all 없음
+              한 셀 내부 동시 페이지 1로 고정, dedup 키는 셀 단위 유지 — 같은 셀 동시 요청 3건이 페이지 시퀀스 1회 공유
+    타임아웃  5s는 페이지 단위라 다중 페이지 셀이 부당하게 끊기지 않음. 실측 3페이지 2.3s → 정책 변경 없음
+    parity    pageNo=1 요청과 기존 요청 응답이 바이트 단위 동일(부산 4셀 실 API 확인). ≤1,000건 셀 동작 변화 0
+    QA        실 API: 강남 2,091/2,091(3p)·송파 1,873(2p)·분당 1,358(2p)·해운대 714(1p)·해운대 매매 387·서구 117 — 전부 PASS, 중복 행 0
+    검증      신규 페이징 테스트 16 pass, 기존 rate-guard 테스트 26 pass(수정 없음), src 전체 2,171 pass 0 fail
+              eslint exit 0, tsc src 오류 0(기존 25건은 scripts/tmp FAIL_EXISTING_SCRIPT_ERRORS), next build 성공 43/43
+
 ### E-JIP MOLIT QUOTA & SCALE PROBE V1 — PAGING_FIX_REQUIRED (READ-ONLY)
 
 Production write·schema·migration·sync·cron·region enable 0. 앱 코드 변경 0(read-only probe 스크립트 2개 추가).
