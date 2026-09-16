@@ -147,6 +147,43 @@ KST period 모듈(`Statistics Period & Trade UX V1`)은 지역 판정과 무관�
 
 ---
 
+## 8. Production QA (배포 후, §19·§21)
+
+커밋 `1214f98` push → Vercel Production 배포 완료.
+
+### 부산 parity — 18/18 완전 동일
+
+배포 전에 기록한 signature(응답 status·scope·region·period·mode·rows/items 길이와 head·data 키 구성·연도별 표 전체 등)를 배포 후와 비교했다.
+
+| 요청 | http | 결과 |
+|---|---|---|
+| dashboard 부산전체 / 서구 / 해운대 / 연제 | 200 | **IDENTICAL** ×4 |
+| price-rankings record-high 서구 | 200 | **IDENTICAL** |
+| price-rankings rising / decline 해운대 | 200 | **IDENTICAL** ×2 |
+| price-rankings area84 연제 | 200 | **IDENTICAL** |
+| region-change sigungu 부산 / dong 해운대 | 200 | **IDENTICAL** ×2 |
+| region-change (param 누락 케이스) | 400 | **IDENTICAL** |
+| yearly 서구 / 해운대 | 200 | **IDENTICAL** ×2 |
+| large-complex 부산 / 서구 | 200 | **IDENTICAL** ×2 |
+| transactions marker 해운대 (DB-first 지도) | 200 | **IDENTICAL** |
+| large-complex 서울 | 200 `UNSUPPORTED` | **IDENTICAL** |
+| region-change sigungu 서울 (live 경로) | 200 `OK` | **IDENTICAL** |
+
+**PARITY: PASS** — 부산 결과도, 비부산 live 동작도 바뀌지 않았다.
+
+### 안전 확인
+
+| 확인 | 결과 |
+|---|---|
+| sitemap `<loc>` | **139** (불변) |
+| sitemap 내 서울/경기 URL | **0** |
+| `/` · `/stats` · `/map` | 200 |
+| 5xx | **0** |
+| `error_logs` 최근 2시간 / 24시간 | **0 / 0** (최신 2026-09-11, 배포 5일 전) |
+| 서울/경기 stats 공개 | 변화 없음(§3·§10대로 live 경로 유지, 신규 노출 0) |
+
+---
+
 ## 9. 하드코딩 재스캔 (§20)
 
 | 분류 | 위치 | 비고 |
