@@ -2,6 +2,25 @@
 
 ## 2026-09-16
 
+### E-JIP MOLIT QUOTA & SCALE PROBE V1 — PAGING_FIX_REQUIRED (READ-ONLY)
+
+Production write·schema·migration·sync·cron·region enable 0. 앱 코드 변경 0(read-only probe 스크립트 2개 추가).
+MOLIT 호출 43건(GET 조회만, endpoint당 quota 약 0.2% 소모). 상세: `docs/development/MOLIT_QUOTA_SCALE_PROBE_V1.md`
+
+    quota     응답 헤더 x-ratelimit-limit=10000 실측, 카운터는 endpoint별 독립(매매 9882→9863 / 전월세 9967→9948 동일 실행)
+              리셋 주기는 헤더에 없음 → 창 주기 UNCONFIRMED(일 단위 정황만). 일일 한도 초과 로그 0건
+    결함      라이브 경로(src/lib/api-molit.ts:126) pageNo 없음·totalCount 미검증 → 서울 전월세 실제 절단 확정
+              강남구 202603 2,091건 중 1,000만 조회(52.2% 누락)·송파 1,873·분당 1,358·마포 1,150·김포 1,061·강남 202608 1,050
+              probe 전월세 20셀 중 6셀(30%)이 1,000 초과. 매매는 20셀 전부 1,000 미만(최대 경기 영통 577)
+    정상      대량 sync 경로(sale/rent-molit-fetch)는 pageNo·totalCount 검증하고 PARTIAL 보존 — 커버리지 fetched<total 0건
+              서버 페이징 정상 검증: 전월세 강남 202603 pageNo=3 → itemCount 91 = expected 91
+    규모      일일 증분 83구 = 매매 332·전월세 474 (한도의 3.3%/4.7%)
+              5년 백필 전체(부산+서울+경기) = 매매 4,980·전월세 7,110 → endpoint당 한 창 안에 들어감, 동시 1로 약 2시간
+    병목      quota가 아니라 cron 실행시간 — 83구 332셀은 50초 예산/maxDuration 60에 불가(부산 64셀은 통과)
+              districtOffset 파라미터는 있으나 vercel.json이 안 넘기고 SyncRun 테이블이 없어 offset 영속화 불가
+    로그      error_logs 30일 112건 중 초당 요청제한 91·timeout 6 (최근 2026-09-11). 일일 한도 흔적 0
+    검증      probe exit 0 stopped=null, DB read READ ONLY 트랜잭션 exit 0, eslint exit 0, tsc 신규 스크립트 오류 0
+
 ### E-JIP SEOUL / GYEONGGI EXPANSION DATA AUDIT V1 — ARCHITECTURE_WORK_REQUIRED (READ-ONLY)
 
 Production write·schema·sync·region enable 0. 앱 코드 변경 0(read-only 감사 스크립트 1개 추가). 상세: `docs/development/SEOUL_GYEONGGI_EXPANSION_DATA_AUDIT_V1.md`
