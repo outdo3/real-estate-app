@@ -122,7 +122,10 @@ export default function VolumeChartCard({
   const moreQuery = new URLSearchParams({ period: comparisonPreset, dealType }).toString();
   const feedPreset = feedPresetFor(comparisonPreset);
   const briefing = reportEntry ? briefingPeriodFor(comparisonPreset) : null;
-  const briefingHref = reportEntry && briefing ? (briefing.periodDays === 30 ? reportEntry.href : `${reportEntry.href}?period=${briefing.periodDays}`) : null;
+  // STATS_PERIOD_IMAGE_PARITY_V2 — 선택한 기간 키를 그대로 넘긴다(30일로 바꾸지 않는다). 리포트가 같은 계산기로 같은 범위를 만든다.
+  const briefingHref = reportEntry && briefing
+    ? `${reportEntry.href}${reportEntry.href.includes('?') ? '&' : '?'}period=${encodeURIComponent(briefing.periodKey)}`
+    : null;
   const changeColor = !metric ? 'var(--text-secondary)' : metric.changeCount > 0 ? 'var(--up-color)' : metric.changeCount < 0 ? 'var(--down-color)' : 'var(--text-secondary)';
 
   // DETAIL PRICE CHART INTERACTION P1 패턴 재사용 — activeIndex를 Recharts의
@@ -381,7 +384,6 @@ export default function VolumeChartCard({
             <span className={styles.briefingLabel}>{reportEntry.label}</span>
             <span className={styles.briefingBasis}>
               {briefing.basisLabel}
-              {!briefing.matchesSelection ? ' · 선택 기간과 기준이 달라요' : ''}
             </span>
           </span>
           <ChevronRight size={15} aria-hidden="true" />

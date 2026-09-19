@@ -2,6 +2,22 @@
 
 ## 2026-09-19
 
+### E-JIP STATS PERIOD & IMAGE PARITY V2 — 선택 기간이 브리핑·이미지·PDF·공유까지 같은 범위로 간다 + 15일
+
+DB write 0 · schema 0 · stats 집계 공식 0 · SEO canonical/메타 0 · 취소 코드 0.
+상세: `docs/development/STATS_PERIOD_IMAGE_PARITY_V2.md`
+
+    원인      30일 fallback 세 곳 — ① 카드 브리핑 링크가 오늘·어제·7일·30일을 30일(3개월은 90일)로 치환
+              ② 리포트 ?period=가 30/90/365 외 값을 조용히 30으로(Production: ?period=7d가 "최근 30일" 1,998건)
+              ③ 공유 링크에 기간이 없어 받는 사람은 항상 기본 30일 · 파일명에도 기간 없음
+    수정      리포트가 통계 기간 키(today·yesterday·7d·15d·30d·3m)를 받아 화면과 같은 계산기(KST, 오늘 포함)로 범위 생성
+              기존 30/90/365·기본 진입·SEO 설명은 그대로 · 모르는 값만 기본
+              공유 링크 ?period= · 파일명 기간 키 · 헤더에 기간 라벨 + 날짜 범위(이미지·PDF 안에 남음)
+              하루 단위(오늘·어제)는 리포트도 직전 대비 생략(화면과 같은 정책)
+    15일      09-05~09-19 ↔ 직전 08-21~09-04 · dashboard 요약(캐시 v4) · concentration/feed 허용 · 칩 추가
+    문구      중앙 거래가 → 매매 중앙가격 · ㎡당 중앙가 → ㎡당 매매 중앙가격 + 카드 설명(가격순 가운데 값 · 평균과 다름)
+    검증      신규 13 · src 2,266 · scripts 154 · 0 fail · eslint 23파일 exit 0 · tsc src 오류 0(기존 25건 scripts/tmp) · build 성공
+
 ### E-JIP CANCELLATION INSERT PATH FIX V1 — 새 형제 insert의 취소 상태를 그룹 개수로 정한다
 
 schema/migration 0 · repair 0 · restore gate 변경 0 · 기존 28행 변경 0 · cron 수동 실행 0.

@@ -3,7 +3,7 @@ import { siteConfig, buildOpenGraph, buildTwitter } from '@/config/site';
 import RegionReportSheet from '@/components/report/RegionReportSheet';
 import JsonLd from '@/components/seo/JsonLd';
 import { readRegionReportForPeriod } from '@/lib/report/region-read-cached';
-import { DEFAULT_PERIOD_DAYS, parsePeriodParam } from '@/lib/report/report-period';
+import { DEFAULT_REPORT_PERIOD_KEY, parseReportPeriodKey } from '@/lib/report/report-period';
 import { cityReportSeo, districtNavLinks, regionAvailableDataFromEnvelope } from '@/lib/seo/report-region-seo';
 import { buildBreadcrumbJsonLd } from '@/lib/seo/site-seo';
 
@@ -18,7 +18,7 @@ type Props = { searchParams: Promise<{ period?: string | string[] }> };
 // REGIONAL_SEO_DATA_AWARE_DESCRIPTION_PATCH_V1 — 설명은 canonical 페이지(기본 기간)가 실제로 보여주는
 // 섹션 값에서 만든다. 같은 요청의 page와 envelope을 공유한다(readRegionReportForPeriod).
 export async function generateMetadata(): Promise<Metadata> {
-  const envelope = await readRegionReportForPeriod('CITY', null, null, DEFAULT_PERIOD_DAYS).catch(() => null);
+  const envelope = await readRegionReportForPeriod('CITY', null, null, DEFAULT_REPORT_PERIOD_KEY).catch(() => null);
   const seo = cityReportSeo(regionAvailableDataFromEnvelope('CITY', envelope));
   return {
     title: seo.title,
@@ -32,7 +32,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function CityReportPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const envelope = await readRegionReportForPeriod('CITY', null, null, parsePeriodParam(sp?.period));
+  const envelope = await readRegionReportForPeriod('CITY', null, null, parseReportPeriodKey(sp?.period));
   const seo = cityReportSeo();
   return (
     <>

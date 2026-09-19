@@ -5,7 +5,7 @@ import InvalidScope from '@/components/report/InvalidScope';
 import JsonLd from '@/components/seo/JsonLd';
 import { readRegionReportForPeriod } from '@/lib/report/region-read-cached';
 import { isBusanCurrentLawdCd } from '@/lib/report/region-scope';
-import { DEFAULT_PERIOD_DAYS, parsePeriodParam } from '@/lib/report/report-period';
+import { DEFAULT_REPORT_PERIOD_KEY, parseReportPeriodKey } from '@/lib/report/report-period';
 import { districtReportSeo, dongNavLinks, regionAvailableDataFromEnvelope } from '@/lib/seo/report-region-seo';
 import { readBusanDongTradeCounts } from '@/lib/seo/region-seo-read';
 import { buildBreadcrumbJsonLd } from '@/lib/seo/site-seo';
@@ -23,7 +23,7 @@ type Props = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { lawdCd } = await params;
   const envelope = isBusanCurrentLawdCd(lawdCd)
-    ? await readRegionReportForPeriod('DISTRICT', lawdCd, null, DEFAULT_PERIOD_DAYS).catch(() => null)
+    ? await readRegionReportForPeriod('DISTRICT', lawdCd, null, DEFAULT_REPORT_PERIOD_KEY).catch(() => null)
     : null;
   const seo = districtReportSeo(lawdCd, regionAvailableDataFromEnvelope('DISTRICT', envelope));
   return {
@@ -44,7 +44,7 @@ export default async function DistrictReportPage({ params, searchParams }: Props
   }
   const sp = await searchParams;
   const [envelope, dongCounts] = await Promise.all([
-    readRegionReportForPeriod('DISTRICT', lawdCd, null, parsePeriodParam(sp?.period)),
+    readRegionReportForPeriod('DISTRICT', lawdCd, null, parseReportPeriodKey(sp?.period)),
     // 동 링크 목록은 보조 내비게이션이다 — 조회가 실패하면 목록만 빠진다(리포트는 그대로).
     readBusanDongTradeCounts(),
   ]);

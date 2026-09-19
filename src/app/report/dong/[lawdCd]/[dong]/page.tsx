@@ -5,7 +5,7 @@ import InvalidScope from '@/components/report/InvalidScope';
 import JsonLd from '@/components/seo/JsonLd';
 import { readRegionReportForPeriod } from '@/lib/report/region-read-cached';
 import { isBusanCurrentLawdCd, normalizeDong } from '@/lib/report/region-scope';
-import { DEFAULT_PERIOD_DAYS, parsePeriodParam } from '@/lib/report/report-period';
+import { DEFAULT_REPORT_PERIOD_KEY, parseReportPeriodKey } from '@/lib/report/report-period';
 import { dongReportSeo, regionAvailableDataFromEnvelope } from '@/lib/seo/report-region-seo';
 import { readDongTrailingYearTrades } from '@/lib/seo/region-seo-read';
 import { buildBreadcrumbJsonLd } from '@/lib/seo/site-seo';
@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const trades = isBusanCurrentLawdCd(lawdCd) && dongName ? await readDongTrailingYearTrades(lawdCd, dongName) : null;
   const envelope =
     dongName && trades != null && trades > 0
-      ? await readRegionReportForPeriod('DONG', lawdCd, dongName, DEFAULT_PERIOD_DAYS).catch(() => null)
+      ? await readRegionReportForPeriod('DONG', lawdCd, dongName, DEFAULT_REPORT_PERIOD_KEY).catch(() => null)
       : null;
   const seo = dongReportSeo(lawdCd, dongName ?? '', trades, regionAvailableDataFromEnvelope('DONG', envelope));
   return {
@@ -59,7 +59,7 @@ export default async function DongReportPage({ params, searchParams }: Props) {
   }
   const sp = await searchParams;
   const [envelope, trades] = await Promise.all([
-    readRegionReportForPeriod('DONG', lawdCd, dongName, parsePeriodParam(sp?.period)),
+    readRegionReportForPeriod('DONG', lawdCd, dongName, parseReportPeriodKey(sp?.period)),
     readDongTrailingYearTrades(lawdCd, dongName),
   ]);
   const seo = dongReportSeo(lawdCd, dongName, trades);

@@ -27,6 +27,7 @@ const PERIOD_OPTIONS: PeriodOption[] = [
   { preset: 'today', label: '오늘' },
   { preset: 'yesterday', label: '어제' },
   { preset: '7d', label: '최근 7일' },
+  { preset: '15d', label: '최근 15일' },
   { preset: '30d', label: '최근 30일' },
   { preset: '3m', label: '최근 3개월' },
 ];

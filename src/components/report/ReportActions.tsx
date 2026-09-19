@@ -8,7 +8,8 @@ import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
   buildExportFilename,
   buildShareText,
-  reportCanonicalUrl,
+  periodKeyOf,
+  reportShareUrl,
   type ReportIdentity,
 } from '@/lib/report/export-identity';
 import type { ReportEnvelope } from '@/lib/report/types';
@@ -68,6 +69,8 @@ export default function ReportActions({
           aptSeqs: envelope.scope.aptSeqs,
         },
         periodEnd: envelope.period.end,
+        // STATS_PERIOD_IMAGE_PARITY_V2 — 선택 기간을 공유 링크·파일명까지 가져간다.
+        periodKey: periodKeyOf(envelope),
       }
     : null;
 
@@ -75,7 +78,7 @@ export default function ReportActions({
     if (typeof window === 'undefined') return '';
     // SHARE_CARD_UNIFICATION_V1 §11 — 오리진은 siteConfig(NEXT_PUBLIC_SITE_URL)에서 온다.
     // 그래야 도메인 커토버 후 리포트 공유 링크도 같이 e-jip.com으로 넘어간다.
-    const fromIdentity = identity ? reportCanonicalUrl(resolveShareOrigin(), identity) : null;
+    const fromIdentity = identity ? reportShareUrl(resolveShareOrigin(), identity) : null;
     // identity로 못 만들면 현재 주소를 쓴다 — 추측한 경로로 다른 리포트를 가리키지 않는다.
     return fromIdentity ?? window.location.href;
   }, [identity]);

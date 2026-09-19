@@ -183,7 +183,8 @@ export async function GET(request: Request) {
     // STATISTICS_PERIOD_TRADE_UX_V1 — 기간(오늘/어제/최근 N일)이 KST 날짜에 묶이므로 캐시도 KST 날짜별로 가른다.
     // 날짜가 없으면 자정을 넘긴 뒤 최대 TTL(30분) 동안 어제 기준 '오늘'이 남는다.
     const kstToday = kstDateString(new Date());
-    const cacheKey = isSidoAll ? `stats-dashboard-sido:v3:${sidoCodeParam}:${kstToday}` : `stats-dashboard:v3:${lawdCd}:${kstToday}`;
+    // STATS_PERIOD_IMAGE_PARITY_V2 — 응답에 15d 요약이 추가돼 v4로 올린다(15d가 없는 이전 캐시 항목과 섞이지 않게).
+    const cacheKey = isSidoAll ? `stats-dashboard-sido:v4:${sidoCodeParam}:${kstToday}` : `stats-dashboard:v4:${lawdCd}:${kstToday}`;
     // PERFORMANCE_V1 §21/§33 / PHASE D / PHASE D.2 — sido-wide(전체 시/도) 요청은
     // 매매(sale)+전세/월세 verified 개월 모두 DB-first다(Busan 한정). 검증범위
     // 밖(주로 진행 중인 현재월 1개월)만 여전히 MOLIT 호출이 필요하다. 스키마
@@ -357,7 +358,8 @@ export async function GET(request: Request) {
       // clipDateRangeToVerified의 배타적 경계로 보장됨). 비부산은 rent DB 자체가
       // 없으므로 기존 row 전체 기반 계산을 그대로 쓴다(동작 변경 없음).
       // STATISTICS_PERIOD_TRADE_UX_V1 — 오늘/어제 추가, 모든 기간을 KST 계약일 기준으로 해석(resolveVolumePeriod).
-      const VOLUME_COMPARISON_PRESETS: VolumePeriodPreset[] = ['today', 'yesterday', '7d', '30d', '3m'];
+      // STATS_PERIOD_IMAGE_PARITY_V2 — 15d 추가.
+      const VOLUME_COMPARISON_PRESETS: VolumePeriodPreset[] = ['today', 'yesterday', '7d', '15d', '30d', '3m'];
       const verifiedApt = allAptTrades.filter((t: any) => !t.dealCanceled);
       const countInRange = (trades: any[], range: { from: string; to: string }) =>
         trades.filter((t: any) => t.dealDate >= range.from && t.dealDate <= range.to).length;

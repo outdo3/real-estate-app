@@ -245,7 +245,8 @@ test('7 페이지 배선: 설명은 기본 기간 envelope에서, page와 같은
   ] as const) {
     const code = codeOf(read(p));
     const meta = code.slice(code.indexOf('export async function generateMetadata'), code.indexOf('export default'));
-    assert.ok(new RegExp(`readRegionReportForPeriod\\('${level}'[^)]*DEFAULT_PERIOD_DAYS\\)`).test(meta), `${p}: 기본 기간 envelope을 읽지 않는다`);
+    // STATS_PERIOD_IMAGE_PARITY_V2 — 기간 인자가 일수에서 기간 키로 바뀌었다(기본 = '30', 의미 동일).
+    assert.ok(new RegExp(`readRegionReportForPeriod\\('${level}'[^)]*DEFAULT_REPORT_PERIOD_KEY\\)`).test(meta), `${p}: 기본 기간 envelope을 읽지 않는다`);
     assert.ok(new RegExp(`regionAvailableDataFromEnvelope\\('${level}', envelope\\)`).test(meta), `${p}: 설명이 envelope 값을 보지 않는다`);
     assert.ok(/\.catch\(\(\) => null\)/.test(meta), `${p}: 조회 실패 시 일반 설명으로 떨어지지 않는다`);
     assert.ok(!/searchParams/.test(meta), `${p}: 메타데이터가 ?period=에 따라 달라진다`);
@@ -255,7 +256,7 @@ test('7 페이지 배선: 설명은 기본 기간 envelope에서, page와 같은
   }
   const cached = codeOf(read('src/lib/report/region-read-cached.ts'));
   assert.ok(/from 'react'/.test(cached) && /cache\(/.test(cached), 'React cache로 감싸지 않았다');
-  assert.ok(/resolvePeriod\(days\)/.test(cached));
+  assert.ok(/resolveReportPeriod\(periodKey\)/.test(cached));
 });
 
 // ── 8~9. 서울·경기 재사용 ─────────────────────────────────────────────────

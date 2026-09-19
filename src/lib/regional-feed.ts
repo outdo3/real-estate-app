@@ -15,6 +15,7 @@ export type PeriodPreset =
   | 'today'
   | 'yesterday'
   | '7d'
+  | '15d'
   | 'thisWeek'
   | 'lastWeek'
   | '30d'
@@ -61,6 +62,13 @@ export function resolvePeriodRange(preset: PeriodPreset, now: Date, custom?: { f
     case '7d': {
       const from = new Date(now);
       from.setDate(now.getDate() - 6);
+      return { from: toDateStr(from), to: today };
+    }
+    case '15d': {
+      // STATS_PERIOD_IMAGE_PARITY_V2 — 피드 라우트는 15d를 KST 규칙(resolveVolumePeriod)으로 해석한다.
+      // 이 분기는 타입 완결성을 위한 기존 방식(로컬 날짜) 대응이다.
+      const from = new Date(now);
+      from.setDate(now.getDate() - 14);
       return { from: toDateStr(from), to: today };
     }
     case 'thisWeek': {

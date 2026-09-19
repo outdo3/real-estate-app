@@ -84,6 +84,12 @@ export interface ReportPeriod {
   /** 포함(inclusive) 종료일 YYYY-MM-DD. */
   end: string;
   label: string;
+  /** STATS_PERIOD_IMAGE_PARITY_V2 — 이 기간을 만든 URL 키(예: '7d', '30'). 공유 링크·파일명에 그대로 싣는다. */
+  key?: string;
+  /** 하루짜리 기간(오늘/어제) — 직전 기간 대비를 표시하지 않는다. */
+  singleDay?: boolean;
+  /** 기본 진입 기간인가(공유 링크에 ?period=를 붙이지 않는다). */
+  isDefault?: boolean;
 }
 
 export interface ReportTrust {

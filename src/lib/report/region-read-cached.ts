@@ -9,11 +9,13 @@
 import { cache } from 'react';
 import { readRegionReport } from './region-read';
 import type { RegionLevel } from './region-report';
-import { resolvePeriod } from './report-period';
+import { resolveReportPeriod, type ReportPeriodKey } from './report-period';
 
+// STATS_PERIOD_IMAGE_PARITY_V2 — 일수(30/90/365) 대신 기간 키를 받는다. 통계 화면에서 온 '7d'·'15d'·'yesterday'
+// 같은 키가 30일로 바뀌지 않고 같은 날짜 범위로 읽힌다(report-period.ts).
 export const readRegionReportForPeriod = cache(
-  async (level: RegionLevel, lawdCd: string | null, dong: string | null, days: number) => {
-    const period = resolvePeriod(days);
+  async (level: RegionLevel, lawdCd: string | null, dong: string | null, periodKey: ReportPeriodKey) => {
+    const period = resolveReportPeriod(periodKey);
     return readRegionReport({
       level,
       lawdCd,
@@ -21,6 +23,7 @@ export const readRegionReportForPeriod = cache(
       start: period.start,
       end: period.end,
       periodLabel: period.label,
+      periodMeta: { key: period.key, singleDay: period.singleDay, isDefault: period.isDefault },
     });
   }
 );

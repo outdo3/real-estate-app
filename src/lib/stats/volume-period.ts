@@ -7,12 +7,14 @@
 //
 // 날짜는 모두 **계약일(deal_date)** 범위다. 수집일(created_at)과 섞지 않는다.
 
-export type VolumePeriodPreset = 'today' | 'yesterday' | '7d' | '30d' | '3m';
+// STATS_PERIOD_IMAGE_PARITY_V2 — 15일 추가. 선택한 기간 하나가 화면·API·한장 브리핑(이미지/PDF)까지 그대로 간다.
+export type VolumePeriodPreset = 'today' | 'yesterday' | '7d' | '15d' | '30d' | '3m';
 
 export const VOLUME_PERIOD_OPTIONS: readonly { key: VolumePeriodPreset; label: string }[] = [
   { key: 'today', label: '오늘' },
   { key: 'yesterday', label: '어제' },
   { key: '7d', label: '최근 7일' },
+  { key: '15d', label: '최근 15일' },
   { key: '30d', label: '최근 30일' },
   { key: '3m', label: '최근 3개월' },
 ];
@@ -69,6 +71,8 @@ export function resolveVolumePeriod(preset: VolumePeriodPreset, now: Date): Volu
     }
     case '7d':
       return { from: shiftDays(today, -6), to: today };
+    case '15d':
+      return { from: shiftDays(today, -14), to: today };
     case '30d':
       return { from: shiftDays(today, -29), to: today };
     case '3m':
@@ -95,20 +99,32 @@ export function hasComparablePreviousPeriod(preset: VolumePeriodPreset): boolean
  * 실거래 신고 기한은 계약 후 30일이라 짧은 최근 기간일수록 이후 추가분 비중이 크다.
  */
 export function needsReportingLagNotice(preset: VolumePeriodPreset): boolean {
-  return preset === 'today' || preset === 'yesterday' || preset === '7d';
+  return preset === 'today' || preset === 'yesterday' || preset === '7d' || preset === '15d';
+}
+
+/** 'YYYY-MM-DD' → 'YYYY.MM.DD'. 하루짜리는 날짜 하나, 그 외는 'A ~ B'. 이미지 헤더와 화면이 같은 표기를 쓴다. */
+export function volumePeriodRangeText(range: VolumePeriodRange): string {
+  const dot = (ymd: string) => ymd.replace(/-/g, '.');
+  return range.from === range.to ? dot(range.from) : `${dot(range.from)} ~ ${dot(range.to)}`;
 }
 
 /**
- * 한장 브리핑(리포트)이 실제로 쓰는 기간. 리포트 엔진은 어제까지 30/90/365일만 지원한다.
- * 선택 기간과 같은 기간을 만들 수 없으면 조용히 바꾸지 않고 `matchesSelection=false`와
- * 실제 기준 라벨을 돌려준다 — 화면이 그 차이를 그대로 표시한다.
+ * 한장 브리핑(리포트)을 **선택한 기간 그대로** 연다.
+ *
+ * STATS_PERIOD_IMAGE_PARITY_V2 — 예전에는 리포트 엔진이 어제까지 30/90/365일만 받는다는 이유로
+ * 오늘·어제·7일·30일을 전부 30일(3개월은 90일)로 바꿔 열었다. 그래서 7일 화면에서 저장한 이미지가
+ * 30일 기준이었다. 리포트는 이제 이 preset 키를 그대로 받아(report-period.ts) 같은 계산기
+ * (resolveVolumePeriod)로 같은 날짜 범위를 만든다 — 다른 기간으로 바꾸지 않는다.
  */
-export function briefingPeriodFor(preset: VolumePeriodPreset): { periodDays: 30 | 90; basisLabel: string; matchesSelection: boolean } {
-  if (preset === '3m') return { periodDays: 90, basisLabel: '어제까지 최근 90일 기준', matchesSelection: false };
-  return { periodDays: 30, basisLabel: '어제까지 최근 30일 기준', matchesSelection: false };
+export function briefingPeriodFor(preset: VolumePeriodPreset, now: Date = new Date()): { periodKey: VolumePeriodPreset; basisLabel: string; matchesSelection: true } {
+  return {
+    periodKey: preset,
+    basisLabel: `${volumePeriodLabel(preset)} · ${volumePeriodRangeText(resolveVolumePeriod(preset, now))} 기준`,
+    matchesSelection: true,
+  };
 }
 
 /** 실거래 피드(/stats/feed)가 같은 기간으로 열 수 있는가 — 피드에는 3개월 preset이 없다. */
-export function feedPresetFor(preset: VolumePeriodPreset): 'today' | 'yesterday' | '7d' | '30d' | null {
+export function feedPresetFor(preset: VolumePeriodPreset): 'today' | 'yesterday' | '7d' | '15d' | '30d' | null {
   return preset === '3m' ? null : preset;
 }

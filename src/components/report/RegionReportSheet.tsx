@@ -25,6 +25,21 @@ const KPI_KEYS_BY_TYPE: Record<string, string[]> = {
 };
 
 /**
+ * STATS_PERIOD_IMAGE_PARITY_V2 §14 — 중앙값 카드 아래 한 줄 설명. 툴팁이 아니라 카드 안에 적는다 —
+ * 이미지(PNG)·PDF로 저장해도 같이 남아야 뜻이 전달된다.
+ */
+const KPI_HINTS: Record<string, string> = {
+  medianDealAmount: '가격순 가운데 값 · 평균과 다름',
+  medianPricePerM2: '가격순 가운데 값 · 평균과 다름',
+};
+
+/** 'YYYY-MM-DD' 기간 → 헤더용 'YYYY.MM.DD' 또는 'YYYY.MM.DD ~ YYYY.MM.DD'. 이미지 안에서도 기간을 확정한다. */
+function periodRangeText(start: string, end: string): string {
+  const dot = (ymd: string) => ymd.replace(/-/g, '.');
+  return start === end ? dot(start) : `${dot(start)} ~ ${dot(end)}`;
+}
+
+/**
  * REGIONAL_SEO_KEYWORD_LANDING_V1 §12 — 분포 행의 하위 지역 링크(부산 → 구, 구 → 동).
  * 행 자체가 이미 envelope의 실제 거래에서 나온 지역이라 이름을 지어내지 않는다.
  * 경로는 리포트 경로 단일 정의(report-links)만 쓴다.
@@ -234,7 +249,9 @@ export default function RegionReportSheet({
           title={h1}
           subtitle={envelope.subtitle}
           // H1이 지역 검색어로 바뀌어도 진입 CTA("서구 한장 브리핑")와 같은 제품 이름이 보이게 한다.
-          tags={[heading ? '한장 브리핑' : '지역 브리핑', envelope.period.label]}
+          // STATS_PERIOD_IMAGE_PARITY_V2 §13 — 기간 라벨과 **실제 날짜 범위**를 함께 싣는다. 저장한 이미지만 봐도
+          // 어느 기간인지 알 수 있어야 한다(예: 최근 7일 · 2026.09.13 ~ 2026.09.19 / 어제 · 2026.09.18).
+          tags={[heading ? '한장 브리핑' : '지역 브리핑', envelope.period.label, periodRangeText(envelope.period.start, envelope.period.end)]}
           completeness={envelope.trust.completeness}
           stamp={envelope.dataAsOf ? `데이터 기준 ${envelope.dataAsOf.slice(0, 10).replace(/-/g, '.')}` : null}
         />
@@ -242,7 +259,7 @@ export default function RegionReportSheet({
         <div className={styles.body}>
           <div className={`${styles.kpiGrid} ${kpis.length > 4 ? styles.kpiGrid6 : ''}`}>
             {kpis.map((m, i) => (
-              <KpiCard key={m.key} metric={m} accent={i === 0} />
+              <KpiCard key={m.key} metric={m} accent={i === 0} hint={KPI_HINTS[m.key] ?? null} />
             ))}
           </div>
 

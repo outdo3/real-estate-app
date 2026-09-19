@@ -94,7 +94,8 @@ test('TTL과 기간 옵션은 그대로다 — 느린 걸 숨기는 방식으로
   assert.equal((code.match(/5 \* 60 \* 1000/g) ?? []).length, 2, '캐시 TTL 지점 수가 바뀌었다(단일 구/시도 전체 각 1회)');
   // 12개월 옵션이 그대로 살아 있다.
   assert.ok(/'12m'/.test(code), '12개월 프리셋이 사라졌다');
-  assert.ok(/VALID_PRESETS: PeriodPreset\[\] = \['today', 'yesterday', '7d', 'thisWeek', 'lastWeek', '30d', '12m', 'custom'\]/.test(code),
+  // STATS_PERIOD_IMAGE_PARITY_V2 — 15d만 추가됐다(기존 옵션은 그대로).
+  assert.ok(/VALID_PRESETS: PeriodPreset\[\] = \['today', 'yesterday', '7d', '15d', 'thisWeek', 'lastWeek', '30d', '12m', 'custom'\]/.test(code),
     '기간 옵션 목록이 바뀌었다');
 });
 

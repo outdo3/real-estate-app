@@ -32,7 +32,8 @@ import {
 // (regional-feed.ts)를 그대로 재사용한다 — 새 fetch 메커니즘을 만들지 않는다.
 export const dynamic = 'force-dynamic';
 
-const VALID_PRESETS: (PriceRankingPeriodPreset | 'today' | 'yesterday')[] = ['today', 'yesterday', '7d', '30d', '3m', '6m', '12m'];
+// STATS_PERIOD_IMAGE_PARITY_V2 — 15d 추가(없으면 15d 요청이 조용히 30d로 바뀐다).
+const VALID_PRESETS: (PriceRankingPeriodPreset | 'today' | 'yesterday' | '15d')[] = ['today', 'yesterday', '7d', '15d', '30d', '3m', '6m', '12m'];
 const MAX_ENTRIES = 30;
 
 export async function GET(request: Request) {

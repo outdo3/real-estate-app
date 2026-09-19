@@ -121,7 +121,8 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
     },
     {
       key: 'medianDealAmount',
-      label: '중앙 거래가',
+      // STATS_PERIOD_IMAGE_PARITY_V2 §14 — '중앙 거래가'는 무엇의 중앙인지 읽히지 않았다(copy only, 계산 불변).
+      label: '매매 중앙가격',
       value: agg.medianDealAmount,
       displayValue: money(agg.medianDealAmount),
       unit: '만원',
@@ -132,7 +133,7 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
     },
     {
       key: 'medianPricePerM2',
-      label: '㎡당 중앙가',
+      label: '㎡당 매매 중앙가격',
       value: agg.medianPricePerM2 == null ? null : Math.round(agg.medianPricePerM2 * 10) / 10,
       displayValue:
         agg.medianPricePerM2 == null ? '정보 없음' : `${(Math.round(agg.medianPricePerM2 * 10) / 10).toLocaleString('ko-KR')}만원/㎡`,
@@ -156,9 +157,13 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
   ];
 
   const delta = countDelta(rows.length, input.previousCount);
+  // STATS_PERIOD_IMAGE_PARITY_V2 — 하루짜리 기간(오늘/어제)은 직전 기간 대비를 만들지 않는다.
+  // 통계 화면과 같은 정책이다(volume-period.ts hasComparablePreviousPeriod): 하루 단위는 신고 시차가 커서
+  // 증감이 시장 변화가 아니라 수집 차이를 말하게 된다.
+  const comparable = !input.period.singleDay;
   // 증감률을 '해석'으로 쓸 수 있으려면 최근 1년 표본과 직전 기간 표본이 **둘 다** 충분해야 한다.
-  const deltaStable = gate.sampleSufficient && delta.previous >= MIN_SAMPLE_FOR_INTERPRETATION;
-  metrics.push({
+  const deltaStable = comparable && gate.sampleSufficient && delta.previous >= MIN_SAMPLE_FOR_INTERPRETATION;
+  if (comparable) metrics.push({
     key: 'transactionCountDelta',
     label: '직전 동일기간 대비 거래량',
     value: delta.ratio == null ? null : Math.round(delta.ratio * 1000) / 10,

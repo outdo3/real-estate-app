@@ -16,6 +16,7 @@ import {
 import type { MasterEnrichment, TradeRow } from './region-aggregate';
 import { buildRegionReport, type RegionLevel, type RegionReportInput } from './region-report';
 import type { ReportEnvelope, ReportPeriod } from './types';
+import { reportPreviousRange } from './report-period';
 
 export interface RegionReadOptions {
   level: RegionLevel;
@@ -26,6 +27,8 @@ export interface RegionReadOptions {
   /** 포함 종료일 YYYY-MM-DD */
   end: string;
   periodLabel?: string;
+  /** STATS_PERIOD_IMAGE_PARITY_V2 — 기간 키/하루 여부/기본 여부. envelope.period에 그대로 싣는다. */
+  periodMeta?: { key: string; singleDay: boolean; isDefault: boolean };
   /** 테스트 결정론을 위해 주입 가능. 기본은 현재 시각. */
   now?: Date;
 }
@@ -139,9 +142,8 @@ export async function readRegionReport(opts: RegionReadOptions): Promise<ReportE
   if (!scope.ok) throw new Error(`REPORT_SCOPE_INVALID: ${scope.reason} (${scope.rejected.join(',')})`);
 
   const now = opts.now ?? new Date();
-  const spanDays = Math.max(1, Math.round((toDate(end).getTime() - toDate(start).getTime()) / 86400000) + 1);
-  const prevEnd = shiftDays(start, -1);
-  const prevStart = shiftDays(prevEnd, -(spanDays - 1));
+  // 직전 동일 기간 — 계산은 report-period.ts 한 곳(통계 화면의 previousPeriodRange와 같은 정의, 테스트 고정).
+  const { start: prevStart, end: prevEnd } = reportPreviousRange(start, end);
   const yearStart = shiftDays(end, -364);
   const twoYearStart = shiftDays(end, -729);
 
@@ -196,7 +198,7 @@ export async function readRegionReport(opts: RegionReadOptions): Promise<ReportE
     ? new Date(Math.max(...cells.map((c) => c.verifiedAt.getTime()))).toISOString()
     : null;
 
-  const period: ReportPeriod = { start, end, label: opts.periodLabel ?? `${start} ~ ${end}` };
+  const period: ReportPeriod = { start, end, label: opts.periodLabel ?? `${start} ~ ${end}`, ...(opts.periodMeta ?? {}) };
   const input: RegionReportInput = {
     level,
     lawdCd,

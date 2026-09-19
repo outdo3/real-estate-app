@@ -33,8 +33,8 @@ const KST_LATE = new Date('2026-09-15T14:59:00.000Z');
 // 한국 2026-09-16 00:00 = UTC 2026-09-15 15:00
 const KST_MIDNIGHT = new Date('2026-09-15T15:00:00.000Z');
 
-test('기간 옵션: 오늘·어제·최근 7일·최근 30일·최근 3개월, 기본값은 기존과 같은 최근 30일', () => {
-  assert.deepEqual(VOLUME_PERIOD_OPTIONS.map((o) => o.label), ['오늘', '어제', '최근 7일', '최근 30일', '최근 3개월']);
+test('기간 옵션: 오늘·어제·최근 7일·최근 15일·최근 30일·최근 3개월, 기본값은 기존과 같은 최근 30일', () => {
+  assert.deepEqual(VOLUME_PERIOD_OPTIONS.map((o) => o.label), ['오늘', '어제', '최근 7일', '최근 15일', '최근 30일', '최근 3개월']);
   assert.equal(DEFAULT_VOLUME_PERIOD, '30d');
 });
 
@@ -72,19 +72,30 @@ test('하루 단위: 전날 증감 비교 없음 + 신고 시차 안내', () => 
   assert.equal(needsReportingLagNotice('today'), true);
   assert.equal(needsReportingLagNotice('yesterday'), true);
   assert.equal(needsReportingLagNotice('7d'), true);
+  assert.equal(needsReportingLagNotice('15d'), true);
+  assert.equal(hasComparablePreviousPeriod('15d'), true);
   assert.equal(needsReportingLagNotice('3m'), false);
 });
 
-test('한장 브리핑은 지원 기간(어제까지 30/90일)만 쓰고, 실제 기준을 숨기지 않는다', () => {
-  for (const p of ['today', 'yesterday', '7d', '30d'] as const) {
-    const b = briefingPeriodFor(p);
-    assert.equal(b.periodDays, 30);
-    assert.equal(b.basisLabel, '어제까지 최근 30일 기준');
-    assert.equal(b.matchesSelection, false, '리포트는 어제까지라 오늘 끝나는 선택 기간과 같은 기간이 아니다');
+test('한장 브리핑은 선택한 기간을 그대로 연다 — 30일로 바꾸지 않는다(STATS_PERIOD_IMAGE_PARITY_V2)', () => {
+  const now = new Date('2026-09-19T03:00:00.000Z'); // KST 2026-09-19 12:00
+  const expected: Record<string, string> = {
+    today: '오늘 · 2026.09.19 기준',
+    yesterday: '어제 · 2026.09.18 기준',
+    '7d': '최근 7일 · 2026.09.13 ~ 2026.09.19 기준',
+    '15d': '최근 15일 · 2026.09.05 ~ 2026.09.19 기준',
+    '30d': '최근 30일 · 2026.08.21 ~ 2026.09.19 기준',
+    '3m': '최근 3개월 · 2026.06.19 ~ 2026.09.19 기준',
+  };
+  for (const o of VOLUME_PERIOD_OPTIONS) {
+    const b = briefingPeriodFor(o.key, now);
+    assert.equal(b.periodKey, o.key, `${o.key}가 다른 기간으로 바뀌었다`);
+    assert.equal(b.matchesSelection, true);
+    assert.equal(b.basisLabel, expected[o.key]);
   }
-  assert.deepEqual(briefingPeriodFor('3m'), { periodDays: 90, basisLabel: '어제까지 최근 90일 기준', matchesSelection: false });
   assert.equal(feedPresetFor('3m'), null, '피드에 3개월 preset이 없으면 링크를 만들지 않는다');
   assert.equal(feedPresetFor('yesterday'), 'yesterday');
+  assert.equal(feedPresetFor('15d'), '15d');
 });
 
 test('거래 많은 단지: 응답 순서 그대로 상위 5개, canonical 상세 링크(없으면 링크 없음)', () => {
@@ -99,12 +110,12 @@ test('거래 많은 단지: 응답 순서 그대로 상위 5개, canonical 상�
   assert.equal(buildTopComplexHref({ ...rows[0], dong: '' }), null);
 });
 
-test('dashboard: 5개 기간을 KST 계약일로 계산하고 캐시를 KST 날짜별로 가른다', () => {
+test('dashboard: 6개 기간을 KST 계약일로 계산하고 캐시를 KST 날짜별로 가른다', () => {
   const route = code('src/app/api/stats/dashboard/route.ts');
-  assert.match(route, /const VOLUME_COMPARISON_PRESETS: VolumePeriodPreset\[\] = \['today', 'yesterday', '7d', '30d', '3m'\];/);
+  assert.match(route, /const VOLUME_COMPARISON_PRESETS: VolumePeriodPreset\[\] = \['today', 'yesterday', '7d', '15d', '30d', '3m'\];/);
   assert.equal((route.match(/const current = resolveVolumePeriod\(preset, now\);/g) ?? []).length, 2);
   assert.ok(!/resolvePriceRankingPeriod/.test(route));
-  assert.match(route, /`stats-dashboard-sido:v3:\$\{sidoCodeParam\}:\$\{kstToday\}`/);
+  assert.match(route, /`stats-dashboard-sido:v4:\$\{sidoCodeParam\}:\$\{kstToday\}`/);
   // 계약일(dealDate) 기준 집계, 취소 제외 — 수집일(created_at)을 쓰지 않는다
   assert.match(route, /trades\.filter\(\(t: any\) => t\.dealDate >= range\.from && t\.dealDate <= range\.to\)\.length/);
   assert.match(route, /const verifiedApt = allAptTrades\.filter\(\(t: any\) => !t\.dealCanceled\);/);
@@ -113,13 +124,13 @@ test('dashboard: 5개 기간을 KST 계약일로 계산하고 캐시를 KST 날�
 
 test('concentration: 같은 기간 규칙 + 부산은 카드·피드와 같은 DB 원장, aptSeq 전달', () => {
   const route = code('src/app/api/stats/concentration/route.ts');
-  assert.match(route, /\['today', 'yesterday', '7d', '30d', '3m', '6m', '12m'\]/);
+  assert.match(route, /\['today', 'yesterday', '7d', '15d', '30d', '3m', '6m', '12m'\]/);
   assert.match(route, /isVolumePeriodPreset\(preset\) \? resolveVolumePeriod\(preset, now\) : resolvePriceRankingPeriod\(preset, now\)/);
   assert.match(route, /const dbBacked = isFeedDbBackedSido\(/);
   assert.match(route, /loadBusanFeedTradesFromDb\(lawdCds, months, rentSplit\.verified\)/);
   assert.match(route, /aptSeq: e\.aptSeq,/);
   const feed = code('src/app/api/stats/feed/route.ts');
-  assert.match(feed, /preset === 'today' \|\| preset === 'yesterday' \|\| preset === '7d' \|\| preset === '30d'\s*\? resolveVolumePeriod\(preset, now\)/);
+  assert.match(feed, /preset === 'today' \|\| preset === 'yesterday' \|\| preset === '7d' \|\| preset === '15d' \|\| preset === '30d'\s*\? resolveVolumePeriod\(preset, now\)/);
 });
 
 test('카드: 기간 하나가 요약·단지·실거래 목록·브리핑에 같이 적용된다', () => {
