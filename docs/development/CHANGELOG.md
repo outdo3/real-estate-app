@@ -2,6 +2,22 @@
 
 ## 2026-09-19
 
+### E-JIP CANCELLATION PREVENTION CRON VALIDATION GATE V1 — FAIL: insert 경로가 새 false-cancel 7건을 만들었다
+
+READ ONLY 검증. DB write 0 · restore gate 변경 0 · repair 0 · schema 0 · cron 수동 실행 0.
+상세: `docs/development/CANCELLATION_PREVENTION_CRON_VALIDATION_GATE_V1.md`
+
+    cron      배포(9/16 03:35Z) 후 sale-sync 3회 · sale-recheck 3회 실행, SALE 193셀 전부 COMPLETE
+    게이트    SALE_CANCEL_RESTORE_ENABLED 미설정(OFF) · cancelRestored 0 · 기존 21행 21/21 그대로
+    발견      신규 false-cancel 7그룹(원천 1/2 ↔ DB 2/2) — 상한 327→334(+7)와 정확히 일치
+              형제 수가 늘 때 reconcile은 SIBLING_COUNT_MISMATCH로 skip하고, insert가 occurrenceIndex 순서로
+              원천의 취소 행을 새 형제로 넣는다 — 결함 A가 flip 경로에서만 제거되고 insert 경로에 남아 있다
+    census    cron이 건드린 209셀 재조회: OVER_CANCEL 27(기존 20 + 신규 7) · UNDER_CANCEL 0 · 결함 B 계열 8(배포 후 변경 0)
+    dry-run   운영 core dry-run: cancelRestorePending 합 28(21+7) · cancelRestored 0 · 예상 flip/insert 0
+    한계      cancel metric은 로그에만 있고 Vercel 로그 보존이 약 1시간이라 실제 cron 로그 줄은 회수 불가
+    추가      scripts/audit-cancel-prevention-cron-census.ts (read-only, prod-db-guard)
+    다음      insert 경로를 그룹 개수 기준으로 고친 뒤(승인 필요) 게이트 재실행 → repair 대상 28행
+
 ### E-JIP NON-BUSAN STATS TRUST GATE V1 — 부산 밖 통계는 신뢰할 수 있는 DB가 준비될 때까지 "준비 중"
 
 DB write 0 · schema/migration 0 · 서울/경기 수집·backfill 0 · sitemap/SEO 0 · stats 공식 0 · 지도/상세 게이트 0.
