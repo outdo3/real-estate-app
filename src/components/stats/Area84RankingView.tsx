@@ -9,6 +9,8 @@ import Empty from '@/components/ui/Empty';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import styles from './Area84RankingView.module.css';
+import StatsUnsupportedRegion from './StatsUnsupportedRegion';
+import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
 
 // 84SQM_RANKING_V1 — "84㎡ 국민평형 순위". PriceRankingView(하락/2년최고가/상승/
 // 전세위험)와 같은 API(/api/stats/price-rankings, mode=area84)·같은 필터/페이지네이션
@@ -182,7 +184,9 @@ export default function Area84RankingView({
         </div>
       )}
 
-      {isLoading && offset === 0 ? (
+      {isStatsUnsupportedResponse(data) ? (
+        <StatsUnsupportedRegion displayRegionName={displayRegionName} />
+      ) : isLoading && offset === 0 ? (
         <InlineLoading message={`${displayRegionName} 데이터를 불러오고 있어요...`} />
       ) : data?.status === 'ERROR' ? (
         <ErrorState variant="section" message={data.message || '데이터를 불러오지 못했어요.'} />

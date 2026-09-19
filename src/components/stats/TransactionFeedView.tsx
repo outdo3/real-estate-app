@@ -20,6 +20,8 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { formatPercentChange, directionColor } from '@/lib/stats-format';
 import styles from './TransactionFeedView.module.css';
+import StatsUnsupportedRegion from './StatsUnsupportedRegion';
+import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
 
 // STATISTICS V2 — REGIONAL TRANSACTION FEED §8~§25. 당근/아파트미 실거래 UX를
 // 참고하되(날짜별 그룹, compact row, 신고가/변동 badge) 이집만의 "시장 요약 →
@@ -239,7 +241,9 @@ export default function TransactionFeedView({
           예전에는 로딩 분기가 `visibleTrades.length === 0`까지 요구해서, 이전 목록이
           남아 있는 전환 중에는 로딩으로 가지 못하고 아래 `!data`에 걸려 **빈 상태
           문구가 떴다**(사용자 보고 증상). `!data`는 "없다"가 아니라 "아직 안 왔다"다. */}
-      {error || data?.status === 'ERROR' ? (
+      {isStatsUnsupportedResponse(data) ? (
+        <StatsUnsupportedRegion displayRegionName={displayRegionName} />
+      ) : error || data?.status === 'ERROR' ? (
         <ErrorState variant="section" message={data?.message || '실거래 데이터를 불러오지 못했어요.'} />
       ) : !data ? (
         <InlineLoading message="실거래 데이터를 확인하고 있어요..." />

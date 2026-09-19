@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { resolveLawdCdByNames, resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import { geocodeApartmentName } from '@/lib/geocode-apt';
 import { logServerError } from '@/lib/log-server-error';
+import { isStatsEnabledLawdCd } from '@/lib/region/enablement';
+import { STATS_UNSUPPORTED_MESSAGE, statsUnsupportedSuccessBody } from '@/lib/region/stats-gate';
 import {
   classifyQuery,
   normalizeSidoName,
@@ -198,6 +200,12 @@ export async function POST(request: Request) {
         payload = { intent: 'condition_search', briefing, complexes, lawdCd };
       }
     } else if (classification.intent === 'regional_stats') {
+      // NON_BUSAN_STATS_TRUST_GATE_V1 — 통계가 열리지 않은 지역은 dashboard가 준비 중으로 답한다.
+      // 그걸 "불러오지 못했습니다"(실패)로 바꿔 말하지 않고, 준비 중이라고 그대로 전한다.
+      // 캐시에도 저장하지 않는다(아래 저장 단계 전에 반환).
+      if (!isStatsEnabledLawdCd(lawdCd)) {
+        return NextResponse.json({ ...statsUnsupportedSuccessBody(), error: STATS_UNSUPPORTED_MESSAGE });
+      }
       const stats = await runRegionalStats(lawdCd, request.url);
       if (!stats) {
         return NextResponse.json({ success: false, error: '지역 통계를 불러오지 못했습니다.' });

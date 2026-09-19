@@ -7,6 +7,8 @@ import { BarChart3, ChevronRight, FileText, Table2 } from 'lucide-react';
 import Link from 'next/link';
 import FilterChip from '@/components/ui/FilterChip';
 import ErrorState from '@/components/ui/ErrorState';
+import StatsUnsupportedRegion from './StatsUnsupportedRegion';
+import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { findNearestIndex, type IndexedPosition } from '@/lib/chart-crosshair';
 import {
@@ -236,6 +238,8 @@ export default function VolumeChartCard({
   };
 
   if (isLoading) return <InlineLoading message="분석 중입니다..." />;
+  // NON_BUSAN_STATS_TRUST_GATE_V1 — 준비 중인 지역은 오류 카드가 아니라 준비 중 안내다.
+  if (isStatsUnsupportedResponse(apiResponse)) return <StatsUnsupportedRegion displayRegionName={displayRegionName} />;
   if (!data) return <ErrorState variant="section" message="거래량 데이터를 불러오지 못했습니다." />;
 
   return (

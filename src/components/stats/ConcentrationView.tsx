@@ -9,6 +9,8 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { directionColor } from '@/lib/stats-format';
 import styles from './ConcentrationView.module.css';
+import StatsUnsupportedRegion from './StatsUnsupportedRegion';
+import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
 
 // STATISTICS V2.1-2 §19~§26 — "거래집중". 기존 top-traded(rankings.ts, 월
 // 단위)를 대체한다 — 아실 "많이산단지" benchmark를 참고하되 day-precise 기간
@@ -145,7 +147,9 @@ export default function ConcentrationView({
         ))}
       </div>
 
-      {isLoading ? (
+      {isStatsUnsupportedResponse(data) ? (
+        <StatsUnsupportedRegion displayRegionName={displayRegionName} />
+      ) : isLoading ? (
         <InlineLoading message="거래집중 데이터를 불러오는 중입니다..." />
       ) : error || data?.status === 'ERROR' ? (
         <ErrorState variant="section" message={data?.message || '거래집중 데이터를 불러오지 못했어요.'} />

@@ -10,6 +10,8 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { areaBandLabel } from '@/lib/regional-feed';
 import styles from './PriceRankingView.module.css';
+import StatsUnsupportedRegion from './StatsUnsupportedRegion';
+import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
 
 // STATISTICS V2.1-1 — DECLINE + RECORD HIGH + RISING §3/§23. 세 화면이
 // 공유하는 랭킹 UI. "단순 숫자 나열"이 아니라 비교 기준(과거 최고가/직전
@@ -256,7 +258,9 @@ export default function PriceRankingView({
         </div>
       )}
 
-      {isLoading && offset === 0 ? (
+      {isStatsUnsupportedResponse(data) ? (
+        <StatsUnsupportedRegion displayRegionName={displayRegionName} />
+      ) : isLoading && offset === 0 ? (
         <InlineLoading message={`${displayRegionName} 데이터를 불러오고 있어요...`} />
       ) : data?.status === 'ERROR' ? (
         <ErrorState variant="section" message={data.message || '데이터를 불러오지 못했어요.'} />

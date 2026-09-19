@@ -87,6 +87,12 @@ export function getEnabledRegions(
 // 그래서 stats 지원 여부(`stats` 축)와 **별개의 이름**으로 둔다. 둘을 같은 축으로
 // 뭉뚱그리면 지금 live MOLIT로 정상 동작 중인 비부산 요청을 조용히 막게 된다.
 //
+// NON_BUSAN_STATS_TRUST_GATE_V1 — 이후 승인에 따라 stats 라우트는 `stats` 축으로 먼저 게이트한다
+// (region/stats-gate.ts). 비부산 stats는 live MOLIT로 가지 않고 '준비 중'을 받는다. 두 축의 분리는
+// 그대로 유지된다 — 게이트는 `stats`, 게이트 뒤의 DB-first/live 선택은 `cronSync`. 서울을 열 때는
+// DB 적재가 끝난 뒤 두 축을 함께 연다(stats만 열면 게이트 뒤에서 다시 live 경로로 떨어진다).
+// 지도/상세의 /api/transactions는 이 게이트를 쓰지 않는다.
+//
 // 정책을 두 벌로 만들지 않기 위해 `cronSync` 축에서 파생한다 — 정기 수집을 하는 지역만
 // DB가 최신이고, 그 지역이 곧 DB-first가 안전한 지역이다.
 
@@ -106,6 +112,14 @@ export function isTradeDbFirstLawdCd(lawdCd: string | null | undefined): boolean
 /** 통계 기능이 이 시도를 지원하는가(large-complex처럼 DB 전용 기능의 게이트). */
 export function isStatsEnabledSido(sidoCode: string | null | undefined): boolean {
   return getSidoEnablement(sidoCode).stats;
+}
+
+/**
+ * 통계 기능이 이 시군구를 지원하는가. registry에 없는 코드는 **false**다 — 접두사로
+ * 추측하지 않는다(NON_BUSAN_STATS_TRUST_GATE_V1).
+ */
+export function isStatsEnabledLawdCd(lawdCd: string | null | undefined): boolean {
+  return getRegionEnablement(lawdCd).stats;
 }
 
 /** 통계가 지원되는 시도 코드 목록. 현재는 부산 하나뿐이며, 기본값 산출에 쓴다. */

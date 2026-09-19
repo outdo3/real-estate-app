@@ -1,4 +1,5 @@
 import { isTradeDbFirstLawdCd, isTradeDbFirstSido } from '@/lib/region/enablement';
+import { isStatsRegionSupported, statsUnsupportedStatusBody } from '@/lib/region/stats-gate';
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
@@ -32,6 +33,8 @@ import {
 // STATS_REGION_ENABLEMENT_MIGRATION_V1 — 지역 판정을 canonical registry/enablement로 옮겼다.
 // 의미는 그대로다: "실거래를 DB에 유지하는 지역(현재 부산)만 DB-first". 비부산 요청은
 // 여전히 기존 live 경로를 그대로 탄다(동작 변화 0).
+// NON_BUSAN_STATS_TRUST_GATE_V1 — 이제 비부산 요청은 이 판정 전에 stats 게이트(isStatsRegionSupported)에서
+// '준비 중'으로 돌아간다. 이 판정은 게이트를 통과한 지역 안에서 DB-first/live를 가르는 역할만 한다.
 function isBusanScopedRequest(lawdCd: string | null, sidoCode: string | null): boolean {
   if (sidoCode) return isTradeDbFirstSido(sidoCode);
   return isTradeDbFirstLawdCd(lawdCd);
@@ -166,6 +169,12 @@ export async function GET(request: Request) {
       if (!sidoCode || !/^\d{2}$/.test(sidoCode)) {
         return NextResponse.json({ status: 'ERROR', message: 'sidoCode 파라미터가 필요합니다.' }, { status: 400 });
       }
+      // NON_BUSAN_STATS_TRUST_GATE_V1 — 통계가 열리지 않은 시도는 구 목록 조회·DB·MOLIT 전에 돌려보낸다.
+      // 대한민국 화면은 시도마다 이 요청을 보내므로, 여기서 막히지 않으면 비부산 시도 전체가
+      // live MOLIT fan-out(경기 ≈94초)을 돈다.
+      if (!isStatsRegionSupported({ lawdCd: null, sidoCode, sidoName: null })) {
+        return NextResponse.json(statsUnsupportedStatusBody());
+      }
       const districts = await getSigunguListForSido(sidoCode);
       if (districts.length === 0) {
         return NextResponse.json({ status: 'ERROR', message: `시도코드 "${sidoCode}"의 시군구 목록을 찾을 수 없습니다.` }, { status: 400 });
@@ -235,6 +244,9 @@ export async function GET(request: Request) {
       const lawdCd = searchParams.get('lawdCd');
       if (!lawdCd || !/^\d{5}$/.test(lawdCd)) {
         return NextResponse.json({ status: 'ERROR', message: 'lawdCd 파라미터가 필요합니다.' }, { status: 400 });
+      }
+      if (!isStatsRegionSupported({ lawdCd, sidoCode: null, sidoName: null })) {
+        return NextResponse.json(statsUnsupportedStatusBody());
       }
       const isBusan = isBusanScopedRequest(lawdCd, null);
       let overallBuckets: RegionChangeAggregate[];
@@ -311,6 +323,9 @@ export async function GET(request: Request) {
     const lawdCd = searchParams.get('lawdCd');
     if (!lawdCd || !/^\d{5}$/.test(lawdCd)) {
       return NextResponse.json({ status: 'ERROR', message: 'lawdCd 파라미터가 필요합니다.' }, { status: 400 });
+    }
+    if (!isStatsRegionSupported({ lawdCd, sidoCode: null, sidoName: null })) {
+      return NextResponse.json(statsUnsupportedStatusBody());
     }
     const dong = searchParams.get('dong');
     const sortParam = searchParams.get('sort') || 'changePct';

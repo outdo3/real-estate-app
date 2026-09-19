@@ -14,7 +14,9 @@ import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
 // 나오는지, 그리고 그 의미가 마이그레이션 전과 **완전히 동일**한지 고정한다.
 //
 // 핵심: 여기서 다루는 판정은 "출시 여부"가 아니라 "DB-first 적격 여부"다.
-// 비부산 요청은 예나 지금이나 live 경로로 정상 처리된다(이 테스트가 그 구분을 지킨다).
+// 이 테스트는 DB-first 판정(cronSync)만 다룬다. 비부산 stats를 '준비 중'으로 막는 게이트(stats 축)는
+// NON_BUSAN_STATS_TRUST_GATE_V1에서 추가됐고 region/stats-gate.test.ts가 고정한다. 지도/상세의
+// /api/transactions 비부산 요청은 여전히 live 경로로 처리된다.
 
 function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
@@ -115,7 +117,8 @@ test('11b · 각 라우트가 실제로 enablement helper를 호출한다', () =
     ['src/app/api/stats/region-change/route.ts', /isTradeDbFirst(Sido|LawdCd)\(/],
     ['src/app/api/stats/yearly/route.ts', /isTradeDbFirstLawdCd\(/],
     ['src/app/api/transactions/route.ts', /isTradeDbFirstLawdCd\(/],
-    ['src/app/api/stats/large-complex/route.ts', /isStatsEnabledSido\(/],
+    // NON_BUSAN_STATS_TRUST_GATE_V1 — large-complex는 다른 stats 라우트와 같은 게이트(stats 축)를 쓴다.
+    ['src/app/api/stats/large-complex/route.ts', /isStatsRegionSupported\(/],
     ['src/lib/stats/feed-db-source.ts', /isTradeDbFirstSido\(/],
   ];
   for (const [rel, re] of expectations) assert.match(read(rel), re, rel);
@@ -128,7 +131,9 @@ test('14 · large-complex는 지원 시도만 통과시키고 나머지는 UNSUP
   for (const sido of ['11', '41', '27', '99', null]) assert.equal(isStatsEnabledSido(sido), false, String(sido));
   assert.deepEqual([...getStatsEnabledSidoCodes()], ['26']);
   const src = read('src/app/api/stats/large-complex/route.ts');
-  assert.match(src, /status: 'UNSUPPORTED'/, 'UNSUPPORTED 계약이 유지돼야 한다');
+  // NON_BUSAN_STATS_TRUST_GATE_V1 — UNSUPPORTED 본문은 공용 게이트가 만든다(계약 필드는 그대로 + supported/reason).
+  assert.match(src, /statsUnsupportedStatusBody\(/, 'UNSUPPORTED 계약이 유지돼야 한다');
+  assert.match(read('src/lib/region/stats-gate.ts'), /status: 'UNSUPPORTED'/, 'UNSUPPORTED 계약이 유지돼야 한다');
   assert.ok(!/sido: '부산'/.test(src), "where 절의 '부산' 리터럴이 남아 있다");
 });
 

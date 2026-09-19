@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isStatsEnabledLawdCd } from '@/lib/region/enablement';
+import { isStatsRegionSupported, statsUnsupportedStatusBody } from '@/lib/region/stats-gate';
 import { fetchMolitData, formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
 import { resolveLawdCd, fetchMonthsThrottled, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
@@ -69,6 +71,12 @@ export async function GET(request: Request) {
   // 기존 lawdCd 기반 단일 구 조회 계약은 전혀 바뀌지 않는다(하위호환).
   const isSidoAll = !lawdCdParam && !!sidoCodeParam && /^\d{2}$/.test(sidoCodeParam);
 
+  // NON_BUSAN_STATS_TRUST_GATE_V1 — 통계가 열리지 않은 지역은 캐시·DB·MOLIT에 닿기 전에 돌려보낸다.
+  // 비부산 피드가 live MOLIT로 대신 채워지던 경로를 닫는다(부산 DB 피드로 대신 답하지도 않는다).
+  if (!isStatsRegionSupported({ lawdCd: lawdCdParam, sidoCode: sidoCodeParam, sidoName: sido })) {
+    return NextResponse.json(statsUnsupportedStatusBody());
+  }
+
   try {
     let lawdCd: string | null = null;
     if (!isSidoAll) {
@@ -76,6 +84,7 @@ export async function GET(request: Request) {
       if (!lawdCd) {
         return NextResponse.json({ status: 'ERROR', message: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` }, { status: 400 });
       }
+      if (!isStatsEnabledLawdCd(lawdCd)) return NextResponse.json(statsUnsupportedStatusBody());
     }
 
     const now = new Date();

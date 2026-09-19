@@ -1,5 +1,30 @@
 # 이집 개발 변경 기록
 
+## 2026-09-19
+
+### E-JIP NON-BUSAN STATS TRUST GATE V1 — 부산 밖 통계는 신뢰할 수 있는 DB가 준비될 때까지 "준비 중"
+
+DB write 0 · schema/migration 0 · 서울/경기 수집·backfill 0 · sitemap/SEO 0 · stats 공식 0 · 지도/상세 게이트 0.
+상세: `docs/development/NON_BUSAN_STATS_TRUST_GATE_V1.md`
+
+    정책      enablement의 stats 축 하나로 판정 — 부산만 열림, 서울·경기·그 밖·미등록 코드는 닫힘(새 플래그 체계 없음)
+    게이트    region/stats-gate.ts(순수 함수) — 라우트의 지역 해석 순서(lawdCd → sidoCode → 시도명)를 그대로 따라
+              캐시·DB·MOLIT·법정동 프록시 호출 전에 판정. 이름 경로는 resolveLawdCd 뒤 한 번 더 확인
+    라우트    dashboard·yearly·price-rankings·region-change(sigungu/dong/complex)·feed·concentration·gap-invest·rankings
+              + large-complex(기존 UNSUPPORTED를 같은 게이트로 통일, sidoCode=26&lawdCd=11680 같은 불일치도 차단)
+    계약      HTTP 200 · 기존 shape 유지 + supported:false · reason:'UNSUPPORTED_REGION' · message · supportedSidoCode/Name
+              데이터/0건 필드 없음, 부산 데이터 대체 없음, 500·error_logs 없음
+    화면      StatsUnsupportedRegion(Empty notReady) — "이 지역 통계는 현재 준비 중입니다." + 사용자 선택형 "부산광역시 통계 보기"
+              거래량·피드·하락/신고가/상승/전세위험·84㎡·거래집중·갭투자·대단지·변동지도에 unsupported 분기를 맨 앞에 추가
+              변동지도 대한민국 타일은 비부산 시도를 "조회 실패" 대신 "준비 중"으로 표시
+              AI 검색 regional_stats도 비부산이면 dashboard 호출 없이 준비 중 안내(캐시 저장 안 함)
+    제외      /api/transactions(지도·상세·분위지도)와 stats/supply(Presale DB)는 게이트하지 않음
+    발견      배포 전 large-complex?sidoCode=26&lawdCd=11680이 200 OK·items 0으로 응답 — 미지원을 "0건"으로 위장하던 경로
+    성능      배포 전 Production 실측: 강남 yearly 117.3s · 분당 yearly 78.0s · 서울 변동지도 시도 88.4s (live MOLIT)
+    검증      신규 테스트 10 pass(비부산 77요청 × fetch 0 · DB 0 · console.error 0) · src 2,243 pass · scripts 135 pass · 0 fail
+              eslint(변경 23파일) exit 0 · npm run lint 오류는 전부 기존(.worktrees 1633 · scripts 5 · src 0)
+              tsc src 오류 0(기존 25건 scripts/tmp) · next build 성공
+
 ## 2026-09-16
 
 ### E-JIP STATS REGION ENABLEMENT MIGRATION V1 — stats 지역 판정이 registry/enablement 한 곳에서 나온다

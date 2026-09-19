@@ -6,9 +6,9 @@ import useSWR from 'swr';
 import Empty from '@/components/ui/Empty';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
-import { useRegion } from '@/contexts/RegionContext';
 import styles from './LargeComplexView.module.css';
-import { buildRegionDisplayName } from '@/lib/region-display-name';
+import StatsUnsupportedRegion from './StatsUnsupportedRegion';
+import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
 
 // STATISTICS V2.1-4 §17/§21/§23 — "세대수가 많은 단지는?" 부산 전용 V1(§14 실측:
 // ApartmentMaster는 부산 데이터만 있음). 부산 외 지역 선택 시 빈 화면 대신 정직한
@@ -52,7 +52,6 @@ const HOUSEHOLD_FILTERS = [
 ];
 
 const PAGE_SIZE = 30;
-const BUSAN_REGION = { lawdCd: '26140', sidoCode: '26', dong: 'all', sido: '부산광역시', sigungu: '서구', displayRegionName: buildRegionDisplayName({ sido: '부산광역시', sigungu: '서구', dong: 'all' }) };
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -68,7 +67,6 @@ export default function LargeComplexView({
   displayRegionName: string;
 }) {
   const router = useRouter();
-  const { setRegion } = useRegion();
   const [minHouseholds, setMinHouseholds] = useState('0');
   const [offset, setOffset] = useState(0);
   const [allItems, setAllItems] = useState<ComplexItem[]>([]);
@@ -102,17 +100,11 @@ export default function LargeComplexView({
     router.push(`/apt/${encodeURIComponent(item.name)}?${qs.toString()}`);
   };
 
-  if (data?.status === 'UNSUPPORTED') {
+  // NON_BUSAN_STATS_TRUST_GATE_V1 — 다른 통계 화면과 같은 준비 중 안내를 쓴다(부산 데이터로 대신 채우지 않음).
+  if (isStatsUnsupportedResponse(data)) {
     return (
       <div className={styles.wrap}>
-        <Empty
-          variant="notReady"
-          title={data.message || '대단지 순위는 현재 부산 지역부터 제공하고 있어요.'}
-          description="다른 지역은 데이터를 준비 중이에요."
-        />
-        <button className={styles.busanCta} onClick={() => setRegion(BUSAN_REGION)}>
-          부산으로 이동
-        </button>
+        <StatsUnsupportedRegion displayRegionName={displayRegionName} />
       </div>
     );
   }

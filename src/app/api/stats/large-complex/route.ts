@@ -1,4 +1,5 @@
-import { getStatsEnabledSidoCodes, isStatsEnabledSido } from '@/lib/region/enablement';
+import { getStatsEnabledSidoCodes } from '@/lib/region/enablement';
+import { isStatsRegionSupported, statsUnsupportedStatusBody } from '@/lib/region/stats-gate';
 import { getSido } from '@/lib/region/registry';
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
@@ -16,7 +17,6 @@ export const dynamic = 'force-dynamic';
 // 이 기능은 ApartmentMaster(DB)만 쓰므로 데이터가 있는 시도에서만 의미가 있고, 그 밖의
 // 시도에는 예전처럼 UNSUPPORTED를 정직하게 돌려준다(빈 결과를 "0건"으로 위장하지 않음).
 const SUPPORTED_SIDO_CODE = getStatsEnabledSidoCodes()[0];
-const SUPPORTED_SIDO_NAME = getSido(SUPPORTED_SIDO_CODE)?.name ?? '';
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 50;
 const RECENT_TRADE_MONTHS = 3;
@@ -39,13 +39,15 @@ export async function GET(request: Request) {
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT));
 
   // §21/§22 — 부산 외 시도는 데이터가 아예 없다(빈 결과를 "0건"처럼 보여주지 않음).
-  if (!isStatsEnabledSido(sidoCodeParam)) {
-    return NextResponse.json({
-      status: 'UNSUPPORTED',
-      message: '대단지 순위는 현재 부산 지역부터 제공하고 있어요.',
-      supportedSidoCode: SUPPORTED_SIDO_CODE,
-      supportedSidoName: SUPPORTED_SIDO_NAME,
-    });
+  // NON_BUSAN_STATS_TRUST_GATE_V1 — 다른 stats 라우트와 같은 게이트를 쓴다(응답 계약·문구는 그대로,
+  // supported/reason 필드만 추가). lawdCd도 함께 본다 — `sidoCode=26&lawdCd=11680`처럼 시도와
+  // 시군구가 어긋나면 부산 필터에 서울 코드가 걸려 빈 결과가 "0건"처럼 보였다.
+  const lawdCdScope = lawdCdParam && /^\d{5}$/.test(lawdCdParam) ? lawdCdParam : null;
+  const supported =
+    isStatsRegionSupported({ lawdCd: null, sidoCode: sidoCodeParam, sidoName: null }) &&
+    (!lawdCdScope || isStatsRegionSupported({ lawdCd: lawdCdScope, sidoCode: null, sidoName: null }));
+  if (!supported) {
+    return NextResponse.json(statsUnsupportedStatusBody('대단지 순위는 현재 부산 지역부터 제공하고 있어요.'));
   }
 
   try {

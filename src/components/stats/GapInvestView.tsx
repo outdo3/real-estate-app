@@ -9,6 +9,8 @@ import InlineLoading from '@/components/ui/InlineLoading';
 import { useRegion } from '@/contexts/RegionContext';
 import { directionColor } from '@/lib/stats-format';
 import styles from './GapInvestView.module.css';
+import StatsUnsupportedRegion from './StatsUnsupportedRegion';
+import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
 
 // STATISTICS V2.1-3 §7/§27/§28 — 갭투자는 "단지 순위"보다 "어느 지역에서 갭
 // 형태 거래가 늘고 있는가"가 먼저다. 시도 전체 → 시군구 랭킹, 특정 구 선택
@@ -194,7 +196,9 @@ export default function GapInvestView({
         </div>
       )}
 
-      {isLoading ? (
+      {isStatsUnsupportedResponse(data) ? (
+        <StatsUnsupportedRegion displayRegionName={displayRegionName} />
+      ) : isLoading ? (
         <InlineLoading message="분석 중입니다..." />
       ) : error || data?.status === 'ERROR' ? (
         <ErrorState variant="section" message={data?.message || '갭투자 데이터를 불러오지 못했어요.'} />

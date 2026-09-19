@@ -7,6 +7,9 @@ import Empty from '@/components/ui/Empty';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
+import StatsUnsupportedRegion from './StatsUnsupportedRegion';
+import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
+import { getRegionByLawdCd, getSido } from '@/lib/region/registry';
 import { isValidMapCoord, mapViewportKey, resolveMapViewport, validMapPoints } from '@/lib/map/map-viewport';
 import styles from './RegionChangeMapView.module.css';
 
@@ -70,6 +73,8 @@ interface NationTile {
   bucket: Bucket | null;
   loading: boolean;
   error: boolean;
+  /** NON_BUSAN_STATS_TRUST_GATE_V1 — 통계가 아직 열리지 않은 시도. 조회 실패와 구분한다. */
+  unsupported: boolean;
 }
 
 export default function RegionChangeMapView() {
@@ -119,7 +124,7 @@ export default function RegionChangeMapView() {
       .then((r) => r.json())
       .then((data: { sidos: { code: string; name: string }[] }) => {
         if (cancelled || data == null) return;
-        const initial: NationTile[] = (data.sidos || []).map((s) => ({ sidoCode: s.code, sidoName: s.name, bucket: null, loading: true, error: false }));
+        const initial: NationTile[] = (data.sidos || []).map((s) => ({ sidoCode: s.code, sidoName: s.name, bucket: null, loading: true, error: false, unsupported: false }));
         setNationTiles(initial);
         setNationLoading(false);
 
@@ -133,7 +138,8 @@ export default function RegionChangeMapView() {
             .then((r) => r.json())
             .then((d) => {
               if (cancelled) return;
-              setNationTiles((prev) => prev.map((t) => (t.sidoCode === tile.sidoCode ? { ...t, bucket: d.status === 'OK' ? d.overall : null, loading: false, error: d.status !== 'OK' } : t)));
+              const unsupported = isStatsUnsupportedResponse(d);
+              setNationTiles((prev) => prev.map((t) => (t.sidoCode === tile.sidoCode ? { ...t, bucket: d.status === 'OK' ? d.overall : null, loading: false, error: d.status !== 'OK' && !unsupported, unsupported } : t)));
             })
             .catch(() => {
               if (cancelled) return;
@@ -175,11 +181,11 @@ export default function RegionChangeMapView() {
   // ── breadcrumb / title ──
   const breadcrumb: { label: string; onClick?: () => void }[] = [{ label: '대한민국', onClick: uiLevel !== 'nation' ? () => navigate({ level: 'nation', period }) : undefined }];
   if (uiLevel === 'sido' || uiLevel === 'sigungu' || uiLevel === 'dong') {
-    const label = scopedData?.sidoName || nationTiles.find((t) => t.sidoCode === sidoCode)?.sidoName || sidoCode || '';
+    const label = scopedData?.sidoName || nationTiles.find((t) => t.sidoCode === sidoCode)?.sidoName || getSido(sidoCode)?.name || sidoCode || '';
     breadcrumb.push({ label, onClick: uiLevel !== 'sido' ? () => navigate({ level: 'sido', sidoCode: sidoCode || undefined, period }) : undefined });
   }
   if (uiLevel === 'sigungu' || uiLevel === 'dong') {
-    const label = scopedData?.sigunguName || '';
+    const label = scopedData?.sigunguName || getRegionByLawdCd(lawdCd)?.name || '';
     breadcrumb.push({ label, onClick: uiLevel !== 'sigungu' ? () => navigate({ level: 'sigungu', sidoCode: sidoCode || undefined, lawdCd: lawdCd || undefined, period }) : undefined });
   }
   if (uiLevel === 'dong' && dong && dong !== 'all') {
@@ -242,6 +248,8 @@ export default function RegionChangeMapView() {
           data={scopedData}
           loading={scopedLoading}
           periodLabel={periodLabel}
+          regionLabel={breadcrumb[breadcrumb.length - 1]?.label || ''}
+          onSelectSupportedSido={(supportedSidoCode) => navigate({ level: 'sido', sidoCode: supportedSidoCode, period })}
           onSelectDistrict={(lawdCdSel) => navigate({ level: 'sigungu', sidoCode: sidoCode || undefined, lawdCd: lawdCdSel, period })}
           onSelectDong={(dongSel) => navigate({ level: 'dong', sidoCode: sidoCode || undefined, lawdCd: lawdCd || undefined, dong: dongSel, period })}
           onSelectComplex={(name, complexLawdCd, complexDong) => router.push(`/apt/${encodeURIComponent(name)}?lawdCd=${complexLawdCd}&dong=${encodeURIComponent(complexDong)}`)}
@@ -287,6 +295,8 @@ function NationGrid({ tiles, loading, onSelect }: { tiles: NationTile[]; loading
             <span className={styles.tileName}>{t.sidoName}</span>
             {t.loading ? (
               <span className={styles.tileLoading}>불러오는 중</span>
+            ) : t.unsupported ? (
+              <span className={styles.tileMuted}>준비 중</span>
             ) : t.error || !t.bucket ? (
               <span className={styles.tileMuted}>조회 실패</span>
             ) : (
@@ -309,6 +319,8 @@ function ScopedLevel({
   data,
   loading,
   periodLabel,
+  regionLabel,
+  onSelectSupportedSido,
   onSelectDistrict,
   onSelectDong,
   onSelectComplex,
@@ -317,11 +329,15 @@ function ScopedLevel({
   data: any;
   loading: boolean;
   periodLabel: string;
+  regionLabel: string;
+  onSelectSupportedSido: (sidoCode: string) => void;
   onSelectDistrict: (lawdCd: string) => void;
   onSelectDong: (dong: string) => void;
   onSelectComplex: (name: string, lawdCd: string, dong: string) => void;
 }) {
   if (loading) return <InlineLoading message="데이터를 불러오고 있어요..." />;
+  // NON_BUSAN_STATS_TRUST_GATE_V1 — 준비 중인 지역은 오류가 아니다(아래 ErrorState로 떨어지지 않게 먼저 본다).
+  if (isStatsUnsupportedResponse(data)) return <StatsUnsupportedRegion displayRegionName={regionLabel} onSelectSupportedSido={onSelectSupportedSido} />;
   if (!data || data.status !== 'OK') return <ErrorState variant="section" message={data?.message || '데이터를 불러오지 못했어요.'} />;
 
   if (uiLevel === 'dong') {

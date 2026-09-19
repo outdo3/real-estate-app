@@ -1510,3 +1510,32 @@ Production 감사에서 사이트맵 37개 중 32개가 서버 HTML이 지역과
 
 상태:
 로컬 구현·검증 완료, Production 적용 승인 대기. 문서: `docs/development/REGIONAL_SEO_KEYWORD_LANDING_V1.md`
+
+## 2026-09-19 — 부산 밖 통계는 live MOLIT로 대신 채우지 않고, 신뢰할 수 있는 DB가 준비될 때까지 "준비 중"으로 닫는다
+
+날짜:
+2026-09-19
+
+결정:
+통계 기능(거래량·연도별·가격 순위·변동지도·피드·거래집중·갭투자·대단지)은 enablement의 `stats` 축이 열린 지역(현재 부산)에서만
+동작한다. 그 밖의 지역은 캐시·DB·MOLIT를 부르기 전에 HTTP 200 `supported:false, reason:'UNSUPPORTED_REGION'`으로 돌려보내고,
+화면은 "이 지역 통계는 현재 준비 중입니다."를 보여준다. 지도/상세의 `/api/transactions`는 이 결정의 범위가 아니다.
+
+배경:
+`STATS_REGION_ENABLEMENT_MIGRATION_V1` §10에서 "비부산 stats는 live MOLIT로 동작 중이며 이를 막는 것은 제품 결정"으로 남겼고,
+이번에 부산 출시 신뢰 정책으로 승인됐다. 배포 전 실측으로 강남 연도별 117초, 서울 변동지도 88초였고, live 경로는
+coverage cell·취소 반영 같은 DB-first 신뢰 장치를 거치지 않는다.
+
+이유:
+- 신뢰 장치를 거치지 않은 숫자를 부산 통계와 같은 화면·같은 문구로 보여주면 사용자는 둘을 구분할 수 없다.
+- 판단 기준을 enablement 하나로 두면 서울을 열 때 라우트를 고치지 않는다(설정 한 곳).
+- 준비 중은 오류가 아니다 — 500/error_logs/빨간 오류 화면으로 보내지 않고, "0건"처럼 보이는 빈 결과도 만들지 않는다.
+- 다른 지역(부산) 데이터로 대신 채우지 않는다. 부산으로의 이동은 사용자가 버튼으로만 한다.
+
+영향:
+- 서울·경기·그 밖 지역 사용자는 통계 화면에서 데이터 대신 준비 중 안내를 본다(기존 live 통계 기능 제거).
+- 서울을 열 때는 DB 적재 완료 후 `stats`와 `cronSync` 두 축을 함께 연다 — `stats`만 열면 게이트 뒤에서 다시 live 경로로 간다.
+- 공급(`stats/supply`, Presale DB)과 분위지도(`/api/transactions`)는 게이트하지 않았다 — 별도 결정 대상.
+
+상태:
+구현·로컬 검증 완료. 문서: `docs/development/NON_BUSAN_STATS_TRUST_GATE_V1.md`

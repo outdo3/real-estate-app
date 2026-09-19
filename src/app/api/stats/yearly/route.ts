@@ -1,4 +1,5 @@
-import { isTradeDbFirstLawdCd } from '@/lib/region/enablement';
+import { isStatsEnabledLawdCd, isTradeDbFirstLawdCd } from '@/lib/region/enablement';
+import { isStatsRegionSupported, statsUnsupportedSuccessBody } from '@/lib/region/stats-gate';
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
@@ -24,6 +25,8 @@ interface YearlyRow {
 // STATS_REGION_ENABLEMENT_MIGRATION_V1 — 지역 판정을 canonical registry/enablement로 옮겼다.
 // 의미는 그대로다: "실거래를 DB에 유지하는 지역(현재 부산)만 DB-first". 비부산 요청은
 // 여전히 기존 live 경로를 그대로 탄다(동작 변화 0).
+// NON_BUSAN_STATS_TRUST_GATE_V1 — 이제 비부산 요청은 이 판정 전에 stats 게이트(isStatsRegionSupported)에서
+// '준비 중'으로 돌아간다. 이 판정은 게이트를 통과한 지역 안에서 DB-first/live를 가르는 역할만 한다.
 
 async function fetchYearlySaleTableFromDb(lawdCd: string, startYear: number, currentYear: number): Promise<YearlyRow[]> {
   const aggregates = await getYearlySaleAggregate(lawdCd, startYear);
@@ -48,11 +51,18 @@ export async function GET(request: Request) {
   const sido = searchParams.get('sido') || '부산광역시';
   const gungu = searchParams.get('gungu') || '서구';
 
+  // NON_BUSAN_STATS_TRUST_GATE_V1 — 통계가 열리지 않은 지역은 캐시·DB·MOLIT에 닿기 전에 돌려보낸다.
+  // 이 라우트는 비부산에서 13년치 월별 MOLIT fan-out(≈84초)을 돌던 경로다.
+  if (!isStatsRegionSupported({ lawdCd: lawdCdParam, sidoCode: null, sidoName: sido })) {
+    return NextResponse.json(statsUnsupportedSuccessBody());
+  }
+
   try {
     const lawdCd = lawdCdParam && /^\d{5}$/.test(lawdCdParam) ? lawdCdParam : await resolveLawdCd(sido, gungu);
     if (!lawdCd) {
       return NextResponse.json({ success: false, error: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` });
     }
+    if (!isStatsEnabledLawdCd(lawdCd)) return NextResponse.json(statsUnsupportedSuccessBody());
 
     const isBusan = isTradeDbFirstLawdCd(lawdCd);
 
