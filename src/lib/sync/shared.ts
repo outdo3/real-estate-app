@@ -46,6 +46,11 @@ export interface CellReport {
   cancelReconcileSkipped?: number;
   /** §15 — 치유가 꺼져 있어 쓰지 않고 남겨둔 과다 취소 row 수(승인 대기). */
   cancelRestorePending?: number;
+  /** CANCELLATION_INSERT_PATH_FIX_V1 — insert(예정) 행 중 취소 상태인 행 수. dry-run에서는 예상치. */
+  insertCanceled?: number;
+  /** CANCELLATION_INSERT_PATH_FIX_V1 — DB에 형제가 이미 있는 그룹에서 부족분 insert를 추측 없이 보류한 그룹 수
+   * (aptSeq 없음·identity 불일치·원천 취소 부족분 > 넣을 행 수). */
+  insertReconcileSkipped?: number;
   /** RENT_OCCURRENCE_SAFETY_V1 §5 — Option E group guard가 보류한 INSERT 수(RENT 전용).
    * `blocked`(aptSeq 없어 정규화 단계에서 걸러진 행)와 **절대 합치지 않는다** — 서로 다른
    * 사건이다. SALE 경로에는 이 가드가 없어 항상 undefined다(0건이 아니라 "해당 없음"). */
@@ -76,6 +81,10 @@ export interface SyncSummary {
   cancelReconcileSkipped?: number;
   /** §15 — 치유가 꺼져 있어 남겨둔 과다 취소 row 총합(승인 대기). */
   cancelRestorePending?: number;
+  /** CANCELLATION_INSERT_PATH_FIX_V1 — insert(예정) 중 취소 행 총합. */
+  insertCanceled?: number;
+  /** CANCELLATION_INSERT_PATH_FIX_V1 — 부족분 insert를 보류한 그룹 총합. */
+  insertReconcileSkipped?: number;
   coverageRecorded: number;
   durationMs: number;
   needsReview: ReviewItem[];

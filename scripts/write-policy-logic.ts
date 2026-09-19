@@ -238,3 +238,151 @@ export function reconcileGroupCancellation(
 
   return { kind: 'reconcile', toCancel: [], toRestore: restorable.slice(0, excess).map((r) => ({ id: r.id })) };
 }
+
+// ── CANCELLATION_INSERT_PATH_FIX_V1 ────────────────────────────────────────
+//
+// 예방 수정(위 reconcileGroupCancellation)은 **기존 행의 취소 flip**을 그룹 개수로 바꿨지만,
+// 형제가 **새로 늘어나는 insert**는 여전히 행 단위였다:
+//
+//   원천: 같은 거래 2줄(정상 1 + 취소 1) · DB: 1줄(취소)
+//   1) 형제 수 2 ≠ 1 → reconcile은 SIBLING_COUNT_MISMATCH로 skip
+//   2) insert는 occurrenceIndex(원천 응답 순서) 자연키로 행을 대응시킨다 — 원천 순서가
+//      [정상, 취소]면 기존 취소 행이 index 0에 매칭되고, index 1의 **취소 행**이 새로 들어간다
+//   3) DB 2/2 취소 ↔ 원천 1/2 — 새 false-cancel (CANCELLATION_PREVENTION_CRON_VALIDATION_GATE_V1: 7건)
+//
+// 해결: DB에 이미 형제가 있는 그룹에서 새로 넣을 행은 **그룹 개수**로 정한다.
+//   넣을 행 수    = 원천 형제 수 − DB 형제 수
+//   그중 취소 수  = max(0, 원천 취소 수 − DB 취소 수)
+//   취소 수가 넣을 행 수보다 많으면(기존 정상 행까지 취소로 바꿔야 맞는 경우) 추측하지 않고 skip.
+// 어느 원천 행의 내용을 쓸지, 어느 occurrenceIndex 자리에 둘지는 **응답 순서와 무관한**
+// 결정적 규칙으로 정한다(아래). occurrenceIndex는 자연키 자리 배정에만 쓰고 진실 판정에는 쓰지 않는다.
+//
+// 이 함수가 하지 않는 것:
+//   - 기존 행을 바꾸지 않는다(취소/치유는 reconcileGroupCancellation 담당, 치유는 게이트 뒤).
+//   - 형제 수가 원천과 같거나 더 많은 그룹에는 아무것도 넣지 않는다(결함 B = 원천 회수는 별도).
+//   - 원천이 COMPLETE가 아닌 셀에서 불리면 안 된다(호출부 계약, reconcile과 동일).
+
+export interface GroupInsertSourceRow {
+  occurrenceIndex: number;
+  dealCanceled: boolean;
+  cancelDate: string | null;
+  registryDate: string | null;
+  aptSeq: string | null;
+  aptName: string;
+  dong: string;
+  jibun?: string | null;
+  buildYear?: number | null;
+  rawUid?: string | null;
+}
+
+export interface GroupInsertExistingRow {
+  occurrenceIndex: number;
+  dealCanceled: boolean;
+  cancelDate: string | null;
+  registryDate: string | null;
+  aptName: string;
+  dong: string;
+}
+
+export type GroupInsertSkipReason =
+  /** aptSeq 없는 행 — name+dong fallback으로 identity를 만들지 않는다(classifyRow의 reviewRequired와 같은 원칙). */
+  | 'NO_APT_SEQ'
+  /** 원천/DB 형제의 단지명·동이 엇갈린다 — 같은 거래라고 단정할 수 없다. */
+  | 'IDENTITY_MISMATCH'
+  /** 원천 취소 부족분이 새로 넣을 행 수보다 많다 — 기존 정상 행을 취소로 바꿔야 맞는데, 그 판정은 추측이다. */
+  | 'CANCELED_DEFICIT_EXCEEDS_MISSING'
+  /** 방어용 — 이론상 도달 불가(원천에 넣을 만큼의 행이 남지 않음). */
+  | 'INSUFFICIENT_SOURCE_ROWS';
+
+export type GroupInsertPlan<T> =
+  | { kind: 'none' }
+  | { kind: 'skipped'; reason: GroupInsertSkipReason; missing: number }
+  | { kind: 'insert'; rows: T[]; canceledInserts: number };
+
+/** 응답 순서와 무관한 내용 기반 정렬 키. rawUid(응답 위치 기반)는 나머지가 완전히 같을 때만 순서를 가른다. */
+function canonicalContentKey(r: GroupInsertSourceRow): string {
+  return JSON.stringify([
+    r.dealCanceled ? 1 : 0,
+    r.cancelDate ?? '',
+    r.registryDate ?? '',
+    r.aptName,
+    r.dong,
+    r.jibun ?? '',
+    r.buildYear ?? '',
+    r.rawUid ?? '',
+  ]);
+}
+
+/** 이미 DB에 있는 값과 같은 원천 행을 multiset에서 하나씩 뺀다(같은 값이면 어느 것을 빼도 같다). */
+function removeMatched<T extends GroupInsertSourceRow>(pool: T[], taken: (string | null)[], field: 'cancelDate' | 'registryDate'): T[] {
+  const rest = [...pool];
+  for (const v of taken) {
+    const i = rest.findIndex((r) => (r[field] ?? null) === (v ?? null));
+    if (i >= 0) rest.splice(i, 1);
+  }
+  return rest;
+}
+
+/**
+ * 한 occurrence 그룹에서 새로 넣을 행을 정한다. **순서 무관 · 결정적 · 멱등.**
+ *
+ * - DB 형제 0: 원천 행을 그대로 넣는다(신규 그룹 — 개수가 자명하게 일치하고, 기존 동작과 동일).
+ * - 원천 형제 수 ≤ DB 형제 수: 넣지 않는다(같으면 reconcile 담당, 적으면 결함 B).
+ * - 원천 형제 수 > DB 형제 수 > 0: 그룹 개수로 부족분을 계산해 넣는다.
+ *
+ * 반환 행의 occurrenceIndex는 0부터 DB가 쓰지 않는 자리를 오름차순으로 배정한다(자연키 중복 방지).
+ * 취소 행이 먼저, 그다음 정상 행 순서로 자리를 받는다.
+ */
+export function planGroupInserts<T extends GroupInsertSourceRow>(
+  sourceRows: T[],
+  existingRows: GroupInsertExistingRow[]
+): GroupInsertPlan<T> {
+  if (existingRows.length === 0) {
+    if (sourceRows.length === 0) return { kind: 'none' };
+    return { kind: 'insert', rows: [...sourceRows], canceledInserts: sourceRows.filter((r) => r.dealCanceled).length };
+  }
+  const missing = sourceRows.length - existingRows.length;
+  if (missing <= 0) return { kind: 'none' };
+
+  if (sourceRows.some((r) => !r.aptSeq)) return { kind: 'skipped', reason: 'NO_APT_SEQ', missing };
+  const name = sourceRows[0].aptName;
+  const dong = sourceRows[0].dong;
+  if (sourceRows.some((r) => r.aptName !== name || r.dong !== dong) || existingRows.some((e) => e.aptName !== name || e.dong !== dong)) {
+    return { kind: 'skipped', reason: 'IDENTITY_MISMATCH', missing };
+  }
+
+  const sourceCanceled = sourceRows.filter((r) => r.dealCanceled).length;
+  const dbCanceled = existingRows.filter((e) => e.dealCanceled).length;
+  const canceledInserts = Math.max(0, sourceCanceled - dbCanceled);
+  if (canceledInserts > missing) return { kind: 'skipped', reason: 'CANCELED_DEFICIT_EXCEEDS_MISSING', missing };
+  const activeInserts = missing - canceledInserts;
+
+  const byContent = (a: T, b: T) => {
+    const ka = canonicalContentKey(a);
+    const kb = canonicalContentKey(b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  };
+  const canceledAll = sourceRows.filter((r) => r.dealCanceled).sort(byContent);
+  const activeAll = sourceRows.filter((r) => !r.dealCanceled).sort(byContent);
+  const canceledPool = removeMatched(canceledAll, existingRows.filter((e) => e.dealCanceled).map((e) => e.cancelDate), 'cancelDate');
+  const activePool = removeMatched(activeAll, existingRows.filter((e) => !e.dealCanceled).map((e) => e.registryDate), 'registryDate');
+  // 값 매칭으로 빠진 뒤에도 부족하면 같은 상태의 전체 풀에서 채운다(형제는 서로 구분되지 않는다).
+  const pick = (pool: T[], full: T[], n: number): T[] | null => {
+    const out = pool.slice(0, n);
+    for (const r of full) {
+      if (out.length >= n) break;
+      if (!out.includes(r)) out.push(r);
+    }
+    return out.length === n ? out : null;
+  };
+  const canceledPicks = pick(canceledPool, canceledAll, canceledInserts);
+  const activePicks = pick(activePool, activeAll, activeInserts);
+  if (!canceledPicks || !activePicks) return { kind: 'skipped', reason: 'INSUFFICIENT_SOURCE_ROWS', missing };
+
+  const used = new Set(existingRows.map((e) => e.occurrenceIndex));
+  const freeSlots: number[] = [];
+  for (let i = 0; freeSlots.length < missing; i++) if (!used.has(i)) freeSlots.push(i);
+
+  const rows = [...canceledPicks, ...activePicks].map((r, i) => ({ ...r, occurrenceIndex: freeSlots[i] }));
+  return { kind: 'insert', rows, canceledInserts };
+}

@@ -18,6 +18,7 @@ import {
   buildRegistryOnlyUpdateFields,
   classifyRow,
   reconcileGroupCancellation,
+  planGroupInserts,
   isRegistrySupplementUnambiguous,
   occurrenceGroupKey,
 } from '../../../scripts/write-policy-logic';
@@ -121,8 +122,10 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
       cancelRestored: a.cancelRestored + (r.cancelRestored ?? 0),
       cancelRestorePending: a.cancelRestorePending + (r.cancelRestorePending ?? 0),
       cancelReconcileSkipped: a.cancelReconcileSkipped + (r.cancelReconcileSkipped ?? 0),
+      insertCanceled: a.insertCanceled + (r.insertCanceled ?? 0),
+      insertReconcileSkipped: a.insertReconcileSkipped + (r.insertReconcileSkipped ?? 0),
     }),
-    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0, registryUpdated: 0, registryAmbiguousSkipped: 0, cancelRestored: 0, cancelRestorePending: 0, cancelReconcileSkipped: 0 }
+    { fetched: 0, inserted: 0, updated: 0, blocked: 0, failed: 0, registryUpdated: 0, registryAmbiguousSkipped: 0, cancelRestored: 0, cancelRestorePending: 0, cancelReconcileSkipped: 0, insertCanceled: 0, insertReconcileSkipped: 0 }
   );
 
   let status: SyncRunStatus = 'SUCCESS';
@@ -146,6 +149,7 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
   log(
     `DONE sale status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} ` +
       `cancelRestored=${totals.cancelRestored} cancelRestorePending=${totals.cancelRestorePending} cancelReconcileSkipped=${totals.cancelReconcileSkipped} ` +
+      `insertCanceled=${totals.insertCanceled} insertReconcileSkipped=${totals.insertReconcileSkipped} ` +
       `registryUpdated=${totals.registryUpdated} registryAmbiguousSkipped=${totals.registryAmbiguousSkipped} ` +
       `blocked=${totals.blocked} failed=${totals.failed} coverageRecorded=${recorded} durationMs=${summary.durationMs}`
   );
@@ -233,6 +237,9 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     // 아직 적재되지 않은 그룹(insert 대기)은 이번 실행에서 판정하지 않는다 — insert가
     // 원천 상태를 그대로 넣으므로 개수는 맞고, 다음 실행부터 정상적으로 대조된다.
     if (!dbSiblings || dbSiblings.length === 0) continue;
+    // CANCELLATION_INSERT_PATH_FIX_V1 — 원천 형제가 더 많은 그룹은 아래 그룹 insert 계획이 맡는다.
+    // (예전에는 여기서 SIBLING_COUNT_MISMATCH로 skip된 뒤 행 단위 insert가 순서대로 취소 행을 넣었다.)
+    if (srcSiblings.length > dbSiblings.length) continue;
     // identity가 어긋난 그룹은 손대지 않는다(기존 conflict 원칙과 동일).
     const srcName = srcSiblings[0].aptName;
     const srcDong = srcSiblings[0].dong;
@@ -260,10 +267,30 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     }
   }
 
+  // CANCELLATION_INSERT_PATH_FIX_V1 — DB에 형제가 이미 있는 그룹의 새 행은 행 단위(occurrenceIndex =
+  // 원천 응답 순서)로 고르지 않고 **그룹 개수**로 정한다: 넣을 수 = 원천 형제 − DB 형제, 그중 취소 수 =
+  // max(0, 원천 취소 − DB 취소). 신규 그룹(DB 형제 0)은 아래 행 단위 경로 그대로다.
   const inserts: TradeRowInput[] = [];
+  const groupPlanned = new Set<string>();
+  let insertReconcileSkipped = 0;
+  for (const [key, srcSiblings] of siblingsByGroup) {
+    const dbSiblings = existingSiblingsByGroup.get(key);
+    if (!dbSiblings || dbSiblings.length === 0) continue;
+    groupPlanned.add(key);
+    const plan = planGroupInserts(srcSiblings, dbSiblings);
+    if (plan.kind === 'insert') inserts.push(...plan.rows);
+    else if (plan.kind === 'skipped') {
+      insertReconcileSkipped++;
+      base.reviewCandidates++;
+      log(`INSERT_RECONCILE_SKIPPED ${lawdCd}:${dealYmd} reason=${plan.reason} missing=${plan.missing}`);
+    }
+  }
+
   const registrySupplements: { id: number; registryDate: string }[] = [];
   for (const row of rows) {
     const match = existingMap.get(naturalKeyStr(row));
+    // 형제가 이미 있는 그룹에서 자연키가 비는 행은 위 그룹 계획이 넣을지 정했다 — 행 단위로 다시 넣지 않는다.
+    if (!match && groupPlanned.has(occurrenceGroupKey(row))) continue;
     const kind = classifyRow(row, match);
     // §10 — aptSeq 없는 새 row는 insert하지 않는다(reviewRequired). name+dong fallback으로
     // canonical identity를 만들지 않는다.
@@ -390,10 +417,13 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     base.registryUpdated = registrySupplements.length;
   }
   base.cancelReconcileSkipped = cancelReconcileSkipped;
+  base.insertCanceled = inserts.filter((r) => r.dealCanceled).length;
+  base.insertReconcileSkipped = insertReconcileSkipped;
 
   log(
     `${fetchResult.status} ${lawdCd}:${dealYmd} fetched=${base.fetched} blocked=${base.blocked} inserted=${base.inserted} ` +
       `flips=${base.updated} cancelRestored=${base.cancelRestored ?? 0} cancelRestorePending=${base.cancelRestorePending ?? 0} cancelReconcileSkipped=${cancelReconcileSkipped} ` +
+      `insertCanceled=${base.insertCanceled} insertReconcileSkipped=${insertReconcileSkipped} ` +
       `registry=${base.registryUpdated} registryAmbiguous=${base.registryAmbiguousSkipped} review=${base.reviewCandidates}`
   );
   return base;

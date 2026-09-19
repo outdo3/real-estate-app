@@ -2,6 +2,24 @@
 
 ## 2026-09-19
 
+### E-JIP CANCELLATION INSERT PATH FIX V1 — 새 형제 insert의 취소 상태를 그룹 개수로 정한다
+
+schema/migration 0 · repair 0 · restore gate 변경 0 · 기존 28행 변경 0 · cron 수동 실행 0.
+상세: `docs/development/CANCELLATION_INSERT_PATH_FIX_V1.md`
+
+    원인      원천 형제 > DB 형제면 reconcile이 SIBLING_COUNT_MISMATCH로 skip하고, insert가 occurrenceIndex(응답 순서)
+              자연키로 행을 대응시켜 원천의 취소 행을 새 형제로 넣었다 — 원천 1/2 ↔ DB 2/2
+    발견      수정 전 로직 replay(형제가 나중에 늘어난 304그룹)에서 과다 취소가 정확히 28그룹 = 확정 28행과 같은 집합
+              → 기존 21행도 flip 래칫이 아니라 이 insert 경로로 생겼다(예방 V1의 한계)
+    수정      planGroupInserts(): 넣을 수 = 원천 형제 − DB 형제, 그중 취소 = max(0, 원천 취소 − DB 취소),
+              취소 > 넣을 수면 보류(추측 없음). 내용 기반 정렬 + 빈 occurrenceIndex 오름차순 배정 — 응답 순서 무관
+              신규 그룹(DB 0) · 개수 같음(reconcile) · 원천 < DB(결함 B skip)는 기존 동작 그대로
+    metric    insertCanceled · insertReconcileSkipped (+ INSERT_RECONCILE_SKIPPED 로그)
+    replay    304그룹: 원천 일치 legacy 276 → 새 정책 304 · 과다 취소 28 → 0 · 진짜 취소 누락 0 · 신규 7건 7/7 일치
+    dry-run   확정 28행 21셀: insert 0 · flip 0 · pending 28 · restored 0 · 실제 쓰기 0
+    검증      정책 19 + syncOneSaleCell 통합 10(수정 전 core로 바꾸면 E1 2/2로 실패) · src 2,253 · scripts 154 · 0 fail
+              eslint 변경 6파일 exit 0 · tsc src 오류 0(기존 25건 scripts/tmp) · next build 성공
+
 ### E-JIP CANCELLATION PREVENTION CRON VALIDATION GATE V1 — FAIL: insert 경로가 새 false-cancel 7건을 만들었다
 
 READ ONLY 검증. DB write 0 · restore gate 변경 0 · repair 0 · schema 0 · cron 수동 실행 0.
