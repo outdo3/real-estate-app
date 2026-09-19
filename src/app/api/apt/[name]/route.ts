@@ -10,6 +10,7 @@ import {
   type MonthFetchOutcome,
 } from '@/lib/apt-trade-completeness';
 import { logServerError } from '@/lib/log-server-error';
+import { isTradeDbFirstLawdCd } from '@/lib/region/enablement';
 import { resolveStrongIdentityAptSeqs, matchesTradeIdentity, deriveCanonicalAptSeq } from '@/lib/apt-name-match';
 import { resolveCanonicalCoords } from '@/lib/apt-canonical-coords';
 import {
@@ -250,6 +251,12 @@ export async function GET(
         });
         if (aptSeq) {
           canonicalAptSeqForRead = aptSeq;
+        }
+        // SEOUL_DETAIL_DB_FIRST_GATE — DB를 1차 소스로 쓰는 것은 정기 수집(cronSync)으로 DB가
+        // 완전하다고 보장되는 지역뿐이다. 그 밖의 지역(예: 서울 강남구 1회성 파일럿 46행)은 DB에
+        // 일부 달만 있어도 전체 이력을 가려 버리므로 MOLIT 결과를 유지한다. 지역은 URL lawdCd가
+        // 아니라 aptSeq 자체의 구 코드("{lawdCd}-{일련번호}")로 판정한다.
+        if (aptSeq && isTradeDbFirstLawdCd(aptSeq.slice(0, 5))) {
           const db = await readDetailSaleTradesFromDb(aptSeq, period);
           if (db.usedDb) {
             activeTrades = db.trades;
