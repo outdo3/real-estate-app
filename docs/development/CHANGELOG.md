@@ -2,6 +2,17 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL MASTER REMAINING 24 DISTRICTS APPLY V1 — 서울 Tier A 나머지 24구 6,736행 Production 적재(승인)
+
+Production INSERT 6,736 · UPDATE 0 · DELETE 0 · schema 0 · enable 0. 상세: `docs/development/SEOUL_MASTER_REMAINING_24_APPLY_V1.md`
+
+    절차      구 코드 오름차순, 구마다 직전 dry-run(외부 호출 0·승인 artifact 행과 완전 일치) → --apply --district --expect-ready → 전 행 read-back → 부산 확인
+    정지 1회  성동구 사전 점검에서 OUT_OF_TARGET 1(11140-1012, 중구 canonical·파일럿 적재 완료) — 쓰기 없음. 승인 identity 정정 4건과 정확히 같을 때만 허용하도록 좁혀 재개
+    결과      24/24 구 PASS · inserted 6,736 · skipped 0 · failed 0 · insert 128.7초 · DB 오류 0
+    최종      전체 10,281(부산 3,438 + 서울 6,843) · 서울 aptSeq 고유 6,843 · 25구 전부 승인 dry-run과 일치 · 좌표 6,726 / null 117 · 전 행 차이 0
+    부산      fingerprint 98dd4a45… · updated_at · 좌표 null 37 불변
+    기타      서울 매매 46/46 EXACT · rollback artifact 25개 = DB id 6,843 · 서울 공개 없음
+
 ### E-JIP SEOUL MASTER JUNG-GU PILOT APPLY V1 — 서울 중구 ApartmentMaster 107행 Production 적재(승인)
 
 Production INSERT 107 · UPDATE 0 · DELETE 0 · schema 0 · enable 0. 상세: `docs/development/SEOUL_MASTER_JUNG_GU_PILOT_APPLY_V1.md`
