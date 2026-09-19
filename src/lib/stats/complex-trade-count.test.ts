@@ -67,7 +67,7 @@ test('3·4·5 · 취소 형제 — 유효+취소 = 1, 유효+유효 = 2, 순서�
   assert.equal(screenCounts([...bothActive].reverse()).get('26380-2073'), 2);
 });
 
-test('6~9 · 7일·15일·30일·3개월 — 기간과 무관하게 같은 규칙(기간 안 유효 기록 수)', () => {
+test('6~11 · 오늘·어제·7일·15일·30일·3개월 — 기간과 무관하게 같은 규칙(기간 안 유효 기록 수)', () => {
   const now = new Date('2026-09-19T03:00:00.000Z');
   const rows = [
     ...daewoon46(), // 08-21
@@ -75,8 +75,13 @@ test('6~9 · 7일·15일·30일·3개월 — 기간과 무관하게 같은 규�
     dbTrade({ aptSeq: '26290-4786', name: '롯데캐슬인피니엘', dong: '문현동', date: '2026-09-18', floor: 24 }),
     dbTrade({ aptSeq: '26290-4786', name: '롯데캐슬인피니엘', dong: '문현동', date: '2026-09-10', floor: 7, canceled: true }),
     dbTrade({ aptSeq: '26500-29', name: '삼익비치', dong: '남천동', date: '2026-07-01', floor: 5 }),
+    // 오늘(09-19)·어제(09-18) — 같은 조건 2건 + 취소 형제
+    dbTrade({ aptSeq: '26140-1361', name: 'e편한세상', dong: '암남동', date: '2026-09-19', floor: 9 }),
+    dbTrade({ aptSeq: '26140-1361', name: 'e편한세상', dong: '암남동', date: '2026-09-19', floor: 9 }),
+    dbTrade({ aptSeq: '26140-1361', name: 'e편한세상', dong: '암남동', date: '2026-09-18', floor: 3, canceled: true }),
+    dbTrade({ aptSeq: '26140-1361', name: 'e편한세상', dong: '암남동', date: '2026-09-18', floor: 3 }),
   ];
-  for (const key of ['7d', '15d', '30d', '3m'] as const) {
+  for (const key of ['today', 'yesterday', '7d', '15d', '30d', '3m'] as const) {
     const range = resolveVolumePeriod(key, now);
     const inRange = rows.filter((t) => isDateInRange(t.dealDate, range));
     const counts = screenCounts(inRange);
@@ -162,4 +167,37 @@ test('16 · 실거래 피드도 기록 단위 — 같은 조건 다른 세대·�
   assert.notEqual(r0.uid, r1.uid);
   assert.equal(dedupeByRecord([r0, r1]).length, 2);
   assert.match(codeOf('src/lib/rent-history-read.ts'), /occurrence_index as "occurrenceIndex"/);
+});
+
+test('19 · 화면 순위·건수 = 브리핑(=이미지/PDF 원본) 순위·건수 — 6개 기간 모두, 대운 46 포함', async () => {
+  const { buildRegionReport } = await import('../report/region-report');
+  const now = new Date('2026-09-19T03:00:00.000Z');
+  const rows = [
+    ...daewoon46(),
+    ...Array.from({ length: 27 }, (_, i) => dbTrade({ aptSeq: '26290-4786', name: '롯데캐슬인피니엘', dong: '문현동', date: `2026-09-${String(1 + (i % 19)).padStart(2, '0')}`, floor: 5 + (i % 20) })),
+    ...Array.from({ length: 12 }, (_, i) => dbTrade({ aptSeq: '26500-29', name: '삼익비치', dong: '남천동', date: `2026-09-${String(10 + (i % 10)).padStart(2, '0')}`, floor: 3 })),
+    dbTrade({ aptSeq: '26500-29', name: '삼익비치', dong: '남천동', date: '2026-09-18', floor: 3, canceled: true }),
+    ...Array.from({ length: 3 }, () => dbTrade({ aptSeq: '26140-1361', name: 'e편한세상', dong: '암남동', date: '2026-09-19', floor: 9 })),
+  ];
+  for (const key of ['today', 'yesterday', '7d', '15d', '30d', '3m'] as const) {
+    const range = resolveVolumePeriod(key, now);
+    const inRange = rows.filter((t) => isDateInRange(t.dealDate, range));
+    // 화면: 라우트와 같은 파이프라인 + 라우트 정렬(건수 내림차순)
+    const screen = buildConcentrationRanking(dedupeByRecord(inRange), []).sort((a, b) => b.currentCount - a.currentCount).map((e) => [e.aptSeq, e.currentCount]);
+    // 브리핑: 리포트 빌더의 "거래가 많은 단지" 섹션(이미지·PDF가 캡처하는 그 값)
+    const env = buildRegionReport({
+      level: 'CITY', lawdCd: null, dong: null, previousCount: 0, trailingYearCount: 500, masters: [], generatedAt: now.toISOString(), dataAsOf: null, coverageComplete: true,
+      period: { start: range.from, end: range.to, label: key },
+      rows: inRange.map((t) => ({ aptSeq: t.aptSeq, lawdCd: t.lawdCd, dong: t.dong, aptName: t.name, exclusiveArea: t.excluUseArea!, dealAmount: t.dealAmount, dealDate: t.dealDate, dealCanceled: t.dealCanceled, floor: Number(t.floorRaw) })),
+      twoYearRows: [],
+    });
+    const report = (env.sections.find((x) => x.key === 'representativeComplexes')?.rows ?? []).map((r) => [r.cells.aptSeq, r.cells.count]);
+    assert.deepEqual(screen.slice(0, report.length), report, key);
+    // 요약 거래건수 = 단지 합계
+    const total = env.metrics.find((m) => m.key === 'transactionCount')!.value;
+    assert.equal(screen.reduce((a, [, c]) => a + Number(c), 0), total, `${key} 합계`);
+  }
+  const range30 = resolveVolumePeriod('30d', now);
+  const r30 = buildConcentrationRanking(dedupeByRecord(rows.filter((t) => isDateInRange(t.dealDate, range30))), []);
+  assert.equal(r30.find((e) => e.aptSeq === '26380-2073')!.currentCount, 46);
 });
