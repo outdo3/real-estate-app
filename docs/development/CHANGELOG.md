@@ -2,6 +2,17 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL MASTER SIDO NORMALIZATION V1 — 서울 master sido '서울특별시' → '서울'(승인 Production UPDATE)
+
+Production UPDATE 6,843(sido만) · INSERT 0 · DELETE 0 · schema 0 · enable 0. 상세: `docs/development/SEOUL_MASTER_SIDO_NORMALIZATION_V1.md`
+
+    이유      master sido 관행은 registry 축약 표기(부산·서울·경기) — large-complex·점수 peer-context가 이 값으로 조회
+    조건      sido='서울특별시' AND sgg_cd LIKE '11%' · 한 트랜잭션 · 영향 행 ≠ 6,843이면 되돌림 · 스냅샷/되돌림 템플릿 선기록
+    결과      affected 6,843 · 서울 '서울' 6,843 / '서울특별시' 0 · sido 외 컬럼 변경 0(updated_at 포함) · 좌표 6,726/117 불변
+    부산      3,438 · fingerprint 7785079a…(sido·name 포함)·98dd4a45…(좌표) 모두 불변
+    seed      toCreateData sido = getSido('11').shortName
+    준비도    large-complex 조회 6,843(세대수 조건 시 0 — enrichment 전) · peer-context universe 6,843
+
 ### E-JIP SEOUL SALE BACKFILL PLAN V1 — 서울 매매 전체 이력 backfill 계획(READ ONLY) + 상세 DB-first 지역 게이트 hotfix
 
 Production write 0 · schema 0 · enable 0 · 서울 매매 apply BLOCKED(Defect A). 상세: `docs/development/SEOUL_SALE_BACKFILL_PLAN_V1.md`

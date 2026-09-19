@@ -17,6 +17,10 @@ import {
   type RawTradeItem,
   type SeedCandidate,
 } from './seoul-master-seed-plan-logic';
+import { getSido } from '../src/lib/region/registry';
+
+/** ApartmentMaster.sido는 registry의 축약 표기(부산·서울·경기)를 쓴다 — large-complex·점수 peer-context가 이 값으로 조회한다. */
+export const SEOUL_SIDO_SHORT: string = getSido('11')!.shortName;
 
 export const SEOUL_DISTRICTS: readonly { lawdCd: string; name: string }[] = [
   ['11110', '종로구'], ['11140', '중구'], ['11170', '용산구'], ['11200', '성동구'], ['11215', '광진구'],
@@ -372,7 +376,7 @@ export function toCreateData(row: SeedRow) {
     aptSeq: row.aptSeq,
     name: row.name,
     normalizedName: row.normalizedName,
-    sido: '서울특별시',
+    sido: SEOUL_SIDO_SHORT,
     sigungu: row.districtName,
     sggCd: row.district,
     umdName: row.dong,
