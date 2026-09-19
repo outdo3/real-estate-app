@@ -2,6 +2,20 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL SALE BACKFILL PLAN V1 — 서울 매매 전체 이력 backfill 계획(READ ONLY) + 상세 DB-first 지역 게이트 hotfix
+
+Production write 0 · schema 0 · enable 0 · 서울 매매 apply BLOCKED(Defect A). 상세: `docs/development/SEOUL_SALE_BACKFILL_PLAN_V1.md`
+
+    원천      가장 이른 달 2005-07(2005년 51셀·104행), 본격 2006-01~
+    실측      18개 구 전체 + 강서 일부 1,083,461행(4,668셀 전부 COMPLETE, 다중 페이지 47, 최대 3,141행) · 나머지 7구는 quota 예약 지키려 다음 창
+    규모      서울 전체 ≈1.44M행(측정 비율 projection) · 취소 1.16%(2020년부터만 존재) · DB +≈835MB
+    master    EXACT 95.16% · MISSING 4.84%(1,564 aptSeq 전부 2024-10 이전 거래 — 재건축 전 단지) · 오기재 26 · 자연키 충돌 0
+    취소      역순 정규화: 그룹 건수·취소 수 불변, 취소 슬롯만 순서 의존 → 재동기화는 count 기반 reconcile 필수
+    46행      자연키 46/46 일치 · 취소 상태 44/46(적재 뒤 원천 취소 2행 → 향후 apply 시 UPDATE 발생, 승인 필요)
+    스크립트  syncOneSaleCell 기반 새 driver(240개월 상한·부산 기본값·셀별 checkpoint·quota 예약) · legacy 스크립트 사용 금지
+    발견      서울 master sido '서울특별시' vs 관행 '부산'식 축약 — 정정 제안(승인 필요)
+    hotfix    상세 API가 서울 파일럿 46행 때문에 DB 3건만 보이던 문제 → DB-first를 aptSeq 구의 cronSync 지역으로 제한(8681234). 은마 MOLIT 158건 복구, 부산 불변
+
 ### E-JIP SEOUL MASTER REMAINING 24 DISTRICTS APPLY V1 — 서울 Tier A 나머지 24구 6,736행 Production 적재(승인)
 
 Production INSERT 6,736 · UPDATE 0 · DELETE 0 · schema 0 · enable 0. 상세: `docs/development/SEOUL_MASTER_REMAINING_24_APPLY_V1.md`
