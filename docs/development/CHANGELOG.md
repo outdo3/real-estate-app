@@ -2,6 +2,17 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL MASTER SEED SCRIPT V1 — 서울 Tier A create-only seed 스크립트(CODE ONLY, dry-run)
+
+Production write 0 · schema 0 · enable 0 · --apply 미실행. 상세: `docs/development/SEOUL_MASTER_SEED_SCRIPT_V1.md`
+
+    스크립트  scripts/seed-seoul-apartment-master.ts(+ -logic.ts) — 기존 apartment_master_seed.ts 재사용 안 함
+    안전장치  전 페이지·totalCount 검증 · 오류≠빈 결과 · 부분 셀 구 통째 보류 · aptSeq 앞 5자리 구 정정 · 매매 원천만(Tier B 구조적 제외)
+              좌표는 Kakao 주소 검색 필지 일치 단일 결과만 · 서울 aptSeq만 조회/생성 · create-only(update/upsert/delete 없음)
+    게이트    --apply + ALLOW_PROD_DB_WRITE=1 + --district + --expect-ready 일치 · rollback artifact(id 목록 + 3중 조건)
+    dry-run   25구 600/600 셀 COMPLETE · READY 6,843(계획 Tier A와 차이 0) · 좌표 EXACT 6,839 · 중구 파일럿 READY 107(좌표 107/107)
+    검증      테스트 24 · scripts 190 · 역조회 124/125 필지 일치 · 재실행 외부 호출 0 · 부산 3,438행 변경 없음
+
 ### E-JIP SEOUL MASTER SEED PLAN V1 — 서울 ApartmentMaster 구축 계획(READ ONLY)
 
 Production write 0 · schema 0 · enable 0. 상세: `docs/development/SEOUL_MASTER_SEED_PLAN_V1.md` · 도구: `scripts/audit-seoul-master-seed-plan.ts`
