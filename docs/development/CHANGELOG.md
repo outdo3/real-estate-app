@@ -2,6 +2,16 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL MASTER JUNG-GU PILOT APPLY V1 — 서울 중구 ApartmentMaster 107행 Production 적재(승인)
+
+Production INSERT 107 · UPDATE 0 · DELETE 0 · schema 0 · enable 0. 상세: `docs/development/SEOUL_MASTER_JUNG_GU_PILOT_APPLY_V1.md`
+
+    명령      ALLOW_PROD_DB_READ=1 ALLOW_PROD_DB_WRITE=1 npx tsx scripts/seed-seoul-apartment-master.ts --apply --district=11140 --expect-ready=107
+    결과      inserted 107 · skipped 0 · failed 0 · 2.68초 · id 5427~5533
+    감사      서울 107(중구 107) · aptSeq 고유 107 · 좌표 106 / null 1(11140-30) · 전 행 dry-run과 일치
+    부산      3,438 · fingerprint 98dd4a45… 불변 · updated_at·좌표 null 37 불변
+    공개      stats/cronSync/sitemap/SEO 그대로 닫힘 · 나머지 24구 6,736행은 별도 승인 대기
+
 ### E-JIP SEOUL MASTER COORDINATE REVERSE CHECK V1 — 서울 seed 좌표 양방향 필지 검증(CODE + DRY-RUN)
 
 Production write 0 · --apply 미실행 · 부산 변경 0. 상세: `docs/development/SEOUL_MASTER_COORDINATE_REVERSE_CHECK_V1.md`
