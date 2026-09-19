@@ -351,7 +351,7 @@ export default function VolumeChartCard({
                 {salePriceKpi.medianPricePerM2 != null ? (
                   <>
                     <span className={styles.kpiValue}>{salePriceKpi.medianPricePerM2.toLocaleString('ko-KR')}만원</span>
-                    <span className={styles.kpiSub}>전용면적 기준 · 가격순 가운데 값</span>
+                    <span className={styles.kpiSub}>전용면적 기준 중앙값</span>
                   </>
                 ) : (
                   <span className={styles.kpiValueMuted}>데이터 없음</span>
