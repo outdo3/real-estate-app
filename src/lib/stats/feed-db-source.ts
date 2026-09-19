@@ -85,7 +85,9 @@ export function storedSaleToFeedRaw(t: FeedSaleRow): Record<string, unknown> {
  * apartment_rent_histories에는 취소 컬럼 자체가 없다. 같은 상수 모양을 맞출 뿐이다. */
 export function storedRentToFeedRaw(r: StoredRentTrade): Record<string, unknown> {
   return {
-    id: `db-rent-${r.lawdCd}:${r.dealYmd}:${r.aptSeq ?? r.aptName}:${r.exclusiveArea}:${r.deposit}:${r.monthlyRent}:${r.floor ?? 'x'}:${r.dealDate.toISOString().slice(0, 10)}`,
+    // TOP_COMPLEX_AGGREGATION_FIX_V1 — 원천 순번까지 넣어 같은 조건의 서로 다른 전월세 기록이 같은 id를 갖지 않게 한다
+    // (dedupeByRecord가 id로 접는다 — 내용이 같아도 다른 기록이면 둘 다 남아야 한다).
+    id: `db-rent-${r.lawdCd}:${r.dealYmd}:${r.aptSeq ?? r.aptName}:${r.exclusiveArea}:${r.deposit}:${r.monthlyRent}:${r.floor ?? 'x'}:${r.dealDate.toISOString().slice(0, 10)}:${r.occurrenceIndex ?? 0}`,
     name: r.aptName,
     dong: r.dong,
     aptSeq: r.aptSeq,

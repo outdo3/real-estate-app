@@ -19,7 +19,7 @@ import {
   monthsForRange,
   isDateInRange,
   toFeedTrade,
-  dedupeTrades,
+  dedupeByRecord,
   buildConcentrationRanking,
   type FeedTrade,
 } from '@/lib/regional-feed';
@@ -88,7 +88,8 @@ export async function GET(request: Request) {
 
     if (dbBacked) {
       const lawdCds = isSidoAll ? (await getSigunguListForSido(sidoCodeParam!)).map((d) => d.code.substring(0, 5)) : [lawdCd!];
-      const cacheKey = `stats-concentration-db:v1:${lawdCds.join(',')}:${apiType}:${fetchRange.from}:${fetchRange.to}`;
+      // TOP_COMPLEX_AGGREGATION_FIX_V1 — 담는 값이 내용 dedupe 목록 → 기록 단위 목록으로 바뀌어 v2.
+      const cacheKey = `stats-concentration-db:v2:${lawdCds.join(',')}:${apiType}:${fetchRange.from}:${fetchRange.to}`;
       const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
         const rentSplit = apiType === 'rent'
           ? splitVerifiedMonths(months, await getRentVerifiedRange())
@@ -113,7 +114,8 @@ export async function GET(request: Request) {
             }
           }
         }
-        return { trades: dedupeTrades(trades), failedLawdCds: Array.from(failedSet) };
+        // TOP_COMPLEX_AGGREGATION_FIX_V1 — 같은 원천 기록만 하나로(내용이 같은 다른 세대 거래는 그대로 둔다).
+        return { trades: dedupeByRecord(trades), failedLawdCds: Array.from(failedSet) };
       });
       allTrades = cached.trades;
       // DB가 기본 원천이므로 남은 MOLIT(검증 안 된 전월세 월) 실패는 전체 실패가 아니라 부분 지연이다.
@@ -149,7 +151,7 @@ export async function GET(request: Request) {
           }
         }
       }
-      allTrades = dedupeTrades(allTrades);
+      allTrades = dedupeByRecord(allTrades);
       if (cached.failedLawdCds.length === cached.lawdCds.length && cached.lawdCds.length > 0) apiError = true;
     } else {
       const cacheKey = `stats-concentration:${lawdCd}:${apiType}:${months.join(',')}`;
@@ -163,7 +165,7 @@ export async function GET(request: Request) {
           if (t) allTrades.push(t);
         }
       }
-      allTrades = dedupeTrades(allTrades);
+      allTrades = dedupeByRecord(allTrades);
       if (dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
 
       // §36 — API 실패 vs 거래 없음 구분(feed와 동일 원칙).

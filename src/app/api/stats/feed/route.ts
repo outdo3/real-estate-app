@@ -13,7 +13,7 @@ import {
   buildRegionSummary,
   buildMarketInterpretation,
   groupTradesByDate,
-  dedupeTrades,
+  dedupeByRecord,
   filterVerifiedTrades,
   areaBandLabel,
   windowCoverageLabel,
@@ -119,7 +119,8 @@ export async function GET(request: Request) {
       // BUSAN_12M_STATS_PERFORMANCE_FIX_V1 §4 — 캐시 키를 v2로 올린다: 캐시에 담는
       // 값이 "MOLIT raw 결과 맵"에서 "조립·중복제거까지 끝난 FeedTrade 목록"으로
       // 바뀌었다(TTL 5분은 그대로 — 데이터 최신성 기준을 바꾸지 않는다).
-      const cacheKey = `stats-feed-sido:v2:${sidoCodeParam}:${months.join(',')}`;
+      // TOP_COMPLEX_AGGREGATION_FIX_V1 — 담는 값이 내용 dedupe 목록 → 기록 단위 목록으로 바뀌어 v3.
+      const cacheKey = `stats-feed-sido:v3:${sidoCodeParam}:${months.join(',')}`;
       const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
         // 전월세는 **검증범위 안 월만** DB로 읽는다. 검증 안 된 월(주로 진행 중인
         // 현재월)은 기존 MOLIT 경로를 그대로 쓴다 — 검증되지 않은 기간을 "DB에 다
@@ -176,7 +177,8 @@ export async function GET(request: Request) {
           }
         }
 
-        return { trades: dedupeTrades(trades), failedLawdCds: Array.from(failedSet), lawdCds, dbBacked };
+        // TOP_COMPLEX_AGGREGATION_FIX_V1 — 같은 원천 기록만 하나로. 같은 조건의 다른 세대 거래·취소+재신고 형제를 숨기지 않는다.
+        return { trades: dedupeByRecord(trades), failedLawdCds: Array.from(failedSet), lawdCds, dbBacked };
       });
 
       partial = cached.failedLawdCds.length > 0;
@@ -219,7 +221,7 @@ export async function GET(request: Request) {
           if (t) allTrades.push(t);
         }
       }
-      allTrades = dedupeTrades(allTrades);
+      allTrades = dedupeByRecord(allTrades);
       if (dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
 
       // §39 API 실패 vs 거래 없음 구분 — period 안에 거래가 하나도 없을 때만, 그

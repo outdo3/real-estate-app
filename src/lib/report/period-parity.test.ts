@@ -202,7 +202,7 @@ test('20 · 캐시 키 — 기간마다 분리된다(요약은 KST 날짜 키에
   assert.match(dash, /`stats-dashboard:v4:\$\{lawdCd\}:\$\{kstToday\}`/);
   assert.match(dash, /\['today', 'yesterday', '7d', '15d', '30d', '3m'\]/);
   const conc = code('src/app/api/stats/concentration/route.ts');
-  assert.match(conc, /`stats-concentration-db:v1:\$\{lawdCds\.join\(','\)\}:\$\{apiType\}:\$\{fetchRange\.from\}:\$\{fetchRange\.to\}`/);
+  assert.match(conc, /`stats-concentration-db:v2:\$\{lawdCds\.join\(','\)\}:\$\{apiType\}:\$\{fetchRange\.from\}:\$\{fetchRange\.to\}`/);
   // 리포트는 요청 단위 React cache — 인자(기간 키)가 다르면 다른 항목이다.
   assert.match(code('src/lib/report/region-read-cached.ts'), /async \(level: RegionLevel, lawdCd: string \| null, dong: string \| null, periodKey: ReportPeriodKey\)/);
 });

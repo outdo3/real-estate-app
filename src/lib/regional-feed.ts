@@ -11,6 +11,8 @@
 //     (다른 단지로 fallback하지 않는다는 원칙 — 이름만으로 다른 지역/단지와
 //     섞지 않기 위해 dong까지 포함).
 
+import { countValidTradesByComplex, groupValidTradesByComplex } from './stats/complex-trade-count';
+
 export type PeriodPreset =
   | 'today'
   | 'yesterday'
@@ -179,7 +181,30 @@ export function groupKey(t: Pick<FeedTrade, 'aptSeq' | 'name' | 'dong' | 'excluU
   return `${identityKey(t)}::${areaKey(t)}::${t.dealType}`;
 }
 
-/** 같은 거래가 중복 fetch(달 겹침 등)로 두 번 들어와도 하나만 남긴다. */
+/**
+ * TOP_COMPLEX_AGGREGATION_FIX_V1 — **같은 원천 기록**이 두 번 들어온 경우만 하나로 남긴다(기록 식별자 `uid` 기준).
+ *
+ * 거래 많은 단지·실거래 피드는 이 함수를 쓴다. 아래 `dedupeTrades`(내용 기준)는 (단지·면적·금액·계약일·층)이 같으면
+ * 서로 다른 세대의 실제 거래까지 접고, 취소 여부를 보지 않아 취소 행이 남으면 유효 거래까지 사라졌다
+ * (TOP_COMPLEX_AGGREGATION_TRUST_AUDIT_V1). uid는 DB 경로에서 행 id(`db-sale-<id>`), 전월세는 자연키+순번,
+ * MOLIT 경로에서는 응답 내 순번이라 원천 기록마다 고유하다.
+ */
+export function dedupeByRecord<T extends { uid: string }>(trades: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const t of trades) {
+    if (seen.has(t.uid)) continue;
+    seen.add(t.uid);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * 같은 거래가 중복 fetch(달 겹침 등)로 두 번 들어와도 하나만 남긴다.
+ * 내용 기준이라 같은 조건의 서로 다른 거래도 접는다 — 거래 많은 단지·피드는 더 이상 쓰지 않는다(dedupeByRecord).
+ * 가격 순위(price-rankings)의 기존 호출은 이번 범위 밖이라 그대로 둔다.
+ */
 export function dedupeTrades(trades: FeedTrade[]): FeedTrade[] {
   const seen = new Map<string, FeedTrade>();
   for (const t of trades) {
@@ -442,20 +467,9 @@ export interface ConcentrationEntry {
 // 원칙을 강제). 절대 "인기"/"선호"를 뜻하지 않는다 — 대단지·분양 시점 등 다른
 // 이유로도 거래건수가 많을 수 있다(§23 캐치 문구는 호출부 UI가 책임진다).
 export function buildConcentrationRanking(currentTrades: FeedTrade[], previousTrades: FeedTrade[]): ConcentrationEntry[] {
-  const currentVerified = filterVerifiedTrades(currentTrades);
-  const previousVerified = filterVerifiedTrades(previousTrades);
-
-  const byIdentity = new Map<string, FeedTrade[]>();
-  for (const t of currentVerified) {
-    const key = identityKey(t);
-    if (!byIdentity.has(key)) byIdentity.set(key, []);
-    byIdentity.get(key)!.push(t);
-  }
-  const prevCounts = new Map<string, number>();
-  for (const t of previousVerified) {
-    const key = identityKey(t);
-    prevCounts.set(key, (prevCounts.get(key) || 0) + 1);
-  }
+  // TOP_COMPLEX_AGGREGATION_FIX_V1 — 한장 브리핑과 같은 공용 규칙: 취소를 먼저 빼고, 유효 기록 하나를 한 건으로 센다.
+  const byIdentity = groupValidTradesByComplex(currentTrades, identityKey, (t) => t.dealCanceled);
+  const prevCounts = countValidTradesByComplex(previousTrades, identityKey, (t) => t.dealCanceled);
 
   const rows: ConcentrationEntry[] = [];
   for (const [key, trades] of byIdentity) {

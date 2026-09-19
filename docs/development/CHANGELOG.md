@@ -2,6 +2,19 @@
 
 ## 2026-09-19
 
+### E-JIP TOP COMPLEX AGGREGATION FIX V1 — "거래 많은 단지"가 같은 조건의 다른 거래를 접지 않는다
+
+DB write 0 · schema 0 · 취소 repair 0 · 결함 B 0 · 기간 의미 0.
+상세: `docs/development/TOP_COMPLEX_AGGREGATION_FIX_V1.md`
+
+    원인      화면이 (단지·면적·금액·계약일·층) 같은 행을 첫 행만 남기고 취소를 뺐다 — 원천 실재 거래 삭제 + 취소 행이 남으면 유효 거래까지 0
+    규칙      유효(취소 아님) 기록 하나 = 한 건. 취소를 먼저 빼고 단지별로 센다(공용 helper groupValidTradesByComplex)
+    화면      concentration: dedupeTrades → dedupeByRecord(같은 uid만), 캐시 v2 · buildConcentrationRanking이 공용 helper 사용
+    브리핑    representativeComplexes가 같은 helper 사용 — 결과 동일
+    피드      /api/stats/feed도 dedupeByRecord(캐시 v3) — 달 겹침 재조회는 현재 경로에서 생기지 않아 내용 dedupe는 기록 삭제만 했다
+              전월세 DB uid에 occurrence_index 포함
+    검증      신규 9(수정 전 16·0 재현 포함) · src 2,275 · scripts 154 · 0 fail · eslint 13파일 · tsc src 0(기존 25) · build 성공
+
 ### E-JIP TOP COMPLEX AGGREGATION TRUST AUDIT V1 — "거래 많은 단지"의 정답은 원천 유효 기록 수(READ ONLY)
 
 READ ONLY 감사. DB write 0 · schema 0 · 집계 규칙/화면/리포트 변경 0.

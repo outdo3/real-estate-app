@@ -191,11 +191,13 @@ test('§6 세로 밀도는 기존 토큰을 공유한다 — A4/print 모드가 
 test('§7 건수·순위·정렬·집계 로직을 건드리지 않았다', () => {
   const code = codeOf(AGGREGATE);
   // 그룹 키는 여전히 aptSeq 우선이고, 정렬은 건수 → 최신 거래일 → 이름 순이다.
-  assert.ok(/const key = r\.aptSeq \? `id:\$\{r\.aptSeq\}` : `nd:\$\{r\.aptName\}\|\$\{normalizeDong\(r\.dong\) \?\? ''\}`/.test(code),
+  // TOP_COMPLEX_AGGREGATION_FIX_V1 — 개수는 화면과 같은 공용 함수(groupValidTradesByComplex)로 센다.
+  // 키 식·정렬·"유효 행 하나 = 한 건"은 그대로다(결과 동일 — complex-trade-count.test.ts 10번이 무작위 표본으로 고정).
+  assert.ok(/\(r\) => \(r\.aptSeq \? `id:\$\{r\.aptSeq\}` : `nd:\$\{r\.aptName\}\|\$\{normalizeDong\(r\.dong\) \?\? ''\}`\)/.test(code),
     'identity 그룹 키가 바뀌었다');
   assert.ok(/\.sort\(\(a, b\) => \(b\.count - a\.count\) \|\| b\.latestDealDate\.localeCompare\(a\.latestDealDate\) \|\| a\.aptName\.localeCompare\(b\.aptName\)\)/.test(code),
     'ranking 정렬이 바뀌었다');
-  assert.ok(/cur\.count \+= 1;/.test(code), '건수 계산이 바뀌었다');
+  assert.ok(/count: list\.length/.test(code) && /groupValidTradesByComplex\(/.test(code), '건수 계산이 바뀌었다');
 });
 
 test('§7 섹션 정의(제목·행 수·trust·cells)가 그대로다', () => {

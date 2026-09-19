@@ -43,6 +43,8 @@ export interface StoredRentTrade {
   floor: number | null;
   buildYear: number | null;
   jibun: string | null;
+  /** TOP_COMPLEX_AGGREGATION_FIX_V1 — 자연키 안의 원천 순번. 같은 조건의 서로 다른 기록을 구분하는 유일한 값이다. */
+  occurrenceIndex?: number;
 }
 
 function ymStartDate(ym: string): Date {
@@ -78,12 +80,12 @@ export async function fetchRentMonthBucketsFromDb(lawdCds: string[], months: str
   // jeonseRate는 apartment name+area 단위 row-level 매칭이 필요해 aggregate로 대체 불가)
   // 최소한 "옮기는 방식"만 더 빠르게 한다.
   const rows = await prisma.$queryRaw<
-    { lawdCd: string; aptSeq: string | null; aptName: string; dong: string; exclusiveArea: string; deposit: number; monthlyRent: number; dealType: string; dealDate: Date; dealYmd: string; floor: number | null; buildYear: number | null; jibun: string | null }[]
+    { lawdCd: string; aptSeq: string | null; aptName: string; dong: string; exclusiveArea: string; deposit: number; monthlyRent: number; dealType: string; dealDate: Date; dealYmd: string; floor: number | null; buildYear: number | null; jibun: string | null; occurrenceIndex: number }[]
   >`
     SELECT lawd_cd as "lawdCd", apt_seq as "aptSeq", apt_name as "aptName", dong,
            exclusive_area::text as "exclusiveArea", deposit, monthly_rent as "monthlyRent",
            deal_type as "dealType", deal_date as "dealDate", deal_ymd as "dealYmd",
-           floor, build_year as "buildYear", jibun
+           floor, build_year as "buildYear", jibun, occurrence_index as "occurrenceIndex"
     FROM apartment_rent_histories
     WHERE lawd_cd = ANY(${lawdCds}) AND deal_date >= ${from} AND deal_date <= ${to}
   `;

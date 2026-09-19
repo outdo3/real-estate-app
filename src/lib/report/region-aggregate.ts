@@ -11,6 +11,7 @@
 //   §10 예측 금지 — 실측 차이값만.
 //   평형(평) 라벨 금지 — ApartmentUnitType 커버리지가 2.9%라 ㎡만 쓴다.
 
+import { groupValidTradesByComplex } from '../stats/complex-trade-count';
 import { isBusanCurrentLawdCd, normalizeDong } from './region-scope';
 import type { MetricTrust, ReportRow, SampleGate } from './types';
 
@@ -181,17 +182,19 @@ export interface ComplexActivity {
 
 /** 대표 단지 — 거래건수 desc, 동률은 최근 계약일 desc → 이름 asc. */
 export function representativeComplexes(rows: readonly TradeRow[], limit: number): ComplexActivity[] {
+  // TOP_COMPLEX_AGGREGATION_FIX_V1 — 통계 화면(거래 많은 단지)과 같은 공용 규칙으로 센다:
+  // 취소를 먼저 빼고, 유효 행 하나를 한 건으로(내용이 같다고 접지 않는다). 결과는 이전과 동일하다.
+  // identity는 aptSeq 우선. 없으면 이름+동으로만 묶고 **다른 단지와 합치지 않는다**.
+  const groups = groupValidTradesByComplex(
+    rows,
+    (r) => (r.aptSeq ? `id:${r.aptSeq}` : `nd:${r.aptName}|${normalizeDong(r.dong) ?? ''}`),
+    (r) => r.dealCanceled
+  );
   const m = new Map<string, ComplexActivity>();
-  for (const r of rows) {
-    // identity는 aptSeq 우선. 없으면 이름+동으로만 묶고 **다른 단지와 합치지 않는다**.
-    const key = r.aptSeq ? `id:${r.aptSeq}` : `nd:${r.aptName}|${normalizeDong(r.dong) ?? ''}`;
-    const cur = m.get(key);
-    if (!cur) {
-      m.set(key, { aptSeq: r.aptSeq, aptName: r.aptName, dong: normalizeDong(r.dong), lawdCd: r.lawdCd, count: 1, latestDealDate: r.dealDate });
-    } else {
-      cur.count += 1;
-      if (r.dealDate > cur.latestDealDate) cur.latestDealDate = r.dealDate;
-    }
+  for (const [key, list] of groups) {
+    const first = list[0];
+    const latestDealDate = list.reduce((d, r) => (r.dealDate > d ? r.dealDate : d), first.dealDate);
+    m.set(key, { aptSeq: first.aptSeq, aptName: first.aptName, dong: normalizeDong(first.dong), lawdCd: first.lawdCd, count: list.length, latestDealDate });
   }
   return [...m.values()]
     .sort((a, b) => (b.count - a.count) || b.latestDealDate.localeCompare(a.latestDealDate) || a.aptName.localeCompare(b.aptName))

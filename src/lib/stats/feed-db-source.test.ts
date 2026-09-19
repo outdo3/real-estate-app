@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { toFeedTrade, dedupeTrades, identityKey, areaKey, groupKey } from '../regional-feed';
+import { toFeedTrade, dedupeByRecord, identityKey, areaKey, groupKey } from '../regional-feed';
 import { FEED_DB_SIDO_CODE, isFeedDbBackedSido, monthRangeBounds, storedSaleToFeedRaw, storedRentToFeedRaw } from './feed-db-source';
 
 /**
@@ -177,13 +177,15 @@ test('전용면적을 반올림하지 않는다 — 다른 면적이 하나로 �
   assert.notEqual(groupKey(a), groupKey(b));
 });
 
-test('중복 제거 의미가 그대로다 — DB row도 같은 키로 접힌다', () => {
+test('중복 제거는 기록 단위다 — 내용이 같아도 다른 DB 행(다른 원천 기록)은 둘 다 남는다', () => {
   const mk = (id: number) => toFeedTrade(storedSaleToFeedRaw({
     id, lawdCd: '26350', aptSeq: '26350-1', aptName: 'A', dong: '우동',
     exclusiveArea: '84.99', dealAmount: 50000, dealDate: new Date(Date.UTC(2026, 0, 1)), floor: 5, dealCanceled: false,
   }), 'sale', '26350')!;
-  // uid가 달라도(행 id가 다름) 같은 거래 내용이면 하나로 접힌다 — MOLIT 경로와 동일.
-  assert.equal(dedupeTrades([mk(1), mk(2)]).length, 1);
+  // TOP_COMPLEX_AGGREGATION_FIX_V1 — 예전에는 행 id가 달라도 같은 내용이면 하나로 접었다. 원천 감사에서 같은 날 같은 층
+  // 같은 금액의 서로 다른 세대 거래가 실재함을 확인했다(대운스카이뷰1차 46기록). 같은 기록(같은 id)만 접는다.
+  assert.equal(dedupeByRecord([mk(1), mk(2)]).length, 2);
+  assert.equal(dedupeByRecord([mk(1), mk(1)]).length, 1);
 });
 
 // ── D. 실패를 0이나 에러로 잘못 접지 않는다 ────────────────────────────────────
@@ -214,11 +216,11 @@ test('단일 구 조회 경로는 그대로다 — 이 STEP의 범위가 아니�
   assert.ok(/typeLabel === '에러'/.test(code), 'API 실패 판별 프로브가 사라졌다');
 });
 
-test('캐시 키가 v2로 올라갔다 — 담는 값의 모양이 바뀌었기 때문이다', () => {
+test('캐시 키가 v3로 올라갔다 — 담는 값의 의미(기록 단위 목록)가 바뀌었기 때문이다', () => {
   const code = codeOf(ROUTE);
-  assert.ok(/`stats-feed-sido:v2:\$\{sidoCodeParam\}:\$\{months\.join\(','\)\}`/.test(code), '시도 전체 캐시 키 버전이 오르지 않았다');
+  assert.ok(/`stats-feed-sido:v3:\$\{sidoCodeParam\}:\$\{months\.join\(','\)\}`/.test(code), '시도 전체 캐시 키 버전이 오르지 않았다');
   // 캐시에는 조립까지 끝난 목록이 들어간다(같은 5분 안에 같은 일을 다시 하지 않는다).
-  assert.ok(/return \{ trades: dedupeTrades\(trades\), failedLawdCds/.test(code), '캐시가 조립 결과를 담지 않는다');
+  assert.ok(/return \{ trades: dedupeByRecord\(trades\), failedLawdCds/.test(code), '캐시가 조립 결과를 담지 않는다');
 });
 
 // ── F. 새 인프라를 만들지 않았다 ───────────────────────────────────────────────
