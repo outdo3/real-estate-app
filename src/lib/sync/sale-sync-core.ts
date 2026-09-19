@@ -189,131 +189,23 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
   if (rows.length === 0) return base;
 
   const existing = await prisma.apartmentTradeHistory.findMany({
-    where: { lawdCd, dealYmd },
+    // SEOUL_SALE_BACKFILL_DRIVER_V1 — dealDate 월 범위를 함께 건다. (lawd_cd, deal_ymd) index가 없어
+    // 예전 조건은 그 구의 전체 이력을 훑었다. deal_ymd = deal_date의 연월(전 행 불일치 0 실측)이라
+    // 결과는 같고, (lawd_cd, deal_date) index로 해당 달만 읽는다.
+    where: { lawdCd, dealYmd, dealDate: monthDateRange(dealYmd) },
     // TRADE_REGISTRY_DATA_V1.1 — registryDate는 self-heal 판정에 필수라 반드시 select한다.
     select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, cancelDate: true, aptName: true, dong: true, registryDate: true },
   });
-  const existingMap = new Map<string, (typeof existing)[number]>();
-  for (const e of existing) {
-    if (e.floor == null) continue; // 자연키에 floor가 필수(기존 정책과 동일)
-    existingMap.set(naturalKeyStr({ groupKeyStr: e.groupKeyStr, dealAmount: e.dealAmount, dealDate: e.dealDate.toISOString().slice(0, 10), floor: e.floor, occurrenceIndex: e.occurrenceIndex }), e);
-  }
 
-  // TRADE_REGISTRY_DATA_V1.1 §4 — 같은 자연키 그룹(occurrenceIndex 제외)의 형제 row를
-  // 미리 모아둔다. 형제들의 registryDate가 엇갈리면 순서 흔들림에 취약하므로 보충하지 않는다.
-  const siblingsByGroup = new Map<string, TradeRowInput[]>();
-  for (const row of rows) {
-    const key = occurrenceGroupKey(row);
-    const list = siblingsByGroup.get(key);
-    if (list) list.push(row);
-    else siblingsByGroup.set(key, [row]);
-  }
-
-  // CANCELLATION_RATCHET_PREVENTION_FIX_V1 — DB 형제도 그룹 키로 모은다(occurrenceIndex 제외).
-  // 원천/DB 양쪽을 **순서 무관**하게 그룹으로 세워야 취소 개수를 대조할 수 있다.
-  const existingSiblingsByGroup = new Map<string, typeof existing>();
-  for (const e of existing) {
-    if (e.floor == null) continue;
-    const key = occurrenceGroupKey({
-      groupKeyStr: e.groupKeyStr,
-      dealAmount: e.dealAmount,
-      dealDate: e.dealDate.toISOString().slice(0, 10),
-      floor: e.floor,
-    });
-    const list = existingSiblingsByGroup.get(key);
-    if (list) list.push(e);
-    else existingSiblingsByGroup.set(key, [e]);
-  }
-
-  // 취소 상태는 **그룹 단위 개수**로만 정한다(결함 A 근절). 원천 응답 순서에 의존하지 않으므로
-  // 순서가 흔들려도 결과가 바뀌지 않는다. 이 시점에서 셀은 이미 COMPLETE/EMPTY_VALID다(§11 가드).
+  const plan = planSaleCellWrites(rows, existing);
+  for (const line of plan.logLines) log(`${line.split(' ')[0]} ${lawdCd}:${dealYmd} ${line.split(' ').slice(1).join(' ')}`);
+  base.reviewCandidates += plan.reviewCandidates;
+  base.registryAmbiguousSkipped += plan.registryAmbiguousSkipped;
+  base.unchanged += plan.unchanged;
   const restoreEnabled = isCancelRestoreEnabled();
-  const cancelFlips: { id: number; cancelDate: string | null }[] = [];
-  const cancelRestores: number[] = [];
-  const reconcileTouched = new Set<number>();
-  let cancelReconcileSkipped = 0;
-  for (const [key, srcSiblings] of siblingsByGroup) {
-    const dbSiblings = existingSiblingsByGroup.get(key);
-    // 아직 적재되지 않은 그룹(insert 대기)은 이번 실행에서 판정하지 않는다 — insert가
-    // 원천 상태를 그대로 넣으므로 개수는 맞고, 다음 실행부터 정상적으로 대조된다.
-    if (!dbSiblings || dbSiblings.length === 0) continue;
-    // CANCELLATION_INSERT_PATH_FIX_V1 — 원천 형제가 더 많은 그룹은 아래 그룹 insert 계획이 맡는다.
-    // (예전에는 여기서 SIBLING_COUNT_MISMATCH로 skip된 뒤 행 단위 insert가 순서대로 취소 행을 넣었다.)
-    if (srcSiblings.length > dbSiblings.length) continue;
-    // identity가 어긋난 그룹은 손대지 않는다(기존 conflict 원칙과 동일).
-    const srcName = srcSiblings[0].aptName;
-    const srcDong = srcSiblings[0].dong;
-    if (
-      srcSiblings.some((r) => r.aptName !== srcName || r.dong !== srcDong) ||
-      dbSiblings.some((e) => e.aptName !== srcName || e.dong !== srcDong)
-    ) {
-      base.reviewCandidates++;
-      cancelReconcileSkipped++;
-      continue;
-    }
-    const result = reconcileGroupCancellation(srcSiblings, dbSiblings);
-    if (result.kind === 'skipped') {
-      cancelReconcileSkipped++;
-      continue;
-    }
-    if (result.kind === 'noChange') continue;
-    for (const c of result.toCancel) {
-      cancelFlips.push(c);
-      reconcileTouched.add(c.id);
-    }
-    for (const r of result.toRestore) {
-      cancelRestores.push(r.id);
-      reconcileTouched.add(r.id);
-    }
-  }
-
-  // CANCELLATION_INSERT_PATH_FIX_V1 — DB에 형제가 이미 있는 그룹의 새 행은 행 단위(occurrenceIndex =
-  // 원천 응답 순서)로 고르지 않고 **그룹 개수**로 정한다: 넣을 수 = 원천 형제 − DB 형제, 그중 취소 수 =
-  // max(0, 원천 취소 − DB 취소). 신규 그룹(DB 형제 0)은 아래 행 단위 경로 그대로다.
-  const inserts: TradeRowInput[] = [];
-  const groupPlanned = new Set<string>();
-  let insertReconcileSkipped = 0;
-  for (const [key, srcSiblings] of siblingsByGroup) {
-    const dbSiblings = existingSiblingsByGroup.get(key);
-    if (!dbSiblings || dbSiblings.length === 0) continue;
-    groupPlanned.add(key);
-    const plan = planGroupInserts(srcSiblings, dbSiblings);
-    if (plan.kind === 'insert') inserts.push(...plan.rows);
-    else if (plan.kind === 'skipped') {
-      insertReconcileSkipped++;
-      base.reviewCandidates++;
-      log(`INSERT_RECONCILE_SKIPPED ${lawdCd}:${dealYmd} reason=${plan.reason} missing=${plan.missing}`);
-    }
-  }
-
-  const registrySupplements: { id: number; registryDate: string }[] = [];
-  for (const row of rows) {
-    const match = existingMap.get(naturalKeyStr(row));
-    // 형제가 이미 있는 그룹에서 자연키가 비는 행은 위 그룹 계획이 넣을지 정했다 — 행 단위로 다시 넣지 않는다.
-    if (!match && groupPlanned.has(occurrenceGroupKey(row))) continue;
-    const kind = classifyRow(row, match);
-    // §10 — aptSeq 없는 새 row는 insert하지 않는다(reviewRequired). name+dong fallback으로
-    // canonical identity를 만들지 않는다.
-    // 취소 관련 분류(updateFalseToTrue / updateTrueToFalseSkipped)는 더 이상 쓰기를 만들지
-    // 않는다 — 취소는 위 그룹 reconciliation이 전담한다.
-    if (kind === 'insert') inserts.push(row);
-    else if (kind === 'reviewRequired' || kind === 'conflict') base.reviewCandidates++;
-    else if (kind === 'updateRegistryOnly' && match && !reconcileTouched.has(match.id)) {
-      // §4 OCCURRENCE SAFETY — 형제 registryDate가 전부 같을 때만 보충한다.
-      if (!isRegistrySupplementUnambiguous(siblingsByGroup.get(occurrenceGroupKey(row)) ?? [row])) {
-        base.registryAmbiguousSkipped++;
-        base.unchanged++;
-        continue;
-      }
-      // §3 WRITE CONTRACT — 분류와 독립적으로 전제를 다시 검사한다(이중 안전장치).
-      const data = buildRegistryOnlyUpdateFields(row, match);
-      if (!data) {
-        base.unchanged++;
-        continue;
-      }
-      registrySupplements.push({ id: match.id, registryDate: data.registryDate });
-    } else base.unchanged++;
-  }
+  const { inserts, cancelFlips, cancelRestores, registrySupplements } = plan;
+  const cancelReconcileSkipped = plan.cancelReconcileSkipped;
+  const insertReconcileSkipped = plan.insertReconcileSkipped;
 
   if (mode === 'apply') {
     for (let i = 0; i < inserts.length; i += CHUNK_SIZE) {
@@ -427,4 +319,176 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
       `registry=${base.registryUpdated} registryAmbiguous=${base.registryAmbiguousSkipped} review=${base.reviewCandidates}`
   );
   return base;
+}
+
+/** syncOneSaleCell이 읽는 DB 기존 행의 모양. */
+export interface ExistingTradeRow {
+  id: number;
+  groupKeyStr: string;
+  dealAmount: number;
+  dealDate: Date;
+  floor: number | null;
+  occurrenceIndex: number;
+  dealCanceled: boolean;
+  cancelDate: string | null;
+  aptName: string;
+  dong: string;
+  registryDate: string | null;
+}
+
+export interface SaleCellPlan {
+  inserts: TradeRowInput[];
+  cancelFlips: { id: number; cancelDate: string | null }[];
+  /** 과다 취소 치유 후보(쓰기는 SALE_CANCEL_RESTORE_ENABLED=1일 때만). */
+  cancelRestores: number[];
+  registrySupplements: { id: number; registryDate: string }[];
+  reviewCandidates: number;
+  registryAmbiguousSkipped: number;
+  unchanged: number;
+  cancelReconcileSkipped: number;
+  insertReconcileSkipped: number;
+  logLines: string[];
+}
+
+/** dealYmd("YYYYMM")의 [월초, 다음 달 월초) — deal_date(@db.Date) 조건. */
+export function monthDateRange(dealYmd: string): { gte: Date; lt: Date } {
+  const y = Number(dealYmd.slice(0, 4));
+  const m = Number(dealYmd.slice(4, 6));
+  return { gte: new Date(Date.UTC(y, m - 1, 1)), lt: new Date(Date.UTC(y, m, 1)) };
+}
+
+/**
+ * SEOUL_SALE_BACKFILL_DRIVER_V1 — syncOneSaleCell의 쓰기 계획 부분을 그대로 떼어낸 순수 함수(DB·네트워크 없음).
+ * 운영 cron과 서울 backfill driver가 **같은 판정**을 쓰도록 하기 위한 것이다(동작 변경 없음).
+ * 원천 행(COMPLETE 셀 정규화 결과)과 같은 셀의 DB 기존 행으로 insert / 취소 reconcile / registry 보충을 정한다.
+ */
+export function planSaleCellWrites(rows: TradeRowInput[], existing: readonly ExistingTradeRow[]): SaleCellPlan {
+  const out = { reviewCandidates: 0, registryAmbiguousSkipped: 0, unchanged: 0, logLines: [] as string[] };
+  const existingMap = new Map<string, ExistingTradeRow>();
+  for (const e of existing) {
+    if (e.floor == null) continue; // 자연키에 floor가 필수(기존 정책과 동일)
+    existingMap.set(naturalKeyStr({ groupKeyStr: e.groupKeyStr, dealAmount: e.dealAmount, dealDate: e.dealDate.toISOString().slice(0, 10), floor: e.floor, occurrenceIndex: e.occurrenceIndex }), e);
+  }
+
+  // TRADE_REGISTRY_DATA_V1.1 §4 — 같은 자연키 그룹(occurrenceIndex 제외)의 형제 row를
+  // 미리 모아둔다. 형제들의 registryDate가 엇갈리면 순서 흔들림에 취약하므로 보충하지 않는다.
+  const siblingsByGroup = new Map<string, TradeRowInput[]>();
+  for (const row of rows) {
+    const key = occurrenceGroupKey(row);
+    const list = siblingsByGroup.get(key);
+    if (list) list.push(row);
+    else siblingsByGroup.set(key, [row]);
+  }
+
+  // CANCELLATION_RATCHET_PREVENTION_FIX_V1 — DB 형제도 그룹 키로 모은다(occurrenceIndex 제외).
+  // 원천/DB 양쪽을 **순서 무관**하게 그룹으로 세워야 취소 개수를 대조할 수 있다.
+  const existingSiblingsByGroup = new Map<string, ExistingTradeRow[]>();
+  for (const e of existing) {
+    if (e.floor == null) continue;
+    const key = occurrenceGroupKey({
+      groupKeyStr: e.groupKeyStr,
+      dealAmount: e.dealAmount,
+      dealDate: e.dealDate.toISOString().slice(0, 10),
+      floor: e.floor,
+    });
+    const list = existingSiblingsByGroup.get(key);
+    if (list) list.push(e);
+    else existingSiblingsByGroup.set(key, [e]);
+  }
+
+  // 취소 상태는 **그룹 단위 개수**로만 정한다(결함 A 근절). 원천 응답 순서에 의존하지 않으므로
+  // 순서가 흔들려도 결과가 바뀌지 않는다. 이 시점에서 셀은 이미 COMPLETE/EMPTY_VALID다(§11 가드).
+  const cancelFlips: { id: number; cancelDate: string | null }[] = [];
+  const cancelRestores: number[] = [];
+  const reconcileTouched = new Set<number>();
+  let cancelReconcileSkipped = 0;
+  for (const [key, srcSiblings] of siblingsByGroup) {
+    const dbSiblings = existingSiblingsByGroup.get(key);
+    // 아직 적재되지 않은 그룹(insert 대기)은 이번 실행에서 판정하지 않는다 — insert가
+    // 원천 상태를 그대로 넣으므로 개수는 맞고, 다음 실행부터 정상적으로 대조된다.
+    if (!dbSiblings || dbSiblings.length === 0) continue;
+    // CANCELLATION_INSERT_PATH_FIX_V1 — 원천 형제가 더 많은 그룹은 아래 그룹 insert 계획이 맡는다.
+    // (예전에는 여기서 SIBLING_COUNT_MISMATCH로 skip된 뒤 행 단위 insert가 순서대로 취소 행을 넣었다.)
+    if (srcSiblings.length > dbSiblings.length) continue;
+    // identity가 어긋난 그룹은 손대지 않는다(기존 conflict 원칙과 동일).
+    const srcName = srcSiblings[0].aptName;
+    const srcDong = srcSiblings[0].dong;
+    if (
+      srcSiblings.some((r) => r.aptName !== srcName || r.dong !== srcDong) ||
+      dbSiblings.some((e) => e.aptName !== srcName || e.dong !== srcDong)
+    ) {
+      out.reviewCandidates++;
+      cancelReconcileSkipped++;
+      continue;
+    }
+    const result = reconcileGroupCancellation(srcSiblings, dbSiblings);
+    if (result.kind === 'skipped') {
+      cancelReconcileSkipped++;
+      continue;
+    }
+    if (result.kind === 'noChange') continue;
+    for (const c of result.toCancel) {
+      cancelFlips.push(c);
+      reconcileTouched.add(c.id);
+    }
+    for (const r of result.toRestore) {
+      cancelRestores.push(r.id);
+      reconcileTouched.add(r.id);
+    }
+  }
+
+  // CANCELLATION_INSERT_PATH_FIX_V1 — DB에 형제가 이미 있는 그룹의 새 행은 행 단위(occurrenceIndex =
+  // 원천 응답 순서)로 고르지 않고 **그룹 개수**로 정한다: 넣을 수 = 원천 형제 − DB 형제, 그중 취소 수 =
+  // max(0, 원천 취소 − DB 취소). 신규 그룹(DB 형제 0)은 아래 행 단위 경로 그대로다.
+  const inserts: TradeRowInput[] = [];
+  const groupPlanned = new Set<string>();
+  let insertReconcileSkipped = 0;
+  for (const [key, srcSiblings] of siblingsByGroup) {
+    const dbSiblings = existingSiblingsByGroup.get(key);
+    if (!dbSiblings || dbSiblings.length === 0) continue;
+    groupPlanned.add(key);
+    const plan = planGroupInserts(srcSiblings, dbSiblings);
+    if (plan.kind === 'insert') inserts.push(...plan.rows);
+    else if (plan.kind === 'skipped') {
+      insertReconcileSkipped++;
+      out.reviewCandidates++;
+      out.logLines.push(`INSERT_RECONCILE_SKIPPED reason=${plan.reason} missing=${plan.missing}`);
+    }
+  }
+
+  const registrySupplements: { id: number; registryDate: string }[] = [];
+  for (const row of rows) {
+    const match = existingMap.get(naturalKeyStr(row));
+    // 형제가 이미 있는 그룹에서 자연키가 비는 행은 위 그룹 계획이 넣을지 정했다 — 행 단위로 다시 넣지 않는다.
+    if (!match && groupPlanned.has(occurrenceGroupKey(row))) continue;
+    const kind = classifyRow(row, match);
+    // §10 — aptSeq 없는 새 row는 insert하지 않는다(reviewRequired). name+dong fallback으로
+    // canonical identity를 만들지 않는다.
+    // 취소 관련 분류(updateFalseToTrue / updateTrueToFalseSkipped)는 더 이상 쓰기를 만들지
+    // 않는다 — 취소는 위 그룹 reconciliation이 전담한다.
+    if (kind === 'insert') inserts.push(row);
+    else if (kind === 'reviewRequired' || kind === 'conflict') out.reviewCandidates++;
+    else if (kind === 'updateRegistryOnly' && match && !reconcileTouched.has(match.id)) {
+      // §4 OCCURRENCE SAFETY — 형제 registryDate가 전부 같을 때만 보충한다.
+      if (!isRegistrySupplementUnambiguous(siblingsByGroup.get(occurrenceGroupKey(row)) ?? [row])) {
+        out.registryAmbiguousSkipped++;
+        out.unchanged++;
+        continue;
+      }
+      // §3 WRITE CONTRACT — 분류와 독립적으로 전제를 다시 검사한다(이중 안전장치).
+      const data = buildRegistryOnlyUpdateFields(row, match);
+      if (!data) {
+        out.unchanged++;
+        continue;
+      }
+      registrySupplements.push({ id: match.id, registryDate: data.registryDate });
+    } else out.unchanged++;
+  }
+
+
+  return {
+    inserts, cancelFlips, cancelRestores, registrySupplements,
+    reviewCandidates: out.reviewCandidates, registryAmbiguousSkipped: out.registryAmbiguousSkipped, unchanged: out.unchanged,
+    cancelReconcileSkipped, insertReconcileSkipped, logLines: out.logLines,
+  };
 }

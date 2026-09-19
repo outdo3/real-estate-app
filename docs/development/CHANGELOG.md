@@ -2,6 +2,18 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL SALE BACKFILL DRIVER V1 — 서울 매매 backfill driver(코드 + dry-run, apply 차단)
+
+Production write 0 · schema 0 · enable 0 · apply BLOCKED(DEFECT_A_GATE_PASS). 상세: `docs/development/SEOUL_SALE_BACKFILL_DRIVER_V1.md`
+
+    driver    scripts/backfill-seoul-sale.ts(+ -logic) — dry-run 기본, 구+연월 checkpoint, quota 예약 정지, 산출물 10종
+    판정      운영과 같은 함수: planSaleCellWrites(syncOneSaleCell에서 그대로 떼어냄, 동작 불변) / apply는 syncOneSaleCell
+    게이트    --apply + READ/WRITE env + DEFECT_A_GATE_PASS=1 + --district/--from/--to + --expect-inserts + (기존 행 변경 시) --approve-existing-updates
+    성능      기존 행 조회에 deal_date 월 범위 — 부산진구 2,605ms → 0.49ms(결과 동일, deal_ymd 불변식 865,421행 불일치 0)
+    dry-run   중구 12개월 944(계획값과 동일, EXACT 944) · 강남 12개월 2,744(insert 2,698, 기존 46 SKIP, 기존 행 변경 6) · 노원 2006-11 3,141(4쪽)
+    46행      자연키 46/46 · 기존 행 변경 6 = 취소 2 + 등기일 보충 4(apply 승인 대상)
+    배포      운영 cron 코드 포함 — 2026-09-20 Defect A cron 검증 전 push 보류(커밋만)
+
 ### E-JIP SEOUL MASTER SIDO NORMALIZATION V1 — 서울 master sido '서울특별시' → '서울'(승인 Production UPDATE)
 
 Production UPDATE 6,843(sido만) · INSERT 0 · DELETE 0 · schema 0 · enable 0. 상세: `docs/development/SEOUL_MASTER_SIDO_NORMALIZATION_V1.md`

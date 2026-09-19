@@ -34,6 +34,12 @@ function buildUrl(lawdCd: string, dealYmd: string, pageNo: number): string {
   return `${ENDPOINT}?serviceKey=${finalKey}&LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}&pageNo=${pageNo}&numOfRows=${PAGE_SIZE}`;
 }
 
+/**
+ * SEOUL_SALE_BACKFILL_DRIVER_V1 — 응답 헤더 x-ratelimit-remaining의 마지막 관측값. **읽기만** 한다(fetch 동작 불변).
+ * 같은 키를 Production 라이브 조회·cron이 함께 쓰므로, 대량 backfill driver가 예약분에서 멈추는 데 쓴다.
+ */
+export const saleQuotaObserved: { remaining: number | null; at: number | null } = { remaining: null, at: null };
+
 interface RawPageResult {
   ok: boolean;
   rawItems: any[];
@@ -53,6 +59,11 @@ async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Pr
       headers: { Accept: 'application/xml, text/xml, */*' },
       signal: AbortSignal.timeout(10000),
     });
+    const remainingHeader = response.headers?.get?.('x-ratelimit-remaining');
+    if (remainingHeader != null && remainingHeader !== '' && Number.isFinite(Number(remainingHeader))) {
+      saleQuotaObserved.remaining = Number(remainingHeader);
+      saleQuotaObserved.at = Date.now();
+    }
     const textData = await response.text();
     // APT_DETAIL_NAME_TYPE_HOTFIX 후속 — fetchMolitData()와 동일한 파서를 쓴다.
     // 단지명 태그만 숫자 변환을 끄는 설정이라 resultCode/totalCount/거래금액/면적 등
