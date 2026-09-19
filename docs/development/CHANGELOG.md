@@ -2,6 +2,21 @@
 
 ## 2026-09-19
 
+### E-JIP TOP COMPLEX AGGREGATION TRUST AUDIT V1 — "거래 많은 단지"의 정답은 원천 유효 기록 수(READ ONLY)
+
+READ ONLY 감사. DB write 0 · schema 0 · 집계 규칙/화면/리포트 변경 0.
+상세: `docs/development/TOP_COMPLEX_AGGREGATION_TRUST_AUDIT_V1.md` · 도구: `scripts/audit-top-complex-aggregation.ts`
+
+    원인      화면은 (단지·면적·금액·계약일·층) 4필드로 첫 행만 남긴 뒤 취소를 뺀다 — 원천에 실재하는 동일 조건 세대 거래를
+              접고, 취소 행이 먼저면 유효 거래까지 잃는다. 브리핑은 취소 제외 DB 행을 그대로 센다
+    대표      대운스카이뷰1차 30일: 원천 46기록(법인 간 직거래 일괄, 46건 모두 등기일 보유, 층당 3세대) = DB 46 = 브리핑 46,
+              화면 16(층·금액별 1건만 남김)
+    정답      원천 유효 기록 수 — 30일 1,921 · 3개월 6,786(셀 32/64개 전부 완전)
+              절대 오차 브리핑 15/27 · 화면 52/78. 브리핑 오차는 전부 알려진 데이터 결함(false-cancel 28행, 결함 B)
+    원천      DB 행 > 원천 행 그룹 0 — ingest 중복 없음. 4필드는 거래 identity가 아니다(원천에 호수·거래번호 없음)
+    권고      B. CANONICAL TRANSACTION COUNT(= 원천 유효 기록, 구현은 취소 제외 DB 행을 id로 셈) — 화면을 브리핑 쪽으로 맞춘다
+              공용 countValidTradesByComplex · concentration DB 경로 dedupe 제거·취소 먼저 · 피드도 같은 점검. 추가 쿼리 없음
+
 ### E-JIP STATS PERIOD & IMAGE PARITY V2 — 선택 기간이 브리핑·이미지·PDF·공유까지 같은 범위로 간다 + 15일
 
 DB write 0 · schema 0 · stats 집계 공식 0 · SEO canonical/메타 0 · 취소 코드 0.
