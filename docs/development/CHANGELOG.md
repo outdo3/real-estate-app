@@ -2,6 +2,17 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL BUILDING LEDGER ENRICHMENT PLAN V1 — 건축물대장 기본정보 backfill 지역 일반화(코드 + 서울 dry-run)
+
+Production write 0 · schema 0 · 매매 sync 변경 0 · 서울 apply BLOCKED. 상세: `docs/development/SEOUL_BUILDING_LEDGER_ENRICHMENT_PLAN_V1.md`
+
+    지역      --region(기본 26=부산, 기존 동작 그대로 — HEAD 대비 dry-run 출력 동일) / 11=서울 STRICT dry-run 전용
+    STRICT    pageNo=1+totalCount 확인 · 레코드 필지 = 조회 필지(EXACT_LOT) · 다건 MULTIPLE · 잘림/불일치 REVIEW · 교차 확인 CONFLICT
+    표본      서울 6구 240건: EXACT 216(90.0%) · MULTIPLE 15 · NO_MATCH 1 · REVIEW 8 · FAILED 0 · CONFLICT 0
+    fallback  총괄표제부 89 + 표제부 127(+52.9%p) · 대단지 후보 ≥500 38 / ≥1000 18
+    quota     1.99호출/행 → 전체 약 13,600호출·5.7시간 — 구 단위 --district 분할 실행으로 설계, 전체 dry-run 미실행
+    발견      BldRgstHubService는 pageNo 없으면 numOfRows 무시(1건) — 부산 스크립트·라이브 apt-building-info도 해당, 부산 TITLE 표본 8/50이 실제 다건(보고만, 별도 STEP)
+
 ### E-JIP SEOUL SALE BACKFILL DRIVER V1 — 서울 매매 backfill driver(코드 + dry-run, apply 차단)
 
 Production write 0 · schema 0 · enable 0 · apply BLOCKED(DEFECT_A_GATE_PASS). 상세: `docs/development/SEOUL_SALE_BACKFILL_DRIVER_V1.md`

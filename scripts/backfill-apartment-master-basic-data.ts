@@ -27,6 +27,11 @@
  *
  *   # 5) 체크포인트 무시하고 처음부터(멱등성 재검증용)
  *   npx ts-node --compiler-options '{"module":"commonjs"}' scripts/backfill-apartment-master-basic-data.ts --apply
+ *
+ * SEOUL_BUILDING_LEDGER_ENRICHMENT_PLAN_V1 — 지역 인자(--region, 기본 26=부산 — 기존 동작 그대로).
+ *   서울(--region=11)은 STRICT 정책(잘린 응답·필지 불일치·총괄표제부 여러 건 = 보류)과 주소 원문 계획을 쓰고,
+ *   이 버전에서는 **dry-run 전용**(--apply 거부). 산출물은 tmp/seoul-ledger-enrichment/.
+ *   ALLOW_PROD_DB_READ=1 npx tsx scripts/backfill-apartment-master-basic-data.ts --region=11 --sample [--sample-size=240] [--cross-check]
  */
 
 import * as dotenv from 'dotenv';
@@ -34,7 +39,24 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { PrismaClient, BasicSpecSource } from '@prisma/client';
 import { parseBrTitleInfoRecord, isNumberedBuildingUnit } from '../src/lib/apt-building-info';
-import { planField, calcParkingPerHousehold, type FieldPlan as SharedFieldPlan } from './backfill-basic-data-logic';
+import {
+  planField,
+  calcParkingPerHousehold,
+  decideGeneralTitle,
+  extractGeneralFields,
+  decideTitleFallback,
+  crossCheckGeneralVsTitle,
+  ledgerPageParams,
+  countMainBuildings,
+  LENIENT_POLICY,
+  STRICT_POLICY,
+  regionConfig,
+  pickSeoulSample,
+  SEOUL_SAMPLE_DISTRICTS,
+  type LedgerPolicy,
+  type LotQuery,
+  type FieldPlan as SharedFieldPlan,
+} from './backfill-basic-data-logic';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env'), quiet: true });
 dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
@@ -42,9 +64,21 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 const prisma = new PrismaClient();
 const API_KEY = process.env.DATA_GO_KR_API_KEY || '';
 
-const RESULTS_DIR = path.resolve(__dirname, '_data_coverage_fix_v1_results');
+// 부산(기본)은 기존 결과 폴더 그대로, 서울은 별도 폴더(체크포인트 섞임 방지).
+const REGION_ARG = (process.argv.find((a) => a.startsWith('--region=')) ?? '--region=26').split('=')[1];
+const RESULTS_DIR = REGION_ARG === '26'
+  ? path.resolve(__dirname, '_data_coverage_fix_v1_results')
+  : path.resolve(__dirname, '../tmp/seoul-ledger-enrichment');
 const CHECKPOINT_PATH = path.join(RESULTS_DIR, 'checkpoint.json');
 const LOG_PATH = path.join(RESULTS_DIR, `run-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+
+/** 마지막 관측 x-ratelimit-remaining(읽기만). */
+const ledgerQuota: { remaining: number | null; calls: number } = { remaining: null, calls: 0 };
+function observeQuota(res: Response) {
+  ledgerQuota.calls++;
+  const h = res.headers?.get?.('x-ratelimit-remaining');
+  if (h != null && h !== '' && Number.isFinite(Number(h))) ledgerQuota.remaining = Number(h);
+}
 
 // ── CLI args ─────────────────────────────────────────────────────────────
 function parseArgs() {
@@ -61,6 +95,11 @@ function parseArgs() {
     sample: has('--sample'),
     limit: get('--limit') ? parseInt(get('--limit')!, 10) : undefined,
     aptSeqFilter: get('--aptSeq') ? get('--aptSeq')!.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+    region: get('--region') ?? '26',
+    crossCheck: has('--cross-check'),
+    sampleSize: get('--sample-size') ? parseInt(get('--sample-size')!, 10) : 240,
+    /** 서울 전용: 구 단위 분할 실행(재개 단위). 산출물은 tmp/seoul-ledger-enrichment/district-<구>/. */
+    district: get('--district'),
   };
 }
 
@@ -113,7 +152,8 @@ function jibunToBunJi(jibun: string): { bun: string; ji: string } | null {
 }
 
 interface GeneralTitleResult {
-  status: 'success' | 'not_found' | 'failed_retryable';
+  /** multiple/incomplete/lot_mismatch는 STRICT(서울)에서만 나온다. */
+  status: 'success' | 'not_found' | 'failed_retryable' | 'multiple' | 'incomplete' | 'lot_mismatch' | 'jibun_unparseable';
   totalHouseholds: number | null;
   mainBuildingCount: number | null;
   parkingCount: number | null;
@@ -121,19 +161,29 @@ interface GeneralTitleResult {
   mgmBldrgstPk: string | null;
   floorAreaRatio: number | null;
   buildingCoverageRatio: number | null;
+  roadAddress: string | null;
+  jibunAddress: string | null;
+  records: number;
 }
 
-async function fetchGeneralTitleOnce(sggCd: string, umdCd: string, jibun: string): Promise<GeneralTitleResult> {
+function lotQueryOf(sggCd: string, umdCd: string, jibun: string): LotQuery | null {
   const bj = jibunToBunJi(jibun);
-  const empty = (status: GeneralTitleResult['status']): GeneralTitleResult => ({
+  return bj ? { sggCd, umdCd, bun: bj.bun, ji: bj.ji } : null;
+}
+
+async function fetchGeneralTitleOnce(sggCd: string, umdCd: string, jibun: string, policy: LedgerPolicy): Promise<GeneralTitleResult> {
+  const bj = jibunToBunJi(jibun);
+  const empty = (status: GeneralTitleResult['status'], records = 0): GeneralTitleResult => ({
     status, totalHouseholds: null, mainBuildingCount: null, parkingCount: null,
-    useApprovalDate: null, mgmBldrgstPk: null, floorAreaRatio: null, buildingCoverageRatio: null,
+    useApprovalDate: null, mgmBldrgstPk: null, floorAreaRatio: null, buildingCoverageRatio: null, roadAddress: null, jibunAddress: null, records,
   });
-  if (!bj) return empty('not_found');
+  // 부산(LENIENT)은 기존과 같이 not_found, 서울(STRICT)은 지번을 조회 키로 만들 수 없음을 따로 표시한다.
+  if (!bj) return empty(policy.strict ? 'jibun_unparseable' : 'not_found');
   const cleanKey = encodeURIComponent(decodeURIComponent(API_KEY.trim().replace(/['"]/g, '')));
-  const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo?serviceKey=${cleanKey}&sigunguCd=${sggCd}&bjdongCd=${umdCd}&platGbCd=0&bun=${bj.bun}&ji=${bj.ji}&numOfRows=5&_type=json`;
+  const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo?serviceKey=${cleanKey}&sigunguCd=${sggCd}&bjdongCd=${umdCd}&platGbCd=0&bun=${bj.bun}&ji=${bj.ji}&${ledgerPageParams(policy)}&_type=json`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  observeQuota(res);
   const rawText = await res.text();
   if (!res.ok) {
     const retryable = res.status === 429 || res.status === 503 || rawText.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS');
@@ -152,60 +202,49 @@ async function fetchGeneralTitleOnce(sggCd: string, umdCd: string, jibun: string
   }
   const items = json?.response?.body?.items?.item;
   const arr = Array.isArray(items) ? items : (items ? [items] : []);
-  if (arr.length === 0) return empty('not_found');
-  const target = arr.reduce((best: any, cur: any) => ((cur.hhldCnt || 0) > (best.hhldCnt || 0) ? cur : best));
-
-  const hhldCnt = parseInt(target.hhldCnt, 10);
-  const parkingCnt = parseInt(target.totPkngCnt, 10);
-  const mainBldCnt = parseInt(target.mainBldCnt, 10);
-  const vlRat = parseFloat(target.vlRat);
-  const bcRat = parseFloat(target.bcRat);
-  const useAprDay: string = target.useAprDay || '';
-
-  return {
-    status: 'success',
-    totalHouseholds: !isNaN(hhldCnt) && hhldCnt > 0 ? hhldCnt : null,
-    mainBuildingCount: !isNaN(mainBldCnt) && mainBldCnt > 0 ? mainBldCnt : null,
-    parkingCount: !isNaN(parkingCnt) && parkingCnt > 0 ? parkingCnt : null,
-    useApprovalDate: /^\d{8}$/.test(useAprDay) ? useAprDay : null,
-    mgmBldrgstPk: arr.length === 1 && rawMgmBldrgstPk ? rawMgmBldrgstPk : (target.mgmBldrgstPk != null ? String(target.mgmBldrgstPk) : null),
-    floorAreaRatio: !isNaN(vlRat) && vlRat > 0 ? vlRat : null,
-    buildingCoverageRatio: !isNaN(bcRat) && bcRat > 0 ? bcRat : null,
-  };
+  const totalRaw = Number(json?.response?.body?.totalCount);
+  const decision = decideGeneralTitle(arr, Number.isFinite(totalRaw) ? totalRaw : null, rawMgmBldrgstPk, lotQueryOf(sggCd, umdCd, jibun)!, policy);
+  if (decision.status !== 'success') return empty(decision.status, arr.length);
+  return { status: 'success', records: arr.length, ...extractGeneralFields(decision.record, decision.mgmBldrgstPk) };
 }
 
-async function fetchGeneralTitle(sggCd: string, umdCd: string, jibun: string): Promise<GeneralTitleResult> {
+async function fetchGeneralTitle(sggCd: string, umdCd: string, jibun: string, policy: LedgerPolicy = LENIENT_POLICY): Promise<GeneralTitleResult> {
   const maxAttempts = 3;
+  const failed: GeneralTitleResult = { status: 'failed_retryable', totalHouseholds: null, mainBuildingCount: null, parkingCount: null, useApprovalDate: null, mgmBldrgstPk: null, floorAreaRatio: null, buildingCoverageRatio: null, roadAddress: null, jibunAddress: null, records: 0 };
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await throttledLedgerCall(() => fetchGeneralTitleOnce(sggCd, umdCd, jibun));
+      return await throttledLedgerCall(() => fetchGeneralTitleOnce(sggCd, umdCd, jibun, policy));
     } catch (e: any) {
-      if (!e?.retryable || attempt === maxAttempts) {
-        return { status: 'failed_retryable', totalHouseholds: null, mainBuildingCount: null, parkingCount: null, useApprovalDate: null, mgmBldrgstPk: null, floorAreaRatio: null, buildingCoverageRatio: null };
-      }
+      if (!e?.retryable || attempt === maxAttempts) return failed;
       await new Promise((r) => setTimeout(r, LEDGER_MIN_INTERVAL_MS * attempt));
     }
   }
-  return { status: 'failed_retryable', totalHouseholds: null, mainBuildingCount: null, parkingCount: null, useApprovalDate: null, mgmBldrgstPk: null, floorAreaRatio: null, buildingCoverageRatio: null };
+  return failed;
 }
 
 interface TitleFallbackResult {
-  status: 'success' | 'not_found' | 'multiple_review' | 'building_unit_review' | 'failed_retryable';
+  status: 'success' | 'not_found' | 'multiple_review' | 'building_unit_review' | 'failed_retryable' | 'incomplete' | 'lot_mismatch';
   info: ReturnType<typeof parseBrTitleInfoRecord> | null;
+  /** 교차 확인용 원 레코드(STRICT). */
+  records: any[];
+  roadAddress: string | null;
+  jibunAddress: string | null;
 }
 
-async function fetchTitleFallbackOnce(sggCd: string, umdCd: string, jibun: string): Promise<TitleFallbackResult> {
+async function fetchTitleFallbackOnce(sggCd: string, umdCd: string, jibun: string, policy: LedgerPolicy): Promise<TitleFallbackResult> {
   const bj = jibunToBunJi(jibun);
-  if (!bj) return { status: 'not_found', info: null };
+  const none = (status: TitleFallbackResult['status'], records: any[] = []): TitleFallbackResult => ({ status, info: null, records, roadAddress: null, jibunAddress: null });
+  if (!bj) return none('not_found');
   const cleanKey = encodeURIComponent(decodeURIComponent(API_KEY.trim().replace(/['"]/g, '')));
-  const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${sggCd}&bjdongCd=${umdCd}&platGbCd=0&bun=${bj.bun}&ji=${bj.ji}&numOfRows=5&_type=json`;
+  const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${sggCd}&bjdongCd=${umdCd}&platGbCd=0&bun=${bj.bun}&ji=${bj.ji}&${ledgerPageParams(policy)}&_type=json`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  observeQuota(res);
   const rawText = await res.text();
   if (!res.ok) {
     const retryable = res.status === 429 || res.status === 503 || rawText.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS');
     if (retryable) { const e: any = new Error(`HTTP ${res.status}`); e.retryable = true; throw e; }
-    return { status: 'not_found', info: null };
+    return none('not_found');
   }
   const json = JSON.parse(rawText);
   const header = json?.response?.header;
@@ -213,30 +252,29 @@ async function fetchTitleFallbackOnce(sggCd: string, umdCd: string, jibun: strin
     if (/LIMITED_NUMBER_OF_SERVICE_REQUESTS/.test(header?.errMsg || '')) {
       const e: any = new Error('rate limited'); e.retryable = true; throw e;
     }
-    return { status: 'not_found', info: null };
+    return none('not_found');
   }
   const items = json?.response?.body?.items?.item;
   const arr = Array.isArray(items) ? items : (items ? [items] : []);
-  if (arr.length === 0) return { status: 'not_found', info: null };
-  if (arr.length > 1) return { status: 'multiple_review', info: null }; // 안전조건: 자동 대표값 선택 금지
-  // MASTER_HOUSEHOLD_VERIFICATION_V1 안전조건: 지번에 표제부가 1건뿐이어도, dongNm이
-  // "103동"처럼 구체적 건물번호면 다동 복합단지 중 하나일 위험이 있어 사람 검토로 돌린다
-  // (src/lib/apt-building-info.ts의 isNumberedBuildingUnit 주석 — 실측 근거 동일).
-  if (isNumberedBuildingUnit(arr[0]?.dongNm)) return { status: 'building_unit_review', info: null };
-  return { status: 'success', info: parseBrTitleInfoRecord(arr[0]) };
+  const totalRaw = Number(json?.response?.body?.totalCount);
+  // 안전조건(기존과 동일): 1건일 때만, 동번호 단위("103동")면 사람 검토 — MASTER_HOUSEHOLD_VERIFICATION_V1.
+  const decision = decideTitleFallback(arr, Number.isFinite(totalRaw) ? totalRaw : null, lotQueryOf(sggCd, umdCd, jibun)!, policy, isNumberedBuildingUnit);
+  if (decision !== 'success') return none(decision, arr);
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return { status: 'success', info: parseBrTitleInfoRecord(arr[0]), records: arr, roadAddress: text(arr[0].newPlatPlc), jibunAddress: text(arr[0].platPlc) };
 }
 
-async function fetchTitleFallback(sggCd: string, umdCd: string, jibun: string): Promise<TitleFallbackResult> {
+async function fetchTitleFallback(sggCd: string, umdCd: string, jibun: string, policy: LedgerPolicy = LENIENT_POLICY): Promise<TitleFallbackResult> {
   const maxAttempts = 3;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await throttledLedgerCall(() => fetchTitleFallbackOnce(sggCd, umdCd, jibun));
+      return await throttledLedgerCall(() => fetchTitleFallbackOnce(sggCd, umdCd, jibun, policy));
     } catch (e: any) {
-      if (!e?.retryable || attempt === maxAttempts) return { status: 'failed_retryable', info: null };
+      if (!e?.retryable || attempt === maxAttempts) return { status: 'failed_retryable', info: null, records: [], roadAddress: null, jibunAddress: null };
       await new Promise((r) => setTimeout(r, LEDGER_MIN_INTERVAL_MS * attempt));
     }
   }
-  return { status: 'failed_retryable', info: null };
+  return { status: 'failed_retryable', info: null, records: [], roadAddress: null, jibunAddress: null };
 }
 
 // ── 체크포인트(재개 가능) ────────────────────────────────────────────────
@@ -256,7 +294,7 @@ function saveCheckpoint(cp: Checkpoint) {
 }
 
 // ── 행 단위 처리 ─────────────────────────────────────────────────────────
-type RowOutcome = 'READY' | 'REVIEW' | 'NO_SOURCE' | 'FAILED' | 'CONFLICT' | 'UNCHANGED' | 'FILLABLE';
+type RowOutcome = 'READY' | 'REVIEW' | 'NO_SOURCE' | 'FAILED' | 'CONFLICT' | 'UNCHANGED' | 'FILLABLE' | 'MULTIPLE';
 
 // 실제 판정 로직(planField/calcParkingPerHousehold)은 순수 함수라 별도 파일
 // (backfill-basic-data-logic.ts)로 분리해 dotenv/prisma 부작용 없이 단위 테스트한다.
@@ -267,12 +305,18 @@ async function processRow(row: {
   totalHouseholds: number | null; mainBuildingCount: number | null; parkingCount: number | null;
   useApprovalDate: string | null; mgmBldrgstPk: string | null;
   floorAreaRatio: number | null; buildingCoverageRatio: number | null; parkingPerHousehold: number | null;
-}): Promise<{ outcome: RowOutcome; source: BasicSpecSource | null; plans: FieldPlan[]; note: string }> {
+  roadAddress?: string | null; jibunAddress?: string | null;
+}, policy: LedgerPolicy = LENIENT_POLICY, crossCheck = false): Promise<{ outcome: RowOutcome; source: BasicSpecSource | null; plans: FieldPlan[]; note: string; detail?: string }> {
   if (!row.sggCd || !row.umdCd || !row.jibun) {
     return { outcome: 'REVIEW', source: null, plans: [], note: 'identity 불완전(sggCd/umdCd/jibun 결측)' };
   }
 
-  const general = await fetchGeneralTitle(row.sggCd, row.umdCd, row.jibun);
+  const general = await fetchGeneralTitle(row.sggCd, row.umdCd, row.jibun, policy);
+  // STRICT(서울) 전용 상태 — 부산(LENIENT)에서는 나오지 않는다.
+  if (general.status === 'jibun_unparseable') return { outcome: 'REVIEW', source: null, plans: [], note: '지번을 건축물대장 조회 키로 만들 수 없음(블록·산 지번 등)', detail: 'JIBUN_UNPARSEABLE' };
+  if (general.status === 'multiple') return { outcome: 'MULTIPLE', source: null, plans: [], note: `총괄표제부 ${general.records}건 — 대표값 자동 선택 금지`, detail: 'GENERAL_MULTIPLE' };
+  if (general.status === 'incomplete') return { outcome: 'REVIEW', source: null, plans: [], note: '총괄표제부 응답이 totalCount보다 적음', detail: 'GENERAL_INCOMPLETE' };
+  if (general.status === 'lot_mismatch') return { outcome: 'REVIEW', source: null, plans: [], note: '총괄표제부 레코드 필지가 조회 지번과 다름', detail: 'GENERAL_LOT_MISMATCH' };
   let source: BasicSpecSource;
   let fresh: { totalHouseholds: number | null; mainBuildingCount: number | null; parkingCount: number | null; useApprovalDate: string | null; mgmBldrgstPk: string | null; floorAreaRatio: number | null; buildingCoverageRatio: number | null };
   let note = '';
@@ -281,18 +325,35 @@ async function processRow(row: {
     return { outcome: 'FAILED', source: null, plans: [], note: '총괄표제부 조회 반복 실패(retryable)' };
   }
 
+  let addresses: { roadAddress: string | null; jibunAddress: string | null } = { roadAddress: null, jibunAddress: null };
   if (general.status === 'success') {
     source = BasicSpecSource.BUILDINGHUB_GENERAL_TITLE;
     fresh = general;
+    addresses = { roadAddress: general.roadAddress, jibunAddress: general.jibunAddress };
     note = '총괄표제부 성공';
+    // STRICT 교차 확인(선택): 같은 필지 표제부가 단일 건물이면 세대수가 같아야 한다 — 다르면 병합하지 않고 보류.
+    if (policy.strict && crossCheck) {
+      const title = await fetchTitleFallback(row.sggCd, row.umdCd, row.jibun, policy);
+      // 비교는 완전한 단일 레코드 목록일 때만(잘린 응답·필지 불일치·다건은 비교 대상 아님).
+      const comparable = title.status === 'success' || title.status === 'building_unit_review';
+      if (comparable && crossCheckGeneralVsTitle(general.totalHouseholds, title.records) === 'CONFLICT') {
+        return { outcome: 'CONFLICT', source: null, plans: [], note: '총괄표제부와 단일 표제부의 세대수가 다름 — 자동 병합 금지', detail: 'GENERAL_TITLE_CONFLICT' };
+      }
+    }
   } else {
     // 총괄표제부 레코드 없음 → 표제부 fallback(정확히 1건일 때만)
-    const title = await fetchTitleFallback(row.sggCd, row.umdCd, row.jibun);
+    const title = await fetchTitleFallback(row.sggCd, row.umdCd, row.jibun, policy);
+    if (title.status === 'incomplete' || title.status === 'lot_mismatch') {
+      return { outcome: 'REVIEW', source: null, plans: [], note: `표제부 ${title.status}`, detail: `TITLE_${title.status.toUpperCase()}` };
+    }
     if (title.status === 'failed_retryable') {
       return { outcome: 'FAILED', source: null, plans: [], note: '표제부 조회 반복 실패(retryable)' };
     }
     if (title.status === 'multiple_review') {
-      return { outcome: 'REVIEW', source: null, plans: [], note: '표제부 2건 이상 — 자동 대표값 선택 금지' };
+      // 부산(LENIENT)은 기존대로 REVIEW, 서울(STRICT)은 MULTIPLE로 따로 센다(둘 다 보류 — 쓰지 않음).
+      // STRICT 보고용: 다건 중 주건축물이 정확히 1건인지(부속건축물=경비실 등) — 판정은 그대로 보류.
+      const oneMain = policy.strict && countMainBuildings(title.records) === 1;
+      return { outcome: policy.strict ? 'MULTIPLE' : 'REVIEW', source: null, plans: [], note: '표제부 2건 이상 — 자동 대표값 선택 금지', detail: oneMain ? 'TITLE_MULTIPLE_ONE_MAIN' : 'TITLE_MULTIPLE' };
     }
     if (title.status === 'building_unit_review') {
       return { outcome: 'REVIEW', source: null, plans: [], note: '표제부 1건이지만 dongNm이 구체적 건물번호(예: "103동") — 다동 복합단지의 일부일 위험, 자동 채택 금지(MASTER_HOUSEHOLD_VERIFICATION_V1)' };
@@ -314,6 +375,7 @@ async function processRow(row: {
       floorAreaRatio: title.info.far,
       buildingCoverageRatio: title.info.bcr,
     };
+    addresses = { roadAddress: title.roadAddress, jibunAddress: title.jibunAddress };
     note = '표제부 fallback 성공(1건 정확 매칭)';
   }
 
@@ -332,6 +394,12 @@ async function processRow(row: {
   const finalParking = row.parkingCount ?? fresh.parkingCount;
   const freshPph = calcParkingPerHousehold(finalParking, finalHousehold);
   plans.push(planField('parkingPerHousehold', row.parkingPerHousehold, freshPph));
+  // STRICT(서울): 정확히 일치한 대장 레코드의 주소 원문도 계획(스키마 기존 필드 roadAddress=newPlatPlc, jibunAddress=platPlc).
+  // 부산 기존 동작에는 넣지 않는다.
+  if (policy.strict) {
+    plans.push(planField('roadAddress', row.roadAddress ?? null, addresses.roadAddress));
+    plans.push(planField('jibunAddress', row.jibunAddress ?? null, addresses.jibunAddress));
+  }
 
   if (plans.some((p) => p.action === 'CONFLICT_REVIEW')) {
     return { outcome: 'CONFLICT', source, plans, note: note + ' — 기존 값과 충돌하는 필드 있음(덮어쓰지 않음)' };
@@ -357,7 +425,33 @@ async function main() {
     return;
   }
 
-  const where: any = { sggCd: { startsWith: '26' } }; // 부산만(§17: 부산 외 write 금지)
+  const region = regionConfig(opts.region);
+  if (!region) {
+    log(`지원하지 않는 --region=${opts.region} (26=부산, 11=서울) — 중단`);
+    process.exitCode = 1;
+    return;
+  }
+  const isSeoul = region.sggPrefix === '11';
+  if (isSeoul) {
+    // SEOUL_BUILDING_LEDGER_ENRICHMENT_PLAN_V1 — 서울은 이 버전에서 dry-run 전용. 쓰기는 별도 승인 STEP에서 연다.
+    if (opts.apply) {
+      log('BLOCKED: 서울(--region=11) --apply는 아직 승인되지 않았다 — dry-run만 가능. DB write 없음.');
+      process.exitCode = 2;
+      return;
+    }
+    if (opts.district && !/^11\d{3}$/.test(opts.district)) {
+      log(`--district=${opts.district}는 서울 구 코드(11xxx)가 아니다 — 중단`);
+      process.exitCode = 1;
+      return;
+    }
+    const { assertProductionDbAccessAllowed } = await import('./_prod-db-guard');
+    assertProductionDbAccessAllowed('DIAGNOSTIC', 'backfill-apartment-master-basic-data(--region=11 dry-run)');
+    await runSeoulDryRun(opts, log);
+    fs.writeFileSync(LOG_PATH, logLines.join('\n'));
+    return;
+  }
+
+  const where: any = { sggCd: { startsWith: region.sggPrefix } }; // 부산만(§17: 부산 외 write 금지)
   if (opts.aptSeqFilter) where.aptSeq = { in: opts.aptSeqFilter };
   else if (opts.sample) where.aptSeq = { in: SAMPLE_APT_SEQS };
 
@@ -384,7 +478,7 @@ async function main() {
 
   log(`대상 행 수: ${scoped.length}`);
 
-  const counts: Record<RowOutcome, number> = { READY: 0, REVIEW: 0, NO_SOURCE: 0, FAILED: 0, CONFLICT: 0, UNCHANGED: 0, FILLABLE: 0 };
+  const counts: Record<RowOutcome, number> = { READY: 0, REVIEW: 0, NO_SOURCE: 0, FAILED: 0, CONFLICT: 0, UNCHANGED: 0, FILLABLE: 0, MULTIPLE: 0 };
   const fillableByField: Record<string, number> = {};
   const newlyPopulated: Record<string, number> = {};
   let updatedRows = 0;
@@ -444,6 +538,78 @@ async function main() {
   log(`\n로그 저장: ${LOG_PATH}`);
 
   fs.writeFileSync(LOG_PATH, logLines.join('\n'));
+  await prisma.$disconnect();
+}
+
+// ───────────────────────── 서울 dry-run(STRICT, 쓰기 없음) ─────────────────────────
+
+async function runSeoulDryRun(opts: ReturnType<typeof parseArgs>, log: (l: string) => void) {
+  const rows = await prisma.apartmentMaster.findMany({
+    where: { sggCd: opts.district ? opts.district : { startsWith: '11' }, ...(opts.aptSeqFilter ? { aptSeq: { in: opts.aptSeqFilter } } : {}) },
+    select: {
+      id: true, aptSeq: true, name: true, sggCd: true, umdCd: true, umdName: true, jibun: true, buildYear: true,
+      totalHouseholds: true, mainBuildingCount: true, parkingCount: true, useApprovalDate: true, mgmBldrgstPk: true,
+      floorAreaRatio: true, buildingCoverageRatio: true, parkingPerHousehold: true, roadAddress: true, jibunAddress: true,
+    },
+    orderBy: { id: 'asc' },
+  });
+  const all = rows.filter((r): r is typeof r & { aptSeq: string } => !!r.aptSeq);
+  let scoped = opts.sample ? pickSeoulSample(all, SEOUL_SAMPLE_DISTRICTS, Math.max(2, Math.round(opts.sampleSize / SEOUL_SAMPLE_DISTRICTS.length))) : all;
+  if (opts.limit) scoped = scoped.slice(0, opts.limit);
+  log(`서울 dry-run 대상 ${scoped.length}건 (전체 서울 master ${all.length}) crossCheck=${opts.crossCheck}`);
+
+  const results: any[] = [];
+  const t0 = Date.now();
+  for (const [i, row] of scoped.entries()) {
+    const r = await processRow(row, STRICT_POLICY, opts.crossCheck);
+    const fill = Object.fromEntries(r.plans.filter((p) => p.action === 'FILL_NULL').map((p) => [p.field, p.newValue]));
+    const status = r.outcome === 'READY' || r.outcome === 'UNCHANGED' ? 'EXACT' : r.outcome === 'MULTIPLE' ? 'MULTIPLE' : r.outcome === 'NO_SOURCE' ? 'NO_MATCH' : r.outcome === 'FAILED' ? 'FAILED' : 'REVIEW_REQUIRED';
+    results.push({ aptSeq: row.aptSeq, name: row.name, sggCd: row.sggCd, umdName: row.umdName, jibun: row.jibun, buildYear: row.buildYear, status, outcome: r.outcome, source: r.source, detail: r.detail ?? null, note: r.note, fill });
+    if ((i + 1) % 25 === 0 || i + 1 === scoped.length) log(`[${i + 1}/${scoped.length}] ${row.aptSeq} ${row.name} → ${status} (${r.note}) quotaRemaining=${ledgerQuota.remaining}`);
+  }
+
+  const by = (st: string) => results.filter((x) => x.status === st);
+  const pct = (n: number) => (results.length ? Math.round((n / results.length) * 1000) / 10 : 0);
+  const fieldCount = (f: string) => results.filter((x) => x.fill[f] != null).length;
+  const fields = ['totalHouseholds', 'mainBuildingCount', 'parkingCount', 'floorAreaRatio', 'buildingCoverageRatio', 'parkingPerHousehold', 'useApprovalDate', 'mgmBldrgstPk', 'roadAddress', 'jibunAddress'];
+  const exact = by('EXACT');
+  const general = exact.filter((x) => x.source === BasicSpecSource.BUILDINGHUB_GENERAL_TITLE).length;
+  const title = exact.filter((x) => x.source === BasicSpecSource.BUILDINGHUB_TITLE).length;
+  const households = exact.map((x) => x.fill.totalHouseholds).filter((v: any) => typeof v === 'number') as number[];
+  const byDistrict = Object.fromEntries(SEOUL_SAMPLE_DISTRICTS.map((d) => { const x = results.filter((r) => r.sggCd === d); return [d, { n: x.length, exact: x.filter((r) => r.status === 'EXACT').length, multiple: x.filter((r) => r.status === 'MULTIPLE').length, noMatch: x.filter((r) => r.status === 'NO_MATCH').length, review: x.filter((r) => r.status === 'REVIEW_REQUIRED').length }]; }));
+  const byEra = ['old', 'new'].map((era) => { const x = results.filter((r) => (era === 'old' ? (r.buildYear ?? 0) < 2005 : (r.buildYear ?? 0) >= 2005)); return { era, n: x.length, exact: x.filter((r) => r.status === 'EXACT').length }; });
+  const callsPerRow = results.length ? ledgerQuota.calls / results.length : 0;
+  const summary = {
+    at: new Date().toISOString(), mode: 'DRY_RUN', region: '11', policy: 'STRICT', sample: opts.sample, crossCheck: opts.crossCheck, district: opts.district ?? null,
+    rows: results.length, seoulMasterTotal: all.length,
+    status: { EXACT: exact.length, MULTIPLE: by('MULTIPLE').length, NO_MATCH: by('NO_MATCH').length, REVIEW_REQUIRED: by('REVIEW_REQUIRED').length, FAILED: by('FAILED').length },
+    pct: { EXACT: pct(exact.length), MULTIPLE: pct(by('MULTIPLE').length), NO_MATCH: pct(by('NO_MATCH').length), REVIEW_REQUIRED: pct(by('REVIEW_REQUIRED').length) },
+    exactBySource: { GENERAL_TITLE: general, TITLE_FALLBACK: title, fallbackGainPctPoints: pct(title) },
+    reviewDetail: results.filter((x) => x.status !== 'EXACT').reduce((m: Record<string, number>, x) => ((m[x.detail ?? x.outcome] = (m[x.detail ?? x.outcome] ?? 0) + 1), m), {}),
+    byDistrict, byEra,
+    largeComplexCandidates: { withHouseholds: households.length, ge500: households.filter((h) => h >= 500).length, ge1000: households.filter((h) => h >= 1000).length },
+    calls: { total: ledgerQuota.calls, perRow: Math.round(callsPerRow * 100) / 100, quotaRemainingLastSeen: ledgerQuota.remaining },
+    elapsedSec: Math.round((Date.now() - t0) / 100) / 10,
+    writes: { insert: 0, update: 0, delete: 0 },
+  };
+  const outDir = opts.district ? path.join(RESULTS_DIR, `district-${opts.district}`) : RESULTS_DIR;
+  fs.mkdirSync(outDir, { recursive: true });
+  const out = (f: string, v: unknown) => fs.writeFileSync(path.join(outDir, f), JSON.stringify(v, null, 2));
+  out('summary.json', summary);
+  out('sample-results.json', results);
+  out('exact-matches.json', exact);
+  out('multiple-matches.json', by('MULTIPLE'));
+  out('no-match.json', by('NO_MATCH'));
+  out('review-required.json', [...by('REVIEW_REQUIRED'), ...by('FAILED')]);
+  out('field-coverage.json', { rows: results.length, fillable: Object.fromEntries(fields.map((f) => [f, { count: fieldCount(f), pct: pct(fieldCount(f)) }])) });
+  const projectedCalls = Math.round(callsPerRow * all.length);
+  out('quota-plan.json', {
+    measuredCallsPerRow: summary.calls.perRow, seoulRows: all.length, projectedCalls, ledgerMinIntervalMs: LEDGER_MIN_INTERVAL_MS,
+    projectedHours: Math.round(((projectedCalls * LEDGER_MIN_INTERVAL_MS) / 3600000) * 10) / 10,
+    note: '건축물대장(BldRgstHubService)은 라이브 상세(/api/apt/[name]/info)와 같은 키를 쓴다 — 전체 실행은 구 단위 --aptSeq 분할·체크포인트로 여러 번에 나눠 한다. 총괄표제부·표제부는 오퍼레이션이 달라 한도도 각각이다.',
+    quotaRemainingLastSeen: ledgerQuota.remaining,
+  });
+  log(`\n=== 서울 dry-run 요약 === ${JSON.stringify(summary.status)} exactBySource=${JSON.stringify(summary.exactBySource)} calls=${ledgerQuota.calls} — DB write 없음`);
   await prisma.$disconnect();
 }
 
