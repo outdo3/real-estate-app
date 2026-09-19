@@ -174,4 +174,71 @@ npm run build                                              Compiled successfully
 
 ## 10. Production QA
 
-배포 후 기록.
+커밋 `99419e4` push → Vercel Production 배포(push 후 약 60초에 새 응답 확인). DB/schema 변화 없음.
+
+### 부산 parity — 배포 전 2회 / 배포 후 1회, 응답 본문 전체 해시 비교
+
+| 요청 (26개 + 지도 1) | 결과 |
+|---|---|
+| dashboard 부산전체 / 서구 / 해운대 / 연제 / 기본 진입 | **동일** ×5 |
+| price-rankings record-high 서구 · rising/decline 해운대 · area84 연제 · area84 부산전체 · decline 부산전체 | **동일** ×6 |
+| region-change sigungu 부산 · dong 해운대 · complex 연제 · (param 누락 400) | **동일** ×4 |
+| yearly 해운대 | **동일** |
+| yearly 서구 | **다름** — 아래 |
+| feed 부산전체 7일 / 30일 | **동일** ×2 |
+| concentration 부산전체 / 서구 | **동일** ×2 |
+| gap-invest 부산전체 | **동일** |
+| gap-invest 해운대 | 배포 전 두 번끼리도 달랐음(부산 단일 구 갭투자는 live MOLIT) — 비교 대상 아님 |
+| large-complex 부산 / 서구 | **동일** ×2 |
+| transactions marker 해운대(지도) | **동일** |
+
+`yearly?lawdCd=26140` 차이 분석: 연도별 표의 매매는 DB, 전세/월세는 부산이어도 **live MOLIT**다(`fetchMonthsThrottled`, 실패 월을 조용히 빈 배열로 둠). 읽기 전용 조회로 서구 매매 row의 마지막 변경이 2026-09-18 23:29Z(배포 전 baseline 01:16Z 이전)임을 확인했다 — 매매 부분은 두 시점에 동일한 DB였다. 같은 코드 경로의 해운대 yearly는 동일했고, 배포 후 캐시 만료(10분)를 넘겨 두 번 다시 계산한 서구 yearly는 매매·전세·월세 전 연도가 서로 동일했다. 차이는 live 전월세 응답 쪽이며 게이트(부산은 통과)와 무관하다고 판단한다. 단, 배포 전 본문을 저장하지 않아 어느 연도가 달랐는지까지는 확인하지 못했다.
+
+**PARITY: PASS**(비교 가능한 25개 전부 동일, 1개는 live 전월세 변동으로 설명).
+
+### 비부산 — 빠른 준비 중, live MOLIT fan-out 0
+
+| 요청 | 배포 전 | 배포 후 |
+|---|---|---|
+| yearly 강남 11680 | 200 success, **117.3s** | 200 준비 중, **0.11s** |
+| yearly 분당 41135 | 200 success, **78.0s** | 200 준비 중, **0.11s** |
+| dashboard 강남 11680 | 200 success, 7.3s | 200 준비 중, 0.07s |
+| dashboard 송파 11710 | 200 success, 6.3s | 200 준비 중, 0.22s |
+| price-rankings record-high 강남 | 200 OK, 3.2s | 준비 중, 0.06s |
+| price-rankings area84 김포 41570 | 200 OK, 5.2s | 준비 중, 0.06s |
+| region-change sigungu 서울 | 200 OK, **88.4s** | 준비 중, 0.07s |
+| region-change dong 분당 | 200 OK, 1.1s | 준비 중, 0.06s |
+| feed 송파 7일 | 200 OK, 66.9s | 준비 중, 0.05s |
+| feed 경기 전체 7일 | 200 OK, 34.9s | 준비 중, 0.58s |
+| concentration 김포 | 200 OK, 27.4s | 준비 중, 0.05s |
+| gap-invest 강남 | 200 OK, 8.3s | 준비 중, 0.15s |
+| rankings 분당 | 200 success, 7.7s | 준비 중, 0.06s |
+| dashboard 대구 27110 | 200 success, 8.9s | 준비 중, 0.06s |
+| large-complex 서울 | UNSUPPORTED | UNSUPPORTED + `supported:false`/`reason` |
+| large-complex `sidoCode=26&lawdCd=11680` | **OK, 0건** | **준비 중** |
+
+16개 전부 HTTP 200, 응답 본문은 계약별로 동일한 한 가지(`success` 계약 1종, `status` 계약 1종, large-complex 1종) — 데이터·0건 필드 없음. 서버는 캐시/DB/MOLIT 전에 반환하므로(로컬 테스트로 fetch 0·DB 0 고정) 이 요청들이 MOLIT를 부른 경로가 없다.
+
+### 지도/상세 영향 없음
+
+`/api/transactions?type=apt&lawdCd=11680&months=1`(강남, 지도 경로) — 배포 전후 **동일**(200). stats 게이트가 지도/상세에 걸리지 않았다.
+
+### 화면 (Production, Chrome)
+
+- 강남 공유 링크로 들어간 거래량·실거래·하락·신고가·상승·전세위험·84㎡·거래집중·갭투자·대단지 **10개 화면 전부** "이 지역 통계는 현재 준비 중입니다." 표시, "거래가 없어요"/"불러오지 못했"/"조회 실패" 문구 0.
+- 변동지도: 경기 시도 단계·서울 구 단계 준비 중 안내. **대한민국 화면: 부산광역시 "0% · 1016개 단지", 나머지 16개 시도 "준비 중"**(이전: 16개 시도 live fan-out 후 값 또는 "조회 실패").
+- 360/375/390px: 가로 스크롤 0(`scrollWidth == innerWidth`), "부산광역시 통계 보기" 버튼 높이 44px. 데스크톱에서도 같은 카드로 표시.
+- "부산광역시 통계 보기" 클릭 → 지역 "부산광역시 전체"로 바뀌고 부산 실거래 피드가 정상 표시.
+
+### 안전 확인
+
+| 확인 | 결과 |
+|---|---|
+| sitemap `<loc>` | **139** (불변) |
+| sitemap 내 서울/경기 URL | **0** · stats URL은 `/stats` 1개(기존) |
+| `/stats` canonical | `https://e-jip.com/stats` (불변) |
+| `/` · `/stats` · `/map` · `/stats/volume` | 200 |
+| `error_logs` 배포 후 / 최근 24시간 | **0 / 0** (최신 2026-09-11) — 읽기 전용 조회 |
+| DB write · schema | 0 |
+
+AI 검색 `regional_stats` 경로는 Gemini 호출 비용이 들어 Production에서 직접 호출하지 않았다(로컬 코드·타입 검증만).
