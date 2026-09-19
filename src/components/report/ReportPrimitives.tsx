@@ -3,6 +3,7 @@
 // **envelope만 읽는다.** 여기에는 DB 접근도, 수치 재계산도, trust 재해석도 없다.
 // 값과 신뢰 상태는 이미 envelope이 정해둔 것을 그대로 그린다.
 
+import type React from 'react';
 import styles from './ReportSheet.module.css';
 import type { MetricTrust, ReportEnvelope, ReportMetric } from '@/lib/report/types';
 
@@ -63,7 +64,7 @@ export function ReportHeader({
   );
 }
 
-export function SectionHead({ title, meta }: { title: string; meta?: string | null }) {
+export function SectionHead({ title, meta }: { title: string; meta?: React.ReactNode }) {
   return (
     <div className={styles.sectionHead}>
       <h2 className={styles.sectionTitle}>{title}</h2>

@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+### E-JIP ONE-PAGE REPORT FINAL POLISH V1 — 저장 메뉴 PDF 중복 제거 · 최근 실거래 건수 표시 일치 (로컬 커밋, push 보류)
+
+    메뉴      [이미지] 메뉴는 기본 이미지 · 인스타 피드용 두 개만. PDF는 액션바 [PDF] 버튼 하나(동작 불변)
+    건수      최근 실거래 제목 옆 건수 = 실제 보이는 행 수: 웹 5건 / 문서(PNG·PDF) 3건. "최근 거래 일부 표시" 안내 유지
+    무변화    인스타 1080×1350 카드·캡처 코드, 데이터·API·DB 없음
+
 ### E-JIP ONE-PAGE REPORT REDESIGN V1 — 한장 리포트 정보구조 재설계 + 인스타 피드 4:5 PNG (로컬 커밋, push 보류)
 
 DB write 0 · schema 0 · sale-sync/cancellation 변경 0 · 새 조회 0. 상세: `docs/development/ONE_PAGE_REPORT_REDESIGN_V1.md`

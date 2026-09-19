@@ -277,11 +277,27 @@ function ComplexCountSection({ section, showDong }: { section: ReportSection; sh
   );
 }
 
+/** 문서(PNG/PDF)에 싣는 최근 실거래 수 — ReportSheet.module.css의 data-export-cap='3'과 짝. */
+const DOC_TRADE_CAP = 3;
+
 function TradeSection({ section, showDong }: { section: ReportSection; showDong: boolean }) {
   const rows = section.rows.slice(0, 5);
   return (
     <section className={styles.section}>
-      <SectionHead title={section.title} meta={`${rows.length}건`} />
+      {/* ONE_PAGE_REPORT_FINAL_POLISH_V1 — 건수 표시는 실제로 보이는 행 수와 같아야 한다: 웹 5건 / 문서 3건. */}
+      <SectionHead
+        title={section.title}
+        meta={
+          rows.length > DOC_TRADE_CAP ? (
+            <>
+              <span className={styles.webOnly}>{rows.length}건</span>
+              <span className={styles.docOnly}>{DOC_TRADE_CAP}건</span>
+            </>
+          ) : (
+            `${rows.length}건`
+          )
+        }
+      />
       {/* 문서(PNG/PDF)는 3건까지 — A4 한 장 예산. 나머지는 exportNote가 밝힌다(단지 리포트와 같은 장치). */}
       <div className={styles.tradeList} data-export-cap="3">
         {rows.map((r) => {
@@ -320,7 +336,7 @@ function TradeSection({ section, showDong }: { section: ReportSection; showDong:
           );
         })}
       </div>
-      {rows.length > 3 && <p className={styles.exportNote}>최근 거래 일부 표시 · 전체는 이집에서 확인</p>}
+      {rows.length > DOC_TRADE_CAP && <p className={styles.exportNote}>최근 거래 일부 표시 · 전체는 이집에서 확인</p>}
       {section.note && <p className={styles.sectionNote}>{section.note}</p>}
     </section>
   );

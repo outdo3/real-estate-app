@@ -92,6 +92,8 @@
   --r-matrix-cols: 1.1fr 1fr 1fr;
   --r-score-domain-cols: 1fr;
   --r-export-only: none;  /* 내보내기 전용 문구 */
+  --r-web-inline: inline; /* ONE_PAGE_REPORT_FINAL_POLISH_V1 — 웹 전용 인라인(예: 웹 건수) */
+  --r-doc-inline: none;   /* 문서(PNG/PDF) 전용 인라인(예: 문서 건수) */
 
   /* 글자 배율 — 큰/중간 글자에만 곱한다(작은 캡션까지 줄이면 못 읽는다). */
   --r-fs: 1;
@@ -694,6 +696,8 @@
  * **한쪽만 고치지 말 것.**
  */
 /* 내보내기 전용 문구 — 웹에서는 숨어 있다가 문서에서만 나온다(§5). */
+.webOnly { display: var(--r-web-inline); }
+.docOnly { display: var(--r-doc-inline); }
 .exportNote { display: var(--r-export-only); margin: 6px 0 0; font-size: 0.72rem; color: var(--r-ink-3); }
 
 /* ── 공유 이미지: A4 한 장 캔버스 ───────────────────────────────────────
@@ -755,6 +759,8 @@
   --r-bar-cols: 46px 1fr 46px;
   --r-matrix-cols: 1.1fr 1fr 1fr;
   --r-export-only: block;
+  --r-web-inline: none;
+  --r-doc-inline: inline;
   --r-head-space: 5px;
   --r-tag-mt: 8px;
   --r-trade-date-display: inline;
@@ -857,6 +863,8 @@
     --r-bar-cols: 44px 1fr 44px;
     --r-matrix-cols: 1.1fr 1fr 1fr;
     --r-export-only: block;
+    --r-web-inline: none;
+    --r-doc-inline: inline;
     --r-trade-date-display: inline;
     --r-trade-date-margin: 0 0 0 8px;
     --r-bar-gap: 6px;

@@ -302,9 +302,34 @@ test('16 · 모바일 — 저장 메뉴는 화면 안(360px), 항목 터치 영�
   assert.match(sheet, /@media \(max-width: 860px\) \{[\s\S]*?--r-kpi-cols: repeat\(2, 1fr\);/);
   const name = sheet.slice(sheet.indexOf('.priceNameText {'), sheet.indexOf('}', sheet.indexOf('.priceNameText {')));
   assert.match(name, /text-overflow: ellipsis;/);
-  // 메뉴 항목 문구 — 모바일에서 세 가지가 분명하다.
+  // 메뉴 항목 문구 — FINAL_POLISH_V1: [이미지] 메뉴는 이미지 형식 두 가지만, PDF는 액션바 버튼 하나.
   const actions = code('src/components/report/ReportActions.tsx');
-  for (const label of ['기본 이미지', '인스타 피드용', 'PDF']) assert.ok(actions.includes(`<strong>${label}</strong>`), label);
+  for (const label of ['기본 이미지', '인스타 피드용']) assert.ok(actions.includes(`<strong>${label}</strong>`), label);
+  assert.ok(!actions.includes('<strong>PDF</strong>'), '메뉴에 PDF가 중복된다');
+  assert.equal((actions.match(/role="menuitem"/g) ?? []).length, 2);
+  assert.ok(actions.includes('onClick={savePdf}'), '액션바 PDF 버튼');
+  assert.ok(actions.includes('<ActionLabel text="PDF" />'));
+});
+
+// ── FINAL_POLISH_V1 · 최근 실거래 건수 표시 = 실제로 보이는 행 수(웹 5 / 문서 3) ─────────────────
+test('최근 실거래 건수 — 웹은 표시 행 수, 문서(PNG/PDF)는 3건, 일부 표시 안내 유지', () => {
+  const sheet = code('src/components/report/RegionReportSheet.tsx');
+  assert.match(sheet, /const DOC_TRADE_CAP = 3;/);
+  assert.match(sheet, /<span className=\{styles\.webOnly\}>\{rows\.length\}건<\/span>/);
+  assert.match(sheet, /<span className=\{styles\.docOnly\}>\{DOC_TRADE_CAP\}건<\/span>/);
+  assert.match(sheet, /data-export-cap="3"/);
+  assert.match(sheet, /rows\.length > DOC_TRADE_CAP && <p className=\{styles\.exportNote\}>최근 거래 일부 표시/);
+  const css = raw('src/components/report/ReportSheet.module.css');
+  assert.match(css, /\.webOnly \{ display: var\(--r-web-inline\); \}/);
+  assert.match(css, /\.docOnly \{ display: var\(--r-doc-inline\); \}/);
+  // 웹 기본값(웹 표시), A4 캡처·인쇄에서 뒤집힌다.
+  const sheetBlock = css.slice(css.indexOf('.sheet {'), css.indexOf('/* ── 헤더'));
+  assert.match(sheetBlock, /--r-web-inline: inline;/);
+  assert.match(sheetBlock, /--r-doc-inline: none;/);
+  const a4 = css.slice(css.indexOf(".sheet[data-export-mode='a4'] {"), css.indexOf('/* 남는 세로는'));
+  assert.match(a4, /--r-web-inline: none;\s*--r-doc-inline: inline;/);
+  const print = css.slice(css.indexOf('@media print {'), css.indexOf('/* ── REGIONAL_SEO_KEYWORD_LANDING_V1'));
+  assert.match(print, /--r-web-inline: none;\s*--r-doc-inline: inline;/);
 });
 
 // ── 기간 밖 거래 ──────────────────────────────────────────────────────────────────

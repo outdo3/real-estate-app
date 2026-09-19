@@ -151,7 +151,9 @@ test('§8/§18 동작과 분석이 그대로다', () => {
   // 다른 리포트는 예전처럼 바로 saveImage, 메뉴의 "기본 이미지"·"PDF"도 같은 함수를 부른다.
   assert.ok(ACTIONS.includes('onClick={saveMenuEnabled ? () => setMenuOpen((v) => !v) : saveImage}'), 'saveImage 연결이 끊겼다');
   assert.ok(/const saveMenuEnabled = !!envelope && envelope\.reportType\.startsWith\('REGION_'\);/.test(ACTIONS), '메뉴가 지역 리포트 밖으로 번졌다');
-  assert.ok(/setMenuOpen\(false\);\s*saveImage\(\);/.test(ACTIONS) && /setMenuOpen\(false\);\s*savePdf\(\);/.test(ACTIONS), '메뉴 항목 연결이 끊겼다');
+  assert.ok(/setMenuOpen\(false\);\s*saveImage\(\);/.test(ACTIONS) && /setMenuOpen\(false\);\s*saveInstagram\(\);/.test(ACTIONS), '메뉴 항목 연결이 끊겼다');
+  // ONE_PAGE_REPORT_FINAL_POLISH_V1 — PDF는 액션바 [PDF] 버튼 하나(메뉴 안 중복 제거).
+  assert.ok(!/setMenuOpen\(false\);\s*savePdf\(\);/.test(ACTIONS), '메뉴에 PDF가 다시 들어갔다');
   for (const ev of ['report_share', 'report_image_save', 'report_pdf_save']) {
     assert.ok(ACTIONS.includes(ev), `분석 이벤트가 사라졌다: ${ev}`);
   }

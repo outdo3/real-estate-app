@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { Share2, Download, ArrowLeft, Check, Loader2, Image as ImageIcon, Smartphone, Printer } from 'lucide-react';
+import { Share2, Download, ArrowLeft, Check, Loader2, Image as ImageIcon, Smartphone } from 'lucide-react';
 import styles from './RegionReportSheet.module.css';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
@@ -62,7 +62,8 @@ export default function ReportActions({
   const [done, setDone] = useState<string | null>(null);
   // 연타로 캡처가 겹치지 않게. 상태와 별도로 즉시 반영돼야 해서 ref를 쓴다.
   const running = useRef(false);
-  // ONE_PAGE_REPORT_REDESIGN_V1 — 지역 리포트만 저장 메뉴(기본 이미지 / 인스타 피드용 / PDF)를 연다.
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 지역 리포트만 [이미지]가 이미지 형식 메뉴(기본 이미지 / 인스타 피드용)를 연다.
+  // ONE_PAGE_REPORT_FINAL_POLISH_V1 — PDF는 액션바의 독립 [PDF] 버튼 하나만 둔다(메뉴와 중복 제거).
   // 다른 리포트(단지·비교·일별)의 [이미지] 버튼은 예전처럼 바로 저장한다.
   const saveMenuEnabled = !!envelope && envelope.reportType.startsWith('REGION_');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -360,21 +361,6 @@ export default function ReportActions({
               <span className={styles.saveMenuText}>
                 <strong>인스타 피드용</strong>
                 <span>1080×1350 PNG · 4:5</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.saveMenuItem}
-              onClick={() => {
-                setMenuOpen(false);
-                savePdf();
-              }}
-            >
-              <Printer size={20} aria-hidden="true" />
-              <span className={styles.saveMenuText}>
-                <strong>PDF</strong>
-                <span>인쇄 창에서 PDF로 저장</span>
               </span>
             </button>
           </div>
