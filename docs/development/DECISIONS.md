@@ -1538,4 +1538,4 @@ coverage cell·취소 반영 같은 DB-first 신뢰 장치를 거치지 않는�
 - 공급(`stats/supply`, Presale DB)과 분위지도(`/api/transactions`)는 게이트하지 않았다 — 별도 결정 대상.
 
 상태:
-구현·로컬 검증 완료. 문서: `docs/development/NON_BUSAN_STATS_TRUST_GATE_V1.md`
+Production 적용(`99419e4`)·QA 완료. 문서: `docs/development/NON_BUSAN_STATS_TRUST_GATE_V1.md`

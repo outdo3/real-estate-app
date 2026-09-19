@@ -24,6 +24,10 @@ DB write 0 · schema/migration 0 · 서울/경기 수집·backfill 0 · sitemap/
     검증      신규 테스트 10 pass(비부산 77요청 × fetch 0 · DB 0 · console.error 0) · src 2,243 pass · scripts 135 pass · 0 fail
               eslint(변경 23파일) exit 0 · npm run lint 오류는 전부 기존(.worktrees 1633 · scripts 5 · src 0)
               tsc src 오류 0(기존 25건 scripts/tmp) · next build 성공
+    Production 99419e4 배포 — 부산 parity 25/25 동일(yearly 서구 1건은 live 전월세 변동, DB 매매 불변 확인)
+              비부산 16요청 전부 200 준비 중 0.05~0.6s(강남 yearly 117.3s→0.11s, 분당 yearly 78.0s→0.11s, 서울 변동지도 88.4s→0.07s)
+              지도 /api/transactions 강남 전후 동일 · 10개 화면 준비 중 안내 · 360/375/390 overflow 0 · 버튼 44px
+              변동지도 대한민국: 부산만 값, 16개 시도 "준비 중" · sitemap 139 · 서울/경기 URL 0 · error_logs 0
 
 ## 2026-09-16
 
