@@ -2,6 +2,19 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL MASTER SEED PLAN V1 — 서울 ApartmentMaster 구축 계획(READ ONLY)
+
+Production write 0 · schema 0 · enable 0. 상세: `docs/development/SEOUL_MASTER_SEED_PLAN_V1.md` · 도구: `scripts/audit-seoul-master-seed-plan.ts`
+
+    원천      MOLIT 매매 aptSeq = canonical seed(부산 M4-B와 동일). K-apt V5는 kaptCode라 seed 불가(후속 enrichment)
+    discovery 25구 × 24개월 매매·전월세 1,200셀 전부 COMPLETE(호출 1,407), null/형식오류/타지역 오염 0
+    tier      A 매매 6,843 · B 전월세 전용 2,244(umdCd는 같은 구 매매 대응 1개일 때만) · REVIEW 18
+    중복      여러 구 오기재 4(표기 동일 → 앞 5자리 구) · 같은 필지 35그룹 · 동명 260그룹 — merge 없음
+    파일럿    기존 서울 매매 46행 전부 EXACT
+    좌표      Kakao 주소 검색 필지 일치 100/100(표본) → seed 1순위. 단지명 키워드 결과 저장 금지
+    발견      기존 seed 스크립트: 페이지 없음 · 실패=0건 · 전역 좌표 dedupe가 부산 28단지 좌표를 지울 수 있음 → 신규 create-only 스크립트 필요
+    판정      READY_FOR_SEED_APPROVAL(Tier A 6,843행, 중구 파일럿 → 나머지)
+
 ### E-JIP REGIONAL PRICE COMPARISON UX V1.1 — 거래량 화면 상단 4개 KPI · 표본 적음 묶음
 
 DB write 0 · schema 0 · 새 쿼리 0 · 한장 브리핑(중앙가격 KPI) 변경 0. 상세: `docs/development/REGIONAL_PRICE_COMPARISON_UX_V1_1.md`
