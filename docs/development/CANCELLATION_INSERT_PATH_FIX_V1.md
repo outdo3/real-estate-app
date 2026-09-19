@@ -168,4 +168,30 @@ npm run build                                                 Compiled successfu
 
 ## 10. Production QA
 
-배포 후 기록.
+커밋 `03abea9` push → Vercel Production 배포 `real-estate-kjnlod92q` Ready(2026-09-19 11:49 KST), `e-jip.com` alias 확인. DB/schema/env 변경 없음.
+
+| 확인 | 결과 |
+|---|---|
+| `/` · `/stats` · `/map` · `/stats/volume` · `/sitemap.xml` | 200 |
+| stats dashboard 서구 · 비부산 yearly(준비 중) · 지도 `/api/transactions` · 단지 상세 | 200 (영향 없음) |
+| `/api/cron/sale-sync` 무인증 | 401 (실행되지 않음) |
+| Vercel 5xx (배포 후 15분) | 0 |
+| `error_logs` 배포 후 | 0 |
+
+### 17 — repair 없음 확인 (read-only gate 스크립트, 배포 후)
+
+| 지표 | 값 |
+|---|---|
+| 기존 21행 | 21/21 취소, 최신 변경 2026-09-15 (불변) |
+| 신규 7행 | 배포 직전 read-only 스냅샷 28/28 취소, 배포 후 적재·변경 행 0 → 불변 |
+| 배포 후 쓰인 행(`source_fetched_at` > 배포) | **0** |
+| 전체 / 취소 행 | 865,421 / 16,343 (불변) |
+| 형제 전원 취소 그룹 / 상한 | 273 / 334 (불변) |
+| 자연키 중복 | 0 |
+| INSERT repair · UPDATE repair · DELETE | 0 · 0 · 0 |
+
+### 판정
+
+**runtime deploy healthy, cron proof pending.** 배포 후 cron은 아직 돌지 않았다(다음 sale-sync 2026-09-19 19:00 UTC = 9/20 04:00 KST, sale-recheck 23:00 UTC = 08:00 KST). cron 수동 실행은 하지 않았다.
+
+다음 검증(cron 1~2회 후): `audit-cancel-prevention-cron-gate.ts <배포시각>` + `audit-cancel-prevention-cron-census.ts <배포시각>` — 조건: 상한 334에서 증가 0, 신규 OVER_CANCEL 0(기존 28만 남음), UNDER_CANCEL 0, `insertReconcileSkipped` 이상 없음. 통과하면 28행 repair 승인 대상.
