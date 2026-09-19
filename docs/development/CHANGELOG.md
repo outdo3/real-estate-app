@@ -2,6 +2,16 @@
 
 ## 2026-09-19
 
+### E-JIP SEOUL MASTER COORDINATE REVERSE CHECK V1 — 서울 seed 좌표 양방향 필지 검증(CODE + DRY-RUN)
+
+Production write 0 · --apply 미실행 · 부산 변경 0. 상세: `docs/development/SEOUL_MASTER_COORDINATE_REVERSE_CHECK_V1.md`
+
+    규칙      정방향 주소 검색 필지 일치 + 그 좌표의 역지오코딩 필지(구·법정동·산·본번·부번) 일치 = VERIFIED만 저장. 그 외 null(WRONG < NULL)
+    checkpoint V1 정방향 결과 이어받아 역방향만 호출 · 종결 상태 재호출 없음 · 429 안전 정지/재개
+    결과      READY 6,843 · VERIFIED 6,726(98.29%) · REVERSE_MISMATCH 113(다른 동/구 6 포함) · 좌표 null 117 · 역방향 6,839회 · 429 0
+    중구      READY 107 · VERIFIED 106 · null 1(11140-30, 217-95 → 217-92). 11590-1 건영 → REVERSE_MISMATCH(null)
+    검증      테스트 38(+14) · scripts 204 · 부산 fingerprint 불변
+
 ### E-JIP SEOUL MASTER SEED SCRIPT V1 — 서울 Tier A create-only seed 스크립트(CODE ONLY, dry-run)
 
 Production write 0 · schema 0 · enable 0 · --apply 미실행. 상세: `docs/development/SEOUL_MASTER_SEED_SCRIPT_V1.md`

@@ -5,7 +5,8 @@
 //   - 셀은 totalCount까지 모든 페이지를 읽어야 COMPLETE. 오류를 빈 결과로 취급하지 않는다.
 //   - 한 구에 COMPLETE가 아닌 셀이 하나라도 있으면 그 구 전체를 보류한다(부분 데이터 적재 금지).
 //   - 이름·지번·좌표로 aptSeq를 합치거나 만들지 않는다.
-//   - 좌표는 Kakao 주소 검색에서 구·법정동·본번·부번이 모두 같은 단일 결과만.
+//   - 좌표는 Kakao 주소 검색에서 구·법정동·본번·부번이 모두 같은 단일 결과를 찾고(정방향),
+//     그 좌표를 역지오코딩한 필지도 같은 구·법정동·본번·부번일 때만(역방향) 저장한다 — WRONG < NULL.
 //   - create-only. 이 모듈에는 update/upsert/delete 경로가 없다.
 
 import {
@@ -105,9 +106,17 @@ export interface SeedRow {
   sourceCell: string;
   lat: number | null;
   lng: number | null;
-  coordinateSource: 'KAKAO_ADDRESS_EXACT_LOT' | null;
-  coordinateConfidence: 'EXACT_LOT' | null;
+  coordinateSource: 'KAKAO_ADDRESS_EXACT_LOT_REVERSE_VERIFIED' | null;
+  coordinateConfidence: 'EXACT_LOT_BOTH_DIRECTIONS' | null;
   coordinateStatus: CoordinateStatus | 'PENDING' | 'SKIPPED' | 'NOT_ATTEMPTED';
+  /** 검증 기록(REVERSE CHECK V1). 저장되는 lat/lng는 VERIFIED일 때만 채워진다. */
+  targetLot: string;
+  forwardAddress: string | null;
+  forwardLat: number | null;
+  forwardLng: number | null;
+  reverseAddress: string | null;
+  reverseLot: string | null;
+  coordinateReason: string | null;
   status: RowStatus;
   reasons: string[];
 }
@@ -128,6 +137,8 @@ function toRow(c: SeedCandidate, status: RowStatus, reasons: string[]): SeedRow 
     name: c.name, normalizedName: normalizeName(c.name), buildYear: c.buildYear, tradeCount: c.tradeCount,
     sourceCell: `${c.lawdCd}:${c.latestDealDate.slice(0, 7).replace('-', '')}`,
     lat: null, lng: null, coordinateSource: null, coordinateConfidence: null, coordinateStatus: 'NOT_ATTEMPTED', status, reasons,
+    targetLot: `${districtName(c.lawdCd)} ${c.umdNm} ${c.jibun}`, forwardAddress: null, forwardLat: null, forwardLng: null,
+    reverseAddress: null, reverseLot: null, coordinateReason: null,
   };
 }
 
@@ -199,9 +210,30 @@ export function buildTierARows(input: {
 
 // ───────────────────────── 좌표(Kakao 주소 검색, 필지 일치) ─────────────────────────
 
-export type CoordinateStatus = 'EXACT' | 'NO_MATCH' | 'AMBIGUOUS' | 'JIBUN_UNPARSEABLE' | 'ERROR' | 'RATE_LIMITED';
+/** 정방향(주소 검색) 판정. EXACT는 **중간 단계**다 — 역방향까지 통과해야 VERIFIED. */
+export type ForwardStatus = 'EXACT' | 'NO_MATCH' | 'AMBIGUOUS' | 'JIBUN_UNPARSEABLE';
+
+/**
+ * 최종 좌표 상태. 저장 좌표는 VERIFIED만.
+ * 종결(재조회 안 함): VERIFIED · FORWARD_NO_MATCH · REVERSE_MISMATCH · REVERSE_NO_RESULT · AMBIGUOUS · JIBUN_UNPARSEABLE
+ * 미종결(다음 실행에서 이어서): ERROR · RATE_LIMITED
+ */
+export type CoordinateStatus =
+  | 'VERIFIED'
+  | 'FORWARD_NO_MATCH'
+  | 'REVERSE_MISMATCH'
+  | 'REVERSE_NO_RESULT'
+  | 'AMBIGUOUS'
+  | 'JIBUN_UNPARSEABLE'
+  | 'ERROR'
+  | 'RATE_LIMITED';
+
+export const TERMINAL_COORDINATE_STATUSES: ReadonlySet<CoordinateStatus> = new Set<CoordinateStatus>([
+  'VERIFIED', 'FORWARD_NO_MATCH', 'REVERSE_MISMATCH', 'REVERSE_NO_RESULT', 'AMBIGUOUS', 'JIBUN_UNPARSEABLE',
+]);
 
 export interface KakaoAddressDoc {
+  address_name?: string;
   address_type?: string;
   x?: string;
   y?: string;
@@ -237,9 +269,9 @@ export function addressQuery(row: Pick<SeedRow, 'districtName' | 'dong' | 'jibun
 export function matchExactLot(
   docs: readonly KakaoAddressDoc[],
   expected: { districtName: string; dong: string; jibun: string }
-): { status: 'EXACT' | 'NO_MATCH' | 'AMBIGUOUS' | 'JIBUN_UNPARSEABLE'; lat: number | null; lng: number | null } {
+): { status: ForwardStatus; lat: number | null; lng: number | null; address: string | null } {
   const lot = parseJibun(expected.jibun);
-  if (!lot) return { status: 'JIBUN_UNPARSEABLE', lat: null, lng: null };
+  if (!lot) return { status: 'JIBUN_UNPARSEABLE', lat: null, lng: null, address: null };
   const hits = docs.filter((d) => {
     const a = d.address;
     if (d.address_type !== 'REGION_ADDR' || !a) return false;
@@ -250,12 +282,62 @@ export function matchExactLot(
       && stripZeros(a.main_address_no ?? '') === lot.main
       && (() => { const s = stripZeros(a.sub_address_no ?? ''); return (s === '0' ? '' : s) === lot.sub; })();
   });
-  if (hits.length === 0) return { status: 'NO_MATCH', lat: null, lng: null };
-  if (hits.length > 1) return { status: 'AMBIGUOUS', lat: null, lng: null };
+  if (hits.length === 0) return { status: 'NO_MATCH', lat: null, lng: null, address: null };
+  if (hits.length > 1) return { status: 'AMBIGUOUS', lat: null, lng: null, address: null };
   const lat = Number(hits[0].y);
   const lng = Number(hits[0].x);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { status: 'NO_MATCH', lat: null, lng: null };
-  return { status: 'EXACT', lat, lng };
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { status: 'NO_MATCH', lat: null, lng: null, address: null };
+  return { status: 'EXACT', lat, lng, address: hits[0].address_name ?? null };
+}
+
+// ───────────────────────── 역방향(좌표 → 필지) ─────────────────────────
+
+/** Kakao coord2address 응답 documents[0]. 지번 주소(address)만 본다 — 도로명 주소는 필지 identity가 아니다. */
+export interface KakaoReverseDoc {
+  address?: {
+    address_name?: string;
+    region_1depth_name?: string;
+    region_2depth_name?: string;
+    region_3depth_name?: string;
+    mountain_yn?: string;
+    main_address_no?: string;
+    sub_address_no?: string;
+  } | null;
+}
+
+export type ReverseOutcome = { kind: 'OK'; doc: KakaoReverseDoc | null } | { kind: 'ERROR' | 'RATE_LIMITED'; detail: string };
+
+/**
+ * 정방향 좌표를 역지오코딩한 필지가 목표 필지(시도 서울·구·법정동·산 여부·본번·부번)와 같을 때만 VERIFIED.
+ * 인접 필지·다른 동이면 REVERSE_MISMATCH, 지번 주소가 없으면 REVERSE_NO_RESULT — 둘 다 좌표를 버린다.
+ */
+export function verifyReverseLot(
+  doc: KakaoReverseDoc | null,
+  expected: { districtName: string; dong: string; jibun: string }
+): { status: 'VERIFIED' | 'REVERSE_MISMATCH' | 'REVERSE_NO_RESULT' | 'JIBUN_UNPARSEABLE'; reverseAddress: string | null; reverseLot: string | null; reason: string | null } {
+  const lot = parseJibun(expected.jibun);
+  if (!lot) return { status: 'JIBUN_UNPARSEABLE', reverseAddress: null, reverseLot: null, reason: 'TARGET_JIBUN_UNPARSEABLE' };
+  const a = doc?.address;
+  if (!a || !a.main_address_no) return { status: 'REVERSE_NO_RESULT', reverseAddress: null, reverseLot: null, reason: 'NO_LOT_ADDRESS_AT_COORDINATE' };
+  const sub = stripZeros(a.sub_address_no ?? '');
+  const subPart = sub && sub !== '0' ? `-${sub}` : '';
+  const reverseLot = `${a.region_2depth_name ?? ''} ${a.region_3depth_name ?? ''} ${a.mountain_yn === 'Y' ? '산' : ''}${stripZeros(a.main_address_no)}${subPart}`;
+  const diffs: string[] = [];
+  if (!(a.region_1depth_name ?? '').startsWith('서울')) diffs.push('SIDO');
+  if (a.region_2depth_name !== expected.districtName) diffs.push('GU');
+  if (a.region_3depth_name !== expected.dong) diffs.push('DONG');
+  if ((a.mountain_yn === 'Y') !== lot.mountain) diffs.push('MOUNTAIN');
+  if (stripZeros(a.main_address_no) !== lot.main) diffs.push('MAIN_LOT');
+  if ((sub === '0' ? '' : sub) !== lot.sub) diffs.push('SUB_LOT');
+  return diffs.length
+    ? { status: 'REVERSE_MISMATCH', reverseAddress: a.address_name ?? null, reverseLot, reason: diffs.join('+') }
+    : { status: 'VERIFIED', reverseAddress: a.address_name ?? null, reverseLot, reason: null };
+}
+
+/** 정방향 판정이 이미 종결인 경우의 최종 상태. EXACT면 null(역방향 필요). */
+export function forwardTerminalStatus(f: ForwardStatus): CoordinateStatus | null {
+  if (f === 'EXACT') return null;
+  return f === 'NO_MATCH' ? 'FORWARD_NO_MATCH' : f;
 }
 
 // ───────────────────────── Apply 게이트 · 생성 데이터 · rollback ─────────────────────────
@@ -297,9 +379,11 @@ export function toCreateData(row: SeedRow) {
     umdCd: row.umdCd,
     jibun: row.jibun,
     buildYear: row.buildYear,
-    latitude: row.coordinateStatus === 'EXACT' ? row.lat : null,
-    longitude: row.coordinateStatus === 'EXACT' ? row.lng : null,
-    geocodeQuality: row.coordinateStatus === 'EXACT' ? 'exact' : row.coordinateStatus === 'NO_MATCH' || row.coordinateStatus === 'AMBIGUOUS' || row.coordinateStatus === 'JIBUN_UNPARSEABLE' ? 'failed' : null,
+    // 양방향 검증을 통과한 좌표만. 그 밖의 종결 상태는 좌표 null + 'failed'(조회했으나 신뢰 못 함), 미조회는 null.
+    latitude: row.coordinateStatus === 'VERIFIED' ? row.lat : null,
+    longitude: row.coordinateStatus === 'VERIFIED' ? row.lng : null,
+    geocodeQuality: row.coordinateStatus === 'VERIFIED' ? 'exact'
+      : TERMINAL_COORDINATE_STATUSES.has(row.coordinateStatus as CoordinateStatus) ? 'failed' : null,
   };
 }
 

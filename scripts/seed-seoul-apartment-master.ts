@@ -10,7 +10,8 @@
  * 이 스크립트는:
  *   - MOLIT 매매만 읽는다(pageNo/totalCount 검증, 동시 1·350ms). COMPLETE가 아닌 셀이 있는 구는 통째로 보류.
  *   - DB는 서울 aptSeq 목록으로만 조회하고(apt_seq = ANY), create만 한다. update/upsert/delete 경로 없음.
- *   - 좌표는 Kakao 주소 검색 필지 일치 결과만 저장한다. 키워드 검색을 호출하지 않는다.
+ *   - 좌표는 Kakao 주소 검색 필지 일치(정방향) + 그 좌표의 역지오코딩 필지 일치(역방향)가 모두 통과할 때만 저장한다.
+ *     키워드 검색을 호출하지 않는다. (REVERSE CHECK V1 — WRONG COORDINATE < NULL COORDINATE)
  *   - 산출물: tmp/seoul-master-seed-run/ (checkpoints/ · raw/ · 결과 JSON). API key·DB URL은 출력하지 않는다.
  *
  * 실행:
@@ -34,9 +35,14 @@ import {
   districtFetchState,
   evaluateApplyGates,
   fetchSaleCell,
+  forwardTerminalStatus,
   matchExactLot,
   toCreateData,
+  verifyReverseLot,
+  TERMINAL_COORDINATE_STATUSES,
   type AddressSearchOutcome,
+  type ForwardStatus,
+  type ReverseOutcome,
   type CellFetch,
   type CoordinateStatus,
   type DistrictState,
@@ -65,6 +71,8 @@ export interface WritableSeedDb {
 export interface SeedDeps {
   fetchPage: PageFetcher;
   searchAddress: (query: string) => Promise<AddressSearchOutcome>;
+  /** Kakao coord2address(좌표 → 지번 필지). */
+  reverseGeocode: (lat: number, lng: number) => Promise<ReverseOutcome>;
   readDb: () => Promise<ReadOnlySeedDb>;
   /** 모든 apply 게이트 통과 후에만 호출된다. */
   writeDb: () => Promise<WritableSeedDb>;
@@ -92,11 +100,30 @@ interface Checkpoint {
   state: DistrictState;
   cells: Omit<CellFetch, 'items'>[];
   rawFile: string | null;
-  coordinates: Record<string, { status: CoordinateStatus; lat: number | null; lng: number | null }>;
+  coordinates: Record<string, CoordEntry | LegacyCoordEntry>;
   updatedAt: string;
 }
 
-const TERMINAL: ReadonlySet<CoordinateStatus> = new Set(['EXACT', 'NO_MATCH', 'AMBIGUOUS', 'JIBUN_UNPARSEABLE']);
+/** REVERSE CHECK V1 체크포인트 항목 — 정방향 결과와 역방향 결과를 따로 남겨, 재실행 때 끝난 단계는 다시 호출하지 않는다. */
+interface CoordEntry {
+  v: 2;
+  status: CoordinateStatus;
+  forward: { status: ForwardStatus; lat: number | null; lng: number | null; address: string | null } | null;
+  reverse: { address: string | null; lot: string | null; reason: string | null } | null;
+}
+/** SEED SCRIPT V1 체크포인트(정방향만). EXACT는 역방향 검증 전 상태로 이어받는다. */
+interface LegacyCoordEntry { status: 'EXACT' | 'NO_MATCH' | 'AMBIGUOUS' | 'JIBUN_UNPARSEABLE' | 'ERROR' | 'RATE_LIMITED'; lat: number | null; lng: number | null }
+
+export function migrateCoordEntry(e: CoordEntry | LegacyCoordEntry | undefined): CoordEntry | null {
+  if (!e) return null;
+  if ((e as CoordEntry).v === 2) return e as CoordEntry;
+  const old = e as LegacyCoordEntry;
+  if (old.status === 'ERROR' || old.status === 'RATE_LIMITED') return null; // 다시 조회
+  const forward = { status: old.status, lat: old.lat, lng: old.lng, address: null };
+  const terminal = forwardTerminalStatus(old.status);
+  // 정방향 EXACT는 역방향 전이라 미종결(ERROR 자리 표시) — 정방향 좌표만 재사용하고 역방향만 호출한다.
+  return { v: 2, status: terminal ?? 'ERROR', forward, reverse: null };
+}
 
 // ───────────────────────── 본체 ─────────────────────────
 
@@ -107,7 +134,7 @@ export async function runSeed(opts: SeedOptions, deps: SeedDeps) {
   fs.mkdirSync(rawDir, { recursive: true });
   const writeJson = (p: string, v: unknown) => fs.writeFileSync(p, JSON.stringify(v, null, 2));
   const now = () => deps.now().toISOString();
-  const calls = { molitPages: 0, kakao: 0 };
+  const calls = { molitPages: 0, kakaoForward: 0, kakaoReverse: 0 };
 
   const targets = opts.districts ?? SEOUL_DISTRICTS.map((d) => d.lawdCd);
   for (const t of targets) if (!SEOUL_CODES.has(t)) throw new Error(`서울 25개 구 코드가 아님: ${t}`);
@@ -156,33 +183,53 @@ export async function runSeed(opts: SeedOptions, deps: SeedDeps) {
   const existing = await readDb.findExistingAptSeqs(rows.filter((r) => r.status === 'READY').map((r) => r.aptSeq));
   for (const r of rows) if (r.status === 'READY' && existing.has(r.aptSeq)) { r.status = 'EXISTING_SKIPPED'; r.reasons = ['APTSEQ_ALREADY_IN_MASTER']; }
 
-  // 4) 좌표(READY 행만, 필지 일치만)
+  // 4) 좌표(READY 행만): 정방향 필지 일치 → 역방향 필지 일치. 둘 다 통과해야 VERIFIED.
   let quotaStopped = false;
   for (const lawdCd of targets) {
     const cp = cps.get(lawdCd)!;
     if (heldBack.has(lawdCd)) continue;
     const ready = rows.filter((r) => r.district === lawdCd && r.status === 'READY');
     let sinceSave = 0;
+    const save = () => { cp.updatedAt = now(); writeJson(path.join(cpDir, `${lawdCd}.json`), cp); };
     for (const r of ready) {
       if (opts.skipCoordinates) { r.coordinateStatus = 'SKIPPED'; continue; }
-      const cached = cp.coordinates[r.aptSeq];
-      if (cached && TERMINAL.has(cached.status)) { applyCoord(r, cached); continue; }
-      if (quotaStopped) { r.coordinateStatus = 'PENDING'; continue; }
-      calls.kakao++;
-      const res = await deps.searchAddress(addressQuery(r));
-      let coord: { status: CoordinateStatus; lat: number | null; lng: number | null };
-      if (res.kind === 'OK') coord = matchExactLot(res.docs, r);
-      else coord = { status: res.kind === 'RATE_LIMITED' ? 'RATE_LIMITED' : 'ERROR', lat: null, lng: null };
-      if (coord.status === 'RATE_LIMITED') { quotaStopped = true; deps.log(`[coord] Kakao 제한 — 이후 조회 중단, 다음 실행에서 이어감`); }
-      cp.coordinates[r.aptSeq] = coord;
-      applyCoord(r, coord);
-      if (++sinceSave >= 50) { cp.updatedAt = now(); writeJson(path.join(cpDir, `${lawdCd}.json`), cp); sinceSave = 0; }
+      let entry = migrateCoordEntry(cp.coordinates[r.aptSeq]);
+      if (entry && TERMINAL_COORDINATE_STATUSES.has(entry.status)) { applyCoord(r, entry); continue; }
+      if (quotaStopped) { r.coordinateStatus = 'PENDING'; if (entry) applyCoord(r, entry, 'PENDING'); continue; }
+      // 미종결 항목(ERROR/RATE_LIMITED)은 남은 단계부터 다시: 정방향 결과가 있으면 그대로 쓰고 역방향만 다시 부른다.
+      if (entry) entry = { ...entry, status: 'ERROR' };
+      // 정방향(이미 있으면 재사용)
+      if (!entry?.forward) {
+        calls.kakaoForward++;
+        const res = await deps.searchAddress(addressQuery(r));
+        if (res.kind !== 'OK') {
+          entry = { v: 2, status: res.kind === 'RATE_LIMITED' ? 'RATE_LIMITED' : 'ERROR', forward: null, reverse: null };
+        } else {
+          const f = matchExactLot(res.docs, r);
+          const terminal = forwardTerminalStatus(f.status);
+          entry = { v: 2, status: terminal ?? 'ERROR', forward: { status: f.status, lat: f.lat, lng: f.lng, address: f.address }, reverse: null };
+        }
+      }
+      // 역방향(정방향 EXACT일 때만)
+      if (entry.forward?.status === 'EXACT' && entry.forward.lat != null && entry.forward.lng != null && !TERMINAL_COORDINATE_STATUSES.has(entry.status)) {
+        calls.kakaoReverse++;
+        const rv = await deps.reverseGeocode(entry.forward.lat, entry.forward.lng);
+        if (rv.kind === 'OK') {
+          const v = verifyReverseLot(rv.doc, r);
+          entry = { ...entry, status: v.status, reverse: { address: v.reverseAddress, lot: v.reverseLot, reason: v.reason } };
+        } else {
+          entry = { ...entry, status: rv.kind === 'RATE_LIMITED' ? 'RATE_LIMITED' : 'ERROR' };
+        }
+      }
+      if (entry.status === 'RATE_LIMITED') { quotaStopped = true; deps.log(`[coord] Kakao 제한 — 이후 조회 중단, 다음 실행에서 이어감`); }
+      cp.coordinates[r.aptSeq] = entry;
+      applyCoord(r, entry);
+      if (++sinceSave >= 50) { save(); sinceSave = 0; }
     }
-    // 상태: 좌표 단계가 끝나야(모든 READY 행이 종결 상태) READY
-    const coordsDone = opts.skipCoordinates || ready.every((r) => TERMINAL.has(r.coordinateStatus as CoordinateStatus));
+    // 상태: 모든 READY 행의 좌표가 종결 상태여야 READY
+    const coordsDone = opts.skipCoordinates || ready.every((r) => TERMINAL_COORDINATE_STATUSES.has(r.coordinateStatus as CoordinateStatus));
     cp.state = coordsDone ? 'READY' : 'VALIDATED';
-    cp.updatedAt = now();
-    writeJson(path.join(cpDir, `${lawdCd}.json`), cp);
+    save();
   }
   const districtStates = new Map([...cps.values()].map((c) => [c.lawdCd, c.state]));
 
@@ -205,8 +252,11 @@ export async function runSeed(opts: SeedOptions, deps: SeedDeps) {
     readyByDistrict: Object.fromEntries(targets.map((d) => [d, ready.filter((r) => r.district === d).length])),
     coordinates: {
       skipped: opts.skipCoordinates, quotaStopped,
-      EXACT: coordCount('EXACT'), NO_MATCH: coordCount('NO_MATCH'), AMBIGUOUS: coordCount('AMBIGUOUS'), JIBUN_UNPARSEABLE: coordCount('JIBUN_UNPARSEABLE'),
+      VERIFIED: coordCount('VERIFIED'), FORWARD_NO_MATCH: coordCount('FORWARD_NO_MATCH'), REVERSE_MISMATCH: coordCount('REVERSE_MISMATCH'),
+      REVERSE_NO_RESULT: coordCount('REVERSE_NO_RESULT'), AMBIGUOUS: coordCount('AMBIGUOUS'), JIBUN_UNPARSEABLE: coordCount('JIBUN_UNPARSEABLE'),
       ERROR: coordCount('ERROR'), RATE_LIMITED: coordCount('RATE_LIMITED'), PENDING: coordCount('PENDING'), SKIPPED: coordCount('SKIPPED'),
+      forwardExact: ready.filter((r) => r.forwardLat != null).length,
+      nullCoordinates: ready.filter((r) => r.coordinateStatus !== 'VERIFIED').length,
     },
     identityCorrections: corrections.length,
     planComparison: planTierAInTargets ? {
@@ -223,7 +273,14 @@ export async function runSeed(opts: SeedOptions, deps: SeedDeps) {
   writeJson(path.join(opts.outDir, 'ready-to-insert.json'), ready);
   writeJson(path.join(opts.outDir, 'existing-skipped.json'), by('EXISTING_SKIPPED'));
   writeJson(path.join(opts.outDir, 'review-required.json'), by('REVIEW_REQUIRED'));
-  writeJson(path.join(opts.outDir, 'coordinate-missing.json'), ready.filter((r) => r.coordinateStatus !== 'EXACT'));
+  writeJson(path.join(opts.outDir, 'coordinate-missing.json'), ready.filter((r) => r.coordinateStatus !== 'VERIFIED'));
+  const reverseView = (r: SeedRow) => ({
+    aptSeq: r.aptSeq, name: r.name, district: r.district, dong: r.dong, jibun: r.jibun, targetLot: r.targetLot,
+    forwardAddress: r.forwardAddress, forwardLat: r.forwardLat, forwardLng: r.forwardLng,
+    reverseAddress: r.reverseAddress, reverseLot: r.reverseLot, coordinateStatus: r.coordinateStatus, reason: r.coordinateReason,
+  });
+  writeJson(path.join(opts.outDir, 'coordinate-reverse-audit.json'), ready.map(reverseView));
+  writeJson(path.join(opts.outDir, 'coordinate-reverse-mismatch.json'), ready.filter((r) => r.coordinateStatus === 'REVERSE_MISMATCH' || r.coordinateStatus === 'REVERSE_NO_RESULT').map(reverseView));
   writeJson(path.join(opts.outDir, 'district-status.json'), [...cps.values()].map((c) => ({
     lawdCd: c.lawdCd, name: c.name, state: c.state, cells: c.cells.length, completeCells: c.cells.filter((x) => x.status === 'COMPLETE').length,
     multiPageCells: c.cells.filter((x) => x.pages > 1).length, maxTotalCount: Math.max(0, ...c.cells.map((x) => x.totalCount ?? 0)),
@@ -279,10 +336,17 @@ export async function runSeed(opts: SeedOptions, deps: SeedDeps) {
   return { summary: done, rows, applied };
 }
 
-function applyCoord(r: SeedRow, c: { status: CoordinateStatus; lat: number | null; lng: number | null }) {
-  r.coordinateStatus = c.status;
-  if (c.status === 'EXACT') {
-    r.lat = c.lat; r.lng = c.lng; r.coordinateSource = 'KAKAO_ADDRESS_EXACT_LOT'; r.coordinateConfidence = 'EXACT_LOT';
+function applyCoord(r: SeedRow, e: CoordEntry, overrideStatus?: SeedRow['coordinateStatus']) {
+  r.coordinateStatus = overrideStatus ?? e.status;
+  r.forwardAddress = e.forward?.address ?? null;
+  r.forwardLat = e.forward?.status === 'EXACT' ? e.forward.lat : null;
+  r.forwardLng = e.forward?.status === 'EXACT' ? e.forward.lng : null;
+  r.reverseAddress = e.reverse?.address ?? null;
+  r.reverseLot = e.reverse?.lot ?? null;
+  r.coordinateReason = e.reverse?.reason ?? null;
+  // 저장 좌표는 양방향 검증 통과(VERIFIED)만. 그 밖은 정방향 좌표가 있어도 null.
+  if (r.coordinateStatus === 'VERIFIED' && r.forwardLat != null && r.forwardLng != null) {
+    r.lat = r.forwardLat; r.lng = r.forwardLng; r.coordinateSource = 'KAKAO_ADDRESS_EXACT_LOT_REVERSE_VERIFIED'; r.coordinateConfidence = 'EXACT_LOT_BOTH_DIRECTIONS';
   } else {
     r.lat = null; r.lng = null; r.coordinateSource = null; r.coordinateConfidence = null;
   }
@@ -362,6 +426,31 @@ export async function realSearchAddress(query: string): Promise<AddressSearchOut
       if (!res.ok) return { kind: 'ERROR', detail: `http=${res.status}` };
       const body = await res.json();
       return { kind: 'OK', docs: Array.isArray(body?.documents) ? body.documents : [] };
+    } catch (e: any) {
+      if (attempt < 1) { await sleep(1000); continue; }
+      return { kind: 'ERROR', detail: e?.name ?? 'error' };
+    }
+  }
+  return { kind: 'ERROR', detail: 'exhausted' };
+}
+
+/** Kakao coord2address(좌표 → 지번 필지). 429는 2회만 재시도 후 RATE_LIMITED. */
+export async function realReverseGeocode(lat: number, lng: number): Promise<ReverseOutcome> {
+  const headers = {
+    Authorization: `KakaoAK ${process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || ''}`,
+    KA: 'sdk/1.0 os/javascript origin/http%3A%2F%2Flocalhost%3A3000',
+    Origin: 'http://localhost:3000',
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const wait = lastKakaoAt + 120 - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastKakaoAt = Date.now();
+    try {
+      const res = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${lng}&y=${lat}`, { headers, signal: AbortSignal.timeout(8000) });
+      if (res.status === 429) { if (attempt < 2) { await sleep(2000 * 2 ** attempt); continue; } return { kind: 'RATE_LIMITED', detail: 'http=429' }; }
+      if (!res.ok) return { kind: 'ERROR', detail: `http=${res.status}` };
+      const body = await res.json();
+      return { kind: 'OK', doc: Array.isArray(body?.documents) && body.documents.length ? body.documents[0] : null };
     } catch (e: any) {
       if (attempt < 1) { await sleep(1000); continue; }
       return { kind: 'ERROR', detail: e?.name ?? 'error' };
@@ -467,7 +556,7 @@ async function main() {
   const result = await runSeed(
     { outDir: cli.outDir, months: monthsBackKst(cli.months), districts: cli.districts, apply: cli.apply, allowProdDbWrite: cli.allowProdDbWrite, expectReady: cli.expectReady, skipCoordinates: cli.skipCoordinates, refetch: cli.refetch },
     {
-      fetchPage: realFetchPage, searchAddress: realSearchAddress, readDb: realReadDb, writeDb: realWriteDb,
+      fetchPage: realFetchPage, searchAddress: realSearchAddress, reverseGeocode: realReverseGeocode, readDb: realReadDb, writeDb: realWriteDb,
       planExclusions: plan?.exclusions ?? null, planTierA: plan?.tierA ?? null, now: () => new Date(), log: (m) => console.log(m),
     }
   );
