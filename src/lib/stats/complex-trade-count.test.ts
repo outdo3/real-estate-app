@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { countValidTradesByComplex, groupValidTradesByComplex } from './complex-trade-count';
+import { compareTopComplex, countValidTradesByComplex, groupValidTradesByComplex } from './complex-trade-count';
 import { buildConcentrationRanking, dedupeByRecord, dedupeTrades, identityKey, isDateInRange, toFeedTrade, type FeedTrade } from '../regional-feed';
 import { storedRentToFeedRaw, storedSaleToFeedRaw } from './feed-db-source';
 import { representativeComplexes, type TradeRow } from '../report/region-aggregate';
@@ -30,6 +30,9 @@ function dbTrade(o: { aptSeq?: string; name?: string; dong?: string; area?: stri
 const screenCounts = (trades: FeedTrade[]) => new Map(buildConcentrationRanking(dedupeByRecord(trades), []).map((e) => [e.aptSeq ?? e.name, e.currentCount]));
 /** 수정 전 화면 파이프라인: 내용 dedupe(첫 행) → 취소 제외 → 단지별. 회귀 증거용. */
 const legacyScreenCounts = (trades: FeedTrade[]) => new Map(buildConcentrationRanking(dedupeTrades(trades), []).map((e) => [e.aptSeq ?? e.name, e.currentCount]));
+
+/** 화면 거래 행 → 브리핑 입력 행(같은 기록). */
+const toBriefRow = (t: FeedTrade): TradeRow => ({ aptSeq: t.aptSeq, lawdCd: t.lawdCd, dong: t.dong, aptName: t.name, exclusiveArea: t.excluUseArea!, dealAmount: t.dealAmount, dealDate: t.dealDate, dealCanceled: t.dealCanceled, floor: Number(t.floorRaw) });
 
 /** 대운스카이뷰1차 30일 원천 구성: 2층 28.135㎡ 1건 + 3~17층 24.43㎡ 층마다 3건(같은 금액) = 46. */
 function daewoon46(): FeedTrade[] {
@@ -120,16 +123,33 @@ test('10 · 화면과 브리핑이 같은 규칙 — 무작위 표본에서 단�
   assert.match(codeOf('src/lib/report/region-aggregate.ts'), /groupValidTradesByComplex\(/);
 });
 
-test('11·12 · 정렬과 동률 처리는 각 경로 기존 규칙 그대로', () => {
-  // 화면: 건수 내림차순, 동률은 입력(계약일·id) 순서 — 라우트의 정렬 식이 그대로다.
+test('11·12 · 정렬과 동률 처리 — 화면·브리핑이 같은 공용 규칙(건수 → 최근 계약일 → 이름)', () => {
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 예전 화면은 건수만으로 정렬해 동률 순서가 DB 조회 순서를 따랐고,
+  // 브리핑과 5위가 달랐다(부산 15일: 동원로얄듀크 vs 사직쌍용예가, 둘 다 6건). 이제 둘 다 compareTopComplex.
   const route = codeOf('src/app/api/stats/concentration/route.ts');
-  assert.match(route, /return b\.currentCount - a\.currentCount;/);
-  // 브리핑: 건수 → 최근 계약일 → 이름.
+  assert.match(route, /return compareTopComplex\(\s*\{ count: a\.currentCount, latestDealDate: a\.latestDealDate, name: a\.name \},\s*\{ count: b\.currentCount, latestDealDate: b\.latestDealDate, name: b\.name \}\s*\);/);
   const agg = codeOf('src/lib/report/region-aggregate.ts');
-  assert.match(agg, /\.sort\(\(a, b\) => \(b\.count - a\.count\) \|\| b\.latestDealDate\.localeCompare\(a\.latestDealDate\) \|\| a\.aptName\.localeCompare\(b\.aptName\)\)/);
-  const rows = [dbTrade({ aptSeq: 'A', name: 'A', date: '2026-09-01' }), dbTrade({ aptSeq: 'B', name: 'B', date: '2026-09-02' }), dbTrade({ aptSeq: 'B', name: 'B', date: '2026-09-03' })];
-  const ranked = buildConcentrationRanking(dedupeByRecord(rows), []).sort((a, b) => b.currentCount - a.currentCount);
-  assert.deepEqual(ranked.map((e) => [e.aptSeq, e.currentCount, e.latestDealDate]), [['B', 2, '2026-09-03'], ['A', 1, '2026-09-01']]);
+  assert.match(agg, /\.sort\(\(a, b\) => compareTopComplex\(\{ \.\.\.a, name: a\.aptName \}, \{ \.\.\.b, name: b\.aptName \}\)\)/);
+  // 규칙 자체: 건수 desc → 최근 계약일 desc → 이름 asc.
+  const k = (name: string, count: number, latestDealDate: string) => ({ name, count, latestDealDate });
+  assert.deepEqual(
+    [k('나', 6, '2026-09-10'), k('가', 6, '2026-09-10'), k('다', 6, '2026-09-18'), k('라', 9, '2026-09-01')].sort(compareTopComplex).map((x) => x.name),
+    ['라', '다', '가', '나']
+  );
+  // 두 경로가 동률에서도 같은 순서를 낸다(입력 순서를 뒤집어도).
+  const rows = [
+    dbTrade({ aptSeq: 'A', name: '가', date: '2026-09-01' }), dbTrade({ aptSeq: 'A', name: '가', date: '2026-09-02' }),
+    dbTrade({ aptSeq: 'B', name: '나', date: '2026-09-01' }), dbTrade({ aptSeq: 'B', name: '나', date: '2026-09-02' }),
+    dbTrade({ aptSeq: 'C', name: '다', date: '2026-09-03' }), dbTrade({ aptSeq: 'C', name: '다', date: '2026-09-01' }),
+  ];
+  for (const input of [rows, [...rows].reverse()]) {
+    const screen = buildConcentrationRanking(dedupeByRecord(input), [])
+      .sort((a, b) => compareTopComplex({ count: a.currentCount, latestDealDate: a.latestDealDate, name: a.name }, { count: b.currentCount, latestDealDate: b.latestDealDate, name: b.name }))
+      .map((e) => [e.aptSeq, e.currentCount]);
+    const brief = representativeComplexes(input.map(toBriefRow), 5).map((c) => [c.aptSeq, c.count]);
+    assert.deepEqual(screen, [['C', 2], ['A', 2], ['B', 2]]);
+    assert.deepEqual(brief, screen);
+  }
 });
 
 test('13 · 요약 거래건수와 단지 합계가 같은 기준(유효 기록 수)이다', () => {

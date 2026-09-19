@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Share2, Download, ArrowLeft, Check, Loader2 } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Share2, Download, ArrowLeft, Check, Loader2, Image as ImageIcon, Smartphone, Printer } from 'lucide-react';
 import styles from './RegionReportSheet.module.css';
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import {
   buildExportFilename,
+  buildInstagramFilename,
   buildShareText,
   periodKeyOf,
   reportShareUrl,
@@ -29,7 +31,13 @@ import { reportShareCopy } from '@/lib/share/ejipShareCard';
  *  - 공유 URL은 화면 이름이 아니라 envelope identity에서 만든다(§10).
  */
 
-type ActionState = 'idle' | 'image' | 'pdf' | 'share';
+type ActionState = 'idle' | 'image' | 'pdf' | 'share' | 'insta';
+
+/**
+ * ONE_PAGE_REPORT_REDESIGN_V1 — 인스타 피드용 무대는 **누른 뒤에만** 불러온다(Next lazy loading, ssr:false).
+ * 리포트를 읽기만 하는 사용자의 번들·첫 렌더에는 들어가지 않는다.
+ */
+const InstagramExportStage = dynamic(() => import('./InstagramExportStage'), { ssr: false });
 
 export default function ReportActions({
   title,
@@ -54,6 +62,28 @@ export default function ReportActions({
   const [done, setDone] = useState<string | null>(null);
   // 연타로 캡처가 겹치지 않게. 상태와 별도로 즉시 반영돼야 해서 ref를 쓴다.
   const running = useRef(false);
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 지역 리포트만 저장 메뉴(기본 이미지 / 인스타 피드용 / PDF)를 연다.
+  // 다른 리포트(단지·비교·일별)의 [이미지] 버튼은 예전처럼 바로 저장한다.
+  const saveMenuEnabled = !!envelope && envelope.reportType.startsWith('REGION_');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [instaRequested, setInstaRequested] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    const onPointer = (e: PointerEvent) => {
+      if (barRef.current && !barRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  }, [menuOpen]);
 
   // SHARE_CARD_UNIFICATION_V1 §8 — 리포트 공유에도 브랜드 카카오 카드를 쓴다.
   // 클릭 전에 SDK가 준비돼 있어야 팝업이 차단되지 않는다(훅 주석 참고).
@@ -139,6 +169,28 @@ export default function ReportActions({
       running.current = false;
       setBusy('idle');
     }
+  };
+
+  /** ONE_PAGE_REPORT_REDESIGN_V1 — 인스타 피드용 4:5(1080×1350). 같은 envelope을 전용 레이아웃으로 굽는다. */
+  const saveInstagram = () => {
+    if (running.current || !envelope) return;
+    running.current = true;
+    setBusy('insta');
+    setError(null);
+    setInstaRequested(true);
+  };
+  const finishInstagram = (blob: Blob | null) => {
+    setInstaRequested(false);
+    running.current = false;
+    setBusy('idle');
+    if (!blob) {
+      // 잘린 이미지·다른 크기를 저장하지 않는다 — 실패라고 말한다.
+      flash(setError, '인스타 이미지를 만들지 못했습니다');
+      return;
+    }
+    downloadBlob(blob, identity ? buildInstagramFilename(identity) : 'e-jip-report-instagram-4x5.png');
+    trackEvent('report_image_save', { ga: { ...gaContext(), method: 'instagram_4x5' } });
+    flash(setDone, '인스타 피드용 저장 완료');
   };
 
   /**
@@ -277,17 +329,67 @@ export default function ReportActions({
 
   return (
     <>
-      <div className={styles.actions} data-export-exclude="" data-bottom-bar="">
+      <div className={styles.actions} data-export-exclude="" data-bottom-bar="" ref={barRef}>
+        {saveMenuEnabled && menuOpen && (
+          <div className={styles.saveMenu} role="menu" aria-label="저장 형식">
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.saveMenuItem}
+              onClick={() => {
+                setMenuOpen(false);
+                saveImage();
+              }}
+            >
+              <ImageIcon size={20} aria-hidden="true" />
+              <span className={styles.saveMenuText}>
+                <strong>기본 이미지</strong>
+                <span>한 장 리포트 PNG</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.saveMenuItem}
+              onClick={() => {
+                setMenuOpen(false);
+                saveInstagram();
+              }}
+            >
+              <Smartphone size={20} aria-hidden="true" />
+              <span className={styles.saveMenuText}>
+                <strong>인스타 피드용</strong>
+                <span>1080×1350 PNG · 4:5</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.saveMenuItem}
+              onClick={() => {
+                setMenuOpen(false);
+                savePdf();
+              }}
+            >
+              <Printer size={20} aria-hidden="true" />
+              <span className={styles.saveMenuText}>
+                <strong>PDF</strong>
+                <span>인쇄 창에서 PDF로 저장</span>
+              </span>
+            </button>
+          </div>
+        )}
         <div className={styles.actionInner}>
           {shareButton}
           <button
             type="button"
             className={styles.actionBtn}
-            onClick={saveImage}
+            onClick={saveMenuEnabled ? () => setMenuOpen((v) => !v) : saveImage}
             disabled={busy !== 'idle'}
             aria-label="리포트 이미지 저장"
+            {...(saveMenuEnabled ? { 'aria-haspopup': 'menu' as const, 'aria-expanded': menuOpen } : {})}
           >
-            {busy === 'image' ? (
+            {busy === 'image' || busy === 'insta' ? (
               <Loader2 size={16} aria-hidden="true" className={styles.spin} />
             ) : (
               <Download size={16} aria-hidden="true" />
@@ -328,6 +430,9 @@ export default function ReportActions({
           </p>
         )}
       </div>
+      {instaRequested && envelope && (
+        <InstagramExportStage envelope={envelope} onDone={(blob) => finishInstagram(blob)} onError={() => finishInstagram(null)} />
+      )}
     </>
   );
 }

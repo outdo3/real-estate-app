@@ -5,6 +5,7 @@
 
 import {
   BUSAN_CURRENT_LAWD_CODES,
+  BUSAN_DISTRICTS,
   districtName,
   normalizeDong,
 } from './region-scope';
@@ -34,6 +35,13 @@ import type {
   ReportType,
 } from './types';
 import { summarizeTrust } from './types';
+import { buildSalePriceKpi, type SalePriceKpi } from '../stats/sale-price-kpi';
+import { priceBandLabel } from '../stats/price-band-label';
+import {
+  buildRegionPriceComparison,
+  REGION_PRICE_LOW_SAMPLE_BELOW,
+  type RegionPriceComparison,
+} from '../stats/region-price-comparison';
 
 export const REPORT_VERSION = 'report-1.0.0';
 
@@ -98,8 +106,10 @@ function scopeOf(input: RegionReportInput): ReportScope {
   return { level: 'DONG', lawdCd: input.lawdCd, dong: d, aptSeqs: null, displayName: `부산 ${name} ${d}`.trim() };
 }
 
-export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
-  const rows = prepareRows(input.rows);
+export function buildRegionReport(input: RegionReportInput): ReportEnvelope<RegionReportData> {
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 기간 밖 거래는 어떤 섹션에도 들어가지 않는다. 조회(region-read)가 이미 기간으로
+  // 자르지만, 건수·최근 실거래·가격대·지역 평균이 **같은 행 집합**을 쓰도록 여기서 한 번 더 고정한다(정상 입력에서는 무변화).
+  const rows = prepareRows(input.rows).filter((r) => r.dealDate >= input.period.start && r.dealDate <= input.period.end);
   const twoYear = prepareRows(input.twoYearRows);
 
   const agg = aggregate(rows);
@@ -155,6 +165,15 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
       source: src,
     },
   ];
+
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 통계 화면 상단 KPI와 **같은 함수·같은 행·같은 기간**(buildSalePriceKpi).
+  // 신뢰 등급은 중앙가격과 같은 표본 게이트를 쓴다 — 새 지표 때문에 리포트 완전성 판정이 달라지지 않게.
+  // "표본 적음"(5건 미만)은 통계 화면처럼 표시 태그일 뿐 값을 숨기지 않는다.
+  const priceKpi = buildSalePriceKpi(
+    rows.map((r) => ({ dealAmount: r.dealAmount, excluUseArea: r.exclusiveArea, dealDate: r.dealDate, dealCanceled: r.dealCanceled })),
+    { from: input.period.start, to: input.period.end }
+  );
+  metrics.push(topPriceBandMetric(priceKpi, gate, src));
 
   const delta = countDelta(rows.length, input.previousCount);
   // STATS_PERIOD_IMAGE_PARITY_V2 — 하루짜리 기간(오늘/어제)은 직전 기간 대비를 만들지 않는다.
@@ -284,6 +303,43 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
   if (unenriched > 0) notes.push(`단지 기본정보가 연결되지 않은 행이 ${unenriched}건 있습니다(거래 자체는 유효합니다).`);
 
   const scope = scopeOf(input);
+
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 하위 지역 평균 매매가격(부산 → 구·군, 구 → 동). 통계 화면과 같은 함수·같은 행.
+  // 거래가 있는 지역만 universe로 넣는다: 순위·평균·건수는 통계 화면(12개월 동 목록 universe)과 같고,
+  // "거래 없음" 행은 한 장 리포트에 싣지 않는다. 동 리포트는 하위 지역이 없어 null.
+  const range = { from: input.period.start, to: input.period.end };
+  const priceRows = rows.map((r) => ({
+    lawdCd: r.lawdCd,
+    dong: normalizeDong(r.dong),
+    dealAmount: r.dealAmount,
+    excluUseArea: r.exclusiveArea,
+    dealDate: r.dealDate,
+    dealCanceled: r.dealCanceled,
+  }));
+  const regionPrice: RegionPriceComparison | null =
+    input.level === 'CITY'
+      ? buildRegionPriceComparison(priceRows, 'district', BUSAN_DISTRICTS.map((d) => ({ key: d.lawdCd, name: d.name })), range)
+      : input.level === 'DISTRICT'
+        ? buildRegionPriceComparison(
+            priceRows,
+            'dong',
+            [...new Set(priceRows.map((r) => r.dong).filter((d): d is string => !!d))].map((d) => ({ key: d, name: d })),
+            range
+          )
+        : null;
+  if (regionPrice) regionPrice.rows = regionPrice.rows.filter((r) => r.count > 0);
+
+  const data: RegionReportData = {
+    priceKpi,
+    regionPrice,
+    summaryLine: buildSummaryLine({
+      periodLabel: input.period.label,
+      regionName: input.level === 'CITY' ? '부산' : scope.displayName,
+      count: agg.transactionCount,
+      priceKpi,
+    }),
+  };
+
   return {
     reportType: REPORT_TYPE_BY_LEVEL[input.level],
     reportVersion: REPORT_VERSION,
@@ -310,6 +366,98 @@ export function buildRegionReport(input: RegionReportInput): ReportEnvelope {
       { source: MASTER_SOURCE, dataAsOf: null },
     ],
     navigationTargets: [],
-    data: null,
+    data,
   };
+}
+
+/**
+ * ONE_PAGE_REPORT_REDESIGN_V1 — 지역 리포트 전용 payload(envelope.data).
+ * 웹 시트·PNG·PDF·인스타 피드 이미지가 **이 한 벌**을 읽는다. 통계 계산을 화면마다 복제하지 않는다.
+ */
+export interface RegionReportData {
+  /** 많이 거래된 가격대 · ㎡당 중앙가격 — 통계 화면 salePriceKpiByPeriod와 같은 함수. */
+  priceKpi: SalePriceKpi;
+  /** CITY: 구·군별 / DISTRICT: 동별 평균 매매가격(거래 있는 지역만). DONG은 null. */
+  regionPrice: RegionPriceComparison | null;
+  /** 상단 한 줄 요약 — 현재 데이터의 사실만(평가·전망 없음). */
+  summaryLine: string;
+}
+
+/** envelope.data가 지역 리포트 payload인지. 없으면(예전 형태·다른 리포트) null — 화면은 그 블록만 뺀다. */
+export function regionReportDataOf(envelope: Pick<ReportEnvelope<unknown>, 'data'>): RegionReportData | null {
+  const d = envelope.data as Partial<RegionReportData> | null;
+  return d && d.priceKpi && typeof d.summaryLine === 'string' ? (d as RegionReportData) : null;
+}
+
+/** 통계 화면 '많이 거래된 가격대' 카드와 같은 표기 규칙: 1~2개면 이름, 3개 이상이면 "한 가격대로 모이지 않음". */
+export function topPriceBandText(kpi: SalePriceKpi): string {
+  if (kpi.topBands.length === 0) return '거래 없음';
+  if (kpi.topBands.length <= 2) return kpi.topBands.map((b) => priceBandLabel(b.lowerEok)).join(' · ');
+  return '한 가격대로 모이지 않음';
+}
+
+/** 가격대 카드 아래 한 줄 — "12건 · 전체의 34%" / "각 7건 · 전체의 20%" / "3개 가격대가 각 2건". */
+export function topPriceBandSub(kpi: SalePriceKpi): string | null {
+  if (kpi.topBands.length === 0 || kpi.count === 0) return null;
+  const n = kpi.topBands[0].count.toLocaleString('ko-KR');
+  if (kpi.topBands.length > 2) return `${kpi.topBands.length}개 가격대가 각 ${n}건`;
+  const share = Math.round((kpi.topBands[0].count / kpi.count) * 100);
+  return `${kpi.topBands.length === 2 ? '각 ' : ''}${n}건 · 전체의 ${share}%`;
+}
+
+export interface RegionPriceTop {
+  /** 거래 5건 이상 — 평균 매매가격 높은 순 최대 limit곳(순위 표시). */
+  ranked: RegionPriceComparison['rows'];
+  /** 표본 적음(1~4건) 참고 묶음 — ranked가 limit보다 적을 때만 남는 자리를 채운다(순위 없음). */
+  reference: RegionPriceComparison['rows'];
+  /** 자리가 없어 목록에서 생략된 표본 적음 지역 수. */
+  omittedLowSample: number;
+}
+
+/**
+ * 한 장 리포트·인스타 이미지 공용 TOP 선택. 통계 화면과 같은 정렬(표본 충분 → 표본 적음, 각 묶음 안에서 평균가 desc)을
+ * 그대로 두고 앞에서 자른다 — 순위를 다시 매기지 않는다. 전체 행 수는 limit를 넘지 않는다(레이아웃 고정).
+ */
+export function regionPriceTop(comparison: RegionPriceComparison | null, limit = 5): RegionPriceTop {
+  const rows = (comparison?.rows ?? []).filter((r) => r.count > 0 && r.avgAmount != null);
+  const ranked = rows.filter((r) => !r.lowSample).slice(0, limit);
+  const low = rows.filter((r) => r.lowSample);
+  const reference = low.slice(0, Math.max(0, limit - ranked.length));
+  return { ranked, reference, omittedLowSample: low.length - reference.length };
+}
+
+/** 통계 화면과 같은 "표본 적음" 기준(5건 미만). 값은 숨기지 않고 표시만 한다. */
+export function isLowSampleCount(count: number): boolean {
+  return count > 0 && count < REGION_PRICE_LOW_SAMPLE_BELOW;
+}
+
+function topPriceBandMetric(kpi: SalePriceKpi, gate: ReturnType<typeof sampleGate>, src: MetricSource): ReportMetric {
+  const value = kpi.topBands.length ? kpi.topBands.map((b) => b.lowerEok).join(',') : null;
+  return {
+    key: 'topPriceBand',
+    label: '많이 거래된 가격대',
+    // 동률 구간은 모두 싣는다(하나를 임의로 고르지 않는다). 예: '3,4' = 3억원대·4억원대.
+    value,
+    displayValue: topPriceBandText(kpi),
+    unit: '억원 구간',
+    trust: trustForSample(value, gate),
+    reason: value == null ? '기간 내 거래가 없습니다.' : gate.reason,
+    sampleSize: kpi.count,
+    source: src,
+  };
+}
+
+/**
+ * 한 줄 요약. **현재 데이터의 사실만** 쓴다 — 오름/내림 평가, 전망, 추정 없음.
+ *   "최근 15일 부산 매매 792건, 2억원대 거래가 가장 많았습니다."
+ * 5건 미만이면 가격대 문장을 붙이지 않는다(한두 건이 "가장 많음"처럼 읽히지 않게). 0건이면 거래 없음.
+ */
+export function buildSummaryLine(input: { periodLabel: string; regionName: string; count: number; priceKpi: SalePriceKpi }): string {
+  const { periodLabel, regionName, count, priceKpi } = input;
+  const head = `${periodLabel} ${regionName}`;
+  if (count === 0) return `${head}에서 확인된 매매 거래가 없습니다.`;
+  const total = `${head} 매매 ${count.toLocaleString('ko-KR')}건`;
+  if (count < REGION_PRICE_LOW_SAMPLE_BELOW || priceKpi.topBands.length === 0) return `${total}이 확인됐습니다.`;
+  if (priceKpi.topBands.length > 2) return `${total}, 거래가 한 가격대로 모이지 않았습니다.`;
+  return `${total}, ${priceKpi.topBands.map((b) => priceBandLabel(b.lowerEok)).join('·')} 거래가 가장 많았습니다.`;
 }

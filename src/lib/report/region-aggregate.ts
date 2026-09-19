@@ -11,7 +11,7 @@
 //   §10 예측 금지 — 실측 차이값만.
 //   평형(평) 라벨 금지 — ApartmentUnitType 커버리지가 2.9%라 ㎡만 쓴다.
 
-import { groupValidTradesByComplex } from '../stats/complex-trade-count';
+import { compareTopComplex, groupValidTradesByComplex } from '../stats/complex-trade-count';
 import { isBusanCurrentLawdCd, normalizeDong } from './region-scope';
 import type { MetricTrust, ReportRow, SampleGate } from './types';
 
@@ -197,7 +197,8 @@ export function representativeComplexes(rows: readonly TradeRow[], limit: number
     m.set(key, { aptSeq: first.aptSeq, aptName: first.aptName, dong: normalizeDong(first.dong), lawdCd: first.lawdCd, count: list.length, latestDealDate });
   }
   return [...m.values()]
-    .sort((a, b) => (b.count - a.count) || b.latestDealDate.localeCompare(a.latestDealDate) || a.aptName.localeCompare(b.aptName))
+    // 순위 규칙은 통계 화면과 공용(compareTopComplex) — 결과는 예전 인라인 비교와 같다.
+    .sort((a, b) => compareTopComplex({ ...a, name: a.aptName }, { ...b, name: b.aptName }))
     .slice(0, limit);
 }
 

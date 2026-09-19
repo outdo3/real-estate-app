@@ -126,11 +126,15 @@ test('16 · KPI 라벨이 계산과 맞다 — 중앙가격 KPI 없음, ㎡당�
   assert.equal(k.medianPricePerM2, Math.round(aggregate(rows).medianPricePerM2! * 10) / 10);
 });
 
-test('17 · 한장 브리핑은 중앙가격 KPI 유지', () => {
+test('17 · 한장 브리핑 KPI — 통계 화면과 같은 네 칸, 매매 중앙가격은 지우지 않고 가격 상세로(ONE_PAGE_REPORT_REDESIGN_V1)', () => {
   const sheet = codeOf('src/components/report/RegionReportSheet.tsx');
-  assert.match(sheet, /REGION_CITY: \['transactionCount', 'medianDealAmount', 'medianPricePerM2'/);
-  assert.match(sheet, /REGION_DISTRICT: \['transactionCount', 'medianDealAmount', 'medianPricePerM2'/);
+  assert.match(sheet, /REGION_CITY: \['transactionCount', 'topPriceBand', 'medianPricePerM2', 'transactionCountDelta'\]/);
+  assert.match(sheet, /REGION_DISTRICT: \['transactionCount', 'topPriceBand', 'medianPricePerM2', 'transactionCountDelta'\]/);
+  // 매매 중앙가격: 동 KPI + 구·부산 "가격 상세"(envelope 지표 그대로)
+  assert.match(sheet, /REGION_DONG: \['transactionCount', 'topPriceBand', 'medianPricePerM2', 'medianDealAmount'\]/);
+  assert.match(sheet, /const keys = \['medianDealAmount', 'latestDealDate'\]\.filter\(\(k\) => !shownKeys\.includes\(k\)\);/);
   assert.match(codeOf('src/lib/report/region-report.ts'), /label: '㎡당 매매 중앙가격'/);
+  assert.match(codeOf('src/lib/report/region-report.ts'), /key: 'medianDealAmount'/);
 });
 
 test('18 · 모바일 — KPI 2열(360~390), 넓은 화면 4열, 값 줄바꿈 허용', () => {

@@ -195,7 +195,8 @@ test('§7 건수·순위·정렬·집계 로직을 건드리지 않았다', () =
   // 키 식·정렬·"유효 행 하나 = 한 건"은 그대로다(결과 동일 — complex-trade-count.test.ts 10번이 무작위 표본으로 고정).
   assert.ok(/\(r\) => \(r\.aptSeq \? `id:\$\{r\.aptSeq\}` : `nd:\$\{r\.aptName\}\|\$\{normalizeDong\(r\.dong\) \?\? ''\}`\)/.test(code),
     'identity 그룹 키가 바뀌었다');
-  assert.ok(/\.sort\(\(a, b\) => \(b\.count - a\.count\) \|\| b\.latestDealDate\.localeCompare\(a\.latestDealDate\) \|\| a\.aptName\.localeCompare\(b\.aptName\)\)/.test(code),
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 같은 규칙(건수 → 최근 계약일 → 이름)을 통계 화면과 공용 함수로 쓴다.
+  assert.ok(/\.sort\(\(a, b\) => compareTopComplex\(\{ \.\.\.a, name: a\.aptName \}, \{ \.\.\.b, name: b\.aptName \}\)\)/.test(code),
     'ranking 정렬이 바뀌었다');
   assert.ok(/count: list\.length/.test(code) && /groupValidTradesByComplex\(/.test(code), '건수 계산이 바뀌었다');
 });

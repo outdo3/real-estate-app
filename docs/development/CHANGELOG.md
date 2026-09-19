@@ -2,6 +2,17 @@
 
 ## 2026-09-19
 
+### E-JIP ONE-PAGE REPORT REDESIGN V1 — 한장 리포트 정보구조 재설계 + 인스타 피드 4:5 PNG (로컬 커밋, push 보류)
+
+DB write 0 · schema 0 · sale-sync/cancellation 변경 0 · 새 조회 0. 상세: `docs/development/ONE_PAGE_REPORT_REDESIGN_V1.md`
+
+    KPI       거래건수 · 많이 거래된 가격대 · ㎡당 중앙가격 · 거래량 변화(통계 화면과 같은 네 칸) — 매매 중앙가격은 "가격 상세"로(동은 KPI 유지)
+    신규      한 줄 요약(사실만) · 구·군별/동별 평균 매매가격 TOP5 + 표본 적음 참고 묶음 — 통계 화면과 같은 함수·같은 행(envelope.data)
+    동률      거래 많은 단지 동률 순서를 공용 compareTopComplex로 고정(리포트·/api/stats/concentration) — 건수 불변
+    문서      A4/PDF: KPI 4칸 한 줄 · 최근 실거래 3건 · 분포 제외 → 부산 15일 1080×1528 유지
+    인스타    저장 메뉴(기본 이미지/인스타 피드용/PDF) · 전용 카드 1080×1350 · 넘치면 저장 안 함 · 누른 뒤에만 로드
+    parity    부산·서구·해운대 9개 기간 조합 KPI·지역 평균·단지 TOP5 9/9 일치(로컬, 운영 DB 읽기)
+
 ### E-JIP SEOUL BUILDING LEDGER ENRICHMENT PLAN V1 — 건축물대장 기본정보 backfill 지역 일반화(코드 + 서울 dry-run)
 
 Production write 0 · schema 0 · 매매 sync 변경 0 · 서울 apply BLOCKED. 상세: `docs/development/SEOUL_BUILDING_LEDGER_ENRICHMENT_PLAN_V1.md`

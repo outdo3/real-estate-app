@@ -14,14 +14,25 @@ import ReportActions from './ReportActions';
 import { complexCountLabel, complexRowLabels } from '@/lib/report/complex-row-labels';
 import { aptDetailHref, districtReportHref, dongReportHref } from '@/lib/report/report-links';
 import type { BreadcrumbItem } from '@/lib/seo/site-seo';
-import { KpiCard, ReportHeader, SectionHead, TrustFooter } from './ReportPrimitives';
+import { DefinitionList, KpiCard, ReportHeader, SectionHead, TrustFooter } from './ReportPrimitives';
+import {
+  isLowSampleCount,
+  regionPriceTop,
+  regionReportDataOf,
+  topPriceBandSub,
+  type RegionReportData,
+} from '@/lib/report/region-report';
+import { formatRegionAvgPrice, REGION_PRICE_LOW_SAMPLE_BELOW, type RegionPriceRow } from '@/lib/stats/region-price-comparison';
 
-/** KPI로 띄울 지표 키와 순서. 스코프별로 의미 있는 것만 고른다. */
+/**
+ * KPI로 띄울 지표 키와 순서 — ONE_PAGE_REPORT_REDESIGN_V1: 통계 화면 상단과 같은 네 칸
+ * (거래건수 · 많이 거래된 가격대 · ㎡당 중앙가격 · 거래량 변화). 매매 중앙가격은 지우지 않고
+ * 아래 "가격 상세"로 옮겼다(envelope 값 그대로). 동은 예전처럼 증감 대신 매매 중앙가격을 둔다(표본이 작다).
+ */
 const KPI_KEYS_BY_TYPE: Record<string, string[]> = {
-  REGION_CITY: ['transactionCount', 'medianDealAmount', 'medianPricePerM2', 'transactionCountDelta', 'latestDealDate'],
-  REGION_DISTRICT: ['transactionCount', 'medianDealAmount', 'medianPricePerM2', 'transactionCountDelta', 'latestDealDate'],
-  // 동은 표본이 작아 ㎡당 중앙가가 오히려 더 읽을 만하다.
-  REGION_DONG: ['transactionCount', 'medianDealAmount', 'medianPricePerM2', 'latestDealDate'],
+  REGION_CITY: ['transactionCount', 'topPriceBand', 'medianPricePerM2', 'transactionCountDelta'],
+  REGION_DISTRICT: ['transactionCount', 'topPriceBand', 'medianPricePerM2', 'transactionCountDelta'],
+  REGION_DONG: ['transactionCount', 'topPriceBand', 'medianPricePerM2', 'medianDealAmount'],
 };
 
 /**
@@ -30,8 +41,52 @@ const KPI_KEYS_BY_TYPE: Record<string, string[]> = {
  */
 const KPI_HINTS: Record<string, string> = {
   medianDealAmount: '가격순 가운데 값 · 평균과 다름',
-  medianPricePerM2: '가격순 가운데 값 · 평균과 다름',
+  medianPricePerM2: '전용면적 기준 · 가격순 가운데 값',
+  transactionCountDelta: '직전 동일기간 대비',
 };
+
+/** KPI 칸에서만 쓰는 짧은 이름(통계 화면과 같은 말). envelope 라벨은 그대로 둔다. */
+const KPI_LABELS: Record<string, string> = {
+  medianPricePerM2: '㎡당 중앙가격',
+  transactionCountDelta: '거래량 변화',
+};
+
+/** 하루짜리 기간은 증감을 만들지 않는다(통계 화면과 같은 정책) — 빈칸 대신 이유를 적는다. 값이 아니라 안내다. */
+const SINGLE_DAY_DELTA: ReportMetric = {
+  key: 'transactionCountDelta',
+  label: '거래량 변화',
+  value: null,
+  displayValue: '비교 안 함',
+  unit: null,
+  trust: 'MISSING',
+  reason: '하루 단위는 신고 시차가 커서 전날과 비교하지 않습니다.',
+  sampleSize: null,
+  source: { source: '', dataAsOf: null },
+};
+
+/**
+ * 거래량 변화 칸: "-29.3% (1120건 → 792건)"을 한 값으로 쓰면 360px에서 세 줄로 접힌다. 값(증감률)과
+ * 근거(직전 → 현재 건수)를 나눠 쓴다 — 숫자는 envelope 지표 그대로(value = 증감률, sampleSize = 직전 건수).
+ */
+function presentKpi(m: ReportMetric, envelope: ReportEnvelope): { metric: ReportMetric; hint: string | null } | null {
+  if (m.key !== 'transactionCountDelta' || m.value == null) return null;
+  const pct = Number(m.value);
+  const current = Number(envelope.metrics.find((x) => x.key === 'transactionCount')?.value ?? 0);
+  return {
+    metric: { ...m, label: KPI_LABELS[m.key] ?? m.label, displayValue: `${pct > 0 ? '+' : ''}${pct}%` },
+    hint: `${Number(m.sampleSize ?? 0).toLocaleString('ko-KR')}건 → ${current.toLocaleString('ko-KR')}건 · 직전 동일기간 대비`,
+  };
+}
+
+function kpiHint(m: ReportMetric, data: RegionReportData | null): string | null {
+  if (m.key === 'topPriceBand' && data) {
+    const sub = topPriceBandSub(data.priceKpi);
+    if (!sub) return null;
+    return isLowSampleCount(data.priceKpi.count) ? `${sub} · 표본 적음` : sub;
+  }
+  if (m === SINGLE_DAY_DELTA) return '하루 단위';
+  return KPI_HINTS[m.key] ?? null;
+}
 
 /** 'YYYY-MM-DD' 기간 → 헤더용 'YYYY.MM.DD' 또는 'YYYY.MM.DD ~ YYYY.MM.DD'. 이미지 안에서도 기간을 확정한다. */
 function periodRangeText(start: string, end: string): string {
@@ -51,10 +106,13 @@ function distributionHref(envelope: ReportEnvelope, cells: Record<string, string
 }
 
 function DistributionSection({ section, envelope }: { section: ReportSection; envelope: ReportEnvelope }) {
-  const top = section.rows.slice(0, 8);
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 지역 비교(평균 매매가격)가 위로 올라가 분포는 상위 5곳만 보조로 둔다.
+  const top = section.rows.slice(0, 5);
   const max = Math.max(1, ...top.map((r) => Number(r.cells.count ?? 0)));
   return (
-    <section className={styles.section}>
+    // ONE_PAGE_REPORT_REDESIGN_V1 — 문서(PNG/PDF)에서는 싣지 않는다: 위 지역 비교가 하위 지역별 건수를 이미 보여 주고,
+    // A4 한 장 예산을 넘긴다(부산 15일 실측 1080×1772). 웹에서는 하위 지역 이동 링크로 그대로 남는다.
+    <section className={styles.section} data-export-hide="">
       <SectionHead title={section.title} meta={`상위 ${top.length}곳`} />
       {top.map((r) => {
         const count = Number(r.cells.count ?? 0);
@@ -94,6 +152,82 @@ function DistributionSection({ section, envelope }: { section: ReportSection; en
 function aptHref(cells: Record<string, string | number | null>): string | null {
   const str = (v: string | number | null | undefined) => (v == null ? null : String(v));
   return aptDetailHref({ name: str(cells.aptName), aptSeq: str(cells.aptSeq), lawdCd: str(cells.lawdCd), dong: str(cells.dong) });
+}
+
+/**
+ * ONE_PAGE_REPORT_REDESIGN_V1 — 하위 지역 평균 매매가격 TOP5(부산 → 구·군, 구 → 동).
+ * 값·정렬은 envelope.data(통계 화면과 같은 함수)가 정했고 여기서는 자르기(regionPriceTop)와 배치만 한다.
+ * 5건 이상은 순위, 1~4건은 "참고용" 묶음(순위 없음, 흐리게) — 통계 화면과 같은 규칙.
+ */
+function RegionPriceSection({ data, envelope }: { data: RegionReportData; envelope: ReportEnvelope }) {
+  const top = regionPriceTop(data.regionPrice);
+  const title = envelope.scope.level === 'CITY' ? '구·군별 평균 매매가격' : '동별 평균 매매가격';
+  const empty = top.ranked.length === 0 && top.reference.length === 0;
+  const row = (r: RegionPriceRow, rank: number | null) => {
+    const href = distributionHref(envelope, envelope.scope.level === 'CITY' ? { lawdCd: r.key } : { dong: r.key });
+    const body = (
+      <>
+        <span className={styles.priceRank}>{rank ?? ''}</span>
+        <span className={styles.priceName}>
+          <span className={styles.priceNameText}>{r.name}</span>
+          <span className={styles.priceSub}>
+            {r.count.toLocaleString('ko-KR')}건
+            {r.avgPricePerM2 != null && ` · ㎡당 평균 ${Math.round(r.avgPricePerM2).toLocaleString('ko-KR')}만원`}
+            {r.lowSample && <span className={styles.lowSampleTag}>표본 적음</span>}
+          </span>
+        </span>
+        <span className={styles.priceValue}>{r.avgAmount != null ? formatRegionAvgPrice(r.avgAmount) : '거래 없음'}</span>
+      </>
+    );
+    const cls = `${styles.priceRow} ${r.lowSample ? styles.priceRowLow : ''}`;
+    return href ? (
+      <Link key={r.key} href={href} className={cls}>
+        {body}
+      </Link>
+    ) : (
+      <div key={r.key} className={cls}>
+        {body}
+      </div>
+    );
+  };
+  return (
+    <section className={styles.section}>
+      <SectionHead title={title} meta={empty ? null : `상위 ${top.ranked.length + top.reference.length}곳`} />
+      {empty ? (
+        <p className={styles.sectionNote}>해당 기간에 확인된 매매 거래가 없습니다.</p>
+      ) : (
+        <div className={styles.tradeList}>
+          {top.ranked.map((r, i) => row(r, i + 1))}
+          {top.reference.length > 0 && (
+            <div className={styles.priceGroupLabel}>거래 {REGION_PRICE_LOW_SAMPLE_BELOW}건 미만 · 참고용</div>
+          )}
+          {top.reference.map((r) => row(r, null))}
+        </div>
+      )}
+      {!empty && (
+        <p className={styles.sectionNote}>
+          기간 안 유효 매매 거래금액의 단순 평균(취소 제외) · 시세가 아닙니다.
+          {top.omittedLowSample > 0 && ` 거래 ${REGION_PRICE_LOW_SAMPLE_BELOW}건 미만 ${top.omittedLowSample}곳은 생략했습니다.`}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** 매매 중앙가격·최근 계약일 — 상단 KPI에서 내려온 값(envelope 지표 그대로, 새 계산 없음). KPI에 이미 있는 값은 반복하지 않는다. */
+function PriceDetailSection({ envelope, shownKeys }: { envelope: ReportEnvelope; shownKeys: readonly string[] }) {
+  const keys = ['medianDealAmount', 'latestDealDate'].filter((k) => !shownKeys.includes(k));
+  const rows = keys
+    .map((k) => envelope.metrics.find((m) => m.key === k))
+    .filter((m): m is ReportMetric => !!m)
+    .map((m) => ({ key: m.key, label: m.label, value: m.displayValue, trust: m.trust }));
+  if (rows.length === 0) return null;
+  return (
+    <section className={styles.section}>
+      <SectionHead title="가격 상세" />
+      <DefinitionList rows={rows} />
+    </section>
+  );
 }
 
 /**
@@ -148,7 +282,8 @@ function TradeSection({ section, showDong }: { section: ReportSection; showDong:
   return (
     <section className={styles.section}>
       <SectionHead title={section.title} meta={`${rows.length}건`} />
-      <div className={styles.tradeList}>
+      {/* 문서(PNG/PDF)는 3건까지 — A4 한 장 예산. 나머지는 exportNote가 밝힌다(단지 리포트와 같은 장치). */}
+      <div className={styles.tradeList} data-export-cap="3">
         {rows.map((r) => {
           const href = aptHref(r.cells);
           const area = r.cells.exclusiveAreaM2;
@@ -185,6 +320,7 @@ function TradeSection({ section, showDong }: { section: ReportSection; showDong:
           );
         })}
       </div>
+      {rows.length > 3 && <p className={styles.exportNote}>최근 거래 일부 표시 · 전체는 이집에서 확인</p>}
       {section.note && <p className={styles.sectionNote}>{section.note}</p>}
     </section>
   );
@@ -219,15 +355,36 @@ export default function RegionReportSheet({
   /** §12 — 하위 지역 브리핑 링크(부산 → 16개 구·군, 구 → 색인 대상 동). */
   subRegionNav?: RegionSubNav | null;
 }) {
+  const data = regionReportDataOf(envelope);
   const kpiKeys = KPI_KEYS_BY_TYPE[envelope.reportType] ?? [];
   const kpis = kpiKeys
-    .map((k) => envelope.metrics.find((m) => m.key === k))
+    .map((k) => envelope.metrics.find((m) => m.key === k) ?? (k === 'transactionCountDelta' && envelope.period.singleDay ? SINGLE_DAY_DELTA : undefined))
     .filter((m): m is ReportMetric => !!m);
 
   const distribution = envelope.sections.find((s) => s.kind === 'DISTRIBUTION');
   const complexes = envelope.sections.find((s) => s.key === 'representativeComplexes');
   const recent = envelope.sections.find((s) => s.key === 'recentTrades');
   const showDong = envelope.scope.level !== 'DONG';
+  const hasRegionPrice = !!data?.regionPrice;
+  // 보조 묶음 — 분포(하위 지역 링크 포함)·가격 상세(매매 중앙가격·최근 계약일)·최근 2년 최고가.
+  const secondary = (
+    <>
+      {distribution && distribution.rows.length > 0 && <DistributionSection section={distribution} envelope={envelope} />}
+      <PriceDetailSection envelope={envelope} shownKeys={kpiKeys} />
+      {envelope.highlights.length > 0 && (
+        <section className={styles.section}>
+          {envelope.highlights.map((h) => (
+            <div key={h.key} className={styles.highlight}>
+              <div className={styles.highlightLabel}>{h.label}</div>
+              <div className={styles.highlightValue}>{h.displayValue}</div>
+              {/* 기간 문구를 반드시 함께 노출한다 — '역대 신고가'로 읽히면 안 된다. */}
+              <div className={styles.highlightContext}>{h.contextLabel}</div>
+            </div>
+          ))}
+        </section>
+      )}
+    </>
+  );
   const title = `${envelope.scope.displayName} 부동산 한장 브리핑`;
   const h1 = heading ?? title;
 
@@ -257,36 +414,47 @@ export default function RegionReportSheet({
         />
 
         <div className={styles.body}>
-          <div className={`${styles.kpiGrid} ${kpis.length > 4 ? styles.kpiGrid6 : ''}`}>
-            {kpis.map((m, i) => (
-              <KpiCard key={m.key} metric={m} accent={i === 0} hint={KPI_HINTS[m.key] ?? null} />
-            ))}
+          {/* ONE_PAGE_REPORT_REDESIGN_V1 — 한 줄 요약: envelope이 현재 데이터로만 만든 사실 문장(평가·전망 없음). */}
+          {data && <p className={styles.summaryLead}>{data.summaryLine}</p>}
+
+          <div className={`${styles.kpiGrid} ${styles.kpiGrid4}`}>
+            {kpis.map((m, i) => {
+              const split = presentKpi(m, envelope);
+              return (
+                <KpiCard
+                  key={m.key}
+                  metric={split ? split.metric : KPI_LABELS[m.key] ? { ...m, label: KPI_LABELS[m.key] } : m}
+                  accent={i === 0}
+                  hint={split ? split.hint : kpiHint(m, data)}
+                />
+              );
+            })}
           </div>
 
+          {/* 지역 비교 → 거래 많은 단지 → 최근 실거래 → 보조(분포·가격 상세·2년 최고가). 동 리포트는 하위 지역이 없어
+              단지 옆에 가격 상세를 둔다. */}
           <div className={styles.cols}>
             <div className={styles.col}>
-              {complexes && complexes.rows.length > 0 && (
-                <ComplexCountSection section={complexes} showDong={showDong} />
+              {hasRegionPrice ? (
+                <RegionPriceSection data={data!} envelope={envelope} />
+              ) : (
+                complexes && complexes.rows.length > 0 && <ComplexCountSection section={complexes} showDong={showDong} />
               )}
+            </div>
+            <div className={styles.col}>
+              {hasRegionPrice ? (
+                complexes && complexes.rows.length > 0 && <ComplexCountSection section={complexes} showDong={showDong} />
+              ) : (
+                secondary
+              )}
+            </div>
+          </div>
+
+          <div className={`${styles.cols} ${hasRegionPrice ? '' : styles.colsSingle}`}>
+            <div className={styles.col}>
               {recent && recent.rows.length > 0 && <TradeSection section={recent} showDong={showDong} />}
             </div>
-
-            <div className={styles.col}>
-              {distribution && distribution.rows.length > 0 && <DistributionSection section={distribution} envelope={envelope} />}
-
-              {envelope.highlights.length > 0 && (
-                <section className={styles.section}>
-                  {envelope.highlights.map((h) => (
-                    <div key={h.key} className={styles.highlight}>
-                      <div className={styles.highlightLabel}>{h.label}</div>
-                      <div className={styles.highlightValue}>{h.displayValue}</div>
-                      {/* 기간 문구를 반드시 함께 노출한다 — '역대 신고가'로 읽히면 안 된다. */}
-                      <div className={styles.highlightContext}>{h.contextLabel}</div>
-                    </div>
-                  ))}
-                </section>
-              )}
-            </div>
+            {hasRegionPrice && <div className={styles.col}>{secondary}</div>}
           </div>
 
           {envelope.interpretation.text && (

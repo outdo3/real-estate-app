@@ -195,7 +195,9 @@ test('§14 · 중앙값 문구 — 매매 중앙가격 / ㎡당 매매 중앙가
   assert.equal(env.metrics.find((m) => m.key === 'medianDealAmount')!.value, 60000);
   const sheet = code('src/components/report/RegionReportSheet.tsx');
   assert.match(sheet, /medianDealAmount: '가격순 가운데 값 · 평균과 다름'/);
-  assert.match(sheet, /hint=\{KPI_HINTS\[m\.key\] \?\? null\}/);
+  // ONE_PAGE_REPORT_REDESIGN_V1 — 설명은 kpiHint 한 곳에서 정한다(가격대·하루 단위는 동적, 나머지는 KPI_HINTS).
+  assert.match(sheet, /hint=\{split \? split\.hint : kpiHint\(m, data\)\}/);
+  assert.match(sheet, /return KPI_HINTS\[m\.key\] \?\? null;/);
 });
 
 test('20 · 캐시 키 — 기간마다 분리된다(요약은 KST 날짜 키에 전 기간 포함, 단지/피드는 기간 범위로 필터)', () => {

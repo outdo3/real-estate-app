@@ -378,6 +378,72 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── ONE_PAGE_REPORT_REDESIGN_V1 — 한 줄 요약 · 4칸 KPI · 지역 평균가격 ───────────────
+ * 새 클래스만 추가한다(기존 행 클래스는 건드리지 않는다). 세로 여백은 기존 밀도 토큰을 그대로 쓴다. */
+.summaryLead {
+  margin: 0;
+  font-size: calc(1.08rem * var(--r-fs));
+  font-weight: 800;
+  line-height: var(--r-lh);
+  color: var(--r-ink);
+  word-break: keep-all;
+}
+/* 데스크톱 1000px에서는 기존 auto-fit이 4칸을 만든다. A4/인쇄에서만 4칸을 고정한다(아래 두 블록). */
+.kpiGrid4 { grid-template-columns: var(--r-kpi-cols); }
+/* 동 리포트: 하위 지역 비교가 없어 최근 실거래를 한 단으로 둔다(빈 오른쪽 칸을 만들지 않는다). */
+.colsSingle { grid-template-columns: 1fr; }
+
+.priceRow {
+  display: grid;
+  grid-template-columns: 1.4em minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: var(--r-trade-pad) 0;
+  border-bottom: 1px solid var(--r-line-soft);
+  color: inherit;
+  text-decoration: none;
+}
+.priceRow:last-child { border-bottom: none; }
+.priceRowLow { opacity: 0.72; }
+.priceRank { font-size: 0.8rem; font-weight: 800; color: var(--r-brand-deep); text-align: center; font-variant-numeric: tabular-nums; }
+.priceName { min-width: 0; display: flex; flex-direction: column; }
+.priceNameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(0.94rem * var(--r-fs));
+  font-weight: 700;
+  color: var(--r-ink);
+}
+.priceSub { font-size: 0.74rem; color: var(--r-ink-3); word-break: keep-all; }
+.priceValue {
+  white-space: nowrap;
+  font-size: calc(0.96rem * var(--r-fs));
+  font-weight: 800;
+  color: var(--r-ink);
+  font-variant-numeric: tabular-nums;
+}
+.priceGroupLabel {
+  margin-top: 6px;
+  padding: 4px 0 2px;
+  border-top: 1px dashed var(--r-line);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--r-ink-3);
+}
+.lowSampleTag {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--r-warn-soft);
+  color: var(--r-warn);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
 /* ── 하이라이트(최근 2년 최고가 등) ─────────────────────────────────────── */
 .highlight {
   background: var(--r-brand-soft);
@@ -710,12 +776,17 @@
 .sheet[data-export-mode='a4'] .body { flex: 1 1 auto; justify-content: flex-start; }
 .sheet[data-export-mode='a4'][data-export-fill='spread'] .body { justify-content: space-between; }
 .sheet[data-export-mode='a4'] .headSide { flex-wrap: nowrap; }
+/* ONE_PAGE_REPORT_REDESIGN_V1 — KPI 4칸은 문서에서도 한 줄(3+1로 갈라지지 않게). */
+.sheet[data-export-mode='a4'] .kpiGrid4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 /* 문서에서는 '2026-09-
 05'처럼 토큰 중간에서 갈리지 않게. 좁은 화면(웹)에는
    같은 규칙을 걸지 않는다 — 가로 넘침을 만들 수 있다. */
 .sheet[data-export-mode='a4'] .highlightValue { word-break: keep-all; overflow-wrap: normal; }
 /* 거래는 문서에서 4건까지 — 나머지는 exportNote가 명시한다. */
 .sheet[data-export-mode='a4'] .tradeList[data-export-cap='4'] > *:nth-child(n + 5) { display: none; }
+/* ONE_PAGE_REPORT_REDESIGN_V1 — 지역 리포트 최근 실거래는 문서에서 3건, 문서에서 빼는 보조 섹션은 data-export-hide. */
+.sheet[data-export-mode='a4'] .tradeList[data-export-cap='3'] > *:nth-child(n + 4) { display: none; }
+.sheet[data-export-mode='a4'] [data-export-hide] { display: none; }
 
 /* ── 인쇄(PDF) ──────────────────────────────────────────────────────────
  * 같은 문서를 A4로 흘려보낸다. 별도 템플릿을 만들지 않는다.
@@ -799,8 +870,11 @@
     --r-fs-kpi: 1.32rem;
   }
   .headSide { flex-wrap: nowrap; }
+  .kpiGrid4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .highlightValue { word-break: keep-all; overflow-wrap: normal; }
   .tradeList[data-export-cap='4'] > *:nth-child(n + 5) { display: none; }
+  .tradeList[data-export-cap='3'] > *:nth-child(n + 4) { display: none; }
+  .sheet [data-export-hide] { display: none; }
 
   /* 배경색이 인쇄에서 사라지지 않게 */
   .header,

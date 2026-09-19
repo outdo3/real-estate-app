@@ -6,6 +6,7 @@ import { getOrSetCache } from '@/lib/server-cache';
 import { resolveLawdCd, fetchMonthsThrottled, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
 import { getSigunguListForSido } from '@/lib/region-utils';
 import { prisma } from '@/lib/prisma';
+import { compareTopComplex } from '@/lib/stats/complex-trade-count';
 import { isVolumePeriodPreset, resolveVolumePeriod } from '@/lib/stats/volume-period';
 import { isFeedDbBackedSido, loadBusanFeedTradesFromDb } from '@/lib/stats/feed-db-source';
 import { splitVerifiedMonths, getRentVerifiedRange } from '@/lib/rent-history-read';
@@ -195,7 +196,11 @@ export async function GET(request: Request) {
     const sorted = [...entries].sort((a, b) => {
       if (sort === 'delta') return b.deltaCount - a.deltaCount;
       if (sort === 'latest') return b.latestDealDate.localeCompare(a.latestDealDate);
-      return b.currentCount - a.currentCount;
+      // ONE_PAGE_REPORT_REDESIGN_V1 — 건수 정렬의 동률 순서를 한장 리포트와 같은 공용 규칙으로 고정한다(건수 불변).
+      return compareTopComplex(
+        { count: a.currentCount, latestDealDate: a.latestDealDate, name: a.name },
+        { count: b.currentCount, latestDealDate: b.latestDealDate, name: b.name }
+      );
     });
     const top = sorted.slice(0, MAX_ENTRIES);
 

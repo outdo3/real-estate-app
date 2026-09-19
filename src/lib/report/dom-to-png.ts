@@ -88,7 +88,7 @@ const COPIED_PROPS = [
 /** 순수 도형에만 추가로 복사하는 기하 속성. */
 const FIXED_SIZE_PROPS = ['width', 'height', 'max-height'] as const;
 
-function inlineStyles(source: Element, target: Element) {
+function inlineStyles(source: Element, target: Element, keepOverflow = false) {
   const computed = window.getComputedStyle(source);
   const decls: string[] = [];
   for (const prop of COPIED_PROPS) {
@@ -105,24 +105,26 @@ function inlineStyles(source: Element, target: Element) {
   // 원본 인라인 스타일은 **맨 뒤에** 붙여 우선권을 준다 — 분포 막대의 width:%처럼
   // 컴포넌트가 직접 지정한 값이 computed 복사본에 덮이면 안 된다.
   const own = source.getAttribute('style') || '';
-  target.setAttribute('style', `${decls.join(';')};overflow:visible;${own}`);
+  // keepOverflow: 크기가 계약인 캡처(인스타 카드)는 말줄임(overflow:hidden + ellipsis)을 그대로 둬야
+  // 긴 단지명이 옆 칸 값 위로 넘치지 않는다. 기본(A4 문서)은 예전 그대로 visible로 푼다.
+  target.setAttribute('style', `${decls.join(';')};${keepOverflow ? '' : 'overflow:visible;'}${own}`);
 }
 
-function cloneWithStyles(source: Element): Element | null {
+function cloneWithStyles(source: Element, keepOverflow = false): Element | null {
   if (source.hasAttribute(EXPORT_EXCLUDE_ATTR)) return null;
   const tag = source.tagName.toLowerCase();
   // script/style은 캡처본에 들어갈 이유가 없고 SVG 파싱만 어렵게 만든다.
   if (tag === 'script' || tag === 'style' || tag === 'noscript') return null;
 
   const clone = source.cloneNode(false) as Element;
-  inlineStyles(source, clone);
+  inlineStyles(source, clone, keepOverflow);
 
   const sourceChildren = Array.from(source.childNodes);
   for (const child of sourceChildren) {
     if (child.nodeType === Node.TEXT_NODE) {
       clone.appendChild(child.cloneNode(true));
     } else if (child.nodeType === Node.ELEMENT_NODE) {
-      const childClone = cloneWithStyles(child as Element);
+      const childClone = cloneWithStyles(child as Element, keepOverflow);
       if (childClone) clone.appendChild(childClone);
     }
   }
@@ -312,6 +314,51 @@ export async function captureReportExport(node: HTMLElement): Promise<CaptureRes
   } finally {
     holder.remove();
   }
+}
+
+/**
+ * ONE_PAGE_REPORT_REDESIGN_V1 — **정확한 크기**의 PNG(예: 인스타 피드 1080×1350).
+ *
+ * captureElementToPng는 내용 높이에 맞춰 잘라내므로 결과 크기가 내용에 따라 달라진다. 피드 이미지는
+ * 크기 자체가 계약이라 노드의 CSS 크기(width×height)를 그대로 한 장으로 그리고 outW×outH 캔버스에 맞춘다.
+ * 노드는 이미 화면 밖에 **렌더된 상태**여야 한다(computed style을 복사한다). 실패하면 던진다.
+ */
+export async function captureElementToFixedPng(node: HTMLElement, outW: number, outH: number): Promise<CaptureResult> {
+  const rect = node.getBoundingClientRect();
+  const cssWidth = Math.round(rect.width);
+  const cssHeight = Math.round(rect.height);
+  if (cssWidth === 0 || cssHeight === 0) throw new Error('EXPORT_EMPTY_NODE');
+  // 비율이 다르면 늘려 찍지 않는다 — 레이아웃이 계약 크기로 그려지지 않았다는 뜻이다.
+  if (Math.abs(cssWidth / cssHeight - outW / outH) > 0.002) throw new Error('EXPORT_ASPECT_MISMATCH');
+
+  const clone = cloneWithStyles(node, true);
+  if (!clone) throw new Error('EXPORT_CLONE_FAILED');
+  (clone as HTMLElement).style.width = `${cssWidth}px`;
+  (clone as HTMLElement).style.height = `${cssHeight}px`;
+  (clone as HTMLElement).style.margin = '0';
+  // 카드 자체는 크기가 계약이다 — 바깥으로 넘치는 것은 자른다(넘침 여부는 호출부가 먼저 검사한다).
+  (clone as HTMLElement).style.overflow = 'hidden';
+
+  const serialized = new XMLSerializer().serializeToString(clone);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${cssWidth}" height="${cssHeight}" viewBox="0 0 ${cssWidth} ${cssHeight}">` +
+    `<foreignObject x="0" y="0" width="100%" height="100%">` +
+    `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${cssWidth}px;height:${cssHeight}px">${serialized}</div>` +
+    `</foreignObject></svg>`;
+  const image = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('EXPORT_NO_CANVAS_CONTEXT');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, outW, outH);
+  ctx.drawImage(image, 0, 0, outW, outH);
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('EXPORT_TOBLOB_FAILED');
+  return { blob, width: canvas.width, height: canvas.height };
 }
 
 /** 현재 화면에서 캡처 대상(시트) 노드를 찾는다. 없으면 null. */

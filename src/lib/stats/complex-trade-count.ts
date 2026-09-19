@@ -33,6 +33,19 @@ export function groupValidTradesByComplex<T>(
   return out;
 }
 
+/**
+ * ONE_PAGE_REPORT_REDESIGN_V1 — "거래 많은 단지" **순위 규칙**(통계 화면·한장 리포트·인스타 이미지 공용).
+ * 건수 desc → 최근 계약일 desc → 이름 asc. 예전에는 통계 API가 건수만으로 정렬해 동률의 순서가 DB 조회 순서를
+ * 따랐고, 한장 리포트(최근 계약일 → 이름)와 5위가 달랐다(부산 15일 실측: 동원로얄듀크 vs 사직쌍용예가, 둘 다 6건).
+ * 건수 자체는 바꾸지 않는다 — 동률 안의 순서만 고정한다.
+ */
+export function compareTopComplex(
+  a: { count: number; latestDealDate: string; name: string },
+  b: { count: number; latestDealDate: string; name: string }
+): number {
+  return b.count - a.count || b.latestDealDate.localeCompare(a.latestDealDate) || a.name.localeCompare(b.name);
+}
+
 /** 단지별 유효 거래 수. */
 export function countValidTradesByComplex<T>(
   rows: readonly T[],

@@ -14,7 +14,7 @@ import {
   resolveScopeLawdCds,
 } from './region-scope';
 import type { MasterEnrichment, TradeRow } from './region-aggregate';
-import { buildRegionReport, type RegionLevel, type RegionReportInput } from './region-report';
+import { buildRegionReport, type RegionLevel, type RegionReportData, type RegionReportInput } from './region-report';
 import type { ReportEnvelope, ReportPeriod } from './types';
 import { reportPreviousRange } from './report-period';
 
@@ -125,7 +125,7 @@ const TRADE_SELECT = {
  * 지역 리포트를 읽어 envelope로 돌려준다. **읽기 전용.**
  * 스코프가 유효하지 않으면 조용히 걸러내지 않고 throw한다 — 분모가 말없이 달라지는 것을 막는다.
  */
-export async function readRegionReport(opts: RegionReadOptions): Promise<ReportEnvelope> {
+export async function readRegionReport(opts: RegionReadOptions): Promise<ReportEnvelope<RegionReportData>> {
   const { level, start, end } = opts;
   const lawdCd = opts.lawdCd ?? null;
   const dong = normalizeDong(opts.dong);
