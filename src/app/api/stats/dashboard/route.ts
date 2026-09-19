@@ -10,6 +10,7 @@ import { prisma, warmupConnections } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import { kstDateString, resolveVolumePeriod, type VolumePeriodPreset } from '@/lib/stats/volume-period';
 import { buildRegionPriceComparison, dongUniverseFromTrades, type RegionPriceComparison } from '@/lib/stats/region-price-comparison';
+import { buildSalePriceKpi, type SalePriceKpi } from '@/lib/stats/sale-price-kpi';
 import { previousPeriodRange } from '@/lib/regional-feed';
 import { getRegionalSaleRowsRawFromDb, type StoredTrade } from '@/lib/trade-history-read';
 import {
@@ -186,7 +187,8 @@ export async function GET(request: Request) {
     const kstToday = kstDateString(new Date());
     // STATS_PERIOD_IMAGE_PARITY_V2 — 응답에 15d 요약이 추가돼 v4로 올린다(15d가 없는 이전 캐시 항목과 섞이지 않게).
     // REGIONAL_PRICE_COMPARISON_V1 — regionPriceByPeriod 추가로 v5.
-    const cacheKey = isSidoAll ? `stats-dashboard-sido:v5:${sidoCodeParam}:${kstToday}` : `stats-dashboard:v5:${lawdCd}:${kstToday}`;
+    // REGIONAL_PRICE_COMPARISON_UX_V1.1 — salePriceKpiByPeriod 추가·지역 정렬 그룹화로 v6.
+    const cacheKey = isSidoAll ? `stats-dashboard-sido:v6:${sidoCodeParam}:${kstToday}` : `stats-dashboard:v6:${lawdCd}:${kstToday}`;
     // PERFORMANCE_V1 §21/§33 / PHASE D / PHASE D.2 — sido-wide(전체 시/도) 요청은
     // 매매(sale)+전세/월세 verified 개월 모두 DB-first다(Busan 한정). 검증범위
     // 밖(주로 진행 중인 현재월 1개월)만 여전히 MOLIT 호출이 필요하다. 스키마
@@ -405,11 +407,15 @@ export async function GET(request: Request) {
       // REGIONAL_PRICE_COMPARISON_V1 — 하위 지역별 평균 매매가격. 거래량 요약의 sale과 **같은 행(verifiedApt)·같은 기간**
       // 이라 하위 지역 건수 합계 = 매매 거래건수(분류 불가 건은 unclassifiedCount). 추가 쿼리 없음.
       const regionPriceByPeriod: Record<string, RegionPriceComparison> = {};
+      // REGIONAL_PRICE_COMPARISON_UX_V1.1 — 상단 매매 KPI(많이 거래된 가격대 · ㎡당 중앙가격). 같은 행·같은 기간.
+      const salePriceKpiByPeriod: Record<string, SalePriceKpi> = {};
       {
         const level = isSidoAll ? 'district' : 'dong';
         const universe = isSidoAll ? districtUniverse : dongUniverseFromTrades(verifiedApt);
         for (const preset of VOLUME_COMPARISON_PRESETS) {
-          regionPriceByPeriod[preset] = buildRegionPriceComparison(verifiedApt, level, universe, resolveVolumePeriod(preset, now));
+          const range = resolveVolumePeriod(preset, now);
+          regionPriceByPeriod[preset] = buildRegionPriceComparison(verifiedApt, level, universe, range);
+          salePriceKpiByPeriod[preset] = buildSalePriceKpi(verifiedApt, range);
         }
       }
 
@@ -693,6 +699,7 @@ export async function GET(request: Request) {
         chartDataByType,
         volumeSummaryByPeriod,
         regionPriceByPeriod,
+        salePriceKpiByPeriod,
         hotIssues,
         gapInvest,
         topPrices,

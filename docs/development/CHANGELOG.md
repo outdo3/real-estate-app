@@ -2,6 +2,16 @@
 
 ## 2026-09-19
 
+### E-JIP REGIONAL PRICE COMPARISON UX V1.1 — 거래량 화면 상단 4개 KPI · 표본 적음 묶음
+
+DB write 0 · schema 0 · 새 쿼리 0 · 한장 브리핑(중앙가격 KPI) 변경 0. 상세: `docs/development/REGIONAL_PRICE_COMPARISON_UX_V1_1.md`
+
+    KPI       거래건수 · 많이 거래된 가격대(1억원 균일 구간 최빈, 동률은 모두 표시) · ㎡당 중앙가격(브리핑과 같은 계산) · 거래량 변화
+    라벨      지역 행 "㎡당" → "㎡당 평균"(계산이 평균)
+    정렬      5건 이상(순위) → "거래 5건 미만 · 참고용"(순위 없음·흐리게) → 거래 없음. 가격·지역 누락 없음
+    데이터    dashboard salePriceKpiByPeriod(같은 verifiedApt·같은 range), 캐시 v6
+    대조      부산·서구·해운대 × 6개 기간 가격대 합 = 지역 합 = 매매 건수 18/18
+
 ### E-JIP REGIONAL PRICE COMPARISON V1 — 거래량 화면에 구별/동별 평균 매매가격
 
 DB write 0 · schema 0 · 새 쿼리 0 · 중앙가격 KPI 유지. 상세: `docs/development/REGIONAL_PRICE_COMPARISON_V1.md`

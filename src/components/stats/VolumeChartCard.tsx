@@ -24,6 +24,8 @@ import {
 import { buildTopComplexHref, topComplexRows, type ConcentrationEntryLike } from '@/lib/stats/volume-top-complexes';
 import { withBriefingPeriod } from '@/lib/report/stats-report-entry';
 import { REGION_PRICE_LOW_SAMPLE_BELOW, formatRegionAvgPrice, type RegionPriceComparison } from '@/lib/stats/region-price-comparison';
+import type { SalePriceKpi } from '@/lib/stats/sale-price-kpi';
+import { priceBandLabel, priceBandRangeText } from '@/lib/stats/price-band-label';
 import pageStyles from '@/app/stats/page.module.css';
 import styles from './VolumeChartCard.module.css';
 
@@ -115,6 +117,8 @@ export default function VolumeChartCard({
   // REGIONAL_PRICE_COMPARISON_V1 — 하위 지역별 평균 매매가격(요약의 매매 건수와 같은 행·같은 기간).
   const regionPrice: RegionPriceComparison | undefined = data?.regionPriceByPeriod?.[comparisonPreset];
   const regionPriceTitle = lawdCd ? '동별 평균 매매가격' : '구별 평균 매매가격';
+  // REGIONAL_PRICE_COMPARISON_UX_V1.1 — 상단 매매 KPI(요약 건수와 같은 행·같은 기간).
+  const salePriceKpi: SalePriceKpi | undefined = dealType === 'sale' ? data?.salePriceKpiByPeriod?.[comparisonPreset] : undefined;
   const regionPriceWithTrades = regionPrice ? regionPrice.rows.filter((r) => r.count > 0).length : 0;
   const regionPriceRows = regionPrice ? (regionPriceExpanded ? regionPrice.rows : regionPrice.rows.slice(0, REGION_PRICE_PREVIEW)) : [];
 
@@ -305,21 +309,78 @@ export default function VolumeChartCard({
       {byPeriod && metric ? (
         <div className={styles.summary}>
           <div className={styles.summaryLabel}>{displayRegionName} · {dealTypeMeta.label} · {periodLabel}</div>
-          <div className={styles.summaryRow}>
-            {metric.currentCount > 0 ? (
-              <span className={styles.summaryValue}>{metric.currentCount.toLocaleString('ko-KR')}건</span>
-            ) : (
-              <span className={styles.summaryNone}>해당 기간에 확인된 거래가 없습니다.</span>
+          <div className={styles.kpiGrid}>
+            <div className={styles.kpi}>
+              <span className={styles.kpiLabel}>거래건수</span>
+              {metric.currentCount > 0 ? (
+                <span className={styles.summaryValue}>{metric.currentCount.toLocaleString('ko-KR')}건</span>
+              ) : (
+                <span className={styles.kpiValueMuted}>0건</span>
+              )}
+            </div>
+            {salePriceKpi && (
+              <div className={styles.kpi}>
+                <span className={styles.kpiLabel}>많이 거래된 가격대</span>
+                {salePriceKpi.topBands.length === 0 ? (
+                  <span className={styles.kpiValueMuted}>거래 없음</span>
+                ) : salePriceKpi.topBands.length <= 2 ? (
+                  <>
+                    <span className={styles.kpiValue} title={salePriceKpi.topBands.map((b) => priceBandRangeText(b.lowerEok)).join(', ')}>
+                      {salePriceKpi.topBands.map((b) => priceBandLabel(b.lowerEok)).join(' · ')}
+                    </span>
+                    <span className={styles.kpiSub}>
+                      {salePriceKpi.topBands.length === 2 ? '각 ' : ''}
+                      {salePriceKpi.topBands[0].count.toLocaleString('ko-KR')}건 · 전체의 {Math.round((salePriceKpi.topBands[0].count / salePriceKpi.count) * 100)}%
+                      {salePriceKpi.count < REGION_PRICE_LOW_SAMPLE_BELOW && <span className={styles.lowSampleTag}>표본 적음</span>}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className={styles.kpiValueMuted}>한 가격대로 모이지 않음</span>
+                    <span className={styles.kpiSub}>
+                      {salePriceKpi.topBands.length}개 가격대가 각 {salePriceKpi.topBands[0].count.toLocaleString('ko-KR')}건
+                      {salePriceKpi.count < REGION_PRICE_LOW_SAMPLE_BELOW && <span className={styles.lowSampleTag}>표본 적음</span>}
+                    </span>
+                  </>
+                )}
+              </div>
             )}
-            {comparable && (metric.previousCount > 0 ? (
-              <span className={styles.summaryChange} style={{ color: changeColor }}>
-                이전 {metric.previousCount.toLocaleString('ko-KR')}건 대비 {metric.changeCount > 0 ? '▲' : metric.changeCount < 0 ? '▼' : ''}
-                {Math.abs(metric.changeCount).toLocaleString('ko-KR')}건{metric.changePct != null ? ` (${metric.changePct > 0 ? '+' : ''}${metric.changePct}%)` : ''}
-              </span>
-            ) : (
-              <span className={styles.summaryEmpty}>이전 동일 기간에는 거래가 없었어요.</span>
-            ))}
+            {salePriceKpi && (
+              <div className={styles.kpi}>
+                <span className={styles.kpiLabel}>㎡당 중앙가격</span>
+                {salePriceKpi.medianPricePerM2 != null ? (
+                  <>
+                    <span className={styles.kpiValue}>{salePriceKpi.medianPricePerM2.toLocaleString('ko-KR')}만원</span>
+                    <span className={styles.kpiSub}>전용면적 기준 · 가격순 가운데 값</span>
+                  </>
+                ) : (
+                  <span className={styles.kpiValueMuted}>데이터 없음</span>
+                )}
+              </div>
+            )}
+            <div className={styles.kpi}>
+              <span className={styles.kpiLabel}>거래량 변화</span>
+              {!comparable ? (
+                <>
+                  <span className={styles.kpiValueMuted}>비교 안 함</span>
+                  <span className={styles.kpiSub}>하루 단위</span>
+                </>
+              ) : metric.previousCount > 0 ? (
+                <>
+                  <span className={styles.kpiValue} style={{ color: changeColor }}>
+                    {metric.changeCount > 0 ? '▲' : metric.changeCount < 0 ? '▼' : ''}
+                    {Math.abs(metric.changeCount).toLocaleString('ko-KR')}건
+                  </span>
+                  <span className={styles.kpiSub}>
+                    이전 {metric.previousCount.toLocaleString('ko-KR')}건 대비{metric.changePct != null ? ` ${metric.changePct > 0 ? '+' : ''}${metric.changePct}%` : ''}
+                  </span>
+                </>
+              ) : (
+                <span className={styles.summaryEmpty}>이전 동일 기간에는 거래가 없었어요.</span>
+              )}
+            </div>
           </div>
+          {metric.currentCount === 0 && <p className={styles.summaryNone}>해당 기간에 확인된 거래가 없습니다.</p>}
           <div className={styles.summaryPeriodNote}>
             계약일 {byPeriod.period.from === byPeriod.period.to ? byPeriod.period.from : `${byPeriod.period.from}~${byPeriod.period.to}`}
             {comparable ? ` · 이전 동일 기간 ${byPeriod.previousPeriod.from}~${byPeriod.previousPeriod.to}` : ''}
@@ -355,14 +416,18 @@ export default function VolumeChartCard({
               <ol className={styles.topList}>
                 {regionPriceRows.map((row, i) => (
                   <li key={row.key}>
-                    <div className={styles.topRow}>
-                      <span className={styles.topRank}>{row.avgAmount != null ? i + 1 : ''}</span>
+                    {/* UX V1.1 — 표본 적음 묶음은 순위를 매기지 않고 구분선 아래에 흐리게 둔다(가격은 그대로). */}
+                    {row.lowSample && (i === 0 || !regionPriceRows[i - 1].lowSample) && (
+                      <div className={styles.regionGroupLabel}>거래 {REGION_PRICE_LOW_SAMPLE_BELOW}건 미만 · 참고용</div>
+                    )}
+                    <div className={`${styles.topRow} ${row.lowSample ? styles.regionRowLow : ''}`}>
+                      <span className={styles.topRank}>{row.avgAmount != null && !row.lowSample ? i + 1 : ''}</span>
                       <span className={styles.topName}>
                         <span className={styles.topNameText}>{row.name}</span>
                         {row.count > 0 && (
                           <span className={styles.topDong}>
                             {row.count.toLocaleString('ko-KR')}건
-                            {row.avgPricePerM2 != null && ` · ㎡당 ${Math.round(row.avgPricePerM2).toLocaleString('ko-KR')}만원`}
+                            {row.avgPricePerM2 != null && ` · ㎡당 평균 ${Math.round(row.avgPricePerM2).toLocaleString('ko-KR')}만원`}
                             {row.lowSample && <span className={styles.lowSampleTag}>표본 적음</span>}
                           </span>
                         )}
@@ -388,7 +453,7 @@ export default function VolumeChartCard({
               )}
               <p className={styles.regionNote}>
                 평균 매매가격은 기간 안 유효 매매 거래금액의 단순 평균이에요(취소 거래 제외). 면적·단지 구성에 따라 달라져 시세를 뜻하지 않아요.
-                {` 거래 ${REGION_PRICE_LOW_SAMPLE_BELOW}건 미만은 '표본 적음'으로 표시해요.`}
+                {` 거래 ${REGION_PRICE_LOW_SAMPLE_BELOW}건 미만 지역은 순위 없이 아래에 따로 모았어요.`}
                 {regionPrice.unclassifiedCount > 0 && ` ${lawdCd ? '동' : '구·군'} 정보가 없는 ${regionPrice.unclassifiedCount.toLocaleString('ko-KR')}건은 목록에서 제외했어요.`}
               </p>
             </>

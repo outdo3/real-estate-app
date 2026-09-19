@@ -200,7 +200,7 @@ test('§14 · 중앙값 문구 — 매매 중앙가격 / ㎡당 매매 중앙가
 
 test('20 · 캐시 키 — 기간마다 분리된다(요약은 KST 날짜 키에 전 기간 포함, 단지/피드는 기간 범위로 필터)', () => {
   const dash = code('src/app/api/stats/dashboard/route.ts');
-  assert.match(dash, /`stats-dashboard:v5:\$\{lawdCd\}:\$\{kstToday\}`/);
+  assert.match(dash, /`stats-dashboard:v6:\$\{lawdCd\}:\$\{kstToday\}`/);
   assert.match(dash, /\['today', 'yesterday', '7d', '15d', '30d', '3m'\]/);
   const conc = code('src/app/api/stats/concentration/route.ts');
   assert.match(conc, /`stats-concentration-db:v2:\$\{lawdCds\.join\(','\)\}:\$\{apiType\}:\$\{fetchRange\.from\}:\$\{fetchRange\.to\}`/);

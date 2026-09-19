@@ -84,9 +84,12 @@ export function buildRegionPriceComparison(
     lowSample: a.count > 0 && a.count < REGION_PRICE_LOW_SAMPLE_BELOW,
   }));
 
-  // 기본 정렬: 평균 매매가격 높은 순 → 거래건수 많은 순 → 지역명. 거래 없는 지역은 맨 뒤(이름순).
+  // 정렬(UX V1.1 — 그룹 B): 표본 충분(5건 이상) → 표본 적음(1~4건) → 거래 없음 순으로 묶고,
+  // 각 묶음 안에서 평균 매매가격 높은 순 → 거래건수 많은 순 → 지역명. 1건짜리 지역이 평균 1위로 올라와
+  // 대표값처럼 보이는 것을 막는다. 어떤 지역도 빼지 않고 가격도 바꾸지 않는다.
+  const tier = (r: RegionPriceRow) => (r.avgAmount == null ? 2 : r.lowSample ? 1 : 0);
   rows.sort((x, y) => {
-    if ((x.avgAmount == null) !== (y.avgAmount == null)) return x.avgAmount == null ? 1 : -1;
+    if (tier(x) !== tier(y)) return tier(x) - tier(y);
     if (x.avgAmount != null && y.avgAmount != null && x.avgAmount !== y.avgAmount) return y.avgAmount - x.avgAmount;
     if (x.count !== y.count) return y.count - x.count;
     return x.name.localeCompare(y.name, 'ko');

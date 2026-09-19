@@ -74,7 +74,7 @@ test('6 · 1건 지역도 평균을 그대로 보여준다(최소 건수로 숨�
   assert.equal(r.rows[0].lowSample, true);
 });
 
-test('7 · 정렬 — 평균 높은 순 → 건수 많은 순 → 지역명, 거래 없는 지역은 맨 뒤', () => {
+test('7 · 정렬 — 같은 묶음(여기선 모두 표본 적음) 안에서 평균 높은 순 → 건수 많은 순 → 지역명, 거래 없는 지역은 맨 뒤', () => {
   const universe = ['가동', '나동', '다동', '라동', '마동'].map((d) => ({ key: d, name: d }));
   const r = buildRegionPriceComparison(
     [
@@ -154,7 +154,7 @@ test('14 · 6개 기간 모두 같은 계산기(resolveVolumePeriod) 범위 — 
 
 test('15 · 대시보드 — 추가 쿼리 없이 verifiedApt(요약 sale과 같은 행)·같은 기간으로 계산', () => {
   const route = codeOf('src/app/api/stats/dashboard/route.ts');
-  assert.match(route, /buildRegionPriceComparison\(verifiedApt, level, universe, resolveVolumePeriod\(preset, now\)\)/);
+  assert.match(route, /buildRegionPriceComparison\(verifiedApt, level, universe, range\)/);
   assert.match(route, /sale: buildComparison\(verifiedApt, current, previous\)/);
   assert.match(route, /regionPriceByPeriod,/);
   // 새 DB 조회를 만들지 않는다
@@ -168,11 +168,11 @@ test('16 · 대시보드 — 시도 전체는 구·군(지역코드) 목록, 구
   assert.match(route, /dongUniverseFromTrades\(verifiedApt\)/);
 });
 
-test('17 · 캐시 키 v5 — 이전 응답(regionPriceByPeriod 없음)과 섞이지 않는다', () => {
+test('17 · 캐시 키 v6(UX V1.1) — 이전 응답(regionPriceByPeriod/salePriceKpiByPeriod 없음)과 섞이지 않는다', () => {
   const route = codeOf('src/app/api/stats/dashboard/route.ts');
-  assert.match(route, /stats-dashboard-sido:v5:/);
-  assert.match(route, /stats-dashboard:v5:/);
-  assert.ok(!/stats-dashboard(-sido)?:v4:/.test(route));
+  assert.match(route, /stats-dashboard-sido:v6:/);
+  assert.match(route, /stats-dashboard:v6:/);
+  assert.ok(!/stats-dashboard(-sido)?:v[45]:/.test(route));
 });
 
 test('18 · 화면 — 옵션 A: 요약 KPI 아래 섹션 추가(매매만), 상위 5 + 전체 보기, 거래 없음·표본 적음 표시', () => {
@@ -184,7 +184,7 @@ test('18 · 화면 — 옵션 A: 요약 KPI 아래 섹션 추가(매매만), 상
   assert.match(card, /표본 적음/);
   assert.match(card, /REGION_PRICE_PREVIEW = 5/);
   // 요약 KPI(거래건수)는 그대로, 섹션은 그 아래·거래 많은 단지 위
-  const kpi = card.indexOf('styles.summaryValue');
+  const kpi = card.indexOf('styles.kpiGrid');
   const section = card.indexOf('regionPriceTitle}</h4>');
   const top = card.indexOf('aria-label="거래가 많은 단지"');
   assert.ok(kpi > 0 && kpi < section && section < top);
