@@ -23,6 +23,7 @@ import {
 } from '@/lib/stats/volume-period';
 import { buildTopComplexHref, topComplexRows, type ConcentrationEntryLike } from '@/lib/stats/volume-top-complexes';
 import { withBriefingPeriod } from '@/lib/report/stats-report-entry';
+import { REGION_PRICE_LOW_SAMPLE_BELOW, formatRegionAvgPrice, type RegionPriceComparison } from '@/lib/stats/region-price-comparison';
 import pageStyles from '@/app/stats/page.module.css';
 import styles from './VolumeChartCard.module.css';
 
@@ -49,6 +50,8 @@ const DEAL_TYPE_OPTIONS: { key: DealType; label: string; indexLabel: string }[] 
 // volumeSummaryByPeriod[preset])·거래 많은 단지(concentration)·실거래 목록(feed)·한장 브리핑 링크가
 // 같은 preset을 받는다. 기간 규칙(KST 계약일)은 src/lib/stats/volume-period.ts 한 곳에 있다.
 const TOP_COMPLEX_LIMIT = 5;
+// REGIONAL_PRICE_COMPARISON_V1 — 모바일은 상위 5곳만 먼저 보이고 "전체 N곳 보기"로 펼친다.
+const REGION_PRICE_PREVIEW = 5;
 
 interface ConcentrationResponse {
   status: 'OK' | 'ERROR';
@@ -85,6 +88,7 @@ export default function VolumeChartCard({
   const [dealType, setDealType] = useState<DealType>('sale');
   const [comparisonPreset, setComparisonPreset] = useState<VolumePeriodPreset>(DEFAULT_VOLUME_PERIOD);
   const [tableHint, setTableHint] = useState(false);
+  const [regionPriceExpanded, setRegionPriceExpanded] = useState(false);
 
   const dashboardQuery = lawdCd ? `lawdCd=${lawdCd}` : `sidoCode=${sidoCode}`;
   const { data: apiResponse, isLoading } = useSWR(
@@ -108,6 +112,11 @@ export default function VolumeChartCard({
   const metric = byPeriod?.[dealType];
   const periodLabel = volumePeriodLabel(comparisonPreset);
   const comparable = hasComparablePreviousPeriod(comparisonPreset);
+  // REGIONAL_PRICE_COMPARISON_V1 — 하위 지역별 평균 매매가격(요약의 매매 건수와 같은 행·같은 기간).
+  const regionPrice: RegionPriceComparison | undefined = data?.regionPriceByPeriod?.[comparisonPreset];
+  const regionPriceTitle = lawdCd ? '동별 평균 매매가격' : '구별 평균 매매가격';
+  const regionPriceWithTrades = regionPrice ? regionPrice.rows.filter((r) => r.count > 0).length : 0;
+  const regionPriceRows = regionPrice ? (regionPriceExpanded ? regionPrice.rows : regionPrice.rows.slice(0, REGION_PRICE_PREVIEW)) : [];
 
   // 거래 많은 단지 — 요약과 같은 지역 범위(시도 전체 또는 시군구, 동 필터 없음)·같은 기간·같은 거래유형.
   // 파라미터 순서는 /stats/top-traded(ConcentrationView)와 같게 둬 SWR 캐시를 공유한다.
@@ -134,6 +143,7 @@ export default function VolumeChartCard({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const pointPositionsRef = useRef<IndexedPosition[]>([]);
   useEffect(() => { setActiveIndex(null); }, [dealType, lawdCd, sidoCode]);
+  useEffect(() => { setRegionPriceExpanded(false); }, [lawdCd, sidoCode]);
 
   const chartCleanupRef = useRef<(() => void) | null>(null);
   const chartRefCallback = useCallback((el: HTMLDivElement | null) => {
@@ -330,6 +340,60 @@ export default function VolumeChartCard({
         </div>
       ) : (
         <p className={styles.summaryNone}>이 기간의 거래량을 아직 계산하지 못했어요.</p>
+      )}
+
+      {dealType === 'sale' && regionPrice && (
+        <section className={styles.topSection} aria-label={regionPriceTitle}>
+          <div className={styles.topHeader}>
+            <h4 className={styles.topTitle}>{regionPriceTitle}</h4>
+            <span className={styles.topBasis}>{periodLabel} 기준</span>
+          </div>
+          {regionPriceWithTrades === 0 ? (
+            <p className={styles.topEmpty}>해당 기간에 확인된 매매 거래가 없습니다.</p>
+          ) : (
+            <>
+              <ol className={styles.topList}>
+                {regionPriceRows.map((row, i) => (
+                  <li key={row.key}>
+                    <div className={styles.topRow}>
+                      <span className={styles.topRank}>{row.avgAmount != null ? i + 1 : ''}</span>
+                      <span className={styles.topName}>
+                        <span className={styles.topNameText}>{row.name}</span>
+                        {row.count > 0 && (
+                          <span className={styles.topDong}>
+                            {row.count.toLocaleString('ko-KR')}건
+                            {row.avgPricePerM2 != null && ` · ㎡당 ${Math.round(row.avgPricePerM2).toLocaleString('ko-KR')}만원`}
+                            {row.lowSample && <span className={styles.lowSampleTag}>표본 적음</span>}
+                          </span>
+                        )}
+                      </span>
+                      {row.avgAmount != null ? (
+                        <span className={styles.topCount}>{formatRegionAvgPrice(row.avgAmount)}</span>
+                      ) : (
+                        <span className={styles.regionNoTrade}>거래 없음</span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              {regionPrice.rows.length > REGION_PRICE_PREVIEW && (
+                <button
+                  type="button"
+                  className={styles.moreLink}
+                  aria-expanded={regionPriceExpanded}
+                  onClick={() => setRegionPriceExpanded((v) => !v)}
+                >
+                  {regionPriceExpanded ? '접기' : `전체 ${regionPrice.rows.length}곳 보기`}
+                </button>
+              )}
+              <p className={styles.regionNote}>
+                평균 매매가격은 기간 안 유효 매매 거래금액의 단순 평균이에요(취소 거래 제외). 면적·단지 구성에 따라 달라져 시세를 뜻하지 않아요.
+                {` 거래 ${REGION_PRICE_LOW_SAMPLE_BELOW}건 미만은 '표본 적음'으로 표시해요.`}
+                {regionPrice.unclassifiedCount > 0 && ` ${lawdCd ? '동' : '구·군'} 정보가 없는 ${regionPrice.unclassifiedCount.toLocaleString('ko-KR')}건은 목록에서 제외했어요.`}
+              </p>
+            </>
+          )}
+        </section>
       )}
 
       <section className={styles.topSection} aria-label="거래가 많은 단지">

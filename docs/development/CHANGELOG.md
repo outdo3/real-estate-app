@@ -2,6 +2,17 @@
 
 ## 2026-09-19
 
+### E-JIP REGIONAL PRICE COMPARISON V1 — 거래량 화면에 구별/동별 평균 매매가격
+
+DB write 0 · schema 0 · 새 쿼리 0 · 중앙가격 KPI 유지. 상세: `docs/development/REGIONAL_PRICE_COMPARISON_V1.md`
+
+    정의      선택 기간 유효(취소 아님) 매매 거래금액 산술평균 · 유효 행 하나 = 한 건 · 거래 없으면 "거래 없음"(0원 없음)
+              5건 미만 "표본 적음"(숨기지 않음) · 평균↓ → 건수↓ → 지역명
+    범위      부산 전체 → 16개 구·군(lawdCd) · 구 → 법정동(원천 dong, 행정동 추정 없음)
+    데이터    dashboard가 이미 읽은 verifiedApt로 regionPriceByPeriod(6개 기간) 계산, 캐시 v5
+    화면      VolumeChartCard 요약 아래 섹션(옵션 A) · 상위 5 + 전체 보기 · ㎡당 보조 문구
+    대조      부산·서구·해운대·사하 × 6개 기간 하위 합계 = 매매 건수 24/24, 미분류 0
+
 ### E-JIP 15D BRIEFING ENTRY BUG — 통계 상세 공용 "한장 브리핑" 링크가 선택 기간을 싣는다
 
 DB/schema 0 · 집계 0. 상세: `docs/development/STATS_15D_BRIEFING_ENTRY_FIX.md`

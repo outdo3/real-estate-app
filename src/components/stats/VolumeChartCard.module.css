@@ -322,6 +322,34 @@
   color: var(--text-primary);
   text-decoration: none;
 }
+button.moreLink {
+  width: 100%;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.lowSampleTag {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  background: #f1f3f5;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  vertical-align: 1px;
+}
+.regionNoTrade {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.regionNote {
+  margin: 0.45rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
 .briefingLink {
   display: flex;
   align-items: center;

@@ -115,7 +115,7 @@ test('dashboard: 6개 기간을 KST 계약일로 계산하고 캐시를 KST 날�
   assert.match(route, /const VOLUME_COMPARISON_PRESETS: VolumePeriodPreset\[\] = \['today', 'yesterday', '7d', '15d', '30d', '3m'\];/);
   assert.equal((route.match(/const current = resolveVolumePeriod\(preset, now\);/g) ?? []).length, 2);
   assert.ok(!/resolvePriceRankingPeriod/.test(route));
-  assert.match(route, /`stats-dashboard-sido:v4:\$\{sidoCodeParam\}:\$\{kstToday\}`/);
+  assert.match(route, /`stats-dashboard-sido:v5:\$\{sidoCodeParam\}:\$\{kstToday\}`/);
   // 계약일(dealDate) 기준 집계, 취소 제외 — 수집일(created_at)을 쓰지 않는다
   assert.match(route, /trades\.filter\(\(t: any\) => t\.dealDate >= range\.from && t\.dealDate <= range\.to\)\.length/);
   assert.match(route, /const verifiedApt = allAptTrades\.filter\(\(t: any\) => !t\.dealCanceled\);/);

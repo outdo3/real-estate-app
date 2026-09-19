@@ -9,6 +9,7 @@ import { buildGapCandidates, normalizeAptName } from '@/lib/gap-invest-calc';
 import { prisma, warmupConnections } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import { kstDateString, resolveVolumePeriod, type VolumePeriodPreset } from '@/lib/stats/volume-period';
+import { buildRegionPriceComparison, dongUniverseFromTrades, type RegionPriceComparison } from '@/lib/stats/region-price-comparison';
 import { previousPeriodRange } from '@/lib/regional-feed';
 import { getRegionalSaleRowsRawFromDb, type StoredTrade } from '@/lib/trade-history-read';
 import {
@@ -184,7 +185,8 @@ export async function GET(request: Request) {
     // 날짜가 없으면 자정을 넘긴 뒤 최대 TTL(30분) 동안 어제 기준 '오늘'이 남는다.
     const kstToday = kstDateString(new Date());
     // STATS_PERIOD_IMAGE_PARITY_V2 — 응답에 15d 요약이 추가돼 v4로 올린다(15d가 없는 이전 캐시 항목과 섞이지 않게).
-    const cacheKey = isSidoAll ? `stats-dashboard-sido:v4:${sidoCodeParam}:${kstToday}` : `stats-dashboard:v4:${lawdCd}:${kstToday}`;
+    // REGIONAL_PRICE_COMPARISON_V1 — regionPriceByPeriod 추가로 v5.
+    const cacheKey = isSidoAll ? `stats-dashboard-sido:v5:${sidoCodeParam}:${kstToday}` : `stats-dashboard:v5:${lawdCd}:${kstToday}`;
     // PERFORMANCE_V1 §21/§33 / PHASE D / PHASE D.2 — sido-wide(전체 시/도) 요청은
     // 매매(sale)+전세/월세 verified 개월 모두 DB-first다(Busan 한정). 검증범위
     // 밖(주로 진행 중인 현재월 1개월)만 여전히 MOLIT 호출이 필요하다. 스키마
@@ -220,6 +222,8 @@ export async function GET(request: Request) {
       let rentLawdCds: string[] = [];
       let verifiedRentMonthsFlag: string[] = [];
       let rentMonthlyAggregate: Map<string, RentMonthAggregate> = new Map();
+      // REGIONAL_PRICE_COMPARISON_V1 — 시도 전체일 때 하위 구·군 목록(거래 없는 구도 "거래 없음"으로 남긴다).
+      let districtUniverse: { key: string; name: string }[] = [];
 
       if (isSidoAll) {
         // §19/§20 성능 — 부산 16개 구 × 12개월 × 2타입 = 384 task 최대치였으나,
@@ -232,6 +236,7 @@ export async function GET(request: Request) {
         // 새 연결을 맺어야 해 병렬 실행의 이득이 사라진다(prisma.ts 주석 참고).
         const [districts] = await Promise.all([getSigunguListForSido(sidoCodeParam!), warmupConnections(3)]);
         const lawdCds = districts.map((d) => d.code.substring(0, 5));
+        districtUniverse = districts.map((d) => ({ key: d.code.substring(0, 5), name: d.name.split(' ').slice(1).join(' ') || d.name }));
         const isBusan = isBusanScopedRequest(null, sidoCodeParam, true);
         // RENT_TRADE_HISTORY_V1 PHASE D — 부산 요청만 verified/unverified로 나눈다
         // (비부산은 rent DB 자체가 없으므로 전부 unverified 취급 = 기존과 동일하게
@@ -396,6 +401,17 @@ export async function GET(request: Request) {
         }
         return { jeonse, wolse };
       };
+
+      // REGIONAL_PRICE_COMPARISON_V1 — 하위 지역별 평균 매매가격. 거래량 요약의 sale과 **같은 행(verifiedApt)·같은 기간**
+      // 이라 하위 지역 건수 합계 = 매매 거래건수(분류 불가 건은 unclassifiedCount). 추가 쿼리 없음.
+      const regionPriceByPeriod: Record<string, RegionPriceComparison> = {};
+      {
+        const level = isSidoAll ? 'district' : 'dong';
+        const universe = isSidoAll ? districtUniverse : dongUniverseFromTrades(verifiedApt);
+        for (const preset of VOLUME_COMPARISON_PRESETS) {
+          regionPriceByPeriod[preset] = buildRegionPriceComparison(verifiedApt, level, universe, resolveVolumePeriod(preset, now));
+        }
+      }
 
       const volumeSummaryByPeriod: Record<string, any> = {};
       if (isBusanFlag) {
@@ -676,6 +692,7 @@ export async function GET(request: Request) {
         chartData,
         chartDataByType,
         volumeSummaryByPeriod,
+        regionPriceByPeriod,
         hotIssues,
         gapInvest,
         topPrices,
