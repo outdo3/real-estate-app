@@ -22,6 +22,8 @@
 // 다른 지역 리포트로 보내는 fallback을 만들지 않는다(§4).
 import { cityReportHref, districtReportHref, dongReportHref, REPORT_LABELS } from './report-links';
 import { isBusanCurrentLawdCd } from './region-scope';
+import { DEFAULT_REPORT_PERIOD_KEY, resolveReportPeriod } from './report-period';
+import { briefingPeriodFor, isVolumePeriodPreset, volumePeriodRangeText } from '@/lib/stats/volume-period';
 
 /** 리포트가 존재하는 시도. 소프트런칭 범위와 같다(부산). */
 export const REPORT_SIDO_CODE = '26';
@@ -92,4 +94,44 @@ export function resolveStatsReportEntry(region: StatsRegionLike | null | undefin
   }
 
   return null;
+}
+
+// ── STATS_15D_BRIEFING_ENTRY_FIX ──────────────────────────────────────────────
+//
+// Production 재현: 실거래 화면에서 "최근 15일"을 고른 뒤 "부산 한장 브리핑"을 누르면 `/report/city/busan`
+// (기본 30일)이 열렸다. 그 버튼은 통계 상세 페이지(type-client)의 공용 CTA인데, 기간 상태는 각 화면
+// (실거래·거래 많은 단지) **안에** 있어 CTA가 몰랐다. STATS_PERIOD_IMAGE_PARITY_V2는 거래량 카드 안의
+// 링크만 고쳤다. 이제 브리핑 링크는 전부 이 두 함수로 만든다.
+
+/** 브리핑 경로에 기간 키를 붙인다. 이미 쿼리가 있으면 이어 붙인다. */
+export function withBriefingPeriod(href: string, periodKey: string): string {
+  return `${href}${href.includes('?') ? '&' : '?'}period=${encodeURIComponent(periodKey)}`;
+}
+
+export interface StatsBriefingTarget {
+  href: string;
+  /** CTA 아래 한 줄 — 브리핑이 실제로 쓰는 기간·범위·거래유형. 조용히 다른 기간으로 열지 않는다. */
+  basisLabel: string;
+  /** 화면에서 고른 기간을 그대로 싣는가. false면 브리핑 기본 기간(어제까지 30일)으로 열린다. */
+  matchesSelection: boolean;
+}
+
+/**
+ * 통계 화면의 선택 기간 → 브리핑 링크.
+ * - 선택 기간이 통계 기간 키(오늘·어제·7일·15일·30일·3개월)면 그 키를 싣는다 — 리포트가 같은 계산기로 같은 범위를 만든다.
+ * - 브리핑에 같은 기간이 없는 선택(이번 주·지난주·12개월 등)이나 기간이 없는 화면이면 기본 기간으로 열되,
+ *   그 기간을 라벨로 밝힌다.
+ * 브리핑은 **매매** 기준이다(실거래 피드 "전체"는 전월세를 함께 센다) — 라벨에 적어 숫자 차이를 오해하지 않게 한다.
+ */
+export function statsBriefingTarget(entry: StatsReportEntry, selectedPeriod: string | null | undefined, now: Date = new Date()): StatsBriefingTarget {
+  if (selectedPeriod && isVolumePeriodPreset(selectedPeriod)) {
+    const b = briefingPeriodFor(selectedPeriod, now);
+    return { href: withBriefingPeriod(entry.href, b.periodKey), basisLabel: `${b.basisLabel} · 매매`, matchesSelection: true };
+  }
+  const d = resolveReportPeriod(DEFAULT_REPORT_PERIOD_KEY, now);
+  return {
+    href: entry.href,
+    basisLabel: `${d.label} · ${volumePeriodRangeText({ from: d.start, to: d.end })} 기준 · 매매`,
+    matchesSelection: false,
+  };
 }

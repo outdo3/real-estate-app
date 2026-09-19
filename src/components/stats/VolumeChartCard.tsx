@@ -22,6 +22,7 @@ import {
   type VolumePeriodPreset,
 } from '@/lib/stats/volume-period';
 import { buildTopComplexHref, topComplexRows, type ConcentrationEntryLike } from '@/lib/stats/volume-top-complexes';
+import { withBriefingPeriod } from '@/lib/report/stats-report-entry';
 import pageStyles from '@/app/stats/page.module.css';
 import styles from './VolumeChartCard.module.css';
 
@@ -123,9 +124,7 @@ export default function VolumeChartCard({
   const feedPreset = feedPresetFor(comparisonPreset);
   const briefing = reportEntry ? briefingPeriodFor(comparisonPreset) : null;
   // STATS_PERIOD_IMAGE_PARITY_V2 — 선택한 기간 키를 그대로 넘긴다(30일로 바꾸지 않는다). 리포트가 같은 계산기로 같은 범위를 만든다.
-  const briefingHref = reportEntry && briefing
-    ? `${reportEntry.href}${reportEntry.href.includes('?') ? '&' : '?'}period=${encodeURIComponent(briefing.periodKey)}`
-    : null;
+  const briefingHref = reportEntry && briefing ? withBriefingPeriod(reportEntry.href, briefing.periodKey) : null;
   const changeColor = !metric ? 'var(--text-secondary)' : metric.changeCount > 0 ? 'var(--up-color)' : metric.changeCount < 0 ? 'var(--down-color)' : 'var(--text-secondary)';
 
   // DETAIL PRICE CHART INTERACTION P1 패턴 재사용 — activeIndex를 Recharts의

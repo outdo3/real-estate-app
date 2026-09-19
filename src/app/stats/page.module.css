@@ -792,6 +792,16 @@
 }
 .reportCta:active { background: rgba(16, 185, 129, 0.06); }
 
+/* STATS_15D_BRIEFING_ENTRY_FIX — 브리핑이 실제로 쓰는 기간·거래유형(한 줄, 오류처럼 보이지 않는 보조 문구). */
+.reportCtaBasis {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-secondary, #6b7280);
+  text-align: center;
+  word-break: keep-all;
+}
+
 /* STATS_REPORT_ENTRY_V1 — 통계 메인 헤더의 인라인(보조) 진입점.
  * `.reportCta`는 전체폭 버튼이라 헤더 한 줄에 지역 트리거와 나란히 놓을 수 없다.
  * 같은 색·같은 테두리를 쓰되 폭만 내용에 맞추고, 터치 타겟 44px은 유지한다.

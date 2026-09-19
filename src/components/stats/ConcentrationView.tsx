@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import Badge from '@/components/ui/Badge';
@@ -89,11 +89,14 @@ export default function ConcentrationView({
   sidoCode,
   dong,
   displayRegionName,
+  onPeriodChange,
 }: {
   lawdCd: string | null;
   sidoCode: string;
   dong: string;
   displayRegionName: string;
+  /** STATS_15D_BRIEFING_ENTRY_FIX — 선택 기간을 페이지 공용 "한장 브리핑" CTA에 알린다(그 링크가 같은 기간으로 열리게). */
+  onPeriodChange?: (preset: string) => void;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -104,6 +107,9 @@ export default function ConcentrationView({
   const initialPeriod = searchParams.get('period');
   const initialDealType = searchParams.get('dealType');
   const [preset, setPreset] = useState(PERIOD_OPTIONS.some((p) => p.preset === initialPeriod) ? initialPeriod! : '30d');
+  useEffect(() => {
+    onPeriodChange?.(preset);
+  }, [preset, onPeriodChange]);
   const [dealType, setDealType] = useState(DEAL_TYPE_OPTIONS.some((d) => d.value === initialDealType) ? initialDealType! : 'sale');
   const [sort, setSort] = useState('count');
 

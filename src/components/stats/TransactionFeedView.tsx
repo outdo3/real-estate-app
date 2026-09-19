@@ -149,11 +149,14 @@ export default function TransactionFeedView({
   sidoCode,
   dong,
   displayRegionName,
+  onPeriodChange,
 }: {
   lawdCd: string | null;
   sidoCode: string;
   dong: string;
   displayRegionName: string;
+  /** STATS_15D_BRIEFING_ENTRY_FIX — 선택 기간을 페이지 공용 "한장 브리핑" CTA에 알린다(그 링크가 같은 기간으로 열리게). */
+  onPeriodChange?: (preset: string) => void;
 }) {
   const router = useRouter();
   // STATISTICS_PERIOD_TRADE_UX_V1 — 거래량 카드의 "실거래 목록 보기"가 넘긴 기간·거래유형으로 연다(허용 값만).
@@ -161,6 +164,9 @@ export default function TransactionFeedView({
   const initialPeriod = searchParams.get('period');
   const initialDealType = searchParams.get('dealType');
   const [preset, setPreset] = useState(PERIOD_OPTIONS.some((p) => p.preset === initialPeriod) ? initialPeriod! : '7d');
+  useEffect(() => {
+    onPeriodChange?.(preset);
+  }, [preset, onPeriodChange]);
   const [dealType, setDealType] = useState(initialDealType === 'sale' || initialDealType === 'jeonse' || initialDealType === 'wolse' ? initialDealType : '');
   const [offset, setOffset] = useState(0);
 

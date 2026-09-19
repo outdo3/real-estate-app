@@ -89,7 +89,8 @@ test('11·21 · URL 파싱 — 15d는 15d로, 기존 30/90/365는 그대로, 모
 test('12·13 · 통계 카드 → 브리핑 링크가 선택 기간 키를 그대로 싣는다(7일·15일 포함, 30일 대체 없음)', () => {
   for (const o of VOLUME_PERIOD_OPTIONS) assert.equal(briefingPeriodFor(o.key, NOON_KST).periodKey, o.key);
   const card = code('src/components/stats/VolumeChartCard.tsx');
-  assert.match(card, /period=\$\{encodeURIComponent\(briefing\.periodKey\)\}/);
+  // STATS_15D_BRIEFING_ENTRY_FIX — 링크 결합은 공용 withBriefingPeriod(통계 상세 CTA와 같은 함수).
+  assert.match(card, /withBriefingPeriod\(reportEntry\.href, briefing\.periodKey\)/);
   assert.ok(!/periodDays/.test(card), '예전의 30/90일 치환이 남아 있다');
   assert.ok(!/선택 기간과 기준이 달라요/.test(card));
   // 세 리포트 페이지가 키를 그대로 해석하고, 읽기 계층이 그 키로 범위를 만든다.

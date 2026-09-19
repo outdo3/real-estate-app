@@ -2,6 +2,15 @@
 
 ## 2026-09-19
 
+### E-JIP 15D BRIEFING ENTRY BUG — 통계 상세 공용 "한장 브리핑" 링크가 선택 기간을 싣는다
+
+DB/schema 0 · 집계 0. 상세: `docs/development/STATS_15D_BRIEFING_ENTRY_FIX.md`
+
+    재현      실거래 화면 15일 선택 → "부산 한장 브리핑" href가 선택 전후 모두 /report/city/busan → 최근 30일 1,998건
+    원인      그 버튼은 V2가 고친 거래량 카드 링크가 아니라 type-client의 공용 CTA(href={entry.href}) — 기간은 화면 내부 상태
+    수정      statsBriefingTarget/withBriefingPeriod 한 곳에서 링크 생성 · 실거래/거래 많은 단지가 onPeriodChange로 기간 전달
+              대응 기간이 없으면 기본 브리핑으로 열되 기간을 한 줄로 밝힘 · "매매" 명시(피드 전체 1,992 = 매매 792 + 전월세)
+
 ### E-JIP TOP COMPLEX AGGREGATION FIX V1 — "거래 많은 단지"가 같은 조건의 다른 거래를 접지 않는다
 
 DB write 0 · schema 0 · 취소 repair 0 · 결함 B 0 · 기간 의미 0.

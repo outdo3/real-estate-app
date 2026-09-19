@@ -16,7 +16,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import ShareAction from '@/components/ShareAction';
 import { useRegion } from '@/contexts/RegionContext';
-import { resolveStatsReportEntry } from '@/lib/report/stats-report-entry';
+import { resolveStatsReportEntry, statsBriefingTarget } from '@/lib/report/stats-report-entry';
 import { resolveTradeReadState, resolveTransactionsReadState } from '@/lib/trade-read-state';
 import { getStatsMenuItem } from '../statsMenu';
 import { buildStatsShareContext, statsRegionShareLabel } from './shareContext';
@@ -416,6 +416,8 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
   const { region, setRegion, openRegionModal } = useRegion();
   const searchParams = useSearchParams();
   const item = getStatsMenuItem(slug);
+  // STATS_15D_BRIEFING_ENTRY_FIX — 기간을 가진 화면(실거래·거래 많은 단지)이 알려주는 현재 선택 기간.
+  const [briefingPeriod, setBriefingPeriod] = useState<string | null>(null);
 
   // GLOBAL SHARE SYSTEM V1 §6/§27 — 통계 지역 필터는 RegionContext(client-only state)에만
   // 있고 URL에는 없다(감사 결과). 공유 링크(buildStatsShareContext가 만든 ?sido=&sigungu=
@@ -471,14 +473,18 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
             연결된 적이 없었다. 지역 identity가 불충분하면 여전히 null이고, 그때는 다른
             지역 리포트로 보내지 않고 CTA를 만들지 않는다. */}
         {/* STATISTICS_PERIOD_TRADE_UX_V1 — 거래량 화면은 선택 기간과 브리핑 기준을 함께 보여줘야 해서 카드 안에서 렌더한다. */}
+        {/* STATS_15D_BRIEFING_ENTRY_FIX — 실거래·거래 많은 단지 화면은 선택 기간을 올려 보내고, CTA가 같은 기간으로 연다.
+            같은 기간이 없는 선택·기간이 없는 화면은 기본 기간으로 열되 그 기간을 아래 한 줄로 밝힌다(조용한 30일 대체 금지). */}
         {slug !== 'change-map' && slug !== 'volume' && item.status === 'live' && (() => {
           const entry = resolveStatsReportEntry(region);
           if (!entry) return null;
+          const target = statsBriefingTarget(entry, briefingPeriod);
           return (
             <div style={{ margin: '0 0 0.75rem' }}>
-              <Link href={entry.href} className={styles.reportCta}>
+              <Link href={target.href} className={styles.reportCta}>
                 {entry.label}
               </Link>
+              <p className={styles.reportCtaBasis}>{target.basisLabel}</p>
             </div>
           );
         })()}
@@ -486,7 +492,7 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
         {item.status === 'soon' ? (
           <ComingSoonCard title={item.title} reason={item.soonReason} />
         ) : slug === 'feed' ? (
-          <TransactionFeedView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
+          <TransactionFeedView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} onPeriodChange={setBriefingPeriod} />
         ) : slug === 'decline' || slug === 'record-high' || slug === 'rising' || slug === 'jeonse-risk' ? (
           <PriceRankingView mode={slug} lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
         ) : slug === 'area84' ? (
@@ -500,7 +506,7 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
         ) : slug === 'change-map' ? (
           <RegionChangeMapView />
         ) : slug === 'top-traded' ? (
-          <ConcentrationView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} />
+          <ConcentrationView lawdCd={region.lawdCd} sidoCode={region.sidoCode} dong={region.dong} displayRegionName={region.displayRegionName} onPeriodChange={setBriefingPeriod} />
         ) : slug === 'volume' ? (
           <VolumeChartCard
             lawdCd={region.lawdCd}

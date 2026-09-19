@@ -141,7 +141,9 @@ test('§7-5 통계 메인에 진입점이 있다', () => {
 test('§7-5 통계 상세도 같은 함수로 진입점을 만든다 — 판정이 두 벌이 아니다', () => {
   const code = codeOf(STATS_TYPE);
   assert.ok(/const entry = resolveStatsReportEntry\(region\);/.test(code), '상세가 같은 함수를 쓰지 않는다');
-  assert.ok(/href=\{entry\.href\}/.test(code));
+  // STATS_15D_BRIEFING_ENTRY_FIX — 링크는 같은 진입점(entry)에서 선택 기간만 붙여 만든다(statsBriefingTarget).
+  // 예전 `href={entry.href}`는 화면 기간을 버려 15일 선택이 30일 브리핑으로 열렸다(Production 재현).
+  assert.ok(/const target = statsBriefingTarget\(entry, briefingPeriod\);/.test(code) && /href=\{target\.href\}/.test(code));
   assert.ok(/\{entry\.label\}/.test(code), '상세는 지역명이 들어간 전체 문구를 쓴다');
   // 예전의 부분 게이트가 남아 있지 않다(구/군만 통과시키던 조건).
   assert.ok(!/isBusanCurrentLawdCd/.test(code), '옛 부분 게이트가 남아 있다');
