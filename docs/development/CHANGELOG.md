@@ -2,6 +2,29 @@
 
 ## 2026-09-20
 
+### E-JIP BUSAN BUILDING LEDGER AUTO-SAFE CORRECTION V1 — 승인된 세대수 42 + 도로명 87 보정 (Production write)
+
+승인 UPDATE: households 42 · roadAddress 87 · 파생비율 30 = unique master 113. INSERT 0 · DELETE 0 · schema 0 · runtime src 0 · 서울 0 · cancellation 0 · sale apply 0. 상세: `docs/development/BUSAN_BUILDING_LEDGER_AUTO_SAFE_CORRECTION_V1.md`
+
+    재생성     감사 파일 미사용 — 부산 TITLE/GENERAL master 2,714 전수를 Production에서 다시 읽고 safe pager로 대장 재조회해 판정을 처음부터 다시 생성
+    1차STOP   백오프 없이 돌렸더니 조회실패 91(rate limit 87) -> households 41 · road 83으로 **축소 측정** -> STOP 규칙이 정확히 걸림
+    원인      rate limit를 실패로 처리하면 못 읽은 필지가 조용히 "대상 아님"이 된다 — 정책 변경이 아니라 측정 미완
+    수정      지수 백오프(최대 4회) 추가 · STOP 조건에 "미해결 조회실패 1건이라도 있으면 중단" 신설 -> 2차 조회실패 0으로 42/87 정확히 재현(호출 2,850, 재시도 136)
+    세대수규칙 공식 mainPurpsCdNm='공동주택'만 주거로 인정 · 주거 레코드 전부 hhldCnt>0일 때만 AUTO · 0세대 공동주택(상가동) 1건이라도 섞이면 REVIEW · 비주거 합산 0건
+    도로명규칙 필지 도로명이 단일로 합의될 때만 · first row/다수결/최근접/geocoder 추론 전부 금지(테스트로 고정: 3건 중 2건 동일해도 다수결 금지)
+    범위밖발견 parkingPerHousehold는 계산값이 아니라 **저장 컬럼** — 세대수만 고치면 리포트/통계/비교/주차Score가 41.33을 계속 읽는다(상세·AI검색만 재계산)
+    확인후처리 임의로 쓰지 않고 사용자 확인 -> 파생 불변식 복구 승인 · parking_count는 읽기만 · 이미 값 있는 30건만(비어 있는 12건은 채우지 않음) · 214 전체 불변식 위반 0
+    26350-15  §12(제외)와 §4(87에 포함)가 충돌 -> 사용자 확인 후 **도로명만** 채움. households 90·parking 743 그대로 유지 확인
+    안전장치   쓰기 전 rollback artifact 113행(old/new/provenance/되돌림SQL) · 행마다 optimistic guard(현재 값이 예상 old와 같을 때만) · 불일치 시 전체 롤백 · 실제 불일치 0 · 단일 트랜잭션
+    사후검증   households 42/42 · road 87/87 · unique 113 · 예상과 다른 값 0 · **승인 밖 필드 drift 0** · 파생비율 복구 30/깨짐 0 · REVIEW 0건 · UNKNOWN 724 0건
+    이상치      세대당 주차 2.0 초과 — 승인집합 20->4, 영향 전체(214) 46->30. 경동 13.36->1.08 · 대우마리나3 10.33->0.83 · 현대무지개타운 7.39->0.62 · 경남마리나 5.21->1.00
+    미해소     최악 엘지(26350-131, 41.33)는 **고쳐지지 않음** — 0세대 공동주택 혼재로 REVIEW. 남은 30건 전부 같은 사유
+    QA        Production 상세 12건 중 10건 새 값 반영 확인 · 총주차대수 총량은 전부 불변(parking 미변경이 화면에서도 확인)
+    캐시선점   42건 중 **2건**(26350-2 경동 72, 26350-278 우성빌라 4)이 tier1 apartments 캐시에 가려 옛 값 노출 — 캐시 write는 이번 범위 밖(별도 승인)
+    회귀      large-complex 200(최소 1,938세대, 보정 단지 신규 진입 0) · dashboard/rankings/supply/sitemap/transactions/school 200 · 주차Score 정상(대우마리나3 38점)
+    격리      매매 865,421 · 취소 16,345 · 서울 master 6,843 · 서울 좌표 6,726 · 부산 3,438 · UNKNOWN 724 · 부산 좌표 null 2 — 전부 baseline 불변
+    테스트    busan-ledger-auto-safe-logic.test.mjs 15/15 pass · eslint 0 · tsc src 0/신규 0
+
 ### E-JIP BUILDING LEDGER FIELD POLICY & STORED DATA TRUST AUDIT V1 — 필드별 권위 출처 확정 (READ-ONLY)
 
 Production INSERT/UPDATE/DELETE 0 · 대장 정정 0 · 좌표 0 · sale apply 0 · cancellation 0 · schema 0 · runtime src 0. 상세: `docs/development/BUILDING_LEDGER_FIELD_POLICY_V1.md`
