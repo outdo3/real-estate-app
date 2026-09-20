@@ -10,8 +10,6 @@
 // node의 네이티브 ESM 로더에서는 해석되지 않는다. 이름 매칭 함수(aptNamesMatch)는 호출부
 // (route.ts)가 주입한다.
 
-export type NameMatcher = (nameA: string, nameB: string) => boolean;
-
 export interface MasterCoordRow {
   name: string;
   umdName: string | null;
@@ -23,7 +21,6 @@ export interface MasterCoordRow {
 
 export interface MasterCoordIndex {
   exact: Map<string, MasterCoordRow>;
-  byDong: Map<string, MasterCoordRow[]>;
 }
 
 export interface ResolvedApartmentCoords {
@@ -35,39 +32,33 @@ export interface ResolvedApartmentCoords {
 
 export function buildMasterCoordIndex(masters: MasterCoordRow[]): MasterCoordIndex {
   const exact = new Map<string, MasterCoordRow>();
-  const byDong = new Map<string, MasterCoordRow[]>();
   for (const m of masters) {
     const key = `${m.umdName}|${m.name}`;
     if (!exact.has(key)) exact.set(key, m);
-    const dongKey = m.umdName || '';
-    if (!byDong.has(dongKey)) byDong.set(dongKey, []);
-    byDong.get(dongKey)!.push(m);
   }
-  return { exact, byDong };
+  return { exact };
 }
 
-// 1순위: dong+name 완전일치. 2순위: 같은 법정동(umdName) 안에서만 aptNamesMatch(차수/브랜드
-// alias 등 실측으로 검증된 안전한 표기 차이만 흡수)로 보강한다 — 다른 dong으로는 절대
-// 확장하지 않아 "다른 단지 fallback 금지" 원칙을 유지한다. 매칭 실패 시 aptSeq/좌표 모두
-// null(추정 좌표 생성 금지, name-only identity 없이 좌표만 붙이지 않음).
+// MAP_TIER2_FALLBACK_REMOVAL_V1 — **dong+name 완전일치만** canonical identity로 인정한다.
+//
+// 예전에는 완전일치가 실패하면 같은 법정동 안에서 aptNamesMatch(양방향 부분포함)로 한 번 더
+// 찾았다. 그 규칙은 표기 차이를 흡수하려던 것이었지만, 이름 포함 관계는 identity가 아니다 —
+// MAP_IDENTITY_FALLBACK_IMPACT_AUDIT_V1이 운영 데이터로 실측한 결과, 현재 지도 창(12개월)에서
+// 2순위가 실제로 쓰인 marker는 부산 2,886개 중 **단 1개**였고 그 1개가 **오귀속**이었다:
+// `주례일산맨션`(26530-69)이 정규화 후 `주례` ⊂ `주례일산맨션` 때문에 `주례`(26530-72)의
+// aptSeq와 좌표를 물려받았다. 정당한 표기차로 살아 있던 marker는 부산·서울 모두 **0개**였다.
+// 상세 경로는 이미 같은 원칙(resolveStrongIdentityAptSeqs, SEARCH_DETAIL_IDENTITY_HOTFIX_V2)으로
+// 막혀 있었고, 지도만 열려 있어 일관성이 없었다.
+//
+// 완전일치에 실패하면 aptSeq/좌표 모두 null이다 — 다른 단지의 좌표를 빌려오지 않고, marker를
+// 만들지 않는다(추정 좌표 생성 금지, name-only identity 금지). "틀린 위치에 찍힌 marker"보다
+// "marker 없음"이 정직한 실패다.
 export function resolveApartmentCoords(
   index: MasterCoordIndex,
   dong: string,
-  name: string,
-  matchName: NameMatcher,
-  fuzzyCache?: Map<string, MasterCoordRow | null>
+  name: string
 ): ResolvedApartmentCoords {
-  const key = `${dong}|${name}`;
-  let master = index.exact.get(key) ?? null;
-
-  if (!master) {
-    if (fuzzyCache?.has(key)) {
-      master = fuzzyCache.get(key) ?? null;
-    } else {
-      master = (index.byDong.get(dong) || []).find((c) => matchName(c.name, name)) || null;
-      fuzzyCache?.set(key, master);
-    }
-  }
+  const master = index.exact.get(`${dong}|${name}`) ?? null;
 
   const hasCoords = !!master && Number.isFinite(master.latitude) && Number.isFinite(master.longitude);
   return {

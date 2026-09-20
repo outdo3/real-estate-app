@@ -40,23 +40,59 @@ const CELLS = path.join(OUT, 'cells');
 
 export type MarkerClass = 'EXACT' | 'FALLBACK_SELF' | 'FALLBACK_WRONG' | 'FALLBACK_UNKNOWN' | 'DROPPED_NO_MATCH' | 'DROPPED_NO_COORDS';
 
+/**
+ * MAP_TIER2_FALLBACK_REMOVAL_V1 이전의 **제거된 2순위 규칙**을 감사용으로만 재현한다.
+ * 운영 코드에는 더 이상 존재하지 않는다 — before/after 비교와 과거 측정 재현에만 쓴다.
+ * (tier-1은 운영 index.exact를 그대로 쓰고, 2순위만 같은 dong 안에서 aptNamesMatch로 찾는다.)
+ */
+export function legacyResolveAptSeq(
+  index: { exact: Map<string, MasterCoordRow> },
+  byDong: Map<string, MasterCoordRow[]>,
+  dong: string,
+  name: string
+): { master: MasterCoordRow | null; viaTier2: boolean } {
+  const exact = index.exact.get(`${dong}|${name}`) ?? null;
+  if (exact) return { master: exact, viaTier2: false };
+  const m = (byDong.get(dong) || []).find((c) => aptNamesMatch(c.name, name)) || null;
+  return { master: m, viaTier2: !!m };
+}
+
+/** 제거된 규칙 재현에 필요한 dong 색인(운영 index에서는 삭제됐다). */
+export function buildLegacyDongIndex(masters: MasterCoordRow[]): Map<string, MasterCoordRow[]> {
+  const byDong = new Map<string, MasterCoordRow[]>();
+  for (const m of masters) {
+    const k = m.umdName || '';
+    (byDong.get(k) ?? byDong.set(k, []).get(k)!).push(m);
+  }
+  return byDong;
+}
+
 export interface TradeLike { aptSeq: string | null; dong: string; name: string; dealDate?: string }
 
 /** 운영 판정을 그대로 쓴 한 행의 분류. index.exact 히트 여부로 tier-1/tier-2를 가른다. */
 export function classifyRow(
   index: ReturnType<typeof buildMasterCoordIndex>,
-  t: TradeLike,
-  fuzzyCache: Map<string, MasterCoordRow | null>
-): { cls: MarkerClass; resolvedAptSeq: string | null } {
+  byDong: Map<string, MasterCoordRow[]>,
+  t: TradeLike
+): { cls: MarkerClass; resolvedAptSeq: string | null; afterRendered: boolean } {
   const tier1 = index.exact.get(`${t.dong}|${t.name}`) ?? null;
-  const r = resolveApartmentCoords(index, t.dong, t.name, aptNamesMatch, fuzzyCache);
+  // AFTER — 현재 운영 함수(완전일치만).
+  const after = resolveApartmentCoords(index, t.dong, t.name);
+  const afterRendered = after.lat != null && after.lng != null;
+  // BEFORE — 제거된 2순위까지 포함한 예전 규칙.
+  const legacy = legacyResolveAptSeq(index, byDong, t.dong, t.name);
+  const r = {
+    aptSeq: legacy.master ? legacy.master.aptSeq : null,
+    lat: legacy.master && Number.isFinite(legacy.master.latitude) ? legacy.master.latitude : null,
+    lng: legacy.master && Number.isFinite(legacy.master.longitude) ? legacy.master.longitude : null,
+  };
   const hasCoords = r.lat != null && r.lng != null;
   // 좌표가 없으면 marker가 안 생긴다. 원인은 둘로 갈린다 — master를 아예 못 찾았거나(master 공백),
   // 찾았는데 그 master에 좌표가 없거나(좌표 공백). identity 문제는 전자뿐이다.
-  if (!hasCoords) return { cls: r.aptSeq ? 'DROPPED_NO_COORDS' : 'DROPPED_NO_MATCH', resolvedAptSeq: r.aptSeq };
-  if (tier1) return { cls: 'EXACT', resolvedAptSeq: r.aptSeq };
-  if (!t.aptSeq) return { cls: 'FALLBACK_UNKNOWN', resolvedAptSeq: r.aptSeq };
-  return { cls: r.aptSeq === t.aptSeq ? 'FALLBACK_SELF' : 'FALLBACK_WRONG', resolvedAptSeq: r.aptSeq };
+  if (!hasCoords) return { cls: r.aptSeq ? 'DROPPED_NO_COORDS' : 'DROPPED_NO_MATCH', resolvedAptSeq: r.aptSeq, afterRendered };
+  if (tier1) return { cls: 'EXACT', resolvedAptSeq: r.aptSeq, afterRendered };
+  if (!t.aptSeq) return { cls: 'FALLBACK_UNKNOWN', resolvedAptSeq: r.aptSeq, afterRendered };
+  return { cls: r.aptSeq === t.aptSeq ? 'FALLBACK_SELF' : 'FALLBACK_WRONG', resolvedAptSeq: r.aptSeq, afterRendered };
 }
 
 interface Agg { rows: number; markers: number }
@@ -113,18 +149,21 @@ async function main() {
 
   /** 한 지역(구)의 행 묶음을 운영 파이프라인대로 돌린다. */
   function runDistrict(lawdCd: string, rows: TradeLike[]) {
-    const index = buildMasterCoordIndex(byDistrict.get(lawdCd) ?? []);
-    const fuzzyCache = new Map<string, MasterCoordRow | null>();
+    const districtMasters = byDistrict.get(lawdCd) ?? [];
+    const index = buildMasterCoordIndex(districtMasters);
+    const byDong = buildLegacyDongIndex(districtMasters);
     const agg = blank();
+    const markerAfter = new Map<string, boolean>();
     const markerCls = new Map<string, MarkerClass>();
     const wrongCases: unknown[] = [];
     const wrongRowsByKey = new Map<string, number>();
 
     for (const r of rows) {
-      const { cls, resolvedAptSeq } = classifyRow(index, r, fuzzyCache);
+      const { cls, resolvedAptSeq, afterRendered } = classifyRow(index, byDong, r);
       agg[cls].rows++;
       const key = `${r.dong}|${r.name}`;
       if (!markerCls.has(key)) markerCls.set(key, cls);
+      if (!markerAfter.has(key)) markerAfter.set(key, afterRendered);
       if (cls === 'FALLBACK_WRONG') {
         wrongRowsByKey.set(key, (wrongRowsByKey.get(key) ?? 0) + 1);
         if (!wrongCases.some((c: any) => c.key === key)) {
@@ -140,8 +179,11 @@ async function main() {
       if (c) agg[c].markers++;
     }
     const rendered = agg.EXACT.markers + agg.FALLBACK_SELF.markers + agg.FALLBACK_WRONG.markers + agg.FALLBACK_UNKNOWN.markers;
+    // AFTER — 실제 운영 함수가 지금 만들어내는 marker 수.
+    let renderedAfter = 0;
+    for (const [key] of markers) if (markerAfter.get(key)) renderedAfter++;
     for (const c of wrongCases as any[]) c.rows = wrongRowsByKey.get(c.key) ?? 0;
-    return { lawdCd, agg, rendered, inputRows: rows.length, complexKeys: markers.size, wrongCases };
+    return { lawdCd, agg, rendered, renderedAfter, inputRows: rows.length, complexKeys: markers.size, wrongCases };
   }
 
   // ── 부산: 현재 Production ──
@@ -176,13 +218,13 @@ async function main() {
   const seoul = FETCH_ORDER.map((d) => runDistrict(d, seoulByDistrict.get(d) ?? []));
 
   const sum = (list: ReturnType<typeof runDistrict>[]) => {
-    const agg = blank(); let rendered = 0, inputRows = 0;
+    const agg = blank(); let rendered = 0, renderedAfter = 0, inputRows = 0;
     for (const r of list) {
       for (const k of Object.keys(agg) as MarkerClass[]) { agg[k].rows += r.agg[k].rows; agg[k].markers += r.agg[k].markers; }
-      rendered += r.rendered; inputRows += r.inputRows;
+      rendered += r.rendered; renderedAfter += r.renderedAfter; inputRows += r.inputRows;
     }
     const fallbackMarkers = agg.FALLBACK_SELF.markers + agg.FALLBACK_WRONG.markers + agg.FALLBACK_UNKNOWN.markers;
-    return { inputRows, rendered, exactMarkers: agg.EXACT.markers, fallbackMarkers,
+    return { inputRows, renderedBefore: rendered, renderedAfter, removedByRemoval: rendered - renderedAfter, rendered, exactMarkers: agg.EXACT.markers, fallbackMarkers,
       fallbackSharePct: rendered ? +(fallbackMarkers / rendered * 100).toFixed(2) : 0,
       wrongMarkers: agg.FALLBACK_WRONG.markers,
       wrongSharePct: rendered ? +(agg.FALLBACK_WRONG.markers / rendered * 100).toFixed(2) : 0,
@@ -204,8 +246,8 @@ async function main() {
       perRequestScope: '한 번에 lawdCd 1개(지도 중심 역지오코딩)',
       boundsCulling: '없음 — zoom은 individual/grouped 렌더 모드만 바꾼다(markerDensityMode)',
     },
-    busanCurrent: { ...sum(busan), districts: busan.map((b) => ({ lawdCd: b.lawdCd, inputRows: b.inputRows, rendered: b.rendered, exact: b.agg.EXACT.markers, fallback: b.agg.FALLBACK_SELF.markers + b.agg.FALLBACK_WRONG.markers + b.agg.FALLBACK_UNKNOWN.markers, wrong: b.agg.FALLBACK_WRONG.markers, droppedNoMatch: b.agg.DROPPED_NO_MATCH.markers, droppedNoCoords: b.agg.DROPPED_NO_COORDS.markers })) },
-    seoulSimulated: { cellsMissing: seoulCellsMissing, ...sum(seoul), districts: seoul.map((b) => ({ lawdCd: b.lawdCd, inputRows: b.inputRows, rendered: b.rendered, exact: b.agg.EXACT.markers, fallback: b.agg.FALLBACK_SELF.markers + b.agg.FALLBACK_WRONG.markers + b.agg.FALLBACK_UNKNOWN.markers, wrong: b.agg.FALLBACK_WRONG.markers, droppedNoMatch: b.agg.DROPPED_NO_MATCH.markers, droppedNoCoords: b.agg.DROPPED_NO_COORDS.markers })) },
+    busanCurrent: { ...sum(busan), districts: busan.map((b) => ({ lawdCd: b.lawdCd, inputRows: b.inputRows, renderedBefore: b.rendered, renderedAfter: b.renderedAfter, exact: b.agg.EXACT.markers, fallback: b.agg.FALLBACK_SELF.markers + b.agg.FALLBACK_WRONG.markers + b.agg.FALLBACK_UNKNOWN.markers, wrong: b.agg.FALLBACK_WRONG.markers, droppedNoMatch: b.agg.DROPPED_NO_MATCH.markers, droppedNoCoords: b.agg.DROPPED_NO_COORDS.markers })) },
+    seoulSimulated: { cellsMissing: seoulCellsMissing, ...sum(seoul), districts: seoul.map((b) => ({ lawdCd: b.lawdCd, inputRows: b.inputRows, renderedBefore: b.rendered, renderedAfter: b.renderedAfter, exact: b.agg.EXACT.markers, fallback: b.agg.FALLBACK_SELF.markers + b.agg.FALLBACK_WRONG.markers + b.agg.FALLBACK_UNKNOWN.markers, wrong: b.agg.FALLBACK_WRONG.markers, droppedNoMatch: b.agg.DROPPED_NO_MATCH.markers, droppedNoCoords: b.agg.DROPPED_NO_COORDS.markers })) },
     busanWrongCases: busan.flatMap((b) => b.wrongCases),
     seoulWrongCases: seoul.flatMap((b) => b.wrongCases),
   };

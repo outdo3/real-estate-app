@@ -2,6 +2,9 @@
  * SEOUL_HISTORICAL_MASTER_MISSING_STRATEGY_V1 §7 — master 없는 거래가 제품에서 **다른 단지로
  * 잘못 귀속되는지**를 실제 운영 함수로 검증한다 (STRICT READ ONLY).
  *
+ * (MAP_TIER2_FALLBACK_REMOVAL_V1 이후: 아래 2순위 규칙은 운영에서 제거됐다. 이 스크립트는
+ *  당시 측정을 재현할 수 있도록 `legacyResolveAptSeq()`로 그 규칙을 감사용으로만 되살린다.)
+ *
  * 지도(`/api/transactions`)는 거래의 (dong, name)을 `resolveApartmentCoords()`로 master에
  * 연결한다. 1순위는 dong+name 완전일치, 2순위는 **같은 법정동 안에서 `aptNamesMatch()`**
  * (양방향 부분포함 + 차수 가드). 2순위가 과거 단지를 현재 다른 단지에 붙이면 그 거래는
@@ -21,8 +24,8 @@ import * as fs from 'fs';
 dotenv.config({ path: path.resolve(__dirname, '../.env'), quiet: true });
 dotenv.config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 
-import { buildMasterCoordIndex, resolveApartmentCoords, type MasterCoordRow } from '../src/lib/map-marker-coords';
-import { aptNamesMatch } from '../src/lib/apt-name-match';
+import { buildMasterCoordIndex, type MasterCoordRow } from '../src/lib/map-marker-coords';
+import { legacyResolveAptSeq, buildLegacyDongIndex } from './audit-map-identity-fallback-impact';
 import { OUT } from './audit-seoul-sale-backfill-plan';
 
 interface Missing { aptSeq: string; lawdCd: string; names: string[]; dongs: string[]; rows: number }
@@ -57,19 +60,25 @@ async function main() {
     (byDistrict.get(m.sgg_cd) ?? byDistrict.set(m.sgg_cd, []).get(m.sgg_cd)!)
       .push({ name: m.name, umdName: m.umd_name, aptSeq: m.apt_seq, buildYear: m.build_year, latitude: m.latitude, longitude: m.longitude });
   }
-  const indexCache = new Map<string, ReturnType<typeof buildMasterCoordIndex>>();
+  const indexCache = new Map<string, { index: ReturnType<typeof buildMasterCoordIndex>; byDong: Map<string, MasterCoordRow[]> }>();
   const indexFor = (lawdCd: string) => {
     let i = indexCache.get(lawdCd);
-    if (!i) { i = buildMasterCoordIndex(byDistrict.get(lawdCd) ?? []); indexCache.set(lawdCd, i); }
+    if (!i) {
+      const ms = byDistrict.get(lawdCd) ?? [];
+      i = { index: buildMasterCoordIndex(ms), byDong: buildLegacyDongIndex(ms) };
+      indexCache.set(lawdCd, i);
+    }
     return i;
   };
 
   /** 한 (구, 동, 이름, 자기 aptSeq) 조합이 운영 규칙에서 어디로 붙는지. */
   function probe(lawdCd: string, dong: string, name: string, ownSeq: string) {
-    const r = resolveApartmentCoords(indexFor(lawdCd), dong, name, aptNamesMatch);
-    if (!r.aptSeq) return { verdict: 'NO_MATCH' as const, to: null as string | null, coords: false };
-    if (r.aptSeq === ownSeq) return { verdict: 'SELF' as const, to: r.aptSeq, coords: r.lat != null };
-    return { verdict: 'MISATTRIBUTED' as const, to: r.aptSeq, coords: r.lat != null };
+    const { index, byDong } = indexFor(lawdCd);
+    const { master } = legacyResolveAptSeq(index, byDong, dong, name);
+    const coords = !!master && Number.isFinite(master.latitude) && Number.isFinite(master.longitude);
+    if (!master || !master.aptSeq) return { verdict: 'NO_MATCH' as const, to: null as string | null, coords: false };
+    if (master.aptSeq === ownSeq) return { verdict: 'SELF' as const, to: master.aptSeq, coords };
+    return { verdict: 'MISATTRIBUTED' as const, to: master.aptSeq, coords };
   }
 
   // ── 서울: 이번 측정의 MASTER_MISSING 전수 ──
@@ -107,7 +116,7 @@ async function main() {
 
   const out = {
     at: new Date().toISOString(), readOnly: true, apiCalls: 0, masterCreated: 0,
-    method: '운영 resolveApartmentCoords() + aptNamesMatch()를 그대로 import해 실제 master/이름으로 실행',
+    method: 'MAP_TIER2_FALLBACK_REMOVAL_V1로 제거된 2순위 규칙(legacyResolveAptSeq)을 감사용으로 재현해 실제 master/이름으로 실행 — 현재 운영 경로에는 이 규칙이 없다',
     seoul: { aptSeqsProbed: seoulMissing.length, byVerdict: seoul, rowsByVerdict: seoulRows,
       misattributedRows: seoulRows.MISATTRIBUTED, cases: seoulCases.slice(0, 40), caseCount: seoulCases.length },
     busanToday: { pairsProbed: busanMissing.length, byVerdict: busan, rowsByVerdict: busanRows,

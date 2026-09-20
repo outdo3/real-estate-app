@@ -2,6 +2,21 @@
 
 ## 2026-09-20
 
+### E-JIP MAP TIER-2 FALLBACK REMOVAL V1 — 지도 좌표 결합에서 이름 부분포함 2순위 제거 (runtime fix, 로컬 커밋)
+
+Production write 0 · schema 0 · master 0 · Seoul apply 0 · repair 0 · deploy 0 · push 0 · API 응답 계약 불변. 상세: `docs/development/MAP_TIER2_FALLBACK_REMOVAL_V1.md`
+
+    변경      map-marker-coords.ts 2순위 제거(resolveApartmentCoords는 index/dong/name 3인자) · NameMatcher·byDong 색인·fuzzy 캐시 삭제 · transactions route 호출부 정리
+    정책      dong+name 완전일치만 canonical identity · 실패 시 aptSeq·좌표 null, marker 미생성(다른 단지 좌표 차용 금지)
+    범위      aptNamesMatch 자체는 불변 — 상세·교육·Score identity는 각자 안전장치와 함께 계속 사용. 지도 좌표 결합 한 곳만 변경
+    부산      marker 2,886 -> 2,885 (-1, 0.03%) · 변한 구는 사상구 하나뿐(141 -> 140) · 나머지 15개 구 불변
+    서울      5,819 -> 5,819 (변화 0) · 25개 구 전부 불변
+    제거된것   26530-69 주례일산맨션이 26530-72 주례의 aptSeq·좌표를 물려받던 확정 오귀속 1건 — 이제 NO MATCH
+    테스트    map-marker-coords 7 -> 10(주례일산맨션·대림타운1 회귀 + 2순위 제거 반전 + 완전일치 유지) · src 2,342 pass · scripts 249 pass · eslint 0 · build 성공
+    e2e QA    npm start 후 실제 라우트: 26530=140(주례일산맨션 aptSeq/좌표 null, 주례는 26530-72 유지) · 26230=351 · 26350=272 · 26140=137 전부 예측 일치
+    성능      색인 0.570 -> 0.489ms · 34,829행 해석 7.526 -> 7.263ms (악화 없음, 근소 개선)
+    미배포    배포 시 부산 지도에서 marker 1개 감소(의도) · 더 큰 공백은 master 좌표 없음(서울 93단지 812행/부산 37단지 115행, 별도 STEP)
+
 ### E-JIP MAP IDENTITY FALLBACK IMPACT AUDIT V1 — 지도 이름 fallback 실제 노출 정량화 (READ ONLY, 로컬 커밋)
 
 Production write 0 · runtime 변경 0 · deploy 0 · fallback 제거 0 · master 생성 0 · Seoul apply 0 · 외부 API 0. 상세: `docs/development/MAP_IDENTITY_FALLBACK_IMPACT_AUDIT_V1.md`

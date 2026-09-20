@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { fetchMolitData, formatKoreanPrice, redactMolitFailureMessage, DataType } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
 import { buildMasterCoordIndex, resolveApartmentCoords, type MasterCoordRow } from '@/lib/map-marker-coords';
-import { aptNamesMatch } from '@/lib/apt-name-match';
 import { recentMonths } from '@/lib/molit-months';
 import { resolveTrustworthyPyeongBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import { queryTrades } from '@/lib/trade-history-read';
@@ -218,11 +217,12 @@ export async function GET(request: Request) {
         // ApartmentMaster는 그 19건 전부 유효 좌표를 갖고 있어 이 교체만으로 marker coverage가
         // 오히려 개선된다. 매칭/좌표 결합 규칙 자체는 src/lib/map-marker-coords.ts(순수 함수,
         // 단위 테스트 있음)에 있다.
+        // MAP_TIER2_FALLBACK_REMOVAL_V1 — 이름 부분포함 2순위 매칭을 없앴으므로 matcher·
+        // fuzzy 캐시가 더 이상 필요 없다(완전일치 Map 조회 한 번뿐).
         const masterIndex = buildMasterCoordIndex(masters);
-        const fuzzyCache = new Map<string, MasterCoordRow | null>();
 
         data = data.map((item: any) => {
-          const resolved = resolveApartmentCoords(masterIndex, item.dong, item.name, aptNamesMatch, fuzzyCache);
+          const resolved = resolveApartmentCoords(masterIndex, item.dong, item.name);
           return { ...item, ...resolved };
         });
       }
