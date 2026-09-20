@@ -2,6 +2,29 @@
 
 ## 2026-09-21
 
+### E-JIP ADSENSE READINESS AUDIT V1 — 신청 준비 상태 감사 (READ-ONLY)
+
+광고 노출 0 · Auto Ads 0 · 가짜 publisher ID 0 · DB write 0 · runtime src 0 · UI/SEO 변경 0 · CSP 완화 0. 상세: `docs/development/ADSENSE_READINESS_AUDIT_V1.md`
+
+    판정      **READY_WITH_MINOR_FIXES** — BLOCKER 없음 · P1 3건 · P2 2건(그중 2건은 publisher ID 발급 후에만 가능)
+    접근성     Mediapartners-Google UA로 / /map /stats /school /report/city/busan /report/district/26140 전부 **200**, 로그인 불필요, 5xx 0
+    robots    Allow: / 에 /api·/admin·/my·/community/write만 차단 · sitemap 선언 · 콘텐츠 페이지 전부 크롤 허용
+    SSR실측    구 리포트 raw HTML **1,537자·수치 32개로 충실** / `/stats` 556자·수치 0 / 홈 186자("불러오는 중") — 홈·통계가 **raw HTML 기준으로는 얇다**(P1-3)
+    콘텐츠     sitemap 138 URL(리포트 133·커뮤니티 2·홈·stats·school) · dummy/placeholder/테스트 문구 0 · 리포트는 템플릿 공유하나 내용은 지역 고유
+    신뢰페이지  /privacy(3,691자)·/terms·문의(운영자 이메일+/feedback)·운영자 정보 **전부 이미 존재**
+    광고고지    처방침 **§7-다 "광고 서비스"가 이미 존재** — 제3자 광고 쿠키·구글 광고 쿠키·opt-out(adssettings.google.com) 링크 포함. AdSense 표준 고지 핵심 충족
+    ads.txt   **MISSING(404)** — 가짜 ID 생성 안 함. 발급 후 `public/ads.txt` 1줄이면 끝(같은 방식으로 public/396495....txt가 이미 루트 서빙 중이라 경로 계약 검증됨)
+    연결방식    A(head snippet, next/script afterInteractive) 권장 · Search Console 소유권 이미 확인 · client ID 없어 placeholder 삽입 안 함
+    CSP       **CSP 자체가 없음**(HSTS만) -> AdSense 스크립트 차단 없음, **완화 불필요**. 광고 도입 전 CSP 신규 도입은 오히려 도메인 누락 위험
+    캡처격리   **이미 단일 계약 존재** — `data-export-exclude`가 PNG(dom-to-png.ts:114)·인쇄(globals.css:242)·인스타(InstagramExportStage:77) 3중 강제 + 회귀 테스트 고정. 광고는 이 속성 필수 & data-export-root 밖 배치
+    배치전략    Auto Ads 처음부터 금지 · 수동 우선(리포트 하단·stats 하단·홈 섹션 사이·커뮤니티 피드) · 금지구역(지도 UI·가격 바로 위·캡처 영역·PDF/인스타·CTA·폼)
+    모바일     BottomNav 하단 고정과 앵커 광고 충돌 위험 · CLS 방지 위해 슬롯 고정 높이 예약 필수 · InstallBanner와 상하단 동시 점유 주의
+    UGC       로그인 필수·작성자만 수정/삭제·User.banned 차단·이미지 매직바이트 검증/10MB·1.5MB/픽셀폭탄 방지/글당 5장 — 단 **사용자 신고 기능 없음(P1-2)**
+    색인독립    AdSense 승인 != 검색 색인 수. 색인이 적다고 승인 불가로 단정하지 않음 — 별도 SEO 과제로 분리
+    P1        ads.txt(ID 후) · UGC 신고 경로 · 홈/stats SSR 보강
+    P2        /report/city/busan 5.27초(콜드 스타트 추정) · 처방침 제3자 표에 Google 광고 한 줄 추가
+    미수정    PATCH_REQUIRED로만 보고 — publisher ID 필요·정책 문구 승인 필요·대규모 UI 변경은 §18 STOP 규칙대로 손대지 않음
+
 ### E-JIP POST-CRON CANCELLATION + JUNG-GU PILOT REVALIDATION V1 — 크론 전 재검증 (READ-ONLY, PARTIAL)
 
 Production INSERT/UPDATE/DELETE 0 · 서울 apply 0 · repair 0 · env 변경 0 · runtime src 0. 상세: `docs/development/POST_CRON_CANCELLATION_JUNGGU_REVALIDATION_V1.md`
