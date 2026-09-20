@@ -2,6 +2,22 @@
 
 ## 2026-09-20
 
+### E-JIP SEOUL HISTORICAL MASTER_MISSING STRATEGY V1 — 과거 단지 master 정책 확정 (READ ONLY, 로컬 커밋)
+
+Production write 0 · master 생성 0 · sale apply 0 · schema 0 · runtime 변경 0 · 외부 API 0. 상세: `docs/development/SEOUL_HISTORICAL_MASTER_MISSING_STRATEGY_V1.md`
+
+    대상      MASTER_MISSING 2,424 aptSeq / 73,275행(active 72,927 · canceled 348) · recent-gap 0 재확인
+    거래량    500+ 25개(1.0%)가 행의 34.8% · 9건 이하 832개(34.3%)는 합쳐도 6.2%
+    관계      exact 증거만 — A 같은aptSeq 0 · B 동일필지 32(2,685행) · C 동일도로명 61(14,397행) · D 이름만 51 · E 무관계 2,280(54,723행)
+    핵심발견   exact 일치도 identity가 아니다 — 도로명 61건 전부 재건축 승계(개포주공1단지→디에이치퍼스티어아이파크, 시영1·시영2 둘 다 헬리오시티)
+    같은필지32 강한 동일단지 신호 0 · 재건축승계 8 · 필지공유(기간겹침) 21 · 모호 5 → merge 금지
+    제품동작   리포트·통계·최근거래·record-high는 정상 집계 / 검색은 숨김(master 기반) / sitemap은 단지 미포함 / 상세는 STRONG_RESULT_PROTECTION로 보호
+    STOP성립   지도 /api/transactions 2순위 이름매칭이 오귀속 — 운영 함수 실행 실측: 서울 338 aptSeq(11,766행), 부산 98(2,879행). 현재 12개월 창 실제 노출은 부산 1행(주례일산맨션→주례)
+    안전성    FK 0개 · 저장·집계 가능 · 부산 선례 39,700행(4.59%)/1,470 aptSeq(30.0%)가 이미 master 없이 운영 중 — 단 저장가능 != 제품적으로 올바름
+    권고      OPTION C transaction-only — master 0개 생성, 73,275행 전부 거래로만 보존, 통계 포함, 검색·SEO 노출 0, historicalOnly 플래그 모델은 현재 불필요
+    선결      backfill 전 지도 2순위 매칭 보호 필요(부산에도 존재하는 기존 결함, 별도 승인)
+    PATCH_REQUIRED applyMatchesPlan이 자연키 충돌 skip 2건을 차감하지 않아 오탐 정지 — 드라이버 쪽 expectedSkips 보정 권고(sale-sync-core 무변경), 코드 수정 안 함
+
 ### E-JIP SEOUL SALE FULL-HISTORY MEASUREMENT COMPLETION V1 — 서울 25/25 구 실측 완료 (READ ONLY, 로컬 커밋)
 
 Production write 0 · schema 0 · 서울 apply 0 · repair 0 · enable 0 · runtime 코드 변경 0. 상세: `docs/development/SEOUL_SALE_FULL_HISTORY_MEASUREMENT_COMPLETION_V1.md`
