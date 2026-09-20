@@ -57,9 +57,12 @@ test('1. --region=11은 서울 prefix와 STRICT 정책, 등록되지 않은 지�
 });
 
 // 2
-test('2. 부산(기본 26) 동작 불변 — LENIENT 판정이 기존 코드와 같다', () => {
+// BUILDING_LEDGER_PAGINATION_FIX_V1 — 부산 **선택 정책**은 그대로지만 **수집**은 완전해졌다.
+// 잘린 응답(totalCount > 받은 건수)은 이제 부산에서도 보류한다. 그래서 아래 비교는
+// "완전하게 받은 응답"(totalCount = arr.length)에서 기존 판정과 같은지를 본다.
+test('2. 부산(기본 26) 선택 정책 불변 — 완전한 응답에서 LENIENT 판정이 기존 코드와 같다', () => {
   assert.deepEqual(regionConfig('26'), { sggPrefix: '26', policy: LENIENT_POLICY });
-  assert.equal(ledgerNumOfRows(LENIENT_POLICY), 5);
+  assert.equal(ledgerNumOfRows(LENIENT_POLICY), 100, '부산도 100건·pageNo=1로 받는다');
   const bq = { sggCd: '26470', umdCd: '10200', bun: '0001', ji: '0000' };
   const fixtures = [
     [],
@@ -69,15 +72,19 @@ test('2. 부산(기본 26) 동작 불변 — LENIENT 판정이 기존 코드와 
   ];
   for (const arr of fixtures) {
     for (const rawPk of [null, '1234-5']) {
-      const now = decideGeneralTitle(arr, 999, rawPk, bq, LENIENT_POLICY); // totalCount도 부산은 보지 않는다
+      // totalCount = arr.length → 완전한 응답. 선택 판정이 기존과 같아야 한다.
+      const now = decideGeneralTitle(arr, arr.length, rawPk, bq, LENIENT_POLICY);
       const old = oldBusanGeneral(arr, rawPk);
       assert.equal(now.status, old.status);
       if (old.status === 'success') { assert.equal(now.record, old.record); assert.equal(now.mgmBldrgstPk, old.mgmBldrgstPk); }
     }
   }
   for (const arr of [[], [rec()], [rec(), rec()], [rec({ dongNm: '103동' })], [rec({ bun: '9999' })]]) {
-    assert.equal(decideTitleFallback(arr, 999, bq, LENIENT_POLICY, numbered), oldBusanTitle(arr));
+    assert.equal(decideTitleFallback(arr, arr.length, bq, LENIENT_POLICY, numbered), oldBusanTitle(arr));
   }
+  // 새 동작: 잘린 응답은 부산에서도 보류한다(예전에는 그대로 통과해 한 동 값을 단지 값으로 썼다).
+  assert.equal(decideTitleFallback([rec()], 14, bq, LENIENT_POLICY, numbered), 'incomplete');
+  assert.equal(decideGeneralTitle([rec()], 14, null, bq, LENIENT_POLICY).status, 'incomplete');
   // 부산 결과 폴더·주소 계획 미포함·표제부 다건 REVIEW 유지
   assert.match(SCRIPT, /REGION_ARG === '26'\s*\n\s*\? path\.resolve\(__dirname, '_data_coverage_fix_v1_results'\)/);
   assert.match(SCRIPT, /if \(policy\.strict\) \{\s*\n\s*plans\.push\(planField\('roadAddress'/);
@@ -172,9 +179,9 @@ test('서울 표본 — 구마다 구축/신축 반씩, aptSeq 순 결정적', (
   assert.equal(a.filter((r) => r.buildYear < 2005).length, 10);
 });
 
-test('페이지 파라미터 — STRICT는 pageNo=1(없으면 API가 1건만 준다), 부산 URL은 그대로', () => {
+test('페이지 파라미터 — 두 정책 모두 pageNo=1(없으면 API가 1건만 준다)', () => {
   assert.equal(ledgerPageParams(STRICT_POLICY), 'numOfRows=100&pageNo=1');
-  assert.equal(ledgerPageParams(LENIENT_POLICY), 'numOfRows=5');
+  assert.equal(ledgerPageParams(LENIENT_POLICY), 'numOfRows=100&pageNo=1', 'BUILDING_LEDGER_PAGINATION_FIX_V1 — 부산도 잘리지 않게 한다');
   assert.equal((SCRIPT.match(/&\$\{ledgerPageParams\(policy\)\}&_type=json/g) || []).length, 2);
   // 교차 확인은 완전한 단일 레코드 목록일 때만
   assert.match(SCRIPT, /const comparable = title\.status === 'success' \|\| title\.status === 'building_unit_review';/);

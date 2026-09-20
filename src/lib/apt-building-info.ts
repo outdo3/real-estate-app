@@ -1,3 +1,5 @@
+import { fetchAllLedgerPages } from './building-ledger-pager';
+
 export interface BuildingRegistryInfo {
   parkingCount: number | null;
   far: number | null; // 용적률(%)
@@ -19,6 +21,37 @@ export interface BuildingRegistryInfo {
 // 지번에 표제부가 1건뿐이어도 단지 전체값으로 신뢰하지 않는다 — dongNm이 공백이면
 // (진짜 단일 건물 단지의 정상 패턴) 기존처럼 신뢰한다.
 const NUMBERED_BUILDING_UNIT_PATTERN = /^제?\d+동$/;
+
+/**
+ * BUILDING_LEDGER_PAGINATION_FIX_V1 — 한 지번의 대장 레코드를 **끝까지** 가져온다.
+ * pageNo 없이 부르면 서버가 1건만 주고(실측), 그 1건을 지번 전부로 믿으면 다동 단지의
+ * 한 동 값을 단지 전체 값으로 쓰게 된다. 여기서는 수집만 하고 선택은 호출부가 한다.
+ */
+async function fetchLedgerRecords(op: string, cleanKey: string, lawdCd: string, bjdongCd: string, bun: string, ji: string, timeoutMs: number) {
+  return fetchAllLedgerPages(async (pageNo, numOfRows) => {
+    const url = `https://apis.data.go.kr/1613000/BldRgstHubService/${op}?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&platGbCd=0&bun=${bun}&ji=${ji}&numOfRows=${numOfRows}&pageNo=${pageNo}&_type=json`;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!res.ok) {
+        const kind = res.status === 429 || res.status === 503 ? 'RATE_LIMITED' : 'ERROR';
+        return { kind, detail: `http=${res.status}` } as const;
+      }
+      const json = await res.json();
+      const header = json?.response?.header;
+      if (header?.resultCode && header.resultCode !== '00') {
+        if (/LIMITED_NUMBER_OF_SERVICE_REQUESTS/.test(header?.errMsg || '')) return { kind: 'RATE_LIMITED', detail: 'quota' } as const;
+        return { kind: 'ERROR', detail: `resultCode=${header.resultCode}` } as const;
+      }
+      const body = json?.response?.body;
+      const raw = body?.items?.item;
+      const items = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
+      const total = Number(body?.totalCount);
+      return { kind: 'OK', items, totalCount: Number.isFinite(total) ? total : items.length } as const;
+    } catch (e) {
+      return { kind: 'ERROR', detail: (e as Error)?.name ?? 'error' } as const;
+    }
+  });
+}
 
 export function isNumberedBuildingUnit(dongNm: unknown): boolean {
   if (typeof dongNm !== 'string') return false;
@@ -76,17 +109,12 @@ async function fetchBrTitleInfoFallback(
   bun: string,
   ji: string
 ): Promise<BuildingRegistryInfo | null> {
-  const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&platGbCd=0&bun=${bun}&ji=${ji}&numOfRows=5&_type=json`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-  if (!res.ok) return null;
-
-  const json = await res.json();
-  const header = json?.response?.header;
-  if (header?.resultCode && header.resultCode !== '00') return null;
-
-  const items = json?.response?.body?.items?.item;
-  if (!items) return null;
-  const itemsArr = Array.isArray(items) ? items : [items];
+  // BUILDING_LEDGER_PAGINATION_FIX_V1 — 전 페이지를 모은 뒤에 세어야 "정확히 1건"이 참이다.
+  // 예전에는 pageNo 없이 1건만 받아서 14개 동짜리 지번도 1건처럼 보였고, 그래서 아래
+  // 안전조건이 한 번도 걸리지 않았다.
+  const paged = await fetchLedgerRecords('getBrTitleInfo', cleanKey, lawdCd, bjdongCd, bun, ji, 4000);
+  if (paged.status !== 'COMPLETE') return null; // EMPTY·PARTIAL·오류는 값을 만들지 않는다
+  const itemsArr = paged.items as any[];
   if (itemsArr.length !== 1) return null; // 안전조건: 정확히 1건일 때만 신뢰
   // MASTER_HOUSEHOLD_VERIFICATION_V1 안전조건: 그 1건이 다동 복합단지의 특정 건물이면
   // (dongNm이 "103동"처럼 구체적 건물번호) 단지 전체값으로 신뢰하지 않는다(위 주석 참고).
@@ -150,19 +178,11 @@ export async function fetchBuildingRegistryInfo(
     // getBrTitleInfo(표제부 — 동 1개 단위)가 아니라 getBrRecapTitleInfo(총괄표제부 — 단지
     // 전체 집계, 세대수·총주차대수 포함)를 쓴다. 이 응답은 XML이 아니라 기본 JSON이다
     // (실측 확인 — 기존 코드는 XMLParser로 파싱하고 있었는데 애초에 안 맞았다).
-    const bldUrl = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo?serviceKey=${cleanKey}&sigunguCd=${lawdCd}&bjdongCd=${bjdongCd}&platGbCd=0&bun=${bun}&ji=${ji}&numOfRows=5&_type=json`;
-
-    const bldRes = await fetch(bldUrl, { signal: AbortSignal.timeout(4000) });
-    if (!bldRes.ok) return null;
-
-    const json = await bldRes.json();
-    const header = json?.response?.header;
-    if (header?.resultCode && header.resultCode !== '00') {
-      console.warn(`BldRgstHubService error: ${header.resultCode} ${header.resultMsg}`);
-      return null;
-    }
-    const items = json?.response?.body?.items?.item;
-    const itemsArr = Array.isArray(items) ? items : (items ? [items] : []);
+    // BUILDING_LEDGER_PAGINATION_FIX_V1 — 총괄표제부도 전 페이지를 모은다. 여러 건이면
+    // 아래 기존 선택 규칙(세대수 최대)이 **전체 후보** 위에서 돌아야 한다.
+    const pagedRecap = await fetchLedgerRecords('getBrRecapTitleInfo', cleanKey, lawdCd, bjdongCd, bun, ji, 4000);
+    if (pagedRecap.status === 'ERROR' || pagedRecap.status === 'RATE_LIMITED' || pagedRecap.status === 'PARTIAL') return null;
+    const itemsArr = pagedRecap.items as any[];
     // 같은 지번에 총괄표제부가 여러 건 잡히는 경우(드묾) 세대수가 가장 큰 것을 대표로 쓴다.
     const target = itemsArr.length > 0
       ? itemsArr.reduce((best: any, cur: any) => ((cur.hhldCnt || 0) > (best.hhldCnt || 0) ? cur : best))

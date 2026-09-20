@@ -2,6 +2,26 @@
 
 ## 2026-09-20
 
+### E-JIP BUILDING LEDGER PAGINATION FIX + BUSAN IMPACT AUDIT V1 — 대장 조회 잘림 수정 (runtime fix + read-only census)
+
+기존 대장 데이터 UPDATE 0 · master UPDATE 0 · 좌표 0 · schema 0 · sale/cancellation 0. 상세: `docs/development/BUILDING_LEDGER_PAGINATION_FIX_V1.md`
+
+    결함      pageNo 없이 부르면 서버가 numOfRows를 무시하고 1건만 준다(실측: 우동 1104-1, totalCount=14인데 item 1건) — 그 1건을 단지 전부로 믿었다
+    2차피해    잘림이 "표제부 1건일 때만 신뢰" 안전장치를 무력화 — 14건짜리 지번도 늘 1건으로 보여 규칙이 한 번도 안 걸렸다
+    계약확인   pageNo 필수 · numOfRows는 pageNo와 함께일 때만 반영 · totalCount는 정직 · page999는 빈 결과(오류 아님) · 순서 안정 · PK 중복 0
+    pager     src/lib/building-ledger-pager.ts 신규 — pageNo 명시·totalCount까지 수집·공식 PK로만 dedupe·수집수!=totalCount면 PARTIAL(값 미제공)·오류 위장 금지·maxPages 20
+    live수정   apt-building-info.ts 두 호출 모두 pager 사용 — 응답 계약 불변 · 삼호가든맨션(14건) 한 동 값 -> 정보 없음 · 한솔솔파크(1건) 165/204/535.3/59.82 정상 유지
+    부산helper ledgerPageParams 두 정책 모두 pageNo=1&numOfRows=100 · 잘림 검사를 LENIENT 분기보다 앞으로 이동 · 선택 정책은 한 글자도 안 바꿈
+    필드정책   합산은 필드마다 다르다 — 세대수는 동별 제 값(합 1,076)이지만 주차는 743이 단지 총량으로 각 레코드에 반복(합하면 7,903 오류). 단순 "전 페이지 합산" 수정은 주차를 망친다
+    census    부산 2,714건 전수(호출 2,714·rate limit 0) — UNCHANGED 2,494(91.9%) · 실제 VALUE_DIFF 5 · 보류전환 214(다건 170 + 동번호 44) · 원천공백 1
+    허수제거   원자료 VALUE_DIFF 297 중 225는 저장 ""vs새 null, 77은 22자리 PK의 JS 숫자 정밀도 손실 — 감사 도구 아티팩트라 제외
+    다건분포   1건 2,525 · 2건 92 · 3-5건 49 · 6-10건 26 · 11+건 22 = 다건 189(6.96%) · 최대 27건 · 영향 214건 전부 BUILDINGHUB_TITLE
+    26350-15  OLD_WRONG + FIELD_POLICY_REQUIRED — 저장 90세대는 한 동 값(주차 743과 앞뒤 안 맞음). 단 1,076도 자동으로 옳다고 하지 않음(상가·노유자 혼재)
+    성능      1건 261ms · 14건 518ms · numOfRows=100이면 최대 27건도 1페이지 — 추가 왕복 사실상 없음
+    서울117   고친 페이징으로 표본 20 중 18이 도로명 확보(환산 약 105) — 단 도로명은 필지 고유키가 아님(이안용산1차 102/103동이 지번 다른데 도로명 동일), 역방향 검증 필요
+    테스트    pager 10개 신규 · src 2,352 pass · scripts 256 pass · eslint 0 · build 성공 · 옛 결함을 고정하던 기존 테스트 2개는 새 계약으로 갱신
+    미실행    기존 214건 정정(필드 정책 선행 필요) · prisma.apartment 캐시 잔존값 · UNKNOWN 724건
+
 ### E-JIP BUSAN MASTER COORDINATE ENRICHMENT APPLY V1 — 승인된 부산 좌표 35행 UPDATE (Production write)
 
 승인 UPDATE 35행 × 3컬럼(latitude·longitude·geocodeQuality) · 그 밖 write 0 · 서울 좌표 0 · sale apply 0 · repair 0 · schema 0 · runtime src 0. 상세: `docs/development/BUSAN_MASTER_COORDINATE_ENRICHMENT_APPLY_V1.md`
