@@ -2,6 +2,24 @@
 
 ## 2026-09-20
 
+### E-JIP MASTER COORDINATE GAP AUDIT V1 — 좌표 공백 규모·원인·복구 가능성 (READ ONLY, 로컬 커밋)
+
+Production write 0 · 좌표 변경 0 · master 변경 0 · schema 0 · Seoul apply 0 · runtime 변경 0. 상세: `docs/development/MASTER_COORDINATE_GAP_AUDIT_V1.md`
+
+    baseline  부산 3,438 중 좌표없음 37 · 서울 6,843 중 117 · 반쪽좌표 0 · 무효좌표 0
+    원인      서울 117 = 전부 geocodeQuality 'failed'(엄격 역방향 검증이 거부, 113 REVERSE_MISMATCH + 4 기존누락) / 부산 37 = 36 '(null)'(이 경로로 시도된 적 없음) + 1 'failed'
+    창영향    부산 37단지 115행 · 서울 93단지 812행 — 기존 알려진 값 정확히 재현
+    출처주의   부산은 DB, 서울은 live MOLIT(캐시 원천) — DB만으로 세면 서울이 1단지/1행으로 잘못 나온다(cronSync OFF, DB엔 강남 45행뿐)
+    주소증거   road/jibunAddress는 양쪽 0건 — 쓸 수 있는 건 법정 필지(L2)뿐(부산 36 · 서울 114), name+dong만 있는 L4는 부산 1 · 서울 3
+    dry-run   승인 규칙 그대로(정방향 exact 1건 + 역방향 같은 필지 복귀) · Kakao 96회 · 좌표 저장 0 — 부산 35 VERIFIED_EXACT(112행) · 1 REVERSE_MISMATCH / 서울 표본 12/12 다시 REVERSE_MISMATCH
+    복구      부산 marker 2,885 -> 2,920(+35, +1.21%) · 남는 공백 2단지 3행 / 서울은 재조회로 0 감소
+    우선순위   대운스카이뷰1차 46행 · 롯데캐슬인피니엘 30행이 112행 중 76행(68%)
+    중복좌표   READY_EXACT 35개 중 기존 master와 좌표 일치 0건
+    대장paging 라이브 apt-building-info UNSAFE(pageNo 없음·totalCount 미확인) · 부산 LENIENT UNSAFE · 서울 STRICT SAFE — 단 이번 복구는 대장을 쓰지 않아 막히지 않음
+    제품영향   좌표만 결측이고 identity는 온전 — 지도 marker/클릭·학교배정 단지목록·교육거리만 영향, 검색·상세·리포트·통계는 정상
+    발견      Kakao REST는 REST 키 필요 — seed가 쓰는 NEXT_PUBLIC_KAKAO_MAP_API_KEY는 현재 401, KAKAO_CLIENT_ID는 200
+    미실행    좌표 update 0 · 대장 수정 0 · 제안 A(부산 35행 UPDATE)는 승인 대상
+
 ### E-JIP MAP TRUST + SEOUL PREP PUSH & DEPLOY V1 — 보류 커밋 5개 push + 지도 신뢰 수정 배포 (DB write 0)
 
 Production INSERT/UPDATE/DELETE 0 · Seoul apply 0 · repair 0 · master 0 · schema 0 · 5xx 0. 상세: `docs/development/MAP_TIER2_FALLBACK_REMOVAL_V1.md` §10
