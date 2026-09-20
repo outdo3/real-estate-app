@@ -2,6 +2,23 @@
 
 ## 2026-09-20
 
+### E-JIP APARTMENT CACHE STALE HOUSEHOLDS CORRECTION V1 — 캐시가 가리던 2행 정리 (Production write)
+
+승인 UPDATE: `apartments` 정확히 2행의 `total_households`. master 0 · INSERT 0 · DELETE 0 · 다른 캐시 행/컬럼 0 · schema 0 · runtime src 0 · 서울 0 · cancellation 0 · sale apply 0. 상세: `docs/development/APARTMENT_CACHE_STALE_HOUSEHOLDS_CORRECTION_V1.md`
+
+    원인      tier1 게이트는 parkingCount·far·bcr·approvalDate 네 필드만 본다 — **세대수는 게이트에 없고** cached.totalHouseholds ?? null로 딸려 나온다
+    결과      네 필드가 찬 캐시 행은 세대수가 낡아도 통과하고, isFullyPopulated가 그 값을 truthy로 봐서 tier2(master)가 아예 실행되지 않았다
+    대상      id 399 해운대경동제이드(우동 974) 72->892 · id 255 우성빌라(중동 1505-3) 4->15 — 지번으로 특정(캐시 이름이 master 이름과 다름)
+    방식선택   A 세대수 exact update 채택 / B 세대수 NULL 무효화(표시 동일하나 승인값과 다름) / C 행 삭제는 **기각**
+    C기각근거  master의 use_approval_date가 두 건 다 NULL — 화면의 1995년/1994년은 캐시가 준다. 행을 지우면 live가 다건 필지에 null을 줘서 **사용승인일이 사라진다**
+    안전장치   baseline(72/4)·master(892/15) Production 재확인 후 불일치 시 STOP · 대상 지번 캐시 행 정확히 2개 확인 · 쓰기 전 rollback artifact · 행마다 id+기대 old 일치할 때만 UPDATE · 불일치 시 전체 롤백(실제 0건)
+    사후검증   변경 2/2 · 변경 컬럼 total_households only · parking/far/bcr/승인일 전부 불변 · master 불변 · 캐시 행 수 95->95 · **캐시가 master를 가리는 행 0**
+    잔여9건    캐시!=master 9행은 전부 master 세대수가 NULL(서울 7·부산 2) — 캐시가 없는 값을 채워주는 반대 상황이라 결함 아님. 양쪽 값이 있으면서 어긋나는 행 0
+    QA        경동 892세대·세대당 1.08대(총 962대) · 해운대경동제이드도 892 · 우성빌라 15세대·1.20대(총 18대) — 총주차 총량 불변, 비율은 formatParking이 재계산
+    회귀      large-complex/dashboard/rankings/supply/sitemap 200이고 **응답 바이트 수가 쓰기 전과 완전 동일** · transactions/school 200 · 주차Score 경동 51(총점 53)
+    격리      부산 3,438 · 서울 6,843 · 서울 좌표 6,726 · 매매 865,421 · 취소 16,345 전부 baseline 불변
+    구조남음   세대수가 tier1 게이트에 없는 구조는 그대로 — 게이트 충족 캐시 행이 56개라 앞으로도 master 세대수 보정을 가릴 수 있다. 코드 수정이라 별도 STEP 필요
+
 ### E-JIP BUSAN BUILDING LEDGER AUTO-SAFE CORRECTION V1 — 승인된 세대수 42 + 도로명 87 보정 (Production write)
 
 승인 UPDATE: households 42 · roadAddress 87 · 파생비율 30 = unique master 113. INSERT 0 · DELETE 0 · schema 0 · runtime src 0 · 서울 0 · cancellation 0 · sale apply 0. 상세: `docs/development/BUSAN_BUILDING_LEDGER_AUTO_SAFE_CORRECTION_V1.md`
