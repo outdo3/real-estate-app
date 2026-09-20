@@ -2,6 +2,21 @@
 
 ## 2026-09-20
 
+### E-JIP MAP TRUST + SEOUL PREP PUSH & DEPLOY V1 — 보류 커밋 5개 push + 지도 신뢰 수정 배포 (DB write 0)
+
+Production INSERT/UPDATE/DELETE 0 · Seoul apply 0 · repair 0 · master 0 · schema 0 · 5xx 0. 상세: `docs/development/MAP_TIER2_FALLBACK_REMOVAL_V1.md` §10
+
+    push      dfd9aa0..40dc688 fast-forward · 696c830 c532c4e de1e4de 83d63a3(runtime) 40dc688 · force 0
+    분류      runtime 변경은 83d63a3 하나(map-marker-coords.ts · transactions/route.ts) — src/lib/sync·prisma·api/cron 전부 무변경
+    배포      real-estate-fpzcl5aew Ready · build 27s · 2026-09-20 13:10:38 KST · 주요 라우트 200 · cron 무인증 401 · error_logs 0
+    사상구     marker 141 -> 140 · 주례일산맨션 aptSeq=26530-72(+좌표) -> aptSeq/lat/lng 전부 null, marker 없음 · 주례는 26530-72와 자기 좌표 유지
+    부산회귀   16개 구 전부 예측 일치(합계 2,885 = exact-only 예측) — 사상구 -1 외 marker 손실 0
+    서울      5,819 -> 5,819(변화 0) · 라이브 spot-check 종로구 587행 -> 85 marker, 좌표 없는 행 0, partial=false
+    서울게이트  stats UNSUPPORTED · sitemap 서울 URL 0 · coverage cell 0 · 매매 46행 불변 · apply 0
+    충돌패치   40dc688은 scripts 전용 — 런타임이 backfill-seoul-sale을 import하지 않음(grep 0건) · DEFECT_A_GATE_PASS·ALLOW_PROD_DB_WRITE 둘 다 env에 없음
+    취소격리   확정 28행 28/28 불변 · SALE_CANCEL_RESTORE_ENABLED 없음(OFF) · 상한 334 · 전원취소 273 · 전체 865,421/16,345 불변
+    no-write  배포 후 쓰인 행 0 · error_logs 0
+
 ### E-JIP SEOUL SALE NATURAL-KEY COLLISION PATCH V1 — driver 오탐 정지 제거 (scripts only, 로컬 커밋)
 
 Production write 0 · Seoul apply 0 · repair 0 · master 0 · schema 0 · push 0 · **src/ 전체 무변경**. 상세: `docs/development/SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1.md`

@@ -3,7 +3,8 @@
 `MAP_IDENTITY_FALLBACK_IMPACT_AUDIT_V1`의 실측에 따라, 지도 좌표 결합에서 **2순위 이름 부분포함 fallback을 제거**한다. 이제 `dong+name` 완전일치만 canonical identity로 인정한다.
 
 - 날짜: 2026-09-20 (KST) · 기준 커밋 `de1e4de`
-- **Production INSERT/UPDATE/DELETE 0** · schema 0 · master 0 · Seoul sale apply 0 · cancellation repair 0 · deploy 0 · push 0
+- **Production INSERT/UPDATE/DELETE 0** · schema 0 · master 0 · Seoul sale apply 0 · cancellation repair 0
+- push·배포는 이후 같은 날 별도 STEP에서 수행했고 운영 실측 결과를 §10에 기록했다
 - HTTP API 응답 계약(필드·형태) 변경 없음
 
 ## 판정
@@ -133,6 +134,87 @@ npm run build                                               exit 0
 
 ## 9. 남은 것 · 다음
 
-1. **배포 안 함** — 이번 STEP은 local commit까지다. 배포하면 부산 지도에서 주례일산맨션 marker 1개가 사라진다(의도된 결과).
+1. ~~배포 안 함~~ → **배포 완료**(§10). 운영에서 부산 사상구 marker가 141 → 140이 됐고 사라진 1개는 주례일산맨션 오귀속이다(의도된 결과).
 2. **더 큰 marker 공백은 좌표다**(이전 audit §11): master는 있는데 좌표가 없어 marker가 안 생기는 단지가 **서울 93곳(812행) · 부산 37곳(115행)**. fallback(1건)보다 두 자릿수 크다 — 별도 STEP 권고.
 3. 서울 sale backfill은 이 변경과 무관하게 계속 `DEFECT_A_GATE_PASS` 미설정으로 BLOCKED이며, 지도 노출을 늘리지 않는다(이전 audit §10).
+
+---
+
+## 10. Production QA — push & deploy (2026-09-20)
+
+보류 중이던 local commit 5개를 push하고 배포해 **운영에서 before/after를 실측**했다. DB write 0.
+
+| 항목 | 값 |
+|---|---|
+| push | `dfd9aa0..40dc688` (fast-forward, force 0) |
+| 커밋 | `696c830` `c532c4e` `de1e4de` **`83d63a3`(runtime)** `40dc688` |
+| 배포 | `real-estate-fpzcl5aew` **Ready**, build 27s, `2026-09-20 13:10:38 KST` |
+| alias | `e-jip.com` · `www.e-jip.com` · `real-estate-app-git-main-park11` |
+| 라우트 | `/` `/map` `/stats` `/report/city/busan` `/report/district/26140` `/api/transactions` `/sitemap.xml` 전부 **200** · `/api/cron/sale-sync` 무인증 **401** · 5xx 0 |
+| `error_logs` 배포 후 | **0** |
+
+### runtime diff 분류 (push 범위 전체)
+
+| 커밋 | 성격 | `src/` |
+|---|---|---|
+| `696c830` · `c532c4e` · `de1e4de` | docs + read-only audit scripts | 없음 |
+| **`83d63a3`** | **runtime** | `map-marker-coords.ts` · `transactions/route.ts` (+ 테스트) |
+| `40dc688` | scripts only (backfill driver + tests) | **없음** |
+
+`src/lib/sync/` · `prisma/` · `src/app/api/cron/` **전부 무변경**(`git diff --name-only dfd9aa0..40dc688`로 확인).
+
+### 사상구 before / after (운영 실측)
+
+배포 **전** 운영 응답이 결함을 그대로 보여줬다: `주례일산맨션 aptSeq=26530-72`(주례의 aptSeq) + 좌표 보유.
+
+| | before | after |
+|---|---|---|
+| 사상구 marker | **141** | **140** |
+| `주례일산맨션` | `aptSeq=26530-72`, 좌표 있음 → marker 생성 | **`aptSeq=null`, `lat=null`, `lng=null` → marker 없음** |
+| `주례` | `aptSeq=26530-72`, 자기 좌표 | **불변** (`26530-72`, `35.15036…`, `129.01040…`) |
+
+### 부산 16개 구 회귀 — 16/16 예측 일치
+
+| 구 | after | 예측 | | 구 | after | 예측 |
+|---|---|---|---|---|---|---|
+| 부산진구 | 351 | 351 | | 사상구 | **140** | **140** |
+| 사하구 | 288 | 288 | | 서구 | 137 | 137 |
+| 동래구 | 275 | 275 | | 기장군 | 119 | 119 |
+| 해운대구 | 272 | 272 | | 영도구 | 113 | 113 |
+| 금정구 | 233 | 233 | | 동구 | 75 | 75 |
+| 수영구 | 214 | 214 | | 중구 | 50 | 50 |
+| 남구 | 213 | 213 | | 강서구 | 42 | 42 |
+| 연제구 | 206 | 206 | | 북구 | 157 | 157 |
+| **합계** | **2,885** | **2,885** | | | | |
+
+**사상구 −1 외에 사라진 marker는 없다.**
+
+### 서울
+
+| 확인 | 결과 |
+|---|---|
+| marker 수(배포된 코드 기준) | **5,819 → 5,819**, tier-2 marker 0, 제거 **0** |
+| 라이브 경로 spot-check(종로구 11110, live MOLIT) | 587행 → **85 marker**, 좌표 없는 행 0, `partial=false`, aptSeq 정상 |
+| stats | `UNSUPPORTED` / "이 지역 통계는 현재 준비 중입니다." |
+| sitemap 서울 URL | **0** |
+| coverage cell · 매매 행 | **0** · **46**(불변) |
+| Seoul sale apply | **0** |
+
+### 충돌 패치(`40dc688`) 반입 상태
+
+scripts 전용이라 **Production runtime에 들어가지 않는다** — `grep -rn "backfill-seoul-sale" src/` 결과 0건(어떤 런타임 코드도 import하지 않는다). Production env에 `DEFECT_A_GATE_PASS` · `ALLOW_PROD_DB_WRITE` **둘 다 없음**이라 apply는 구조적으로 불가능하고, `--approve-existing-updates`도 자동 활성화되지 않는다.
+
+### 취소 격리
+
+| 지표 | 값 |
+|---|---|
+| 확정 false-cancel 28행 | **28/28 취소**, 복구 0, 최신 변경 `2026-09-18T19:59:54Z`(불변) |
+| `SALE_CANCEL_RESTORE_ENABLED` | Production env에 **없음** = OFF |
+| 과다 취소 상한 | **334**(baseline 불변) |
+| 전원취소 그룹 | **273**(baseline 불변) |
+| 전체 행 / 취소 행 | 865,421 / 16,345(불변) |
+| sale-sync/cancellation runtime | **무변경** |
+
+### No-write
+
+Production INSERT/UPDATE/DELETE **0/0/0** · 배포 후 쓰인 행 **0** · Seoul apply 0 · repair 0 · master 변경 0 · schema 0.
