@@ -2,6 +2,26 @@
 
 ## 2026-09-20
 
+### E-JIP BUSAN ZERO-HOUSEHOLD POLICY B APPLY V1 — 승인된 세대수 37 + 파생비율 34 보정 (Production write)
+
+승인 UPDATE: `total_households` 37 · `parking_per_household` 34. **parking_count 변경 0** · FAR/BCR/buildingCount/approvalDate/roadAddress/좌표/캐시/서울/sale/cancellation/schema 전부 불변 · INSERT/DELETE 0 · runtime src 0. 상세: `docs/development/BUSAN_ZERO_HOUSEHOLD_POLICY_B_APPLY_V1.md`
+
+    재생성     감사 artifact 미사용 — 부산 TITLE/GENERAL master 2,714 전수를 Production에서 다시 읽고 safe pager로 대장 재조회해 POLICY B 판정을 처음부터 재생성
+    1차STOP   수치는 이미 37/34로 맞았지만 **조회 실패 18건**이 남아 STOP — 수가 맞는 것은 완전성의 증거가 아니다(못 읽은 18건에 38번째 대상이 있었을 수 있음)
+    해소      18건만 간격 900ms로 재조회 -> 조회 실패 0 · 신규 대상 0 · 37/34 확정(rate limit 347 -> 9)
+    제외확인   한보장산 26350-52 제외(부속건축물인데 호수 1 = 근거 상충) · roadAddress-only REVIEW 19 · UNKNOWN 724 · 기존 AUTO 42 · ALREADY_OK 132 전부 미변경 · 부산 외/중복 aptSeq 0
+    parking   **읽기 전용 증거** — UPDATE의 SET에 등장하지 않고 WHERE 조건에만 등장한다
+    severe사전 엘지 48->1,848(1.07) · 대림2 42->682(1.04) · 대림 104->1,424(1.08) · 삼호가든맨션 90->1,076(0.69) — 쓰기 전 기대값 4/4 일치
+    안전장치   쓰기 전 rollback artifact 37행(old/new/근거/되돌림SQL) · 행마다 optimistic guard(세대수는 기대 old, 파생비율은 parking_count와 옛 비율 둘 다 일치할 때만) · 단일 트랜잭션 · 불일치 0
+    사후검증   households 37/37 · 파생비율 34/34 · **parking_count 0** · 예상과 다른 값 0 · 승인 밖 drift 0 · 한보장산 미변경 · 214 전체 불변식 위반 0
+    이상치      세대당 주차 >2.0: **30 -> 2** · >5.0: 22 -> 0 · >10.0: 13 -> 0 (남은 2건 송도탑스빌 3.02 · 구서쌍용스윗닷홈 2.04는 이번 대상 아님)
+    QA        Production 상세 4건 전부 새 세대수 반영 · **주차 총량 1,984/708/1,541/743 전부 불변** · 삼호가든맨션 주차는 여전히 UNRESOLVED로 유지
+    Score     엘지 주차 74점 — 41.33대 시절엔 의미 없던 값이 1.07대 기준 실제 점수가 됐다(총점 41)
+    캐시      37건에 붙은 캐시 행 0 · 게이트 충족 0 · 가려진 값 0
+    회귀      large-complex/dashboard/rankings/supply/sitemap/transactions/school **응답 바이트 수가 쓰기 전과 완전 동일** · 진입 경계 1,938세대 > 최대 신규값 1,848이라 목록 구성 불변
+    격리      부산 3,438 · 서울 6,843 · 서울 좌표 6,726 · UNKNOWN 724 · 매매 865,421 · 취소 16,345 · **all-canceled 273** · **upper bound 334** · Seoul sale 46 전부 baseline
+    테스트    scripts 576 pass / 0 fail · eslint 0 · tsc 신규 0
+
 ### E-JIP BUILDING LEDGER ZERO-HOUSEHOLD REVIEW POLICY V1 — 0세대 공동주택 판정 정책 (READ-ONLY)
 
 Production INSERT/UPDATE/DELETE 0 · master 0 · 캐시 0 · parking 0 · schema 0 · 서울 0 · cancellation 0 · sale apply 0 · runtime src 0. 상세: `docs/development/BUILDING_LEDGER_ZERO_HOUSEHOLD_REVIEW_POLICY_V1.md`

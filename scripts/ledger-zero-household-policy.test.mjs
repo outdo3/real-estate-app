@@ -116,3 +116,36 @@ test('엘지 케이스: 0세대 상가동 2개를 근거로 제외하면 1,848�
   // 주차 1,984대 기준 세대당 1.07대 — 41.33에서 정상 범위로 내려온다
   assert.equal(Math.round((1984 / o.B) * 100) / 100, 1.07);
 });
+
+// ── APPLY 스크립트의 순수 판정 (BUSAN_ZERO_HOUSEHOLD_POLICY_B_APPLY_V1) ──
+
+import { policyBOutcome, MUST_EXCLUDE, SEVERE_EXPECTED } from './apply-busan-zero-household-policy-b.ts';
+
+test('apply의 POLICY B 판정은 근거 있는 0세대만 빼고 합산한다', () => {
+  const o = policyBOutcome([
+    rec({ hhldCnt: 900 }), rec({ hhldCnt: 948 }),
+    rec({ hhldCnt: 0, etcPurps: '생활편익시설, 의료시설', hoCnt: 67, fmlyCnt: 60 }),
+  ]);
+  assert.equal(o.newHouseholds, 1848);
+  assert.equal(o.excluded, 1);
+  assert.deepEqual(o.blocked, []);
+  assert.equal(o.evidence.length, 1);
+});
+
+test('apply의 POLICY B는 근거 없는 0세대가 남으면 값을 만들지 않는다', () => {
+  const o = policyBOutcome([rec({ hhldCnt: 900 }), rec({ hhldCnt: 0, mainAtchGbCdNm: '부속건축물', etcPurps: '경비실', hoCnt: 1 })]);
+  assert.equal(o.newHouseholds, null, '한보장산 형태 — 부속인데 호수 신고');
+  assert.deepEqual(o.blocked, ['RESIDENTIAL_ZERO_SUSPICIOUS']);
+});
+
+test('한보장산은 반드시 제외 목록에 있다', () => {
+  assert.equal(MUST_EXCLUDE.has('26350-52'), true);
+});
+
+test('severe 기대값은 감사 결과와 일치한다 — 쓰기 전 대조용', () => {
+  assert.deepEqual(SEVERE_EXPECTED['26350-131'], { name: '엘지', oldH: 48, newH: 1848, parking: 1984 });
+  assert.deepEqual(SEVERE_EXPECTED['26350-15'], { name: '삼호가든맨션', oldH: 90, newH: 1076, parking: 743 });
+  // 주차는 기대값에 있지만 조건으로만 쓰인다 — 새 비율은 두 값의 나눗셈이다
+  assert.equal(Math.round((1984 / 1848) * 100) / 100, 1.07);
+  assert.equal(Math.round((743 / 1076) * 100) / 100, 0.69);
+});
