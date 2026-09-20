@@ -2,6 +2,29 @@
 
 ## 2026-09-20
 
+### E-JIP BUILDING LEDGER FIELD POLICY & STORED DATA TRUST AUDIT V1 — 필드별 권위 출처 확정 (READ-ONLY)
+
+Production INSERT/UPDATE/DELETE 0 · 대장 정정 0 · 좌표 0 · sale apply 0 · cancellation 0 · schema 0 · runtime src 0. 상세: `docs/development/BUILDING_LEDGER_FIELD_POLICY_V1.md`
+
+    핵심      틀린 건 세대수 한 필드였고 주차는 대체로 이미 옳았다 — 화면의 "세대당 주차"는 파생값이라 세대수 오류가 그대로 증폭됐다
+    필드규칙   필드마다 다르다 — 세대수 조건부 합산 O · 주차 합산 X(단지 총량 반복) · FAR/BCR X(동별 상이) · buildingCount X(표제부에 필드 없음) · 도로명 조건부 O
+    분류근거   mainPurpsCdNm 공식 코드명으로만 주거 판정(이름 추측 금지) — 공동주택 765 + 근린생활 56 + 단독 16 + 판매 15 + 노유자 11 + 교육/창고/업무/공장/위험물
+    잘림증거   저장 세대수가 틀린 80건 **전부**가 그 지번 개별 동 한 곳의 값과 정확히 일치 — 우연이 아니라 잘림의 직접 증거
+    교차검증   세대수를 주거합계로 바꾸면 세대당 주차가 41.33/28.80/18.46 -> 1.07/1.08/1.04로 일제 수렴(전부 1.02~1.15) — 저장 주차가 단지 총량으로 옳았다는 독립 증거
+    세대수판정 ALREADY_OK 90 · AUTO 42 · REVIEW 38 · KEEP_NULL 44 (주거 레코드에 0세대가 하나도 없을 때만 합산 신뢰)
+    주차판정   자동 규칙 없음 — SAME_REPEATED_TOTAL 79 · SINGLE 85 · DONG_LEVEL 21 · MIXED 14 · ALL_ZERO 15. 그중 75건은 저장값이 이미 정답이라 정정 대상에서 제외
+    FAR/BCR   DIVERGENT 94/62 — 다동 단지는 동마다 다른 게 정상이라 first/max 임의 선택 금지 원칙대로 제외
+    도로명     지번당 단일 189 · 2개 17 · 3개 6 · 4개 1 · 5개 1 -> AUTO 87 · 이미일치 102 · REVIEW 25. identity key로는 쓰지 않음(도로명 공유 반례 존재)
+    우선순위   실측 증명 — tier1 prisma.apartment(4필드 전부 있을 때만) -> tier2 apartment_masters -> tier3 live. 26350-15의 90/743은 **tier2 저장값** 출처, 1986년은 네이버 fallback
+    런타임확인 고친 helper는 14건 지번에 null을 반환해 정상 동작 중 — 화면 값은 이미 저장된 master 값이라 코드로는 안 고쳐진다
+    26350-15  세대수 REVIEW(합 1,076이나 공동주택 0세대 상가동 혼재) · 주차 UNRESOLVED(13x743 + 1x473 — 앞 STEP "전부 743" 기술을 정정) · 도로명 AUTO_SAFE · buildingCount UNRESOLVED
+    노출규모   세대수 오류 80 · 세대당 주차까지 오류 65 · 2.0대 초과로 누가 봐도 이상 44 · FAR/BCR 동반 55 · 캐시 중복 3. 최악 엘지(26350-131) 48세대/1984대
+    UNKNOWN   부산 724건은 이번 census 밖 — PK 9~10자리(표제부 계열) · FAR/BCR 0건 · 600건이 대장 파생값 보유 · created 2026-08-13 = provenance 누락 구 import, 별도 STEP 필요
+    캐시      prisma.apartment 95행(부산 82·서울 11) 중 tier1 단축 조건 충족 56 — master를 가릴 수 있어 정정 시 동반 고려. 214건과 겹침 9, 오류 80건과 겹침 3
+    정정계획   승인 대기 — 세대수 42 + 도로명 87 = 최대 129 master 2필드. 행별 old/new/근거 + 되돌림 SQL 가능. **이번 STEP 실행 0**
+    서울117    도로명은 대체로 단일하나 identity 확정 아님 — 정방향 후 역방향 필지 검증 통과율 미측정
+    테스트    eslint 0 · tsc src 0 (기존 scripts 21 + tmp 4 = FAIL_EXISTING_SCRIPT_ERRORS, 건수 불변) · runtime 무변경이라 build/suite는 533a524 상태 유지
+
 ### E-JIP BUILDING LEDGER PAGINATION FIX + BUSAN IMPACT AUDIT V1 — 대장 조회 잘림 수정 (runtime fix + read-only census)
 
 기존 대장 데이터 UPDATE 0 · master UPDATE 0 · 좌표 0 · schema 0 · sale/cancellation 0. 상세: `docs/development/BUILDING_LEDGER_PAGINATION_FIX_V1.md`
