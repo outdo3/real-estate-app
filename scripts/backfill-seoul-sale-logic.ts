@@ -102,6 +102,113 @@ export function existingRowDrift(plan: Pick<SaleCellPlan, 'cancelFlips' | 'cance
   return out;
 }
 
+// ── SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1 ────────────────────────────────
+//
+// DB 자연키 unique는 `(group_key, deal_amount, deal_date, floor, occurrence_index)`로
+// **lawdCd를 포함하지 않는다**. MOLIT이 같은 거래를 이웃 구 응답에도 실어 보내면(서울 실측
+// 33행) 두 셀이 같은 자연키를 만들고, `createMany skipDuplicates`가 나중 쪽을 조용히 건너뛴다.
+// 그러면 실제 inserted가 계획보다 작아져 applyMatchesPlan이 **정상 apply를 오탐 정지**시킨다.
+//
+// 그래서 계획 단계에서 건너뛸 수를 미리 센다. 건너뛰는 이유는 둘뿐이고 둘 다 결정적이다:
+//   DB_EXISTS   이미 DB에 그 자연키가 있다(다른 구·다른 달·이전 실행이 넣었다)
+//   RUN_EARLIER 이번 실행의 **앞선 셀**이 같은 자연키를 넣을 예정이다
+//
+// sale-sync-core(취소 판정)는 건드리지 않는다 — 이 계산은 driver 바깥에서만 쓴다.
+
+/** DB unique와 같은 자연키 문자열. lawdCd·dealYmd는 들어가지 않는다(그것이 충돌의 원인이다). */
+export function naturalKeyOf(r: { groupKeyStr: string; dealAmount: number; dealDate: string; floor: number | null; occurrenceIndex: number }): string {
+  return `${r.groupKeyStr}|${r.dealAmount}|${r.dealDate}|${r.floor}|${r.occurrenceIndex}`;
+}
+
+/** aptSeq 앞 5자리가 canonical 구다. 형식이 아니면 null — 이름·지번으로 추측하지 않는다. */
+export function canonicalLawdCdOf(aptSeq: string | null | undefined): string | null {
+  const m = /^(\d{5})-\d+$/.exec((aptSeq ?? '').trim());
+  return m ? m[1] : null;
+}
+
+export type SkipReason = 'DB_EXISTS' | 'RUN_EARLIER';
+
+export interface PlannedInsertKey {
+  naturalKey: string;
+  aptSeq: string | null;
+}
+
+export interface CellPlannedKeys {
+  lawdCd: string;
+  ym: string;
+  /** 이 셀이 넣으려는 행들의 자연키(계획 순서 그대로). */
+  keys: PlannedInsertKey[];
+}
+
+export interface CellSkips {
+  lawdCd: string;
+  ym: string;
+  plannedInserts: number;
+  expectedSkips: number;
+  expectedActualInserts: number;
+  skipped: { naturalKey: string; aptSeq: string | null; reason: SkipReason; canonicalLawdCd: string | null; ownerIsCanonical: boolean | null }[];
+}
+
+export interface ExpectedSkipsResult {
+  cells: CellSkips[];
+  plannedInserts: number;
+  expectedSkips: number;
+  expectedActualInserts: number;
+  /** canonical 구가 아닌 셀이 자연키를 먼저 차지하는 경우 — 적용 순서를 바꾸라는 신호. */
+  nonCanonicalOwnerWarnings: { naturalKey: string; aptSeq: string | null; claimedBy: string; canonicalLawdCd: string | null }[];
+}
+
+/**
+ * 셀들을 **실제 적용 순서 그대로** 훑으며 건너뛸 행을 센다(순서에 의존하지 않도록 결과를 순서와
+ * 무관하게 만드는 것이 아니라, 실제 순서에서 무엇이 건너뛰어질지를 정확히 계산한다).
+ *
+ * `dbExistingKeys`는 계획된 자연키 중 **이미 DB에 있는 것**의 집합(읽기 전용 조회 결과).
+ */
+export function computeExpectedSkips(cells: readonly CellPlannedKeys[], dbExistingKeys: ReadonlySet<string>): ExpectedSkipsResult {
+  const claimed = new Map<string, string>(); // naturalKey → 이번 실행에서 먼저 차지한 lawdCd
+  const out: CellSkips[] = [];
+  const warnings: ExpectedSkipsResult['nonCanonicalOwnerWarnings'] = [];
+
+  for (const cell of cells) {
+    const skipped: CellSkips['skipped'] = [];
+    for (const k of cell.keys) {
+      const canonical = canonicalLawdCdOf(k.aptSeq);
+      if (dbExistingKeys.has(k.naturalKey)) {
+        skipped.push({ naturalKey: k.naturalKey, aptSeq: k.aptSeq, reason: 'DB_EXISTS', canonicalLawdCd: canonical, ownerIsCanonical: null });
+        continue;
+      }
+      const earlier = claimed.get(k.naturalKey);
+      if (earlier !== undefined) {
+        skipped.push({ naturalKey: k.naturalKey, aptSeq: k.aptSeq, reason: 'RUN_EARLIER', canonicalLawdCd: canonical, ownerIsCanonical: canonical ? earlier === canonical : null });
+        continue;
+      }
+      claimed.set(k.naturalKey, cell.lawdCd);
+    }
+    out.push({
+      lawdCd: cell.lawdCd, ym: cell.ym,
+      plannedInserts: cell.keys.length,
+      expectedSkips: skipped.length,
+      expectedActualInserts: cell.keys.length - skipped.length,
+      skipped,
+    });
+  }
+
+  // 같은 실행 안에서 canonical이 아닌 구가 자연키를 차지했으면 경고한다(적용 순서 조정 대상).
+  for (const cell of out) {
+    for (const s of cell.skipped) {
+      if (s.reason !== 'RUN_EARLIER' || !s.canonicalLawdCd) continue;
+      const owner = claimed.get(s.naturalKey);
+      if (owner && owner !== s.canonicalLawdCd) {
+        warnings.push({ naturalKey: s.naturalKey, aptSeq: s.aptSeq, claimedBy: owner, canonicalLawdCd: s.canonicalLawdCd });
+      }
+    }
+  }
+
+  const plannedInserts = out.reduce((s, c) => s + c.plannedInserts, 0);
+  const expectedSkips = out.reduce((s, c) => s + c.expectedSkips, 0);
+  return { cells: out, plannedInserts, expectedSkips, expectedActualInserts: plannedInserts - expectedSkips, nonCanonicalOwnerWarnings: warnings };
+}
+
 export type QuotaDecision = 'CONTINUE' | 'STOP_RESERVE' | 'STOP_MAX_CALLS';
 
 /** 같은 키를 Production이 함께 쓰므로 예약분에 닿거나 이번 실행 상한에 닿으면 멈춘다. remaining을 모르면(첫 호출 전) 계속. */
@@ -144,7 +251,16 @@ export function evaluateApplyGates(g: ApplyGateInput): { allowed: boolean; reaso
   return { allowed: reasons.length === 0, reasons };
 }
 
-/** apply 뒤 셀 결과가 dry-run 계획과 같은가(다르면 원천이 바뀐 것 — 그 셀에서 정지). */
-export function applyMatchesPlan(report: { inserted: number; updated: number }, planned: { inserts: number; cancelFlips: number }): boolean {
-  return report.inserted === planned.inserts && report.updated === planned.cancelFlips;
+/**
+ * apply 뒤 셀 결과가 dry-run 계획과 같은가(다르면 원천이 바뀐 것 — 그 셀에서 정지).
+ *
+ * SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1 — 자연키가 겹치는 행은 `skipDuplicates`가 건너뛰므로
+ * 실제 inserted는 **계획 − 예상 skip**이다. `expectedSkips`를 주지 않으면 0으로 본다(기존 동작).
+ */
+export function applyMatchesPlan(
+  report: { inserted: number; updated: number },
+  planned: { inserts: number; cancelFlips: number; expectedSkips?: number }
+): boolean {
+  const expected = planned.inserts - (planned.expectedSkips ?? 0);
+  return report.inserted === expected && report.updated === planned.cancelFlips;
 }

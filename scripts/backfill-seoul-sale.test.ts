@@ -5,7 +5,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { runBackfill, parseCli, type BackfillDeps, type BackfillOptions, type ReadDb } from './backfill-seoul-sale';
-import { evaluateApplyGates, quotaDecision, resolveScope, classifyTradeMaster } from './backfill-seoul-sale-logic';
+import {
+  evaluateApplyGates, quotaDecision, resolveScope, classifyTradeMaster,
+  computeExpectedSkips, applyMatchesPlan, naturalKeyOf, canonicalLawdCdOf,
+  type CellPlannedKeys,
+} from './backfill-seoul-sale-logic';
 import { monthDateRange, type ExistingTradeRow } from '../src/lib/sync/sale-sync-core';
 import { fetchSaleCell, type PageFetcher, type PageOutcome } from './seed-seoul-apartment-master-logic';
 
@@ -31,9 +35,19 @@ const dbRow = (o: Partial<ExistingTradeRow> = {}): ExistingTradeRow => ({
   id: 1, groupKeyStr: 'id:11140-1::84.9::sale', dealAmount: 120000, dealDate: new Date('2026-09-03T00:00:00Z'), floor: 5, occurrenceIndex: 0,
   dealCanceled: false, cancelDate: null, aptName: '남산타운', dong: '신당동', registryDate: null, ...o,
 });
-function fakeDb(existing: Record<string, ExistingTradeRow[]> = {}, masters = ['11140-1']): ReadDb & { lookups: string[] } {
+function fakeDb(
+  existing: Record<string, ExistingTradeRow[]> = {},
+  masters = ['11140-1'],
+  /** 이미 DB에 있는 자연키(자연키에는 lawdCd가 없다 — 다른 구가 넣은 행을 여기로 표현한다). */
+  existingKeys: string[] = []
+): ReadDb & { lookups: string[] } {
   const lookups: string[] = [];
-  return { lookups, findExisting: async (l, ym) => { lookups.push(`${l}:${ym}`); return (existing[`${l}:${ym}`] ?? []).map((r) => ({ ...r })); }, seoulMasterAptSeqs: async () => new Set(masters) };
+  return {
+    lookups,
+    findExisting: async (l, ym) => { lookups.push(`${l}:${ym}`); return (existing[`${l}:${ym}`] ?? []).map((r) => ({ ...r })); },
+    seoulMasterAptSeqs: async () => new Set(masters),
+    existingNaturalKeys: async (keys) => new Set(keys.filter((k) => existingKeys.includes(k))),
+  };
 }
 function setup(o: { data: Record<string, Record<string, Cell>>; db?: ReadDb; opts?: Partial<BackfillOptions>; deps?: Partial<BackfillDeps>; outDir?: string; fetchLog?: string[] }) {
   const outDir = o.outDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'seoul-sale-'));
@@ -225,4 +239,104 @@ test('22 · 멱등 재실행 — 같은 원천·master·checkpoint면 같은 결
     deps: { applyCell: async () => ({ status: 'COMPLETE', inserted: 0, updated: 0 }) } });
   const r = await bad.run();
   assert.match(r.summary.stoppedBy, /^APPLY_MISMATCH_11140_202608/);
+});
+
+// ── SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1 ────────────────────────────────
+//
+// 실측 근거(서울 1,440,126행 전수 census): 중복 자연키 2개, 전부 cross-district,
+// aptSeq 11590-3369(관악푸르지오102동, 사당동) 한 단지. canonical 구는 동작구 11590이다
+// — 두 응답 모두 aptSeq와 umdCd(10700 사당동)가 같고 sggCd만 조회 구를 되돌려준다.
+
+const KEY_A = 'id:11590-3369::114.69::sale|106000|2025-03-15|4|0';
+const KEY_B = 'id:11590-3369::114.69::sale|105000|2025-08-08|10|0';
+const cell = (lawdCd: string, ym: string, keys: string[]): CellPlannedKeys =>
+  ({ lawdCd, ym, keys: keys.map((naturalKey) => ({ naturalKey, aptSeq: '11590-3369' })) });
+
+test('자연키/ canonical 구 추출 — lawdCd는 자연키에 없고, canonical은 aptSeq 앞 5자리뿐', () => {
+  assert.equal(
+    naturalKeyOf({ groupKeyStr: 'id:11590-3369::114.69::sale', dealAmount: 106000, dealDate: '2025-03-15', floor: 4, occurrenceIndex: 0 }),
+    KEY_A
+  );
+  assert.equal(canonicalLawdCdOf('11590-3369'), '11590');
+  assert.equal(canonicalLawdCdOf(null), null, '추측하지 않는다');
+  assert.equal(canonicalLawdCdOf('관악푸르지오102동'), null, '이름으로 구를 정하지 않는다');
+});
+
+// A. 같은 실행에 동작·관악이 함께 있으면 뒤 구의 2행이 건너뛰어진다.
+test('A · cross-district 중복 2행 → expectedSkips = 2', () => {
+  const r = computeExpectedSkips(
+    [cell('11590', '202503', [KEY_A]), cell('11590', '202508', [KEY_B]),
+     cell('11620', '202503', [KEY_A]), cell('11620', '202508', [KEY_B])],
+    new Set()
+  );
+  assert.equal(r.plannedInserts, 4);
+  assert.equal(r.expectedSkips, 2);
+  assert.equal(r.expectedActualInserts, 2);
+  const gwanak = r.cells.filter((c) => c.lawdCd === '11620');
+  assert.deepEqual(gwanak.map((c) => c.expectedSkips), [1, 1], '건너뛰는 쪽은 canonical이 아닌 관악이다');
+  assert.deepEqual(gwanak.flatMap((c) => c.skipped.map((s) => s.reason)), ['RUN_EARLIER', 'RUN_EARLIER']);
+});
+
+// B. 충돌이 없는 구는 0이어야 한다(정상 구에 부작용 없음).
+test('B · 충돌 없는 구 → expectedSkips = 0', () => {
+  const r = computeExpectedSkips(
+    [{ lawdCd: '11140', ym: '202609', keys: [{ naturalKey: 'id:11140-1::84.9::sale|120000|2026-09-03|5|0', aptSeq: '11140-1' }] }],
+    new Set()
+  );
+  assert.equal(r.expectedSkips, 0);
+  assert.equal(r.expectedActualInserts, 1);
+  assert.equal(r.nonCanonicalOwnerWarnings.length, 0);
+});
+
+// C. canonical 구를 먼저 적재한 **이전 실행** 뒤에는, 관악만 돌려도 DB에 이미 있어 건너뛴다.
+test('C · canonical 구가 먼저 적재된 뒤 관악만 실행하면 DB_EXISTS로 건너뛴다', () => {
+  const r = computeExpectedSkips(
+    [cell('11620', '202503', [KEY_A]), cell('11620', '202508', [KEY_B])],
+    new Set([KEY_A, KEY_B]) // 동작구가 이미 넣어 둔 상태
+  );
+  assert.equal(r.expectedSkips, 2);
+  assert.equal(r.expectedActualInserts, 0);
+  assert.deepEqual(r.cells.flatMap((c) => c.skipped.map((s) => s.reason)), ['DB_EXISTS', 'DB_EXISTS']);
+});
+
+// D. 순서가 뒤집혀 canonical이 아닌 구가 행을 차지하면 경고한다(적용 순서 조정 신호).
+test('D · canonical owner 순서 검증 — 관악이 먼저면 경고, 동작이 먼저면 경고 없음', () => {
+  const wrong = computeExpectedSkips([cell('11620', '202503', [KEY_A]), cell('11590', '202503', [KEY_A])], new Set());
+  assert.equal(wrong.expectedSkips, 1);
+  assert.equal(wrong.nonCanonicalOwnerWarnings.length, 1);
+  assert.equal(wrong.nonCanonicalOwnerWarnings[0].claimedBy, '11620');
+  assert.equal(wrong.nonCanonicalOwnerWarnings[0].canonicalLawdCd, '11590');
+
+  const right = computeExpectedSkips([cell('11590', '202503', [KEY_A]), cell('11620', '202503', [KEY_A])], new Set());
+  assert.equal(right.expectedSkips, 1);
+  assert.equal(right.nonCanonicalOwnerWarnings.length, 0, 'canonical이 차지했으면 경고하지 않는다');
+});
+
+// E. 중구 파일럿(최근 12개월 944행) — 충돌 0이므로 계획과 실제가 같아야 한다.
+test('E · 중구 파일럿 944행 → skip 0, 예상 실제 insert 944', () => {
+  const keys: CellPlannedKeys[] = Array.from({ length: 12 }, (_, m) => ({
+    lawdCd: '11140', ym: `2026${String(m + 1).padStart(2, '0')}`,
+    keys: Array.from({ length: m === 0 ? 944 - 11 * 1 : 1 }, (_, i) => ({ naturalKey: `id:11140-${m}-${i}::84.9::sale|1|2026-01-01|1|0`, aptSeq: '11140-1' })),
+  }));
+  const total = keys.reduce((s, c) => s + c.keys.length, 0);
+  assert.equal(total, 944, 'fixture가 파일럿 규모와 같은지');
+  const r = computeExpectedSkips(keys, new Set());
+  assert.equal(r.plannedInserts, 944);
+  assert.equal(r.expectedSkips, 0);
+  assert.equal(r.expectedActualInserts, 944);
+});
+
+// applyMatchesPlan — 오탐 정지의 실제 원인이 닫혔는지.
+test('applyMatchesPlan — expectedSkips만큼 적게 들어와도 정상으로 본다', () => {
+  // 예전 동작(보정 없음)에서는 오탐 정지였다.
+  assert.equal(applyMatchesPlan({ inserted: 8, updated: 0 }, { inserts: 10, cancelFlips: 0 }), false);
+  // 보정 후: 10 계획 − 2 skip = 8이 정상.
+  assert.equal(applyMatchesPlan({ inserted: 8, updated: 0 }, { inserts: 10, cancelFlips: 0, expectedSkips: 2 }), true);
+  // 그래도 그보다 더/덜 들어오면 여전히 정지한다.
+  assert.equal(applyMatchesPlan({ inserted: 9, updated: 0 }, { inserts: 10, cancelFlips: 0, expectedSkips: 2 }), false);
+  assert.equal(applyMatchesPlan({ inserted: 7, updated: 0 }, { inserts: 10, cancelFlips: 0, expectedSkips: 2 }), false);
+  // 취소 flip 수는 기존대로 정확히 일치해야 한다.
+  assert.equal(applyMatchesPlan({ inserted: 8, updated: 1 }, { inserts: 10, cancelFlips: 0, expectedSkips: 2 }), false);
+  // expectedSkips를 주지 않으면 기존 동작 그대로.
+  assert.equal(applyMatchesPlan({ inserted: 10, updated: 0 }, { inserts: 10, cancelFlips: 0 }), true);
 });

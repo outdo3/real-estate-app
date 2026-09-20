@@ -26,6 +26,11 @@ import { planSaleCellWrites, type ExistingTradeRow, type SaleCellPlan } from '..
 import { fetchSaleCell, type PageFetcher, type PageOutcome } from './seed-seoul-apartment-master-logic';
 import {
   applyMatchesPlan,
+  computeExpectedSkips,
+  naturalKeyOf,
+  canonicalLawdCdOf,
+  type CellPlannedKeys,
+  type PlannedInsertKey,
   cellStateFromPlan,
   classifyTradeMaster,
   evaluateApplyGates,
@@ -44,6 +49,12 @@ export interface ReadDb {
   /** 운영 syncOneSaleCell과 같은 조건(lawdCd·dealYmd·dealDate 월 범위)으로 셀의 기존 행을 읽는다. */
   findExisting(lawdCd: string, ym: string): Promise<ExistingTradeRow[]>;
   seoulMasterAptSeqs(): Promise<Set<string>>;
+  /**
+   * SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1 — 주어진 자연키 중 **이미 DB에 있는 것**.
+   * 자연키에 lawdCd가 없으므로 셀 단위 findExisting으로는 다른 구가 이미 넣은 행을 볼 수 없다.
+   * 읽기 전용이며 unique index를 그대로 탄다.
+   */
+  existingNaturalKeys(keys: readonly string[]): Promise<Set<string>>;
 }
 
 export interface ApplyCellReport { status: string; inserted: number; updated: number }
@@ -79,7 +90,11 @@ interface CellCheckpoint {
   pages: number;
   errors: string[];
   fetchedAt: string | null;
-  plan?: { inserts: number; insertCanceled: number; cancelFlips: number; cancelRestores: number; registrySupplements: number; existing: number; existingMatched: number; reviewCandidates: number; insertReconcileSkipped: number; cancelReconcileSkipped: number };
+  plan?: { inserts: number; insertCanceled: number; cancelFlips: number; cancelRestores: number; registrySupplements: number; existing: number; existingMatched: number; reviewCandidates: number; insertReconcileSkipped: number; cancelReconcileSkipped: number;
+    /** SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1 — 이 셀이 넣으려는 행들의 자연키(충돌 계산용). */
+    insertKeys?: PlannedInsertKey[];
+    /** canonical 구가 아닌 곳에 저장될 계획 행 수(보고용). */
+    nonCanonicalInserts?: number };
   blockedReasons?: string[];
   applied?: { at: string; inserted: number; updated: number; status: string };
 }
@@ -168,9 +183,8 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
     const existing = await db.findExisting(lawdCd, ym);
     dbMs += Date.now() - td;
     const plan: SaleCellPlan = planSaleCellWrites(rows, existing);
-    const nk = (r: { groupKeyStr: string; dealAmount: number; dealDate: string; floor: number | null; occurrenceIndex: number }) => `${r.groupKeyStr}|${r.dealAmount}|${r.dealDate}|${r.floor}|${r.occurrenceIndex}`;
-    const existingKeys = new Set(existing.map((e) => nk({ ...e, dealDate: e.dealDate.toISOString().slice(0, 10) })));
-    const matched = rows.filter((r) => existingKeys.has(nk(r)));
+    const existingKeys = new Set(existing.map((e) => naturalKeyOf({ ...e, dealDate: e.dealDate.toISOString().slice(0, 10) })));
+    const matched = rows.filter((r) => existingKeys.has(naturalKeyOf(r)));
     for (const r of matched) existingSkipped.push({ lawdCd, ym, aptSeq: r.aptSeq, dealDate: r.dealDate, dealAmount: r.dealAmount, floor: r.floor, occurrenceIndex: r.occurrenceIndex });
     for (const r of plan.inserts) readyInserts.push(insertView(lawdCd, ym, r, classifyTradeMaster(r, masters)));
     for (const d of existingRowDrift(plan, existing)) drift.push({ ...d, lawdCd, ym });
@@ -187,6 +201,10 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
       inserts: plan.inserts.length, insertCanceled: plan.inserts.filter((r) => r.dealCanceled).length, cancelFlips: plan.cancelFlips.length,
       cancelRestores: plan.cancelRestores.length, registrySupplements: plan.registrySupplements.length, existing: existing.length, existingMatched: matched.length,
       reviewCandidates: plan.reviewCandidates, insertReconcileSkipped: plan.insertReconcileSkipped, cancelReconcileSkipped: plan.cancelReconcileSkipped,
+      // 자연키 충돌 계산용 — 이 셀이 넣으려는 행들의 자연키와 aptSeq.
+      insertKeys: plan.inserts.map((r) => ({ naturalKey: naturalKeyOf(r), aptSeq: r.aptSeq })),
+      // canonical 구가 아닌 곳에 저장될 행(원천이 조회 구를 sggCd로 되돌려주는 계열) — 보고만 한다.
+      nonCanonicalInserts: plan.inserts.filter((r) => { const c = canonicalLawdCdOf(r.aptSeq); return c != null && c !== lawdCd; }).length,
     };
     saveCp(lawdCd);
   }
@@ -196,6 +214,16 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
   const byState = allCells.reduce((m: Record<string, number>, c) => ((m[c.state] = (m[c.state] ?? 0) + 1), m), {});
   const plannedInserts = allCells.reduce((s, c) => s + (c.plan?.inserts ?? 0), 0);
   const existingUpdates = allCells.reduce((s, c) => s + (c.plan ? c.plan.cancelFlips + c.plan.cancelRestores + c.plan.registrySupplements : 0), 0);
+
+  // SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1 — 계획된 insert 중 skipDuplicates로 건너뛸 수를
+  // **적용 순서 그대로** 미리 센다. 이유는 둘뿐이다: 이미 DB에 있다 / 이번 실행의 앞선 셀이 넣는다.
+  const plannedKeyCells: CellPlannedKeys[] = allCells.map((c) => ({ lawdCd: c.lawdCd, ym: c.ym, keys: c.plan?.insertKeys ?? [] }));
+  const allPlannedKeys = plannedKeyCells.flatMap((c) => c.keys.map((k) => k.naturalKey));
+  const dbExistingKeys = allPlannedKeys.length ? await db.existingNaturalKeys([...new Set(allPlannedKeys)]) : new Set<string>();
+  const skips = computeExpectedSkips(plannedKeyCells, dbExistingKeys);
+  const skipsByCell = new Map(skips.cells.map((c) => [`${c.lawdCd}:${c.ym}`, c]));
+  const nonCanonicalInserts = allCells.reduce((s, c) => s + (c.plan?.nonCanonicalInserts ?? 0), 0);
+
   const summary: any = {
     at: deps.now().toISOString(), mode: opts.apply ? 'APPLY_REQUESTED' : 'DRY_RUN',
     scope: { districts: scope.districts, from: scope.from, to: scope.to, cells: scope.cells.length },
@@ -203,7 +231,17 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
     source: { rows: sourceRows, active: activeRows, canceled: canceledRows },
     master: masterCounts, masterMissingAptSeqs: masterMissing.size,
     plan: { inserts: plannedInserts, insertExactMaster: readyInserts.filter((r) => r.master === 'EXACT_MASTER').length, insertMasterMissing: readyInserts.filter((r) => r.master === 'MASTER_MISSING').length,
-      existingMatched: allCells.reduce((s, c) => s + (c.plan?.existingMatched ?? 0), 0), existingUpdates, review: review.length },
+      existingMatched: allCells.reduce((s, c) => s + (c.plan?.existingMatched ?? 0), 0), existingUpdates, review: review.length,
+      // 계획 insert 수 − 예상 skip = 실제로 기록될 행 수. apply 후 대조는 이 값으로 한다.
+      expectedSkips: skips.expectedSkips, expectedActualInserts: skips.expectedActualInserts,
+      nonCanonicalInserts },
+    collisions: {
+      note: '자연키에 lawdCd가 없어 같은 거래가 이웃 구 응답에도 실리면 나중 셀이 skipDuplicates로 건너뛴다. canonical 구는 aptSeq 앞 5자리.',
+      expectedSkips: skips.expectedSkips,
+      byReason: skips.cells.flatMap((c) => c.skipped).reduce((m: Record<string, number>, sk) => ((m[sk.reason] = (m[sk.reason] ?? 0) + 1), m), {}),
+      cells: skips.cells.filter((c) => c.expectedSkips > 0),
+      nonCanonicalOwnerWarnings: skips.nonCanonicalOwnerWarnings,
+    },
     calls, quotaRemaining: deps.quotaRemaining(), ms: { total: Date.now() - t0, existingLookup: dbMs },
     writes: { insert: 0, update: 0, delete: 0 },
   };
@@ -217,10 +255,19 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
   out('cancellation-summary.json', cancel);
   out('paging-errors.json', pagingErrors);
   out('quota-status.json', { calls, remaining: deps.quotaRemaining(), reserve: opts.reserveCalls, maxCalls: opts.maxCalls, stoppedBy: stop });
+  out('natural-key-collisions.json', {
+    plannedInserts: skips.plannedInserts, expectedSkips: skips.expectedSkips, expectedActualInserts: skips.expectedActualInserts,
+    nonCanonicalInserts,
+    cells: skips.cells.filter((c) => c.expectedSkips > 0),
+    nonCanonicalOwnerWarnings: skips.nonCanonicalOwnerWarnings,
+  });
 
   if (!opts.apply) {
     out('summary.json', summary);
-    deps.log(`[DRY RUN] cells=${scope.cells.length} ${JSON.stringify(byState)} inserts=${plannedInserts} existingUpdates=${existingUpdates} calls=${calls} — DB write 없음`);
+    deps.log(`[DRY RUN] cells=${scope.cells.length} ${JSON.stringify(byState)} inserts=${plannedInserts} expectedSkips=${skips.expectedSkips} expectedActualInserts=${skips.expectedActualInserts} existingUpdates=${existingUpdates} calls=${calls} — DB write 없음`);
+    if (skips.nonCanonicalOwnerWarnings.length) {
+      deps.log(`[DRY RUN] NON_CANONICAL_OWNER ${skips.nonCanonicalOwnerWarnings.length}건 — canonical 구를 --district 앞에 두면 그 구가 행을 차지한다: ${JSON.stringify(skips.nonCanonicalOwnerWarnings)}`);
+    }
     return { summary, applied: null as null | any[] };
   }
 
@@ -244,12 +291,14 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
     calls++;
     const rep = await deps.applyCell(c.lawdCd, c.ym);
     const cp = loadCp(c.lawdCd)[c.ym];
-    const ok = rep.status !== 'PARTIAL' && rep.status !== 'INVALID' && applyMatchesPlan(rep, { inserts: c.plan!.inserts, cancelFlips: c.plan!.cancelFlips });
+    const cellSkips = skipsByCell.get(`${c.lawdCd}:${c.ym}`)?.expectedSkips ?? 0;
+    const ok = rep.status !== 'PARTIAL' && rep.status !== 'INVALID'
+      && applyMatchesPlan(rep, { inserts: c.plan!.inserts, cancelFlips: c.plan!.cancelFlips, expectedSkips: cellSkips });
     cp.state = ok ? 'APPLIED' : 'BLOCKED';
     cp.applied = { at: deps.now().toISOString(), inserted: rep.inserted, updated: rep.updated, status: rep.status };
-    if (!ok) cp.blockedReasons = [...(cp.blockedReasons ?? []), `APPLY_DIFFERS_FROM_PLAN_${rep.inserted}/${c.plan!.inserts}`];
+    if (!ok) cp.blockedReasons = [...(cp.blockedReasons ?? []), `APPLY_DIFFERS_FROM_PLAN_${rep.inserted}/${c.plan!.inserts - cellSkips}(planned=${c.plan!.inserts},expectedSkips=${cellSkips})`];
     saveCp(c.lawdCd);
-    applied.push({ lawdCd: c.lawdCd, ym: c.ym, ...rep, planned: c.plan!.inserts });
+    applied.push({ lawdCd: c.lawdCd, ym: c.ym, ...rep, planned: c.plan!.inserts, expectedSkips: cellSkips, expectedActualInserts: c.plan!.inserts - cellSkips });
     if (!ok) { summary.stoppedBy = `APPLY_MISMATCH_${c.lawdCd}_${c.ym}`; break; }
   }
   summary.mode = 'APPLIED';
@@ -325,6 +374,25 @@ export async function realReadDb(): Promise<ReadDb> {
       select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, cancelDate: true, aptName: true, dong: true, registryDate: true },
     })),
     seoulMasterAptSeqs: async () => new Set((await ro((tx) => tx.$queryRawUnsafe(`SELECT apt_seq FROM apartment_masters WHERE sgg_cd LIKE '11%' AND apt_seq IS NOT NULL`)) as { apt_seq: string }[]).map((r) => r.apt_seq)),
+    existingNaturalKeys: async (keys) => {
+      const found = new Set<string>();
+      if (!keys.length) return found;
+      // 자연키 컬럼 조합으로 조회한다(문자열 키를 DB에 만들지 않는다). 청크로 나눠 파라미터 폭주를 막는다.
+      const parsed = keys.map((k) => {
+        const [groupKeyStr, dealAmount, dealDate, floor, occurrenceIndex] = k.split('|');
+        return { k, groupKeyStr, dealAmount: Number(dealAmount), dealDate, floor: floor === 'null' ? null : Number(floor), occurrenceIndex: Number(occurrenceIndex) };
+      });
+      const CHUNK = 500;
+      for (let i = 0; i < parsed.length; i += CHUNK) {
+        const slice = parsed.slice(i, i + CHUNK);
+        const rows = await ro((tx) => tx.apartmentTradeHistory.findMany({
+          where: { OR: slice.map((p) => ({ groupKeyStr: p.groupKeyStr, dealAmount: p.dealAmount, dealDate: new Date(`${p.dealDate}T00:00:00.000Z`), floor: p.floor, occurrenceIndex: p.occurrenceIndex })) },
+          select: { groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true },
+        })) as { groupKeyStr: string; dealAmount: number; dealDate: Date; floor: number | null; occurrenceIndex: number }[];
+        for (const r of rows) found.add(naturalKeyOf({ ...r, dealDate: r.dealDate.toISOString().slice(0, 10) }));
+      }
+      return found;
+    },
   };
 }
 

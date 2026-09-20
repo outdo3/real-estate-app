@@ -2,6 +2,21 @@
 
 ## 2026-09-20
 
+### E-JIP SEOUL SALE NATURAL-KEY COLLISION PATCH V1 — driver 오탐 정지 제거 (scripts only, 로컬 커밋)
+
+Production write 0 · Seoul apply 0 · repair 0 · master 0 · schema 0 · push 0 · **src/ 전체 무변경**. 상세: `docs/development/SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1.md`
+
+    원인      자연키에 lawdCd가 없어 이웃 구 응답의 같은 거래가 skipDuplicates로 건너뛰는데, applyMatchesPlan이 report.inserted === planned.inserts를 요구해 정상 apply를 오탐 정지시켰다
+    census    서울 1,440,126행 전수 — distinct 자연키 1,440,124 · 중복 2 · 같은 구 중복 0 · cross-district 2키/4occurrence/2행 skip · 영향 aptSeq 1개 · canonical 모호 0
+    canonical 동작구 11590 — 두 구 응답에서 aptSeq(11590-3369)·umdCd(10700 사당동)·지번(1152)이 동일하고 sggCd만 조회 구를 echo. 해당 셀 사당동 행은 동작 212 vs 관악 2
+    수정      naturalKeyOf/canonicalLawdCdOf/computeExpectedSkips 추가 · ReadDb.existingNaturalKeys(읽기 전용) · applyMatchesPlan이 expectedSkips 반영(미지정 시 기존 동작)
+    순서      canonical이 아닌 구가 자연키를 먼저 차지하면 nonCanonicalOwnerWarnings로 경고 — 적재는 동작(11590) → 관악(11620) 순서 권고
+    규모      expectedActualInserts = (1,440,126 - 46) - 2 = 1,440,078 (계획 1,440,080 · skip 2) — 기존 수치와 동일하되 계산식 명시
+    phase     Pilot 944/skip0 · A 17,824/skip0 · B 37,255/skip0 · C 1,385,001계획/skip2/실제 1,384,999 — 충돌은 Phase C에만
+    격리      sale-sync-core·취소 reconciliation·restore gate·부산 cron 무변경 — 부산 취소/동기화 61 pass
+    테스트    backfill-seoul-sale 19 -> 26(A~E + applyMatchesPlan 회귀) · scripts 256 pass · src 2,342 pass · eslint 0 · build 성공 · tsc 기존 25 불변
+    미실행    중구 파일럿 실행 0 · 강남 46행 UPDATE 6건 승인 상태 유지 · apply는 DEFECT_A_GATE_PASS 미설정으로 BLOCKED
+
 ### E-JIP MAP TIER-2 FALLBACK REMOVAL V1 — 지도 좌표 결합에서 이름 부분포함 2순위 제거 (runtime fix, 로컬 커밋)
 
 Production write 0 · schema 0 · master 0 · Seoul apply 0 · repair 0 · deploy 0 · push 0 · API 응답 계약 불변. 상세: `docs/development/MAP_TIER2_FALLBACK_REMOVAL_V1.md`
