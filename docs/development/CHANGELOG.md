@@ -1,5 +1,26 @@
 # 이집 개발 변경 기록
 
+## 2026-09-21
+
+### E-JIP SEOUL JUNG-GU 12M PILOT FINAL DRY-RUN V1 — apply 직전 최종 검증 (READ-ONLY, PARTIAL)
+
+Production INSERT/UPDATE/DELETE 0 · env 변경 0 · 서울 apply 0 · cron/stats 활성화 0 · runtime src 0. 상세: `docs/development/SEOUL_JUNGGU_12M_PILOT_FINAL_DRYRUN_V1.md`
+
+    판정      **PARTIAL** — 파이프라인 전 항목 통과, 그러나 **원천 행 수 944 -> 943**. §3에 따라 STOP, apply는 새 승인 필요
+    delta     active 889 -> 888 · canceled 55 불변 -> 취소 flip이 아니라 **active 1건 원천 철회**(총계가 줄었다). --refetch 재조회도 943으로 동일, 일시 오류 아님
+    row단위한계 2026-09-19 측정이 **집계 수만 저장**하고 행 집합을 안 남겨 어느 행인지 특정 불가 — 추측으로 채우지 않음. apply 시 자연키 집합을 남기도록 권고
+    lawd_cd   중구 = **11140**을 registry에서 읽음(추정 금지). 같은 registry에 부산 중구 26110이 있어 이름만으로는 특정 불가
+    페이징     12/12 셀 READY · collected==totalCount 전부 COMPLETE · PARTIAL/FAILED/오류 0 · 셀당 1페이지 · invalid 0
+    master    EXACT 943/943 · MISSING 0 · INVALID 0 · REVIEW 0 — 이름/지번 fallback·fuzzy·first-match 미사용
+    기존DB     중구 기존 행 **0** · existing updates **0** · drift 0 -> `--approve-existing-updates` 불필요(강남 6건 승인과 무관)
+    충돌      cross/same-district collision 0 · expectedSkips 0 · nonCanonical 0 · planned 943 = expected actual 943
+    취소      insertCanceled 55 · flips 0 · restores 0 · reconcileSkipped 0 · sameConditionGroups 45/92 — count 기반만, 순서 의존 판단 없음
+    gate      DEFECT_A_GATE_PASS · ALLOW_PROD_DB_WRITE 전부 **NOT SET**(.env에도 없음, 값 출력 0) · evaluateApplyGates 무결
+    수치정정   §1의 "Busan sale 865,421"은 실제로 **전 지역 합계** — 부산만은 **865,289**(+서울 46 +기타 86). §12의 "46->990"도 944 기준이라 현재는 989
+    격리      서울 master 6,843 · 부산 3,438 · 서울 sale 46 · 중구 0 · 전체 865,421 · 취소 16,345 — dry-run 전후 불변
+    테스트    scripts 590 pass / src sync 38 pass / 0 fail · runtime 변경 0
+    미실행    apply는 2026-09-21 sale-sync + recheck PASS 이후. 승인은 숫자 고정보다 **"dry-run 재실행 후 그 값으로 apply"** 형태를 권고
+
 ## 2026-09-20
 
 ### E-JIP BUILDING LEDGER UNKNOWN AUTO-SAFE CORRECTION V1 — 승인된 세대수 57 + 도로명 94 보정 (Production write)
