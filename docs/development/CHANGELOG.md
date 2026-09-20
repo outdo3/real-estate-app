@@ -2,6 +2,28 @@
 
 ## 2026-09-21
 
+### E-JIP POST-CRON CANCELLATION + JUNG-GU PILOT REVALIDATION V1 — 크론 전 재검증 (READ-ONLY, PARTIAL)
+
+Production INSERT/UPDATE/DELETE 0 · 서울 apply 0 · repair 0 · env 변경 0 · runtime src 0. 상세: `docs/development/POST_CRON_CANCELLATION_JUNGGU_REVALIDATION_V1.md`
+
+    판정      **PARTIAL** — 2026-09-21 sale-sync가 **아직 실행 전**(현재 00:52 KST, 크론 04:00 KST). §1 증명 불가로 그 항목 STOP. 나머지는 전부 수행·통과
+    크론증명   시계가 아니라 run 기록으로 확인 — 배포 후 SALE run은 09-19T20:00Z(=09-20 05:00 KST 정기)와 23:30Z(recheck)뿐, 이후 없음. 다음 실행까지 약 3시간 8분
+    스케줄     sale-sync `0 19 * * *` UTC = 04:00 KST · recheck `0 23` = 08:00 KST
+    취소baseline 전 지역 865,421 · 부산 865,289 · 서울 46 · 취소 16,345 · active 849,076 · **all-canceled 273** · **upper bound 334** · multi-sibling 13,065 — 전부 유지
+    이상징후   new false-cancel **0** · new overcancel **0** · genuine missing **0** · sibling-growth regression **0** · natural key 중복 **0** · 불완전 셀 **0** · known 28만
+    insert경로 배포 후 SALE 크론 2회 모두 **inserted 0** · 생성 행 0 -> 고친 insert 경로는 **여전히 production에서 긍정 실행된 적 없음**. 취소 gate 통과와 **별개 사실**로 분리 보고(false-cancel 0이 insert가 없어서일 수 있음)
+    중구fresh   943행 / active 888 / canceled 55 · 12/12 COMPLETE · collected==totalCount · PARTIAL/FAILED/invalid 0 · 원천 내 자연키 중복 0
+    교차검증   신규 rowset 스크립트와 운영 driver가 **독립적으로 같은 943/888/55** 산출
+    rowset    **앞 STEP 결함 해소** — 943행 전체를 naturalKey·aptSeq·거래일·금액·층·occurrenceIndex·취소상태·셀과 함께 artifact로 저장. `--compare`로 행 단위 diff 가능. 자연키/정규화는 운영 모듈 그대로 호출
+    한계명시   944->943 delta 자체는 여전히 설명 불가 — 비교할 2026-09-19 행 집합이 없기 때문. 이번 artifact가 다음 delta의 기준
+    master    EXACT 943/943 · MISSING 0 · INVALID 0 · REVIEW 0
+    DB상태     중구 기존 행 0 · existing updates 0 · drift 0 -> `--approve-existing-updates` 불필요·금지
+    충돌      same/cross-district 0 · expectedSkips 0 · nonCanonical 0
+    최종계획   N=943 · planned 943 · expectedActual 943 · updates 0 — 과거 944를 억지로 맞추지 않음
+    env       DEFECT_A_GATE_PASS · SALE_CANCEL_RESTORE_ENABLED · ALLOW_PROD_DB_WRITE 전부 **NOT SET**(.env에도 없음, 값 출력 0)
+    known28   28 변동 없음 · 추가 검출 0 · repair 0 · 중구 pilot과 별개 STEP/트랜잭션 유지
+    테스트    scripts 590 pass / 0 fail · runtime 변경 0 · MOLIT 36회, 잔여 quota 9,892
+
 ### E-JIP SEOUL JUNG-GU 12M PILOT FINAL DRY-RUN V1 — apply 직전 최종 검증 (READ-ONLY, PARTIAL)
 
 Production INSERT/UPDATE/DELETE 0 · env 변경 0 · 서울 apply 0 · cron/stats 활성화 0 · runtime src 0. 상세: `docs/development/SEOUL_JUNGGU_12M_PILOT_FINAL_DRYRUN_V1.md`
