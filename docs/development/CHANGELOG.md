@@ -2,6 +2,21 @@
 
 ## 2026-09-20
 
+### E-JIP MAP IDENTITY FALLBACK IMPACT AUDIT V1 — 지도 이름 fallback 실제 노출 정량화 (READ ONLY, 로컬 커밋)
+
+Production write 0 · runtime 변경 0 · deploy 0 · fallback 제거 0 · master 생성 0 · Seoul apply 0 · 외부 API 0. 상세: `docs/development/MAP_IDENTITY_FALLBACK_IMPACT_AUDIT_V1.md`
+
+    경로      type=apt&months=12&dong=all, 한 번에 lawdCd 1개(중심 역지오코딩) · 부산만 DB-first(sale·취소제외·행 상한 없음) · 서울은 오늘도 live MOLIT로 같은 경로 통과
+    marker    dedupe 키 dong|name(aptSeq 아님) · 좌표 없으면 행 폐기 · bounds 컬링/상한 없음 · zoom은 individual/grouped 렌더만 전환
+    부산현재   입력 34,829행 → marker 2,886 · EXACT 2,885(99.97%) · fallback 1(0.03%) · 확정 오귀속 1 · SELF 0 · UNKNOWN 0
+    서울시뮬   입력 70,702행 → marker 5,819 · EXACT 5,819(100%) · fallback 0 · 오귀속 0 · 캐시 셀 누락 0
+    exact-only 제거 marker 부산 1(0.03%) / 서울 0 — 제거분이 전부 확정 오귀속, 정당 fallback 손실 0
+    유일사례   사상구 주례동 주례일산맨션(26530-69) → 주례(26530-72) 좌표·aptSeq 상속(정규화 후 주례 ⊂ 주례일산맨션)
+    잠재vs현재 전체이력 잠재 부산 98 aptSeq/2,879행·서울 338/11,766 → 현재 창에서는 부산 1·서울 0. 서울 MASTER_MISSING 2,424개 전부 2024-10 이전이라 12개월 창에 구조적으로 못 들어온다
+    영향      서울 sale backfill은 지도 노출을 늘리지 않는다(넣는 행이 전부 창 밖) — 지도 결함은 부산의 독립 이슈
+    부수발견   더 큰 marker 공백은 fallback이 아니라 master 좌표 없음 — 서울 117/6,843·부산 37/3,438, 현재 창 기준 서울 93단지 812행·부산 37단지 115행이 marker 미생성
+    권고      옵션 B(tier-2 제거) 또는 동치인 C — 현재 데이터에서 결과 동일, 비용 사실상 0. 이번 STEP에서 정책 변경 안 함
+
 ### E-JIP SEOUL HISTORICAL MASTER_MISSING STRATEGY V1 — 과거 단지 master 정책 확정 (READ ONLY, 로컬 커밋)
 
 Production write 0 · master 생성 0 · sale apply 0 · schema 0 · runtime 변경 0 · 외부 API 0. 상세: `docs/development/SEOUL_HISTORICAL_MASTER_MISSING_STRATEGY_V1.md`
