@@ -2,6 +2,30 @@
 
 ## 2026-09-20
 
+### E-JIP BUILDING LEDGER UNKNOWN SOURCE TRUST AUDIT V1 — UNKNOWN 724 전수 신뢰 감사 (READ-ONLY, PARTIAL)
+
+Production INSERT/UPDATE/DELETE 0 · master 0 · 캐시 0 · 좌표 0 · 서울 0 · sale 0 · cancellation 0 · schema 0 · runtime src 0. 상세: `docs/development/BUILDING_LEDGER_UNKNOWN_SOURCE_TRUST_AUDIT_V1.md`
+
+    판정      **PARTIAL** — 724 중 676건만 완전 평가. 미평가 48건(NO_LOT_KEY 45 + 상류 간헐오류 3)을 조용히 제외하지 않고 명시
+    NO_LOT_KEY 45건은 지번 파싱 불가/법정동 코드 없음 — 대장 조회 자체가 불가능하다. identity 보강이 선행돼야 하는 별도 문제
+    간헐오류   3건(래미안포레스티지1단지·오션파라곤·국제금융센터퀸즈W)은 같은 요청이 5/22/12건을 주다가 503·빈 본문·totalCount=0을 반환 — pager가 COMPLETE라 부르지 않는 게 맞다. 3회 재시도 후 중단
+    provenance 표제부 계열 583 · 총괄표제부 계열 17 · 근거없음 124 -> **출처 미기록이지 다른 경로의 데이터가 아니다**(PK는 있는데 FAR/BCR이 0건 = 현재 backfill 산출물 아님)
+    노출규모   다건 레코드 **503건 · 75.5%**(최대 35건) — TITLE census의 6.96%보다 10배 이상 높다. 페이징 결함에 훨씬 크게 노출돼 있었다
+    세대수     STORED_CORRECT 458 · **AUTO_CORRECTABLE 57** · REVIEW 22 · KEEP_NULL 125 · SOURCE_EMPTY 14
+    잘림흔적   틀린 57건 중 **39건**이 개별 동 한 곳의 값과 정확히 일치 — TITLE census와 같은 패턴. 왕자 30->390 · 그린파크 40->200 · 삼익그린맨션 120->315
+    주차      **parking 보유가 7건뿐** · parking_per_household 보유 **0건** -> 자동 규칙도 고칠 대상도 사실상 없음 · 저장값-원천 모순 0
+    이상치      세대당 주차 >2.0 **0건** · >5.0 0 · >10.0 0 — 비율을 만들 parking이 거의 없어 TITLE의 30건 문제가 여기엔 존재하지 않는다
+    도로명     일치 449 · AUTO 채움 94 · REVIEW 123 · **충돌 0**
+    빈문자열정정 앞 STEP "roadAddress 600건 보유"는 허수 — 그중 **47건이 빈 문자열**, 실제 값은 553건. 빈 문자열을 값으로 세는 실수가 이 데이터셋에서 반복된다
+    집계버그정정 도로명 SAFE_VALUE_DIFF가 483로 나왔는데, decideRoadAddress가 **일치 시 newValue를 null로** 돌려주는 걸 safe 값으로 비교한 내 버그였다 -> 실제 충돌은 **0건**
+    FAR/BCR   원천 자체가 비어 있음 345/344건 · 자동 판정 금지 유지
+    승인일     원천 단일 508건이나 저장값이 11건뿐이라 **보정이 아니라 채움** -> 기존 정책대로 자동 대상 제외
+    캐시      UNKNOWN과 겹치는 캐시 12 · tier1 게이트 2 · **세대수 AUTO 57과 겹치는 tier1 0** -> 가려질 위험 0
+    분류      KEEP_CURRENT 368 · REVIEW 166 · **AUTO_SAFE 128** · KEEP_NULL 31 · PARTIAL_SAFE 21 · SOURCE_EMPTY 10
+    우선순위   A(심각+AUTO) **0건** — 이 집합엔 이상치가 없다 / B(AUTO, 노출 낮음) master 128 / C 21 / D 166
+    미실행    세대수 57 + 도로명 94 보정은 **승인 대기**. 파생비율 동기화는 0건이라 따라붙지 않음
+    테스트    scripts 590 pass / 0 fail · eslint 0 · tsc 신규 0
+
 ### E-JIP BUSAN ZERO-HOUSEHOLD POLICY B APPLY V1 — 승인된 세대수 37 + 파생비율 34 보정 (Production write)
 
 승인 UPDATE: `total_households` 37 · `parking_per_household` 34. **parking_count 변경 0** · FAR/BCR/buildingCount/approvalDate/roadAddress/좌표/캐시/서울/sale/cancellation/schema 전부 불변 · INSERT/DELETE 0 · runtime src 0. 상세: `docs/development/BUSAN_ZERO_HOUSEHOLD_POLICY_B_APPLY_V1.md`
