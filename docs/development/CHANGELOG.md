@@ -2,6 +2,28 @@
 
 ## 2026-09-20
 
+### E-JIP HOUSEHOLDS SOURCE PRECEDENCE HARDENING V1 — 세대수 권위를 master로 (runtime fix, DB write 0)
+
+Production DB write 0 · 캐시 0 · master 0 · schema 0 · cancellation 0 · sale apply 0. runtime src 변경 + 배포. 상세: `docs/development/HOUSEHOLDS_SOURCE_PRECEDENCE_HARDENING_V1.md`
+
+    결함위치   tier1 게이트는 parkingCount·far·bcr·approvalDate 네 필드만 본다 — totalHouseholds는 게이트에 **없고** 딸려 나온다
+    연쇄      그 값이 truthy라 isFullyPopulated가 참이 되고 master 보충이 **한 번도 실행되지 않았다** — 경동 892인데 72로 남던 경로
+    새정책    세대수만 MASTER(non-null) > CACHE > LIVE · 그 밖 필드는 CACHE > MASTER > LIVE 기존 그대로
+    구현핵심   master 보충을 **조건 없이** 호출 — 캐시가 세대수를 줬을 때가 바로 master를 봐야 할 순간인데 옛 조건이 정확히 그 경우를 건너뛰었다
+    보존      캐시 행을 버리지 않고 필드 단위 병합 — master의 use_approval_date가 null인 단지가 많아 화면의 "1995년"은 캐시가 준다
+    신규파일   src/lib/registry-precedence.ts(순수 병합 모듈) + 테스트 15개
+    유일대상   apartments 캐시를 읽는 다른 라우트 중 세대수를 쓰는 곳 없음 · score는 apartmentMaster에서 직접 읽음
+    보완케이스 master 세대수 null + 캐시 값 있음 = 게이트 기준 **11건**(전체 14) — 배포 후 Production 전수 **11/11 값 유지**, 주차/FAR/BCR/승인일 동반 보존
+    건수정정   앞 STEP의 "9건"은 INNER JOIN이라 중복/누락이 있었다 — 캐시 행당 master 1개로 축약하면 11건(게이트) / 14건(전체)
+    회귀고정   synthetic stale(master 892 · 캐시 72 -> 892) · 경동 892 · 우성빌라 15 · master null -> 캐시 · 둘 다 null -> live 전부 테스트로 고정
+    QA        경동 892세대 1.08대(962대) · 해운대경동제이드도 892 · 우성빌라 15세대 1.20대(18대) · score/education/facilities/school 200 · 5xx 0
+    회귀      large-complex/dashboard/rankings/supply/sitemap/transactions **응답 바이트 수가 배포 전과 완전 동일**
+    성능      추가는 인덱스 조회 1회이고 **새 질의가 아니다**(기존 where 절 그대로, 빈도만 변함) · MASTER_EXACT_CROSSCHECK가 읽은 row 재사용으로 N+1 없음 · live 호출 54->54 불변 · 실측 중앙값 경동 0.413s / 대신롯데캐슬 0.410s
+    오늘영향   **값이 달라지는 페이지 0건** — 95개 캐시 행 전수 시뮬레이션 변경 0. 어긋나는 행은 좌천시민 1건뿐인데 게이트를 못 통과해 이미 master가 이기고 있었다
+    의미      지금을 고치는 변경이 아니라 다음을 지키는 변경 — 게이트 충족 나머지 55행이 앞으로 master 보정을 가리지 못한다
+    테스트    src 2,367 pass / 0 fail (기존 2,352 + 신규 15) · eslint 0 · tsc src 0 · build 성공
+    배포      72f941c -> real-estate-diehvp1wr Ready(36s)
+
 ### E-JIP APARTMENT CACHE STALE HOUSEHOLDS CORRECTION V1 — 캐시가 가리던 2행 정리 (Production write)
 
 승인 UPDATE: `apartments` 정확히 2행의 `total_households`. master 0 · INSERT 0 · DELETE 0 · 다른 캐시 행/컬럼 0 · schema 0 · runtime src 0 · 서울 0 · cancellation 0 · sale apply 0. 상세: `docs/development/APARTMENT_CACHE_STALE_HOUSEHOLDS_CORRECTION_V1.md`
