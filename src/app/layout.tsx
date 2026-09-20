@@ -3,6 +3,8 @@ import AppProviders from '@/components/AppProviders';
 import { siteConfig, absoluteUrl } from '@/config/site';
 import { BRAND_NAME, MAIN_DESCRIPTION, MAIN_TITLE } from '@/lib/seo/site-seo';
 import './globals.css';
+import Script from 'next/script';
+import { ADSENSE_SCRIPT_SRC } from '@/lib/adsense';
 
 /**
  * PWA_INSTALL_UX_V1 §2/§3 — 설치 가능 요건.
@@ -133,6 +135,15 @@ export default function RootLayout({
             실제로 쓰이는 두 호스트만 연다: 지도 SDK(dapi)와 타일 서버(t1). */}
         <link rel="preconnect" href="https://dapi.kakao.com" />
         <link rel="preconnect" href="https://t1.daumcdn.net" crossOrigin="anonymous" />
+        {/* ADSENSE_CONNECTION_V1 — 사이트 소유권 확인용 공식 로더.
+            이번 단계는 **확인만** 한다: 광고 슬롯도, Auto Ads도 켜지 않는다.
+            afterInteractive — GA4와 같은 기준으로, 초기 렌더/LCP 경로를 막지 않는다. */}
+        <Script
+          id="adsense-loader"
+          strategy="afterInteractive"
+          src={ADSENSE_SCRIPT_SRC}
+          crossOrigin="anonymous"
+        />
       </head>
       <body>
         <AppProviders>{children}</AppProviders>
