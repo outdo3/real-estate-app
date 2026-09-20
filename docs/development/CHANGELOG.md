@@ -2,6 +2,24 @@
 
 ## 2026-09-20
 
+### E-JIP BUSAN MASTER COORDINATE ENRICHMENT APPLY V1 — 승인된 부산 좌표 35행 UPDATE (Production write)
+
+승인 UPDATE 35행 × 3컬럼(latitude·longitude·geocodeQuality) · 그 밖 write 0 · 서울 좌표 0 · sale apply 0 · repair 0 · schema 0 · runtime src 0. 상세: `docs/development/BUSAN_MASTER_COORDINATE_ENRICHMENT_APPLY_V1.md`
+
+    후보재생성  감사 결과가 아니라 현재 Production에서 재생성 — 부산 좌표없음 37행 중 정확 필지 보유 36 후보
+    재검증     승인 규칙 그대로(정방향 exact 1건 + 역방향 같은 필지 복귀) Kakao 72회 → VERIFIED_EXACT 35 · REJECTED 1(삼풍아파트 SUB_LOT) · 모호 0
+    키경로     서버용 KAKAO_CLIENT_ID 사용 · 클라이언트 노출 NEXT_PUBLIC 키(401) 미사용 · 키 값 출력 0 · runtime 웹앱 변경 0
+    충돌      기존 좌표와 완전 일치 0건
+    rollback  쓰기 전에 artifact + 되돌림 SQL 생성(old lat/lng 전부 null) — 실행 안 함
+    UPDATE    트랜잭션 · 행마다 aptSeq + latitude IS NULL AND longitude IS NULL 조건 · 영향 행 35/35
+    사후검증   부산 master 3,438 불변 · 좌표보유 3,401 -> 3,436 · null 37 -> 2 · 무효좌표 0 · 승인외 필드 전부 불변 · updated_at도 불변(raw SQL이라 @updatedAt 미적용)
+    지도      부산 marker 2,885 -> 2,920(+35) · 서울 5,819 불변 · 좌표없어 버려진 단지 37 -> 2(행 115 -> 3) · marker 감소 구 0개
+    우선순위   대운스카이뷰1차(26380-2073)·롯데캐슬인피니엘(26290-4786) 각자 좌표·자기 aptSeq로 marker 생성, 상속 0 — 둘이 회복 112행 중 76행
+    부수효과   학교배정 단지목록·교육거리에 35개 포함 / 검색·리포트(1,784건·471.3만원)·통계·sitemap 불변
+    격리      서울 6,843·6,726·117 불변 · 매매 865,421 · 취소 28/28 · 상한 334 · 전원취소 273 전부 baseline
+    관찰      검색 응답 좌표는 apartmentLocationFeature 출처라 여전히 null(범위 밖) · /api/transactions 30분 캐시로 화면 반영 최대 30분 지연
+    잔여      부산 2행(삼풍아파트 역방향 불일치 · 에코델타 지번 '가-') · 서울 117은 이 방법으로 감소 0
+
 ### E-JIP MASTER COORDINATE GAP AUDIT V1 — 좌표 공백 규모·원인·복구 가능성 (READ ONLY, 로컬 커밋)
 
 Production write 0 · 좌표 변경 0 · master 변경 0 · schema 0 · Seoul apply 0 · runtime 변경 0. 상세: `docs/development/MASTER_COORDINATE_GAP_AUDIT_V1.md`
