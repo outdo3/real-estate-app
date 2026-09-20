@@ -2,6 +2,30 @@
 
 ## 2026-09-20
 
+### E-JIP BUILDING LEDGER ZERO-HOUSEHOLD REVIEW POLICY V1 — 0세대 공동주택 판정 정책 (READ-ONLY)
+
+Production INSERT/UPDATE/DELETE 0 · master 0 · 캐시 0 · parking 0 · schema 0 · 서울 0 · cancellation 0 · sale apply 0 · runtime src 0. 상세: `docs/development/BUILDING_LEDGER_ZERO_HOUSEHOLD_REVIEW_POLICY_V1.md`
+
+    결론      공식 필드로 구분 **가능하다** — 0세대 공동주택 118건 중 111건(94.1%)을 근거 있게 분류, households REVIEW 38건 중 37건 해결
+    가정뒤집힘 처음 규칙은 "hoCnt/fmlyCnt>0이면 주거"였는데 실측이 정반대 — 상업 용도 0세대 77건 중 **74건이 hoCnt>0, 25건이 fmlyCnt>0**(엘지 상가동은 가구수 60·호수 67)
+    교훈      호·가구는 상가 **호실**에도 그대로 쓰인다. 주거의 증거가 아니다 — 그대로 뒀다면 정책 B가 한 건도 못 풀었다
+    최종신호   mainAtchGbCdNm(주/부속 구분) + etcPurps(기타용도)만 사용 · 동 이름 미사용 · 괄호 해석("공동주택(경비실)"=비주거 vs "공동주택(아파트)"=주거)
+    호·가구용도 제외를 **막는 방향으로만** 사용 — 부속건축물인데 주거 단위 신고 시 근거 상충으로 보류(성도뷰크 가구수 48 등 3건)
+    분류      상가·편익 64 · 관리·설비 27 · 주차·부속 20 · MIXED_USE 3 · 주거의심 4 · UNRESOLVED **0**
+    baseline정정 앞 STEP "REVIEW 63건"은 households 38 + road 25를 **더한 값** — 실제 master 합집합은 **57건**(households 38 + road-only 19)
+    정책A     해결 0 / 잔여 38 — 아무것도 못 고침
+    정책B     해결 **37** / 잔여 **1**(한보장산) / 비현실적 결과 0 — **권고**
+    정책C     해결 38 / 잔여 0 — 결과 차이는 1건뿐이나 그 1건을 **근거 없이** 처리. 값이 같다고 방법이 안전한 건 아님
+    엘지      48세대/1,984대 41.33 -> 0세대 상가동 2건(호67·가60 / 호10·가10) 제외하면 **1,848세대 · 세대당 1.07대**
+    대표사례   대림2 16.86->1.04 · 대림 14.82->1.08 · 경남 10.47->1.02 · 건영2 9.38->1.00 · 삼호가든맨션 8.26->0.69(주차는 여전히 UNRESOLVED)
+    교차검증   B 적용 후 세대당 주차 0.5~1.5 구간에 108건 집중 · 5.0 초과 **0건**
+    이상치      >2.0: 30 -> **2** · >5.0: 22 -> 0 · >10.0: 13 -> 0 (severe 30 중 28 해소)
+    회귀      이미 보정한 **42/42 값 변화 0** · ALREADY_OK 132건 전체로 넓혀도 0 — STOP 조건 미해당
+    캐시      AUTO_SAFE_NEW 37건에 붙은 캐시 행 **0** · 배포된 새 우선순위에서 세대수는 master가 이김 -> 가려질 건수 0
+    파생비율   보정 시 함께 맞춰야 할 parking_per_household **34건** — 계산만 하고 쓰지 않음
+    테스트    scripts 572 pass / 0 fail · eslint 0 · tsc 신규 0 · 뒤집힌 가정을 테스트로 고정
+    미실행    37건 보정은 **승인 대기** — 이번 STEP은 policy + audit only
+
 ### E-JIP HOUSEHOLDS SOURCE PRECEDENCE HARDENING V1 — 세대수 권위를 master로 (runtime fix, DB write 0)
 
 Production DB write 0 · 캐시 0 · master 0 · schema 0 · cancellation 0 · sale apply 0. runtime src 변경 + 배포. 상세: `docs/development/HOUSEHOLDS_SOURCE_PRECEDENCE_HARDENING_V1.md`
