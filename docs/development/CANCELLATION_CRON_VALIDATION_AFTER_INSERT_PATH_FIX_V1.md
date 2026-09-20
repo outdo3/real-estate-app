@@ -220,3 +220,96 @@ npx tsx --test src/lib/sync/cancel-reconcile-integration.test.ts
 | `scripts/audit-cancel-known28-spotcheck.ts` | census 범위 밖 확정 행의 개별 원천 대조 |
 
 둘 다 `_prod-db-guard`(DIAGNOSTIC, `ALLOW_PROD_DB_READ=1`) 아래에서만 돌고 쓰기 구문이 없다.
+
+---
+
+## 15. Production QA — push & deploy (2026-09-20)
+
+검증 PASS 판정에 따라 보류 중이던 local commit 4개 + 이 검증 기록 1개를 push했다. **DB write 0.**
+
+| 항목 | 값 |
+|---|---|
+| push | `68d8223..91b35fa` (fast-forward, force 0, history rewrite 0) |
+| 커밋 | `105c9ab` `95656cf` `0c894cd` `53bbbb9` + `91b35fa`(이 기록) |
+| 배포 | `real-estate-3d7ledr01` **Ready**, build 30s, `2026-09-20 10:25:52 KST` = `2026-09-20T01:25:52Z` |
+| alias | `e-jip.com` · `www.e-jip.com` · `real-estate-app-git-main-park11` |
+| 검증 | `/` `/stats` `/map` `/report/city/busan` `/report/district/26140` `/stats/volume` `/sitemap.xml` `/robots.txt` `/api/transactions` 전부 200 · `/api/cron/sale-sync` 무인증 401 · 5xx 0 · `error_logs` 0 |
+
+### sale-sync-core diff lock
+
+`105c9ab`가 취소 경로를 건드리므로 push 전에 원문 대조했다.
+
+- 옮겨진 쓰기 계획 119줄을 정규화(`base.`→`out.`, 타입 별칭, log 지연)해 diff → **차이 1줄뿐**: `const restoreEnabled = isCancelRestoreEnabled();`가 `syncOneSaleCell`에 남았다(쓰기 시점 게이트라 순수 함수 밖이 맞다).
+- 그 블록을 제외한 `syncOneSaleCell` 전체 diff → **허용된 변경 1건뿐**: `where: { lawdCd, dealYmd }` → `where: { lawdCd, dealYmd, dealDate: monthDateRange(dealYmd) }`. apply/쓰기 구간·coverage 기록·restore gate는 **byte 동일**.
+- 불변식 Production 실측: `to_char(deal_date,'YYYYMM') <> deal_ymd` **0 / 865,421**, `deal_date IS NULL` **0**, `apartment_trade_histories_lawd_cd_deal_date_idx` 존재.
+- 취소 semantics 변화 **0**.
+
+### 테스트 (push 전, local `91b35fa`)
+
+```
+npx tsx --test "src/**/*.test.ts" "src/**/*.test.mjs"    pass 2339  fail 0
+npx tsx --test "scripts/*.test.ts" "scripts/*.test.mjs"  pass 249   fail 0
+  (cancel-insert-path-sync · cancel-reconcile-integration · cancel-insert-plan ·
+   cancel-reconcile-logic · backfill-seoul-sale · audit-seoul-sale-backfill-plan 포함)
+npx eslint (origin/main 대비 변경 29개 파일)               exit 0
+npx tsc --noEmit                                         src/ 0 · scripts/ 21 + tmp/ 4 = FAIL_EXISTING_SCRIPT_ERRORS
+                                                         (오류 파일 전부 이번 변경과 무관, 기존과 동일)
+npm run build                                            Compiled successfully · exit 0
+```
+
+### 한장 리포트 Production QA
+
+4개 조합 전부 정상, 가로 overflow 0:
+
+| 조합 | 거래건수 | 많이 거래된 가격대 | ㎡당 중앙가격 | 거래량 변화 | 지역 비교 |
+|---|---|---|---|---|---|
+| 부산 15d | 680건 | 2억원대 (139건·20%) | 435.1만원/㎡ | -38.4% (1,104→680) | **구·군별** 평균 |
+| 부산 30d | 1,784건 | 2억원대 (325건·18%) | 471.3만원/㎡ | -15.2% (2,103→1,784) | **구·군별** 평균 |
+| 서구 15d | 30건 | 3억원대·4억원대 (각 7건·23%) | 628.9만원/㎡ | -3.2% (31→30) | **동별** 평균 |
+| 서구 30d | 61건 | 3억원대 (14건·23%) | 567.8만원/㎡ | -4.7% (64→61) | **동별** 평균 |
+
+거래가 많은 단지 · 최근 실거래(웹 5건) 4/4 표시. 액션바 `공유하기 · 이미지 · PDF · 지도보기`.
+
+### 이미지 QA
+
+| 확인 | 결과 |
+|---|---|
+| `[이미지]` 메뉴 | **기본 이미지 · 인스타 피드용 2개만**, PDF 없음 |
+| PDF | 액션바 독립 버튼으로 유지 |
+| 인스타(부산 15d) | `e-jip-busan-15d-2026-09-20-instagram-4x5.png` **1080×1350**(4:5 정확) · 기간 배지 "최근 15일" · 텍스트/footer 잘림 0 |
+| 인스타(서구 15d) | `e-jip-district-26140-15d-2026-09-20-instagram-4x5.png` **1080×1350** · 동별 평균에서 5건 미만 그룹을 "거래 5건 미만 · 참고용"으로 분리 · 잘림 0 |
+| 기본 이미지(부산 15d) | `e-jip-busan-15d-2026-09-20.png` **1080×1528** · 최근 실거래 **배지 3건 / 행 3건 일치** · "최근 거래 일부 표시 · 전체는 이집에서 확인" 유지 |
+
+### 서울 안전
+
+| 확인 | 결과 |
+|---|---|
+| ApartmentMaster | 서울 **6,843** · 부산 **3,438** |
+| 서울 stats | `/api/stats/concentration?lawdCd=11680` → `UNSUPPORTED` / "이 지역 통계는 현재 준비 중입니다." (fallback 0, 가짜 0건 0, 500 0) |
+| 서울 리포트 | `/report/district/11680` → "리포트를 만들 수 없는 지역입니다" + `robots: noindex, follow` |
+| sitemap | `<loc>` 138개 중 서울 URL **0**(부산 131), '서울' 문자열 0 |
+| cronSync | 서울 `sync_coverage_cells` **0** |
+| 서울 sale apply | **0** — `lawd_cd LIKE '11%'` 46행은 전부 `created_at = 2026-08-31`(driver 이전), `27%` 86행도 동일 |
+| driver 노출 | scripts/docs만, 새 API route 0, runtime UI 0 |
+| `DEFECT_A_GATE_PASS` | Production env에 **없음** |
+
+### 취소 안전 · 다음 cron baseline
+
+| 항목 | 값 |
+|---|---|
+| false-cancel repair | **0** |
+| `SALE_CANCEL_RESTORE_ENABLED` | Production env에 **없음** = OFF 유지 |
+| 확정 28행 | **28/28 취소**, 복구 0, 최신 변경 `2026-09-18T19:59:54Z`(배포 전) |
+| 전체 행 / 취소 행 | 865,421 / 16,345 |
+| 전원취소 그룹 / 상한 | **273 / 334** |
+| 배포 이후 쓰인 행 | **0** |
+| 다음 sale-sync | `0 19 * * *` UTC → **2026-09-21 04:00~05:00 KST**(관측 기동 19:59Z), 배포(01:25Z) 이후이므로 새 배포로 실행됨 |
+| 다음 sale-recheck | `0 23 * * *` UTC → 2026-09-21 08:00~08:30 KST |
+
+**다음 검증 비교값**: known false-cancel **28** · upper-bound **334** · all-canceled groups **273** · new overcancel **0**.
+
+### 남은 것
+
+- **28행 repair 미실행** — 승인 대상 그대로.
+- **PDF는 수동 확인 필요** — print dialog를 자동으로 조작하지 않았다. 사용자가 Production PC 브라우저에서 `[PDF]`를 눌러 확인할 체크리스트: A4 1페이지 · 잘림 없음 · 최근 실거래 3건 · 지역 비교 포함 · footer · 기간 표기.
+- **모바일 실측 한계** — 확장 사이드바가 열린 Chrome의 최소 창 너비 때문에 실제 viewport는 502px까지만 좁힐 수 있었다. 그 폭에서 KPI 2×2 전환·액션바 4버튼·가로 overflow 0을 확인했고, 360/375/390px 실측은 하지 못했다.

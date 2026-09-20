@@ -1,5 +1,22 @@
 # 이집 개발 변경 기록
 
+## 2026-09-20
+
+### E-JIP POST-CANCELLATION-VALIDATION PUSH & DEPLOY V1 — 보류 커밋 5개 push + Production 배포 (DB write 0)
+
+Production INSERT/UPDATE/DELETE 0 · schema 0 · 28행 repair 0 · 서울 sale apply 0 · restore gate OFF 유지. 상세: `docs/development/CANCELLATION_CRON_VALIDATION_AFTER_INSERT_PATH_FIX_V1.md` §15
+
+    검증      cron 검증 PASS(신규 false-cancel 0 · 상한 334 불변 · 확정 28행 그대로) → 보류 해제
+    push      68d8223..91b35fa fast-forward(105c9ab 95656cf 0c894cd 53bbbb9 + 검증 기록) · force 0 · rewrite 0
+    배포      real-estate-3d7ledr01 Ready · 2026-09-20 10:25:52 KST · 주요 라우트 200 · cron 무인증 401 · 5xx 0 · error_logs 0
+    diff lock 105c9ab의 sale-sync-core: 쓰기 계획 119줄은 원문 이동(차이 1줄 = restoreEnabled 위치) · 동작 변경은 existing 조회 deal_date 월 범위 1건뿐 · 취소 semantics 변화 0
+    테스트    src 2339 pass / scripts 249 pass / eslint 29파일 exit 0 / build 성공 / tsc는 기존 scripts 21 + tmp 4 (FAIL_EXISTING_SCRIPT_ERRORS)
+    리포트    부산·서구 × 15d·30d 4/4 정상 — KPI 4칸, 부산은 구·군별 / 서구는 동별 평균, 거래 많은 단지, 최근 실거래, 가로 overflow 0
+    이미지    [이미지] 메뉴 2개(PDF 없음) · 인스타 1080x1350 4:5(부산·서구) · 기본 1080x1528 · 최근 실거래 배지 3건 = 행 3건
+    서울      master 서울 6,843 / 부산 3,438 · stats UNSUPPORTED('준비 중') · 리포트 noindex 안내 · sitemap 서울 0 · coverage cell 0 · 서울 거래 46행은 전부 2026-08-31 생성(driver 이전)
+    baseline  다음 cron 비교값 — known 28 · upper-bound 334 · all-canceled 273 · new overcancel 0 · 다음 sale-sync 2026-09-21 04:00~05:00 KST
+    미실행    28행 repair(승인 대상) · PDF 인쇄 미리보기(사용자 수동 확인) · 360/375/390px 실측(Chrome 최소 창 너비로 502px까지만)
+
 ## 2026-09-19
 
 ### E-JIP ONE-PAGE REPORT FINAL POLISH V1 — 저장 메뉴 PDF 중복 제거 · 최근 실거래 건수 표시 일치 (로컬 커밋, push 보류)
