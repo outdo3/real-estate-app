@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { fetchBuildingRegistryInfo, formatRatio, formatParking } from '@/lib/apt-building-info';
 import { shouldAdoptFallbackUnitTypes, normalizeAptName } from '@/lib/apt-name-match';
+import {
+  mergeMasterIntoRegistry, mergeLiveIntoRegistry, isFullyPopulated,
+  type MasterRegistrySource,
+} from '@/lib/registry-precedence';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +85,11 @@ export async function GET(
     type Registry = { parkingCount: number | null; far: number | null; bcr: number | null; totalHouseholds: number | null; approvalDate: string | null };
     let unitTypes: any[] | null = null;
 
+    // HOUSEHOLDS_SOURCE_PRECEDENCE_HARDENING_V1 — §MASTER_EXACT_CROSSCHECK 조회가 이미
+    // master row를 읽는 경로가 있다. 거기서 읽은 row를 여기 담아 두고 아래 보충 단계가
+    // 재사용해, 같은 단지에 대한 master 조회가 두 번 나가지 않게 한다(N+1 방지).
+    let masterRow: (MasterRegistrySource & { jibun: string | null }) | null = null;
+
     // SEARCH_DETAIL_IDENTITY_HOTFIX_V2 — apt-client.tsx의 "빠른 진입" 최초 호출은
     // dong+lawdCd만 알고 jibun은 아직 모른 채(실거래 응답을 기다리지 않고) 이 라우트를
     // 부른다(§성능, 대기 없음). jibun이 비어있다는 이유만으로 이름+동 캐시를 무조건
@@ -108,9 +117,15 @@ export async function GET(
         if (!effectiveJibun && dong) {
           const masterExact = await prisma.apartmentMaster.findFirst({
             where: { sggCd: lawdCd, umdName: dong, normalizedName: normalizeAptName(aptName) },
-            select: { jibun: true },
+            select: {
+              jibun: true, parkingCount: true, floorAreaRatio: true,
+              buildingCoverageRatio: true, totalHouseholds: true, useApprovalDate: true,
+            },
           });
-          if (masterExact?.jibun) effectiveJibun = masterExact.jibun;
+          if (masterExact?.jibun) {
+            effectiveJibun = masterExact.jibun;
+            masterRow = masterExact; // 아래 보충에서 재사용 — 추가 조회 없음
+          }
         }
 
         // SEARCH_DETAIL_IDENTITY_HOTFIX_V2 — name+dong exact match만으로는 이 캐시
@@ -193,21 +208,20 @@ export async function GET(
     const fetchMasterRegistrySupplement = async (partial: Registry | null): Promise<Registry | null> => {
       if (!dong || !effectiveJibun) return partial;
       try {
-        const master = await prisma.apartmentMaster.findFirst({
-          where: { sggCd: lawdCd, umdName: dong, jibun: effectiveJibun },
-        });
+        // §MASTER_EXACT_CROSSCHECK에서 이미 읽은 row가 같은 지번이면 그대로 쓴다.
+        const master = masterRow && masterRow.jibun === effectiveJibun
+          ? masterRow
+          : await prisma.apartmentMaster.findFirst({
+              where: { sggCd: lawdCd, umdName: dong, jibun: effectiveJibun },
+              select: {
+                jibun: true, parkingCount: true, floorAreaRatio: true,
+                buildingCoverageRatio: true, totalHouseholds: true, useApprovalDate: true,
+              },
+            });
         if (!master) return partial;
-
-        const useAprDay = master.useApprovalDate || '';
-        const approvalDate = /^\d{8}$/.test(useAprDay) ? `${useAprDay.slice(0, 4)}년` : null;
-
-        return {
-          parkingCount: partial?.parkingCount ?? master.parkingCount ?? null,
-          far: partial?.far ?? master.floorAreaRatio ?? null,
-          bcr: partial?.bcr ?? master.buildingCoverageRatio ?? null,
-          totalHouseholds: partial?.totalHouseholds ?? master.totalHouseholds ?? null,
-          approvalDate: partial?.approvalDate ?? approvalDate,
-        };
+        masterRow = master;
+        // 세대수만 master 우선, 나머지는 기존대로 캐시 우선(registry-precedence.ts).
+        return mergeMasterIntoRegistry(partial, master);
       } catch (e) {
         console.warn('ApartmentMaster supplement lookup failed', e);
         return partial;
@@ -219,12 +233,12 @@ export async function GET(
     const naverApprovalYear = naverInfo.approvalYear;
     let registry: Registry | null = cachedRegistry;
 
-    const isFullyPopulated = (r: Registry | null): boolean =>
-      !!r && !!r.parkingCount && !!r.far && !!r.bcr && !!r.totalHouseholds && !!r.approvalDate;
-
-    if (!isFullyPopulated(registry)) {
-      registry = await fetchMasterRegistrySupplement(registry);
-    }
+    // HOUSEHOLDS_SOURCE_PRECEDENCE_HARDENING_V1 — 예전에는 `!isFullyPopulated`일 때만
+    // master를 봤다. 그런데 캐시가 게이트를 통과하면서 낡은 세대수를 들고 오면 그 값이
+    // truthy라 "이미 다 찼다"로 판정되고, master는 한 번도 조회되지 않았다. 세대수의
+    // 권위를 master에 두려면 캐시가 값을 줬을 때야말로 master를 봐야 한다 — 그래서
+    // 조건 없이 부른다. 지번 기준 인덱스 조회 1회이고, 위에서 읽은 row가 있으면 재사용한다.
+    registry = await fetchMasterRegistrySupplement(registry);
 
     if (!isFullyPopulated(registry)) {
       const live = await fetchBuildingRegistryInfo(aptName, lawdCd, dong, effectiveJibun);
@@ -232,13 +246,7 @@ export async function GET(
         // tier1(legacy 캐시)/tier2(ApartmentMaster)가 이미 채운 필드는 덮지 않고 병합한다
         // (live가 registry 전체를 대체하던 기존 동작은 registry가 항상 null 아니면 완전
         // 채움이었을 때만 안전했다 — 이제 tier2로 부분 채움 상태가 생길 수 있어 병합 필요).
-        registry = {
-          parkingCount: registry?.parkingCount ?? live.parkingCount,
-          far: registry?.far ?? live.far,
-          bcr: registry?.bcr ?? live.bcr,
-          totalHouseholds: registry?.totalHouseholds ?? live.totalHouseholds,
-          approvalDate: registry?.approvalDate ?? live.approvalDate,
-        };
+        registry = mergeLiveIntoRegistry(registry, live);
         if (live.mainPurpose) info['주용도'] = live.mainPurpose;
         if (live.parkingCount || live.far || live.bcr || live.totalHouseholds || live.approvalDate) {
           try {
