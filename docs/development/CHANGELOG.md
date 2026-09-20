@@ -2,6 +2,22 @@
 
 ## 2026-09-21
 
+### E-JIP ADSENSE CONNECTION V1 — 사이트 소유권 확인용 snippet + ads.txt (Production 배포)
+
+광고 슬롯 0 · Auto Ads 활성화 0 · UI 변경 0 · DB write 0 · 서울 데이터 변경 0. 상세: `docs/development/ADSENSE_CONNECTION_V1.md`
+
+    삽입위치   `src/app/layout.tsx` 루트 `<head>` — next/script `afterInteractive` + `crossOrigin="anonymous"`(GA4와 같은 기준, LCP 경로 미차단)
+    ID단일화   `src/lib/adsense.ts` 한 곳에서 파생 — 스크립트는 `ca-pub-3291272948162277`, ads.txt는 `pub-3291272948162277`(ca- 접두사 없음). 세 글자 차이로 ads.txt가 무효가 되는 함정을 상수로 제거
+    ads.txt   `public/ads.txt` 1줄 · Production **HTTP 200 · text/plain · 59 bytes · 문자열 완전 일치**
+    raw HTML  `<link rel="preload" as="script" crossorigin>`로 서버 HTML에 URL·client ID 노출 — 실행 `<script>`는 hydration 후 주입
+    런타임검증  브라우저 실측 — 실제 `<script async crossorigin="anonymous" src=...client=ca-pub-3291272948162277>` DOM 존재 · `window.adsbygoogle` 정의됨 · Google이 `show_ads_impl_fy2021.js` 추가 로드 = **로더 정상 동작 확인**
+    광고미노출  홈·구 리포트 모두 **시각적으로 렌더된 광고 0** — `ins.adsbygoogle` 0x0(status=done) + `zrt_lookup` 프레임 0x0은 로더 초기화 스캐폴딩이지 광고가 아님
+    캡처안전   리포트 페이지에서 `adInsideExportRoot=false` · `data-export-root` 1 · `data-export-exclude` 1 — 캡처 계약 무손상(광고 컴포넌트 자체를 아직 만들지 않음)
+    테스트    `src/lib/adsense.test.mjs` 8개 신규(두 ID 형식·파생 일치·디스크 ads.txt 대조·레이아웃 하드코딩 금지·슬롯/AutoAds 부재) · src 전체 **2,375 pass / 0 fail**
+    품질      eslint 0 · tsc src 0 · `npm run build` ✓ Compiled successfully(43 static pages)
+    회귀      / /map /stats /school /report/city/busan /report/district/26140 /privacy /terms 전부 200
+    배포      db7de64 -> real-estate-gp71v8y04 Ready(29s)
+
 ### E-JIP ADSENSE READINESS AUDIT V1 — 신청 준비 상태 감사 (READ-ONLY)
 
 광고 노출 0 · Auto Ads 0 · 가짜 publisher ID 0 · DB write 0 · runtime src 0 · UI/SEO 변경 0 · CSP 완화 0. 상세: `docs/development/ADSENSE_READINESS_AUDIT_V1.md`
