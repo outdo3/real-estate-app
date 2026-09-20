@@ -2,6 +2,23 @@
 
 ## 2026-09-20
 
+### E-JIP SEOUL SALE FULL-HISTORY MEASUREMENT COMPLETION V1 — 서울 25/25 구 실측 완료 (READ ONLY, 로컬 커밋)
+
+Production write 0 · schema 0 · 서울 apply 0 · repair 0 · enable 0 · runtime 코드 변경 0. 상세: `docs/development/SEOUL_SALE_FULL_HISTORY_MEASUREMENT_COMPLETION_V1.md`
+
+    범위      PLAN V1이 quota로 남긴 7개 구(강서 잔여·구로·금천·영등포·동작·관악·서초) — 구 코드는 registry getMolitLeafRegions('11')에서, 25/25 FETCH_ORDER와 일치
+    합계      서울 full-history 1,440,126행(active 1,422,723 / canceled 17,403 = 1.21%) · 셀 6,276 전부 COMPLETE · PARTIAL 0 · FAILED 0 · invalid 0
+    paging    multipage 50셀 · 최대 노원 2006-11 = 3,141행(4쪽) · collected = totalCount 6,276/6,276
+    projection 합계는 우연히 맞았으나(≈1.44M) 구 단위는 -14.8%~+21.1% 어긋남 — 배치 계획 구별 수치를 전부 실측으로 교체
+    master    EXACT 1,366,818(94.91%) · MISSING 73,275(5.09%, 2,424 aptSeq) · INVALID 0 · REVIEW 33 · 구별 82.8%(서초)~99.5%(성북)
+    missing   A 현재master 0 · B 과거거래만 2,392(70,590행) · C 같은필지 다른aptSeq 신호 32(2,685행) · D 최근거래인데 누락 0 — master seed에 최근 누락 없음, 추정 master 생성 0
+    신규발견   자연키 충돌 2건(11590-3369가 동작·관악 양쪽 응답에 동일 자연키) — 적재 시 skipDuplicates로 조용히 1건만 저장, Defect A 위험 없음, expect-inserts 대조에 반영 필요
+    기존46행   same 40 · 취소 drift 2 · 등기일 drift 4 · other 0 = 승인 필요 UPDATE 6(기존 값과 일치) · 같은 셀 계획 insert 41
+    취소       역순 정규화 6,276셀 전부 countsDiffer 0(슬롯만 10,577그룹 차이) — count 기반 semantics 유지 근거
+    배치       Pilot 944 · A 17,824 · B 37,255 · C 1,385,047(전부 실측) = 1,440,126 · 예상 insert 1,440,078 · +835MB · 적재 후 약 1.34GB · 수집 6,330호출 38분 · apply 1~2시간대
+    quota     시작 9,767 → 종료 8,156(1,611 사용) · 예약 2,000 미도달 · RESERVE_STOP 0 · COMPLETE 셀 재호출 0 · 한 창에서 완료(2창 분할 불필요)
+    미실행    apply는 DEFECT_A_GATE_PASS 미설정으로 BLOCKED 유지 · 과거 단지 master 생성 · Defect B
+
 ### E-JIP POST-CANCELLATION-VALIDATION PUSH & DEPLOY V1 — 보류 커밋 5개 push + Production 배포 (DB write 0)
 
 Production INSERT/UPDATE/DELETE 0 · schema 0 · 28행 repair 0 · 서울 sale apply 0 · restore gate OFF 유지. 상세: `docs/development/CANCELLATION_CRON_VALIDATION_AFTER_INSERT_PATH_FIX_V1.md` §15
