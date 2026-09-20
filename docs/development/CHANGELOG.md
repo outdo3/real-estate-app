@@ -2,6 +2,28 @@
 
 ## 2026-09-20
 
+### E-JIP BUILDING LEDGER UNKNOWN AUTO-SAFE CORRECTION V1 — 승인된 세대수 57 + 도로명 94 보정 (Production write)
+
+승인 UPDATE: `total_households` 57 · `road_address` 94 = unique master 149. **basic_spec_source 변경 0**(provenance 미기록) · parking/pph/FAR/BCR/buildingCount/approvalDate/좌표/캐시/서울/sale/cancellation/schema 전부 불변 · INSERT/DELETE 0 · runtime src 0. 상세: `docs/development/BUSAN_UNKNOWN_AUTO_SAFE_CORRECTION_V1.md`
+
+    재생성     감사 artifact 미사용 — 부산 UNKNOWN 724 전수를 Production에서 다시 읽고 safe pager로 대장 재조회해 판정 재생성
+    2회STOP   1차 도로명이 **93**으로 나옴 — 못 읽은 7건 중 하나가 도로명 대상이었다. 간격 2초 재조회로 94 복원(수치 불일치 + 미해결 실패 두 규칙이 함께 막음)
+    미평가3    남은 3건은 감사에서 이미 "미평가 PARTIAL 3"으로 §3 제외 목록에 명시된 필지이고 대상에 미포함 — 가드를 푸는 대신 **기대 aptSeq를 명시적으로 받아 집합이 정확히 일치할 때만** 통과시키도록 구현
+    unique149  감사의 "최대 128"은 master 단위 AUTO_SAFE였고 PARTIAL_SAFE 21이 별도였다 — 필드 단위 write 기준이라 128+21=149. 필드 건수 57/94는 승인값과 정확히 일치
+    감소11건   지금까지 보정이 전부 증가였던 것과 달리 11건이 감소. POLICY B는 표제부 **주거 동만** 합산하므로 상가 호실 포함분이 빠진다 — 현대1차 1,885->1,733은 운동/의료/근린 동 호수 152를 뺀 값과 정확히 일치
+    감소중6건  제외 레코드가 0인데도 줄었다 = 저장값이 표제부 주거 합계와 애초에 안 맞았다(총괄표제부 집계/구 import 추정). pager가 totalCount 일치로 COMPLETE 확인
+    도로명     94건 전부 저장값이 null(60) 또는 빈 문자열(34) — **값 있는 행 덮어쓰기 0**, guard가 "여전히 비어 있을 때만" 강제
+    잘림흔적   39건이 개별 동 한 곳의 값과 정확히 일치 — 감사 결과와 동일
+    사전대조   왕자 30->390 · 그린파크 40->200 기대값 2/2 일치
+    안전장치   쓰기 전 rollback artifact 149행 · 행마다 optimistic guard · 단일 트랜잭션 · 불일치 0
+    사후검증   households 57/57 · road 94/94 · unique 149 · 예상과 다른 값 0 · **승인 밖 drift 0** · **basic_spec_source 변경 0** · 미평가 48 건드림 0
+    QA        Production 12건 전부 반영(왕자 390 · 그린파크 200 · 현대1차 1,733 · 덕천주공1 1,140) · 주차/용적률/건폐율은 원래대로 None 유지
+    데이터상태  라벨은 UNKNOWN 724 그대로(provenance 미기록이므로 실패 아님) · 도로명 보유 553->**647** · 도로명 없음 171->**77** · 틀린 세대수 **57->0** · AUTO 공백 **94->0**
+    캐시      대상과 겹치는 캐시 3 · tier1 게이트 **0** · 가려짐 0
+    회귀      large-complex/rankings/supply/sitemap/transactions **바이트 동일** · dashboard만 72,871->72,820인데 이 라우트는 households를 **전혀 읽지 않고** 응답에 2026-09-21이 들어 있다 — 작업 중 날짜가 바뀌어 기간 창이 이동한 것(재측정 2회 72,820 안정)
+    격리      부산 3,438 · 서울 6,843 · 서울 좌표 6,726 · UNKNOWN 724 · 매매 865,421 · 취소 16,345 · **all-canceled 273** · **upper bound 334** · Seoul sale 46 전부 baseline
+    테스트    scripts 590 pass / 0 fail · eslint 0 · tsc 신규 0
+
 ### E-JIP BUILDING LEDGER UNKNOWN SOURCE TRUST AUDIT V1 — UNKNOWN 724 전수 신뢰 감사 (READ-ONLY, PARTIAL)
 
 Production INSERT/UPDATE/DELETE 0 · master 0 · 캐시 0 · 좌표 0 · 서울 0 · sale 0 · cancellation 0 · schema 0 · runtime src 0. 상세: `docs/development/BUILDING_LEDGER_UNKNOWN_SOURCE_TRUST_AUDIT_V1.md`
