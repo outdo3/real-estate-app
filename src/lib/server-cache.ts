@@ -18,6 +18,15 @@ const inFlight = new Map<string, Promise<unknown>>();
 // 기존과 완전히 동일하게 무조건 캐시하므로, 이 함수를 쓰는 다른 라우트는 영향받지 않는다.
 export interface GetOrSetCacheOptions<T> {
   shouldCache?: (value: T) => boolean;
+  /**
+   * ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1 §4 — 값에 따라 TTL을 달리 준다.
+   *
+   * 부분 실패한 결과를 성공과 같은 TTL로 넣으면, 한 번의 콜드 시작 때 빠진
+   * 칸 하나가 TTL 내내 "확인 불가"로 고정된다(운영 실측으로 확인한 문제).
+   * 그렇다고 아예 캐시하지 않으면 장애가 길 때 매 요청이 재조회를 일으킨다.
+   * 짧게 잡는 것이 둘 사이의 정답이다. 주지 않으면 기존과 동일하게 ttlMs를 쓴다.
+   */
+  ttlFor?: (value: T) => number;
 }
 
 export async function getOrSetCache<T>(
@@ -36,7 +45,8 @@ export async function getOrSetCache<T>(
     try {
       const value = await fetcher();
       if (!options?.shouldCache || options.shouldCache(value)) {
-        store.set(key, { value, expiresAt: Date.now() + ttlMs });
+        const effectiveTtl = options?.ttlFor ? options.ttlFor(value) : ttlMs;
+        store.set(key, { value, expiresAt: Date.now() + effectiveTtl });
       }
       return value;
     } finally {

@@ -32,6 +32,10 @@ const BUSAN_CANCELED_TTL_MS = 30 * 60 * 1000;
 // 예산을 넘기면 그 칸만 "확인 불가" — 화면 전체를 무한정 기다리게 하지 않는다.
 // 운영 실측 median 1.3~2.4s — 정상 범위는 다 통과하고 이상치만 잡는 값을 고른다.
 const BUSAN_CANCELED_BUDGET_MS = 4000;
+// §4 — 부분 실패한 요약은 짧게만 잡는다. 운영 실측에서 콜드 시작 한 번에 빠졌던
+// "취소 거래 수"가 5분 내내 화면에 확인 불가로 고정됐다. 그렇다고 캐시를 아예 끄면
+// 장애가 길 때 매 요청이 전체 재조회를 일으킨다 — 짧게 잡는 것이 둘 사이의 답이다.
+const DEGRADED_CACHE_TTL_MS = 30 * 1000;
 
 // REGION_REGISTRY_V1 §12 — canonical registry에서 파생(중복 하드코딩 제거).
 const BUSAN_16: string[] = getMolitLeafRegions('26').map((r) => r.lawdCd);
@@ -483,7 +487,11 @@ export async function GET() {
 
   const startedAt = Date.now();
   try {
-    const data = await getOrSetCache('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary);
+    const data = await getOrSetCache('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary, {
+      // 완전한 요약은 5분, 조각이 빠진 요약은 30초 — 곧 다시 시도해 스스로 회복한다.
+      // (무거운 지표는 자기 30분 캐시가 이미 채워져 있어 재조회가 비싸지 않다.)
+      ttlFor: (v) => (v.overall.degradedSources.length > 0 ? DEGRADED_CACHE_TTL_MS : CACHE_TTL_MS),
+    });
     lastKnownGood = { data, at: new Date().toISOString() };
     return NextResponse.json({ success: true, data });
   } catch (error) {

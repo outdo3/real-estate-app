@@ -128,7 +128,7 @@ test('§3-C 재조회 실패 시 마지막으로 확인한 값을 stale 표시�
 
 test('§4 무거운 요약은 기존 캐시 헬퍼를 그대로 쓴다 — in-flight dedupe 포함', () => {
   const code = stripComments(OPS_ROUTE);
-  assert.ok(/getOrSetCache\('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary\)/.test(code));
+  assert.ok(/getOrSetCache\('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary/.test(code));
   // server-cache가 같은 key의 동시 요청을 하나로 묶는다(thundering herd 방지).
   const cache = stripComments(read('src/lib/server-cache.ts'));
   assert.ok(/const inFlight = new Map<string, Promise<unknown>>\(\)/.test(cache));
@@ -200,4 +200,16 @@ test('§3/§4 무거운 지표가 맨 뒤에서 돌고, 자기 TTL 캐시와 예
   assert.ok(/getOrSetCache\('admin-ops:busan-canceled', BUSAN_CANCELED_TTL_MS/.test(code), '전용 캐시가 없다');
   assert.ok(/const BUSAN_CANCELED_TTL_MS = 30 \* 60 \* 1000;/.test(code));
   assert.ok(/const BUSAN_CANCELED_BUDGET_MS = 4000;/.test(code));
+});
+
+test('§4 부분 실패한 요약을 5분 내내 고정하지 않는다', () => {
+  // 운영 실측: 콜드 시작 한 번에 "취소 거래 수"가 빠졌는데, 그 요약이 그대로
+  // 5분 캐시되어 이후 모든 요청이 확인 불가를 보였다(degradedCounts 1이 연속).
+  const code = stripComments(OPS_ROUTE);
+  assert.ok(/const DEGRADED_CACHE_TTL_MS = 30 \* 1000;/.test(code));
+  assert.ok(/ttlFor: \(v\) => \(v\.overall\.degradedSources\.length > 0 \? DEGRADED_CACHE_TTL_MS : CACHE_TTL_MS\)/.test(code));
+  // 헬퍼가 값별 TTL을 실제로 지원해야 한다(옵션을 조용히 무시하면 위 계약이 거짓말이 된다).
+  const cache = stripComments(read('src/lib/server-cache.ts'));
+  assert.ok(/const effectiveTtl = options\?\.ttlFor \? options\.ttlFor\(value\) : ttlMs;/.test(cache));
+  assert.ok(/expiresAt: Date\.now\(\) \+ effectiveTtl/.test(cache));
 });
