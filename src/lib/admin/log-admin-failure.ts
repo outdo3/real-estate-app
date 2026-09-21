@@ -19,6 +19,10 @@ import { buildErrorLogMessage } from '@/lib/log-redaction';
  */
 export const ADMIN_FAILURE_CATEGORIES = [
   'ADMIN_DASHBOARD_FAILURE',
+  // ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1 §5 — 대시보드 지표 한 조각만 실패한 경우.
+  // ops의 ADMIN_OPS_DB_SUMMARY_FAILURE와 같은 역할 — 화면은 나머지를 그대로 보여주므로
+  // 전체 실패와 반드시 구분돼야 "화면은 떴는데 칸 하나가 비었다"를 추적할 수 있다.
+  'ADMIN_DASHBOARD_METRIC_FAILURE',
   'ADMIN_OPS_FAILURE',
   'ADMIN_OPS_REGION_MODEL_FAILURE',
   // ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1 §9 — DB 집계 한 조각만 실패한 경우.

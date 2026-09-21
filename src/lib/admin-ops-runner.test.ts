@@ -213,3 +213,88 @@ test('§4 부분 실패한 요약을 5분 내내 고정하지 않는다', () => 
   assert.ok(/const effectiveTtl = options\?\.ttlFor \? options\.ttlFor\(value\) : ttlMs;/.test(cache));
   assert.ok(/expiresAt: Date\.now\(\) \+ effectiveTtl/.test(cache));
 });
+
+// ── ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1 §8 — 같은 패턴을 대시보드에도 적용했는지 ──
+
+const DASH_ROUTE = read('src/app/api/admin/dashboard/route.ts');
+const DASH_UI = read('src/app/admin/dashboard/page.tsx');
+
+test('§1/§2 대시보드도 DB 쿼리를 Promise.all로 동시에 띄우지 않는다', () => {
+  const code = stripComments(DASH_ROUTE);
+  // 재현 실측(다른 라우트가 3초 점유, pool_timeout=2s, 동일 14개 쿼리):
+  //   Promise.all → 14/14 rejected (전부 P2024)   /   순차 → 1/14
+  // prisma는 싱글턴이라 /api/admin/ops와 같은 pool을 쓴다. 여기서 동시에 띄우면
+  // 14개 pool_timeout 타이머가 함께 돌아 전원이 대기 중에 죽는다.
+  assert.ok(!/Promise\.all\(\[[\s\S]*?prisma\./.test(code), 'prisma 쿼리가 다시 Promise.all로 묶였다');
+  assert.ok(!/await Promise\.all\(\[/.test(code), '대시보드에 Promise.all 블록이 돌아왔다');
+  for (const key of ['todayPageViews', 'todayVisitSessions', 'onlineSessions', 'totalUsers', 'eventCounts']) {
+    assert.ok(code.includes(`await m('${key}'`), `${key}가 하나씩 await되지 않는다`);
+  }
+});
+
+test('§2 외부 HTTP(파이프라인 헬스)는 DB 순차 체인을 막지 않는다', () => {
+  const code = stripComments(DASH_ROUTE);
+  // DB connection을 잡지 않으므로 먼저 착수시키고 마지막에 거둔다(기존 병렬성 유지).
+  const startAt = code.indexOf("const pipelinePromise = isolate('pipelineHealth'");
+  const awaitAt = code.indexOf('const pipelineHealthM = await pipelinePromise;');
+  const firstDbAt = code.indexOf("await m('todayPageViews'");
+  assert.ok(startAt > -1 && awaitAt > -1, '파이프라인 헬스 처리가 없다');
+  assert.ok(startAt < firstDbAt, '외부 호출이 DB 체인 뒤로 밀려 latency가 늘어난다');
+  assert.ok(awaitAt > firstDbAt, '외부 호출을 DB 체인 앞에서 기다린다');
+});
+
+test('§3 대시보드도 지표별로 격리되고, 전부 실패했을 때만 전체 장애다', () => {
+  const code = stripComments(DASH_ROUTE);
+  assert.ok(/const m = <T,>\(key: string, run: \(\) => Promise<T>\) => isolate\(key, run, noteMetricFailure\);/.test(code));
+  assert.ok(/if \(isTotalDbOutage\(dbMetrics\)\)/.test(code), '전체 장애 판정이 없다');
+  assert.ok(/const degradedMetrics = unavailableLabels\(\[/.test(code), '무엇이 빠졌는지 알리지 않는다');
+});
+
+test('§5 대시보드 부분 실패가 전용 category로 기록된다', () => {
+  const code = stripComments(DASH_ROUTE);
+  assert.ok(/category: 'ADMIN_DASHBOARD_METRIC_FAILURE'/.test(code));
+  assert.ok(/metricKey: key/.test(code));
+  // 전체 실패 category는 그대로 살아 있어야 한다(회귀 금지).
+  assert.ok(/category: 'ADMIN_DASHBOARD_FAILURE'/.test(code));
+});
+
+test('§6 대시보드가 읽지 못한 값을 0이나 빈 배열로 그리지 않는다', () => {
+  const route = stripComments(DASH_ROUTE);
+  // 응답: 숫자는 null, 배열도 null(= "아무도 없음"과 구분).
+  assert.ok(/todayPageViews: valueOf\(todayPageViewsM\)/.test(route));
+  assert.ok(/todaySessionsM\.status === 'OK' \? Number\(todaySessionsM\.value\[0\]\?\.count \?\? 0\) : null/.test(route));
+  assert.ok(/realtime: onlineAptGroups \? onlineAptGroups\.map/.test(route));
+  assert.ok(/popular30d: popularAptGroups \? popularAptGroups\.map/.test(route));
+
+  const ui = stripComments(DASH_UI);
+  assert.ok(/function num\(v: number \| null \| undefined\): string/.test(DASH_UI));
+  for (const f of ['todayVisitSessions', 'todayPageViews']) {
+    assert.ok(!new RegExp(`d\.traffic\.${f}\.toLocaleString`).test(ui), `${f}가 직접 포맷된다`);
+  }
+  // 배열이 null일 때 "없습니다"가 아니라 "확인 불가"여야 한다.
+  assert.ok(/d\.apartments\.realtime === null \? \(/.test(ui));
+  assert.ok(/d\.apartments\.popular30d === null \? \(/.test(ui));
+  assert.ok(/d\.errors === null \? \(/.test(ui));
+});
+
+test('§9 KST 계약이 깨지지 않았다 — 오늘/7일/30일과 parity 필드 유지', () => {
+  const code = stripComments(DASH_ROUTE);
+  assert.ok(/const startOfToday = startOfKstDay;/.test(code));
+  assert.ok(/const sevenDaysAgo = startOfKstDaysAgo\(6\);/.test(code));
+  assert.ok(/const thirtyDaysAgo = startOfKstDaysAgo\(29\);/.test(code));
+  assert.ok(/todayStartsAt: today\.toISOString\(\)/.test(code), '행동 분석 parity 검증 필드가 사라졌다');
+  assert.ok(/fetchedAt: new Date\(\)\.toISOString\(\)/.test(code));
+  assert.ok(!/setHours\(0, ?0, ?0, ?0\)/.test(code), '런타임 TZ 자정 계산이 돌아왔다');
+});
+
+test('§4 오늘 지표는 캐시하지 않는다 — 행동 분석과의 동시각 parity 보존', () => {
+  const code = stripComments(DASH_ROUTE);
+  // 7일/30일 집계만 짧게 캐시한다(connection 점유 시간 단축이 목적).
+  assert.ok(/const SLOW_METRIC_TTL_MS = 60 \* 1000;/.test(code));
+  for (const key of ['admin-dashboard:popular-30d', 'admin-dashboard:top-searches-7d', 'admin-dashboard:events-7d']) {
+    assert.ok(code.includes(`getOrSetCache('${key}', SLOW_METRIC_TTL_MS`), `${key} 캐시가 없다`);
+  }
+  // 오늘 지표에 캐시를 걸면 ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §9의 delta 0 계약이 깨진다.
+  const todayBlock = code.slice(code.indexOf("await m('todayPageViews'"), code.indexOf("await m('onlineSessions'"));
+  assert.ok(!/getOrSetCache/.test(todayBlock), '오늘 PV/세션이 캐시된다 — 행동 분석과 어긋난다');
+});

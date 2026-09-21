@@ -18,6 +18,15 @@ const REFRESH_INTERVAL_MS = 20 * 1000;
 // 파이프라인 상태 문구는 "정상"/"오류" 외에도 "미연동"/"설정됨"처럼 실패가 아닌
 // 중립적인 상태를 나타낼 수 있다. 이 둘을 전부 오류(빨간색)로 표시하면 아직 구현되지
 // 않았을 뿐인 기능이 장애처럼 보이므로, 상태 문구에 따라 세 가지 스타일로 구분한다.
+/**
+ * ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1 §6 — 읽지 못한 지표를 **0으로 그리지 않는다.**
+ * 이제 한 쿼리가 실패해도 그 칸만 null로 내려오므로, "오늘 방문 0" 같은
+ * 거짓말이 화면에 뜨는 일을 여기서 막는다. 진짜 0과 확인 못함은 다른 사실이다.
+ */
+function num(v: number | null | undefined): string {
+  return typeof v === 'number' ? v.toLocaleString('ko-KR') : '확인 불가';
+}
+
 function pipelineStatusClass(status: string): string {
   if (status.startsWith('정상')) return styles.pipelineStatusOk;
   if (status.startsWith('오류')) return styles.pipelineStatusError;
@@ -118,6 +127,15 @@ export default function AdminDashboardPage() {
                 </Link>
               </nav>
 
+              {/* ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1 §3 — 일부 지표만 못 읽었을 때
+                  화면 전체를 죽이지 않는 대신, 무엇을 못 읽었는지는 숨기지 않는다(ops와 같은 관례). */}
+              {Array.isArray(d.degradedMetrics) && d.degradedMetrics.length > 0 && (
+                <div className={styles.degradedBanner} role="status">
+                  일부 지표를 불러오지 못했습니다 — 나머지는 정상입니다.
+                  <span className={styles.degradedList}>{d.degradedMetrics.join(' · ')}</span>
+                </div>
+              )}
+
               <div className={styles.grid}>
                 {/* 1. 트래픽 요약 */}
                 <div className={styles.card}>
@@ -133,24 +151,24 @@ export default function AdminDashboardPage() {
                     <div className={styles.statTile}>
                       {/* §3 — COUNT(DISTINCT session_id)이므로 사람 수가 아니다. */}
                       <div className={styles.statLabel}>오늘 방문 세션</div>
-                      <div className={styles.statValue}>{d.traffic.todayVisitSessions.toLocaleString('ko-KR')}</div>
+                      <div className={styles.statValue}>{num(d.traffic.todayVisitSessions)}</div>
                       <div className={styles.statHint}>브라우저 세션 기준 중복 제거</div>
                     </div>
                     <div className={styles.statTile}>
                       <div className={styles.statLabel}>오늘 페이지뷰(PV)</div>
-                      <div className={styles.statValue}>{d.traffic.todayPageViews.toLocaleString('ko-KR')}</div>
+                      <div className={styles.statValue}>{num(d.traffic.todayPageViews)}</div>
                     </div>
                     <div className={styles.statTile}>
                       <div className={styles.statLabel}>
                         <span className={styles.onlineDot} />
                         실시간 접속자
                       </div>
-                      <div className={styles.statValue}>{d.traffic.onlineNow.toLocaleString('ko-KR')}명</div>
+                      <div className={styles.statValue}>{d.traffic.onlineNow === null ? '확인 불가' : `${num(d.traffic.onlineNow)}명`}</div>
                     </div>
                     <div className={styles.statTile}>
                       <div className={styles.statLabel}>오늘 신규가입 / 총회원</div>
                       <div className={styles.statValue}>
-                        {d.traffic.todayNewUsers.toLocaleString('ko-KR')} / {d.traffic.totalUsers.toLocaleString('ko-KR')}
+                        {num(d.traffic.todayNewUsers)} / {num(d.traffic.totalUsers)}
                       </div>
                     </div>
                   </div>
@@ -160,7 +178,9 @@ export default function AdminDashboardPage() {
                 <div className={styles.card}>
                   <div className={styles.cardTitle}>🏢 실시간 및 인기 아파트</div>
                   <div className={styles.subLabel}>🟢 지금 보는 사람이 많은 단지</div>
-                  {d.apartments.realtime.length === 0 ? (
+                  {d.apartments.realtime === null ? (
+                    <div className={styles.emptyRow}>확인 불가 — 조회에 실패했습니다.</div>
+                  ) : d.apartments.realtime.length === 0 ? (
                     <div className={styles.emptyRow}>지금 상세페이지를 보고 있는 방문자가 없습니다.</div>
                   ) : (
                     <ul className={styles.rankList}>
@@ -174,7 +194,9 @@ export default function AdminDashboardPage() {
                     </ul>
                   )}
                   <div className={styles.subLabel}>누적 인기 조회 TOP 10 (최근 30일)</div>
-                  {d.apartments.popular30d.length === 0 ? (
+                  {d.apartments.popular30d === null ? (
+                    <div className={styles.emptyRow}>확인 불가 — 조회에 실패했습니다.</div>
+                  ) : d.apartments.popular30d.length === 0 ? (
                     <div className={styles.emptyRow}>아직 집계된 조회 기록이 없습니다.</div>
                   ) : (
                     <ul className={styles.rankList}>
@@ -193,7 +215,9 @@ export default function AdminDashboardPage() {
                 <div className={styles.card}>
                   <div className={styles.cardTitle}>🔍 인기 검색어 & 지역 관심도 (최근 7일)</div>
                   <div className={styles.subLabel}>인기 검색어 TOP 10</div>
-                  {d.search.topQueries.length === 0 ? (
+                  {d.search.topQueries === null ? (
+                    <div className={styles.emptyRow}>확인 불가 — 조회에 실패했습니다.</div>
+                  ) : d.search.topQueries.length === 0 ? (
                     <div className={styles.emptyRow}>아직 검색 기록이 없습니다.</div>
                   ) : (
                     <div>
@@ -205,7 +229,9 @@ export default function AdminDashboardPage() {
                     </div>
                   )}
                   <div className={styles.subLabel}>관심 지역 TOP 10</div>
-                  {d.search.topRegions.length === 0 ? (
+                  {d.search.topRegions === null ? (
+                    <div className={styles.emptyRow}>확인 불가 — 조회에 실패했습니다.</div>
+                  ) : d.search.topRegions.length === 0 ? (
                     <div className={styles.emptyRow}>검색어에서 지역명을 인식하지 못했습니다.</div>
                   ) : (
                     <div>
@@ -224,19 +250,21 @@ export default function AdminDashboardPage() {
                   <div className={styles.statRow}>
                     <div className={styles.statTile}>
                       <div className={styles.statLabel}>오늘 신규 게시글</div>
-                      <div className={styles.statValue}>{d.community.todayNewPosts.toLocaleString('ko-KR')}</div>
+                      <div className={styles.statValue}>{num(d.community.todayNewPosts)}</div>
                     </div>
                     <div className={styles.statTile}>
                       <div className={styles.statLabel}>오늘 신규 댓글</div>
-                      <div className={styles.statValue}>{d.community.todayNewComments.toLocaleString('ko-KR')}</div>
+                      <div className={styles.statValue}>{num(d.community.todayNewComments)}</div>
                     </div>
                     <div className={styles.statTile}>
                       <div className={styles.statLabel}>미처리 신고</div>
-                      <div className={styles.statValue}>{d.community.unresolvedReports.toLocaleString('ko-KR')}건</div>
+                      <div className={styles.statValue}>{d.community.unresolvedReports === null ? '확인 불가' : `${num(d.community.unresolvedReports)}건`}</div>
                     </div>
                   </div>
                   <div className={styles.subLabel}>최근 작성된 글</div>
-                  {d.community.recentPosts.length === 0 ? (
+                  {d.community.recentPosts === null ? (
+                    <div className={styles.emptyRow}>확인 불가 — 조회에 실패했습니다.</div>
+                  ) : d.community.recentPosts.length === 0 ? (
                     <div className={styles.emptyRow}>작성된 글이 없습니다.</div>
                   ) : (
                     d.community.recentPosts.map((p: any) => (
@@ -253,7 +281,8 @@ export default function AdminDashboardPage() {
                 {/* 5. 공공 API 파이프라인 상태 */}
                 <div className={styles.card}>
                   <div className={styles.cardTitle}>⚙️ 공공 API & 데이터 파이프라인 상태</div>
-                  {d.pipeline.map((p: any) => (
+                  {d.pipeline === null && <div className={styles.emptyRow}>확인 불가 — 상태를 읽지 못했습니다.</div>}
+                  {(d.pipeline ?? []).map((p: any) => (
                     <div key={p.name} className={styles.pipelineRow}>
                       <span className={styles.pipelineName}>{p.name}</span>
                       <span className={pipelineStatusClass(p.status)}>
@@ -333,7 +362,9 @@ export default function AdminDashboardPage() {
                   <Link href="/admin/system" className={styles.adminNavLink}>
                     <Activity size={14} aria-hidden="true" /> 심각도·지역별 요약 보기
                   </Link>
-                  {d.errors.length === 0 ? (
+                  {d.errors === null ? (
+                    <div className={styles.emptyRow}>확인 불가 — 조회에 실패했습니다.</div>
+                  ) : d.errors.length === 0 ? (
                     <div className={styles.emptyRow}>최근 기록된 에러가 없습니다.</div>
                   ) : (
                     d.errors.map((e: any) => (

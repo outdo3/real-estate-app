@@ -156,15 +156,30 @@ test('D · 기록 필드는 스키마에 있는 것뿐이다 — IP/헤더/개�
 
 // ── E. 정상 요청은 로그를 만들지 않는다 ───────────────────────────────────────
 
-test('E · 성공 경로에는 로깅 호출이 없다 — catch 블록 안에서만 부른다', () => {
+test('E · 성공 경로에는 로깅 호출이 없다 — 오류 경로에서만 부른다', () => {
+  // ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1 — 예전에는 "파일에서 catch가 로깅보다
+  // 앞에 있다"로만 확인했다. 이제 부분 실패를 isolate()의 오류 콜백에서 기록하므로
+  // 그 검사는 너무 거칠다. 진짜 계약은 **모든 호출이 오류 경로 안**에 있다는 것이다.
   for (const rel of [
     'src/app/api/admin/dashboard/route.ts',
     'src/app/api/admin/behavior/route.ts',
+    'src/app/api/admin/ops/route.ts',
   ]) {
     const code = read(rel);
-    const idxCatch = code.indexOf('} catch (error) {');
-    const idxLog = code.indexOf('logAdminFailure({');
-    assert.ok(idxCatch >= 0 && idxLog > idxCatch, `${rel}: 로깅이 catch 밖에 있다`);
+    const calls = [...code.matchAll(/logAdminFailure\(\{/g)].map((m) => m.index as number);
+    assert.ok(calls.length > 0, `${rel}: 로깅 호출이 아예 없다`);
+    for (const at of calls) {
+      const before = code.slice(0, at);
+      // 오류 경로 진입점: catch 블록, isolate의 실패 콜백, 또는 .catch(...)
+      const errorEntry = Math.max(
+        before.lastIndexOf('} catch'),
+        before.lastIndexOf('Failure = (key: string, e: unknown) => {'),
+        before.lastIndexOf('.catch((e)')
+      );
+      assert.ok(errorEntry > -1, `${rel}: 오류 경로 밖에서 로깅한다`);
+      // 그 진입점이 직전 성공 응답보다 가까워야 성공 경로가 아니다.
+      assert.ok(errorEntry > before.lastIndexOf('success: true'), `${rel}: 성공 경로에서 로깅한다`);
+    }
   }
 });
 
