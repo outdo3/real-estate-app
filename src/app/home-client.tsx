@@ -47,7 +47,12 @@ export default function Home() {
       <main className={styles.main}>
         <section className={styles.heroSection}>
           <img src="/brand/mascot/ejipy-default.webp" alt="" className={styles.heroMascot} />
-          <p className={styles.tagline}>복잡한 부동산, 이집으로 쉽게</p>
+          {/* HOMEPAGE_SEO_BRAND_SIGNAL_P1_V1 §2 — 홈에 의미 있는 H1은 이 하나뿐이다.
+              태그라인 자리를 그대로 쓰므로 보이는 모양은 바뀌지 않는다(.tagline이 margin까지 정의한다). */}
+          <h1 className={styles.tagline}>복잡한 부동산, 이집(E-JIP)으로 쉽게</h1>
+          {/* §3/§4 — 서버 HTML에서 바로 읽히는 한 줄. 이 화면이 무엇을 다루는지(부산·실거래가·거래량·학군)를
+              봇과 첫 방문자 모두에게 JS 실행 전에 알린다. */}
+          <p className={styles.heroLead}>부산 아파트 실거래가·거래량·학군을 한곳에서 확인하세요.</p>
 
           <HomeApartmentSearch />
 
@@ -155,6 +160,23 @@ export default function Home() {
                 <span className={styles.iconCellLabel}>{item.label}</span>
               </Link>
             ))}
+          </div>
+
+          {/* HOMEPAGE_SEO_BRAND_SIGNAL_P1_V1 §3/§5 — 서비스 정체성 본문과, 지금까지 홈에서
+              한 번도 링크되지 않던 세 경로(부산 브리핑·학군·커뮤니티)로 가는 실제 <a>.
+              quickSection 안에 두어 하단 내비 여백(padding-bottom)을 그대로 쓴다. */}
+          <div className={styles.aboutBlock}>
+            <h2 className={styles.aboutHeading}>이집(E-JIP)은 어떤 서비스인가요</h2>
+            <p className={styles.aboutBody}>
+              이집(E-JIP)은 부산 아파트의 실거래가와 거래량, 학군과 단지 정보를 한곳에서 비교할 수 있는
+              부동산 데이터 서비스입니다. 정보를 길게 나열하는 대신, 어디에 살지 정할 때 실제로 필요한 것만
+              골라 보여드립니다.
+            </p>
+            <nav className={styles.aboutLinks} aria-label="주요 페이지">
+              <Link href="/report/city/busan" className={styles.aboutLink}>부산 아파트 한장 브리핑</Link>
+              <Link href="/school" className={styles.aboutLink}>학군·학교 정보</Link>
+              <Link href="/community" className={styles.aboutLink}>부동산 커뮤니티</Link>
+            </nav>
           </div>
         </section>
 
