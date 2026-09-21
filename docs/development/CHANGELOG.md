@@ -2,6 +2,29 @@
 
 ## 2026-09-21
 
+### E-JIP OPS CANCEL INDEX APPLY V1 — 인덱스 1개 Production 적용 (승인됨)
+
+승인 범위 외 변경 0 · business DML **0**(누적 카운터 불변으로 증명) · migration 승인된 1건만. 상세: `docs/development/OPS_CANCEL_INDEX_APPLY_V1.md`
+
+    적용     2026-09-21 **18:19:21 KST** · `npx prisma migrate deploy` 1회 · 28.2초 · cron 창(04/06/08시 KST) 밖 · CONCURRENTLY라 **쓰기 차단 0**
+    DDL      정확히 1문장 — `CREATE INDEX CONCURRENTLY IF NOT EXISTS "apartment_trade_histories_lawd_cd_deal_canceled_idx" ON "apartment_trade_histories"("lawd_cd","deal_canceled")`
+    유효성    indisvalid/indisready/indislive **전부 true** · 인덱스 8→9개 · 중복 없음 · **INVALID 0** · steps=1 rolledBack=no
+    플랜     **Parallel Seq Scan → Index Only Scan** · rows examined 866,366(850,052 폐기) → **16,314(폐기 0)** · Buffers 28,624 → **2,821(read 0)**
+    쿼리     Execution **2,286.14ms → 8.37ms** (**99.63%, 273배**) · Planning 15.5ms → 0.13ms
+    Prisma   실호출 median **1,125ms → 21ms** (54배). **7~10회차(generic plan 구간)도 21ms** — 부분 인덱스를 기각한 근거가 맞았음을 확인
+    추정오차1 효과 추정 `~20~120ms` → 실측 **8.4ms**(내 최선 추정보다도 좋음). 기준선으로 삼은 394ms 측정값 자체가 heap fetch 295,518회로 오염돼 있었다 — 기준선을 검증하지 않은 비례 추정의 한계
+    추정오차2 크기 추정 11.3~12.5MB → 실측 **5,896kB(6.96 B/entry)**. distinct 키 조합이 19×2=**38가지**뿐이라 PG13+ **B-tree deduplication**이 크게 압축 — 저카디널리티 복합 인덱스에 일반 밀도를 적용하면 안 된다
+    DB크기   716MB → **722MB (+0.84%)** · 신규 인덱스 **scans=270**으로 이미 실사용 중
+    ops      warm **200×10/10 · P50 62ms · degraded 0** · DB 블록 P50 799ms → **639ms** · **4초 예산 초과 0/90**(예전엔 콜드에서 발생)
+    미개선    **인덱스가 ops 재조합을 빠르게 만들지는 못했다** — TTL을 실제로 기다려 측정한 rebuild 2회가 **6,131ms / 5,402ms**로 재현. 적용 전 콜드 범위(4.2~15.4초) 안에 그대로 들어간다
+    미확인    남은 5초의 출처를 **단정하지 않았다** — DB 블록 639ms(로컬), region 프록시 단독 0.11~0.18s로 둘 다 설명력 약음. 성공 경로에 구간 계측이 없어 추측 불가 → **다음 작업은 추측이 아니라 계측**
+    오류     적용 이후 error_logs 신규 **0건** · P2024 0 · BudgetExceeded 0(마지막 08:14Z, 적용 65분 전)
+    값불변    전체 865,291 / 유효 848,977 / 취소 16,314 / 최근거래일 2026-09-18 / coverage 16-16 — **전부 동일**, 총계=유효+취소 검산 통과
+    데이터    누적 INSERT 866,452 / UPDATE 100,634 / DELETE 0 — **세 카운터 모두 +0** · row 수·최근거래일 불변
+    rollback **불필요** — 5가지 롤백 조건 전부 해당 없음
+    미충족    **cold 3회를 채우지 못했다** — Vercel 인스턴스 콜드를 외부에서 강제할 수 없음. 자연 발생 1회(2,445ms, 그때도 200/degraded 0)만 확보
+    남은병목  Index Only Scan인데도 **Heap Fetches 16,314** — visibility map이 낡음(last_autovacuum 08-29, dead 53,081). VACUUM이 이것과 기존 조회(heap fetch 295,518) 모두 개선
+
 ### E-JIP OPS CANCEL INDEX PREP V1 — schema + migration SQL 준비만 (미적용)
 
 **Production CREATE INDEX 0 · migrate deploy 0 · db push 0 · DML 0** (운영 DB 실측으로 증명). 상세: `docs/development/OPS_CANCEL_INDEX_PREP_V1.md`
