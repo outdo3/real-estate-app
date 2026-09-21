@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveNeisEduCode, addressMatchesRegion } from '@/lib/neis-sido-codes';
+import { resolveNeisEduCode, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
 import { getOrSetCache } from '@/lib/server-cache';
 
 // PERFORMANCE_V2.1 §5 — 이 라우트는 요청마다 외부 API를 약 7회 부른다:
@@ -49,10 +49,7 @@ export async function GET(request: Request) {
     // 지역 필터링: 주소를 토큰 단위로 쪼개 gungu와 정확히 일치하는 경우만 허용
     // (예전 addr.includes(gungu) 방식은 "강서구".includes("서구") === true라
     // '서구'를 선택해도 '강서구' 학교가 함께 매칭될 수 있었다)
-    const regionSchools = rawSchools.filter(s => {
-      const addr = (s.ORG_RDNMA || s.LCTN_SC_NM || '');
-      return addressMatchesRegion(addr, region, gungu);
-    });
+    const regionSchools = rawSchools.filter(s => schoolBelongsToRegion(s, region, gungu));
 
     let elemCount = 0;
     let midCount = 0;

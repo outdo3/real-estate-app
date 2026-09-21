@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveNeisEduCode, addressMatchesRegion } from '@/lib/neis-sido-codes';
+import { resolveNeisEduCode, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
 import { getOrSetCache } from '@/lib/server-cache';
 
 export async function GET(request: Request) {
@@ -41,13 +41,15 @@ export async function GET(request: Request) {
       // 목록(대신중학교 등 하드코딩 샘플)으로 채워 마치 실제 조회 결과처럼 보여줬다.
       // 실제 데이터를 확보하지 못했으면 빈 목록을 그대로 반환한다(가짜 학교 생성 금지).
 
+      // SCHOOL_DISTRICT_IDENTITY_BUG_FIX_V1 — 목록과 요약 카드가 **같은 기준**을 쓰도록
+      // 판정을 한 곳(schoolBelongsToRegion)으로 모았다. 시/군/구가 비면 빈 목록이다.
+      //
+      // 예전에는 여기에 `region === '부산광역시 서구' && s.SCHUL_NM.includes('대신')`이라는
+      // 이름 기반 예외가 있었다. 주소 기준이 아니라 **학교명**으로 넣는 규칙이라 다른 구의
+      // 동명 학교를 끌어올 수 있었다. 실측해 보니 대신여자중·대신초·부산대신중 셋 다
+      // 주소가 "부산광역시 서구 …"라 주소 규칙만으로 정상 포함된다 — 예외가 불필요하다.
       const gungu = region.split(' ')[1] || '';
-      let filtered = rawSchools.filter((s: any) => {
-        const addr = (s.ORG_RDNMA || s.LCTN_SC_NM || '');
-        if (addressMatchesRegion(addr, region, gungu)) return true;
-        if (region === '부산광역시 서구' && s.SCHUL_NM.includes('대신')) return true;
-        return false;
-      });
+      let filtered = rawSchools.filter((s: any) => schoolBelongsToRegion(s, region, gungu));
 
       const kindMap: Record<string, string> = {
         '초등': '초등학교',

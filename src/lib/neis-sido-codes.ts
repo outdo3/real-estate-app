@@ -12,13 +12,53 @@ export function resolveNeisEduCode(sido: string): string | null {
   return NEIS_SIDO_CODES[sido] || null;
 }
 
-// 학교 주소 문자열에서 시/군/구 이름이 "정확히" 일치하는 항목만 선택한다.
-// 기존에는 addr.includes(gungu) 방식이라 "강서구".includes("서구")처럼
-// 다른 구가 함께 매칭되는 문제가 있어, 주소를 토큰 단위로 쪼개 정확히
-// 일치하는 토큰이 있는지로 판단한다.
-export function addressMatchesRegion(addr: string, region: string, gungu: string): boolean {
+/**
+ * 학교 주소가 **선택한 시/군/구와 정확히 일치**하는지 판정한다.
+ *
+ * SCHOOL_DISTRICT_IDENTITY_BUG_FIX_V1 — 예전에는 토큰 완전일치 앞에
+ * `if (addr.includes(region)) return true;` 라는 **fail-open 지름길**이 있었다.
+ * 시/군/구가 비어 있으면(region이 "부산광역시 " 꼴) 그 한 줄이 주소에 "부산광역시 "가
+ * 들어간 **모든 학교**를 통과시켜, 부산 671곳 중 663곳이 한 목록에 쏟아졌다(실측).
+ * 사용자가 본 "(가칭)명지3고등학교(부산진구) + 명지3·4중·6초(북구)가 한 화면에"가
+ * 바로 이 경로다 — 서로 다른 구의 학교가 동시에 보이는 건 이 경우뿐이다.
+ *
+ * 규칙은 하나다: **주소 토큰 중 시/군/구와 완전히 같은 것이 있어야 한다.**
+ * - `"강서구"`는 토큰 `"서구"`와 같지 않으므로 서구 목록에 들어오지 않는다.
+ * - 시/군/구를 모르면 **false**다. 다른 구 데이터로 대체하지 않는다(wrong data < no data).
+ */
+export function addressMatchesRegion(addr: string, _region: string, gungu: string): boolean {
   if (!addr) return false;
-  const tokens = addr.split(/\s+/);
-  if (addr.includes(region)) return true;
-  return tokens.includes(gungu);
+  // 시/군/구가 없으면 "그 지역"이라고 말할 근거가 없다 — 전 지역을 열어주지 않는다.
+  if (!gungu || !gungu.trim()) return false;
+  return addr.split(/\s+/).includes(gungu.trim());
+}
+
+/**
+ * NEIS가 **아직 개교하지 않은 학교**에 붙이는 임시 레코드인지.
+ *
+ * NEIS는 `(가칭)…` 학교의 `ORG_RDNMA`에 학교 부지가 아니라 **설립을 맡은 교육지원청 주소**를
+ * 넣는다. 실측(부산 671곳):
+ *   (가칭)명지3중학교 · (가칭)명지4중학교 · (가칭)명지6초등학교 → 셋 다 "부산광역시 북구 백양대로1016번다길 44"
+ *   (가칭)명지3고등학교 → "부산광역시 부산진구 화지로 12"
+ * 명지동은 **강서구**인데 주소는 북구/부산진구다. 세 학교가 한 주소를 공유하는 것만 봐도
+ * 학교 위치가 아니라 사무소 주소임을 알 수 있다.
+ *
+ * 즉 이 레코드들은 **소속 구를 주장할 근거가 없다.** 어느 구 목록에 넣어도 틀린 주장이 되므로
+ * 지역 목록·집계에서 제외한다("확인 불가"를 "그 지역"으로 바꾸지 않는다).
+ * 개교해서 NEIS가 실제 주소를 채우면 `(가칭)`이 빠지고 자동으로 다시 포함된다.
+ */
+export function isTentativeSchoolRecord(schoolName: string | null | undefined): boolean {
+  return !!schoolName && schoolName.includes('(가칭)');
+}
+
+/**
+ * 지역 목록/집계에 넣어도 되는 학교인가 — 목록과 요약 카드가 **같은 기준**을 쓰도록 한 곳에 둔다.
+ */
+export function schoolBelongsToRegion(
+  school: { SCHUL_NM?: string | null; ORG_RDNMA?: string | null; LCTN_SC_NM?: string | null },
+  region: string,
+  gungu: string
+): boolean {
+  if (isTentativeSchoolRecord(school.SCHUL_NM)) return false;
+  return addressMatchesRegion(school.ORG_RDNMA || school.LCTN_SC_NM || '', region, gungu);
 }

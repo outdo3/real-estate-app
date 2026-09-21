@@ -48,6 +48,11 @@ export default function SchoolInfoPage() {
   // 학교 검색 API는 동(洞) 단위가 아닌 시/군/구 단위로 동작하므로, 선택된 동 이름은
   // 제외하고 "시도 시군구" 형태로만 구성한다.
   const regionName = `${region.sido} ${region.sigungu}`;
+  // SCHOOL_DISTRICT_IDENTITY_BUG_FIX_V1 — 시/군/구를 고르지 않았으면(= "부산광역시 전체")
+  // 학교 목록은 지역을 특정할 수 없다. 예전에는 그 상태가 시/도 전체 학교를 쏟아냈고,
+  // 이제는 0건이다. 0건을 "불러오지 못했습니다"(실패)로 보여주면 안 되므로 상태를 구분한다.
+  const hasDistrict = !!region.sigungu && region.sigungu.trim().length > 0;
+  const regionLabel = regionName.trim();
 
   // 통계 상태 관리
   const [stats, setStats] = useState<{
@@ -171,7 +176,7 @@ export default function SchoolInfoPage() {
         <div className={styles.header}>
           <div className={styles.headerTop}>
             <button className={styles.regionTrigger} onClick={openRegionModal}>
-              <span>📍 {regionName}</span>
+              <span>📍 {regionLabel}</span>
               <span className={styles.regionTriggerCaret}>▾</span>
             </button>
             <div className={styles.tabs}>
@@ -191,7 +196,7 @@ export default function SchoolInfoPage() {
             <div className={styles.summaryCard}>
               <div className={styles.cardIcon}>🏫</div>
               <div className={styles.cardContent}>
-                <h3>{regionName} {activeTab === '전체' || activeTab === '학원가' ? '학교' : activeTab + '학교'} 수</h3>
+                <h3>{regionLabel} {activeTab === '전체' || activeTab === '학원가' ? '학교' : activeTab + '학교'} 수</h3>
                 <p>
                   {activeTab === '전체' || activeTab === '학원가'
                     ? `총 ${stats.totalSchools}개교 (초${stats.elemCount}/중${stats.midCount}/고${stats.highCount})`
@@ -236,7 +241,7 @@ export default function SchoolInfoPage() {
         {/* 학교 랭킹 리스트 (전체 너비 사용) */}
         <div className={styles.panel}>
           <div className={styles.panelHeader}>
-            <h2 className={styles.panelTitle}>🏫 {regionName} {activeTab} 학교 목록</h2>
+            <h2 className={styles.panelTitle}>🏫 {regionLabel} {activeTab} 학교 목록</h2>
             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
               가나다순
             </span>
@@ -244,7 +249,9 @@ export default function SchoolInfoPage() {
 
           {!loading && schools.length === 0 && (
             <div style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-              학교 정보를 불러오지 못했습니다.
+              {hasDistrict
+                ? `${regionLabel}에서 조회된 학교가 없습니다.`
+                : '구·군을 선택하면 그 지역 학교 목록을 볼 수 있어요.'}
             </div>
           )}
 
