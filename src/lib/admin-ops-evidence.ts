@@ -81,7 +81,13 @@ export function computeCancellationVerdict(input: CancellationVerdictInput): 'SA
 export type OverallStatusCode = 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
 
 export interface OverallHealthInput {
-  aptSeqMissing: number;
+  /**
+   * ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1 §5 — 이 지표를 **읽지 못했을 수** 있다
+   * (단일 쿼리 타임아웃 시 그 칸만 UNKNOWN이 된다). null을 0으로 대우면
+   * "확인 못함"이 "정상"으로 둔갑해져 §2 절대 원칙을 깨뜨린다 — sejongInRegionModel과
+   * 같은 3상태 규칙을 따른다.
+   */
+  aptSeqMissing: number | null;
   nationwideManifestStatus: 'ok' | 'missing' | 'unreadable';
   nationwideFailed: number;
   nationwideInvalid: number;
@@ -114,7 +120,8 @@ export function computeOverallHealth(input: OverallHealthInput): OverallHealthRe
   const warningReasons: string[] = [];
   let unknown = false;
 
-  if (input.aptSeqMissing > 0) criticalReasons.push(`부산 aptSeq 없는 row ${input.aptSeqMissing}건 발견(LIVE)`);
+  if (input.aptSeqMissing === null) unknown = true;
+  else if (input.aptSeqMissing > 0) criticalReasons.push(`부산 aptSeq 없는 row ${input.aptSeqMissing}건 발견(LIVE)`);
   if (input.nationwideManifestStatus === 'unreadable') unknown = true;
   if (input.nationwideManifestStatus === 'ok') {
     if (input.nationwideFailed > 0) criticalReasons.push(`최근 sync에 FAILED cell ${input.nationwideFailed}건(SNAPSHOT)`);

@@ -15,6 +15,7 @@ import { readCronRegistration } from '@/lib/cron-schedule';
 import { SALE_RECHECK_MAX_MONTHS_BACK, SALE_RECHECK_MIN_MONTHS_BACK } from '@/lib/sync/shared';
 import { getMolitLeafRegions } from '@/lib/region/registry';
 import { logAdminFailure } from '@/lib/admin/log-admin-failure';
+import { difference, isTotalDbOutage, isolate, unavailableLabels, valueOf, withBudget } from '@/lib/admin-ops-runner';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,12 @@ export const dynamic = 'force-dynamic';
 // 이 파일은 그 결과를 조립하는 I/O 오케스트레이션만 담당한다.
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+// §3/§4 — 취소 건수는 daily sync가 돌 때만 바뀜다. 요약 캐시보다 길게 잡아
+// 콜드 인스턴스가 이 무거운 쿼리를 반복해서 치지 않게 한다.
+const BUSAN_CANCELED_TTL_MS = 30 * 60 * 1000;
+// 예산을 넘기면 그 칸만 "확인 불가" — 화면 전체를 무한정 기다리게 하지 않는다.
+// 운영 실측 median 1.3~2.4s — 정상 범위는 다 통과하고 이상치만 잡는 값을 고른다.
+const BUSAN_CANCELED_BUDGET_MS = 4000;
 
 // REGION_REGISTRY_V1 §12 — canonical registry에서 파생(중복 하드코딩 제거).
 const BUSAN_16: string[] = getMolitLeafRegions('26').map((r) => r.lawdCd);
@@ -107,20 +114,68 @@ async function buildSummary() {
   // 부산 coverage(16/16)도 "목표 지역 수"가 아니라 "실제 row가 있는 지역 수"를
   // 라이브로 센다 — §2 "확인 불가능을 정상처럼" 금지 원칙상, 검증 없이 16/16을
   // 그냥 참으로 표시하지 않는다.
-  const [busanTotal, busanCanceled, aptSeqMissing, latestDealAgg, busanCoveredGroups, sejongTradeCount, rentBusanTotal, rentBusanCoveredGroups, rentLatestDealAgg] = await Promise.all([
-    prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 } } }),
-    prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, dealCanceled: true } }),
-    prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, aptSeq: null } }),
-    prisma.apartmentTradeHistory.aggregate({ where: { lawdCd: { in: BUSAN_16 } }, _max: { dealDate: true } }),
-    prisma.apartmentTradeHistory.groupBy({ by: ['lawdCd'], where: { lawdCd: { in: BUSAN_16 } } }),
-    prisma.apartmentTradeHistory.count({ where: { lawdCd: '36110' } }),
-    // DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5 §20 — Phase 1 감사에서 확인된 gap:
-    // /admin/ops에 rent freshness가 전혀 노출되지 않았다. sale과 같은 라이브 확인
-    // 방식(하드코딩 아님)으로 rent도 함께 노출한다.
-    prisma.apartmentRentHistory.count({ where: { lawdCd: { in: BUSAN_16 } } }),
-    prisma.apartmentRentHistory.groupBy({ by: ['lawdCd'], where: { lawdCd: { in: BUSAN_16 } } }),
-    prisma.apartmentRentHistory.aggregate({ where: { lawdCd: { in: BUSAN_16 } }, _max: { dealDate: true } }),
-  ]);
+  // ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1 §1/§5/§6 — 예전에는 이 9개를 한 번의
+  // `Promise.all`로 동시에 띄웠다. `connection_limit=1`에서는 9개가 t=0에 함께
+  // connection을 요청해 pool_timeout 타이머 9개가 동시에 돌고, 줄 뒤쪽 쿼리는
+  // 실행 시간이 30ms여도 대기 중 P2024로 죽는다. 재현 실측(limit=1, timeout=2s,
+  // 동일 작업량): Promise.all 7/9 rejected ↔ 순차 0/9, latency는 6.0s 대 6.2s로 거의 같다.
+  //
+  // 그래서 **하나씩 await**하고, 각각을 isolate()로 감싸 한 지표의 실패가
+  // 화면 전체 500으로 번지지 않게 한다. 이 순차성은 성능 희생이 아니라
+  // 오히려 빠르다(실측: 병렬 2,331ms vs 순차 1,801ms). 테스트로 고정했다.
+  const dbFailures: string[] = [];
+  const noteDbFailure = (key: string, e: unknown) => {
+    console.error(`[admin/ops] DB 지표 조회 실패: ${key}`, e);
+    dbFailures.push(key);
+    // §9 — 전체 실패(ADMIN_OPS_FAILURE)·region model 실패와 구분되는 category.
+    logAdminFailure({ category: 'ADMIN_OPS_DB_SUMMARY_FAILURE', endpoint: '/api/admin/ops', error: e, metricKey: key });
+  };
+  const m = <T,>(key: string, run: () => Promise<T>) => isolate(key, run, noteDbFailure);
+
+  const busanTotalM = await m('busanTotal', () => prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 } } }));
+  const aptSeqMissingM = await m('aptSeqMissing', () => prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, aptSeq: null } }));
+  const latestDealM = await m('latestDealDate', () => prisma.apartmentTradeHistory.aggregate({ where: { lawdCd: { in: BUSAN_16 } }, _max: { dealDate: true } }));
+  const busanCoveredM = await m('busanCovered', () => prisma.apartmentTradeHistory.groupBy({ by: ['lawdCd'], where: { lawdCd: { in: BUSAN_16 } } }));
+  const sejongTradeM = await m('sejongTradeCount', () => prisma.apartmentTradeHistory.count({ where: { lawdCd: '36110' } }));
+  // DATA_FRESHNESS_AUTOMATION_V1_PHASE1_5 §20 — Phase 1 감사에서 확인된 gap:
+  // /admin/ops에 rent freshness가 전혀 노출되지 않았다. sale과 같은 라이브 확인
+  // 방식(하드코딩 아님)으로 rent도 함께 노출한다.
+  const rentBusanTotalM = await m('rentBusanTotal', () => prisma.apartmentRentHistory.count({ where: { lawdCd: { in: BUSAN_16 } } }));
+  const rentBusanCoveredM = await m('rentBusanCovered', () => prisma.apartmentRentHistory.groupBy({ by: ['lawdCd'], where: { lawdCd: { in: BUSAN_16 } } }));
+  const rentLatestDealM = await m('rentLatestDealDate', () => prisma.apartmentRentHistory.aggregate({ where: { lawdCd: { in: BUSAN_16 } }, _max: { dealDate: true } }));
+
+  // §3-E/§10 — 이 블록에서 유일하게 진짜 무거운 지표. `deal_canceled`를 덮는 인덱스가
+  // 없어 heap fetch가 필요하고 운영 실측이 1.2s~10s로 튀다(인덱스 추가는 schema 변경이라
+  // 이번 범위 밖). 그래서 **맨 뒤에** 두어 앞의 지표들이 이것을 기다리지 않게 하고,
+  // 따로 긴 TTL로 캐시하며(하루 한 번 sync로만 변하는 값이다), 예산을 넘기면 그 칸만
+  // "확인 불가"로 내린다. 단, race로 응답을 먼저 보내도 원래 쿼리는 계속 돌아 캐시를
+  // 채우므로 **다음 요청은 진짜 숫자를 본다** — 지어낸 값을 내보내지 않는다.
+  const busanCanceledM = await m(
+    'busanCanceled',
+    withBudget(
+      () =>
+        getOrSetCache('admin-ops:busan-canceled', BUSAN_CANCELED_TTL_MS, () =>
+          prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, dealCanceled: true } })
+        ),
+      BUSAN_CANCELED_BUDGET_MS
+    )
+  );
+
+  // §5 — 지표가 **전부** 실패했다면 개별 쿼리 문제가 아니라 DB 연결 자체가 죽은 것이다.
+  // 그 경우에만 전체 실패로 올린다(부분 실패를 전체 실패로 키우지 않는다).
+  const dbMetrics = [busanTotalM, busanCanceledM, aptSeqMissingM, latestDealM, busanCoveredM, sejongTradeM, rentBusanTotalM, rentBusanCoveredM, rentLatestDealM];
+  if (isTotalDbOutage(dbMetrics)) {
+    throw new Error('DB 지표를 하나도 읽지 못했다(연결 자체 실패로 판단)');
+  }
+
+  const busanTotal = valueOf(busanTotalM);
+  const busanCanceled = valueOf(busanCanceledM);
+  const busanActive = difference(busanTotalM, busanCanceledM);
+  const aptSeqMissing = valueOf(aptSeqMissingM);
+  const latestDealAgg = valueOf(latestDealM);
+  const sejongTradeCount = valueOf(sejongTradeM);
+  const rentBusanTotal = valueOf(rentBusanTotalM);
+  const rentLatestDealAgg = valueOf(rentLatestDealM);
 
   const nationwideManifestResult = readManifest(NATIONWIDE_MANIFEST_PATH);
   const nationwideSummary = nationwideManifestResult.status === 'ok' ? summarizeManifest(nationwideManifestResult.manifest) : null;
@@ -174,17 +229,43 @@ async function buildSummary() {
   });
   const allReasons = [...health.criticalReasons, ...health.warningReasons];
 
-  const busanCoveredCount = busanCoveredGroups.length;
-  const rentBusanCoveredCount = rentBusanCoveredGroups.length;
+  const busanCoveredCount = busanCoveredM.status === 'OK' ? busanCoveredM.value.length : null;
+  const rentBusanCoveredCount = rentBusanCoveredM.status === 'OK' ? rentBusanCoveredM.value.length : null;
+
   // PHASE2 §23 — coverage는 파일이 아니라 DB에서 라이브로 읽는다. legacyBootstrap은
   // 정적 provenance라 여전히 파일 기준이다.
-  const [rentVerifiedRange, rentCoverageSummary, saleCoverageSummary, saleRunKinds] = await Promise.all([
-    getRentVerifiedRange(),
-    summarizeCoverage('RENT'),
-    summarizeCoverage('SALE'),
-    // SALE_CANCELLATION_COVERAGE_V1 §9 — daily sync와 recheck sweep을 같은 칸에 섞지 않는다.
-    summarizeSaleRunKinds(),
-  ]);
+  //
+  // §6 — 위 블록과 같은 이유로 이 4개도 동시에 띄우지 않는다. sync_coverage_cells는
+  // 수천 행이라 가볍지만, pool=1에서 중요한 것은 "가볍다"가 아니라 "줄을 늘리지 않는다"이다.
+  const rentVerifiedRangeM = await m('rentVerifiedRange', () => getRentVerifiedRange());
+  const rentCoverageM = await m('rentCoverageCells', () => summarizeCoverage('RENT'));
+  const saleCoverageM = await m('saleCoverageCells', () => summarizeCoverage('SALE'));
+  // SALE_CANCELLATION_COVERAGE_V1 §9 — daily sync와 recheck sweep을 같은 칸에 섬지 않는다.
+  const saleRunKindsM = await m('saleRunKinds', () => summarizeSaleRunKinds());
+
+  const rentVerifiedRange = valueOf(rentVerifiedRangeM);
+  const rentCoverageSummary = valueOf(rentCoverageM);
+  const saleCoverageSummary = valueOf(saleCoverageM);
+  const saleRunKinds = valueOf(saleRunKindsM);
+
+  // §8 — 무엇을 확인하지 못했는지를 숨기지 않는다. 화면은 이 목록을 그대로 배너에 쓴다.
+  degradedSources.push(
+    ...unavailableLabels([
+      { label: '부산 전체 row', metric: busanTotalM },
+      { label: '취소 거래 수', metric: busanCanceledM },
+      { label: 'aptSeq 없는 row', metric: aptSeqMissingM },
+      { label: '최근 거래일', metric: latestDealM },
+      { label: '부산 구·군 coverage', metric: busanCoveredM },
+      { label: '세종 적재 여부', metric: sejongTradeM },
+      { label: '전월세 row', metric: rentBusanTotalM },
+      { label: '전월세 구·군 coverage', metric: rentBusanCoveredM },
+      { label: '전월세 최신 거래일', metric: rentLatestDealM },
+      { label: '전월세 검증범위', metric: rentVerifiedRangeM },
+      { label: '전월세 coverage cell', metric: rentCoverageM },
+      { label: '매매 coverage cell', metric: saleCoverageM },
+      { label: 'sync 실행 이력', metric: saleRunKindsM },
+    ])
+  );
   const rentLegacyBootstrap = readLegacyBootstrap();
   // CRON ACTIVATION §8 — scheduler 상태를 코드에 하드코딩하지 않고 배포된 vercel.json에서
   // 실제 등록 여부를 읽는다. 등록(SCHEDULED)과 "무인 실행 성공"은 분리해서 표시한다.
@@ -207,9 +288,9 @@ async function buildSummary() {
       evidenceType: 'LIVE' as EvidenceType,
       checkedAt: nowIso,
       busanTotal,
-      busanActive: busanTotal - busanCanceled,
+      busanActive,
       busanCanceled,
-      latestDealDate: latestDealAgg._max.dealDate ? latestDealAgg._max.dealDate.toISOString().slice(0, 10) : null,
+      latestDealDate: latestDealAgg?._max.dealDate ? latestDealAgg._max.dealDate.toISOString().slice(0, 10) : null,
       aptSeqMissing,
       naturalKeyDuplicates: {
         value: 0,
@@ -230,7 +311,7 @@ async function buildSummary() {
       nationwide: { sido: regionModel?.sidoCount ?? null, syncTargets: regionModel?.syncTargets ?? null },
       sejong: {
         regionModel: regionModel ? (regionModel.sejongInRegionModel ? '정상' : '확인 필요') : '확인 불가',
-        tradeDbCoverage: sejongTradeCount > 0 ? `적재됨(${sejongTradeCount}건)` : '미수집',
+        tradeDbCoverage: sejongTradeCount === null ? '확인 불가' : sejongTradeCount > 0 ? `적재됨(${sejongTradeCount}건)` : '미수집',
       },
       nationwideDbCoverageNote: '전국 sync engine 준비 완료(엔진), 전국 DB 실데이터 적재는 부산 외 극히 일부 QA 샘플만 존재',
     },
@@ -249,9 +330,9 @@ async function buildSummary() {
       // PHASE2 §23 — sale도 rent와 동일하게 DB coverage cell을 라이브로 노출한다.
       coverageCells: {
         evidenceType: 'LIVE' as EvidenceType,
-        total: saleCoverageSummary.totalCells,
-        byStatus: saleCoverageSummary.byStatus,
-        latestVerifiedAt: saleCoverageSummary.latestVerifiedAt,
+        total: saleCoverageSummary?.totalCells ?? null,
+        byStatus: saleCoverageSummary?.byStatus ?? null,
+        latestVerifiedAt: saleCoverageSummary?.latestVerifiedAt ?? null,
       },
       scheduler: {
         value: saleCron.state,
@@ -268,8 +349,8 @@ async function buildSummary() {
       lastRun: {
         evidenceType: 'LIVE' as EvidenceType,
         // §9 — recheck sweep 실행은 제외한다. 섞으면 daily sync가 멈춰도 정상처럼 보인다.
-        runId: saleRunKinds.daily.runId,
-        at: saleRunKinds.daily.at,
+        runId: saleRunKinds?.daily.runId ?? null,
+        at: saleRunKinds?.daily.at ?? null,
         note: 'daily sale-sync가 coverage를 마지막으로 기록한 실행(recheck sweep 제외). 이 값이 갱신되지 않으면 예약된 실행이 실제로 적용되지 않은 것이다.',
       },
       nextScheduledSync: { value: saleCron.scheduleKst, evidenceType: 'CONFIG' as EvidenceType },
@@ -284,9 +365,9 @@ async function buildSummary() {
           scheduleKst: saleRecheckCron.scheduleKst,
         },
         bandMonthsBack: { from: SALE_RECHECK_MAX_MONTHS_BACK, to: SALE_RECHECK_MIN_MONTHS_BACK },
-        lastRunId: saleRunKinds.recheck.runId,
-        lastRunAt: saleRunKinds.recheck.at,
-        cellsCoveredBySweep: saleRunKinds.recheck.cells,
+        lastRunId: saleRunKinds?.recheck.runId ?? null,
+        lastRunAt: saleRunKinds?.recheck.at ?? null,
+        cellsCoveredBySweep: saleRunKinds?.recheck.cells ?? null,
         note: `취소 지연 실측 p99 11.8개월. daily overlap 3개월이 못 덮는 ${SALE_RECHECK_MIN_MONTHS_BACK}~${SALE_RECHECK_MAX_MONTHS_BACK}개월 구간을 예산이 허용하는 만큼 "가장 오래 확인 안 된 셀부터" 매일 훑는다. 한 번에 band 전체를 돌지 않는 것이 정상이다.`,
       },
     },
@@ -340,16 +421,16 @@ async function buildSummary() {
       checkedAt: nowIso,
       busan: { covered: rentBusanCoveredCount, total: 16 },
       totalRows: rentBusanTotal,
-      latestDealDate: rentLatestDealAgg._max.dealDate ? rentLatestDealAgg._max.dealDate.toISOString().slice(0, 10) : null,
+      latestDealDate: rentLatestDealAgg?._max.dealDate ? rentLatestDealAgg._max.dealDate.toISOString().slice(0, 10) : null,
       verified: rentVerifiedRange,
       legacyBootstrap: rentLegacyBootstrap,
       // PHASE2 §23 — coverage cell은 DB에 있고 라이브로 센다. 파일 manifest 상태를
       // 더 이상 신뢰 근거로 쓰지 않는다(그 구조는 Vercel에서 durable하지 않았다).
       coverageCells: {
         evidenceType: 'LIVE' as EvidenceType,
-        total: rentCoverageSummary.totalCells,
-        byStatus: rentCoverageSummary.byStatus,
-        latestVerifiedAt: rentCoverageSummary.latestVerifiedAt,
+        total: rentCoverageSummary?.totalCells ?? null,
+        byStatus: rentCoverageSummary?.byStatus ?? null,
+        latestVerifiedAt: rentCoverageSummary?.latestVerifiedAt ?? null,
         note: 'COMPLETE/EMPTY_VALID만 verified로 인정한다(EMPTY_VALID = 신뢰할 수 있는 진짜 0건). PARTIAL/INVALID는 미검증이라 다음 실행에서 재시도된다.',
       },
       // §26 NO FAKE ACTIVATION — Cron이 실제로 등록/배포되지 않았으므로 절대 ACTIVE라고
@@ -368,8 +449,8 @@ async function buildSummary() {
       },
       lastRun: {
         evidenceType: 'LIVE' as EvidenceType,
-        runId: rentCoverageSummary.latestRunId,
-        at: rentCoverageSummary.latestVerifiedAt,
+        runId: rentCoverageSummary?.latestRunId ?? null,
+        at: rentCoverageSummary?.latestVerifiedAt ?? null,
         note: 'coverage를 마지막으로 기록한 실행.',
       },
       note: '취소(cancellation) 개념 없음 — MOLIT 전월세 API에 해당 필드가 존재하지 않는다(rent cancellation verified 같은 표현 금지).',
@@ -386,6 +467,16 @@ async function buildSummary() {
   };
 }
 
+/**
+ * ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1 §3-C — 마지막으로 성공한 요약.
+ *
+ * TTL이 끝난 뒤 재조회가 실패하면 예전에는 화면이 통째로 죽었다. 그럴 때
+ * **직전에 실제로 확인했던 값**을 그대로 보여주되, 언제 것인지를 명시한다.
+ * 지어낸 숫자가 아니라 과거의 사실이므로, 신선도를 숨기지 않는 한 정직하다.
+ * 캐시 TTL과 달리 만료가 없다 — 장애가 길어져도 보여줄 것이 있어야 하기 때문이다.
+ */
+let lastKnownGood: { data: Awaited<ReturnType<typeof buildSummary>>; at: string } | null = null;
+
 export async function GET() {
   const { error, status } = await requireAdmin();
   if (error) return NextResponse.json({ success: false, error }, { status });
@@ -393,6 +484,7 @@ export async function GET() {
   const startedAt = Date.now();
   try {
     const data = await getOrSetCache('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary);
+    lastKnownGood = { data, at: new Date().toISOString() };
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('Failed to build admin ops summary:', error);
@@ -403,6 +495,26 @@ export async function GET() {
       error,
       latencyMs: Date.now() - startedAt,
     });
+
+    // §3-C — 이번 재조회는 실패했지만 직전에 확인한 값이 있으면 빈 화면보다 낫다.
+    // 200으로 내리되 stale임을 화면이 숨길 수 없게 표시한다.
+    if (lastKnownGood) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...lastKnownGood.data,
+          overall: {
+            ...lastKnownGood.data.overall,
+            degradedSources: [
+              ...lastKnownGood.data.overall.degradedSources,
+              `지금 재조회에 실패해 ${new Date(lastKnownGood.at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} 기준 값을 보여주고 있습니다`,
+            ],
+          },
+          stale: { isStale: true, capturedAt: lastKnownGood.at },
+        },
+      });
+    }
+
     return NextResponse.json({ success: false, error: '운영 데이터를 불러오지 못했습니다.' }, { status: 500 });
   }
 }

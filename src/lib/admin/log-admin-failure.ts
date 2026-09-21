@@ -21,6 +21,10 @@ export const ADMIN_FAILURE_CATEGORIES = [
   'ADMIN_DASHBOARD_FAILURE',
   'ADMIN_OPS_FAILURE',
   'ADMIN_OPS_REGION_MODEL_FAILURE',
+  // ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1 §9 — DB 집계 한 조각만 실패한 경우.
+  // 화면은 나머지를 그대로 보여주므로 전체 실패(ADMIN_OPS_FAILURE)와 반드시 구분돼야
+  // "화면은 떴는데 숫자 하나가 비었다"를 추적할 수 있다.
+  'ADMIN_OPS_DB_SUMMARY_FAILURE',
   'ADMIN_BEHAVIOR_FAILURE',
 ] as const;
 
@@ -60,6 +64,12 @@ export interface AdminFailureInput {
   error: unknown;
   /** 가능하면 소요 시간(ms) — 타임아웃/콜드스타트 판별에 쓴다. */
   latencyMs?: number;
+  /**
+   * ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1 §9 — 부분 실패 시 어느 지표가 빠졌는지.
+   * 고정 식별자만 들어온다(쿼리 내용·사용자 데이터 아님) — 중복 억제 키에도 섮여
+   * 한 지표의 장애가 다른 지표의 기록을 가리지 않는다.
+   */
+  metricKey?: string;
 }
 
 /**
@@ -92,8 +102,9 @@ const defaultWriter: AdminFailureWriter = async (message, url, stack) => {
 
 export function logAdminFailure(input: AdminFailureInput, write: AdminFailureWriter = defaultWriter): void {
   try {
-    const message = buildErrorLogMessage(input.category, input.error);
-    const key = `${input.endpoint}|${message.slice(0, 200)}`;
+    const base = buildErrorLogMessage(input.category, input.error);
+    const message = input.metricKey ? `${base} (metric=${input.metricKey})` : base;
+    const key = `${input.endpoint}|${input.metricKey ?? ''}|${message.slice(0, 200)}`;
     if (!shouldLogAdminFailure(seenFailures, key, Date.now())) return;
 
     const withLatency =

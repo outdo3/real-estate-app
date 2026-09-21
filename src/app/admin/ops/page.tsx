@@ -9,6 +9,15 @@ import styles from './page.module.css';
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 const REFRESH_INTERVAL_MS = 60 * 1000;
 
+/**
+ * ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1 §12 — 읽지 못한 지표를 **0으로 그리지 않는다.**
+ * 이제 단일 쿼리가 타임아웃되면 그 칸만 null로 내려오므로, "부산 거래 0건"
+ * 같은 거짓말이 화면에 뜨는 일을 여기서 막는다(나머지 칸은 그대로 보인다).
+ */
+function num(v: number | null | undefined): string {
+  return typeof v === 'number' ? v.toLocaleString('ko-KR') : '확인 불가';
+}
+
 function formatDateTime(iso: string | null) {
   if (!iso) return '기록 없음';
   try {
@@ -121,11 +130,11 @@ export default function AdminOpsPage() {
             <div className={styles.statusGrid}>
               <div className={styles.statusTile}>
                 <div className={styles.statusTileLabel}>실거래 DB(부산)</div>
-                <StatusPill label={d.tradeHistory.aptSeqMissing === 0 ? '정상' : '확인 필요'} />
+                <StatusPill label={d.tradeHistory.aptSeqMissing === null ? '확인 불가' : d.tradeHistory.aptSeqMissing === 0 ? '정상' : '확인 필요'} />
               </div>
               <div className={styles.statusTile}>
                 <div className={styles.statusTileLabel}>지역 coverage</div>
-                <StatusPill label={d.coverage.busan.covered === d.coverage.busan.total ? '정상' : '확인 필요'} />
+                <StatusPill label={d.coverage.busan.covered === null ? '확인 불가' : d.coverage.busan.covered === d.coverage.busan.total ? '정상' : '확인 필요'} />
               </div>
               <div className={styles.statusTile}>
                 <div className={styles.statusTileLabel}>24개월 취소검증</div>
@@ -152,11 +161,11 @@ export default function AdminOpsPage() {
               </div>
               <div className={styles.sectionMeta}>확인 시각 {formatDateTime(d.tradeHistory.checkedAt)}</div>
               <div className={styles.kvGrid}>
-                <div className={styles.kv}><span>전체 row</span><b>{d.tradeHistory.busanTotal.toLocaleString('ko-KR')}</b></div>
-                <div className={styles.kv}><span>유효(active)</span><b>{d.tradeHistory.busanActive.toLocaleString('ko-KR')}</b></div>
-                <div className={styles.kv}><span>취소</span><b>{d.tradeHistory.busanCanceled.toLocaleString('ko-KR')}</b></div>
+                <div className={styles.kv}><span>전체 row</span><b>{num(d.tradeHistory.busanTotal)}</b></div>
+                <div className={styles.kv}><span>유효(active)</span><b>{num(d.tradeHistory.busanActive)}</b></div>
+                <div className={styles.kv}><span>취소</span><b>{num(d.tradeHistory.busanCanceled)}</b></div>
                 <div className={styles.kv}><span>최근 거래일</span><b>{d.tradeHistory.latestDealDate || '확인 불가'}</b></div>
-                <div className={styles.kv}><span>aptSeq 없는 row</span><b>{d.tradeHistory.aptSeqMissing}</b></div>
+                <div className={styles.kv}><span>aptSeq 없는 row</span><b>{num(d.tradeHistory.aptSeqMissing)}</b></div>
                 <div className={styles.kv}>
                   <span>자연키 중복 <EvidenceBadge type={d.tradeHistory.naturalKeyDuplicates.evidenceType} /></span>
                   <b>{d.tradeHistory.naturalKeyDuplicates.value}</b>
@@ -177,7 +186,7 @@ export default function AdminOpsPage() {
                 <EvidenceBadge type={d.coverage.evidenceType} />
               </div>
               <div className={styles.kvGrid}>
-                <div className={styles.kv}><span>부산 구·군(실데이터 존재)</span><b>{d.coverage.busan.covered} / {d.coverage.busan.total}</b></div>
+                <div className={styles.kv}><span>부산 구·군(실데이터 존재)</span><b>{d.coverage.busan.covered === null ? '확인 불가' : `${d.coverage.busan.covered} / ${d.coverage.busan.total}`}</b></div>
                 {/* ADMIN_DASHBOARD_TRUST_FIX_V1 §6/§8 — 조회 실패를 0으로 보여주지 않는다. */}
                 <div className={styles.kv}><span>전국 시·도(region model)</span><b>{d.coverage.nationwide.sido === null ? '확인 불가' : `${d.coverage.nationwide.sido} / 17`}</b></div>
                 <div className={styles.kv}><span>전국 sync-target(region model)</span><b>{d.coverage.nationwide.syncTargets === null ? '확인 불가' : d.coverage.nationwide.syncTargets.toLocaleString('ko-KR')}</b></div>
@@ -277,8 +286,8 @@ export default function AdminOpsPage() {
               </div>
               <div className={styles.sectionMeta}>확인 시점 {formatDateTime(d.rentCoverage.checkedAt)}</div>
               <div className={styles.kvGrid}>
-                <div className={styles.kv}><span>부산 구·군(실데이터 존재)</span><b>{d.rentCoverage.busan.covered} / {d.rentCoverage.busan.total}</b></div>
-                <div className={styles.kv}><span>총 row</span><b>{d.rentCoverage.totalRows.toLocaleString('ko-KR')}</b></div>
+                <div className={styles.kv}><span>부산 구·군(실데이터 존재)</span><b>{d.rentCoverage.busan.covered === null ? '확인 불가' : `${d.rentCoverage.busan.covered} / ${d.rentCoverage.busan.total}`}</b></div>
+                <div className={styles.kv}><span>총 row</span><b>{num(d.rentCoverage.totalRows)}</b></div>
                 <div className={styles.kv}><span>최신 거래일</span><b>{d.rentCoverage.latestDealDate ?? '정보 없음'}</b></div>
                 <div className={styles.kv}><span>검증 범위(자동 산출)</span><b>{d.rentCoverage.verified.from} ~ {d.rentCoverage.verified.to}</b></div>
               </div>
