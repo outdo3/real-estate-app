@@ -62,3 +62,31 @@ export function schoolBelongsToRegion(
   if (isTentativeSchoolRecord(school.SCHUL_NM)) return false;
   return addressMatchesRegion(school.ORG_RDNMA || school.LCTN_SC_NM || '', region, gungu);
 }
+
+/**
+ * SCHOOL_REGION_TRANSITION_COUNT_CONTRACT_FIX_V1 §5/§7 — 학교급 버킷.
+ *
+ * 제품 결정(OPTION B): "전체"는 그 지역의 **실제 학교 전부**다. 특수학교·외국인학교·
+ * 각종학교를 목록에서 지우지 않는다 — 실재하는 학교를 숨기는 것은 정보 손실이다.
+ * 대신 요약 카드가 **같은 dataset**을 쓰고, 초/중/고 밖은 "기타"로 모아 센다.
+ *
+ * 초/중/고는 **정확히 일치**할 때만 그 버킷이다. 예컨대 `방송통신고등학교`는 '고등학교'가
+ * 아니므로 기타다 — 이름이 비슷하다고 묶으면 초/중/고 숫자가 조용히 부풀어 오른다.
+ * 값이 없거나(`null`) 모르는 학교급도 **버리지 않고** 기타로 센다(§7).
+ */
+export type SchoolKindBucket = 'elementary' | 'middle' | 'high' | 'other';
+
+export function classifySchoolKind(kind: string | null | undefined): SchoolKindBucket {
+  if (kind === '초등학교') return 'elementary';
+  if (kind === '중학교') return 'middle';
+  if (kind === '고등학교') return 'high';
+  return 'other';
+}
+
+/** 탭 라벨("초등"/"중등"/"고등") → 버킷. "전체"/"학원가"는 학교급 필터를 걸지 않는다. */
+export function bucketForTab(tab: string): SchoolKindBucket | null {
+  if (tab === '초등') return 'elementary';
+  if (tab === '중등') return 'middle';
+  if (tab === '고등') return 'high';
+  return null;
+}

@@ -11,6 +11,24 @@ import { buildRegionDisplayName } from '@/lib/region-display-name';
 
 const TABS = ['전체', '초등', '중등', '고등', '학원가'];
 
+interface SchoolStats {
+  totalSchools: number;
+  elemCount: number;
+  midCount: number;
+  highCount: number;
+  /** COUNT_CONTRACT_FIX_V1 §6 — 초/중/고 밖 학교급(특수·외국인·각종학교 등). total = 초+중+고+기타. */
+  otherCount: number;
+  specRate: string | null;
+  academyLocation: string;
+  academyCount: number;
+}
+
+// 지역이 바뀌는 순간 되돌아갈 자리. 이전 지역 숫자가 새 제목 아래 남지 않게 한다.
+const EMPTY_STATS: SchoolStats = {
+  totalSchools: 0, elemCount: 0, midCount: 0, highCount: 0, otherCount: 0,
+  specRate: null, academyLocation: '-', academyCount: 0,
+};
+
 // ?sido=...&sigungu=...로 진입한 경우(사이트맵/공유 링크) 최초 1회만 URL의 지역으로
 // RegionContext를 초기화한다. useSearchParams()는 정적 렌더링 페이지에서 Suspense 경계
 // 안에 있어야 하므로 별도 컴포넌트로 분리했다.
@@ -55,62 +73,73 @@ export default function SchoolInfoPage() {
   const regionLabel = regionName.trim();
 
   // 통계 상태 관리
-  const [stats, setStats] = useState<{
-    totalSchools: number;
-    elemCount: number;
-    midCount: number;
-    highCount: number;
-    specRate: string | null;
-    academyLocation: string;
-    academyCount: number;
-  }>({
-    totalSchools: 0,
-    elemCount: 0,
-    midCount: 0,
-    highCount: 0,
-    specRate: null,
-    academyLocation: '-',
-    academyCount: 0
-  });
+  const [stats, setStats] = useState<SchoolStats>(EMPTY_STATS);
 
   const [schools, setSchools] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // 선택 지역에 맞는 학교 목록 불러오기 (탭 변경 시 리스트만 업데이트)
+  // SCHOOL_REGION_TRANSITION_COUNT_CONTRACT_FIX_V1 §1~§3
+  //  - 지역/탭이 바뀌면 **즉시 이전 목록을 버린다.** 예전에는 성공 응답이 올 때만 교체해서,
+  //    제목은 새 지역인데 목록은 이전 지역인 상태가 응답 도착까지 유지됐다.
+  //  - 늦게 도착한 이전 요청이 현재 지역을 덮어쓰지 못하게 abort + cancelled 가드를 둔다.
   useEffect(() => {
-    const fetchSchools = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/school?region=${encodeURIComponent(regionName)}&type=${encodeURIComponent(activeTab)}`);
-        const json = await res.json();
-        if (json.success) {
-          setSchools(json.data);
-        }
-      } catch (error) {
-        console.error('Data load error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const controller = new AbortController();
+    let cancelled = false;
 
-    fetchSchools();
+    setSchools([]);
+    setLoading(true);
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/school?region=${encodeURIComponent(regionName)}&type=${encodeURIComponent(activeTab)}`,
+          { signal: controller.signal }
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success) setSchools(json.data);
+      } catch (error) {
+        if (!cancelled && (error as Error)?.name !== 'AbortError') {
+          console.error('Data load error:', error);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [regionName, activeTab]);
 
   // 지역 전체 통계 불러오기 (지역 변경 시에만 업데이트하여 숫자 널뛰기 방지)
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const statsRes = await fetch(`/api/school/stats?region=${encodeURIComponent(regionName)}`);
-        const statsJson = await statsRes.json();
-        if (statsJson.success) {
-          setStats(statsJson.data);
-        }
-      } catch (error) {
-        console.error('Stats load error:', error);
-      }
-    };
+    const controller = new AbortController();
+    let cancelled = false;
 
-    fetchStats();
+    setStats(EMPTY_STATS);
+
+    (async () => {
+      try {
+        const statsRes = await fetch(`/api/school/stats?region=${encodeURIComponent(regionName)}`, {
+          signal: controller.signal,
+        });
+        const statsJson = await statsRes.json();
+        if (cancelled) return;
+        if (statsJson.success) setStats(statsJson.data);
+      } catch (error) {
+        if (!cancelled && (error as Error)?.name !== 'AbortError') {
+          console.error('Stats load error:', error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [regionName]);
 
   const handleTabChange = (tab: string) => {
@@ -199,7 +228,7 @@ export default function SchoolInfoPage() {
                 <h3>{regionLabel} {activeTab === '전체' || activeTab === '학원가' ? '학교' : activeTab + '학교'} 수</h3>
                 <p>
                   {activeTab === '전체' || activeTab === '학원가'
-                    ? `총 ${stats.totalSchools}개교 (초${stats.elemCount}/중${stats.midCount}/고${stats.highCount})`
+                    ? `총 ${stats.totalSchools}개교 (초${stats.elemCount}/중${stats.midCount}/고${stats.highCount}/기타${stats.otherCount})`
                     : activeTab === '초등'
                     ? `총 ${stats.elemCount}개교`
                     : activeTab === '중등'
@@ -247,6 +276,14 @@ export default function SchoolInfoPage() {
             </span>
           </div>
 
+          {/* §3 — 불러오는 동안에는 목록 자리를 비워 둔다. 예전에는 로딩 여부와 무관하게
+              `schools`를 그렸기 때문에 이전 지역 목록이 새 제목 아래 남아 있었다. */}
+          {loading && (
+            <div style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+              불러오는 중입니다...
+            </div>
+          )}
+
           {!loading && schools.length === 0 && (
             <div style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
               {hasDistrict
@@ -256,7 +293,7 @@ export default function SchoolInfoPage() {
           )}
 
           <ul className={styles.schoolList}>
-            {schools.map((item) => (
+            {!loading && schools.map((item) => (
               <li
                 key={item.id}
                 className={styles.schoolItem}

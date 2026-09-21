@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveNeisEduCode, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
+import { bucketForTab, classifySchoolKind, resolveNeisEduCode, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
 import { getOrSetCache } from '@/lib/server-cache';
 
 export async function GET(request: Request) {
@@ -51,14 +51,12 @@ export async function GET(request: Request) {
       const gungu = region.split(' ')[1] || '';
       let filtered = rawSchools.filter((s: any) => schoolBelongsToRegion(s, region, gungu));
 
-      const kindMap: Record<string, string> = {
-        '초등': '초등학교',
-        '중등': '중학교',
-        '고등': '고등학교'
-      };
-      const targetKind = kindMap[type];
-      if (targetKind) {
-        filtered = filtered.filter((s: any) => s.SCHUL_KND_SC_NM === targetKind);
+      // COUNT_CONTRACT_FIX_V1 §5/§8 — "전체"는 그 지역 **모든 학교 유형**을 그대로 둔다
+      // (특수학교·외국인학교·각종학교를 숨기지 않는다). 초등/중등/고등 탭만 해당 버킷으로 좁힌다.
+      // 버킷 판정은 요약 카드와 **같은 함수**를 쓴다 — 두 숫자가 갈라지지 않도록.
+      const targetBucket = bucketForTab(type);
+      if (targetBucket) {
+        filtered = filtered.filter((s: any) => classifySchoolKind(s.SCHUL_KND_SC_NM) === targetBucket);
       }
 
       // 학생수/학급당인원/학업성취도/특목고 진학률/통학시간 등은 NEIS schoolInfo API에

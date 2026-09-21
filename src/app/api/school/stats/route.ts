@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveNeisEduCode, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
+import { classifySchoolKind, resolveNeisEduCode, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
 import { getOrSetCache } from '@/lib/server-cache';
 
 // PERFORMANCE_V2.1 §5 — 이 라우트는 요청마다 외부 API를 약 7회 부른다:
@@ -51,17 +51,24 @@ export async function GET(request: Request) {
     // '서구'를 선택해도 '강서구' 학교가 함께 매칭될 수 있었다)
     const regionSchools = rawSchools.filter(s => schoolBelongsToRegion(s, region, gungu));
 
+    // COUNT_CONTRACT_FIX_V1 §6 — 요약 카드는 "전체" 탭과 **같은 dataset**을 센다.
+    // 예전에는 초/중/고만 세서 목록 24와 카드 23이 어긋났다(서구 특수학교 1곳).
+    // 이제 초/중/고 밖 학교급은 버리지 않고 '기타'로 모은다 — total = 초+중+고+기타.
     let elemCount = 0;
     let midCount = 0;
     let highCount = 0;
+    let otherCount = 0;
 
     regionSchools.forEach(s => {
-      if (s.SCHUL_KND_SC_NM === '초등학교') elemCount++;
-      else if (s.SCHUL_KND_SC_NM === '중학교') midCount++;
-      else if (s.SCHUL_KND_SC_NM === '고등학교') highCount++;
+      switch (classifySchoolKind(s.SCHUL_KND_SC_NM)) {
+        case 'elementary': elemCount++; break;
+        case 'middle': midCount++; break;
+        case 'high': highCount++; break;
+        default: otherCount++; break;
+      }
     });
 
-    const totalSchools = elemCount + midCount + highCount;
+    const totalSchools = elemCount + midCount + highCount + otherCount;
     // 특목고 진학률: NEIS schoolInfo API에는 이 값이 없고, 이 앱에 다른 실제 데이터
     // 소스도 없다. 과거에는 학교명 문자열 해시로 만든 가짜 수치를 여기 채워 넣었으나
     // (STEP 1 감사에서 발견), 실제 근거가 없는 값을 통계처럼 보여주지 않는다는 원칙에
@@ -121,7 +128,7 @@ export async function GET(request: Request) {
     }
 
     // 총 학교 수는 반드시 초+중+고 합계로 산출 (실패 시 임의 숫자로 채우지 않고 0 그대로 반환)
-    const finalTotalSchools = elemCount + midCount + highCount;
+    const finalTotalSchools = elemCount + midCount + highCount + otherCount;
 
       // 결과 조립
       return {
@@ -129,6 +136,7 @@ export async function GET(request: Request) {
         elemCount: elemCount,
         midCount: midCount,
         highCount: highCount,
+        otherCount: otherCount,
         specRate: specRate,
         academyLocation: academyLocation,
         academyCount: academyCount

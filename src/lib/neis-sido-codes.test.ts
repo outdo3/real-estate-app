@@ -4,6 +4,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   addressMatchesRegion,
+  bucketForTab,
+  classifySchoolKind,
   isTentativeSchoolRecord,
   resolveNeisEduCode,
   schoolBelongsToRegion,
@@ -151,4 +153,75 @@ test('대신 계열 3곳은 이름 예외 없이 주소만으로 서구에 포�
 test('resolveNeisEduCode — 모르는 시도는 다른 지역으로 대체하지 않고 null', () => {
   assert.equal(resolveNeisEduCode('부산광역시'), 'C10');
   assert.equal(resolveNeisEduCode('없는도'), null);
+});
+
+// ── COUNT CONTRACT (OPTION B) ───────────────────────────────────────────────
+
+test('§10 · 서구 24 = 초 11 + 중 7 + 고 5 + 기타 1 (N = A+B+C+D)', () => {
+  // 실측 NEIS 서구 24곳의 학교급 구성을 그대로 재현한다.
+  const kinds = [
+    ...Array(11).fill('초등학교'),
+    ...Array(7).fill('중학교'),
+    ...Array(5).fill('고등학교'),
+    '특수학교', // 부산혜송학교
+  ];
+  const c = { elementary: 0, middle: 0, high: 0, other: 0 };
+  for (const k of kinds) c[classifySchoolKind(k)]++;
+  assert.deepEqual(c, { elementary: 11, middle: 7, high: 5, other: 1 });
+  assert.equal(c.elementary + c.middle + c.high + c.other, 24, 'total = 초+중+고+기타 여야 한다');
+});
+
+test('§10 · 부산혜송학교(특수학교)는 전체에 포함되고 초/중/고 탭에는 없다', () => {
+  assert.equal(classifySchoolKind('특수학교'), 'other');
+  assert.equal(bucketForTab('전체'), null, '전체 탭은 학교급 필터를 걸지 않는다');
+  for (const tab of ['초등', '중등', '고등']) {
+    assert.notEqual(bucketForTab(tab), 'other');
+  }
+});
+
+test('§7 · 초/중/고 밖 학교급은 버리지 않고 전부 기타로 센다', () => {
+  const others = [
+    '특수학교', '외국인학교', '각종학교(고)', '각종학교(중)', '방송통신고등학교',
+    '방송통신중학교', '고등기술학교', '공동실습소', '평생학교(고)-3년6학기', '평생학교(중)-2년6학기',
+  ];
+  for (const k of others) assert.equal(classifySchoolKind(k), 'other', k);
+  // 값이 없거나 모르는 학교급도 버리지 않는다.
+  assert.equal(classifySchoolKind(null), 'other');
+  assert.equal(classifySchoolKind(undefined), 'other');
+  assert.equal(classifySchoolKind('미래에생길학교급'), 'other');
+});
+
+test('§7 · 이름이 비슷해도 초/중/고로 승격되지 않는다(숫자 부풀림 방지)', () => {
+  assert.equal(classifySchoolKind('방송통신고등학교'), 'other', "'고등학교'로 끝난다고 고등이 되면 안 된다");
+  assert.equal(classifySchoolKind('방송통신중학교'), 'other');
+  assert.equal(classifySchoolKind('고등기술학교'), 'other');
+  assert.equal(classifySchoolKind('고등학교'), 'high');
+});
+
+test('§8 · 탭 계약 — 전체/학원가는 전체, 초등/중등/고등만 좁힌다', () => {
+  assert.equal(bucketForTab('전체'), null);
+  assert.equal(bucketForTab('학원가'), null);
+  assert.equal(bucketForTab('초등'), 'elementary');
+  assert.equal(bucketForTab('중등'), 'middle');
+  assert.equal(bucketForTab('고등'), 'high');
+});
+
+test('§6 · 목록과 요약 카드가 같은 분류 함수를 쓴다(계약 분기 방지)', () => {
+  for (const rel of ['src/app/api/school/route.ts', 'src/app/api/school/stats/route.ts']) {
+    assert.ok(read(rel).includes('classifySchoolKind'), `${rel}가 공통 분류를 쓰지 않는다`);
+  }
+  // 요약 카드 total에 기타가 포함돼야 한다.
+  const stats = read('src/app/api/school/stats/route.ts');
+  assert.ok(/highCount \+ otherCount/.test(stats), 'total에 otherCount가 빠졌다');
+});
+
+// ── REGION TRANSITION (P0) ──────────────────────────────────────────────────
+
+test('§1~§3 · 지역 전환 시 이전 목록을 버리고, 늦은 응답이 덮지 못한다', () => {
+  const client = read('src/app/school/school-client.tsx');
+  assert.ok(client.includes('setSchools([])'), '지역/탭 변경 시 목록 초기화가 없다');
+  assert.ok(client.includes('setStats(EMPTY_STATS)'), '지역 변경 시 통계 초기화가 없다');
+  assert.ok(client.includes('AbortController'), '요청 취소 가드가 없다');
+  assert.ok(client.includes('cancelled = true'), 'stale 응답 가드가 없다');
+  assert.ok(/\{!loading && schools\.map\(/.test(client), '로딩 중에도 이전 목록을 렌더한다');
 });
