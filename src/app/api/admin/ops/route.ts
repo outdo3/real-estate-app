@@ -16,6 +16,7 @@ import { SALE_RECHECK_MAX_MONTHS_BACK, SALE_RECHECK_MIN_MONTHS_BACK } from '@/li
 import { getMolitLeafRegions } from '@/lib/region/registry';
 import { logAdminFailure } from '@/lib/admin/log-admin-failure';
 import { difference, isTotalDbOutage, isolate, unavailableLabels, valueOf, withBudget } from '@/lib/admin-ops-runner';
+import { PhaseTimer, buildSlowSummary, newRequestId } from '@/lib/admin/phase-timer';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,52 @@ const BUSAN_CANCELED_BUDGET_MS = 4000;
 // "취소 거래 수"가 5분 내내 화면에 확인 불가로 고정됐다. 그렇다고 캐시를 아예 끄면
 // 장애가 길 때 매 요청이 전체 재조회를 일으킨다 — 짧게 잡는 것이 둘 사이의 답이다.
 const DEGRADED_CACHE_TTL_MS = 30 * 1000;
+
+// ADMIN_OPS_LATENCY_INSTRUMENTATION_V1 §7 — 콜드 시작 구분 근거.
+// 모듈이 평가된 순간(= 이 인스턴스가 살아난 순간)과 이 인스턴스가 처리한 요청 수.
+// requestIndex === 1 && msSinceModuleInit가 작으면 **콜드 인스턴스의 첫 요청**이다.
+// 주의: Vercel의 컨테이너 startup/번들 로드 시간은 모듈 평가 **이전**이라
+// 여기서 측정되지 않는다 — 보고할 때 명시적으로 구분한다.
+const MODULE_INIT_AT = Date.now();
+let instanceRequestCount = 0;
+
+/** 응답에 실릴 계측 요약. 구간 이름과 ms뿐이라 개인정보가 없다(관리자 전용 라우트). */
+function buildTimings(
+  timer: PhaseTimer,
+  requestId: string,
+  cachePhase: string,
+  requestIndex: number,
+  msSinceModuleInit: number
+) {
+  return {
+    requestId,
+    totalMs: timer.totalMs,
+    cachePhase,
+    phases: timer.phases(),
+    unaccountedMs: timer.unaccountedMs(),
+    // §7 — 이 응답을 만든 인스턴스가 막 생겼는지.
+    instance: { requestIndex, msSinceModuleInit, likelyColdInstance: requestIndex === 1 },
+  };
+}
+
+/** §3 — 느린 요청만 서버 로그로. DB INSERT 없음, 임계치 미만은 무음. */
+function logIfSlow(
+  timer: PhaseTimer,
+  requestId: string,
+  cachePhase: string,
+  requestIndex: number,
+  msSinceModuleInit: number
+): void {
+  const line = buildSlowSummary({
+    endpoint: '/api/admin/ops',
+    requestId,
+    totalMs: timer.totalMs,
+    phases: timer.phases(),
+    unaccountedMs: timer.unaccountedMs(),
+    extra: { cache: cachePhase, reqIdx: requestIndex, sinceInit: msSinceModuleInit },
+  });
+  if (line) console.warn(line);
+}
 
 // REGION_REGISTRY_V1 §12 — canonical registry에서 파생(중복 하드코딩 제거).
 const BUSAN_16: string[] = getMolitLeafRegions('26').map((r) => r.lawdCd);
@@ -96,12 +143,15 @@ function readCancellation24mSnapshot(): { status: 'ok'; data: Cancellation24mSna
 
 // §13 하드코딩 금지 — RegionSelectModal/sync 엔진과 동일한 런타임 조회를 그대로
 // 재사용한다(§7 새 체계 금지와 동일 원칙).
-async function buildNationwideRegionModel() {
-  const sidoList = await getSidoList();
+async function buildNationwideRegionModel(timer?: PhaseTimer) {
+  // §6 — 외부 HTTP 구간을 둘로 쪼개서 재다: 시도 목록 1회 vs 시군구 18회(병렬).
+  // region-utils에 3초 AbortSignal.timeout이 걸려 있고 retry/backoff는 없다.
+  const track = <T,>(phase: string, run: () => Promise<T>) => (timer ? timer.track(phase, run) : run());
+  const sidoList = await track('proxy:sidoList', () => getSidoList());
   // ADMIN_DASHBOARD_TRUST_FIX_V1 §7 — 예전에는 시도마다 `await`을 걸어 **18회를 순차로**
   // 호출했다. 각 호출은 서로 독립적이므로 한 번에 보낸다(프록시 호출 수는 그대로다).
   // region-utils 쪽에 timeout이 걸려 있어 한 곳이 늦어도 전체가 매달리지 않는다.
-  const lists = await Promise.all(sidoList.map((sido) => getSigunguListForSido(sido.code)));
+  const lists = await track('proxy:sigunguAll', () => Promise.all(sidoList.map((sido) => getSigunguListForSido(sido.code))));
   const syncTargets = lists.reduce((sum, list) => sum + list.length, 0);
   const sejong = sidoList.some((s) => s.code === '36');
   // 목록을 아예 못 받았으면 "시도 0개"를 사실처럼 내려보내지 않는다 — 조회 실패다.
@@ -109,7 +159,7 @@ async function buildNationwideRegionModel() {
   return { sidoCount: sidoList.length, syncTargets, sejongInRegionModel: sejong };
 }
 
-async function buildSummary() {
+async function buildSummary(timer: PhaseTimer) {
   const now = new Date();
   const nowIso = now.toISOString();
 
@@ -134,7 +184,9 @@ async function buildSummary() {
     // §9 — 전체 실패(ADMIN_OPS_FAILURE)·region model 실패와 구분되는 category.
     logAdminFailure({ category: 'ADMIN_OPS_DB_SUMMARY_FAILURE', endpoint: '/api/admin/ops', error: e, metricKey: key });
   };
-  const m = <T,>(key: string, run: () => Promise<T>) => isolate(key, run, noteDbFailure);
+  // §5 — 지표마다 구간 시간을 함께 재다. 이름은 `db:<metric>`으로 묶어
+  // DB 합계와 HTTP total의 차이를 보고할 수 있게 한다.
+  const m = <T,>(key: string, run: () => Promise<T>) => timer.track(`db:${key}`, () => isolate(key, run, noteDbFailure));
 
   const busanTotalM = await m('busanTotal', () => prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 } } }));
   const aptSeqMissingM = await m('aptSeqMissing', () => prisma.apartmentTradeHistory.count({ where: { lawdCd: { in: BUSAN_16 }, aptSeq: null } }));
@@ -181,10 +233,10 @@ async function buildSummary() {
   const rentBusanTotal = valueOf(rentBusanTotalM);
   const rentLatestDealAgg = valueOf(rentLatestDealM);
 
-  const nationwideManifestResult = readManifest(NATIONWIDE_MANIFEST_PATH);
+  const nationwideManifestResult = timer.trackSync('file:manifest', () => readManifest(NATIONWIDE_MANIFEST_PATH));
   const nationwideSummary = nationwideManifestResult.status === 'ok' ? summarizeManifest(nationwideManifestResult.manifest) : null;
 
-  const cancellation24m = readCancellation24mSnapshot();
+  const cancellation24m = timer.trackSync('file:cancelSnapshot', () => readCancellation24mSnapshot());
   // §7 — snapshot 파일에 저장된 verdict 문자열을 그대로 신뢰하지 않는다. 파일이
   // 손상/변조되거나 저장 당시 로직에 버그가 있어도 API 자신이 원본 필드에서
   // 다시 계산해 걸러낸다(ADMIN_OPS_V1.2의 핵심 교훈 — 저장된 결론이 아니라 원본
@@ -206,7 +258,7 @@ async function buildSummary() {
   // 여기가 실패해도 DB/cron/manifest 기반 섹션은 전부 멀쩡하므로, 예전처럼 화면 전체를
   // 죽이지 않고 이 조각만 "확인 불가"로 떨어뜨린다.
   const degradedSources: string[] = [];
-  const regionModel = await buildNationwideRegionModel().catch((e) => {
+  const regionModel = await timer.track('regionModel', () => buildNationwideRegionModel(timer)).catch((e) => {
     console.error('[admin/ops] region model 조회 실패', e);
     // ADMIN_ERROR_LOGGING_P1_V1 §4 — 전체 실패와 **조각 하나 실패**를 로그에서 구분한다.
     // 화면은 부분 실패로 계속 뜨지만(TRUST_FIX_V1 §6), 왜 비었는지는 추적 가능해야 한다.
@@ -270,12 +322,14 @@ async function buildSummary() {
       { label: 'sync 실행 이력', metric: saleRunKindsM },
     ])
   );
-  const rentLegacyBootstrap = readLegacyBootstrap();
+  const rentLegacyBootstrap = timer.trackSync('file:legacyBootstrap', () => readLegacyBootstrap());
   // CRON ACTIVATION §8 — scheduler 상태를 코드에 하드코딩하지 않고 배포된 vercel.json에서
   // 실제 등록 여부를 읽는다. 등록(SCHEDULED)과 "무인 실행 성공"은 분리해서 표시한다.
-  const saleCron = readCronRegistration('/api/cron/sale-sync');
-  const rentCron = readCronRegistration('/api/cron/rent-sync');
-  const saleRecheckCron = readCronRegistration('/api/cron/sale-recheck');
+  const [saleCron, rentCron, saleRecheckCron] = timer.trackSync('file:cronRegistration', () => [
+    readCronRegistration('/api/cron/sale-sync'),
+    readCronRegistration('/api/cron/rent-sync'),
+    readCronRegistration('/api/cron/sale-recheck'),
+  ]);
 
   return {
     overall: {
@@ -482,18 +536,48 @@ async function buildSummary() {
 let lastKnownGood: { data: Awaited<ReturnType<typeof buildSummary>>; at: string } | null = null;
 
 export async function GET() {
-  const { error, status } = await requireAdmin();
+  // ADMIN_OPS_LATENCY_INSTRUMENTATION_V1 — 성공 경로 구간 계측.
+  // 직전 STEP에서 취소 count를 2,286ms → 8.4ms로 줄였는데도 재조합은 5.4~6.1초이었고,
+  // 남은 5초가 어디인지 짐작할 수밖에 없었다. 다음 최적화를 추측으로 하지 않기 위해
+  // 먼저 재는다. 느린 요청일 때만 서버 로그로 남기고 **DB에는 쓰지 않는다**.
+  const timer = new PhaseTimer();
+  const requestId = newRequestId();
+  // §7 콜드 시작 근거 — 모듈이 로드된 지 얼마 안 됐고 이 인스턴스의 첫 요청이면
+  // 콜드 인스턴스다. Vercel 자체의 startup 시간은 라우트 안에서 볼 수 없으므로
+  // 여기에 포함되지 않는다(보고할 때 구분한다).
+  const requestIndex = ++instanceRequestCount;
+  const msSinceModuleInit = Date.now() - MODULE_INIT_AT;
+
+  const { error, status } = await timer.track('auth', () => requireAdmin());
   if (error) return NextResponse.json({ success: false, error }, { status });
 
   const startedAt = Date.now();
   try {
-    const data = await getOrSetCache('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary, {
-      // 완전한 요약은 5분, 조각이 빠진 요약은 30초 — 곧 다시 시도해 스스로 회복한다.
-      // (무거운 지표는 자기 30분 캐시가 이미 채워져 있어 재조회가 비싸지 않다.)
-      ttlFor: (v) => (v.overall.degradedSources.length > 0 ? DEGRADED_CACHE_TTL_MS : CACHE_TTL_MS),
-    });
+    // §4 캐시 lifecycle — fetcher가 실제로 돌았는지로 hit / in-flight 대기 / rebuild를 가른다.
+    let ranBuild = false;
+    const data = await timer.track('cacheOrBuild', () =>
+      getOrSetCache(
+        'admin-ops:summary-v1_2',
+        CACHE_TTL_MS,
+        () => {
+          ranBuild = true;
+          return buildSummary(timer);
+        },
+        {
+          // 완전한 요약은 5분, 조각이 빠진 요약은 30초 — 곧 다시 시도해 스스로 회복한다.
+          // (무거운 지표는 자기 30분 캐시가 이미 채워져 있어 재조회가 비싸지 않다.)
+          ttlFor: (v) => (v.overall.degradedSources.length > 0 ? DEGRADED_CACHE_TTL_MS : CACHE_TTL_MS),
+        }
+      )
+    );
     lastKnownGood = { data, at: new Date().toISOString() };
-    return NextResponse.json({ success: true, data });
+
+    const cachePhase = ranBuild ? 'rebuild' : timer.phases().find((p) => p.phase === 'cacheOrBuild')!.ms < 5 ? 'hit' : 'inflight-wait';
+    const body = { success: true, data: { ...data, timings: buildTimings(timer, requestId, cachePhase, requestIndex, msSinceModuleInit) } };
+    // 직렬화 비용도 구간이다 — 응답이 큼지면 여기가 드러난다.
+    const res = timer.trackSync('serialize', () => NextResponse.json(body));
+    logIfSlow(timer, requestId, cachePhase, requestIndex, msSinceModuleInit);
+    return res;
   } catch (error) {
     console.error('Failed to build admin ops summary:', error);
     // §2 — 운영자가 실제로 자주 보는 실패. 부분 실패(위)와 다른 category로 남긴다.

@@ -106,7 +106,10 @@ test('§6 ops 라우트가 DB 쿼리를 Promise.all로 동시에 띄우지 않�
 
 test('§5 각 지표가 isolate()를 통과한다 — 한 조각 실패가 전체로 번지지 않는다', () => {
   const code = stripComments(OPS_ROUTE);
-  assert.ok(/const m = <T,>\(key: string, run: \(\) => Promise<T>\) => isolate\(key, run, noteDbFailure\);/.test(code));
+  // ADMIN_OPS_LATENCY_INSTRUMENTATION_V1 — 이제 같은 헬퍼가 구간 계측도 함께 한다.
+  // 계약은 그대로다: 모든 지표가 isolate(key, run, noteDbFailure)를 통과한다.
+  assert.ok(/const m = <T,>\(key: string, run: \(\) => Promise<T>\) =>/.test(code));
+  assert.ok(/isolate\(key, run, noteDbFailure\)/.test(code), '지표가 isolate를 거치지 않는다');
   assert.ok(/if \(isTotalDbOutage\(dbMetrics\)\)/.test(code), '전체 장애 판정이 없다');
 });
 
@@ -128,7 +131,10 @@ test('§3-C 재조회 실패 시 마지막으로 확인한 값을 stale 표시�
 
 test('§4 무거운 요약은 기존 캐시 헬퍼를 그대로 쓴다 — in-flight dedupe 포함', () => {
   const code = stripComments(OPS_ROUTE);
-  assert.ok(/getOrSetCache\('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary/.test(code));
+  // fetcher가 직접 buildSummary에서 람다로 바뀜었다(rebuild 여부를 구분하려고) —
+  // 캐시 키·TTL·헬퍼는 그대로다.
+  assert.ok(/getOrSetCache\(\s*'admin-ops:summary-v1_2',\s*CACHE_TTL_MS,/.test(code));
+  assert.ok(/return buildSummary\(timer\);/.test(code), 'buildSummary가 캐시 fetcher에서 빠졌다');
   // server-cache가 같은 key의 동시 요청을 하나로 묶는다(thundering herd 방지).
   const cache = stripComments(read('src/lib/server-cache.ts'));
   assert.ok(/const inFlight = new Map<string, Promise<unknown>>\(\)/.test(cache));
