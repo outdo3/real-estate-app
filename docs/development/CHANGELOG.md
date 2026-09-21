@@ -2,6 +2,27 @@
 
 ## 2026-09-21
 
+### E-JIP OPS CANCEL COUNT INDEX IMPACT AUDIT V1 — 인덱스 필요성 감사 (READ-ONLY)
+
+CREATE INDEX 0 · DROP INDEX 0 · migration 0 · schema 0 · INSERT/UPDATE/DELETE 0 · VACUUM 0. 상세: `docs/development/OPS_CANCEL_COUNT_INDEX_IMPACT_AUDIT_V1.md`
+
+    판정     **INDEX_RECOMMENDED_NOW** — 단 **P2**(긴급 아님). 증상인 ops 500은 이미 캐시+예산으로 해소됐고, 이것은 사고 수습이 아니라 최적화다
+    슬로우쿼리 `lawd_cd IN(부산16) AND deal_canceled = $17` — Prisma query log로 실제 SQL 캡처(그 호출 자체가 **8,161ms**)
+    플랜     **Parallel Seq Scan** — 866,366행을 훑어 **850,052행을 버리고** 16,314행을 찾는다. warm 1,210ms / 재실행 5,676ms
+    대조군    같은 조건에서 `deal_canceled`만 빼면 **Index Only Scan 393ms** — 조건 하나로 Seq↔Index가 갈린다(인덱스 부재 증거)
+    현재인덱스 8개 중 **`deal_canceled`를 포함한 것이 하나도 없다** — 중복 제안 아님
+    분포     total 866,366 · 부산 **99.88%**(선택도 없음) · **`deal_canceled=true` 1.89%**(선택도 전부) · distinct lawd_cd 19
+    순서     `(lawd_cd, deal_canceled)` 채택 — 이 쿼리만 보면 역순과 동등하지만, 서울 backfill 후 lawd_cd가 선택적이 되고 기존 컨벤션·prefix 재사용에도 맞는다(선두 2값 비권장)
+    정정     내가 처음 더 낫다고 본 **부분 인덱스(~0.3MB)는 쓸 수 없다** — Prisma가 `deal_canceled = $17`을 바인드 파라미터로 보내 generic plan에서 술어 함의를 증명할 수 없다(될 때도/안 될 때도 있는 인덱스)
+    크기     ESTIMATE **11.3~12.5 MB** — 근거: 기존 `(lawd_cd, deal_date)` 실측 밀도 14.37 B/entry. DB 전체 716 MB의 **+1.7%**
+    디스크    Supabase 플랜 한도는 DB 안에서 읽을 수 없음 — **대시보드 확인 필요**로 솔직히 보고
+    write    **LOW** — 최근 10일 INSERT 하루 4~945건 · `source_fetched_at` UPDATE는 인덱스 컴럼이 아니라 **HOT 유지** · 취소 UPDATE만 HOT 해제(전체 16,372건)
+    backfill **기다릴 이유 없음** — 서울 backfill의 병목은 MOLIT 쿼터지 DB 삽입 속도가 아니고, Phase A는 QUOTA_BLOCKED라 무기한 대기가 된다
+    lock     PG 17.6 · 활성 세션 0 · cron은 04/06/08시 KST뿐 → **KST 주간 평범한 CREATE INDEX** 권장. CIC는 Prisma가 migration을 트랜잭션으로 감싸 우회 절차 필요
+    효과     **ESTIMATE** 상태 명시 — hypopg가 미설치라 플랜 시뮬레이션 불가(설치는 schema 변경). 쿼리 1,210ms → ~20~120ms 추정
+    한계     **과장하지 않음** — 취소 count는 이미 4초 예산으로 상한이 걸려 있어 인덱스가 없앨 수 있는 것은 **최대 ~4초**. 나머지 8개만으로도 콜드 1.8~7초 → **cold ≤3s 달성을 약속할 수 없다**
+    별건     **VACUUM이 23일 밀렸다** — last_autovacuum 08-29 · dead 53,081 · 플래너가 행 수를 7배 과소추정. 이 쿼리 플랜은 안 바뀌지만 기존 index-only scan의 heap fetch 295,518을 줄인다(실행 안 함, 권고만)
+
 ### E-JIP ADMIN DASHBOARD CONNECTION POOL SAFETY V1 — ops 패턴을 대시보드에도 적용
 
 schema 0 · migration 0 · index 0 · env 0 · business write 0. 상세: `docs/development/ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1.md`
