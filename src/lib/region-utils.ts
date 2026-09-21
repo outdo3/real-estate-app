@@ -23,15 +23,26 @@ let sidoListCache: { code: string; name: string }[] | null = null;
 // (`36*00000` 패턴이 "3611000000"과 자연히 일치하므로) — sido 목록에만 명시적으로
 // 보강한다. 이 지역 코드가 실제로 MOLIT lawdCd로 유효함은 "36110"이 공개적으로
 // 알려진 세종 lawdCd라는 사실과 위 실측이 일치함으로 확인했다.
+// ADMIN_DASHBOARD_TRUST_FIX_V1 §7 — 이 프록시는 제3자 서비스인데 `fetch`에 timeout이
+// 없었다. 응답이 늦어지면 호출부가 그대로 매달려 서버리스 함수 시간 예산을 모두 태웠고,
+// /admin/ops는 이 경로에서만 18번 연속으로 호출했다(감사 §9). 실패는 이미 각 호출부가
+// 빈 배열로 흡수하므로, 여기서는 "언제 포기할지"만 정해 준다.
+const REGCODE_TIMEOUT_MS = 3000;
+
+async function fetchRegcodes(query: string): Promise<{ code: string; name: string }[]> {
+  const res = await fetch(`${REGCODE_PROXY}?${query}`, { signal: AbortSignal.timeout(REGCODE_TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`regcode proxy ${res.status}`);
+  const data = await res.json();
+  return (data.regcodes || []) as { code: string; name: string }[];
+}
+
 const SEJONG_SIDO_CODE = '36';
 const SEJONG_SIDO_NAME = '세종특별자치시';
 
 export async function getSidoList(): Promise<{ code: string; name: string }[]> {
   if (sidoListCache) return sidoListCache;
   try {
-    const res = await fetch(`${REGCODE_PROXY}?regcode_pattern=*00000000`);
-    const data = await res.json();
-    const list = ((data.regcodes || []) as { code: string; name: string }[]).map((r) => ({ code: r.code.substring(0, 2), name: r.name }));
+    const list = (await fetchRegcodes('regcode_pattern=*00000000')).map((r) => ({ code: r.code.substring(0, 2), name: r.name }));
     if (!list.some((s) => s.code === SEJONG_SIDO_CODE)) list.push({ code: SEJONG_SIDO_CODE, name: SEJONG_SIDO_NAME });
     sidoListCache = list;
     return list;
@@ -62,9 +73,7 @@ export async function resolveSidoCode(sido: string): Promise<string | null> {
 export async function getSigunguListForSido(sidoCode: string): Promise<{ code: string; name: string }[]> {
   if (sigunguListCache.has(sidoCode)) return sigunguListCache.get(sidoCode)!;
   try {
-    const res = await fetch(`${REGCODE_PROXY}?regcode_pattern=${sidoCode}*00000&is_ignore_zero=true`);
-    const data = await res.json();
-    const list = ((data.regcodes || []) as { code: string; name: string }[]).filter((item) => item.code.substring(0, 5) !== `${sidoCode}000`);
+    const list = (await fetchRegcodes(`regcode_pattern=${sidoCode}*00000&is_ignore_zero=true`)).filter((item) => item.code.substring(0, 5) !== `${sidoCode}000`);
     sigunguListCache.set(sidoCode, list);
     return list;
   } catch (e) {

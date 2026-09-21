@@ -352,3 +352,25 @@
 .overallBanner {
   overflow-wrap: anywhere;
 }
+
+/* ADMIN_DASHBOARD_TRUST_FIX_V1 §6 — 부분 실패 알림. 전체 실패가 아니므로 경고 톤은 낮춘다. */
+.degradedBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--bg-color);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.degradedList {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  word-break: keep-all;
+}

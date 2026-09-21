@@ -6,14 +6,15 @@ import { onlineSinceThreshold } from '@/lib/presence-server';
 import { fetchMolitData } from '@/lib/api-molit';
 import { detectLeadingRegionKeyword } from '@/lib/ai-search';
 import { ANALYTICS_EVENT_URL_PREFIX } from '@/lib/analytics/events';
+import { startOfKstDay } from '@/lib/kst-day';
 
 export const dynamic = 'force-dynamic';
 
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+// ADMIN_DASHBOARD_TRUST_FIX_V1 §1 — 예전에는 `new Date(); d.setHours(0,0,0,0)`이었다.
+// `setHours`는 실행 환경 로컬 자정이라 Vercel(TZ=UTC)에서는 "오늘"이 **한국시간 09:00**에
+// 시작했고, 매일 그 시각에 오늘 지표가 0으로 리셋됐다(감사 §5에서 151 → 60으로 재현).
+// 이제 런타임 TZ와 무관하게 KST 자정을 쓴다.
+const startOfToday = startOfKstDay;
 
 // 실제로 살아있는 공공 API를 가볍게 한 번씩 호출해 "정상/오류"를 판정한다 — 배치
 // 파이프라인이 따로 없는 이 앱에서는 "마지막 수집 완료 시각" 같은 로그가 없으므로,
@@ -181,10 +182,18 @@ export async function GET() {
       data: {
         traffic: {
           todayPageViews,
-          todayUniqueVisitors: Number(todayUniqueSessions[0]?.count ?? 0),
+          // ADMIN_DASHBOARD_TRUST_FIX_V1 §3 — 이 값은 COUNT(DISTINCT session_id)다.
+          // session_id는 `sessionStorage` 기반이라(src/lib/live-presence.ts) 한 사람이 탭을
+          // 두 개 열면 2로 센다. "방문자 수"가 아니라 **방문 세션 수**이므로 이름도 그렇게 둔다
+          // — 예전 이름 todayUniqueVisitors가 화면 라벨까지 사람 수처럼 보이게 만들었다.
+          todayVisitSessions: Number(todayUniqueSessions[0]?.count ?? 0),
           onlineNow: onlineSessions,
           todayNewUsers,
           totalUsers,
+          // §9 — 이 숫자가 "언제 기준"인지 운영자가 스스로 판단할 수 있게 한다.
+          // 오늘 범위의 시작(KST 자정)과 조회 시각을 함께 내려준다.
+          todayStartsAt: today.toISOString(),
+          fetchedAt: new Date().toISOString(),
         },
         apartments: {
           realtime: onlineAptGroups.map((g) => ({ aptName: g.currentAptName, viewers: g._count.currentAptName })),

@@ -88,7 +88,13 @@ export interface OverallHealthInput {
   nationwideReviewRequired: number;
   cancellation24mStatus: 'ok' | 'missing' | 'unreadable';
   cancellation24mVerdict: 'SAFE' | 'UNSAFE' | null;
-  sejongInRegionModel: boolean;
+  /**
+   * ADMIN_DASHBOARD_TRUST_FIX_V1 §6 — `null`은 "region model을 조회하지 못했다"는 뜻이다.
+   * 예전에는 boolean뿐이라, 외부 프록시 실패로 조회가 안 된 경우에도 `false`가 들어가
+   * "세종이 region model에 없음"이라는 **없는 문제**를 경고로 만들었다. §2 원칙대로
+   * 확인 불가는 경고가 아니라 UNKNOWN이다.
+   */
+  sejongInRegionModel: boolean | null;
 }
 
 export interface OverallHealthResult {
@@ -117,7 +123,8 @@ export function computeOverallHealth(input: OverallHealthInput): OverallHealthRe
   }
   if (input.cancellation24mStatus === 'unreadable' || input.cancellation24mStatus === 'missing') unknown = true;
   else if (input.cancellation24mVerdict !== 'SAFE') criticalReasons.push('24개월 취소검증 snapshot이 SAFE가 아님');
-  if (!input.sejongInRegionModel) warningReasons.push('세종특별자치시가 region model에서 조회되지 않음');
+  if (input.sejongInRegionModel === null) unknown = true;
+  else if (!input.sejongInRegionModel) warningReasons.push('세종특별자치시가 region model에서 조회되지 않음');
 
   let statusCode: OverallStatusCode;
   if (criticalReasons.length > 0) statusCode = 'CRITICAL';

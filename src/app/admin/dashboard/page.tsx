@@ -7,6 +7,7 @@ import { Activity, BarChart3, Database, Users, MessageSquareText } from 'lucide-
 import useSWR from 'swr';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
+import { formatKstTime } from '@/lib/kst-day';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -121,10 +122,19 @@ export default function AdminDashboardPage() {
                 {/* 1. 트래픽 요약 */}
                 <div className={styles.card}>
                   <div className={styles.cardTitle}>📈 트래픽 요약</div>
+                  {/* ADMIN_DASHBOARD_TRUST_FIX_V1 §1/§9 — "오늘"이 KST 기준이라는 것과
+                      언제 조회한 값인지를 숫자 옆에 함께 보여준다. 예전에는 UTC 자정 기준이라
+                      한국시간 09:00에 0으로 리셋됐는데, 화면에는 그 사실이 전혀 없었다. */}
+                  <div className={styles.cardMeta}>
+                    오늘 = 한국시간 00:00 기준
+                    {d.traffic.fetchedAt ? ` · 마지막 갱신 ${formatKstTime(new Date(d.traffic.fetchedAt))}` : ''}
+                  </div>
                   <div className={styles.statRow}>
                     <div className={styles.statTile}>
-                      <div className={styles.statLabel}>오늘 방문자(UV)</div>
-                      <div className={styles.statValue}>{d.traffic.todayUniqueVisitors.toLocaleString('ko-KR')}</div>
+                      {/* §3 — COUNT(DISTINCT session_id)이므로 사람 수가 아니다. */}
+                      <div className={styles.statLabel}>오늘 방문 세션</div>
+                      <div className={styles.statValue}>{d.traffic.todayVisitSessions.toLocaleString('ko-KR')}</div>
+                      <div className={styles.statHint}>브라우저 세션 기준 중복 제거</div>
                     </div>
                     <div className={styles.statTile}>
                       <div className={styles.statLabel}>오늘 페이지뷰(PV)</div>

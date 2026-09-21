@@ -377,3 +377,18 @@
 .card {
   overflow-wrap: anywhere;
 }
+
+/* ADMIN_DASHBOARD_TRUST_FIX_V1 §1/§9 — "오늘"의 기준과 조회 시각을 카드 머리에 조용히 둔다. */
+.cardMeta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+}
+
+/* §3 — 지표 정의가 라벨만으로 충분하지 않을 때 한 줄 덧붙인다(UV가 사람 수가 아니라는 점). */
+.statHint {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+  line-height: 1.3;
+}

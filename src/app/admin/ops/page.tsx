@@ -98,6 +98,15 @@ export default function AdminOpsPage() {
               </div>
             </div>
 
+            {/* ADMIN_DASHBOARD_TRUST_FIX_V1 §6 — 일부 조각만 실패했을 때 그 사실을 알린다.
+                예전에는 한 곳만 실패해도 화면 전체가 "불러오지 못했습니다"였다. */}
+            {Array.isArray(d.overall.degradedSources) && d.overall.degradedSources.length > 0 && (
+              <div className={styles.degradedBanner} role="status">
+                일부 항목을 불러오지 못했습니다 — 나머지 지표는 정상입니다.
+                <span className={styles.degradedList}>{d.overall.degradedSources.join(' · ')}</span>
+              </div>
+            )}
+
             {d.warnings.length > 0 && (
               <div className={styles.warningBox}>
                 <div className={styles.warningTitle}>확인이 필요한 항목</div>
@@ -169,8 +178,9 @@ export default function AdminOpsPage() {
               </div>
               <div className={styles.kvGrid}>
                 <div className={styles.kv}><span>부산 구·군(실데이터 존재)</span><b>{d.coverage.busan.covered} / {d.coverage.busan.total}</b></div>
-                <div className={styles.kv}><span>전국 시·도(region model)</span><b>{d.coverage.nationwide.sido} / 17</b></div>
-                <div className={styles.kv}><span>전국 sync-target(region model)</span><b>{d.coverage.nationwide.syncTargets.toLocaleString('ko-KR')}</b></div>
+                {/* ADMIN_DASHBOARD_TRUST_FIX_V1 §6/§8 — 조회 실패를 0으로 보여주지 않는다. */}
+                <div className={styles.kv}><span>전국 시·도(region model)</span><b>{d.coverage.nationwide.sido === null ? '확인 불가' : `${d.coverage.nationwide.sido} / 17`}</b></div>
+                <div className={styles.kv}><span>전국 sync-target(region model)</span><b>{d.coverage.nationwide.syncTargets === null ? '확인 불가' : d.coverage.nationwide.syncTargets.toLocaleString('ko-KR')}</b></div>
                 <div className={styles.kv}><span>세종 — region model</span><b>{d.coverage.sejong.regionModel}</b></div>
                 <div className={styles.kv}><span>세종 — 실거래 DB 적재</span><b>{d.coverage.sejong.tradeDbCoverage}</b></div>
               </div>

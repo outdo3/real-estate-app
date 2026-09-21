@@ -202,6 +202,20 @@ test('computeOverallHealth: 세종이 region model에 없으면 WARNING(CRITICAL
   assert.equal(r.statusCode, 'WARNING');
 });
 
+// ADMIN_DASHBOARD_TRUST_FIX_V1 §6 — region model 조회 실패(null)를 "세종 없음"이라는
+// 없는 문제로 바꾸지 않는다. 확인 불가는 경고가 아니라 UNKNOWN이다(§2 원칙).
+test('computeOverallHealth: region model을 조회하지 못하면 UNKNOWN이며 없는 경고를 만들지 않는다', () => {
+  const r = computeOverallHealth({ ...HEALTHY_INPUT, sejongInRegionModel: null });
+  assert.equal(r.statusCode, 'UNKNOWN');
+  assert.deepEqual(r.warningReasons, [], '조회 실패를 세종 경고로 바꾸면 안 된다');
+  assert.deepEqual(r.criticalReasons, []);
+});
+
+test('computeOverallHealth: region model 조회 실패가 진짜 CRITICAL을 가리지 않는다', () => {
+  const r = computeOverallHealth({ ...HEALTHY_INPUT, sejongInRegionModel: null, aptSeqMissing: 1 });
+  assert.equal(r.statusCode, 'CRITICAL');
+});
+
 test('computeOverallHealth: REVIEW_REQUIRED > 0이면 WARNING(CRITICAL 아님)', () => {
   const r = computeOverallHealth({ ...HEALTHY_INPUT, nationwideReviewRequired: 2 });
   assert.equal(r.statusCode, 'WARNING');

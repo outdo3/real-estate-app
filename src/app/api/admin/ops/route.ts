@@ -86,12 +86,14 @@ function readCancellation24mSnapshot(): { status: 'ok'; data: Cancellation24mSna
 // 재사용한다(§7 새 체계 금지와 동일 원칙).
 async function buildNationwideRegionModel() {
   const sidoList = await getSidoList();
-  let syncTargets = 0;
-  for (const sido of sidoList) {
-    const list = await getSigunguListForSido(sido.code);
-    syncTargets += list.length;
-  }
+  // ADMIN_DASHBOARD_TRUST_FIX_V1 §7 — 예전에는 시도마다 `await`을 걸어 **18회를 순차로**
+  // 호출했다. 각 호출은 서로 독립적이므로 한 번에 보낸다(프록시 호출 수는 그대로다).
+  // region-utils 쪽에 timeout이 걸려 있어 한 곳이 늦어도 전체가 매달리지 않는다.
+  const lists = await Promise.all(sidoList.map((sido) => getSigunguListForSido(sido.code)));
+  const syncTargets = lists.reduce((sum, list) => sum + list.length, 0);
   const sejong = sidoList.some((s) => s.code === '36');
+  // 목록을 아예 못 받았으면 "시도 0개"를 사실처럼 내려보내지 않는다 — 조회 실패다.
+  if (sidoList.length === 0) return null;
   return { sidoCount: sidoList.length, syncTargets, sejongInRegionModel: sejong };
 }
 
@@ -140,7 +142,15 @@ async function buildSummary() {
         })
       : null;
 
-  const regionModel = await buildNationwideRegionModel();
+  // §6 — region model은 이 요약에서 **유일하게 외부 서비스**에 의존하는 조각이다.
+  // 여기가 실패해도 DB/cron/manifest 기반 섹션은 전부 멀쩡하므로, 예전처럼 화면 전체를
+  // 죽이지 않고 이 조각만 "확인 불가"로 떨어뜨린다.
+  const degradedSources: string[] = [];
+  const regionModel = await buildNationwideRegionModel().catch((e) => {
+    console.error('[admin/ops] region model 조회 실패', e);
+    return null;
+  });
+  if (!regionModel) degradedSources.push('전국 region model(법정동코드 프록시)');
 
   // §18 Overall Health — 4단계(정상/확인 필요/문제/확인 불가) 결정은
   // computeOverallHealth()(src/lib/admin-ops-evidence.ts, 테스트 대상)로 분리했다.
@@ -154,7 +164,7 @@ async function buildSummary() {
     nationwideReviewRequired: nationwideSummary?.reviewRequired ?? 0,
     cancellation24mStatus: cancellation24m.status,
     cancellation24mVerdict,
-    sejongInRegionModel: regionModel.sejongInRegionModel,
+    sejongInRegionModel: regionModel ? regionModel.sejongInRegionModel : null,
   });
   const allReasons = [...health.criticalReasons, ...health.warningReasons];
 
@@ -183,6 +193,9 @@ async function buildSummary() {
       subtitle: '현재 확인 가능한 운영 지표 기준',
       warningsCount: allReasons.length,
       lastCheckedAt: nowIso,
+      // ADMIN_DASHBOARD_TRUST_FIX_V1 §6 — 일부 조각만 못 읽었을 때, 화면 전체를 실패로
+      // 만들지 않는 대신 **무엇을 못 읽었는지**는 숨기지 않는다.
+      degradedSources,
     },
     tradeHistory: {
       evidenceType: 'LIVE' as EvidenceType,
@@ -208,9 +221,9 @@ async function buildSummary() {
       evidenceType: 'LIVE' as EvidenceType,
       checkedAt: nowIso,
       busan: { covered: busanCoveredCount, total: 16 },
-      nationwide: { sido: regionModel.sidoCount, syncTargets: regionModel.syncTargets },
+      nationwide: { sido: regionModel?.sidoCount ?? null, syncTargets: regionModel?.syncTargets ?? null },
       sejong: {
-        regionModel: regionModel.sejongInRegionModel ? '정상' : '확인 필요',
+        regionModel: regionModel ? (regionModel.sejongInRegionModel ? '정상' : '확인 필요') : '확인 불가',
         tradeDbCoverage: sejongTradeCount > 0 ? `적재됨(${sejongTradeCount}건)` : '미수집',
       },
       nationwideDbCoverageNote: '전국 sync engine 준비 완료(엔진), 전국 DB 실데이터 적재는 부산 외 극히 일부 QA 샘플만 존재',
