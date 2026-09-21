@@ -1379,6 +1379,22 @@ model ApartmentTradeHistory {
   // (실측 exec 7.5~12.1초). 단일 컬럼으로 충분하다 — 부산/취소 필터는 같은 하루치
   // 결과 안에서만 걸리므로 복합 인덱스가 필요하지 않다.
   @@index([createdAt])
+  // OPS_CANCEL_COUNT_INDEX_IMPACT_AUDIT_V1 — /api/admin/ops의 취소 건수 count가
+  // **Parallel Seq Scan**이었다. 866,366행을 훑어 850,052행을 버리고 16,314행을 찾는다
+  // (EXPLAIN ANALYZE 실측: warm 1,210ms / Prisma 실호출 8,161ms).
+  //
+  // 기존 8개 인덱스 중 deal_canceled를 포함한 것이 하나도 없어, (lawd_cd, deal_date)로
+  // seek해도 취소 여부는 행마다 heap을 다시 읽어야 한다 — 부산이 테이블의 99.88%라
+  // 그쪽이 seq scan보다 비싸다(플래너 판단이 옳다). 같은 쿼리에서 deal_canceled만 빼면
+  // Index Only Scan 393ms로 바뀐다 — 그 대조가 인덱스 부재의 직접 증거다.
+  //
+  // 선두가 lawd_cd인 이유: deal_canceled는 2값뿐이라 B-tree 선두로 부적절하고,
+  // 서울 확장 이후 lawd_cd가 다시 선택적이 되며, 기존 인덱스 컨벤션과도 맞는다.
+  //
+  // 부분 인덱스(WHERE deal_canceled)는 약 40배 작지만 **쓰지 않는다** — Prisma가
+  // `deal_canceled = $17`을 바인드 파라미터로 보내 generic plan에서는 술어 함의를
+  // 증명할 수 없고, 그러면 "될 때도 안 될 때도 있는" 인덱스가 된다.
+  @@index([lawdCd, dealCanceled])
   @@map("apartment_trade_histories")
 }
 

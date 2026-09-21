@@ -1,0 +1,38 @@
+-- OPS_CANCEL_COUNT_INDEX_IMPACT_AUDIT_V1 — /api/admin/ops 취소 건수 count 병목.
+--
+-- 문제의 쿼리(src/app/api/admin/ops/route.ts, Prisma query log로 캡처한 실제 SQL):
+--   SELECT COUNT(*) FROM (SELECT "id" FROM "apartment_trade_histories"
+--     WHERE ("lawd_cd" IN ($1,…,$16) AND "deal_canceled" = $17) OFFSET $18) AS "sub"
+--
+-- 실측 baseline(EXPLAIN ANALYZE, Production 2026-09-21):
+--   Parallel Seq Scan on apartment_trade_histories
+--     Filter: (deal_canceled AND (lawd_cd = ANY ('{26110,…,26710}')))
+--     Rows Removed by Filter: 425,026 /worker   (866,366행 중 850,052행을 버린다)
+--   Execution Time: 1,209.946 ms (warm) / 5,675 ms (cold) / Prisma 실호출 8,161 ms
+--
+-- 왜 기존 인덱스로 안 되나: 8개 인덱스 중 deal_canceled를 포함한 것이 하나도 없다.
+-- (lawd_cd, deal_date)로 lawd_cd까지는 seek되지만 취소 여부는 행마다 heap을 다시
+-- 읽어야 하고, 부산이 테이블의 99.88%(865,291/866,366)라 그것이 seq scan보다 비싸다.
+-- 같은 쿼리에서 deal_canceled 조건만 빼면 Index Only Scan 393ms로 바뀐다 — 그 대조가
+-- 인덱스 부재의 직접 증거다.
+--
+-- 컬럼 순서: deal_canceled는 2값뿐이라 B-tree 선두로 부적절하고, 서울 확장 이후
+-- lawd_cd가 다시 선택적이 되며, 기존 인덱스 컨벤션((lawd_cd, deal_date) 등)과 맞는다.
+-- 부분 인덱스(WHERE deal_canceled)는 약 40배 작지만 쓰지 않는다 — Prisma가
+-- deal_canceled를 바인드 파라미터로 보내 generic plan에서 술어 함의를 증명할 수 없다.
+--
+-- 크기 ESTIMATE: 866,366 엔트리 × 13~14.4 B/entry ≈ 11.3~12.5 MB
+-- (근거: 기존 (lawd_cd, deal_date) 인덱스 실측 밀도 14.37 B/entry).
+--
+-- CONCURRENTLY를 쓰는 이유는 이 테이블이 증분 sync가 계속 쓰는 대상이기 때문이다.
+-- 일반 CREATE INDEX는 빌드 내내 SHARE 락을 잡아 쓰기를 막는다. Prisma Migrate는
+-- CONCURRENTLY를 감지하면 이 마이그레이션을 트랜잭션 밖에서 실행한다(필수 —
+-- CREATE INDEX CONCURRENTLY는 트랜잭션 안에서 실행될 수 없다).
+-- 같은 방식이 20260901084417_area84_lawd_exclusive_deal_date_idx와
+-- 20260910120000_apartment_trade_created_at_idx에서 이미 Production에 적용됐고
+-- 두 인덱스 모두 현재 valid 상태다.
+--
+-- 실패 시: CONCURRENTLY 빌드가 실패하면 INVALID 인덱스가 남는다. 정리 명령은
+-- DROP INDEX CONCURRENTLY IF EXISTS "apartment_trade_histories_lawd_cd_deal_canceled_idx";
+-- CreateIndex
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "apartment_trade_histories_lawd_cd_deal_canceled_idx" ON "apartment_trade_histories"("lawd_cd", "deal_canceled");

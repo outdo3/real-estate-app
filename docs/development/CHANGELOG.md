@@ -2,6 +2,23 @@
 
 ## 2026-09-21
 
+### E-JIP OPS CANCEL INDEX PREP V1 — schema + migration SQL 준비만 (미적용)
+
+**Production CREATE INDEX 0 · migrate deploy 0 · db push 0 · DML 0** (운영 DB 실측으로 증명). 상세: `docs/development/OPS_CANCEL_INDEX_PREP_V1.md`
+
+    판정     **READY_FOR_APPROVAL** — schema 1줄 + migration 파일 1개. 승인 시 `npx prisma migrate deploy` 한 줄로 적용
+    schema   `@@index([lawdCd, dealCanceled])` 추가. +16줄/-0줄 중 **실제 지시문은 1줄**(나머지 15줄은 근거 주석) · 모델·필드·타입 변경 0 · `src/` 변경 0
+    인덱스명 `apartment_trade_histories_lawd_cd_deal_canceled_idx` — prisma가 자체 생성한 이름이고 기존 컨벤션과 정확히 일치
+    SQL      **오프라인 diff**(DB 접속 없음)로 생성 — 실행문 **정확히 1개** · DROP/ALTER/TRUNCATE/DML/GRANT **0개**(검사 출력 포함)
+    정정     **직전 감사의 §8 권고를 바로잡는다.** "Prisma가 migration을 트랜잭션으로 감싸 CONCURRENTLY는 우회 절차 필요"라고 적었는데 이 저장소에서는 틀리다 — CONCURRENTLY 마이그레이션이 **이미 두 번 Production에 적용**돼 있고(`20260901084417`, `20260910120000`) 두 인덱스 모두 valid다. 일반론을 저장소 선례보다 앞세운 것이 잘못이었다
+    적용방식  **`CREATE INDEX CONCURRENTLY IF NOT EXISTS`** — 쓰기 차단 없음 · 재실행 안전 · 저장소 선례 2건과 동일
+    lock     **LOW** — 쓰기 차단 0 · cron은 04/06/08시 KST뿐 · 측정 시 활성 세션 0 · 권장 창 KST 주간. 실패 시 INVALID 인덱스가 남아 수동 정리 필요(현재 INVALID 0개)
+    rollback `DROP INDEX CONCURRENTLY IF EXISTS …` 한 줄 · 데이터 손실 없음 · INVALID 정리 명령도 동일
+    배포안전  `build`=`next build`, `postinstall`=`prisma generate`뿐 · vercel.json에 buildCommand 없음 → **push해도 자동 적용되지 않는다**
+    미적용증명 작업 후 운영 DB 재확인 — 인덱스 여전히 **8개**(제안 인덱스 없음) · INVALID 0 · `_prisma_migrations` 최신이 09-15 그대로
+    검증     prisma validate ✓ · generate ✓ · tsc src 0 · **1,944 pass / 0 fail** · build ✓
+    남은주의  효과는 여전히 **ESTIMATE**(hypopg 미설치로 시뮬레이션 불가) · 이 인덱스만으로 ops cold ≤3s 보장 안 됨(취소 count는 이미 4초 예산 상한) · VACUUM 23일 밀림(별도 승인 항목)
+
 ### E-JIP OPS CANCEL COUNT INDEX IMPACT AUDIT V1 — 인덱스 필요성 감사 (READ-ONLY)
 
 CREATE INDEX 0 · DROP INDEX 0 · migration 0 · schema 0 · INSERT/UPDATE/DELETE 0 · VACUUM 0. 상세: `docs/development/OPS_CANCEL_COUNT_INDEX_IMPACT_AUDIT_V1.md`
