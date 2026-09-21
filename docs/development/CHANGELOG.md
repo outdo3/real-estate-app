@@ -2,6 +2,28 @@
 
 ## 2026-09-21
 
+### E-JIP SHARE UX V2 — 캐스케이드를 3-액션 공유 시트로 교체
+
+DB write 0 · schema 0 · migration 0 · 연락처 접근 0 · 외부 앱 자동 발송 0 · 카카오 계정 선택 강제 0. 상세: `docs/development/SHARE_UX_V2_AUDIT_AND_IMPLEMENTATION.md`
+
+    근본원인  버그가 아니라 **설계상 도달 불가** — 공유가 "카카오→네이티브→복사" 캐스케이드였고 모바일은 SDK가 항상 준비돼 있어 첫 분기에서 끝났다 → OS 공유 시트가 열릴 일이 없어 "어느 카카톡으로 보낼지"를 고를 수 없었다
+    감사     공유 표면 **12개 전수 파악**(단지상세 Hero/StickyActionBar/학교상세/지도/통계/변동지도/비교/분양/재개발/커뮤니티/AI검색/리포트) — 12개 모두 캐스케이드
+    새UX     `[카카오톡] [공유하기] [링크 복사]` 공통 시트(모바일 하단 시트 / 데스크톱 가운데 모달) · 순서 고정 · 신규 4파일(`shareChannels.ts`/`useShareSheet.ts`/`ShareSheet.tsx`+css)
+    중복제거  세 곳이 각자 돌리던 캐스케이드를 하나로 — `ShareAction`/`KakaoShareButton`/`ReportActions` 외형·props 불변, `useSharePage.ts` 삭제(유일 호출부가 이동)
+    인스턴스  이집이 **특정 카카톡을 고르지 않는다** — `com.kakao.talk`/`intent://`/`kakaolink://` 등 지목 토큰이 들어오면 테스트 실패(§E)
+    정규URL   `buildCanonicalShareUrl()` — 오리진만 정규 오리진으로, 경로·쿼리 보존. localhost/`*.vercel.app`/`::1` 거부. **로컬 실측**: /stats/volume·/report/city/busan·/apt/대신해모로 전부 `https://e-jip.com/...`
+    실패처리  AbortError=정상 취소(토스트·이벤트 없음) · 카카오 실패 시 자동 전환 없이 시트 유지 · 복사 실패 시 **URL을 그대로 노출**(막다른 골목 없음, 실측)
+    dead버튼  쓸 수 없는 채널은 그리지 않는다 · 가용성은 **시트를 여는 순간** 측정 — 렌더 시점에 재던 첫 구현이 실제로 dead button을 만들어 브라우저 실측으로 잡고 테스트로 고정
+    보존     카카오 카드 조립·CTA·브랜드 이미지·SDK 선로드·비교 canonical URL·리포트 identity URL·**리포트 PNG 동반 공유**(`onNativeShare` 주입) 전부 그대로
+    접근성    `role="dialog"`+`aria-modal` · ESC/배경 닫기 · **포커스 복귀 실측** · 액션 63px · safe-area 반영 · z-index 3000(portal, 하단탭바 1000 위)
+    레이아웃  360/375/390 하단 시트 기하 실측 — 좌/우 넘침 0 · 문서 가로 스크롤 없음(단, 확장프로그램이 뷰포트를 958px로 고정해 진짜 기기 렌더는 미촬영)
+    캐처격리  시트는 body portal + `data-export-exclude` — 리포트 실측 `sheetInExportRoot=false`
+    분석     기존 `share_attempt`/`share_success` 의미·시점 불변 + `share_kakao`/`share_native`/`share_copy` 추가(allowlist **끝에** 추가, 스키마 변경 0, 공유 1회=2행) · 취소는 무기록
+    테스트    신규 17건(`shareChannels.test.ts`) + 기존 5파일 계약 갱신(캐스케이드 순서 → 독립 선택지) · src 전체 **1,902 pass / 0 fail**
+    품질     tsc src 오류 0(`scripts/`·`tmp/`는 FAIL_EXISTING_SCRIPT_ERRORS) · 변경 파일 eslint exit 0 · `npm run build` ✓
+    미확인    **듀얼 카카톡 가시성 = NOT_TESTED** — 카카톡 2개 설치 기기가 없어 확인 못함. OS 시트로 가는 길만 열었고 가정으로 PASS 처리하지 않음
+    부작용    프리뷰 배포에서 공유해도 링크는 프로덕션을 가리킨다(의도된 동작)
+
 ### E-JIP ADSENSE CONNECTION V1 — 사이트 소유권 확인용 snippet + ads.txt (Production 배포)
 
 광고 슬롯 0 · Auto Ads 활성화 0 · UI 변경 0 · DB write 0 · 서울 데이터 변경 0. 상세: `docs/development/ADSENSE_CONNECTION_V1.md`

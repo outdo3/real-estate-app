@@ -2,14 +2,19 @@
 
 import React from 'react';
 import { Share2 } from 'lucide-react';
-import { useSharePage, type UseSharePageOptions } from '@/hooks/useSharePage';
+import { useShareSheet, type ShareTargetOptions } from '@/hooks/useShareSheet';
+import ShareSheet from '@/components/share/ShareSheet';
 import styles from './ShareAction.module.css';
 
 // GLOBAL SHARE SYSTEM V1 — 페이지마다 공유 코드를 복붙하지 않도록 만든 공통 공유 버튼.
-// 새로 공유가 필요한 페이지(지도/통계/분양/재개발/커뮤니티/AI검색 등)는 전부 이 컴포넌트를
-// 쓴다. 기존 KakaoShareButton(아파트 상세/StickyActionBar/학교 상세)은 이미 안정적으로
-// 동작 중이라 회귀 위험 없이 그대로 두고 건드리지 않는다(§11).
-export interface ShareActionProps extends UseSharePageOptions {
+// 지도/통계/분양/재개발/커뮤니티/AI검색/비교가 전부 이 컴포넌트를 쓴다.
+//
+// SHARE_UX_V2 §3 — 클릭하면 **공통 공유 시트**가 열린다. 예전에는 이 버튼이 카카오 →
+// 네이티브 → 복사 캐스케이드를 돌며 코드가 채널을 골랐고, 모바일에서는 카카오가 항상
+// 첫 분기에서 이겨 OS 공유 시트에 도달하지 못했다. 그래서 카카오톡을 두 개 쓰는
+// 사용자는 어느 카카오톡으로 보낼지 고를 기회 자체가 없었다. 이제 세 경로를 모두
+// 보여주고 사용자가 고른다. 버튼의 외형/props는 그대로다.
+export interface ShareActionProps extends ShareTargetOptions {
   /** compact: 아이콘+텍스트 알약 버튼(통계/상세 헤더 등). icon: 아이콘만(지도 컨트롤 바 등). */
   variant?: 'compact' | 'icon';
   /**
@@ -25,38 +30,55 @@ export interface ShareActionProps extends UseSharePageOptions {
 }
 
 export default function ShareAction({ variant = 'compact', tone = 'neutral', label = '공유', className, ...shareOptions }: ShareActionProps) {
-  const { status, share } = useSharePage(shareOptions);
+  const sheet = useShareSheet(shareOptions);
+
+  const panel = (
+    <ShareSheet
+      open={sheet.open}
+      onClose={sheet.closeSheet}
+      channels={sheet.channels}
+      url={sheet.url}
+      status={sheet.status}
+      onKakao={sheet.shareKakao}
+      onNative={sheet.shareNative}
+      onCopy={sheet.shareCopy}
+      heading={shareOptions.title}
+    />
+  );
 
   if (variant === 'icon') {
-    const toastLabel = status === 'copied' ? '링크를 복사했어요' : status === 'error' ? '공유에 실패했어요' : null;
     const iconBtnClass = tone === 'brand' ? styles.iconBtnBrand : styles.iconBtn;
     return (
       <div className={styles.iconWrap}>
         <button
           type="button"
-          onClick={share}
+          onClick={sheet.openSheet}
           className={`${iconBtnClass} ${className || ''}`}
           aria-label={tone === 'brand' ? '공유' : '공유하기'}
+          aria-haspopup="dialog"
           title={tone === 'brand' ? '공유' : '공유하기'}
         >
           <Share2 className={styles.icon} aria-hidden="true" />
         </button>
-        {toastLabel && <div className={styles.toast}>{toastLabel}</div>}
+        {panel}
       </div>
     );
   }
 
-  const compactLabel = status === 'copied' ? '복사됨' : status === 'error' ? '공유 실패' : label;
   return (
-    <button
-      type="button"
-      onClick={share}
-      className={`${styles.compactBtn} ${className || ''}`}
-      aria-label="공유하기"
-      title="공유하기"
-    >
-      <Share2 className={styles.icon} aria-hidden="true" />
-      {compactLabel}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={sheet.openSheet}
+        className={`${styles.compactBtn} ${className || ''}`}
+        aria-label="공유하기"
+        aria-haspopup="dialog"
+        title="공유하기"
+      >
+        <Share2 className={styles.icon} aria-hidden="true" />
+        {label}
+      </button>
+      {panel}
+    </>
   );
 }

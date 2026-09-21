@@ -274,7 +274,10 @@ test('14 · 공유 — 기간 키가 공유 링크에 그대로, 공유 경로 �
   assert.equal(reportShareUrl('https://e-jip.com', identityOf(env)), 'https://e-jip.com/report/city/busan?period=15d');
   const actions = code('src/components/report/ReportActions.tsx');
   assert.match(actions, /await navigator\.share\(\{ title, text, url, files: \[file\] \}\);/);
-  assert.match(actions, /sendKakaoShare\(\{/);
+  // SHARE_UX_V2 — 카카오 카드 전송은 공통 시트(useShareSheet)로 옵겨갔다.
+  // 리포트가 그 경로를 여전히 report 성격으로 타는지만 확인한다.
+  assert.match(actions, /useShareSheet\(\{/);
+  assert.match(actions, /shareType: 'report',/);
   assert.match(actions, /periodKey: periodKeyOf\(envelope\)/);
 });
 

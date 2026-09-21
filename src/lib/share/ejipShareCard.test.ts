@@ -186,14 +186,16 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 /** 주석은 설계를 설명하느라 금지 토큰을 언급할 수 있다 — 배선 검사는 코드만 본다. */
 const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const UTILS = read('src/lib/share/shareUtils.ts');
-const HOOK = read('src/hooks/useSharePage.ts');
+const HOOK = read('src/hooks/useShareSheet.ts');
+const SHEET = read('src/components/share/ShareSheet.tsx');
 const KAKAO_BTN = read('src/components/KakaoShareButton.tsx');
 const REPORT = read('src/components/report/ReportActions.tsx');
 const COMPARE = read('src/components/compare/CompareV2.tsx');
 
 test('§3 카카오 카드를 조립하는 곳은 빌더 하나뿐이다 — 화면마다 복붙하지 않는다', () => {
   const callers = [
-    ['useSharePage', HOOK],
+    ['useShareSheet', HOOK],
+    ['ShareSheet', SHEET],
     ['KakaoShareButton', KAKAO_BTN],
     ['ReportActions', REPORT],
     ['CompareV2', COMPARE],
@@ -205,35 +207,63 @@ test('§3 카카오 카드를 조립하는 곳은 빌더 하나뿐이다 — 화
   assert.ok(/window\.Kakao\.Share\.sendDefault\(payload\)/.test(UTILS));
 });
 
-test('§2-A 카카오 브랜드 카드가 네이티브 공유보다 먼저 시도된다 — 두 화면이 갈렸던 원인', () => {
-  const surfaces = [
-    ['useSharePage', HOOK],
-    ['KakaoShareButton', KAKAO_BTN],
-    ['ReportActions', REPORT],
-  ] as const;
-  for (const [name, src] of surfaces) {
-    const kakaoAt = src.indexOf('sendKakaoShare(');
-    const nativeAt = Math.max(src.indexOf('nativeShare('), src.indexOf('navigator.share('));
-    assert.ok(kakaoAt > -1, `${name}에 카카오 경로가 없다`);
-    assert.ok(nativeAt > -1, `${name}에 네이티브 공유 폴백이 없다`);
-    assert.ok(kakaoAt < nativeAt, `${name}에서 네이티브 공유가 카카오 카드보다 먼저다`);
+/**
+ * SHARE_UX_V2 §2/§3 — 이 자리에 있던 "카카오가 네이티브보다 먼저 시도된다" 계약은
+ * 의도적으로 폐기됐다. 그 순서가 바로 문제였다 — 모바일에서 카카오가 항상 첫
+ * 분기를 이겨 OS 공유 시트가 열리지 않았고, 카카톡을 둘 쓰는 사용자는 어느 쪽으로
+ * 보낼지 고를 수 없었다. 이제 세 채널은 **순서가 없는 선택지**다.
+ */
+test('§2 세 채널은 캬스케이드가 아니라 각각 독립적인 사용자 선택지다', () => {
+  const code = codeOf(HOOK);
+  for (const fn of ['shareKakao', 'shareNative', 'shareCopy']) {
+    assert.ok(code.includes(`const ${fn} = useCallback(`), `${fn} 핸들러가 없다`);
   }
+  // 카카오 핸들러 안에서 네이티브/복사로 자동 전환하지 않는다 — 사용자가 다시 고른다.
+  const kakaoFn = code.slice(code.indexOf('const shareKakao'), code.indexOf('const shareNative'));
+  assert.ok(!/nativeShare\(|copyToClipboard\(/.test(kakaoFn), '카카오 실패가 조용히 다른 채널로 넘어간다');
+  // 반대로 죽은 버튼도 아니다 — 실패하면 시트를 열어둔 채 상태를 말한다(§16).
+  assert.ok(/setStatus\('kakao_failed'\)/.test(kakaoFn));
+});
+
+test('§2 카카오 전송은 await 뒤에 오지 않는다 — 팝업 차단 방지', () => {
+  const code = codeOf(HOOK);
+  const kakaoFn = code.slice(code.indexOf('const shareKakao'), code.indexOf('const shareNative'));
+  assert.ok(!/async/.test(kakaoFn.slice(0, kakaoFn.indexOf('{'))), 'shareKakao가 async다');
+  const sendAt = kakaoFn.indexOf('sendKakaoShare(');
+  assert.ok(sendAt > -1, '카카오 경로가 없다');
+  assert.ok(!/await/.test(kakaoFn.slice(0, sendAt)), 'sendKakaoShare 앞에 await가 있다');
+});
+
+test('§4 쓸 수 없는 채널은 그리지 않는다 — PC에 dead button을 두지 않는다', () => {
+  assert.ok(/\{channels\.kakao && \(/.test(SHEET));
+  assert.ok(/\{channels\.native && \(/.test(SHEET));
+  // 링크 복사는 조건 없이 항상 있다 — 막다른 골목을 만들지 않는다.
+  assert.ok(/data-share-action="copy"/.test(SHEET));
+  assert.ok(!/channels\.copy &&/.test(SHEET));
 });
 
 test('§16 카카오 실패가 죽은 버튼이 되지 않는다 — 네이티브 공유/링크 복사로 이어진다', () => {
-  assert.ok(/nativeShare\(\{ title, text, url \}\)/.test(HOOK));
+  assert.ok(/run\(\{ title, text, url \}\)/.test(HOOK));
   assert.ok(/copyToClipboard\(url\)/.test(HOOK));
-  assert.ok(/copyToClipboard\(url\)/.test(KAKAO_BTN));
-  assert.ok(/clipboard\.writeText\(url\)/.test(REPORT));
+  // SHARE_UX_V2 — 세 표면이 각자 캠스케이드를 돌리던 구현은 사라졌다.
+  // 세 곳 모두 같은 공통 시트를 열고, 폴백 경로는 그 시트 안에 한 번만 산다.
+  for (const [name, src] of [['KakaoShareButton', KAKAO_BTN], ['ReportActions', REPORT]] as const) {
+    assert.ok(/useShareSheet\(/.test(src), `${name}이 공통 공유 시트를 쓰지 않는다`);
+    assert.ok(/<ShareSheet$/m.test(src) || /<ShareSheet/.test(src), `${name}에 공유 시트가 렌더되지 않는다`);
+  }
 });
 
 test('§15 분석 이벤트가 그대로 남아 있다', () => {
   assert.ok(/trackEvent\('share_attempt'\)/.test(HOOK));
   assert.ok(/trackEvent\('share_success'\)/.test(HOOK));
   assert.ok(/trackEvent\('report_share'/.test(REPORT));
+  // SHARE_UX_V2 §15 — 기존 두 이벤트는 그대로 두고, 어느 채널을 골랐는지를 더한다.
+  for (const ev of ['share_kakao', 'share_native', 'share_copy']) {
+    assert.ok(HOOK.includes(`trackEvent('${ev}')`), `${ev} 이벤트가 없다`);
+  }
   // 카카오는 전송 완료 콜백이 없으므로 success로 기록하지 않는다.
   const hookCode = codeOf(HOOK);
-  const kakaoBlock = hookCode.slice(hookCode.indexOf('sendKakaoShare('), hookCode.indexOf('nativeShare('));
+  const kakaoBlock = hookCode.slice(hookCode.indexOf('const shareKakao'), hookCode.indexOf('const shareNative'));
   assert.ok(!/share_success/.test(kakaoBlock), '확인할 수 없는 성공을 기록한다');
 });
 
@@ -328,7 +358,7 @@ test('§4 공유가 성공하면 shared다', async () => {
 
 test('§4 취소는 오류 상태로 넘어가지 않고, 집계도 남기지 않는다', () => {
   const code = codeOf(HOOK);
-  const at = code.indexOf("nativeResult === 'aborted'");
+  const at = code.indexOf("result === 'aborted'");
   assert.ok(at > -1, '취소 분기가 없다');
   // 취소 분기는 곧바로 return한다 — 아래의 clipboard/error 경로로 내려가지 않는다.
   const block = code.slice(at, at + 120);

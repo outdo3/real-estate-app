@@ -164,7 +164,7 @@ import { compareShareCopy } from '@/lib/share/ejipShareCard';
 
 const ROOT = resolvePath(__dirname, '../../..');
 const COMPARE = readFileSync(resolvePath(ROOT, 'src/components/compare/CompareV2.tsx'), 'utf8');
-const HOOK = readFileSync(resolvePath(ROOT, 'src/hooks/useSharePage.ts'), 'utf8');
+const HOOK = readFileSync(resolvePath(ROOT, 'src/hooks/useShareSheet.ts'), 'utf8');
 
 test('§G 공유 text에 URL을 넣지 않는다 — Web Share의 url 필드가 따로 있다', () => {
   // SHARE_CARD_UNIFICATION_V1 §6 — 문구는 화면에 리터럴로 쓰지 않고 공통 헬퍼가 만든다
@@ -180,7 +180,9 @@ test('§G 공유 text에 URL을 넣지 않는다 — Web Share의 url 필드가 
 });
 
 test('§G 공유 payload는 title/text/url 세 필드로만 나간다', () => {
-  assert.ok(/await nativeShare\(\{ title, text, url \}\)/.test(HOOK));
+  // SHARE_UX_V2 — 네이티브 공유는 호출부가 대체할 수 있지만(리포트 PNG 첨부), 페이로드 모양은 그대로다.
+  assert.ok(/const run = onNativeShare \|\| nativeShare;/.test(HOOK));
+  assert.ok(/await run\(\{ title, text, url \}\)/.test(HOOK));
   // 카카오 브랜드 카드도 url을 description에 복사하지 않는다 — 링크는 link 필드에만 있다.
   const kakaoCall = HOOK.slice(HOOK.indexOf('sendKakaoShare({'), HOOK.indexOf('share_attempt'));
   assert.ok(/description: text \|\| title,/.test(kakaoCall), `카카오 설명이 바뀌었다: ${kakaoCall}`);
@@ -189,7 +191,9 @@ test('§G 공유 payload는 title/text/url 세 필드로만 나간다', () => {
 });
 
 test('§6 호출부가 준 canonical URL이 주소창 복사보다 우선한다', () => {
-  assert.ok(/const url = explicitUrl \|\| buildShareUrl\(params\);/.test(HOOK));
+  // SHARE_UX_V2 §5 — 시트를 여는 순간 URL을 고정한다. explicitUrl이 있으면 그 경로를 쓰고,
+  // 오리진은 어느 쪽이든 정규 오리진으로 맞춘다(buildCanonicalShareUrl).
+  assert.ok(/setUrl\(buildCanonicalShareUrl\(params, explicitUrl\)\);/.test(HOOK));
   assert.ok(/url=\{shareUrl\}/.test(COMPARE), '비교 화면이 canonical URL을 넘기지 않는다');
   // 예전처럼 주소창 파라미터를 덧씌우는 방식이 남아 있으면 안 된다.
   assert.ok(!/params=\{shareParams\}/.test(COMPARE));

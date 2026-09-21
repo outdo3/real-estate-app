@@ -144,9 +144,10 @@ test('§10 액션 바는 내보내기에서 제외된 채로 남아 있다', () 
 });
 
 test('§8/§18 동작과 분석이 그대로다', () => {
-  for (const fn of ['savePdf', 'share']) {
-    assert.ok(ACTIONS.includes(`onClick={${fn}}`), `${fn} 연결이 끊겼다`);
-  }
+  assert.ok(ACTIONS.includes('onClick={savePdf}'), 'savePdf 연결이 끊겼다');
+  // SHARE_UX_V2 — [공유하기]는 이제 공통 공유 시트를 열고, 채널은 그 안에서 사용자가 고른다.
+  assert.ok(ACTIONS.includes('onClick={sheet.openSheet}'), 'share 연결이 끊겼다');
+  assert.ok(/<ShareSheet/.test(ACTIONS), '공유 시트가 렌더되지 않는다');
   // ONE_PAGE_REPORT_REDESIGN_V1 — 지역 리포트만 [이미지]가 저장 메뉴(기본 이미지/인스타 피드용/PDF)를 연다.
   // 다른 리포트는 예전처럼 바로 saveImage, 메뉴의 "기본 이미지"·"PDF"도 같은 함수를 부른다.
   assert.ok(ACTIONS.includes('onClick={saveMenuEnabled ? () => setMenuOpen((v) => !v) : saveImage}'), 'saveImage 연결이 끊겼다');

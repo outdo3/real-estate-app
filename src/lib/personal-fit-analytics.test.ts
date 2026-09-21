@@ -78,8 +78,11 @@ test('15. allowlist: 기존 28개 이름·순서 그대로 + 개인화 5개만 �
   assert.deepEqual([...ANALYTICS_EVENT_NAMES].slice(PREVIOUS_EVENTS.length, PREVIOUS_EVENTS.length + 5), [
     'personal_fit_settings_cta_click', 'personal_fit_login_cta_click', 'personal_fit_settings_save', 'personal_fit_card_view', 'personal_fit_compare_view',
   ]);
-  // 이후 추가는 USER_FEEDBACK_V1(승인됨)의 2개뿐 — 개인화 이벤트 순서·이름은 그대로.
-  assert.deepEqual([...ANALYTICS_EVENT_NAMES].slice(PREVIOUS_EVENTS.length + 5), ['feedback_open', 'feedback_submit']);
+  // 이후 추가는 USER_FEEDBACK_V1(2개)와 SHARE_UX_V2(3개)뿐 — 개인화 이벤트 순서·이름은 그대로.
+  // 새 이름은 항상 **끝에** 붙인다 — 중간에 끼어넣으면 앞서 고정해둔 순서 계약이 깨진다.
+  assert.deepEqual([...ANALYTICS_EVENT_NAMES].slice(PREVIOUS_EVENTS.length + 5), [
+    'feedback_open', 'feedback_submit', 'share_kakao', 'share_native', 'share_copy',
+  ]);
   assert.ok(!Object.keys(GA_EVENT_MAP).some((k) => k.startsWith('personal_fit_')), '제품 분석 계열 — GA4로 보내지 않음');
   assert.ok(!read('src/lib/analytics/ga.ts').includes('fit_'), 'GA4 파라미터 allowlist 확장 없음');
   // 관리자 집계의 LIKE 접두사와 겹치지 않는다

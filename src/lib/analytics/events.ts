@@ -75,6 +75,14 @@ export const ANALYTICS_EVENT_NAMES = [
   // 의견 유형(고정 enum) 하나뿐이다. 메시지·사용자·단지·페이지·IP·UA는 절대 싣지 않는다.
   'feedback_open',
   'feedback_submit',
+  // SHARE_UX_V2 §15 — 공유는 이제 캐스케이드가 아니라 **사용자가 고른 채널**이다.
+  // 기존 share_attempt/share_success는 의미와 발생 시점이 그대로이고(시계열 유지),
+  // 어느 채널을 골랐는지를 이 세 이벤트가 따로 기록한다(한 번의 공유 = 2행).
+  // 스키마 변경은 없다 — 기존 `/__event__/<name>` 네임스페이스를 그대로 쓴다.
+  // share_kakao는 카카오 SDK에 전송 완료 콜백이 없으므로 "골랐다"까지만 뜻한다.
+  'share_kakao',
+  'share_native',
+  'share_copy',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

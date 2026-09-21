@@ -9,6 +9,7 @@ import {
   type EjipShareType,
   type KakaoFeedPayload,
 } from './ejipShareCard';
+import { joinShareUrl, resolveCanonicalShareOrigin, withCanonicalOrigin } from './shareChannels';
 
 declare global {
   interface Window {
@@ -180,4 +181,31 @@ export async function nativeShare(payload: { title: string; text?: string; url: 
     if (e instanceof Error && e.name === 'AbortError') return 'aborted';
     return 'failed';
   }
+}
+
+/**
+ * SHARE_UX_V2 §5/§6 — 공유/복사에 쓸 **정규 URL**.
+ *
+ * buildShareUrl()이 주소창 오리진을 그대로 쓰는 것과 달리, 오리진만 프로덕션 정규
+ * 오리진으로 갈아끼운다. 경로·쿼리(=화면 상태)는 그대로 보존한다. 프리뷰/로컬에서
+ * 눌러도 수신자가 열 수 있는 링크가 나가고, 카카오 카드도 크롤링 이력이 있는
+ * 도메인을 받는다.
+ *
+ * explicitUrl(비교 화면처럼 호출부가 만든 canonical 링크)이 오면 그 경로를 쓰되
+ * 오리진은 역시 정규 오리진으로 맞춘다.
+ */
+export function buildCanonicalShareUrl(
+  extraParams?: Record<string, string | null | undefined>,
+  explicitUrl?: string
+): string {
+  const origin = resolveCanonicalShareOrigin(siteConfig.url);
+  if (explicitUrl) return withCanonicalOrigin(explicitUrl, origin);
+  if (typeof window === 'undefined') return '';
+  const url = new URL(window.location.href);
+  if (extraParams) {
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value) url.searchParams.set(key, value);
+    });
+  }
+  return joinShareUrl(origin, url.pathname, url.search);
 }

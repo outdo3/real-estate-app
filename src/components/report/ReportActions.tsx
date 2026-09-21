@@ -15,8 +15,9 @@ import {
   type ReportIdentity,
 } from '@/lib/report/export-identity';
 import type { ReportEnvelope } from '@/lib/report/types';
-import { useKakaoSharePreload } from '@/hooks/useKakaoSharePreload';
-import { isKakaoShareReady, sendKakaoShare, buildKakaoShareImageUrl, resolveShareOrigin } from '@/lib/share/shareUtils';
+import { resolveShareOrigin, type NativeShareResult } from '@/lib/share/shareUtils';
+import { useShareSheet } from '@/hooks/useShareSheet';
+import ShareSheet from '@/components/share/ShareSheet';
 import { reportShareCopy } from '@/lib/share/ejipShareCard';
 
 /**
@@ -85,10 +86,6 @@ export default function ReportActions({
       document.removeEventListener('pointerdown', onPointer);
     };
   }, [menuOpen]);
-
-  // SHARE_CARD_UNIFICATION_V1 §8 — 리포트 공유에도 브랜드 카카오 카드를 쓴다.
-  // 클릭 전에 SDK가 준비돼 있어야 팝업이 차단되지 않는다(훅 주석 참고).
-  useKakaoSharePreload();
 
   const identity: ReportIdentity | null = envelope
     ? {
@@ -216,54 +213,23 @@ export default function ReportActions({
   };
 
   /**
-   * §8 — Web Share 우선, 없으면 링크 복사.
+   * SHARE_UX_V2 §3/§8 — 리포트도 다른 화면과 **같은 공통 공유 시트**를 여는다.
    *
-   * 파일 공유를 지원하는 환경(주로 Android Chrome)에서는 캡처 이미지를 함께 싣는다.
-   * 다만 **URL/text는 항상 포함**한다 — 이미지는 클릭할 수 없으므로(§8) 링크가
-   * 없으면 수신자가 리포트로 돌아올 방법이 사라진다.
+   * 예전에는 이 파일이 자기만의 캐스케이드(카카오 → 파일 동반 Web Share → URL
+   * 공유 → 링크 복사)를 직접 돌렸다. 그래서 카카오 SDK가 준비된 모바일에서는
+   * 첫 분기에서 끝나 OS 공유 시트가 열리지 않았고, 캐프처 이미지 공유 경로에도
+   * 닿지 못했다. 이제 사용자가 고른다.
    *
-   * iOS Safari는 files와 url을 함께 넘기면 canShare가 false를 주는 경우가 있어,
-   * 그때는 조용히 URL 공유로 내려간다(거짓 실패 표시 없음).
+   * §8의 파일 동반 공유는 **그대로 살아 있다** — 시트의 [공유하기] 행이 아래
+   * 핸들러로 내려오므로, 지원하는 환경에서는 여전히 캐프처 PNG가 함께 간다.
    */
-  const share = async () => {
-    if (running.current) return;
-    const url = canonicalUrl();
-    if (!url) return;
-    const text = envelope ? buildShareText(envelope) : title;
+  const shareNativeWithReportImage = useCallback(
+    async (payload: { title: string; text?: string; url: string }): Promise<NativeShareResult> => {
+      if (typeof navigator === 'undefined' || !navigator.share) return 'unsupported';
+      const url = payload.url;
+      const text = envelope ? buildShareText(envelope) : title;
 
-    /**
-     * SHARE_CARD_UNIFICATION_V1 §8 — 카카오 브랜드 카드가 1순위.
-     *
-     * 카카오톡으로 리포트를 보내면 예전에는 일반 OG 미리보기(또는 클릭할 수 없는 PNG
-     * 한 장)만 갔다. 이제는 다른 화면과 같은 브랜드 카드 + "이집에서 리포트 보기"
-     * 버튼이 가고, 수신자가 **살아있는 리포트로 돌아올 수 있다**.
-     *
-     * PDF/이미지를 카드에 싣지는 않는다(§8) — 액션바의 [이미지]/[PDF] 저장 버튼과
-     * 인쇄 파이프라인은 이 분기와 무관하게 그대로다. 카카오를 쓸 수 없는 환경에서는
-     * 아래 기존 파일 첨부 공유 → URL 공유 → 링크 복사 사슬이 그대로 살아 있다.
-     *
-     * await보다 먼저 와야 사용자 제스처가 끊기지 않는다.
-     */
-    if (isKakaoShareReady()) {
-      try {
-        const copy = reportShareCopy(title);
-        sendKakaoShare({
-          type: 'report',
-          title: copy.title,
-          description: copy.description,
-          url,
-          imageUrl: buildKakaoShareImageUrl(),
-        });
-        // 카카오 SDK는 전송 완료 콜백이 없다 — 보낸 척하지 않도록 method로 경로만 남긴다.
-        trackEvent('report_share', { ga: { ...gaContext(), method: 'kakao_card' } });
-        return;
-      } catch {
-        // 카카오 공유 제품 비활성화/절대 URL 실패 등 — 아래 기존 경로로 내려간다.
-      }
-    }
-
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      // 파일 공유가 가능한지 먼저 확인한 뒤에만 캡처한다 — 불가능한 환경에서
+      // 파일 공유가 가능한지 먼저 확인한 뒤에만 캐처한다 — 불가능한 환경에서
       // 쓸데없이 1~2초를 쓰지 않기 위해.
       const canShareFiles =
         typeof navigator.canShare === 'function' &&
@@ -276,7 +242,7 @@ export default function ReportActions({
           }
         })();
 
-      if (canShareFiles) {
+      if (canShareFiles && !running.current) {
         running.current = true;
         setBusy('share');
         try {
@@ -287,13 +253,15 @@ export default function ReportActions({
             const filename = identity ? buildExportFilename(identity, 'png') : 'e-jip-report.png';
             const file = new File([blob], filename, { type: 'image/png' });
             if (navigator.canShare({ files: [file] })) {
+              // 이미지만 보내면 수신자가 살아있는 리포트로 돌아올 수 없다 — URL은 항상 함께.
               await navigator.share({ title, text, url, files: [file] });
-              trackEvent('report_share', { ga: { ...gaContext(), method: 'web_share_file' } });
-              return;
+              return 'shared';
             }
           }
-        } catch {
-          // 캡처/파일 공유가 안 되면 URL 공유로 내려간다(아래).
+        } catch (e) {
+          // 사용자가 공유창을 닫은 것은 실패가 아니다.
+          if (e instanceof Error && e.name === 'AbortError') return 'aborted';
+          // 캐처/파일 공유가 안 되면 URL 공유로 내려간다(아래).
         } finally {
           running.current = false;
           setBusy('idle');
@@ -302,29 +270,62 @@ export default function ReportActions({
 
       try {
         await navigator.share({ title, text, url });
-        trackEvent('report_share', { ga: { ...gaContext(), method: 'web_share' } });
-        return;
-      } catch {
-        // 사용자가 취소한 경우도 여기로 온다 — 실패로 표시하지 않는다.
-        // 취소는 공유가 아니므로 이벤트도 보내지 않는다(share 수치를 부풀리지 않는다).
-        return;
+        return 'shared';
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return 'aborted';
+        return 'failed';
       }
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      trackEvent('report_share', { ga: { ...gaContext(), method: 'copy_link' } });
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      flash(setError, '링크를 복사하지 못했습니다');
-    }
-  };
+    },
+    [envelope, identity, title]
+  );
+
+  const shareCopyText = reportShareCopy(title);
+  const sheet = useShareSheet({
+    title: shareCopyText.title,
+    text: shareCopyText.description,
+    shareType: 'report',
+    // §10 — 공유 URL은 화면 이름이 아니라 envelope identity에서 만든다.
+    url: canonicalUrl(),
+    onNativeShare: shareNativeWithReportImage,
+    onChannel: (channel) => {
+      // 카카오 SDK는 전송 완료 콜백이 없다 — 보낌 척하지 않도록 method로 경로만 남긴다.
+      const method = channel === 'kakao' ? 'kakao_card' : channel === 'native' ? 'web_share' : 'copy_link';
+      trackEvent('report_share', { ga: { ...gaContext(), method } });
+      if (channel === 'copy') {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    },
+  });
+
+  const shareSheet = (
+    <ShareSheet
+      open={sheet.open}
+      onClose={sheet.closeSheet}
+      channels={sheet.channels}
+      url={sheet.url}
+      status={sheet.status}
+      onKakao={sheet.shareKakao}
+      onNative={sheet.shareNative}
+      onCopy={sheet.shareCopy}
+      heading={title}
+    />
+  );
+
 
   const shareButton = (
-    <button type="button" className={`${styles.actionBtn} ${styles.actionPrimary}`} onClick={share}>
-      {copied ? <Check size={16} aria-hidden="true" /> : <Share2 size={16} aria-hidden="true" />}
-      <ActionLabel text={busy === 'share' ? '공유 준비 중...' : copied ? '링크 복사됨' : '공유하기'} />
-    </button>
+    <>
+      <button
+        type="button"
+        className={`${styles.actionBtn} ${styles.actionPrimary}`}
+        onClick={sheet.openSheet}
+        aria-haspopup="dialog"
+      >
+        {copied ? <Check size={16} aria-hidden="true" /> : <Share2 size={16} aria-hidden="true" />}
+        <ActionLabel text={busy === 'share' ? '공유 준비 중...' : copied ? '링크 복사됨' : '공유하기'} />
+      </button>
+      {shareSheet}
+    </>
   );
   if (variant === 'share-only') return shareButton;
 
