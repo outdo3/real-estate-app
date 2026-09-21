@@ -2,6 +2,29 @@
 
 ## 2026-09-21
 
+### E-JIP ADMIN DASHBOARD CONNECTION POOL SAFETY V1 — ops 패턴을 대시보드에도 적용
+
+schema 0 · migration 0 · index 0 · env 0 · business write 0. 상세: `docs/development/ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1.md`
+
+    대상     `/api/admin/dashboard`가 14개 Prisma 쿼리를 한 번의 `Promise.all`로 띄우던 구조(= ops를 죽였던 모양)
+    정정     **지난 STEP의 경고를 정정한다.** 이 라우트 단독으로는 현재 안전하다 — 테이블이 작아(page_views **4,578행**) 14개 합이 ~650ms라 pool_timeout=2s에서도 rejected 0/14
+    진짜위험  **포트를 나눠 쓰는 다른 라우트**이다. prisma는 싱글턴이라 /api/admin/ops(busanCanceled 1.2~10s)와 같은 pool을 쓴다
+    재현     3초 점유 + pool_timeout=2s, 동일 14작업: **Promise.all 14/14 rejected(전부 P2024) ↔ 순차 1/14**. 동시 실행은 외부 점유자가 14개 예산을 한꺼번에 태운다
+    수정     ops에서 검증된 `admin-ops-runner` 그대로 재사용(새 추상화 0) — 14개를 하나씩 await + 지표별 isolate()
+    외부HTTP `checkPipelineHealth()`(MOLIT)는 DB connection을 안 잡으므로 체인 **앞에서 착수·뒤에서 거두기** — 기존 병렬성 유지(순서를 테스트로 고정)
+    거짓0    숫자는 null, **배열도 null** — `[]`로 내리면 "지금 보는 사람이 없습니다"로 렌더돼 조회 실패가 사실처럼 보인다. UI는 "확인 불가"
+    배너     `degradedMetrics` 응답 필드 + 상단 배너(ops와 같은 시각 언어)
+    캐시     7일/30일 집계 3개만 **60초** — 목적은 latency가 아니라 **connection 점유 시간 단축**. 오늘 지표는 **무캐시 유지** — ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §9의 delta 0 계약을 캐시로 깨뜨리지 않는다
+    degradedTTL 불필요 — ops는 요약 전체를 캐시했지만 여기는 지표별 캐시라 실패는 애초에 저장되지 않는다(다음 요청이 즉시 재시도)
+    로깅     `ADMIN_DASHBOARD_METRIC_FAILURE`(+`metric=<key>`) 신규. 기존 "성공 경로 로깅 금지" 테스트를 **실제 계약**(모든 호출이 오류 경로 안)으로 교체하고 ops도 검사 대상에 포함
+    성능     운영 12회: **200 × 12/12 · 실패 0 · P2024 0 · P50 261ms · P95 1,367ms · degraded 0**(요약 캐시 없이 매번 실제로 도는 수치)
+    KST회귀   같은 순간 대시보드↔행동분석 **window 동일 · 317/318 · delta 0/0** 유지
+    화면     전 섹션 정상 렌더(트래픽·인기아파트·검색·커뮤니티·파이프라인·에러로그) · degraded 배너 없음
+    error_logs 배포 후 `ADMIN_DASHBOARD*` **0건** · `ADMIN_OPS_FAILURE`도 마지막이 07:43:54Z(ops 수정 전) 그대로
+    테스트    신규 7건(장애 주입 전부 mock) · src 전체 **1,944 pass / 0 fail** · tsc src 0 · eslint 0 · build ✓
+    디버그말  첫 재현은 실패했다 — `PrismaPromise`는 **lazy**라 `.then()` 전에는 실행되지 않는다(점유자가 돌고 있다고 착각했음)
+    남은위험  요약 캐시가 없어 20초 갱신마다 14쿼리 실행(parity와 맞바꿈) · `page_views`가 자라면 다시 무거워짐 · connection_limit=1 출처 여전히 미확인
+
 ### E-JIP ADMIN OPS P2024 CONNECTION POOL FIX V1 — /admin/ops 500 해결
 
 schema 0 · migration 0 · index 0 · env 0 · business write 0 · MOLIT 0. 상세: `docs/development/ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1.md`
