@@ -2,6 +2,24 @@
 
 ## 2026-09-21
 
+### E-JIP PROD VACUUM ANALYZE + AUTOVACUUM AUDIT V1 — 승인된 유지보수 1회
+
+schema 0 · index 0 · migration 0 · autovacuum 설정 변경 0 · business DML 0(누적 카운터 +0으로 증명). 상세: `docs/development/PROD_VACUUM_ANALYZE_AUTOVACUUM_AUDIT_V1.md`
+
+    실행     `VACUUM (ANALYZE) apartment_trade_histories` **1회** · 2026-09-21 **21:41 KST**(cron 창 밖 확인 후) · **12.4초** · VACUUM FULL/REINDEX/CLUSTER 0
+    핵심     **Heap Fetches 295,518 → 0** · buffers 135,653 → **1,512(-98.9%)** · all-visible 비율 **66.66% → 100.00%**
+    before   dead 53,081 · last_vacuum **NULL** · last_autovacuum 2026-08-30(22일 전) · relallvisible 19,081/28,624
+    after    dead **0** · mod_since_analyze 0 · last_vacuum/analyze 21:41 KST · relallvisible **28,624/28,624**
+    원인     **C. 임계치 미도달 = CONFIRMED (고장 아님)** — VACUUM 발동 임계치 = 50 + **0.2** × 866,366 = **173,323**, 현재 dead 53,081(30.6%). 기본 scale factor 0.2가 86만 행 테이블에 안 맞는 것이 전부다
+    기각     A 전역비활성·B 테이블비활성·D worker고갈·E 장기트랜잭션·F 취소충돌·G 통계리셋·H 수동유지보수·I Supabase override — **전부 RULED_OUT**(설정 전부 source=default, reloptions=NULL, 60초 초과 트랜잭션 0개, VACUUM이 dead를 0까지 회수한 것 자체가 E의 반증)
+    쿼리     busanTotal EXPLAIN 3,432→4,72ms·wall 173→97ms·Prisma 155→93ms · busanCovered exec 363→154ms·wall 205→111ms · latestDealDate Prisma 186→97ms
+    ops      재조합 3회 **2,020 / 2,272 / 2,516ms** — 전 **1,317 / 1,319 / 4,695 / 7,498ms**. **최악값 7,498 → 2,516(-66%)**, 편차 6,181 → **496ms(12배 안정)**
+    warm     **200 × 12/12 · P50 59ms · P95 102ms · 서버 측 1.3~3.5ms · degraded 0**
+    회귀     P2024 0 · BudgetExceeded 0 · ADMIN_OPS_FAILURE 0 · 신규 error_logs **0건** · 행 수·최근거래일 불변 · 인덱스 9·migration 22·INVALID 0 불변
+    순위변동  **1위가 `db:latestDealDate`(567~861ms)로 바뀜었다.** VACUUM·인덱스로 못 고친다 — 같은 조건 raw SQL은 `Index Scan Backward + Limit 1`로 **buffers 4개 / 3.3ms**로 이미 최적
+    미해결    플랜 3.3ms ↔ Prisma aggregate 관측 567~861ms의 간극을 **설명하지 못했다**(로컬에서도 raw 17ms vs Prisma 97ms). 추측 없이 다음 STEP 측정 대상으로 남긴다
+    후속     **AUTOVACUUM_CONFIG_REVIEW_NEEDED** — 오늘 청소는 일회성이고 설정이 그대로면 다시 17만 행까지 기다린다. 테이블 override(scale_factor 0.2→0.02) 제안만 하고 **실행하지 않았다**(ALTER TABLE = 별도 승인)
+
 ### E-JIP ADMIN OPS LATENCY INSTRUMENTATION V1 — 추측 전에 계측 (최적화 0)
 
 schema 0 · migration 0 · index 0 · **VACUUM 0** · env 0 · business DML 0 · **최적화 0**. 상세: `docs/development/ADMIN_OPS_LATENCY_INSTRUMENTATION_V1.md`
