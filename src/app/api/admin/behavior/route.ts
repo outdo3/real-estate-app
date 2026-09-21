@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth-helpers';
 import { getOrSetCache } from '@/lib/server-cache';
 import { getBehaviorSummary } from '@/lib/admin-analytics/query';
 import { isAnalyticsRange, type AnalyticsRange } from '@/lib/admin-analytics/types';
+import { logAdminFailure } from '@/lib/admin/log-admin-failure';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
   const { error, status } = await requireAdmin();
   if (error) return NextResponse.json({ success: false, error }, { status });
 
+  const startedAt = Date.now();
   try {
     const url = new URL(request.url);
     const rawRange = url.searchParams.get('range') || '7d';
@@ -25,6 +27,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('Failed to build admin behavior summary:', error);
+    logAdminFailure({
+      category: 'ADMIN_BEHAVIOR_FAILURE',
+      endpoint: '/api/admin/behavior',
+      error,
+      latencyMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ success: false, error: '행동 분석 데이터를 불러오지 못했습니다.' }, { status: 500 });
   }
 }

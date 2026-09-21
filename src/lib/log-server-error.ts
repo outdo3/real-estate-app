@@ -14,8 +14,23 @@ export async function logServerError(message: string, url?: string, stack?: stri
 
 // connection string이 에러 메시지에 우연히 포함되는 경우(예: Prisma init 오류 메시지)를 대비한
 // 방어적 마스킹 — INFRA I1에서 확인된 "비밀값 절대 기록 금지" 원칙 때문에 로그 저장 직전에 둔다.
-function redactConnectionStrings(text: string): string {
-  return text.replace(/postgres(ql)?:\/\/\S+/gi, '[redacted-connection-string]');
+//
+// ADMIN_ERROR_LOGGING_P1_V1 §3 — 관리자 실패 경로를 기록하기 시작하면서 대상을 넓혔다.
+// 에러 메시지에는 실패한 요청 URL이 통째로 섞여 들어오는 경우가 흔한데(fetch 실패 등),
+// 이 앱은 MOLIT `serviceKey`처럼 쿼리스트링에 키를 싣는 외부 API를 쓴다. 보수적으로
+// **이름이 비밀을 암시하는 파라미터/헤더 값**을 통째로 가린다. 값 일부도 남기지 않는다.
+const SECRET_PARAM =
+  /\b(serviceKey|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|passwd|pwd|client[_-]?secret)\b\s*[=:]\s*[^&\s"',}]+/gi;
+const SECRET_HEADER = /\b(authorization|cookie|set-cookie)\b\s*:\s*[^\r\n]+/gi;
+
+export function redactSensitive(text: string): string {
+  return text
+    .replace(/postgres(ql)?:\/\/\S+/gi, '[redacted-connection-string]')
+    // serviceKey=... / apikey=... / token=... / secret=... / password=...
+    .replace(SECRET_PARAM, (_m, key: string) => `${key}=[redacted]`)
+    // Authorization: Bearer xxx / Cookie: ... — 헤더가 통째로 메시지에 섞여 오는 경우
+    .replace(SECRET_HEADER, (_m, key: string) => `${key}: [redacted]`)
+    .replace(/\bBearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]');
 }
 
 // Prisma 예외 종류를 최소 정보로 분류한다. connection 오류(PrismaClientInitializationError)와
@@ -46,5 +61,5 @@ function classifyError(error: unknown): string {
 export function buildErrorLogMessage(method: string, error: unknown): string {
   const kind = classifyError(error);
   const rawMessage = error instanceof Error ? error.message : String(error);
-  return redactConnectionStrings(`[${method}][${kind}] ${rawMessage}`);
+  return redactSensitive(`[${method}][${kind}] ${rawMessage}`);
 }

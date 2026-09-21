@@ -7,6 +7,7 @@ import { fetchMolitData } from '@/lib/api-molit';
 import { detectLeadingRegionKeyword } from '@/lib/ai-search';
 import { ANALYTICS_EVENT_URL_PREFIX } from '@/lib/analytics/events';
 import { startOfKstDay } from '@/lib/kst-day';
+import { logAdminFailure } from '@/lib/admin/log-admin-failure';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +79,7 @@ export async function GET() {
   const { error, status } = await requireAdmin();
   if (error) return NextResponse.json({ success: false, error }, { status });
 
+  const startedAt = Date.now();
   try {
     const today = startOfToday();
     const onlineThreshold = onlineSinceThreshold();
@@ -219,6 +221,14 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Failed to build admin dashboard:', error);
+    // ADMIN_ERROR_LOGGING_P1_V1 §2 — 운영자가 실제로 겪는 실패 경로. 응답은 그대로 500이고,
+    // 기록은 best-effort라 이 호출이 실패 처리 자체를 바꾸지 않는다.
+    logAdminFailure({
+      category: 'ADMIN_DASHBOARD_FAILURE',
+      endpoint: '/api/admin/dashboard',
+      error,
+      latencyMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ success: false, error: '대시보드 데이터를 불러오지 못했습니다.' }, { status: 500 });
   }
 }

@@ -14,6 +14,7 @@ import { getRentVerifiedRange, readLegacyBootstrap, summarizeCoverage, summarize
 import { readCronRegistration } from '@/lib/cron-schedule';
 import { SALE_RECHECK_MAX_MONTHS_BACK, SALE_RECHECK_MIN_MONTHS_BACK } from '@/lib/sync/shared';
 import { getMolitLeafRegions } from '@/lib/region/registry';
+import { logAdminFailure } from '@/lib/admin/log-admin-failure';
 
 export const dynamic = 'force-dynamic';
 
@@ -148,9 +149,14 @@ async function buildSummary() {
   const degradedSources: string[] = [];
   const regionModel = await buildNationwideRegionModel().catch((e) => {
     console.error('[admin/ops] region model 조회 실패', e);
+    // ADMIN_ERROR_LOGGING_P1_V1 §4 — 전체 실패와 **조각 하나 실패**를 로그에서 구분한다.
+    // 화면은 부분 실패로 계속 뜨지만(TRUST_FIX_V1 §6), 왜 비었는지는 추적 가능해야 한다.
+    logAdminFailure({ category: 'ADMIN_OPS_REGION_MODEL_FAILURE', endpoint: '/api/admin/ops', error: e });
     return null;
   });
-  if (!regionModel) degradedSources.push('전국 region model(법정동코드 프록시)');
+  if (!regionModel) {
+    degradedSources.push('전국 region model(법정동코드 프록시)');
+  }
 
   // §18 Overall Health — 4단계(정상/확인 필요/문제/확인 불가) 결정은
   // computeOverallHealth()(src/lib/admin-ops-evidence.ts, 테스트 대상)로 분리했다.
@@ -384,11 +390,19 @@ export async function GET() {
   const { error, status } = await requireAdmin();
   if (error) return NextResponse.json({ success: false, error }, { status });
 
+  const startedAt = Date.now();
   try {
     const data = await getOrSetCache('admin-ops:summary-v1_2', CACHE_TTL_MS, buildSummary);
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('Failed to build admin ops summary:', error);
+    // §2 — 운영자가 실제로 자주 보는 실패. 부분 실패(위)와 다른 category로 남긴다.
+    logAdminFailure({
+      category: 'ADMIN_OPS_FAILURE',
+      endpoint: '/api/admin/ops',
+      error,
+      latencyMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ success: false, error: '운영 데이터를 불러오지 못했습니다.' }, { status: 500 });
   }
 }
