@@ -1,8 +1,14 @@
 /**
- * CANCELLATION_RATCHET_DEFECT_A — REPAIR SCRIPT **제안본**. 아직 실행하지 않았다.
+ * CANCELLATION_RATCHET_DEFECT_A — REPAIR SCRIPT.
  *
- * ⚠ 이 파일은 승인 대기 상태다. 파일명에 `.PROPOSAL.`이 들어 있는 동안에는
- *   Production apply를 하지 않는다. 승인 후 파일명을 바꾸고 실행한다.
+ * ✔ 승인·실행 완료: **2026-09-21 10:34 KST**, known false-cancel **28행 복구**
+ *   (UPDATE 28 · INSERT 0 · DELETE 0, 단일 트랜잭션).
+ *   기록: `docs/development/DEFECT_A_FALSE_CANCEL_28_PRODUCTION_REPAIR_V1.md`
+ *   롤백 자료: `tmp/defect-a-28-repair/snapshot-pre-repair.json`
+ *
+ *   재실행은 **멱등**이다 — 복구된 행은 `deal_canceled=true` 조건에 걸리지 않아 0행이 된다.
+ *   실행 후 대상 그룹은 전부 NO_EXCESS라 dry-run이 0행을 계획한다.
+ *   범위를 벗어난 재실행(다른 --expect)은 여전히 명시 승인이 필요하다.
  *
  * 무엇을 하는가
  *   결함 A(취소 플래그 래칫)로 **원천보다 많이 취소된** 행을 정확히 그만큼만
@@ -22,10 +28,15 @@
  *   7. 스냅샷을 먼저 파일로 남기지 않으면 apply를 시작하지 않는다(롤백 자료).
  *   8. broad UPDATE 없음 — 항상 명시적 id IN (...) 이다.
  *
- * 실행(제안)
- *   dry-run:  ALLOW_PROD_DB_READ=1 npx tsx scripts/repair-cancel-ratchet-defect-a.ts --expect=21
- *   apply:    ALLOW_PROD_DB_READ=1 APPROVE_CANCEL_RATCHET_REPAIR=1 \
- *             npx tsx scripts/repair-cancel-ratchet-defect-a.ts --apply --expect=21 --batch=25
+ * 실행 (2026-09-21에 실제로 쓴 형태)
+ *   dry-run:  ALLOW_PROD_DB_READ=1 npx tsx scripts/repair-cancel-ratchet-defect-a.ts --expect=28
+ *   apply:    ALLOW_PROD_DB_READ=1 ALLOW_PROD_DB_WRITE=1 APPROVE_CANCEL_RATCHET_REPAIR=1 \
+ *             npx tsx scripts/repair-cancel-ratchet-defect-a.ts --apply --expect=28 --batch=28 \
+ *             --snapshot=tmp/defect-a-28-repair/snapshot-pre-repair.json
+ *
+ *   apply는 `assertProductionDbAccessAllowed('BACKFILL', ...)`를 타므로 **`ALLOW_PROD_DB_WRITE=1`도
+ *   필요하다** — 이전 주석에 빠져 있던 항목이다. `--batch`를 대상 수 이상으로 주면 전 건이 한
+ *   트랜잭션에 들어간다(28건은 `--batch=28`로 단일 트랜잭션 실행했다).
  */
 import * as dotenv from 'dotenv';
 import * as path from 'path';
