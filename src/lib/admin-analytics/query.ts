@@ -4,6 +4,7 @@
 // based (§26): a session that viewed the same detail page 10 times still counts once per stage.
 import { prisma } from '@/lib/prisma';
 import { NEXT_ACTION_TYPES, type NextActionType } from '@/lib/decision-journey/types';
+import { startOfKstDay, startOfKstDaysAgo } from '@/lib/kst-day';
 import type {
   AnalyticsRange,
   BehaviorKpi,
@@ -32,15 +33,26 @@ const NEXT_ACTION_LABELS: Record<NextActionType, string> = {
   BACK_TO_RESULTS: '목록으로',
 };
 
-function rangeStart(range: AnalyticsRange): Date {
-  const now = new Date();
-  if (range === 'today') {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
+/**
+ * ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §6~§8 — 기간은 항상 **KST 달력일**이다.
+ *
+ * 이전 구현은 `new Date(); d.setHours(0,0,0,0)`이었다. `setHours`는 실행 환경의
+ * 로컬 시간을 쓰는데 Vercel Function은 TZ=UTC로 돌아, 행동 분석의 "오늘"이
+ * **한국시간 09:00에 시작**했다. 같은 순간 대시보드(KST)는 317을, 여기는 166을
+ * 보여준 이유다(운영 실측). 대시보드는 ADMIN_DASHBOARD_TRUST_FIX_V1에서 이미
+ * 고쳤고, 이 모듈만 남아 있었다.
+ *
+ * KST 계산 사본을 여기에 다시 만들지 않는다 — 대시보드와 **같은 helper**를 쓴다.
+ *
+ * 7일/30일도 rolling 7×24h가 아니라 **오늘을 포함한 최근 N개 KST 달력일**이다.
+ * 화면 라벨이 "7일"이기 때문이다 — rolling은 조회 시각에 따라 가장 오래된 날의
+ * 앞부분이 잘려, 오전에 본 "7일"과 저녁에 본 "7일"이 서로 다른 집합을 가리킨다.
+ * 리포트(`resolveVolumePeriod`)도 이미 KST 달력일 계약이라 세 면이 같아진다.
+ */
+export function rangeStart(range: AnalyticsRange, now: Date = new Date()): Date {
+  if (range === 'today') return startOfKstDay(now);
   const days = range === '7d' ? 7 : 30;
-  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return startOfKstDaysAgo(days - 1, now);
 }
 
 function conversion(current: number, previous: number): number | null {
@@ -71,7 +83,12 @@ interface CombinedCounts {
 async function fetchCombinedCounts(since: Date): Promise<CombinedCounts> {
   const rows = await prisma.$queryRaw<CombinedCounts[]>`
     SELECT
-      COUNT(DISTINCT session_id) as sessions,
+      -- §2/§5 — 방문 세션은 대시보드와 **같은 정의**를 쓴다: 이벤트 행을 제외한
+      -- 실제 페이지뷰의 distinct session_id. 예전에는 여기만 이벤트 행까지 세어,
+      -- 페이지뷰 없이 이벤트만 남긴 세션이 두 화면에서 다르게 세어질 수 있었다
+      -- (오늘 실측 차이는 0이었지만, 정의가 같아야 우연이 아니다).
+      -- entry_sessions와 같은 식이 되어 퍼널 1단계와도 자동으로 일치한다.
+      COUNT(DISTINCT session_id) FILTER (WHERE url NOT LIKE '/__event__/%') as sessions,
       COUNT(*) FILTER (WHERE url NOT LIKE '/__event__/%') as page_views,
       COUNT(*) FILTER (WHERE url LIKE '/apt/%') as detail_views,
       COUNT(*) FILTER (WHERE url = '/map') as map_views,
@@ -199,6 +216,9 @@ export async function getBehaviorSummary(range: AnalyticsRange): Promise<Behavio
   return {
     range,
     rangeLabel: RANGE_LABELS[range],
+    // §9/§11 — 어느 창을 재고 있는지를 응답이 직접 말한다. 대시보드의
+    // todayStartsAt과 같은 관례라, 두 화면의 parity를 화면 밖에서도 검증할 수 있다.
+    rangeStartsAt: since.toISOString(),
     generatedAt: new Date().toISOString(),
     kpi,
     funnel,

@@ -10,6 +10,13 @@ import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+/** §11 — 기간 라벨이 정확히 무엇을 뜻하는지 화면에서 닫는다. */
+function periodContract(range: AnalyticsRange): string {
+  if (range === 'today') return '오늘 = 한국시간 00:00 기준';
+  const days = range === '7d' ? 7 : 30;
+  return `최근 ${days}일 = 오늘 포함 한국시간 ${days}일치`;
+}
+
 const RANGE_OPTIONS: { value: AnalyticsRange; label: string }[] = [
   { value: 'today', label: '오늘' },
   { value: '7d', label: '7일' },
@@ -73,7 +80,14 @@ export default function AdminBehaviorPage() {
             <div className={styles.emptyState}>⚠️ {fetchError}</div>
           ) : d ? (
             <>
-              <p className={styles.rangeCaption}>{d.rangeLabel} 기준 · 브라우저 세션(익명 sessionId) 단위 집계입니다.</p>
+              {/* ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §11 — 대시보드의 "오늘 = 한국시간 00:00 기준"과
+                  같은 안내를 여기에도 둔다. 예전에는 이 화면이 UTC 자정을 써서 두 화면이
+                  다른 숫자를 보였고, 화면 어디에도 그 사실이 없었다. */}
+              <p className={styles.rangeCaption}>
+                {d.rangeLabel} 기준 · 브라우저 세션(익명 sessionId) 단위 집계입니다.
+                <br />
+                {periodContract(d.range)} · 관리자 대시보드와 같은 기준입니다.
+              </p>
 
               <div className={styles.kpiGrid}>
                 <div className={styles.kpiTile}>

@@ -6,7 +6,7 @@ import { onlineSinceThreshold } from '@/lib/presence-server';
 import { fetchMolitData } from '@/lib/api-molit';
 import { detectLeadingRegionKeyword } from '@/lib/ai-search';
 import { ANALYTICS_EVENT_URL_PREFIX } from '@/lib/analytics/events';
-import { startOfKstDay } from '@/lib/kst-day';
+import { startOfKstDay, startOfKstDaysAgo } from '@/lib/kst-day';
 import { logAdminFailure } from '@/lib/admin/log-admin-failure';
 
 export const dynamic = 'force-dynamic';
@@ -83,8 +83,12 @@ export async function GET() {
   try {
     const today = startOfToday();
     const onlineThreshold = onlineSinceThreshold();
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    // ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §8 — 화면 라벨이 "최근 7일"/"최근 30일"이므로
+    // 기간도 **오늘을 포함한 KST 달력일**로 읽는다. rolling N×24h는 조회 시각에 따라
+    // 가장 오래된 날의 앞부분이 잘려 같은 날에도 집합이 달라진다. 행동 분석·리포트와
+    // 같은 계약을 쓴다(기간 의미가 화면마다 모순되지 않게).
+    const sevenDaysAgo = startOfKstDaysAgo(6);
+    const thirtyDaysAgo = startOfKstDaysAgo(29);
 
     const [
       todayPageViews,

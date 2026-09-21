@@ -2,6 +2,26 @@
 
 ## 2026-09-21
 
+### E-JIP ADMIN ANALYTICS DATE PARITY FIX V1 — 대시보드↔행동분석 날짜 계약 통일
+
+DB write 0 · schema 0 · migration 0 · env 0 · MOLIT 0. 상세: `docs/development/ADMIN_ANALYTICS_DATE_PARITY_FIX_V1.md`
+
+    증상     같은 시각인데 대시보드 301/302 vs 행동분석 149/150 — 둘 다 page_views 기반인데 값이 절반
+    원인     **CONFIRMED: UTC/KST boundary** — 행동분석만 `setHours(0,0,0,0)`(=Vercel TZ=UTC)를 써 "오늘"이 한국시간 09:00에 시작. 대시보드는 ADMIN_DASHBOARD_TRUST_FIX_V1에서 이미 고쳐져 있었다
+    운영재현  16:28 KST 원천 실측 — KST창 317/318 vs UTC창 166/167(delta **151**). 사용자가 본 301/302 vs 149/150과 같은 두 창(PV=sessions+1 형태까지 일치)
+    부수원인  세션 정의도 갈라져 있었다 — 행동분석은 `/__event__/` 행까지 distinct에 포함(오늘 실측 차이는 0이었지만 **우연**이므로 식을 대시보드와 동일하게 맞춤)
+    today    두 화면 모두 `startOfKstDay()` — KST 계산 사본을 만들지 않고 같은 `src/lib/kst-day.ts` 재사용(런타임 TZ 무관)
+    7/30일   rolling N×24h → **오늘 포함 최근 N개 KST 달력일**(신규 `startOfKstDaysAgo`). 대시보드의 "최근 7일 인기검색어"·"최근 30일 인기단지"도 같은 계약으로
+    리포트   `resolveVolumePeriod`는 미변경 — 이미 KST 달력일이고 종료일을 어제로 두는 것은 MOLIT cron(04:00 KST) 때문. 거래일 계약이라 의도적으로 다르며 모순 아님
+    parity실측 같은 창에서 **두 코드 경로를 각각 독립 실행** — 대시보드(Prisma count+raw distinct) 317/318, 행동분석(combined FILTER SQL) 317/318 → **delta 0 / 0**
+    캐시     `today`는 무캐시(대시보드와 같은 시점을 보도록) · 7/30일은 기존 5분 TTL 유지 · 초단위 polling 추가 0
+    응답     `rangeStartsAt` 추가 — 어느 창을 재고 있는지 화면 밖에서도 검증 가능(대시보드 `todayStartsAt`과 같은 관례)
+    라벨     행동분석에도 "오늘 = 한국시간 00:00 기준 · 관리자 대시보드와 같은 기준" 캡션 추가(UI 구조 불변)
+    범위     `since` 하나를 모든 쿼리가 공유하므로 상세조회·비교·관심단지·자금계산·공유·검색·여정퍼널·인기단지/지역이 함께 이동(방문/PV만 KST로 남는 것이 구조적으로 불가)
+    테스트    신규 17건(KST 08:59/09:00 경계 · 7/30일 달력일 · 조회시각 무관성 · 동일 fixture 세션/PV parity · 배선 계약) · src 전체 **1,920 pass / 0 fail**
+    품질     tsc src 오류 0 · 변경 파일 eslint exit 0 · `npm run build` ✓
+    영향     대시보드 "최근 7일/30일" 집계 대상이 소폭 감소(7일 PV 513→452, 30일 2,836→2,783) — 라벨과 더 정확히 일치하는 방향
+
 ### E-JIP SHARE UX V2 — 캐스케이드를 3-액션 공유 시트로 교체
 
 DB write 0 · schema 0 · migration 0 · 연락처 접근 0 · 외부 앱 자동 발송 0 · 카카오 계정 선택 강제 0. 상세: `docs/development/SHARE_UX_V2_AUDIT_AND_IMPLEMENTATION.md`

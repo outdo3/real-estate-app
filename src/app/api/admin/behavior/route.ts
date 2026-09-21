@@ -22,7 +22,18 @@ export async function GET(request: Request) {
     // §48 — allowlist 밖 임의 range 파라미터로 비싼 쿼리를 실행하지 못하게 한다.
     const range: AnalyticsRange = isAnalyticsRange(rawRange) ? rawRange : '7d';
 
-    const data = await getOrSetCache(`admin-behavior:${range}`, CACHE_TTL_MS, () => getBehaviorSummary(range));
+    // ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §9/§10 — "오늘"은 캐시하지 않는다.
+    //
+    // /api/admin/dashboard의 트래픽 지표는 캐시 없이 매번 집계한다. 여기만 5분
+    // TTL을 두면, 두 계약을 똑같이 맞춰도 운영자가 두 화면을 나란히 놓고 볼 때
+    // **최대 5분치 트래픽만큼 숫자가 달라** 다시 "왜 다르냐"가 된다.
+    //
+    // 7일/30일은 더 무거운 집계이고 분 단위로 의미가 바뀌지 않으므로 기존 5분
+    // 캐시 관례를 그대로 유지한다(관리자 전용 화면 · 초단위 polling 추가 없음).
+    const data =
+      range === 'today'
+        ? await getBehaviorSummary(range)
+        : await getOrSetCache(`admin-behavior:${range}`, CACHE_TTL_MS, () => getBehaviorSummary(range));
 
     return NextResponse.json({ success: true, data });
   } catch (error) {

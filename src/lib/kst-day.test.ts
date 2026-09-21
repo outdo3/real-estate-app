@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { KST_OFFSET_MS, formatKstTime, startOfKstDay } from './kst-day';
+import { KST_OFFSET_MS, formatKstTime, startOfKstDay, startOfKstDaysAgo } from './kst-day';
 
 // ADMIN_DASHBOARD_TRUST_FIX_V1 §5 — 감사에서 확정된 경계 케이스를 그대로 고정한다.
 // 핵심은 "실행 환경 TZ가 무엇이든 같은 답이 나온다"는 것이다. 이 테스트는 순수 함수만
@@ -84,4 +84,32 @@ test('formatKstTime — UTC 순간을 KST 시:분으로 보여준다', () => {
   assert.equal(formatKstTime(new Date('2026-09-21T00:00:00.000Z')), '09:00');
   assert.equal(formatKstTime(new Date('2026-09-20T15:00:00.000Z')), '00:00');
   assert.equal(formatKstTime(new Date('2026-09-21T03:14:00.000Z')), '12:14');
+});
+
+// ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §7/§8 — 달력일 구간.
+
+test('startOfKstDaysAgo(0)은 startOfKstDay와 같다', () => {
+  const now = new Date('2026-09-21T07:28:33.757Z');
+  assert.equal(startOfKstDaysAgo(0, now).getTime(), startOfKstDay(now).getTime());
+});
+
+test('startOfKstDaysAgo(N)은 정확히 N개 KST 자정만큼 앞이다', () => {
+  const now = new Date('2026-09-21T07:28:33.757Z');
+  assert.equal(startOfKstDaysAgo(6, now).toISOString(), '2026-09-14T15:00:00.000Z'); // 09-15 00:00 KST
+  assert.equal(startOfKstDaysAgo(29, now).toISOString(), '2026-08-22T15:00:00.000Z'); // 08-23 00:00 KST
+  for (const n of [1, 6, 29, 364]) {
+    const diff = startOfKstDay(now).getTime() - startOfKstDaysAgo(n, now).getTime();
+    assert.equal(diff, n * 24 * 60 * 60 * 1000, `${n}일 간격이 어깄난다`);
+  }
+});
+
+test('startOfKstDaysAgo는 음수/소수를 조용히 받아들이지 않고 오늘로 간주한다', () => {
+  const now = new Date('2026-09-21T07:28:33.757Z');
+  assert.equal(startOfKstDaysAgo(-5, now).getTime(), startOfKstDay(now).getTime());
+  assert.equal(startOfKstDaysAgo(2.9, now).getTime(), startOfKstDaysAgo(2, now).getTime());
+});
+
+test('월/년 경계를 넘어도 달력일이 맞는다', () => {
+  const newYearKst = new Date('2026-01-02T01:00:00.000Z'); // 2026-01-02 10:00 KST
+  assert.equal(startOfKstDaysAgo(6, newYearKst).toISOString(), '2025-12-26T15:00:00.000Z'); // 12-27 00:00 KST
 });

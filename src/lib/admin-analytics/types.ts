@@ -63,6 +63,12 @@ export interface ShareStats {
 export interface BehaviorSummary {
   range: AnalyticsRange;
   rangeLabel: string;
+  /**
+   * ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §9 — 이 집계가 실제로 재고 있는 창의 시작(ISO).
+   * KST 달력일 경계다. 대시보드의 `todayStartsAt`과 같은 관례로, 두 화면이
+   * 같은 창을 보고 있는지를 응답만으로 확인할 수 있게 한다.
+   */
+  rangeStartsAt: string;
   generatedAt: string;
   kpi: BehaviorKpi;
   funnel: JourneyFunnelStep[];

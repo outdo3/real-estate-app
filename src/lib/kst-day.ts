@@ -36,3 +36,21 @@ export function formatKstTime(at: Date = new Date()): string {
   const k = new Date(at.getTime() + KST_OFFSET_MS);
   return `${String(k.getUTCHours()).padStart(2, '0')}:${String(k.getUTCMinutes()).padStart(2, '0')}`;
 }
+
+/**
+ * ADMIN_ANALYTICS_DATE_PARITY_FIX_V1 §7/§8 — **오늘을 포함한 최근 N개 KST 달력일**의 시작.
+ *
+ * `startOfKstDaysAgo(6)` = 오늘 포함 7일 구간의 시작(=6일 전 KST 00:00).
+ * `startOfKstDaysAgo(0)` = `startOfKstDay()`.
+ *
+ * 왜 `now - N*24h`(rolling)가 아니라 달력일인가: 화면 라벨이 "7일"/"30일"이기 때문이다.
+ * rolling은 조회 시각에 따라 같은 날의 앞부분이 잘려 나가, 오전에 본 "7일"과 저녁에 본
+ * "7일"이 서로 다른 집합을 가리킨다. 달력일 경계는 운영자가 말하는 "며칠치"와 일치한다.
+ *
+ * 하루는 UTC 기준으로도 정확히 24시간이고(윤초 없음) 한국은 서머타임이 없으므로,
+ * KST 자정에서 24시간씩 빼는 것으로 정확한 KST 달력일 경계가 나온다.
+ */
+export function startOfKstDaysAgo(daysAgo: number, now: Date = new Date()): Date {
+  const today = startOfKstDay(now);
+  return new Date(today.getTime() - Math.max(0, Math.trunc(daysAgo)) * 24 * 60 * 60 * 1000);
+}
