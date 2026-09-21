@@ -1,10 +1,32 @@
 import { PrismaClient } from '@prisma/client';
+import { assertTestWriteAllowed, resolveTestDbPolicy } from '@/lib/test-db-guard';
 
 // Next.js 개발 모드의 핫 리로드마다 새 PrismaClient를 만들면 커넥션이 계속 쌓이므로,
 // 전역에 싱글턴으로 캐싱해 재사용한다 (Prisma 공식 권장 패턴).
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+// TEST_DATABASE_SAFETY_GUARD_V1 §8 — 테스트에서 TEST_DATABASE_URL이 있으면 그것을 쓴다.
+// 운영 런타임은 이 분기에 들어오지 않으므로 동작이 바뀌지 않는다.
+const policy = resolveTestDbPolicy(process.env as Record<string, string | undefined>, process.execArgv);
+const testUrl = policy.testSignal && process.env.TEST_DATABASE_URL ? process.env.TEST_DATABASE_URL : null;
+
+function createClient(): PrismaClient {
+  const client = testUrl
+    ? new PrismaClient({ datasources: { db: { url: testUrl } } })
+    : new PrismaClient();
+
+  // §7/§9 — 테스트 러너일 때만 쓰기 차단 미들웨어를 단다. 운영 런타임에는 붙지 않으므로
+  // 요청 경로에 오버헤드도, 동작 변화도 없다. 읽기는 통과시킨다(의도된 read-only 통합 테스트 보호).
+  if (policy.testSignal) {
+    client.$use(async (params, next) => {
+      assertTestWriteAllowed(params.action, params.model);
+      return next(params);
+    });
+  }
+  return client;
+}
+
+export const prisma = globalForPrisma.prisma ?? createClient();
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;

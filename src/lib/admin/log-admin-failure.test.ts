@@ -9,7 +9,7 @@ import {
   logAdminFailure,
   shouldLogAdminFailure,
 } from './log-admin-failure';
-import { buildErrorLogMessage, redactSensitive } from '@/lib/log-server-error';
+import { buildErrorLogMessage, redactSensitive } from '@/lib/log-redaction';
 
 const read = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf-8');
 

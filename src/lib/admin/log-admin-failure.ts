@@ -11,7 +11,7 @@
 //  - **기존 헬퍼를 재사용한다.** 쓰기·비밀값 마스킹·best-effort는 log-server-error.ts가 이미 한다.
 //  - **로깅이 관리자 응답을 더 망가뜨리지 않는다.** 전부 fire-and-forget이고 절대 throw하지 않는다.
 
-import { buildErrorLogMessage, logServerError } from '@/lib/log-server-error';
+import { buildErrorLogMessage } from '@/lib/log-redaction';
 
 /**
  * 하위 subsystem까지 구분한다 — 운영센터는 이제 부분 실패를 허용하므로(TRUST_FIX_V1 §6),
@@ -78,7 +78,19 @@ export interface AdminFailureInput {
  */
 export type AdminFailureWriter = (message: string, url?: string, stack?: string) => Promise<unknown>;
 
-export function logAdminFailure(input: AdminFailureInput, write: AdminFailureWriter = logServerError): void {
+/**
+ * 기본 writer는 **지연 import**한다.
+ *
+ * `logServerError`를 정적으로 import하면 이 모듈을 부르는 것만으로 `@/lib/prisma`가 로드된다.
+ * 단위 테스트는 writer를 주입해 쓰기를 하지 않는데도 Prisma 클라이언트가 만들어지는 셈이라,
+ * 테스트가 DB 설정에 불필요하게 묶인다. 실제로 쓸 때만 끌어온다.
+ */
+const defaultWriter: AdminFailureWriter = async (message, url, stack) => {
+  const { logServerError } = await import('@/lib/log-server-error');
+  return logServerError(message, url, stack);
+};
+
+export function logAdminFailure(input: AdminFailureInput, write: AdminFailureWriter = defaultWriter): void {
   try {
     const message = buildErrorLogMessage(input.category, input.error);
     const key = `${input.endpoint}|${message.slice(0, 200)}`;
