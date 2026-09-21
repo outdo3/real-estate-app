@@ -2,6 +2,29 @@
 
 ## 2026-09-21
 
+### E-JIP ADMIN OPS P2024 CONNECTION POOL FIX V1 — /admin/ops 500 해결
+
+schema 0 · migration 0 · index 0 · env 0 · business write 0 · MOLIT 0. 상세: `docs/development/ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1.md`
+
+    증상     `/api/admin/ops` 500 · `[ADMIN_OPS_FAILURE][P2024] apartmentTradeHistory.count() — pool timeout 10s, connection limit 1`
+    원인     **직관과 다르다.** 그 count가 느린 것이 아니라 **줄 뒤에 서 있던 쿼리**였다 — `Promise.all` 9개가 t=0에 함께 connection을 요청해 pool_timeout 타이머 9개가 동시에 돌고, 실행 30ms짜리까지 대기 중 죽었다
+    원인증명  운영 DB 재현(limit=1, pool_timeout=2s, 동일 9개·동일 작업량): **Promise.all 6,004ms 7/9 rejected ↔ 순차 6,164ms 0/9**. 다른 것은 "언제 connection을 요청하는가" 하나뿐
+    기각     쿼리 통합은 **측정으로 버렸다** — 단일 FILTER 집계 15,335ms · raw GROUP BY 3,459ms vs 대체 대상 3개 합계 1,889ms(개별 쿼리는 이미 인덱스를 타고, 합치면 865k행 heap 스캔)
+    수정     쿼리·스키마는 그대로 두고 **실행 방식만** 변경 — 두 블록(9+4)을 순차 await(병렬 2,331ms보다 오히려 빠른 1,801ms)
+    격리     지표마다 `isolate()` — 한 조각 실패가 전체 500으로 번지지 않고, **전부 실패했을 때만** DB 연결 장애로 판정
+    거짓0    읽지 못한 값은 0이 아니라 null · `busanActive`는 피연산 하나라도 UNKNOWN이면 null(예전에는 취소 조회 실패 → "유효 = 전체"로 장애가 정상보다 좋아 보였다) · 못 읽은 값으로 "정상" 배지 금지
+    무거운지표 `count(deal_canceled=true)`(단일 최대 비용 1.2~10s, 덤는 인덱스 없음) → **맨 뒤 + 전용 30분 캐시 + 4초 예산**. 예산 초과도 원래 쿼리는 계속 돌아 캐시를 채우므로 다음 요청은 진짜 숫자를 본다
+    캐시     기존 `getOrSetCache` 재사용(in-flight dedupe 이미 존재) + 값별 TTL `ttlFor` 추가 — 완전 5분 / **부분 실패 30초**
+    자가결함  첫 배포 후 QA에서 내가 만든 결함을 잡았다 — 부분 실패 요약이 5분 내내 캐시돼 8회 연속 "확인 불가"(degradedCounts 1 연속). 위 30초 TTL로 수정 후 운영에서 **자가 회복** 실측
+    LKG      재조회 실패 시 직전 검증된 요약을 200으로 내리되 `stale{isStale,capturedAt}`로 시각을 밝힌다(빈 오류 화면 대신)
+    로깅     `ADMIN_OPS_DB_SUMMARY_FAILURE`(+`metric=<key>`) 신규 — 전체 실패·region model 실패와 구분. dedupe 키에 metricKey 포함, 민감정보 금지 유지
+    성능     운영 12회 연속: **200 × 12/12 · 실패 0 · P2024 0 · P50 57ms · P95 88ms · degraded 0**. DB 블록만 limit=1 10회: P50 2,396ms → **799ms**
+    cold     4.2~15.4s(200 반환, P2024 없음 — 순차 실행은 총시간이 pool_timeout을 넘겨도 안 죽는다). **§10 cold ≤3s 목표는 미달** — 정직하게 기록
+    화면     `/admin/ops` 정상 렌더 — 전체 상태 정상·경고 0건 · 전체 row 865,291 / 유효 848,977 / 취소 16,314 / 최근 거래일 2026-09-18 (STEP 시작 시점엔 "운영 데이터를 불러오지 못했습니다" 한 줄)
+    error_logs 배포 이후 `ADMIN_OPS_FAILURE`·P2024 **0건** · 남은 기록은 콜드 인스턴스의 BudgetExceeded 4건뿐이고 그 요청들도 전부 200
+    테스트    신규 17건(장애 주입은 전부 mock — Production 무손상) · src 전체 **1,937 pass / 0 fail** · tsc src 0 · eslint 0 · build ✓
+    남은위험  `/api/admin/dashboard`가 여전히 Promise.all로 ~15개를 띄운다 — **같은 P2024 구조**를 갖고 있고 아직 터지지 않았을 뿐
+
 ### E-JIP ADMIN ANALYTICS DATE PARITY FIX V1 — 대시보드↔행동분석 날짜 계약 통일
 
 DB write 0 · schema 0 · migration 0 · env 0 · MOLIT 0. 상세: `docs/development/ADMIN_ANALYTICS_DATE_PARITY_FIX_V1.md`
