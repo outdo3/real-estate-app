@@ -2,6 +2,25 @@
 
 ## 2026-09-21
 
+### E-JIP ADMIN OPS LATENCY INSTRUMENTATION V1 — 추측 전에 계측 (최적화 0)
+
+schema 0 · migration 0 · index 0 · **VACUUM 0** · env 0 · business DML 0 · **최적화 0**. 상세: `docs/development/ADMIN_OPS_LATENCY_INSTRUMENTATION_V1.md`
+
+    판정     **ROOT_CAUSE_FOUND**
+    결론     재조합 시간의 **99.97%가 DB**이고 **`db:busanTotal` 하나가 최대 71.3%** — 가장 느린 샘플(7,498ms)에서 DB 합계 7,495.8ms, auth 1.3ms, 파일 1.7ms, unaccounted **0.1ms**
+    순위     1) `db:busanTotal` 221~**5,344ms** 2) `db:latestDealDate` 177~760ms 3) `db:busanCovered` 270~740ms — **셋 합쳐 91.3%, 셋 다 같은 `(lawd_cd, deal_date)` 인덱스**
+    진짜원인  인덱스 부재가 아니라 **`Heap Fetches: 295,518`** — visibility map이 낡아(last_autovacuum 08-29, dead 53,081) Index Only Scan이 heap을 다시 읽는다. COUNT 하나에 버퍼 135,592개
+    분산     같은 쿼리가 **221ms ↔ 5,344ms(24배)** — 버퍼 캐시가 따뜻하면 빠르고 아니면 디스크로 내려간다
+    기각     **콜드 스타트 가설 기각** — 가장 빠른 재조합(1,319ms)이 콜드 인스턴스(reqIdx=1, sinceInit=1ms)였고, 가장 느린 것(7,498ms)은 따뜻한 인스턴스(reqIdx=17)였다
+    기각2    **region 프록시도 아니다** — 264~280ms(sidoList 140 + sigunguAll 18회 병렬 139), 가장 느린 샘플에서는 top6에도 못 듦. retry/backoff 없음
+    캐시     히트일 때 서버 측 **1.7~3.2ms**(auth 1.3~2.9ms 포함) — **cold 5초는 캐시 lifecycle 탓이 아니다**. inflight-wait는 관측되지 않음
+    로깅     1,500ms 이상일 때만 `console.warn` 한 줄 · **DB INSERT 0**(error_logs에 ADMIN_OPS_SLOW 0건 실측) · 구간명·ms·난수 8자 id만, 세션·사용자·쿼리 원문 없음(테스트로 고정)
+    계측품질  `unaccountedMs` 0.1~0.4ms — 구간이 사실상 전체를 덮었다. 중첩 구간을 이중으로 빼지 않아 음수가 나오지 않는다(테스트)
+    오버헤드  warm wall P50 62ms → **60ms** — 측정 노이즈 안
+    회귀     200 × 10/10 + 재조합 4회 전부 200 · false zero 0 · P2024 0 · BudgetExceeded 0 · 신규 error_logs 0 · 인덱스 9개·migration 22건 불변 · DML 카운터 +0
+    자성     직전 STEP의 **순서가 틀렸음이 확인됐다** — 인덱스를 먼저 넣었고, 그것이 고친 취소 count는 2순위 이하였다. 가장 비싼 것은 내가 "가볍다"고 판단해 손대지 않은 `busanTotal`이었다
+    다음     **`VACUUM (ANALYZE)` 승인 요청** — 세 지표(91%)를 동시에 해결하고 사용자 화면 조회까지 개선. 인덱스·캐시·인프라는 계측이 가리키지 않는다
+
 ### E-JIP OPS CANCEL INDEX APPLY V1 — 인덱스 1개 Production 적용 (승인됨)
 
 승인 범위 외 변경 0 · business DML **0**(누적 카운터 불변으로 증명) · migration 승인된 1건만. 상세: `docs/development/OPS_CANCEL_INDEX_APPLY_V1.md`
