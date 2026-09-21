@@ -15,6 +15,18 @@ test('로컬 호스트는 Production이 아니다', () => {
   }
 });
 
+// PROD_DB_GUARD_PARITY_PATCH_V1 — 예전 목록에 '::1'이 있었지만 URL.hostname은 대괄호째
+// '[::1]'을 돌려주기 때문에 **한 번도 매칭되지 않았다**(로컬 IPv6가 Production 취급).
+// 안전한 쪽 오류였지만 test-db-guard와 판정이 갈라져 있었다. 그 회귀를 여기서 고정한다.
+test('IPv6 localhost도 Production이 아니다 (대괄호 표기가 URL 파서의 실제 동작)', () => {
+  assert.equal(isProductionDatabaseUrl('postgresql://u:p@[::1]:5432/db'), false);
+});
+
+test('모르는 원격 호스트는 Production으로 본다(fail-closed)', () => {
+  assert.equal(isProductionDatabaseUrl('postgresql://u:p@some-unknown-host/db'), true);
+  assert.equal(isProductionDatabaseUrl('postgresql://u:p@db.abcdefgh.supabase.co:5432/postgres'), true);
+});
+
 test('DATABASE_URL이 없거나 파싱 불가하면 안전한 쪽(Production 간주)으로 처리한다', () => {
   assert.equal(isProductionDatabaseUrl(undefined), false, '설정이 없으면 애초에 접속도 못 하므로 차단 대상이 아니다');
   assert.equal(isProductionDatabaseUrl('not a url'), true, '모르는 형식을 개발용으로 낙관하면 안 된다');

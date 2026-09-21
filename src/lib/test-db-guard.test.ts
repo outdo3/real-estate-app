@@ -53,11 +53,40 @@ test('로컬 호스트 allowlist만 비-Production이다(추측 금지, 모르�
   assert.equal(isProductionDatabaseUrl(undefined), false, 'URL이 없으면 연결 자체가 없다');
 });
 
-test('scripts/_prod-db-guard와 같은 호스트 계약을 쓴다(구현이 갈라지지 않게)', () => {
+test('scripts/_prod-db-guard는 이 판정을 **위임**한다(사본을 다시 만들지 않는다)', () => {
   const code = read('scripts/_prod-db-guard.ts');
-  for (const h of NON_PRODUCTION_DB_HOSTS) {
-    assert.ok(code.includes(`'${h}'`), `scripts 가드에 ${h}가 없다 — 두 판정이 갈라진다`);
+  assert.ok(code.includes("from '../src/lib/test-db-guard'"), 'scripts 가드가 판정을 위임하지 않는다');
+  assert.ok(!/const localHosts\s*=/.test(code), 'scripts 가드가 호스트 목록 사본을 다시 들고 있다 — 두 판정이 갈라진다');
+});
+
+test('두 가드가 같은 입력에 같은 답을 낸다(parity)', async () => {
+  const scriptsGuard = await import('../../scripts/_prod-db-guard');
+  const cases = [
+    'postgresql://u:p@localhost:5432/db',
+    'postgresql://u:p@127.0.0.1:5432/db',
+    'postgresql://u:p@[::1]:5432/db',
+    'postgresql://u:p@0.0.0.0:5432/db',
+    'postgresql://u:p@host.docker.internal:5432/db',
+    PROD,
+    'postgresql://u:p@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres',
+    'postgresql://u:p@some-unknown-host/db',
+    'not a url',
+  ];
+  for (const url of cases) {
+    assert.equal(
+      scriptsGuard.isProductionDatabaseUrl(url),
+      isProductionDatabaseUrl(url),
+      `두 가드의 판정이 다르다 (입력 형태: ${url.replace(/\/\/[^@]*@/, '//[redacted]@')})`
+    );
   }
+  assert.equal(scriptsGuard.isProductionDatabaseUrl(undefined), isProductionDatabaseUrl(undefined));
+});
+
+test('IPv6 localhost가 이제 로컬로 판정된다(회귀 방지) — 두 가드 모두', async () => {
+  const scriptsGuard = await import('../../scripts/_prod-db-guard');
+  const ipv6 = 'postgresql://u:p@[::1]:5432/db';
+  assert.equal(isProductionDatabaseUrl(ipv6), false);
+  assert.equal(scriptsGuard.isProductionDatabaseUrl(ipv6), false, '패치 전에는 여기서 true(=Production)였다');
 });
 
 // ── 정책 ─────────────────────────────────────────────────────────────────────

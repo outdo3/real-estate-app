@@ -14,6 +14,8 @@
 //    이 파일을 아예 거치지 않는다. 즉 이 가드는 구조적으로 Cron에 영향을 줄 수 없다.
 //  - 판정 로직은 순수 함수로 분리해 DB/네트워크 없이 테스트한다.
 
+import { isProductionDatabaseUrl } from '../src/lib/test-db-guard';
+
 export type ScriptClass =
   /** A. 운영 스크립트(수동 sync 등) — Production에서 도는 것이 정상. 절대 막지 않는다. */
   | 'OPERATIONAL'
@@ -34,21 +36,17 @@ export interface GuardDecision {
  *
  * 호스트가 로컬이면 Production이 아니라고 본다. 그 외(supabase 등 원격 호스트)는
  * Production으로 **간주**한다 — 모르는 원격 DB를 "아마 개발용"으로 낙관하지 않는다.
+ *
+ * PROD_DB_GUARD_PARITY_PATCH_V1 — 판정은 이제 **한 곳**에서만 한다.
+ * 예전에는 이 파일이 같은 규칙을 자기 손으로 다시 구현했고, 그 사본에 버그가 있었다:
+ * `URL.hostname`은 IPv6를 **대괄호째**(`[::1]`) 돌려주는데 allowlist는 `'::1'`만 비교해
+ * 로컬 IPv6 DB가 Production으로 판정됐다(TEST_DATABASE_SAFETY_GUARD_V1 §6에서 발견).
+ * 안전한 쪽 오류였지만 **두 가드의 판정이 갈라진다**는 것이 진짜 문제였다.
+ *
+ * src/lib/test-db-guard.ts에 위임한다 — import가 하나도 없는 순수 함수 파일이라
+ * (Prisma/Next 의존 없음) 스크립트에서 불러도 부작용이 없다. 기존 import 경로는 그대로다.
  */
-export function isProductionDatabaseUrl(url: string | undefined): boolean {
-  if (!url) return false;
-  let host: string;
-  try {
-    host = new URL(url).hostname.toLowerCase();
-  } catch {
-    // 파싱 불가한 URL을 안전한 쪽(Production으로 간주)으로 처리한다.
-    return true;
-  }
-  if (!host) return true;
-  const localHosts = ['localhost', '127.0.0.1', '::1', 'host.docker.internal', '0.0.0.0'];
-  if (localHosts.includes(host)) return false;
-  return true;
-}
+export { isProductionDatabaseUrl };
 
 /**
  * 이 스크립트가 지금 이 DB를 상대로 실행돼도 되는지 결정한다(순수 함수).
