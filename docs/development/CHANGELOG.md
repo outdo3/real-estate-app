@@ -2,6 +2,16 @@
 
 ## 2026-09-22
 
+### E-JIP SEOUL SALE INCREMENTAL SYNC READINESS AUDIT V1 — 서울 cron만 켤 수 있나 (READ ONLY)
+
+write 0 · cron 변경 0. 상세: `docs/development/SEOUL_SALE_INCREMENTAL_SYNC_READINESS_AUDIT_V1.md`
+
+    판정     MORE_CODE_WORK_REQUIRED — cron 구 목록은 BUSAN_LAWDCD_16 상수라 URL로 서울을 넘길 수 없다
+    함정     enablement.cronSync는 이름과 달리 상세·지도 DB-first 읽기 스위치 — 서울에 켜면 cron은 그대로이고 읽기만 바뀐다
+    안전     서울도 같은 syncOneSaleCell(취소 reconcile·삭제 없음·master 생성 없음) · 일일 4개월 + recheck 3~12개월 창
+    quota    서울 3구 ≤ 42/일(강남 +14) — cron 합계 한도의 3% 미만
+    범위     종로·중구·용산. 강남(202608 한 달 46행)은 전체 이력 backfill 전까지 제외
+
 ### E-JIP SEOUL PHASE B POST-APPLY VERIFY V1 — 종로·용산 적재 검증 PASS (READ ONLY, MOLIT 0)
 
 write 0. 상세: `docs/development/SEOUL_PHASE_B_JONGNO_YONGSAN_DRYRUN_V1.md` §7
