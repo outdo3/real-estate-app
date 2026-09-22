@@ -2,6 +2,16 @@
 
 ## 2026-09-22
 
+### E-JIP SEOUL PHASE B — 종로 + 용산 전체 이력 dry-run (READY_FOR_APPLY_APPROVAL, write 0)
+
+MOLIT 510 호출 · Production write 0. 상세: `docs/development/SEOUL_PHASE_B_JONGNO_YONGSAN_DRYRUN_V1.md`
+
+    결과     종로 11110 **11,587**(취소 190) · 용산 11170 **25,675**(취소 400) · 합계 37,262 · updates/flips/restores/collisions/skips/review 0
+    월       두 구 255/255 READY · paging 누락 0 · EMPTY 6 / 4(2005년 하반기)
+    identity wrong-district 0 · 자연키 중복(구 안·두 구 사이·기존 DB) 0 · master-missing 617/47 · 1,171/66(전부 2024-09 이전)
+    취소     occurrenceIndex gap 0 · 형제 전원 취소 8 / 6은 원천 상태 그대로(기존 행 0 → 래칫 불가)
+    quota    9,249 → 8,740 · checkpoint 두 개 보존(apply 시 MOLIT 0)
+
 ### E-JIP BEHAVIOR ANALYTICS CONNECTION POOL SAFETY V1 — 행동 분석 DB 쿼리 순차화
 
 숫자 변경 0 · schema 0 · write 0. 상세: `docs/development/BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1.md`
