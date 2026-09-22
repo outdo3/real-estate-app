@@ -2,6 +2,17 @@
 
 ## 2026-09-22
 
+### E-JIP SEOUL JUNG-GU FULL HISTORY RETRY V1 — 중구 전체 이력 적재 (승인 범위)
+
+schema 0 · migration 0 · env 0 · master 생성 0 · fallback identity 0 · 서울 노출 0. 상세: `docs/development/SEOUL_JUNGGU_FULL_HISTORY_RETRY_V1.md`
+
+    apply    2026-09-22 11:05 KST · **insert 16,883 / update 0 / delete 0** · MOLIT 0(checkpoint 재사용) · 중구 943 → **17,826**
+    fresh    source 17,826(+3) — historical 16,880 기준선과 동일, +3은 pilot 창의 뒤늦은 신고(07-28 1건, 09-04 2건, 전부 EXACT·비취소)
+    parity   live DB 재계획(raw 캐시, 0 calls): inserts 0 · updates 0 · matched 17,826 · cancelFlips/Restores 0 · DB-only 0
+    월별     255개월 행 수·취소 수 불일치 0 · null/비정규 aptSeq 0 · 자연키 중복 0 · all-canceled 247 불변
+    quota    9,810 → 9,555(dry-run 255) → apply·검증 0 · reserve 2,000 유지
+    발견     known28 still_canceled 2(09-22 04:59 KST cron 이후, 부산) — 이번 적재와 무관, 별도 조사 필요
+
 ### E-JIP HOME SHARE ENTRY V1 — 홈에 공통 공유 시트 진입점
 
 DB 0 · schema 0 · migration 0 · env 0 · 새 공유 로직 0. 상세: `docs/development/HOME_SHARE_ENTRY_V1.md`
