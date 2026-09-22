@@ -10,6 +10,7 @@ MOLIT 2셀 · write 0. 상세: `docs/development/SOURCE_WITHDRAWAL_REAPPEARANCE_
     parity   26380:202609 원천 106 = DB 106 · 26290:202609 139 = 139 · DB-only 0 · 다음 cron 계획 0
     경로     09-22 cron의 registry 보충은 자연키 일치 원천 행이 있어서 생겼다(classifyRow → updateRegistryOnly)
     목록     withdrawal 4 → **2**(950148 미확인·재등장 가능성 높음, 636871). 부재 1회 관찰로 withdrawn 판정하지 않는다
+    V1.1     950148 성일이안시티(26470:202609)도 **REAPPEARED** — 자연키 정확 일치·registry 09-11·셀 93 = 93. 목록 **1건**(636871)
 
 ### E-JIP DEFECT-A 28 POST-CRON RECONTAMINATION AUDIT V1 — 재오염 아님 (READ ONLY)
 
