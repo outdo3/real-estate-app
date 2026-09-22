@@ -161,6 +161,16 @@
   color: var(--primary-color);
 }
 
+/* HOME_SHARE_ENTRY_V1 — actionSlot + 로그인 버튼 묶음. 로그인 버튼이 혼자일 때 갖던
+   margin-left:auto(우측 끝 고정)를 묶음이 그대로 이어받는다. */
+.rightCluster {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .authButtonSkeleton {
   margin-left: auto;
   flex-shrink: 0;

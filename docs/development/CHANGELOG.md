@@ -1,5 +1,20 @@
 # 이집 개발 변경 기록
 
+## 2026-09-22
+
+### E-JIP HOME SHARE ENTRY V1 — 홈에 공통 공유 시트 진입점
+
+DB 0 · schema 0 · migration 0 · env 0 · 새 공유 로직 0. 상세: `docs/development/HOME_SHARE_ENTRY_V1.md`
+
+    위치     홈 헤더 우측, 로그인/프로필 버튼 바로 왼쪽 — 아이콘 하나(lucide Share2, 44×44, 테두리/그림자 없음)
+    재사용   `ShareAction variant="icon"` → `useShareSheet` → `ShareSheet` 그대로. 카카오/클립보드/네이티브 자체 구현 0
+    URL      `url="/"` → 공통 정규화 → 어느 호스트에서도 `https://e-jip.com/`(params 없음 → 쿼리 0)
+    Header   선택 prop `actionSlot` 추가. 주지 않는 페이지는 기존 DOM(`<HeaderAuthButton />`) 그대로
+    모바일   360/375/390 — 헤더 overflow 0 · 로고/공유/프로필 겹침 0 · 헤더 높이 56 불변 · 우측 여백 16px
+    SEO      title/description/canonical/H1/JSON-LD(4)/소개 본문/내부 링크 3개 불변(로컬 SSR ↔ 배포 전 Production 비교)
+    검증     share tests 50/50 · 관련 tests 40/40 · tsc src/ 오류 0(scripts/tmp 기존 오류만) · 변경 파일 eslint 0/0 · build exit 0
+    남은갭   카카오 카드 제목 `이집(E-JIP) | 이집`(공통 접미사 규칙) · 1st-party 공유 이벤트 표면 구분 없음 · 듀얼 카카오 NOT_TESTED
+
 ## 2026-09-21
 
 ### E-JIP PROD VACUUM ANALYZE + AUTOVACUUM AUDIT V1 — 승인된 유지보수 1회

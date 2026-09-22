@@ -25,6 +25,9 @@ interface HeaderProps {
   /** pageTitle 정렬. 기본은 'right'(우측 끝 근처). 로고가 있던 좌측 영역에 타이틀을
    *  두고 싶을 때(예: 단지 상세페이지) 'left'로 전달한다. */
   pageTitleAlign?: 'left' | 'right';
+  /** HOME_SHARE_ENTRY_V1 — 로그인/프로필 버튼 바로 왼쪽에 붙는 보조 액션(홈의 공유 아이콘).
+   *  주지 않는 페이지는 기존 DOM이 그대로 렌더된다. */
+  actionSlot?: React.ReactNode;
 }
 
 // 하단탭바 항목을 <a href>가 아니라 클릭 핸들러로 이동시킨다 — 실제 href가 있는 앵커는
@@ -57,7 +60,7 @@ function NavButton({
   );
 }
 
-const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge, pageTitleAlign = 'right' }: HeaderProps) => {
+const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge, pageTitleAlign = 'right', actionSlot }: HeaderProps) => {
   const pathname = usePathname();
   const router = useRouter();
   // [MAIN UI-B2] 홈은 최상위 화면이라 뒤로가기보다 브랜드 identity가 자연스럽다. 다른
@@ -104,7 +107,17 @@ const Header = ({ searchSlot, pageTitle, hideMobileNav, hideLogo, pageTitleLarge
           ))}
         </ul>
 
-        <HeaderAuthButton />
+        {/* HOME_SHARE_ENTRY_V1 — 보조 액션과 로그인 버튼을 한 묶음으로 우측 끝에 둔다. 묶음이
+            내용 폭만큼만 차지하므로 로그인 버튼의 margin-left:auto는 묶음 안에서 0이 되고,
+            묶음 자체가 그 역할(우측 고정)을 이어받는다. actionSlot이 없으면 예전 그대로다. */}
+        {actionSlot ? (
+          <div className={styles.rightCluster}>
+            {actionSlot}
+            <HeaderAuthButton />
+          </div>
+        ) : (
+          <HeaderAuthButton />
+        )}
       </div>
     </header>
   );

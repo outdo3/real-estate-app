@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Map as MapIcon, Sparkles, BarChart3, Building2, TrendingDown, Award, TrendingUp, Activity, Scale, Coins, Rows3, ChevronDown, ChevronUp } from 'lucide-react';
 import Header from '@/components/Header';
+import ShareAction from '@/components/ShareAction';
 import AdContainer from '@/components/AdContainer';
 import HomeApartmentSearch from '@/components/HomeApartmentSearch';
 import Button from '@/components/ui/Button';
@@ -16,6 +17,13 @@ import {
   visibleRecentItems,
 } from '@/lib/my/recent-rows';
 import styles from './home-client.module.css';
+
+// HOME_SHARE_ENTRY_V1 — 홈 공유는 SHARE UX V2 공통 시트(ShareAction)를 그대로 쓴다.
+// url은 경로 '/'만 준다 — 오리진은 공통 빌더가 언제나 정규 오리진(https://e-jip.com)으로
+// 채우므로 프리뷰/로컬에서 눌러도 localhost나 *.vercel.app, 쿼리가 실리지 않는다.
+const HOME_SHARE_TITLE = '이집(E-JIP)';
+const HOME_SHARE_TEXT =
+  '복잡한 부동산, 이집으로 쉽게.\n부산 아파트 실거래가·거래량·학군·부동산 정보를 한곳에서 확인하세요.';
 
 const QUICK_MENU = [
   // STATISTICS V2 — REGIONAL TRANSACTION FEED §42/§43: 신규 핵심 기능이라
@@ -43,7 +51,17 @@ export default function Home() {
 
   return (
     <div className={styles.page}>
-      <Header />
+      <Header
+        actionSlot={
+          <ShareAction
+            variant="icon"
+            className={styles.headerShareBtn}
+            url="/"
+            title={HOME_SHARE_TITLE}
+            text={HOME_SHARE_TEXT}
+          />
+        }
+      />
       <main className={styles.main}>
         <section className={styles.heroSection}>
           <img src="/brand/mascot/ejipy-default.webp" alt="" className={styles.heroMascot} />

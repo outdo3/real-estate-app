@@ -180,3 +180,40 @@ test('§B 가용성은 렌더 시점이 아니라 시트를 여는 순간에 잰
   assert.ok(/setNativeReady\(/.test(open), '네이티브 가용성을 시트 열 때 재지 않는다');
   assert.ok(/setKakaoReady\(/.test(open), '카카오 가용성을 시트 열 때 재지 않는다');
 });
+
+// ── I. HOME_SHARE_ENTRY_V1 — 홈도 같은 시트를 쓴다 ─────────────────────────────
+
+const HOME = read('src/app/home-client.tsx');
+const HEADER = read('src/components/Header.tsx');
+
+test('§I 홈 공유 URL은 어느 호스트에서 눌러도 https://e-jip.com/ 이다', () => {
+  // 홈은 url="/"만 넘긴다. 오리진은 공통 빌더(withCanonicalOrigin)가 채운다.
+  for (const configured of [
+    undefined,
+    'http://localhost:3000',
+    'https://real-estate-app-park11.vercel.app',
+    'https://real-estate-app-git-feature-park11.vercel.app',
+    'https://e-jip.com',
+  ]) {
+    const url = withCanonicalOrigin('/', resolveCanonicalShareOrigin(configured));
+    assert.equal(url, 'https://e-jip.com/', `${configured}에서 ${url}`);
+  }
+});
+
+test('§I 홈은 공통 ShareAction을 재사용한다 — 자체 공유 구현이 없다', () => {
+  const code = stripComments(HOME);
+  assert.ok(/import ShareAction from '@\/components\/ShareAction';/.test(code), '공통 ShareAction을 쓰지 않는다');
+  assert.ok(/<ShareAction[\s\S]*?url="\/"/.test(code), '홈 공유 URL이 "/"가 아니다');
+  // 쿼리/디버그 파라미터를 싣지 않는다 — params를 넘기면 현재 주소창 쿼리가 따라간다.
+  const block = code.slice(code.indexOf('<ShareAction'), code.indexOf('/>', code.indexOf('<ShareAction')));
+  assert.ok(!/params=/.test(block), '홈 공유에 params가 실린다');
+  for (const banned of ['navigator.share', 'navigator.clipboard', 'Kakao', 'sendKakaoShare', 'useSharePage', 'useShareSheet']) {
+    assert.ok(!code.includes(banned), `홈에 별도 공유 구현(${banned})이 있다`);
+  }
+});
+
+test('§I Header의 actionSlot은 선택이다 — 넘기지 않는 페이지는 예전 그대로 로그인 버튼만 그린다', () => {
+  const code = stripComments(HEADER);
+  assert.ok(/actionSlot\?: React\.ReactNode;/.test(code));
+  assert.ok(/\{actionSlot \? \([\s\S]*?\) : \(\s*<HeaderAuthButton \/>\s*\)\}/.test(code), 'actionSlot이 없을 때의 분기가 예전과 다르다');
+});
