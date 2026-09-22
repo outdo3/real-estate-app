@@ -34,3 +34,17 @@ live는 그대로(HTTP 200 · 정적 청크 fingerprint `afeb1bf9d4e9` 동일 ·
 "우리 규칙이 건너뜀"과 "Vercel이 push를 받지 못함"을 이 증거로는 구분할 수 없다. 결과(새 빌드 없음·live 불변)는 의도대로다.
 
 **Positive skip verification attempt #2** — 이 문단을 추가한 커밋으로 문서 전용 push를 다시 보내고, push 직후부터 Vercel 배포 목록·Activity·GitHub 상태를 함께 추적한다.
+
+## SKIP 확정 — `49eaf01` (VERCEL_DOCS_ONLY_BUILD_SKIP_POSITIVE_PROOF_V1)
+
+push 2026-09-22 08:30:04 UTC. 로컬 판정 SKIP(exit 0, 직전 성공 배포 `4f3687e` 대비 docs 1개).
+
+- **GitHub 상태**(push 후 ~26초, 08:30:31 UTC): `Vercel` = `success` / **"Canceled by Ignored Build Step"** — 상태값은 `success`이고 설명이 취소다.
+- **Vercel Activity**: "deployed … (49eaf01 in main) to production" — push를 받았다. 이 커밋에 대한 alias 할당 이벤트는 **없다**.
+- **Vercel 배포**: `CANCELED`, 4초, 도메인은 배포 URL과 git 브랜치 URL뿐(`e-jip.com` 없음). **기본 목록에는 보이지 않고 `?status=canceled`로만 보인다.**
+- **빌드 로그 전체 8줄**: `Running "bash scripts/vercel-ignore-build.sh"` → `[ignore-build] SKIP — docs-only change (1 files)` →
+  `The deployment was canceled because the Ignored Build Step command ret[urned 0]` — 의존성 설치·`vercel build`·함수 생성 없음.
+- **live**: HTTP 200 · 정적 청크 fingerprint `afeb1bf9d4e9` 동일 · Production Current는 계속 `4f3687e`.
+
+**판정: SKIP_PROVEN.** 첫 시험 `e77392f`는 `?status=canceled` 목록에도 없고 GitHub 상태도 없었다 — 그 push는 Vercel에 전달되지 않은 것으로 보인다(`9ba50e4`와 같은 모양, 규칙 문제 아님).
+
