@@ -2,6 +2,15 @@
 
 ## 2026-09-22
 
+### E-JIP ANALYTICS SESSION ID INTEGRITY AUDIT V1 — "319 / 321"은 탭 세션 + BOT_LIKE (READ ONLY)
+
+write 0 · schema 0 · UA 수집 0. 상세: `docs/development/ANALYTICS_SESSION_ID_INTEGRITY_AUDIT_V1.md`
+
+    판정     TRACKING_MODEL_LIMITATION · sessionId 과생성 버그 없음 · 319/321은 **09-21 KST** 값(09-22는 1/1)
+    모델     sessionStorage `egip_session_id` = 탭 단위. 새로고침·SPA·뒤로 SAME / 새 탭(noopener·주소)·새 창 NEW (실측)
+    09-21    1-PV 317(99.4%) · 로그인 0 · URL 187개 · 02~15시 시간당 22~30 평탄 · 간격 중앙값 130초 · 30초 넘긴 탭 0 · 상호작용 이벤트 0
+    결론     렌더링 크롤러 모양(BOT_LIKE) — UA가 없어 확정하지 않음. 노출형 이벤트(finance_fit_start 등)도 함께 부풀었다
+
 ### E-JIP SOURCE WITHDRAWAL REAPPEARANCE CHECK V1 — withdrawn 2건 원천 재등장 (READ ONLY)
 
 MOLIT 2셀 · write 0. 상세: `docs/development/SOURCE_WITHDRAWAL_REAPPEARANCE_CHECK_V1.md`
