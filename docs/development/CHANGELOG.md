@@ -2,6 +2,15 @@
 
 ## 2026-09-22
 
+### E-JIP VERCEL RESOURCE PRESSURE AUDIT V1 — 초과는 Functions Storage 하나, 원인은 배포 빈도 (READ ONLY)
+
+설정·요금제·삭제 0. 상세: `docs/development/VERCEL_RESOURCE_PRESSURE_AUDIT_V1.md`
+
+    판정     PLAN_REVIEW_NEEDED — Functions Storage 18.71/10 GB(E-JIP 16.72) 초과, CPU 3h8m/4h(78%), 나머지 한도 여유
+    원인     46일 670배포(최근 7일 132, 오늘 17) × 배포당 함수 번들 — 보존 정책은 이미 오래된 배포를 지우는 중
+    CPU      사용자 SSR(/apt·/stats)이 최대 · 부산 cron ~12초/일 · 서울 cron ~2초/일(한도의 ~0.4%)
+    위험     대시보드 문구는 "Exceeded free resources"뿐 — 오늘도 배포·함수·cron 정상. 향후 조치는 미표시(단정 안 함)
+
 ### E-JIP SEOUL SALE INCREMENTAL CRON ENABLE V1 — 서울 3구 매매 증분 cron 등록 (승인)
 
 schema 0 · env 0 · cronSync 0 · 서울 공개 0 · 강남 제외. 상세: `docs/development/SEOUL_SALE_INCREMENTAL_CRON_ENABLE_V1.md`
