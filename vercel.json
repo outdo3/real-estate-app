@@ -12,6 +12,14 @@
     {
       "path": "/api/cron/sale-recheck?mode=apply",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/sale-sync?mode=apply&scope=seoul",
+      "schedule": "15 19 * * *"
+    },
+    {
+      "path": "/api/cron/sale-recheck?mode=apply&scope=seoul",
+      "schedule": "15 23 * * *"
     }
   ]
 }

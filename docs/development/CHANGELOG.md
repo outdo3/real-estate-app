@@ -2,6 +2,14 @@
 
 ## 2026-09-22
 
+### E-JIP SEOUL SALE INCREMENTAL CRON ENABLE V1 — 서울 3구 매매 증분 cron 등록 (승인)
+
+schema 0 · env 0 · cronSync 0 · 서울 공개 0 · 강남 제외. 상세: `docs/development/SEOUL_SALE_INCREMENTAL_CRON_ENABLE_V1.md`
+
+    cron     vercel.json 3 → 5: sale-sync scope=seoul 04:15 KST(15 19 * * *) · sale-recheck scope=seoul 08:15 KST(15 23 * * *). 부산 3개 그대로
+    예상     매매 12호출(쓰기 0~소량) · recheck ≤ 30호출 · 서울 ≤ 42/일
+    검증     scope+cron 13/13 · 관련 회귀 502/502 · tsc src/ 0 · build 0 · 첫 실행 확인 계획 문서화
+
 ### E-JIP SEOUL SALE INCREMENTAL SYNC PREP V1 — 매매 cron에 고정 서울 scope 추가 (cron 등록 전)
 
 vercel.json 0 · write 0 · cronSync 0. 상세: `docs/development/SEOUL_SALE_INCREMENTAL_SYNC_PREP_V1.md`

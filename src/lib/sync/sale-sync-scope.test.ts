@@ -6,6 +6,7 @@ import { SEOUL_SALE_SYNC_LAWDCDS, resolveSaleSyncScope } from './sale-sync-scope
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
 import { getRegionByLawdCd } from '../region/registry';
 import { getSidoEnablement } from '../region/enablement';
+import { describeDailyUtcCronInKst, findCronForRoute } from '../cron-schedule';
 
 // SEOUL_SALE_INCREMENTAL_SYNC_PREP_V1 — 매매 cron 범위(scope) 계약. 쓰기 0 · DB 0.
 
@@ -103,3 +104,43 @@ test('§H cronSync는 그대로 — 서울은 여전히 비공개이고 scope �
   assert.ok(!/enablement/.test(stripComments(read('src/lib/sync/sale-sync-scope.ts'))), 'scope가 enablement를 읽는다');
   assert.ok(!/cronSync/.test(stripComments(SALE_ROUTE) + stripComments(RECHECK_ROUTE)));
 });
+
+// ── SEOUL_SALE_INCREMENTAL_CRON_ENABLE_V1 — 승인된 cron 집합 고정 ─────────────────────────
+
+const CRONS = (JSON.parse(read('vercel.json')).crons as { path: string; schedule: string }[]);
+
+test('cron: 부산 3개는 그대로 + 승인된 서울 2개만 추가 = 5개, 중복 없음', () => {
+  assert.deepEqual(CRONS, [
+    { path: '/api/cron/sale-sync?mode=apply', schedule: '0 19 * * *' },
+    { path: '/api/cron/rent-sync?mode=apply', schedule: '0 21 * * *' },
+    { path: '/api/cron/sale-recheck?mode=apply', schedule: '0 23 * * *' },
+    { path: '/api/cron/sale-sync?mode=apply&scope=seoul', schedule: '15 19 * * *' },
+    { path: '/api/cron/sale-recheck?mode=apply&scope=seoul', schedule: '15 23 * * *' },
+  ]);
+  assert.equal(new Set(CRONS.map((c) => c.path)).size, CRONS.length);
+});
+
+test('cron: 서울 호출의 scope는 허용 목록으로 해석되고 강남·임의 구를 싣지 않는다', () => {
+  for (const c of CRONS) {
+    const q = new URL(`https://e-jip.com${c.path}`).searchParams;
+    assert.ok(!q.has('lawdCd') && !q.has('lawdCds'), `${c.path}에 구 코드가 실렸다`);
+    const r = resolveSaleSyncScope(q.get('scope'));
+    assert.ok(r.ok, `${c.path}의 scope가 거부된다`);
+  }
+  assert.ok(!CRONS.some((c) => c.path.includes('11680')));
+});
+
+test('cron: 서울 매매 04:15 KST · 서울 recheck 08:15 KST (부산보다 15분 뒤, 같은 호출에 섞이지 않음)', () => {
+  const kst = (path: string) => describeDailyUtcCronInKst(CRONS.find((c) => c.path === path)!.schedule);
+  assert.equal(kst('/api/cron/sale-sync?mode=apply&scope=seoul'), '매일 04:15 KST');
+  assert.equal(kst('/api/cron/sale-recheck?mode=apply&scope=seoul'), '매일 08:15 KST');
+  assert.equal(kst('/api/cron/sale-sync?mode=apply'), '매일 04:00 KST');
+  assert.equal(kst('/api/cron/sale-recheck?mode=apply'), '매일 08:00 KST');
+});
+
+test('cron: /admin/ops의 스케줄 표시는 계속 부산 호출을 가리킨다(서울 항목은 뒤에 있다)', () => {
+  // findCronForRoute는 경로(쿼리 제외)로 **첫** 항목을 고른다 — 서울 항목을 앞에 넣으면 부산 표시가 바뀐다.
+  assert.equal(findCronForRoute(CRONS, '/api/cron/sale-sync').scheduleUtc, '0 19 * * *');
+  assert.equal(findCronForRoute(CRONS, '/api/cron/sale-recheck').scheduleUtc, '0 23 * * *');
+});
+
