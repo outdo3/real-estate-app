@@ -6,9 +6,11 @@ import { ANALYTICS_EVENT_NAMES } from '../analytics/events';
 import { startOfKstDay, startOfKstDaysAgo } from '../kst-day';
 import {
   AUTO_EVENT_NAMES,
+  DECISION_ACTION_EVENT_NAMES,
   EVENT_ENGAGEMENT,
   INTERACTION_EVENT_NAMES,
   INTERACTION_EVENT_URLS,
+  countDecisionSessionsInRows,
   countEngagedSessionsInRows,
   engagedRate,
   isEngagedSession,
@@ -148,3 +150,41 @@ test('참여율 — 분모 0·확인 불가는 null, 그 외 engaged/visits', ()
   assert.equal(engagedRate(null, 319), null);
   assert.equal(engagedRate(2, 319), 2 / 319);
 });
+
+// ── BEHAVIOR_FUNNEL_AUTO_EVENT_CLEANUP_V1 — 퍼널 3단계 "비교 / 관심 / 자금계산" ─────────────
+
+test('퍼널 §A finance_fit_start만 → 결정 세션 0 (페이지를 연 것뿐)', () => {
+  assert.equal(countDecisionSessionsInRows(rows('a', ['/finance-fit', E('finance_fit_start')])), 0);
+});
+
+test('퍼널 §B finance_fit_calculate → 1', () => {
+  assert.equal(countDecisionSessionsInRows(rows('b', ['/finance-fit', E('finance_fit_start'), E('finance_fit_calculate')])), 1);
+});
+
+test('퍼널 §C compare_start → 1', () => {
+  assert.equal(countDecisionSessionsInRows(rows('c', ['/stats/compare', E('compare_start')])), 1);
+});
+
+test('퍼널 §D favorite_add → 1', () => {
+  assert.equal(countDecisionSessionsInRows(rows('d', ['/apt/A', E('favorite_add')])), 1);
+});
+
+test('퍼널 §E 한 세션의 결정 이벤트 여러 건 → 1 (단계는 distinct session으로 센다)', () => {
+  const r = [...rows('e', ['/apt/A', E('favorite_add'), E('compare_start'), E('finance_fit_calculate'), E('favorite_add')]), ...rows('e2', [E('compare_start')])];
+  assert.equal(countDecisionSessionsInRows(r), 2);
+});
+
+test('퍼널 결정 이벤트는 전부 INTERACTION이다 — 자동 이벤트가 들어갈 수 없다', () => {
+  for (const n of DECISION_ACTION_EVENT_NAMES) assert.equal(EVENT_ENGAGEMENT[n], 'INTERACTION', `${n}이 자동 이벤트다`);
+  assert.ok(!(DECISION_ACTION_EVENT_NAMES as readonly string[]).includes('finance_fit_start'));
+});
+
+test('퍼널 SQL이 결정 이벤트 목록을 쓰고 자동 이벤트를 적지 않는다', () => {
+  const query = read('src/lib/admin-analytics/query.ts');
+  const start = query.indexOf('async function fetchCombinedCounts');
+  const combined = query.slice(start, query.indexOf('export async function countEngagedSessions'));
+  const decision = combined.slice(combined.indexOf('COUNT(DISTINCT session_id) FILTER (', combined.indexOf('detail_sessions')), combined.indexOf('as decision_sessions'));
+  assert.ok(/Prisma\.join\(\[\.\.\.DECISION_ACTION_EVENT_URLS\]\)/.test(decision), '결정 단계가 공통 목록을 쓰지 않는다');
+  for (const auto of AUTO_EVENT_NAMES) assert.ok(!decision.includes(auto), `결정 단계 SQL에 자동 이벤트 ${auto}가 있다`);
+});
+

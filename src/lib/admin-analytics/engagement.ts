@@ -89,6 +89,25 @@ export const INTERACTION_EVENT_URLS: readonly string[] = INTERACTION_EVENT_NAMES
 
 export const ENGAGED_MIN_PAGE_VIEWS = 2;
 
+/**
+ * BEHAVIOR_FUNNEL_AUTO_EVENT_CLEANUP_V1 — 행동 분석 퍼널 3단계 "비교 / 관심 / 자금계산"의 이벤트.
+ * 라벨의 세 동작에 하나씩 대응한다: 비교 시작 · 관심단지 추가 · 자금 **계산 실행**.
+ *
+ * 예전에는 자금계산 자리에 `finance_fit_start`가 있었다 — `/finance-fit` 페이지 로드 시 자동 발생하는
+ * 이벤트라(위 분류표 AUTO) 페이지를 열기만 해도 "결정 행동"으로 셌다. 2026-09-21 크롤러가
+ * /finance-fit을 12번 연 것이 최근 7일 3단계 12 전부였다(운영 실측, 교체 후 0).
+ * 이 목록에는 INTERACTION만 들어갈 수 있다(engagement.test.ts가 분류표로 검사한다).
+ */
+export const DECISION_ACTION_EVENT_NAMES = ['compare_start', 'favorite_add', 'finance_fit_calculate'] as const satisfies readonly AnalyticsEventName[];
+
+export const DECISION_ACTION_EVENT_URLS: readonly string[] = DECISION_ACTION_EVENT_NAMES.map((name) => `${ANALYTICS_EVENT_URL_PREFIX}${name}`);
+
+/** 퍼널 3단계의 행 단위 참조 구현 — SQL과 같은 의미(결정 이벤트가 1건이라도 있는 distinct session). */
+export function countDecisionSessionsInRows(rows: readonly { sessionId: string; url: string }[]): number {
+  const urls = new Set(DECISION_ACTION_EVENT_URLS);
+  return new Set(rows.filter((r) => urls.has(r.url.split('?')[0])).map((r) => r.sessionId)).size;
+}
+
 export function isEngagedSession(s: { pageViews: number; interactionEvents: number }): boolean {
   if (s.pageViews < 1) return false;
   return s.pageViews >= ENGAGED_MIN_PAGE_VIEWS || s.interactionEvents >= 1;

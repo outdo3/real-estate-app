@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { NEXT_ACTION_TYPES, type NextActionType } from '@/lib/decision-journey/types';
 import { startOfKstDay, startOfKstDaysAgo } from '@/lib/kst-day';
-import { ENGAGED_MIN_PAGE_VIEWS, INTERACTION_EVENT_URLS } from './engagement';
+import { DECISION_ACTION_EVENT_URLS, ENGAGED_MIN_PAGE_VIEWS, INTERACTION_EVENT_URLS } from './engagement';
 import type {
   AnalyticsRange,
   BehaviorKpi,
@@ -103,10 +103,10 @@ async function fetchCombinedCounts(since: Date): Promise<CombinedCounts> {
       COUNT(*) FILTER (WHERE url LIKE '/__event__/share_success%') as share_successes,
       COUNT(DISTINCT session_id) FILTER (WHERE url NOT LIKE '/__event__/%') as entry_sessions,
       COUNT(DISTINCT session_id) FILTER (WHERE url LIKE '/apt/%') as detail_sessions,
+      -- BEHAVIOR_FUNNEL_AUTO_EVENT_CLEANUP_V1 — 결정 행동은 engagement.ts의 DECISION_ACTION_EVENT_NAMES
+      -- (비교 시작·관심 추가·자금 계산 실행). 자동 발생하는 finance_fit_start는 더 이상 세지 않는다.
       COUNT(DISTINCT session_id) FILTER (
-        WHERE url LIKE '/__event__/compare_start%'
-           OR url LIKE '/__event__/favorite_add%'
-           OR url LIKE '/__event__/finance_fit_start%'
+        WHERE split_part(url, '?', 1) IN (${Prisma.join([...DECISION_ACTION_EVENT_URLS])})
       ) as decision_sessions
     FROM page_views
     WHERE created_at >= ${since}

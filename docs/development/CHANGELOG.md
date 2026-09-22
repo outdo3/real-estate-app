@@ -2,6 +2,14 @@
 
 ## 2026-09-22
 
+### E-JIP BEHAVIOR FUNNEL AUTO-EVENT CLEANUP V1 — 퍼널 "비교 / 관심 / 자금계산"에서 자동 이벤트 제거 (쿼리만)
+
+schema 0 · 새 수집 0 · write 0. 상세: `docs/development/BEHAVIOR_FUNNEL_AUTO_EVENT_CLEANUP_V1.md`
+
+    변경     decision_sessions: finance_fit_start(페이지 로드 자동) → finance_fit_calculate(계산 버튼). compare_start·favorite_add 유지
+    실측     7일 3단계 12 → **0**(12 전부 09-21 크롤러의 /finance-fit 로드) · 30일 16 → 4 · 방문·참여·PV·1~2단계 불변
+    감사     다른 단계·KPI에 자동 이벤트 없음. finance_fit_starts는 계산만 되고 쓰이지 않는 값(그대로 둠)
+
 ### E-JIP ADMIN ENGAGED SESSIONS V1 — 관리자 두 화면에 "참여 세션" 병기 (쿼리만)
 
 schema 0 · 새 수집 0 · UA 0 · bot filter 0. 상세: `docs/development/ADMIN_ENGAGED_SESSIONS_V1.md`
