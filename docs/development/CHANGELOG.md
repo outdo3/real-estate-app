@@ -11,6 +11,7 @@ MOLIT 2셀 · write 0. 상세: `docs/development/SOURCE_WITHDRAWAL_REAPPEARANCE_
     경로     09-22 cron의 registry 보충은 자연키 일치 원천 행이 있어서 생겼다(classifyRow → updateRegistryOnly)
     목록     withdrawal 4 → **2**(950148 미확인·재등장 가능성 높음, 636871). 부재 1회 관찰로 withdrawn 판정하지 않는다
     V1.1     950148 성일이안시티(26470:202609)도 **REAPPEARED** — 자연키 정확 일치·registry 09-11·셀 93 = 93. 목록 **1건**(636871)
+    FINAL    636871 일동지에닌(26380:202601) **STILL_MISSING** — 원천 형제 1(active·등기 04-02) vs DB 2(+canceled 02-26). 셀 273 vs 274, DB-only 이 행뿐. 09-21·09-22 두 번 부재 → 유일한 후보. 그대로 둠(쓰기 0)
 
 ### E-JIP DEFECT-A 28 POST-CRON RECONTAMINATION AUDIT V1 — 재오염 아님 (READ ONLY)
 
