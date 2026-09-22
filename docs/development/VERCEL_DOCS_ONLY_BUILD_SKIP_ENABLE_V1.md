@@ -21,4 +21,7 @@
 
 ## Production 확인
 
-(첫 배포와 문서 전용 배포 확인 결과를 이어서 기록한다.)
+**첫 배포(`4f3687e`, vercel.json·스크립트 변경)**: 로컬 판정 BUILD(직전 성공 배포 `9b00a44` 대비 `scripts/vercel-ignore-build.sh` 변경) → Vercel Production 배포 완료(2026-09-22 08:13:57 UTC 생성, "Deployment has completed").
+배포 후 live: HTTP 200 · 정적 청크 15개(fingerprint `afeb1bf9d4e9`) · sitemap 138 URL · 서울 0.
+
+**문서 전용 배포**: 이 문단을 추가한 커밋이 그 시험이다 — 결과는 아래에 이어서 적는다.
