@@ -24,4 +24,11 @@
 **첫 배포(`4f3687e`, vercel.json·스크립트 변경)**: 로컬 판정 BUILD(직전 성공 배포 `9b00a44` 대비 `scripts/vercel-ignore-build.sh` 변경) → Vercel Production 배포 완료(2026-09-22 08:13:57 UTC 생성, "Deployment has completed").
 배포 후 live: HTTP 200 · 정적 청크 15개(fingerprint `afeb1bf9d4e9`) · sitemap 138 URL · 서울 0.
 
-**문서 전용 배포**: 이 문단을 추가한 커밋이 그 시험이다 — 결과는 아래에 이어서 적는다.
+**스크립트 실행 증거(첫 배포 빌드 로그, KST)**: `17:13:11.719 Running "bash scripts/vercel-ignore-build.sh"` →
+`17:13:11.811 [ignore-build] BUILD — non-docs path changed: scripts/vercel-ignore-build.sh` → `17:13:12.467 Running "vercel build"`. Vercel이 스크립트를 실제로 실행하고, 코드 push를 BUILD로 판정했다.
+
+**문서 전용 시험(`e77392f`, docs/ 한 파일)**: 로컬 판정 SKIP(직전 성공 배포 `4f3687e` 대비 문서 1개).
+push 후 8분 이상 — Vercel 배포 목록(상태 필터 Canceled·Error 포함)·프로젝트 Activity·GitHub 상태/check-run **어디에도 기록 없음**.
+live는 그대로(HTTP 200 · 정적 청크 fingerprint `afeb1bf9d4e9` 동일 · sitemap 서울 0) · Production은 계속 `4f3687e`(Current).
+**판정: 미확정.** 문서상 무시된 빌드는 `CANCELED` 배포로 남아야 하는데 그런 기록이 없다. 같은 날 `9ba50e4` push도 Vercel에 아무 기록을 남기지 않은 적이 있어,
+"우리 규칙이 건너뜀"과 "Vercel이 push를 받지 못함"을 이 증거로는 구분할 수 없다. 결과(새 빌드 없음·live 불변)는 의도대로다.
