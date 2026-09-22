@@ -285,3 +285,17 @@
 .kpiTile {
   overflow-wrap: anywhere;
 }
+
+/* BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1 — 부분 실패 알림. 대시보드 .degradedBanner와 같은 시각 언어. */
+.degradedBanner {
+  padding: 0.7rem 0.9rem;
+  margin-top: 0.75rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--bg-color);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

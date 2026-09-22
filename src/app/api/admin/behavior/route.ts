@@ -30,10 +30,19 @@ export async function GET(request: Request) {
     //
     // 7일/30일은 더 무거운 집계이고 분 단위로 의미가 바뀌지 않으므로 기존 5분
     // 캐시 관례를 그대로 유지한다(관리자 전용 화면 · 초단위 polling 추가 없음).
+    // BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1 — 지표 한 조각만 실패하면 그 칸만 "확인 불가"가 되고
+    // 전용 category로 남긴다(대시보드의 ADMIN_DASHBOARD_METRIC_FAILURE와 같은 역할).
+    const onMetricError = (metricKey: string, e: unknown) => {
+      console.error(`[admin/behavior] 지표 조회 실패: ${metricKey}`, e);
+      logAdminFailure({ category: 'ADMIN_BEHAVIOR_METRIC_FAILURE', endpoint: '/api/admin/behavior', error: e, metricKey });
+    };
     const data =
       range === 'today'
-        ? await getBehaviorSummary(range)
-        : await getOrSetCache(`admin-behavior:${range}`, CACHE_TTL_MS, () => getBehaviorSummary(range));
+        ? await getBehaviorSummary(range, { onMetricError })
+        : await getOrSetCache(`admin-behavior:${range}`, CACHE_TTL_MS, () => getBehaviorSummary(range, { onMetricError }), {
+            // 일부가 빠진 결과를 5분간 붙잡아 두지 않는다 — 다음 요청이 다시 시도한다(정상 결과의 TTL은 그대로).
+            shouldCache: (v) => v.degradedMetrics.length === 0,
+          });
 
     return NextResponse.json({ success: true, data });
   } catch (error) {

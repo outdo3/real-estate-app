@@ -2,6 +2,16 @@
 
 ## 2026-09-22
 
+### E-JIP BEHAVIOR ANALYTICS CONNECTION POOL SAFETY V1 — 행동 분석 DB 쿼리 순차화
+
+숫자 변경 0 · schema 0 · write 0. 상세: `docs/development/BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1.md`
+
+    변경     getBehaviorSummary의 Promise.all(5) → 6개 순차 await(admin-ops-runner isolate 재사용). 핵심 집계 실패는 예전처럼 전체 실패
+    부분실패  참여·검색·인기 단지·관심 지역·다음 행동은 칸만 "확인 불가" + degradedMetrics + ADMIN_BEHAVIOR_METRIC_FAILURE. 부분 실패 결과는 캐시 안 함
+    parity   옛 구현 ↔ 새 구현 Production 대조 오늘/7일/30일 **delta 0**
+    재현     limit=1·timeout 2s·1.9s 점유: Promise.all 2/6 P2024 → 순차 0/6 · 3s 점유: 6/6 → 1/6
+    검증     69/69 tests · tsc src/ 0 · eslint 0 · build 0
+
 ### E-JIP BEHAVIOR FUNNEL AUTO-EVENT CLEANUP V1 — 퍼널 "비교 / 관심 / 자금계산"에서 자동 이벤트 제거 (쿼리만)
 
 schema 0 · 새 수집 0 · write 0. 상세: `docs/development/BEHAVIOR_FUNNEL_AUTO_EVENT_CLEANUP_V1.md`

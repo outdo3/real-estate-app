@@ -29,8 +29,9 @@ function formatPercent(value: number | null): string {
   return `${(value * 100).toFixed(0)}%`;
 }
 
-function num(n: number): string {
-  return n.toLocaleString('ko-KR');
+// BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1 — 조회에 실패한 지표(null)는 0이 아니라 "확인 불가"로 그린다.
+function num(n: number | null): string {
+  return n === null ? '확인 불가' : n.toLocaleString('ko-KR');
 }
 
 // ADMIN_USER_BEHAVIOR_ANALYTICS_V1_PHASE2 §11 — distinct sessionId를 "순 방문자"라고
@@ -89,6 +90,12 @@ export default function AdminBehaviorPage() {
                 <br />
                 {periodContract(d.range)} · 관리자 대시보드와 같은 기준입니다.
               </p>
+
+              {d.degradedMetrics.length > 0 && (
+                <div className={styles.degradedBanner} role="status">
+                  일부 지표를 불러오지 못했습니다: {d.degradedMetrics.join(', ')} — 해당 칸은 &quot;확인 불가&quot;로 표시합니다.
+                </div>
+              )}
 
               <div className={styles.kpiGrid}>
                 <div className={styles.kpiTile} title="브라우저 탭 세션 기준입니다. 새 탭·새 창마다 따로 세며, 사람 수가 아닙니다.">
@@ -153,7 +160,9 @@ export default function AdminBehaviorPage() {
 
                 <div className={styles.card}>
                   <div className={styles.cardTitle}>인기 단지 TOP 10</div>
-                  {d.popularApartments.length === 0 ? (
+                  {d.popularApartments === null ? (
+                    <div className={styles.noData}>확인 불가</div>
+                  ) : d.popularApartments.length === 0 ? (
                     <div className={styles.noData}>데이터 없음</div>
                   ) : (
                     <ul className={styles.rankList}>
@@ -171,7 +180,9 @@ export default function AdminBehaviorPage() {
 
                 <div className={styles.card}>
                   <div className={styles.cardTitle}>관심 지역 TOP 10 (상세조회 기준)</div>
-                  {d.popularRegions.length === 0 ? (
+                  {d.popularRegions === null ? (
+                    <div className={styles.noData}>확인 불가</div>
+                  ) : d.popularRegions.length === 0 ? (
                     <div className={styles.noData}>데이터 없음</div>
                   ) : (
                     <ul className={styles.rankList}>
@@ -203,7 +214,9 @@ export default function AdminBehaviorPage() {
 
                 <div className={styles.card}>
                   <div className={styles.cardTitle}>다음 행동 유형 (상세 → ?)</div>
-                  {d.nextActionBreakdown.length === 0 ? (
+                  {d.nextActionBreakdown === null ? (
+                    <div className={styles.noData}>확인 불가</div>
+                  ) : d.nextActionBreakdown.length === 0 ? (
                     <div className={styles.noData}>데이터 없음</div>
                   ) : (
                     <ul className={styles.rankList}>

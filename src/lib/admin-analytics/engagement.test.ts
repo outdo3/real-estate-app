@@ -120,7 +120,8 @@ test('§G 두 화면이 같은 countEngagedSessions 하나를 쓴다', () => {
   const query = read('src/lib/admin-analytics/query.ts');
   assert.ok(/import \{ countEngagedSessions \} from '@\/lib\/admin-analytics\/query';/.test(route));
   assert.ok(/countEngagedSessions\(today\)/.test(route), '대시보드가 오늘 KST 시작으로 세지 않는다');
-  assert.ok(/const engagedSessions = await countEngagedSessions\(since\);/.test(query), '행동 분석이 같은 함수를 쓰지 않는다');
+  // BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1 — 같은 함수를 isolate()로 감싸 순차 호출한다.
+  assert.ok(/await m\('engagedSessions', \(\) => countEngagedSessions\(since\)\)/.test(query), '행동 분석이 같은 함수를 쓰지 않는다');
   // SQL은 분류 목록과 최소 PV 상수를 **가져다 쓴다** — 이벤트 이름을 SQL에 다시 적지 않는다.
   const sql = query.slice(query.indexOf('export async function countEngagedSessions'), query.indexOf('async function fetchPopularApartments'));
   assert.ok(/Prisma\.join\(\[\.\.\.INTERACTION_EVENT_URLS\]\)/.test(sql));

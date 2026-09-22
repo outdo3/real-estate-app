@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { NEXT_ACTION_TYPES, type NextActionType } from '@/lib/decision-journey/types';
 import { startOfKstDay, startOfKstDaysAgo } from '@/lib/kst-day';
+import { isolate, unavailableLabels, valueOf } from '@/lib/admin-ops-runner';
 import { DECISION_ACTION_EVENT_URLS, ENGAGED_MIN_PAGE_VIEWS, INTERACTION_EVENT_URLS } from './engagement';
 import type {
   AnalyticsRange,
@@ -190,19 +191,49 @@ async function fetchNextActionBreakdown(since: Date): Promise<NextActionBreakdow
   });
 }
 
-export async function getBehaviorSummary(range: AnalyticsRange): Promise<BehaviorSummary> {
-  const since = rangeStart(range);
+export interface BehaviorSummaryOptions {
+  /** 한 지표만 실패했을 때 호출된다(라우트가 ADMIN_BEHAVIOR_METRIC_FAILURE로 기록). */
+  onMetricError?: (key: string, error: unknown) => void;
+}
 
-  const [counts, searchCount, popularApartments, popularRegions, nextActionBreakdown] = await Promise.all([
-    fetchCombinedCounts(since),
-    prisma.searchLog.count({ where: { createdAt: { gte: since } } }),
-    fetchPopularApartments(since),
-    fetchPopularRegions(since),
-    fetchNextActionBreakdown(since),
+/**
+ * BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1 — DB 쿼리를 **하나씩** await한다.
+ *
+ * 예전에는 5개를 `Promise.all`로 동시에 띄웠다. connection_limit=1에서는 5개의 pool_timeout
+ * 타이머가 t=0에 함께 돌기 시작해, 다른 라우트(/api/admin/ops 등)가 connection을 잡고 있으면
+ * 줄 뒤쪽 쿼리가 실행 시간과 무관하게 P2024로 죽는다(ops·dashboard에서 운영 실측으로 확정).
+ * 순차 실행은 자기 차례에 비로소 connection을 요청한다. ops·dashboard와 같은 `isolate` 헬퍼를 쓴다.
+ *
+ * 부분 실패 계약:
+ *   - 종합 집계(fetchCombinedCounts)는 KPI·퍼널·기능 사용량·공유 통계가 전부 여기서 나온다.
+ *     이게 없으면 정직하게 보여줄 KPI가 없으므로 **예전처럼 전체 실패**(라우트가 500 + ADMIN_BEHAVIOR_FAILURE).
+ *   - 나머지(참여 세션·검색 수·인기 단지·관심 지역·다음 행동)는 그 칸만 null이 되고
+ *     `degradedMetrics`에 이름이 실린다. 0이나 빈 배열로 덮지 않는다(거짓 0 금지).
+ */
+export async function getBehaviorSummary(range: AnalyticsRange, options: BehaviorSummaryOptions = {}): Promise<BehaviorSummary> {
+  const since = rangeStart(range);
+  const m = <T,>(key: string, run: () => Promise<T>) => isolate(key, run, options.onMetricError);
+
+  // 순서: 핵심 먼저(실패하면 나머지를 돌릴 이유가 없다), 그 뒤로 하나씩.
+  const counts = await fetchCombinedCounts(since);
+  const engagedM = await m('engagedSessions', () => countEngagedSessions(since));
+  const searchCountM = await m('searchCount', () => prisma.searchLog.count({ where: { createdAt: { gte: since } } }));
+  const popularApartmentsM = await m('popularApartments', () => fetchPopularApartments(since));
+  const popularRegionsM = await m('popularRegions', () => fetchPopularRegions(since));
+  const nextActionBreakdownM = await m('nextActionBreakdown', () => fetchNextActionBreakdown(since));
+
+  const engagedSessions = valueOf(engagedM);
+  const searchCount = valueOf(searchCountM);
+  const popularApartments = valueOf(popularApartmentsM);
+  const popularRegions = valueOf(popularRegionsM);
+  const nextActionBreakdown = valueOf(nextActionBreakdownM);
+  const degradedMetrics = unavailableLabels([
+    { label: '참여 세션', metric: engagedM },
+    { label: '검색(AI 검색) 수', metric: searchCountM },
+    { label: '인기 단지 TOP 10', metric: popularApartmentsM },
+    { label: '관심 지역 TOP 10', metric: popularRegionsM },
+    { label: '다음 행동 유형', metric: nextActionBreakdownM },
   ]);
-  // ADMIN_ENGAGED_SESSIONS_V1 — 위 Promise.all에 끼우지 않고 **뒤에서 하나 더** 부른다.
-  // pool=1에서 동시 쿼리를 늘리면 P2024 위험이 커진다(ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1).
-  const engagedSessions = await countEngagedSessions(since);
 
   const kpi: BehaviorKpi = {
     sessions: Number(counts.sessions),
@@ -259,6 +290,7 @@ export async function getBehaviorSummary(range: AnalyticsRange): Promise<Behavio
     popularRegions,
     nextActionBreakdown,
     shareStats,
+    degradedMetrics,
     historicalDataNote:
       '내부 테스트 제외 정책(관리자 세션·봇·비운영 환경·QA suppression) 적용 이전에 기록된 데이터에는 내부 테스트 활동이 일부 포함될 수 있습니다.',
   };

@@ -30,6 +30,8 @@ export const ADMIN_FAILURE_CATEGORIES = [
   // "화면은 떴는데 숫자 하나가 비었다"를 추적할 수 있다.
   'ADMIN_OPS_DB_SUMMARY_FAILURE',
   'ADMIN_BEHAVIOR_FAILURE',
+  // BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1 — 행동 분석 지표 한 조각만 실패한 경우(화면은 나머지를 보여준다).
+  'ADMIN_BEHAVIOR_METRIC_FAILURE',
 ] as const;
 
 export type AdminFailureCategory = (typeof ADMIN_FAILURE_CATEGORIES)[number];

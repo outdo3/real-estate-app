@@ -12,7 +12,7 @@ export function isAnalyticsRange(value: string): value is AnalyticsRange {
 export interface BehaviorKpi {
   sessions: number; // distinct sessionId — "방문 세션" 표기 전용, "순 방문자"라고 표현하지 않는다(§11)
   /** ADMIN_ENGAGED_SESSIONS_V1 — 방문 세션 중 2페이지 이상 또는 상호작용 이벤트가 있는 세션(engagement.ts). 사람 수가 아니다. */
-  engagedSessions: number;
+  engagedSessions: number | null; // null = 그 지표만 조회 실패(degradedMetrics에 이름) — 0으로 표시하지 않는다
   pageViews: number;
   detailViews: number;
   compareStarts: number;
@@ -32,7 +32,7 @@ export interface JourneyFunnelStep {
 export interface FeatureUsageRow {
   feature: 'search' | 'map' | 'detail' | 'stats' | 'compare' | 'favorite' | 'financeFit' | 'share';
   label: string;
-  count: number;
+  count: number | null; // null = 조회 실패(현재 search만 따로 조회하므로 search만 null이 될 수 있다)
   trust: 'MEASURED' | 'PAGEVIEW_PROXY';
 }
 
@@ -75,10 +75,13 @@ export interface BehaviorSummary {
   kpi: BehaviorKpi;
   funnel: JourneyFunnelStep[];
   featureUsage: FeatureUsageRow[];
-  popularApartments: PopularApartmentRow[];
-  popularRegions: PopularRegionRow[];
-  nextActionBreakdown: NextActionBreakdownRow[];
+  // BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1 — null = 그 목록만 조회 실패. 빈 배열([])은 "실제로 없음"이다.
+  popularApartments: PopularApartmentRow[] | null;
+  popularRegions: PopularRegionRow[] | null;
+  nextActionBreakdown: NextActionBreakdownRow[] | null;
   shareStats: ShareStats;
+  /** 이번 응답에서 확인하지 못한 지표의 이름(비어 있으면 전부 정상). 대시보드 degradedMetrics와 같은 관례. */
+  degradedMetrics: string[];
   // §44 — 정책 적용 시점 이전 데이터에는 QA 트래픽이 섞여 있을 수 있다는 정직한 안내.
   historicalDataNote: string;
 }
