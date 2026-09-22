@@ -32,3 +32,5 @@ push 후 8분 이상 — Vercel 배포 목록(상태 필터 Canceled·Error 포�
 live는 그대로(HTTP 200 · 정적 청크 fingerprint `afeb1bf9d4e9` 동일 · sitemap 서울 0) · Production은 계속 `4f3687e`(Current).
 **판정: 미확정.** 문서상 무시된 빌드는 `CANCELED` 배포로 남아야 하는데 그런 기록이 없다. 같은 날 `9ba50e4` push도 Vercel에 아무 기록을 남기지 않은 적이 있어,
 "우리 규칙이 건너뜀"과 "Vercel이 push를 받지 못함"을 이 증거로는 구분할 수 없다. 결과(새 빌드 없음·live 불변)는 의도대로다.
+
+**Positive skip verification attempt #2** — 이 문단을 추가한 커밋으로 문서 전용 push를 다시 보내고, push 직후부터 Vercel 배포 목록·Activity·GitHub 상태를 함께 추적한다.
