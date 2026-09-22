@@ -140,7 +140,7 @@ test('§H 라우트: 부분 실패는 전용 category로 기록하고, 전체 �
 test('§10 캐시: 7일/30일 TTL은 그대로, 오늘은 캐시 없음, 부분 실패 결과는 캐시하지 않는다', () => {
   const code = stripComments(ROUTE);
   assert.ok(/const CACHE_TTL_MS = 5 \* 60 \* 1000;/.test(code), 'TTL이 바뀌었다');
-  assert.ok(/range === 'today'\s*\?\s*await getBehaviorSummary\(range, \{ onMetricError \}\)/.test(code), '오늘이 캐시를 탄다');
+  assert.ok(/range === 'today'\s*\?\s*await getBehaviorSummary\(range, \{ onMetricError: noteMetricFailure \}\)/.test(code), '오늘이 캐시를 탄다');
   assert.ok(/shouldCache: \(v\) => v\.degradedMetrics\.length === 0/.test(code), '부분 실패 결과를 5분간 붙잡는다');
 });
 

@@ -158,7 +158,7 @@ test('§9/§10 "오늘"은 캐시하지 않는다 — 대시보드와 같은 시
   const todayBranch = code.slice(at, code.indexOf('return NextResponse', at));
   const [freshPath] = todayBranch.split('getOrSetCache');
   // BEHAVIOR_ANALYTICS_CONNECTION_POOL_SAFETY_V1 — 부분 실패 로거를 넘기게 됐다(인자 추가). 캐시 우회 계약은 같다.
-  assert.ok(/getBehaviorSummary\(range(, \{ onMetricError \})?\)/.test(freshPath), 'today가 캐시를 거친다');
+  assert.ok(/getBehaviorSummary\(range(, \{ onMetricError: noteMetricFailure \})?\)/.test(freshPath), 'today가 캐시를 거친다');
   // 7일/30일은 기존 5분 캐시 관례를 유지한다.
   assert.ok(/getOrSetCache\(`admin-behavior:\$\{range\}`, CACHE_TTL_MS/.test(code));
 });

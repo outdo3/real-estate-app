@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isAuthorizedCronRequest } from '@/lib/cron-auth';
 import { runSaleSync } from '@/lib/sync/sale-sync-core';
 import { httpStatusForRun, type SyncMode } from '@/lib/sync/shared';
+import { resolveSaleSyncScope } from '@/lib/sync/sale-sync-scope';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -22,6 +23,11 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
+  // SEOUL_SALE_INCREMENTAL_SYNC_PREP_V1 — 구 목록은 허용 목록(scope)으로만 고른다. 생략 = 부산 16구(기존 그대로).
+  const resolved = resolveSaleSyncScope(url.searchParams.get('scope'));
+  if (!resolved.ok) {
+    return NextResponse.json({ success: false, error: resolved.error }, { status: 400 });
+  }
   // §5 DRY-RUN/APPLY CONTRACT — 명시적으로 apply라고 하지 않으면 절대 쓰지 않는다.
   const mode: SyncMode = url.searchParams.get('mode') === 'apply' ? 'apply' : 'dry-run';
   const districtOffset = Number(url.searchParams.get('districtOffset') ?? '0') || 0;
@@ -36,10 +42,12 @@ export async function GET(request: Request) {
   };
 
   try {
-    const summary = await runSaleSync({ mode, districtOffset, districtLimit }, log);
+    log(`SCOPE ${resolved.scope}${resolved.lawdCds ? ` lawdCds=${resolved.lawdCds.join(',')}` : ''}`);
+    const summary = await runSaleSync({ mode, districtOffset, districtLimit, lawdCds: resolved.lawdCds }, log);
     return NextResponse.json(
       {
         success: summary.status === 'SUCCESS',
+        scope: resolved.scope,
         ...summary,
         // 셀별 상세는 로그에 남기고 응답에서는 요약만 반환한다(응답 비대화 방지).
         reports: undefined,

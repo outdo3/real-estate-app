@@ -2,6 +2,16 @@
 
 ## 2026-09-22
 
+### E-JIP SEOUL SALE INCREMENTAL SYNC PREP V1 — 매매 cron에 고정 서울 scope 추가 (cron 등록 전)
+
+vercel.json 0 · write 0 · cronSync 0. 상세: `docs/development/SEOUL_SALE_INCREMENTAL_SYNC_PREP_V1.md`
+
+    구현     sale-sync·sale-recheck에 scope=seoul(허용 목록 → 11110·11140·11170, 강남 제외). 생략 = 부산 16구 그대로, 그 밖 = 400
+    ops      /admin/ops 매매 coverage·run 요약을 부산 16구로 고정(서울 셀이 섞이지 않게)
+    dry-run  매매 12셀(202606~09) · recheck 30셀(202508~202605) · 계획된 쓰기 0 · MOLIT 42 · 로컬 4.1초 / 10.9초
+    수정     직전 STEP의 행동 분석 콜백 이름이 log-admin-failure §E를 깨고 있던 것을 대시보드와 같은 noteMetricFailure로 맞춤
+    검증     scope 9/9 · 관련 회귀 237/237 · tsc src/ 0 · eslint 0 · build 0
+
 ### E-JIP SEOUL SALE INCREMENTAL SYNC READINESS AUDIT V1 — 서울 cron만 켤 수 있나 (READ ONLY)
 
 write 0 · cron 변경 0. 상세: `docs/development/SEOUL_SALE_INCREMENTAL_SYNC_READINESS_AUDIT_V1.md`

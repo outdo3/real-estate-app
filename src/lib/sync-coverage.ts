@@ -161,22 +161,27 @@ export async function recordCoverageCells(
  */
 const RECHECK_RUN_ID_PREFIX = 'sale-recheck-';
 
-export async function summarizeSaleRunKinds(): Promise<{
+/**
+ * SEOUL_SALE_INCREMENTAL_SYNC_PREP_V1 — `lawdCds`를 주면 그 구의 셀만 본다. /admin/ops의 매매 지표는 **부산 운영 지표**라
+ * 부산 16구를 넘긴다 — 서울 동기화가 시작되면 서울 셀이 부산 수치에 섞이지 않게.
+ */
+export async function summarizeSaleRunKinds(lawdCds?: readonly string[]): Promise<{
   daily: { runId: string | null; at: string | null };
   recheck: { runId: string | null; at: string | null; cells: number };
 }> {
+  const scope = lawdCds ? { lawdCd: { in: [...lawdCds] } } : {};
   const [daily, recheck, recheckCells] = await Promise.all([
     prisma.syncCoverageCell.findFirst({
-      where: { dataset: 'SALE', NOT: { runId: { startsWith: RECHECK_RUN_ID_PREFIX } } },
+      where: { dataset: 'SALE', ...scope, NOT: { runId: { startsWith: RECHECK_RUN_ID_PREFIX } } },
       orderBy: { verifiedAt: 'desc' },
       select: { runId: true, verifiedAt: true },
     }),
     prisma.syncCoverageCell.findFirst({
-      where: { dataset: 'SALE', runId: { startsWith: RECHECK_RUN_ID_PREFIX } },
+      where: { dataset: 'SALE', ...scope, runId: { startsWith: RECHECK_RUN_ID_PREFIX } },
       orderBy: { verifiedAt: 'desc' },
       select: { runId: true, verifiedAt: true },
     }),
-    prisma.syncCoverageCell.count({ where: { dataset: 'SALE', runId: { startsWith: RECHECK_RUN_ID_PREFIX } } }),
+    prisma.syncCoverageCell.count({ where: { dataset: 'SALE', ...scope, runId: { startsWith: RECHECK_RUN_ID_PREFIX } } }),
   ]);
   return {
     daily: { runId: daily?.runId ?? null, at: daily?.verifiedAt ? daily.verifiedAt.toISOString() : null },
@@ -185,7 +190,7 @@ export async function summarizeSaleRunKinds(): Promise<{
 }
 
 /** /admin/ops 표시용 — 특정 dataset의 coverage cell 요약(라이브). */
-export async function summarizeCoverage(dataset: SyncDatasetName): Promise<{
+export async function summarizeCoverage(dataset: SyncDatasetName, lawdCds?: readonly string[]): Promise<{
   totalCells: number;
   byStatus: Record<string, number>;
   latestVerifiedAt: string | null;
@@ -194,10 +199,11 @@ export async function summarizeCoverage(dataset: SyncDatasetName): Promise<{
    * 뜻은 아니기 때문이다(§8). */
   latestRunId: string | null;
 }> {
+  const where = lawdCds ? { dataset, lawdCd: { in: [...lawdCds] } } : { dataset };
   const [grouped, latest, latestCell] = await Promise.all([
-    prisma.syncCoverageCell.groupBy({ by: ['status'], where: { dataset }, _count: { _all: true } }),
-    prisma.syncCoverageCell.aggregate({ where: { dataset }, _max: { verifiedAt: true } }),
-    prisma.syncCoverageCell.findFirst({ where: { dataset }, orderBy: { verifiedAt: 'desc' }, select: { runId: true } }),
+    prisma.syncCoverageCell.groupBy({ by: ['status'], where, _count: { _all: true } }),
+    prisma.syncCoverageCell.aggregate({ where, _max: { verifiedAt: true } }),
+    prisma.syncCoverageCell.findFirst({ where, orderBy: { verifiedAt: 'desc' }, select: { runId: true } }),
   ]);
   const byStatus: Record<string, number> = {};
   let totalCells = 0;

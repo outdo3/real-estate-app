@@ -295,9 +295,10 @@ async function buildSummary(timer: PhaseTimer) {
   // 수천 행이라 가볍지만, pool=1에서 중요한 것은 "가볍다"가 아니라 "줄을 늘리지 않는다"이다.
   const rentVerifiedRangeM = await m('rentVerifiedRange', () => getRentVerifiedRange());
   const rentCoverageM = await m('rentCoverageCells', () => summarizeCoverage('RENT'));
-  const saleCoverageM = await m('saleCoverageCells', () => summarizeCoverage('SALE'));
+  // SEOUL_SALE_INCREMENTAL_SYNC_PREP_V1 — 부산 운영 지표이므로 부산 16구 셀만 센다(서울 동기화 셀이 섞이지 않게).
+  const saleCoverageM = await m('saleCoverageCells', () => summarizeCoverage('SALE', BUSAN_16));
   // SALE_CANCELLATION_COVERAGE_V1 §9 — daily sync와 recheck sweep을 같은 칸에 섬지 않는다.
-  const saleRunKindsM = await m('saleRunKinds', () => summarizeSaleRunKinds());
+  const saleRunKindsM = await m('saleRunKinds', () => summarizeSaleRunKinds(BUSAN_16));
 
   const rentVerifiedRange = valueOf(rentVerifiedRangeM);
   const rentCoverageSummary = valueOf(rentCoverageM);

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isAuthorizedCronRequest } from '@/lib/cron-auth';
 import { runSaleRecheckSweep } from '@/lib/sync/sale-recheck-core';
 import { httpStatusForRun, type SyncMode } from '@/lib/sync/shared';
+import { resolveSaleSyncScope } from '@/lib/sync/sale-sync-scope';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -25,6 +26,12 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
+  // SEOUL_SALE_INCREMENTAL_SYNC_PREP_V1 — sale-sync와 같은 허용 목록. 서울은 부산 sweep과 **별도 호출**로 돈다
+  // (부산 recheck가 이미 45초 예산의 ~42초를 쓴다 — 같은 호출에 넣으면 부산 sweep이 밀린다).
+  const resolved = resolveSaleSyncScope(url.searchParams.get('scope'));
+  if (!resolved.ok) {
+    return NextResponse.json({ success: false, error: resolved.error }, { status: 400 });
+  }
   const mode: SyncMode = url.searchParams.get('mode') === 'apply' ? 'apply' : 'dry-run';
   const maxCellsRaw = url.searchParams.get('maxCells');
   const maxCells = maxCellsRaw ? Number(maxCellsRaw) : undefined;
@@ -32,11 +39,13 @@ export async function GET(request: Request) {
   const budgetMs = budgetMsRaw ? Number(budgetMsRaw) : undefined;
 
   const log = (line: string) => console.log(`[cron/sale-recheck] ${line}`);
+  log(`SCOPE ${resolved.scope}${resolved.lawdCds ? ` lawdCds=${resolved.lawdCds.join(',')}` : ''}`);
 
   try {
     const summary = await runSaleRecheckSweep(
       {
         mode,
+        lawdCds: resolved.lawdCds,
         maxCells: Number.isFinite(maxCells) && maxCells! > 0 ? maxCells : undefined,
         budgetMs: Number.isFinite(budgetMs) && budgetMs! > 0 ? budgetMs : undefined,
       },
@@ -45,6 +54,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: summary.status === 'SUCCESS',
+        scope: resolved.scope,
         ...summary,
         // 셀별 상세는 로그에만 남긴다(응답 비대화 방지).
         reports: undefined,
