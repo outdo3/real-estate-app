@@ -2,6 +2,15 @@
 
 ## 2026-09-22
 
+### E-JIP SOURCE WITHDRAWAL REAPPEARANCE CHECK V1 — withdrawn 2건 원천 재등장 (READ ONLY)
+
+MOLIT 2셀 · write 0. 상세: `docs/development/SOURCE_WITHDRAWAL_REAPPEARANCE_CHECK_V1.md`
+
+    판정     940812 아람센트럴시티 · 950521 대연동동일스위트 모두 **REAPPEARED** — 원천에 자연키 정확 일치 active 행, registry 09-11 / 09-18
+    parity   26380:202609 원천 106 = DB 106 · 26290:202609 139 = 139 · DB-only 0 · 다음 cron 계획 0
+    경로     09-22 cron의 registry 보충은 자연키 일치 원천 행이 있어서 생겼다(classifyRow → updateRegistryOnly)
+    목록     withdrawal 4 → **2**(950148 미확인·재등장 가능성 높음, 636871). 부재 1회 관찰로 withdrawn 판정하지 않는다
+
 ### E-JIP DEFECT-A 28 POST-CRON RECONTAMINATION AUDIT V1 — 재오염 아님 (READ ONLY)
 
 write 0 · 코드 변경 0. 상세: `docs/development/DEFECT_A_28_POST_CRON_RECONTAMINATION_AUDIT_V1.md`
