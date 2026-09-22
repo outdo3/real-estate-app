@@ -2,6 +2,16 @@
 
 ## 2026-09-22
 
+### E-JIP DEFECT-A 28 POST-CRON RECONTAMINATION AUDIT V1 — 재오염 아님 (READ ONLY)
+
+write 0 · 코드 변경 0. 상세: `docs/development/DEFECT_A_28_POST_CRON_RECONTAMINATION_AUDIT_V1.md`
+
+    판정     **GENUINE_SOURCE_CANCELLATION** — 949532 보해이브빌·950722 대연롯데캐슬레전드1단지는 원천이 09-21자 두 번째 취소를 새로 등록했다
+    근거     원천 형제 2·취소 2·해제일 {03,21}/{17,21} = DB와 정확히 일치. 새 해제일은 형제 값 복사가 아닌 원천 고유값(`26.09.21`)
+    경로     reconcileGroupCancellation 부족분 분기(write-policy-logic.ts:206-227). planGroupInserts는 `none` — insert 경로 무관
+    재현     순수 replay가 실제 기록과 동일 · 다음 cron 모의 21셀: inserts/flips/restores 0, 28행 접촉 0
+    수치     all-canceled 245→247·suspect 304→306은 이 2그룹이 원천대로 전부 취소된 것. 09-21 "재오염 위험 없음" 결론 유지
+
 ### E-JIP SEOUL JUNG-GU FULL HISTORY RETRY V1 — 중구 전체 이력 적재 (승인 범위)
 
 schema 0 · migration 0 · env 0 · master 생성 0 · fallback identity 0 · 서울 노출 0. 상세: `docs/development/SEOUL_JUNGGU_FULL_HISTORY_RETRY_V1.md`
