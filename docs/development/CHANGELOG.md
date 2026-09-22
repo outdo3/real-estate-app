@@ -2,6 +2,16 @@
 
 ## 2026-09-22
 
+### E-JIP ADMIN ENGAGED SESSIONS V1 — 관리자 두 화면에 "참여 세션" 병기 (쿼리만)
+
+schema 0 · 새 수집 0 · UA 0 · bot filter 0. 상세: `docs/development/ADMIN_ENGAGED_SESSIONS_V1.md`
+
+    정의     실제 PV ≥1 AND (PV ≥2 OR 상호작용 이벤트 ≥1). 38개 이벤트 전수 분류 — 자동 8개(report_view·detail_map_view·finance_fit_start 등) 제외
+    구현     engagement.ts(순수 분류) + query.ts countEngagedSessions 하나를 대시보드·행동 분석이 공유
+    실측     09-21 KST 방문 319 · PV 321 · **참여 2(0.6%)** / 09-22 1 · 1 · 0 — 출하 SQL = 행 단위 참조
+    검증     28/28 tests · tsc src/ 0 · eslint 0 · build 0
+    한계     일반 검색은 session_id가 없어 미포함 · 퍼널 decision_sessions의 finance_fit_start는 그대로
+
 ### E-JIP ANALYTICS SESSION ID INTEGRITY AUDIT V1 — "319 / 321"은 탭 세션 + BOT_LIKE (READ ONLY)
 
 write 0 · schema 0 · UA 수집 0. 상세: `docs/development/ANALYTICS_SESSION_ID_INTEGRITY_AUDIT_V1.md`

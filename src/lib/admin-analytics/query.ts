@@ -2,9 +2,11 @@
 // COUNT/COUNT(DISTINCT)/GROUP BY — no raw-row materialization, no per-user/session row is ever
 // selected out of this module (§39/§45). Funnel counting is session-based, never PageView-count-
 // based (§26): a session that viewed the same detail page 10 times still counts once per stage.
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { NEXT_ACTION_TYPES, type NextActionType } from '@/lib/decision-journey/types';
 import { startOfKstDay, startOfKstDaysAgo } from '@/lib/kst-day';
+import { ENGAGED_MIN_PAGE_VIEWS, INTERACTION_EVENT_URLS } from './engagement';
 import type {
   AnalyticsRange,
   BehaviorKpi,
@@ -112,6 +114,32 @@ async function fetchCombinedCounts(since: Date): Promise<CombinedCounts> {
   return rows[0];
 }
 
+/**
+ * ADMIN_ENGAGED_SESSIONS_V1 — 참여 세션 수. **대시보드와 행동 분석이 모두 이 함수 하나를 쓴다**
+ * (정의 사본을 두지 않는다 — 두 화면의 값이 우연이 아니라 구조적으로 같게).
+ *
+ * 의미는 `engagement.ts`의 `isEngagedSession` / `countEngagedSessionsInRows`와 같다:
+ * 실제 페이지뷰 1건 이상 AND (페이지뷰 2건 이상 OR 상호작용 이벤트 1건 이상).
+ * 상호작용 목록은 engagement.ts의 분류에서 만든다 — 자동 노출 이벤트(report_view 등)는 들어가지 않는다.
+ * 세션별로 한 번 묶은 뒤 세므로 이벤트가 여러 건이어도 세션은 1로 센다. 집계만 반환한다.
+ */
+export async function countEngagedSessions(since: Date): Promise<number> {
+  const rows = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(*) AS count FROM (
+      SELECT session_id
+      FROM page_views
+      WHERE created_at >= ${since}
+      GROUP BY session_id
+      HAVING COUNT(*) FILTER (WHERE url NOT LIKE '/__event__/%') >= 1
+         AND (
+           COUNT(*) FILTER (WHERE url NOT LIKE '/__event__/%') >= ${ENGAGED_MIN_PAGE_VIEWS}
+           OR COUNT(*) FILTER (WHERE split_part(url, '?', 1) IN (${Prisma.join([...INTERACTION_EVENT_URLS])})) >= 1
+         )
+    ) engaged
+  `;
+  return Number(rows[0]?.count ?? 0);
+}
+
 async function fetchPopularApartments(since: Date): Promise<PopularApartmentRow[]> {
   // Phase 1 감사에서 지적된 대로, 기존 /admin/dashboard의 인기 단지 집계는 aptName만으로
   // 묶어 동명이인 단지가 섞일 위험이 있다(§14/§23). 여기서는 complexId(lawdCd|dong|name)로
@@ -172,9 +200,13 @@ export async function getBehaviorSummary(range: AnalyticsRange): Promise<Behavio
     fetchPopularRegions(since),
     fetchNextActionBreakdown(since),
   ]);
+  // ADMIN_ENGAGED_SESSIONS_V1 — 위 Promise.all에 끼우지 않고 **뒤에서 하나 더** 부른다.
+  // pool=1에서 동시 쿼리를 늘리면 P2024 위험이 커진다(ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1).
+  const engagedSessions = await countEngagedSessions(since);
 
   const kpi: BehaviorKpi = {
     sessions: Number(counts.sessions),
+    engagedSessions,
     pageViews: Number(counts.page_views),
     detailViews: Number(counts.detail_views),
     compareStarts: Number(counts.compare_starts),

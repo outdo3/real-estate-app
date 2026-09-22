@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import type { AnalyticsRange, BehaviorSummary } from '@/lib/admin-analytics/types';
+import { engagedRate } from '@/lib/admin-analytics/engagement';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -90,9 +91,16 @@ export default function AdminBehaviorPage() {
               </p>
 
               <div className={styles.kpiGrid}>
-                <div className={styles.kpiTile}>
+                <div className={styles.kpiTile} title="브라우저 탭 세션 기준입니다. 새 탭·새 창마다 따로 세며, 사람 수가 아닙니다.">
                   <div className={styles.kpiLabel}>방문 세션</div>
                   <div className={styles.kpiValue}>{num(d.kpi.sessions)}</div>
+                  <div className={styles.kpiHint}>브라우저 탭 세션 기준</div>
+                </div>
+                {/* ADMIN_ENGAGED_SESSIONS_V1 — 대시보드의 "오늘 참여 세션"과 같은 함수(countEngagedSessions). */}
+                <div className={styles.kpiTile} title="방문 세션 중 2페이지 이상 조회했거나 비교·관심단지·공유·자금 계산·리포트 저장 등 실제로 버튼을 누른 세션입니다. 페이지를 열기만 해도 생기는 자동 이벤트(리포트·지도 노출 등)는 세지 않습니다.">
+                  <div className={styles.kpiLabel}>참여 세션</div>
+                  <div className={styles.kpiValue}>{num(d.kpi.engagedSessions)}</div>
+                  <div className={styles.kpiHint}>참여율 {formatPercent(engagedRate(d.kpi.engagedSessions, d.kpi.sessions))}</div>
                 </div>
                 <div className={styles.kpiTile}>
                   <div className={styles.kpiLabel}>페이지뷰</div>

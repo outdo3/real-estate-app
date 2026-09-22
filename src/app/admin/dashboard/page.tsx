@@ -8,6 +8,7 @@ import useSWR from 'swr';
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import { formatKstTime } from '@/lib/kst-day';
+import { engagedRate } from '@/lib/admin-analytics/engagement';
 import styles from './page.module.css';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -25,6 +26,11 @@ const REFRESH_INTERVAL_MS = 20 * 1000;
  */
 function num(v: number | null | undefined): string {
   return typeof v === 'number' ? v.toLocaleString('ko-KR') : '확인 불가';
+}
+
+/** ADMIN_ENGAGED_SESSIONS_V1 — 분모 0·확인 불가는 0%가 아니라 '—'로 보인다. */
+function ratePercent(rate: number | null): string {
+  return rate === null ? '—' : `${(rate * 100).toFixed(rate < 0.1 ? 1 : 0)}%`;
 }
 
 function pipelineStatusClass(status: string): string {
@@ -148,11 +154,20 @@ export default function AdminDashboardPage() {
                     {d.traffic.fetchedAt ? ` · 마지막 갱신 ${formatKstTime(new Date(d.traffic.fetchedAt))}` : ''}
                   </div>
                   <div className={styles.statRow}>
-                    <div className={styles.statTile}>
+                    <div className={styles.statTile} title="브라우저 탭 세션 기준입니다. 새 탭·새 창마다 따로 세며, 사람 수가 아닙니다.">
                       {/* §3 — COUNT(DISTINCT session_id)이므로 사람 수가 아니다. */}
                       <div className={styles.statLabel}>오늘 방문 세션</div>
                       <div className={styles.statValue}>{num(d.traffic.todayVisitSessions)}</div>
-                      <div className={styles.statHint}>브라우저 세션 기준 중복 제거</div>
+                      <div className={styles.statHint}>브라우저 탭 세션 기준 · 사람 수 아님</div>
+                    </div>
+                    {/* ADMIN_ENGAGED_SESSIONS_V1 — 방문 세션은 크롤러 한 대로도 수백이 된다(2026-09-21: 319 중 참여 2).
+                        같은 데이터에서 실제로 뭔가를 한 세션을 옆에 둔다. 정의: src/lib/admin-analytics/engagement.ts */}
+                    <div className={styles.statTile} title="방문 세션 중 2페이지 이상 조회했거나 비교·관심단지·공유·자금 계산·리포트 저장 등 실제로 버튼을 누른 세션입니다. 페이지를 열기만 해도 생기는 자동 이벤트(리포트·지도 노출 등)는 세지 않습니다.">
+                      <div className={styles.statLabel}>오늘 참여 세션</div>
+                      <div className={styles.statValue}>{num(d.traffic.todayEngagedSessions)}</div>
+                      <div className={styles.statHint}>
+                        2페이지 이상 또는 실제 버튼 조작 · 참여율 {ratePercent(engagedRate(d.traffic.todayEngagedSessions, d.traffic.todayVisitSessions))}
+                      </div>
                     </div>
                     <div className={styles.statTile}>
                       <div className={styles.statLabel}>오늘 페이지뷰(PV)</div>

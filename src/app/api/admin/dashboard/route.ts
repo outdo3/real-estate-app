@@ -7,6 +7,7 @@ import { fetchMolitData } from '@/lib/api-molit';
 import { detectLeadingRegionKeyword } from '@/lib/ai-search';
 import { ANALYTICS_EVENT_URL_PREFIX } from '@/lib/analytics/events';
 import { startOfKstDay, startOfKstDaysAgo } from '@/lib/kst-day';
+import { countEngagedSessions } from '@/lib/admin-analytics/query';
 import { logAdminFailure } from '@/lib/admin/log-admin-failure';
 // ADMIN_OPS_P2024_CONNECTION_POOL_FIX_V1에서 검증된 패턴을 그대로 재사용한다(새 추상화 없음).
 import { isTotalDbOutage, isolate, unavailableLabels, valueOf } from '@/lib/admin-ops-runner';
@@ -139,6 +140,8 @@ export async function GET() {
         WHERE created_at >= ${today} AND url NOT LIKE ${ANALYTICS_EVENT_URL_PREFIX + '%'}
       `
     );
+    // ADMIN_ENGAGED_SESSIONS_V1 — 행동 분석과 **같은 함수**. 오늘 지표라 캐시하지 않는다(위 §9 계약).
+    const todayEngagedSessionsM = await m('todayEngagedSessions', () => countEngagedSessions(today));
     const onlineSessionsM = await m('onlineSessions', () => prisma.activeSession.count({ where: { lastSeenAt: { gte: onlineThreshold } } }));
     const onlineAptGroupsM = await m('onlineAptGroups', () =>
       prisma.activeSession.groupBy({
@@ -209,7 +212,7 @@ export async function GET() {
     // §3 — 지표가 **전부** 실패했을 때만 DB 연결 자체 장애로 보고 전체 실패로 올린다.
     // 한 지표가 느려서 죽은 것과 DB가 죽은 것은 다르게 생겼다(ops와 같은 기준).
     const dbMetrics = [
-      todayPageViewsM, todaySessionsM, onlineSessionsM, onlineAptGroupsM, popularAptGroupsM,
+      todayPageViewsM, todaySessionsM, todayEngagedSessionsM, onlineSessionsM, onlineAptGroupsM, popularAptGroupsM,
       todayNewUsersM, totalUsersM, recentSearchesM, todayNewPostsM, todayNewCommentsM,
       recentPostsM, unresolvedReportsM, recentErrorsM, eventCountsM,
     ];
@@ -242,6 +245,7 @@ export async function GET() {
     const degradedMetrics = unavailableLabels([
       { label: '오늘 페이지뷰', metric: todayPageViewsM },
       { label: '오늘 방문 세션', metric: todaySessionsM },
+      { label: '오늘 참여 세션', metric: todayEngagedSessionsM },
       { label: '실시간 접속자', metric: onlineSessionsM },
       { label: '실시간 인기 아파트', metric: onlineAptGroupsM },
       { label: '누적 인기 단지(30일)', metric: popularAptGroupsM },
@@ -270,6 +274,8 @@ export async function GET() {
           // §6 — 조회가 실패했을 때 0으로 내려보내지 않는다. "오늘 방문 0"은 장애가
           // 아니라 **사실**로 읽힌다 — 확인하지 못한 것과 구분돼야 한다.
           todayVisitSessions: todaySessionsM.status === 'OK' ? Number(todaySessionsM.value[0]?.count ?? 0) : null,
+          // ADMIN_ENGAGED_SESSIONS_V1 — 방문 세션 중 2페이지 이상 또는 실제 상호작용이 있었던 세션.
+          todayEngagedSessions: valueOf(todayEngagedSessionsM),
           onlineNow: valueOf(onlineSessionsM),
           todayNewUsers: valueOf(todayNewUsersM),
           totalUsers: valueOf(totalUsersM),

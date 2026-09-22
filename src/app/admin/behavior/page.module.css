@@ -72,6 +72,14 @@
   margin-top: 0.15rem;
 }
 
+/* ADMIN_ENGAGED_SESSIONS_V1 — 방문/참여 세션의 정의 한 줄. 대시보드 .statHint와 같은 크기. */
+.kpiHint {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+  line-height: 1.3;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

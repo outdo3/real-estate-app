@@ -11,6 +11,8 @@ export function isAnalyticsRange(value: string): value is AnalyticsRange {
 
 export interface BehaviorKpi {
   sessions: number; // distinct sessionId — "방문 세션" 표기 전용, "순 방문자"라고 표현하지 않는다(§11)
+  /** ADMIN_ENGAGED_SESSIONS_V1 — 방문 세션 중 2페이지 이상 또는 상호작용 이벤트가 있는 세션(engagement.ts). 사람 수가 아니다. */
+  engagedSessions: number;
   pageViews: number;
   detailViews: number;
   compareStarts: number;
