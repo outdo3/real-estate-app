@@ -85,3 +85,44 @@ ALLOW_PROD_DB_READ=1 ALLOW_PROD_DB_WRITE=1 DEFECT_A_GATE_PASS=1 npx tsx scripts/
 ```
 
 `--approve-existing-updates`는 붙이지 않는다(업데이트 0). apply 후 기대값: 전체 **920,717** · 서울 **55,134** · 종로 11,587 · 용산 25,675 · 중구 17,826 불변.
+
+## 7. POST-APPLY VERIFY V1 — **PASS** (READ ONLY · MOLIT 0 · write 0)
+
+apply는 사용자가 실행했다(2026-09-22 14:47~14:53 KST, 같은 checkpoint). 드라이버 산출물 기준:
+종로 `APPLIED` · calls 0 · insert **11,587** / update 0 / delete 0 · 255셀(COMPLETE 249 · EMPTY_VALID 6) · 불일치 셀 0 ·
+용산 `APPLIED` · calls 0 · insert **25,675** / update 0 / delete 0 · 255셀(COMPLETE 251 · EMPTY_VALID 4) · 불일치 셀 0.
+
+| 항목 | apply 전 | apply 후 |
+|---|---|---|
+| 전체 sale | 883,455 | **920,717** (+37,262) |
+| canceled | 16,665 | 17,255 (+590 = 190 + 400) |
+| 서울 | 17,872 | **55,134** |
+| 종로 11110 | 0 | **11,587** (11,397 / 190) |
+| 용산 11170 | 0 | **25,675** (25,275 / 400) |
+| 중구 11140 · 강남 11680 | 17,826 · 46 | 17,826 · 46 (불변) |
+| 부산 · 대구 | 865,497 · 86 | 불변 |
+| 자연키 중복(전역) | 0 | 0 |
+| 형제 전원 취소 그룹 | 247 | **261** (+14) |
+| suspect upper bound | 306 | 322 (+16) |
+
+**원천 ↔ DB 전수 parity** (저장된 raw를 운영 normalizer로 재구성해 DB와 대조):
+
+| 검사 | 종로 | 용산 |
+|---|---|---|
+| 행 수 / 취소 수 | 11,587 = 11,587 · 190 = 190 | 25,675 = 25,675 · 400 = 400 |
+| 월별(행·취소) 불일치 | 0 (거래 있는 달 249 + EMPTY 6 = 255) | 0 (251 + EMPTY 4 = 255) |
+| 형제 그룹(형제 수·취소 수·**해제일 multiset**) 불일치 | 0 / 11,391그룹 | 0 / 25,343그룹 |
+| occurrenceIndex gap | 0 | 0 |
+| aptSeq 없음 · 다른 구 aptSeq · identity_key ≠ `id:{aptSeq}` | 0 · 0 · 0 | 0 · 0 · 0 |
+| 이 구의 aptSeq가 다른 lawd_cd에 실린 행 | 0 | 0 |
+| 범위 밖 · non-sale | 0 · 0 | 0 · 0 |
+| master 없는 행(transaction-only) | 617 / 47 aptSeq | 1,171 / 66 aptSeq |
+
+**형제 전원 취소 +14의 출처**: 종로 8그룹(크기 2×6 · 3×2) + 용산 6그룹(2×6) — 전부 원천에도 같은 형제 수·같은 해제일로 전원 취소다.
+suspect upper bound는 Σ(형제−1)이라 +16 = 종로 10 + 용산 6. 재오염이 아니라 원천의 진짜 취소 그룹이다.
+
+**멱등성(fresh 재계획)**: checkpoint를 `*-replan` 디렉터리로 복사해 셀 상태만 APPLIED → FETCHED로 바꾸고 raw 캐시로 live DB에 다시 계획(원본 checkpoint 불변).
+종로 inserts 0 · matched 11,587 · updates/flips/restores/drift 0 · 용산 inserts 0 · matched 25,675 · 0/0/0/0 · **MOLIT 0 호출** · 두 구 255셀 모두 source = DB = matched.
+
+**서울 노출**: `enablement.ts`의 `'11'`은 주석뿐(09-19 이후 변경 없음) · live sitemap 138 URL 중 서울 0. 앱·통계·SEO·sitemap·cron 전부 OFF 유지.
+

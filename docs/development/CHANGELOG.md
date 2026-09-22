@@ -2,6 +2,15 @@
 
 ## 2026-09-22
 
+### E-JIP SEOUL PHASE B POST-APPLY VERIFY V1 — 종로·용산 적재 검증 PASS (READ ONLY, MOLIT 0)
+
+write 0. 상세: `docs/development/SEOUL_PHASE_B_JONGNO_YONGSAN_DRYRUN_V1.md` §7
+
+    적재     종로 11,587 · 용산 25,675 (update/delete 0) → 전체 920,717 · 서울 55,134 · 중구 17,826 · 강남 46 불변
+    parity   두 구 원천 = DB: 행·취소·월별(255개월)·형제 그룹(해제일 multiset 포함) 불일치 0 · identity 이상 0 · 자연키 중복 0
+    취소     형제 전원 취소 247 → 261(+14 = 종로 8 + 용산 6, 전부 원천 그대로) · suspect bound +16 = Σ(형제−1)
+    멱등     raw 복사 재계획 inserts/updates/flips/restores 0 · MOLIT 0 · 서울 노출 OFF(sitemap 서울 0)
+
 ### E-JIP SEOUL PHASE B — 종로 + 용산 전체 이력 dry-run (READY_FOR_APPLY_APPROVAL, write 0)
 
 MOLIT 510 호출 · Production write 0. 상세: `docs/development/SEOUL_PHASE_B_JONGNO_YONGSAN_DRYRUN_V1.md`
