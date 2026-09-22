@@ -2,6 +2,15 @@
 
 ## 2026-09-22
 
+### E-JIP VERCEL DOCS-ONLY BUILD SKIP SAFETY AUDIT V1 — 문서 전용 push 빌드 생략 규칙 검증 (적용 전)
+
+설정·vercel.json·코드 변경 0. 상세: `docs/development/VERCEL_DOCS_ONLY_BUILD_SKIP_SAFETY_AUDIT_V1.md`
+
+    판정     SAFE_TO_ENABLE — docs/**(+루트 CHANGELOG.md)만 바뀌면 SKIP, 그 밖·판단 불가는 전부 BUILD
+    근거     Vercel 문서: exit 0=취소 · 1=빌드 · VERCEL_GIT_PREVIOUS_SHA=직전 성공 배포 · clone depth 10 → HEAD^가 아니라 PREVIOUS_SHA 기준
+    검증     edge case 26개 일치 · 실제 배포 쌍 611개 재현 거짓 SKIP 0 · 거짓 BUILD 0 · 런타임/빌드의 docs 읽기 0
+    효과     최근 7일 132배포 중 53(40%) · 30일 419 중 108(26%) 생략 가능(추정)
+
 ### E-JIP VERCEL RESOURCE PRESSURE AUDIT V1 — 초과는 Functions Storage 하나, 원인은 배포 빈도 (READ ONLY)
 
 설정·요금제·삭제 0. 상세: `docs/development/VERCEL_RESOURCE_PRESSURE_AUDIT_V1.md`
