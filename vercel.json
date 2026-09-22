@@ -1,5 +1,6 @@
 {
   "regions": ["icn1"],
+  "ignoreCommand": "bash scripts/vercel-ignore-build.sh",
   "crons": [
     {
       "path": "/api/cron/sale-sync?mode=apply",

@@ -2,6 +2,13 @@
 
 ## 2026-09-22
 
+### E-JIP VERCEL DOCS-ONLY BUILD SKIP ENABLE V1 — 문서 전용 push는 Vercel 빌드 생략 (승인)
+
+Vercel 설정·cron·env·schema 0. 상세: `docs/development/VERCEL_DOCS_ONLY_BUILD_SKIP_ENABLE_V1.md`
+
+    변경     scripts/vercel-ignore-build.sh + vercel.json "ignoreCommand" — docs/**(+루트 CHANGELOG.md)만 바뀌면 SKIP, 그 밖·판단 불가는 BUILD
+    검증     edge 13/13 · 실제 배포 611쌍 거짓 SKIP 0 · vercel.json 테스트 47/47 · tsc src/ 0 · build 0
+
 ### E-JIP VERCEL DOCS-ONLY BUILD SKIP SAFETY AUDIT V1 — 문서 전용 push 빌드 생략 규칙 검증 (적용 전)
 
 설정·vercel.json·코드 변경 0. 상세: `docs/development/VERCEL_DOCS_ONLY_BUILD_SKIP_SAFETY_AUDIT_V1.md`
