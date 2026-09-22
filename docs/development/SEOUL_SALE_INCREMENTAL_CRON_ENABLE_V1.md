@@ -20,6 +20,16 @@ schema 0 · migration 0 · env 0 · `enablement.cronSync` 0 · 서울 공개(app
 서울 항목은 **뒤에** 둔다 — `/admin/ops`의 스케줄 표시(`findCronForRoute`)는 경로별 첫 항목을 고르므로 부산 표시가 그대로 유지된다(테스트로 고정).
 서울은 부산과 **별도 호출**이다(부산 recheck가 45초 예산 중 ~42초 사용).
 
+## 등록 확인 (배포 후, Vercel 대시보드 READ ONLY)
+
+`6568f2c` Production 배포 완료(2026-09-22 07:19:05 UTC). Vercel 프로젝트 설정 → Cron Jobs: **Enabled**, 5개 등록 —
+`sale-sync?mode=apply` 19:00 UTC · `rent-sync?mode=apply` 21:00 · `sale-recheck?mode=apply` 23:00 ·
+**`sale-sync?mode=apply&scope=seoul` 19:15 UTC(04:15 KST)** · **`sale-recheck?mode=apply&scope=seoul` 23:15 UTC(08:15 KST)**. "Run" 버튼은 누르지 않았다(apply가 실행된다).
+
+**Hobby 요금제 주의**: Vercel이 명시하듯 Hobby의 cron은 **1시간 유연 창**으로 실행된다 — 서울 매매는 04:00~04:59 KST, 서울 recheck는 08:00~08:59 KST 사이 어느 시점에 돈다.
+서울이 부산보다 먼저 돌 수도 있다. 두 호출은 별도 invocation(각자 connection)이고 셀도 겹치지 않아 기능상 문제는 없지만, 첫 실행 확인은 **09:00 KST 이후**에 한다.
+같은 대시보드에 **"Exceeded free resources"**(Functions Storage 18.71/10 GB · Fluid Active CPU 3h8m/4h) 경고가 떠 있다 — 이번 변경과 무관하지만(서울 cron은 하루 약 15초 CPU) 계정 차원 확인이 필요하다.
+
 ## 첫 실행 예상
 
 - **04:15 KST 매매**: 3구 × 4개월(latestComplete−2 ~ 현재월) = 12셀 ≈ **12 MOLIT 호출**. 오늘 전체 이력을 새로 받았으므로 쓰기는 0 또는 소량(늦은 신고 insert · 해제 flip · 등기일 보충).
@@ -27,7 +37,7 @@ schema 0 · migration 0 · env 0 · `enablement.cronSync` 0 · 서울 공개(app
 - **08:15 KST recheck**: 3구 × 10개월(3~12개월 전) = 최대 **30 호출** — 서울 coverage가 아직 없어 전부 never-verified로 먼저 처리된다. 로컬 dry-run 10.9초(예산 45초).
 - 예상 호출: 서울 ≤ 42/일 → cron 합계 ≈ 270~310/일(한도 10,000의 약 3%).
 
-## 첫 실행 확인 계획 (READ ONLY, 다음 날 08:30 KST 이후)
+## 첫 실행 확인 계획 (READ ONLY, 다음 날 09:00 KST 이후 — Hobby 1시간 창)
 
 | 확인 | 방법 | 기대 |
 |---|---|---|
