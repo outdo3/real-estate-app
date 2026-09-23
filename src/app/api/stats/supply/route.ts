@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sidoFullToShort, parsePresaleSigungu, currentYm, isFutureOrCurrentYm, addMonthsToYm } from '@/lib/presale-region';
+import { isSeoulPublicBlocked } from '@/lib/region/enablement';
+import { getSidoRegions } from '@/lib/region/registry';
+
+/** 청약홈 축약 표기의 서울(= sidoFullToShort('서울특별시')). */
+const SEOUL_SHORT = '서울';
 
 // STATISTICS V2.1-4 — SUPPLY(공급). 입주지도 + 공급추이를 한 번의 fetch로 함께 계산한다
 // (§14/§41 — Presale 총 1,046건은 큰 데이터가 아니라 매 요청마다 새로 fetch해도 무리가
@@ -34,6 +39,31 @@ export async function GET(request: Request) {
         // 처리한다(다른 지역으로 fallback하지 않음).
     if (sidoFull && !sidoShort) {
       return NextResponse.json({ status: 'OK', scope: { sido: sidoFull, sigungu: null, nationwide: false }, period: { preset }, summary: { totalCount: 0, mapCount: 0 }, mapMarkers: [], list: [], trend: [], interpretation: [] });
+    }
+
+    // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 서울 공개 범위 게이트.
+    //
+    // 이 라우트는 시도(`subscriptionAreaName`) 단위라 "서울 전체" 집계가 자연스럽게 가능한데,
+    // 승인 범위는 8개 구뿐이므로 **구를 지정하지 않은 서울 요청은 항상 막는다**(부분 범위를
+    // 전체인 것처럼 답하지 않는다). 구를 지정한 경우에만 그 구의 공개 여부로 판정한다.
+    // 구 이름은 registry의 서울 노드에서 canonical 코드로 바꿔서 본다 — 이름 비교로 끝내지 않는다.
+    // 다른 시도(부산 등)는 이 분기에 들어오지 않아 동작이 그대로다.
+    if (sidoShort === SEOUL_SHORT) {
+      const node = sigunguShort
+        ? getSidoRegions('11').find((n) => n.name === sigunguShort)
+        : null;
+      if (!node || isSeoulPublicBlocked(node.lawdCd)) {
+        return NextResponse.json({
+          status: 'UNSUPPORTED',
+          supported: false,
+          reason: 'UNSUPPORTED_REGION',
+          message: '이 지역 공급 정보는 현재 준비 중입니다.',
+          scope: { sido: sidoFull, sigungu: sigunguShort ?? null, nationwide: false },
+          period: { preset },
+          summary: { totalCount: 0, mapCount: 0 },
+          mapMarkers: [], list: [], trend: [], interpretation: [],
+        });
+      }
     }
 
     const rows = await prisma.presale.findMany({

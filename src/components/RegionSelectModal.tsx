@@ -6,6 +6,7 @@ import { REGCODE_PROXY, resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import styles from './RegionSelectModal.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
+import { isSeoulPublicBlocked, isSidoPubliclyHidden, isSidoPartiallyPublic } from '@/lib/region/enablement';
 
 type RegionOption = { code: string; name: string };
 
@@ -51,7 +52,13 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       setRegionLoading(true);
       fetch(`${REGCODE_PROXY}?regcode_pattern=*00000000`)
         .then((res) => res.json())
-        .then((data) => setModalSidos(data.regcodes || []))
+        .then((data) => {
+          // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 이 목록은 외부 REGCODE 프록시(전국)에서 오므로
+          // 공개 범위와 무관하다. 공개 가능한 시군구가 하나도 없는 시도는 아예 내리지 않는다
+          // (지금은 서울이 여기에 해당). 다른 시도는 필터에 걸리지 않아 그대로다.
+          const all: RegionOption[] = data.regcodes || [];
+          setModalSidos(all.filter((s: RegionOption) => !isSidoPubliclyHidden(s.code.substring(0, 2))));
+        })
         .catch((err) => console.error('시도 목록 조회 실패', err))
         .finally(() => setRegionLoading(false));
     }
@@ -75,7 +82,11 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     fetch(`${REGCODE_PROXY}?regcode_pattern=${sidoCode}*00000&is_ignore_zero=true`)
       .then((res) => res.json())
       .then((data) => {
-        const list = (data.regcodes || []).filter((item: RegionOption) => item.code.substring(0, 5) !== `${sidoCode}000`);
+        // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 승인되지 않은 서울 구는 선택지에서 뺀다.
+        // 판정은 표시 이름이 아니라 법정동코드 앞 5자리(canonical 구 코드)로 한다.
+        const list = (data.regcodes || [])
+          .filter((item: RegionOption) => item.code.substring(0, 5) !== `${sidoCode}000`)
+          .filter((item: RegionOption) => !isSeoulPublicBlocked(item.code.substring(0, 5)));
         setModalSigungus(list);
         setModalStep('sigungu');
       })
@@ -90,6 +101,9 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
   const selectSidoAll = () => {
     if (!selectedSido) return;
     const sidoCode = selectedSido.code.substring(0, 2);
+    // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 일부 구만 공개된 시도는 "시도 전체"를 만들지 않는다.
+    // 8/25구만 열린 상태에서 "서울특별시 전체"는 부분 집계를 전체로 보이게 하는 잘못된 질의다.
+    if (isSidoPartiallyPublic(sidoCode)) return;
     finalize({
       lawdCd: null,
       sidoCode,
@@ -286,9 +300,11 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
 
               {modalStep === 'sigungu' && (
                 <>
-                  <button className={styles.gridBtn} onClick={selectSidoAll}>
-                    {selectedSido?.name} 전체
-                  </button>
+                  {!isSidoPartiallyPublic(selectedSido?.code.substring(0, 2)) && (
+                    <button className={styles.gridBtn} onClick={selectSidoAll}>
+                      {selectedSido?.name} 전체
+                    </button>
+                  )}
                   {modalSigungus.map((sigungu) => (
                     <button key={sigungu.code} className={styles.gridBtn} onClick={() => selectSigungu(sigungu)}>
                       {sigungu.name.split(' ').slice(1).join(' ')}

@@ -10,7 +10,7 @@ import {
   type MonthFetchOutcome,
 } from '@/lib/apt-trade-completeness';
 import { logServerError } from '@/lib/log-server-error';
-import { isTradeDbFirstLawdCd } from '@/lib/region/enablement';
+import { isTradeDbFirstLawdCd, isSeoulPublicBlocked } from '@/lib/region/enablement';
 import { resolveStrongIdentityAptSeqs, matchesTradeIdentity, deriveCanonicalAptSeq } from '@/lib/apt-name-match';
 import { resolveCanonicalCoords } from '@/lib/apt-canonical-coords';
 import {
@@ -101,6 +101,34 @@ export async function GET(
         lawdCd: null,
         dong: dong || null,
         regionUnresolved: true,
+        tradeDataSource: null,
+        canceledExcluded: true,
+        partial: false,
+        failedMonths: [],
+        monthsRequested: 0,
+        monthsSucceeded: 0,
+      });
+    }
+
+    // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 공개 접근 게이트.
+    //
+    // 바로 아래 `isTradeDbFirstLawdCd`는 **DB냐 MOLIT이냐**를 고르는 소스 선택기일 뿐
+    // 접근 제어가 아니다. 그래서 지금까지 미출시 서울(강남 포함) 단지도 live MOLIT로
+    // 전체 이력이 그대로 나갔다. 여기서 막는다.
+    //
+    // 판정은 URL의 단지 이름이 아니라 위에서 확정된 **canonical lawdCd**로만 한다
+    // (이름으로 지역을 추측하면 대신롯데캐슬 같은 서울/부산 동명 충돌이 그대로 재현된다).
+    // 서울 외 지역은 이 게이트의 대상이 아니다 — 경기·대구 등은 지금처럼 동작한다.
+    if (isSeoulPublicBlocked(lawdCd)) {
+      return NextResponse.json({
+        trades: [],
+        apiError: null,
+        lawdCd,
+        dong: dong || null,
+        regionUnsupported: true,
+        supported: false,
+        reason: 'UNSUPPORTED_REGION',
+        message: '이 지역은 아직 준비 중입니다.',
         tradeDataSource: null,
         canceledExcluded: true,
         partial: false,

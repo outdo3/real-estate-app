@@ -12,7 +12,7 @@
 // cron 기본값 등)는 아직 자기 가드를 그대로 갖고 있고, 이 모듈은 그 정책을 **한 곳에서
 // 읽을 수 있게** 해 줄 뿐이다. 소비자 이관은 다음 STEP에서 기능별로 진행한다.
 
-import { getRegionByLawdCd, type RegionNode } from './registry';
+import { getRegionByLawdCd, REGION_NODES, type RegionNode } from './registry';
 
 /**
  * 기능별 공개 상태. 지역 하나가 "열렸다/닫혔다"로 뭉뚱그려지지 않도록 축을 나눈다 —
@@ -114,6 +114,83 @@ const ENABLEMENT_BY_LAWDCD: Readonly<Record<string, RegionEnablement>> = SEOUL_B
 /** 이 시군구가 시도와 별개로 직접 열려 있는가(= allowlist 적중). 지금은 항상 false. */
 export function isBetaAllowlistedLawdCd(lawdCd: string | null | undefined): boolean {
   return !!lawdCd && lawdCd in ENABLEMENT_BY_LAWDCD;
+}
+
+/** 승인된 서울 beta 8구인가(스위치와 무관한 **정적 소속** 판정). */
+export function isSeoulBetaDistrict(lawdCd: string | null | undefined): boolean {
+  return !!lawdCd && (SEOUL_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
+}
+
+// ── SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 공개 차단 정책(서울 한정) ────────────────
+//
+// 이 정책은 **서울에만** 적용한다. 부산은 물론이고 경기·대구 등 다른 지역도 건드리지 않는다:
+// 검색/상세는 지금도 전국을 live MOLIT로 응답하는 것이 의도된 동작이고(비부산 **통계**만
+// NON_BUSAN_STATS_TRUST_GATE_V1로 닫혀 있다), 여기서 전 지역을 막으면 이번 작업 범위 밖의
+// 제품 동작까지 바꾸게 된다. 닫아야 하는 것은 "승인되지 않은 서울"뿐이다.
+//
+// 접두사(`startsWith('11')`)로 판정하지 않는다 — registry 노드를 거쳐 시도를 확인한 뒤,
+// 판정 자체는 축별 enablement에 위임한다. 그래서 allowlist가 유일한 진실 원천으로 남는다.
+
+/**
+ * 이 시군구를 해당 기능 축에서 **공개 차단**해야 하는가.
+ *
+ * 서울이 아니면 항상 false(=이 정책의 대상이 아님). 서울이면 그 축이 열렸는지로만 판정하므로
+ *   · beta OFF  → 서울 25구 전부 차단
+ *   · beta ON   → 승인 8구만 통과, 강남 11680과 나머지 17구는 계속 차단
+ *   · `report`처럼 beta에서도 닫아 둔 축은 8구까지 포함해 **전부** 차단
+ * 이 된다.
+ */
+export function isSeoulPublicBlocked(
+  lawdCd: string | null | undefined,
+  feature: keyof RegionEnablement = 'app'
+): boolean {
+  const node = getRegionByLawdCd(lawdCd);
+  if (!node || node.sidoCode !== '11') return false;
+  return !getRegionEnablement(node.lawdCd)[feature];
+}
+
+/**
+ * 공개 차단 대상 서울 시군구 코드 목록 — DB 질의의 deny-list로 쓴다.
+ * registry의 서울 노드에서 파생하므로 구를 새로 승인해도 목록이 저절로 따라온다.
+ */
+export function seoulPublicBlockedLawdCds(
+  feature: keyof RegionEnablement = 'app'
+): readonly string[] {
+  return REGION_NODES.filter((n) => n.sidoCode === '11' && !getRegionEnablement(n.lawdCd)[feature])
+    .map((n) => n.lawdCd);
+}
+
+/**
+ * 이 시도를 지역 선택지에서 **통째로 감춰야** 하는가 = 공개 가능한 시군구가 하나도 없는가.
+ *
+ * 서울에만 적용한다(다른 시도는 이 정책의 대상이 아니므로 항상 false). beta가 꺼져 있으면
+ * 서울 25구가 전부 닫혀 있으므로 true — 선택 자체가 불가능해진다. beta가 켜지면 8구가
+ * 열리므로 false가 되어 서울이 목록에 나타나고, 그 안에서 8구만 고를 수 있다.
+ */
+export function isSidoPubliclyHidden(
+  sidoCode: string | null | undefined,
+  feature: keyof RegionEnablement = 'app'
+): boolean {
+  if (sidoCode !== '11') return false;
+  return !REGION_NODES.some((n) => n.sidoCode === '11' && getRegionEnablement(n.lawdCd)[feature]);
+}
+
+/**
+ * 이 시도가 **일부 시군구만** 공개된 상태인가 = "시도 전체" 선택을 허용하면 안 되는가.
+ *
+ * 부산처럼 전 구가 열린 시도는 false(= "부산광역시 전체" 그대로 동작). 서울은 beta가 켜지면
+ * 8/25구만 열리므로 true가 되어 "서울특별시 전체" 버튼이 사라진다 — 부분 집계를 전체인 것처럼
+ * 보여 주지 않기 위해서다. beta가 꺼져 있으면 열린 구가 0개라 시도 자체가 목록에 없다.
+ */
+export function isSidoPartiallyPublic(
+  sidoCode: string | null | undefined,
+  feature: keyof RegionEnablement = 'app'
+): boolean {
+  if (!sidoCode) return false;
+  const nodes = REGION_NODES.filter((n) => n.sidoCode === sidoCode);
+  if (nodes.length === 0) return false;
+  const open = nodes.filter((n) => getRegionEnablement(n.lawdCd)[feature]).length;
+  return open > 0 && open < nodes.length;
 }
 
 export function getSidoEnablement(sidoCode: string | null | undefined): RegionEnablement {

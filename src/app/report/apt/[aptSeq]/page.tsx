@@ -5,6 +5,7 @@ import ApartmentReportSheet from '@/components/report/ApartmentReportSheet';
 import InvalidScope from '@/components/report/InvalidScope';
 import { readApartmentReport, AptReportNotFound } from '@/lib/report/apt-read';
 import { prisma } from '@/lib/prisma';
+import { isSeoulPublicBlocked } from '@/lib/region/enablement';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,19 @@ export default async function ApartmentReportPage({ params }: Props) {
   const id = decodeURIComponent(aptSeq).trim();
   if (!id) {
     return <InvalidScope reason="단지 식별자(aptSeq)가 비어 있어 리포트를 만들 수 없습니다." />;
+  }
+
+  // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 서울 단지 리포트는 **전부** 막는다.
+  //
+  // 지금까지 이 경로에는 지역 게이트가 없어서 서울 master 6,843개 전부가 열려 있었다.
+  // 게이트 기준은 `report` 축이고 서울은 beta에서도 그 축을 열지 않는다 — 즉 승인된 8구까지
+  // 포함해 전부 닫힌다. 리포트/SEO 범위(BUSAN_DISTRICTS)·제목·breadcrumb가 아직 부산 전용이라
+  // 상세(`app` 축)보다 **더 엄격해야** 하기 때문이다.
+  // 지역은 aptSeq의 앞 5자리(canonical 구 코드)로만 판정한다 — 이름으로 추측하지 않는다.
+  if (isSeoulPublicBlocked(id.slice(0, 5), 'report')) {
+    return (
+      <InvalidScope reason={`요청하신 단지(${id})가 속한 지역의 리포트는 아직 준비 중입니다.`} />
+    );
   }
 
   // JSX를 try/catch 안에서 만들지 않는다(react-hooks/error-boundaries).

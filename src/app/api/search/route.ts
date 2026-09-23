@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { resolveApartmentViaKakaoAlias } from '@/lib/search-alias-fallback';
 import { rankApartmentMatches, normalizeSearchKeyword } from '@/lib/search-ranking';
+import { seoulPublicBlockedLawdCds } from '@/lib/region/enablement';
 // OFFICETEL_V1 STEP 4B §1/§2 — 기존 아파트 검색을 대체하지 않고 결과 종류만 추가한다.
 import { searchOfficetels, type OfficetelSearchResult } from '@/lib/officetel/search-read';
 
@@ -51,6 +52,15 @@ export async function GET(request: Request) {
   const keyword = q.trim();
   const normalizedKeyword = normalizeSearchKeyword(keyword);
 
+  // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 승인되지 않은 서울은 검색 결과에 나오지 않는다.
+  //
+  // 이 테이블은 오랫동안 부산 전용(약 3,400행)이었고 위 주석의 take 제거 근거도 거기서 나왔다.
+  // 지금은 서울 master 6,843행이 함께 들어 있어, 필터가 없으면 미출시 지역(강남 포함)이
+  // 그대로 공개 검색에 노출된다. 표시 이름이 아니라 **canonical 지역 코드(sggCd)** 로만 거른다.
+  // 부산·그 밖의 지역은 이 목록에 들어가지 않으므로 동작이 바뀌지 않는다.
+  const blockedSggCds = seoulPublicBlockedLawdCds('app');
+  const regionScope = blockedSggCds.length ? { sggCd: { notIn: [...blockedSggCds] } } : {};
+
   // Run Region distinct, Apartment and Officetel search in parallel.
   // 오피스텔 쿼리는 5,056행 테이블 하나라 기존 두 쿼리와 나란히 돌려도 지연이 늘지 않는다.
   // 실패해도 아파트/지역 결과를 죽이지 않는다 — 오피스텔만 빈 배열로 축소된다(§1 무회귀).
@@ -59,7 +69,8 @@ export async function GET(request: Request) {
       where: {
         umdName: {
           contains: normalizedKeyword
-        }
+        },
+        ...regionScope,
       },
       distinct: ['sido', 'sigungu', 'sggCd', 'umdName'],
       select: { sido: true, sigungu: true, sggCd: true, umdName: true },
@@ -70,7 +81,8 @@ export async function GET(request: Request) {
         OR: [
           { normalizedName: { contains: normalizedKeyword } },
           { name: { contains: normalizedKeyword } }
-        ]
+        ],
+        ...regionScope,
       },
       // BUSAN_APARTMENT_SEARCH_COVERAGE_PERFORMANCE_V1 §7/§37 감사 결과 — take:50에
       // 걸려 이 시점에서 이미 잘려나가는 실제 사례를 발견했다("현대"/"동원"/"한신" 같은

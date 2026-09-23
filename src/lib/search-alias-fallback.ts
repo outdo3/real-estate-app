@@ -23,6 +23,7 @@
 
 import { prisma } from './prisma';
 import { boundingBoxFor, haversineMeters } from './geo-bounding-box';
+import { isSeoulPublicBlocked } from './region/enablement';
 
 export interface AliasFallbackCandidate {
   id: number;
@@ -105,6 +106,19 @@ export async function resolveApartmentViaKakaoAlias(keyword: string): Promise<Al
       );
       if (withinRadius.length === 1) {
         const m = withinRadius[0];
+        // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 이 경로가 본 검색의 지역 필터를 우회하지 않게 한다.
+        //
+        // 후보를 **고르기 전에** 거르지 않고 **고른 뒤에** 거부하는 이유: 위 주석대로 후보 수가
+        // 줄면 "2개라 모호 → 거부"가 "1개 → 채택"으로 바뀌어 다른 단지를 반환할 수 있다.
+        // 모호성 판정은 건드리지 않고 결과만 막는다.
+        //
+        // 또 다음 POI로 넘어가지 않고 **즉시 중단**한다 — 이 POI는 미출시 단지로 정상 해석된
+        // 것이므로, 계속 돌다가 이름이 비슷한 **다른 지역** 단지를 집어오면 그게 바로
+        // 금지된 지역 대체(부산 fallback)다.
+        if (isSeoulPublicBlocked(m.sggCd)) {
+          fallbackCache.set(keyword, null);
+          return null;
+        }
         const result: AliasFallbackCandidate = {
           id: m.id, aptSeq: m.aptSeq, name: m.name, sggCd: m.sggCd, umdName: m.umdName,
           jibun: m.jibun, buildYear: m.buildYear, totalHouseholds: m.totalHouseholds,
