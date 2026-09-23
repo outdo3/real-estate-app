@@ -47,18 +47,89 @@ const BUSAN_ENABLED: RegionEnablement = {
  */
 const ENABLEMENT_BY_SIDO: Readonly<Record<string, RegionEnablement>> = {
   '26': BUSAN_ENABLED, // 부산광역시 — 현재 유일한 출시 지역
-  // '11': 서울특별시 — registry에는 존재하지만 미출시
+  // '11': 서울특별시 — registry에는 존재하지만 미출시(아래 시군구 allowlist 참고)
   // '41': 경기도     — registry에는 존재하지만 미출시
 };
+
+// ── SEOUL_MOBILE_BETA_PREP_V1 — 시군구 단위 allowlist ────────────────────────────
+//
+// 서울은 **시도 전체로 열 수 없다**. registry에 서울 25구가 전부 있으므로
+// `ENABLEMENT_BY_SIDO`에 `'11'`을 넣는 순간 전체 이력도 검증도 없는 17개 구가
+// 함께 열린다. 그래서 시도 map은 그대로 두고, 그보다 **먼저** 보는 시군구 층을 둔다.
+//
+// 이 층은 시도 map을 덮어쓰지 않고 앞에서 가로챈다(부산 16구는 계속 시도 층이 답한다).
+// 결과적으로 `getSidoEnablement('11')`은 **계속 전부 false**다 — 이것이 중요하다:
+//   · "서울 전체"(sidoCode=11) 통계/피드 요청은 지금처럼 거부된다.
+//   · `?sido=서울특별시` 이름 경로도 거부된다.
+//   · 시도 단위 DB-first(`isTradeDbFirstSido`)도 거부된다 — 8/25구만 적재돼 있어
+//     "시도 전체 DB-first"는 부분이 아니라 **틀린** 답이기 때문이다.
+// 즉 열리는 것은 오직 아래 목록의 시군구를 **직접** 지정한 요청뿐이다.
+
+/** 서울 모바일 beta 대상 8개 구. 전체 이력 적재 + 사후 검증(원천=DB)을 통과한 구만 있다. */
+export const SEOUL_BETA_LAWDCDS = [
+  '11110', // 종로구
+  '11140', // 중구
+  '11170', // 용산구
+  '11215', // 광진구
+  '11230', // 동대문구
+  '11410', // 서대문구
+  '11440', // 마포구
+  '11545', // 금천구
+] as const;
+
+/**
+ * beta 공개 마스터 스위치. **이 값 하나가 서울 노출 전체를 좌우한다.**
+ * false인 동안 `ENABLEMENT_BY_LAWDCD`는 빈 객체이고, 서울은 모든 축에서 닫혀 있다
+ * (즉 이 파일을 제외한 어떤 동작도 지금은 바뀌지 않는다).
+ */
+export const SEOUL_BETA_ENABLED = false;
+
+/**
+ * beta에서 실제로 여는 축.
+ *
+ * `app`·`cronSync`만 연다 — 서울에 있는 데이터가 **매매 실거래 + 단지 master(좌표)뿐**이기 때문이다.
+ *   · `cronSync`: 매매를 DB에 유지하고 있으므로 상세/지도의 DB-first 읽기가 옳다.
+ *   · `stats`  : 전월세·학교·입지/시장 피처가 전부 부산 전용이고, feed의 DB 경로도 시도 고정이다.
+ *   · `report` : 리포트/SEO 범위는 `BUSAN_DISTRICTS` 기반이라 지역 일반화가 선행돼야 한다.
+ *   · `sitemap`·`seoIndex`: 위 리포트 범위가 정리되기 전에는 색인 대상이 될 수 없다.
+ * 데이터가 준비되는 순서대로 축을 하나씩 여는 것이 이 인터페이스의 목적이다.
+ */
+const SEOUL_BETA_ENABLEMENT: RegionEnablement = {
+  app: true,
+  report: false,
+  stats: false,
+  sitemap: false,
+  seoIndex: false,
+  cronSync: true,
+};
+
+/**
+ * 시군구 단위 공개 상태. 스위치가 꺼져 있으면 **빈 객체**이므로 어떤 조회도 시도 층으로 떨어진다.
+ * 여기에 없는 시군구는 이 층이 관여하지 않는다(부산은 계속 시도 층이 답한다).
+ */
+const ENABLEMENT_BY_LAWDCD: Readonly<Record<string, RegionEnablement>> = SEOUL_BETA_ENABLED
+  ? Object.fromEntries(SEOUL_BETA_LAWDCDS.map((code) => [code, SEOUL_BETA_ENABLEMENT]))
+  : {};
+
+/** 이 시군구가 시도와 별개로 직접 열려 있는가(= allowlist 적중). 지금은 항상 false. */
+export function isBetaAllowlistedLawdCd(lawdCd: string | null | undefined): boolean {
+  return !!lawdCd && lawdCd in ENABLEMENT_BY_LAWDCD;
+}
 
 export function getSidoEnablement(sidoCode: string | null | undefined): RegionEnablement {
   return (sidoCode && ENABLEMENT_BY_SIDO[sidoCode]) || NOT_ENABLED;
 }
 
-/** 모르는 lawdCd는 전부 닫힘으로 본다 — 어떤 지역으로도 fallback하지 않는다. */
+/**
+ * 모르는 lawdCd는 전부 닫힘으로 본다 — 어떤 지역으로도 fallback하지 않는다.
+ *
+ * 시군구 allowlist를 **먼저** 본다(SEOUL_MOBILE_BETA_PREP_V1). allowlist가 비어 있으면
+ * 예전과 완전히 같은 동작(시도 층 단독)이다.
+ */
 export function getRegionEnablement(lawdCd: string | null | undefined): RegionEnablement {
   const node = getRegionByLawdCd(lawdCd);
-  return node ? getSidoEnablement(node.sidoCode) : NOT_ENABLED;
+  if (!node) return NOT_ENABLED;
+  return ENABLEMENT_BY_LAWDCD[node.lawdCd] ?? getSidoEnablement(node.sidoCode);
 }
 
 /** 현재 앱에 공개된 시도 코드 목록. */
@@ -66,12 +137,19 @@ export function getEnabledSidoCodes(): readonly string[] {
   return Object.keys(ENABLEMENT_BY_SIDO).filter((code) => ENABLEMENT_BY_SIDO[code].app);
 }
 
-/** 특정 기능 축에 대해 열려 있는 지역 노드 목록. */
+/**
+ * 특정 기능 축에 대해 열려 있는 지역 노드 목록.
+ *
+ * **시군구 단위로 판정한다**(SEOUL_MOBILE_BETA_PREP_V1). 예전에는 `getSidoEnablement`를 써서
+ * 한 시도가 열리면 그 시도의 모든 구가 딸려 나왔다 — 서울처럼 일부 구만 여는 경우
+ * 그 동작은 곧 "승인되지 않은 17개 구까지 노출"을 뜻하므로 per-lawdCd로 바꾼다.
+ * 부산은 16구가 모두 시도 층에서 열려 있어 결과가 이전과 동일하다.
+ */
 export function getEnabledRegions(
   feature: keyof RegionEnablement,
   nodes: readonly RegionNode[]
 ): readonly RegionNode[] {
-  return nodes.filter((n) => getSidoEnablement(n.sidoCode)[feature]);
+  return nodes.filter((n) => getRegionEnablement(n.lawdCd)[feature]);
 }
 
 // ── STATS_REGION_ENABLEMENT_MIGRATION_V1 ─────────────────────────────────────
