@@ -13,8 +13,22 @@
  * 전체 이력 적재 + 사후 검증(원천 = DB) 완료 구만 넣는다.
  * 11680 강남은 2026-08 한 달(46행) 파일럿뿐이라 제외 — 넣으면 최근 창만 채워져 들쭉날쭉한 부분 이력이 된다.
  * 새 구는 backfill apply → post-apply verify 통과 뒤에만 추가한다.
+ *
+ * SEOUL_PHASE_C_CRON_SCOPE_EXPANSION_V1 — Phase C 5구(마포·서대문·동대문·광진·금천)를 추가해 8구가 됐다.
+ * 근거: 2026-09-23 Phase C apply PASS — 204,987행 적재, 원천/DB parity exact(자연키·cancel_date 다중집합
+ * 셀 단위 0 불일치), 취소 2,746 = 원천, re-plan 결과 pending insert 0, 부산 회귀 0.
+ * 즉 5구 모두 위 조건(전체 이력 + 사후 검증)을 충족한 뒤에 들어왔다.
  */
-export const SEOUL_SALE_SYNC_LAWDCDS = ['11110', '11140', '11170'] as const;
+export const SEOUL_SALE_SYNC_LAWDCDS = [
+  '11110', // 종로구
+  '11140', // 중구
+  '11170', // 용산구
+  '11440', // 마포구   — Phase C
+  '11410', // 서대문구 — Phase C
+  '11230', // 동대문구 — Phase C
+  '11215', // 광진구   — Phase C
+  '11545', // 금천구   — Phase C
+] as const;
 
 export type SaleSyncScope = 'busan' | 'seoul';
 

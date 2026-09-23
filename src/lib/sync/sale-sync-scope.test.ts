@@ -7,6 +7,8 @@ import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
 import { getRegionByLawdCd } from '../region/registry';
 import { getSidoEnablement } from '../region/enablement';
 import { describeDailyUtcCronInKst, findCronForRoute } from '../cron-schedule';
+import { monthsInRange, orderRecheckCellsByStaleness, resolveSaleRange, resolveSaleRecheckBand } from './shared';
+import { subtractMonths } from '../../../scripts/rent-trade-history/incremental-sync-completed-month-logic';
 
 // SEOUL_SALE_INCREMENTAL_SYNC_PREP_V1 — 매매 cron 범위(scope) 계약. 쓰기 0 · DB 0.
 
@@ -26,10 +28,14 @@ test('§A scope 생략 → 코어 기본값(부산 16구) 그대로', () => {
   assert.ok(/const lawdCds = opts\.lawdCds \?\? BUSAN_LAWDCD_16;/.test(read('src/lib/sync/sale-recheck-core.ts')));
 });
 
-test('§B scope=seoul → 정확히 11110 · 11140 · 11170 (등록된 서울 MOLIT 구)', () => {
+// SEOUL_PHASE_C_CRON_SCOPE_EXPANSION_V1 — 기존 3구 + Phase C 5구.
+const SEOUL_BASE_3 = ['11110', '11140', '11170'] as const;
+const SEOUL_PHASE_C_5 = ['11440', '11410', '11230', '11215', '11545'] as const;
+
+test('§B scope=seoul → 정확히 8개 구(기존 3 + Phase C 5, 전부 등록된 서울 MOLIT 구)', () => {
   const r = resolveSaleSyncScope('seoul');
   assert.ok(r.ok);
-  assert.deepEqual(r.ok && r.lawdCds, ['11110', '11140', '11170']);
+  assert.deepEqual(r.ok && r.lawdCds, ['11110', '11140', '11170', '11440', '11410', '11230', '11215', '11545']);
   for (const code of SEOUL_SALE_SYNC_LAWDCDS) {
     const node = getRegionByLawdCd(code);
     assert.ok(node, `${code}가 registry에 없다`);
@@ -38,9 +44,31 @@ test('§B scope=seoul → 정확히 11110 · 11140 · 11170 (등록된 서울 MO
   }
 });
 
+test('§B2 기존 3구는 그대로 남고 Phase C 5구가 빠짐없이 들어갔다', () => {
+  const set = new Set<string>(SEOUL_SALE_SYNC_LAWDCDS);
+  for (const c of SEOUL_BASE_3) assert.ok(set.has(c), `기존 구 ${c}가 빠졌다`);
+  for (const c of SEOUL_PHASE_C_5) assert.ok(set.has(c), `Phase C 구 ${c}가 없다`);
+});
+
 test('§C 강남 11680은 없다 — 서울 25구 자동 포함도 없다', () => {
   assert.ok(!(SEOUL_SALE_SYNC_LAWDCDS as readonly string[]).includes('11680'));
-  assert.equal(SEOUL_SALE_SYNC_LAWDCDS.length, 3);
+  assert.equal(SEOUL_SALE_SYNC_LAWDCDS.length, 8);
+  // 승인된 8개 말고는 어떤 서울 구도 들어올 수 없다.
+  const approved = new Set<string>([...SEOUL_BASE_3, ...SEOUL_PHASE_C_5]);
+  for (const c of SEOUL_SALE_SYNC_LAWDCDS) assert.ok(approved.has(c), `승인되지 않은 구 ${c}`);
+});
+
+test('§C2 중복 lawdCd가 없다', () => {
+  assert.equal(new Set<string>(SEOUL_SALE_SYNC_LAWDCDS).size, SEOUL_SALE_SYNC_LAWDCDS.length);
+});
+
+test('§C3 서울 scope는 부산 구를 하나도 싣지 않는다(양방향 격리)', () => {
+  const seoul = new Set<string>(SEOUL_SALE_SYNC_LAWDCDS);
+  for (const b of BUSAN_LAWDCD_16) assert.ok(!seoul.has(b), `부산 ${b}가 서울 scope에 있다`);
+  for (const s of SEOUL_SALE_SYNC_LAWDCDS) assert.ok(!BUSAN_LAWDCD_16.includes(s), `서울 ${s}가 부산 목록에 있다`);
+  // 부산 기본값은 이 변경과 무관하게 16구 그대로다.
+  assert.equal(BUSAN_LAWDCD_16.length, 16);
+  assert.ok(BUSAN_LAWDCD_16.every((c) => c.startsWith('26')));
 });
 
 test('§D 잘못된 scope는 거부된다(기본값으로 삼키지 않는다)', () => {
@@ -144,3 +172,46 @@ test('cron: /admin/ops의 스케줄 표시는 계속 부산 호출을 가리킨�
   assert.equal(findCronForRoute(CRONS, '/api/cron/sale-recheck').scheduleUtc, '0 23 * * *');
 });
 
+
+// ── SEOUL_PHASE_C_CRON_SCOPE_EXPANSION_V1 — 셀 수 · 실행 예산 ────────────────────────────
+
+test('예산: 서울 sale sync는 8구 × 4개월 = 32셀, 50s 예산 안', () => {
+  // 운영과 같은 식으로 범위를 구한다(재구현 아님).
+  const latestComplete = '202608';
+  const nowMonth = '202609';
+  const { from, to } = resolveSaleRange(latestComplete, nowMonth, subtractMonths, {});
+  const months = monthsInRange(from, to);
+  assert.deepEqual(months, ['202606', '202607', '202608', '202609']); // overlap 3 + 현재월
+  const cells = SEOUL_SALE_SYNC_LAWDCDS.length * months.length;
+  assert.equal(cells, 32);
+
+  // 관측치(2026-09-23 첫 서울 실행): 12셀 ≈ 5.0s → 셀당 ~420ms. 넉넉히 600ms로 본다.
+  const worstMs = cells * 600;
+  assert.ok(worstMs < 50_000 - 2_500, `sale sync 최악 ${worstMs}ms가 예산을 넘는다`);
+});
+
+test('예산: 서울 recheck는 8구 × 10개월 = 80셀, 45s 예산 안', () => {
+  const latestComplete = '202608';
+  const { from, to } = resolveSaleRecheckBand(latestComplete, subtractMonths);
+  const months = monthsInRange(from, to);
+  assert.equal(months.length, 10); // latestComplete-12 ~ latestComplete-3
+  const cells = SEOUL_SALE_SYNC_LAWDCDS.length * months.length;
+  assert.equal(cells, 80);
+
+  // 관측치(2026-09-23): 서울 30셀 ≈ 11.0s, 부산 121셀 ≈ 42s → 둘 다 셀당 ~350ms(MOLIT pacing).
+  // 예산 판정은 elapsed + ESTIMATED_CELL_MS(2500) < 45000, 즉 실질 한계는 42.5s다.
+  const worstMs = cells * 500;
+  assert.ok(worstMs < 45_000 - 2_500, `recheck 최악 ${worstMs}ms가 예산을 넘는다`);
+});
+
+test('예산: band를 다 못 돌아도 실패가 아니다 — 다음 실행이 가장 오래된 셀부터 이어받는다', () => {
+  const core = stripComments(read('src/lib/sync/sale-recheck-core.ts'));
+  // 셀을 하나도 못 돌았을 때만 PARTIAL_RUN이다(부분 sweep은 설계상 정상).
+  assert.ok(/if \(reports\.length === 0\) status = 'PARTIAL_RUN';/.test(core));
+  // 미검증 셀이 먼저 온다 — 새로 들어온 Phase C 5구가 첫 실행에서 우선 처리된다.
+  const never = orderRecheckCellsByStaleness([
+    { lawdCd: '11110', dealYmd: '202512', lastVerifiedAtMs: 1 },
+    { lawdCd: '11440', dealYmd: '202512' }, // 기록 없음 = 미검증
+  ]);
+  assert.equal(never[0].lawdCd, '11440');
+});
