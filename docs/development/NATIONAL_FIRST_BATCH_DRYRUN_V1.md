@@ -51,7 +51,7 @@ REVIEW는 수동으로 READY로 바꾸지 않았다. 적재하려면 "층 공란
 
 ## 4. 식별·자연키
 
-- 원천 셀 내 자연키 중복 0(같은 조건 반복 거래는 occurrenceIndex로 보존, 같은 조건 그룹 7,557)
+- 원천 셀 내 자연키 중복 0(같은 조건 반복 거래는 occurrenceIndex로 보존, 같은 조건 그룹 7,587)
 - DB 자연키 충돌 0(경기 기존 행 없음) · aptSeq 앞자리 ≠ 조회 구 0 · 다른 구 aptSeq 0
 - 이름 기반 판정 없음 — master 분류는 aptSeq 정확 일치(전부 MASTER_MISSING)
 
@@ -71,7 +71,7 @@ REVIEW는 수동으로 READY로 바꾸지 않았다. 적재하려면 "층 공란
 
 ## 8. checkpoint
 
-9구 × 255셀 = 2,295셀, 전부 명시 상태: READY 2,244 · EMPTY_VALID 47 · REVIEW 4 · BLOCKED 0 · ERROR 0.
+9구 × 255셀 = 2,295셀, 전부 명시 상태: READY 2,249 · EMPTY_VALID 42 · REVIEW 4 · BLOCKED 0 · ERROR 0.
 구별 `checkpoint.json`에 기간·plan hash·관측 quota 기록. raw 2,295개 gzip 보존(apply 직전 재계획은 MOLIT 0콜).
 
 ## 9. 호출 비용
