@@ -1,0 +1,1142 @@
+{
+ "source": "REGCODE_PROXY (src/lib/molit-stats-helpers.ts) — registry.ts와 같은 출처",
+ "fetchedAt": "2026-09-24T13:19:53.292Z",
+ "sidos": [
+  {
+   "code": "11",
+   "name": "서울특별시"
+  },
+  {
+   "code": "26",
+   "name": "부산광역시"
+  },
+  {
+   "code": "27",
+   "name": "대구광역시"
+  },
+  {
+   "code": "28",
+   "name": "인천광역시"
+  },
+  {
+   "code": "29",
+   "name": "광주광역시"
+  },
+  {
+   "code": "30",
+   "name": "대전광역시"
+  },
+  {
+   "code": "31",
+   "name": "울산광역시"
+  },
+  {
+   "code": "41",
+   "name": "경기도"
+  },
+  {
+   "code": "43",
+   "name": "충청북도"
+  },
+  {
+   "code": "44",
+   "name": "충청남도"
+  },
+  {
+   "code": "45",
+   "name": "전라북도"
+  },
+  {
+   "code": "46",
+   "name": "전라남도"
+  },
+  {
+   "code": "47",
+   "name": "경상북도"
+  },
+  {
+   "code": "48",
+   "name": "경상남도"
+  },
+  {
+   "code": "50",
+   "name": "제주특별자치도"
+  },
+  {
+   "code": "51",
+   "name": "강원특별자치도"
+  }
+ ],
+ "sigungu": [
+  {
+   "lawdCd": "11110",
+   "fullName": "서울특별시 종로구"
+  },
+  {
+   "lawdCd": "11140",
+   "fullName": "서울특별시 중구"
+  },
+  {
+   "lawdCd": "11170",
+   "fullName": "서울특별시 용산구"
+  },
+  {
+   "lawdCd": "11200",
+   "fullName": "서울특별시 성동구"
+  },
+  {
+   "lawdCd": "11215",
+   "fullName": "서울특별시 광진구"
+  },
+  {
+   "lawdCd": "11230",
+   "fullName": "서울특별시 동대문구"
+  },
+  {
+   "lawdCd": "11260",
+   "fullName": "서울특별시 중랑구"
+  },
+  {
+   "lawdCd": "11290",
+   "fullName": "서울특별시 성북구"
+  },
+  {
+   "lawdCd": "11305",
+   "fullName": "서울특별시 강북구"
+  },
+  {
+   "lawdCd": "11320",
+   "fullName": "서울특별시 도봉구"
+  },
+  {
+   "lawdCd": "11350",
+   "fullName": "서울특별시 노원구"
+  },
+  {
+   "lawdCd": "11380",
+   "fullName": "서울특별시 은평구"
+  },
+  {
+   "lawdCd": "11410",
+   "fullName": "서울특별시 서대문구"
+  },
+  {
+   "lawdCd": "11440",
+   "fullName": "서울특별시 마포구"
+  },
+  {
+   "lawdCd": "11470",
+   "fullName": "서울특별시 양천구"
+  },
+  {
+   "lawdCd": "11500",
+   "fullName": "서울특별시 강서구"
+  },
+  {
+   "lawdCd": "11530",
+   "fullName": "서울특별시 구로구"
+  },
+  {
+   "lawdCd": "11545",
+   "fullName": "서울특별시 금천구"
+  },
+  {
+   "lawdCd": "11560",
+   "fullName": "서울특별시 영등포구"
+  },
+  {
+   "lawdCd": "11590",
+   "fullName": "서울특별시 동작구"
+  },
+  {
+   "lawdCd": "11620",
+   "fullName": "서울특별시 관악구"
+  },
+  {
+   "lawdCd": "11650",
+   "fullName": "서울특별시 서초구"
+  },
+  {
+   "lawdCd": "11680",
+   "fullName": "서울특별시 강남구"
+  },
+  {
+   "lawdCd": "11710",
+   "fullName": "서울특별시 송파구"
+  },
+  {
+   "lawdCd": "11740",
+   "fullName": "서울특별시 강동구"
+  },
+  {
+   "lawdCd": "26110",
+   "fullName": "부산광역시 중구"
+  },
+  {
+   "lawdCd": "26140",
+   "fullName": "부산광역시 서구"
+  },
+  {
+   "lawdCd": "26170",
+   "fullName": "부산광역시 동구"
+  },
+  {
+   "lawdCd": "26200",
+   "fullName": "부산광역시 영도구"
+  },
+  {
+   "lawdCd": "26230",
+   "fullName": "부산광역시 부산진구"
+  },
+  {
+   "lawdCd": "26260",
+   "fullName": "부산광역시 동래구"
+  },
+  {
+   "lawdCd": "26290",
+   "fullName": "부산광역시 남구"
+  },
+  {
+   "lawdCd": "26320",
+   "fullName": "부산광역시 북구"
+  },
+  {
+   "lawdCd": "26350",
+   "fullName": "부산광역시 해운대구"
+  },
+  {
+   "lawdCd": "26380",
+   "fullName": "부산광역시 사하구"
+  },
+  {
+   "lawdCd": "26410",
+   "fullName": "부산광역시 금정구"
+  },
+  {
+   "lawdCd": "26440",
+   "fullName": "부산광역시 강서구"
+  },
+  {
+   "lawdCd": "26470",
+   "fullName": "부산광역시 연제구"
+  },
+  {
+   "lawdCd": "26500",
+   "fullName": "부산광역시 수영구"
+  },
+  {
+   "lawdCd": "26530",
+   "fullName": "부산광역시 사상구"
+  },
+  {
+   "lawdCd": "26710",
+   "fullName": "부산광역시 기장군"
+  },
+  {
+   "lawdCd": "27110",
+   "fullName": "대구광역시 중구"
+  },
+  {
+   "lawdCd": "27140",
+   "fullName": "대구광역시 동구"
+  },
+  {
+   "lawdCd": "27170",
+   "fullName": "대구광역시 서구"
+  },
+  {
+   "lawdCd": "27200",
+   "fullName": "대구광역시 남구"
+  },
+  {
+   "lawdCd": "27230",
+   "fullName": "대구광역시 북구"
+  },
+  {
+   "lawdCd": "27260",
+   "fullName": "대구광역시 수성구"
+  },
+  {
+   "lawdCd": "27290",
+   "fullName": "대구광역시 달서구"
+  },
+  {
+   "lawdCd": "27710",
+   "fullName": "대구광역시 달성군"
+  },
+  {
+   "lawdCd": "27720",
+   "fullName": "대구광역시 군위군"
+  },
+  {
+   "lawdCd": "28110",
+   "fullName": "인천광역시 중구"
+  },
+  {
+   "lawdCd": "28140",
+   "fullName": "인천광역시 동구"
+  },
+  {
+   "lawdCd": "28177",
+   "fullName": "인천광역시 미추홀구"
+  },
+  {
+   "lawdCd": "28185",
+   "fullName": "인천광역시 연수구"
+  },
+  {
+   "lawdCd": "28200",
+   "fullName": "인천광역시 남동구"
+  },
+  {
+   "lawdCd": "28237",
+   "fullName": "인천광역시 부평구"
+  },
+  {
+   "lawdCd": "28245",
+   "fullName": "인천광역시 계양구"
+  },
+  {
+   "lawdCd": "28260",
+   "fullName": "인천광역시 서구"
+  },
+  {
+   "lawdCd": "28710",
+   "fullName": "인천광역시 강화군"
+  },
+  {
+   "lawdCd": "28720",
+   "fullName": "인천광역시 옹진군"
+  },
+  {
+   "lawdCd": "29110",
+   "fullName": "광주광역시 동구"
+  },
+  {
+   "lawdCd": "29140",
+   "fullName": "광주광역시 서구"
+  },
+  {
+   "lawdCd": "29155",
+   "fullName": "광주광역시 남구"
+  },
+  {
+   "lawdCd": "29170",
+   "fullName": "광주광역시 북구"
+  },
+  {
+   "lawdCd": "29200",
+   "fullName": "광주광역시 광산구"
+  },
+  {
+   "lawdCd": "30110",
+   "fullName": "대전광역시 동구"
+  },
+  {
+   "lawdCd": "30140",
+   "fullName": "대전광역시 중구"
+  },
+  {
+   "lawdCd": "30170",
+   "fullName": "대전광역시 서구"
+  },
+  {
+   "lawdCd": "30200",
+   "fullName": "대전광역시 유성구"
+  },
+  {
+   "lawdCd": "30230",
+   "fullName": "대전광역시 대덕구"
+  },
+  {
+   "lawdCd": "31110",
+   "fullName": "울산광역시 중구"
+  },
+  {
+   "lawdCd": "31140",
+   "fullName": "울산광역시 남구"
+  },
+  {
+   "lawdCd": "31170",
+   "fullName": "울산광역시 동구"
+  },
+  {
+   "lawdCd": "31200",
+   "fullName": "울산광역시 북구"
+  },
+  {
+   "lawdCd": "31710",
+   "fullName": "울산광역시 울주군"
+  },
+  {
+   "lawdCd": "41110",
+   "fullName": "경기도 수원시"
+  },
+  {
+   "lawdCd": "41111",
+   "fullName": "경기도 수원시 장안구"
+  },
+  {
+   "lawdCd": "41113",
+   "fullName": "경기도 수원시 권선구"
+  },
+  {
+   "lawdCd": "41115",
+   "fullName": "경기도 수원시 팔달구"
+  },
+  {
+   "lawdCd": "41117",
+   "fullName": "경기도 수원시 영통구"
+  },
+  {
+   "lawdCd": "41130",
+   "fullName": "경기도 성남시"
+  },
+  {
+   "lawdCd": "41131",
+   "fullName": "경기도 성남시 수정구"
+  },
+  {
+   "lawdCd": "41133",
+   "fullName": "경기도 성남시 중원구"
+  },
+  {
+   "lawdCd": "41135",
+   "fullName": "경기도 성남시 분당구"
+  },
+  {
+   "lawdCd": "41150",
+   "fullName": "경기도 의정부시"
+  },
+  {
+   "lawdCd": "41170",
+   "fullName": "경기도 안양시"
+  },
+  {
+   "lawdCd": "41171",
+   "fullName": "경기도 안양시 만안구"
+  },
+  {
+   "lawdCd": "41173",
+   "fullName": "경기도 안양시 동안구"
+  },
+  {
+   "lawdCd": "41190",
+   "fullName": "경기도 부천시"
+  },
+  {
+   "lawdCd": "41210",
+   "fullName": "경기도 광명시"
+  },
+  {
+   "lawdCd": "41220",
+   "fullName": "경기도 평택시"
+  },
+  {
+   "lawdCd": "41250",
+   "fullName": "경기도 동두천시"
+  },
+  {
+   "lawdCd": "41270",
+   "fullName": "경기도 안산시"
+  },
+  {
+   "lawdCd": "41271",
+   "fullName": "경기도 안산시 상록구"
+  },
+  {
+   "lawdCd": "41273",
+   "fullName": "경기도 안산시 단원구"
+  },
+  {
+   "lawdCd": "41280",
+   "fullName": "경기도 고양시"
+  },
+  {
+   "lawdCd": "41281",
+   "fullName": "경기도 고양시 덕양구"
+  },
+  {
+   "lawdCd": "41285",
+   "fullName": "경기도 고양시 일산동구"
+  },
+  {
+   "lawdCd": "41287",
+   "fullName": "경기도 고양시 일산서구"
+  },
+  {
+   "lawdCd": "41290",
+   "fullName": "경기도 과천시"
+  },
+  {
+   "lawdCd": "41310",
+   "fullName": "경기도 구리시"
+  },
+  {
+   "lawdCd": "41360",
+   "fullName": "경기도 남양주시"
+  },
+  {
+   "lawdCd": "41370",
+   "fullName": "경기도 오산시"
+  },
+  {
+   "lawdCd": "41390",
+   "fullName": "경기도 시흥시"
+  },
+  {
+   "lawdCd": "41410",
+   "fullName": "경기도 군포시"
+  },
+  {
+   "lawdCd": "41430",
+   "fullName": "경기도 의왕시"
+  },
+  {
+   "lawdCd": "41450",
+   "fullName": "경기도 하남시"
+  },
+  {
+   "lawdCd": "41460",
+   "fullName": "경기도 용인시"
+  },
+  {
+   "lawdCd": "41461",
+   "fullName": "경기도 용인시 처인구"
+  },
+  {
+   "lawdCd": "41463",
+   "fullName": "경기도 용인시 기흥구"
+  },
+  {
+   "lawdCd": "41465",
+   "fullName": "경기도 용인시 수지구"
+  },
+  {
+   "lawdCd": "41480",
+   "fullName": "경기도 파주시"
+  },
+  {
+   "lawdCd": "41500",
+   "fullName": "경기도 이천시"
+  },
+  {
+   "lawdCd": "41550",
+   "fullName": "경기도 안성시"
+  },
+  {
+   "lawdCd": "41570",
+   "fullName": "경기도 김포시"
+  },
+  {
+   "lawdCd": "41590",
+   "fullName": "경기도 화성시"
+  },
+  {
+   "lawdCd": "41610",
+   "fullName": "경기도 광주시"
+  },
+  {
+   "lawdCd": "41630",
+   "fullName": "경기도 양주시"
+  },
+  {
+   "lawdCd": "41650",
+   "fullName": "경기도 포천시"
+  },
+  {
+   "lawdCd": "41670",
+   "fullName": "경기도 여주시"
+  },
+  {
+   "lawdCd": "41800",
+   "fullName": "경기도 연천군"
+  },
+  {
+   "lawdCd": "41820",
+   "fullName": "경기도 가평군"
+  },
+  {
+   "lawdCd": "41830",
+   "fullName": "경기도 양평군"
+  },
+  {
+   "lawdCd": "43110",
+   "fullName": "충청북도 청주시"
+  },
+  {
+   "lawdCd": "43111",
+   "fullName": "충청북도 청주시 상당구"
+  },
+  {
+   "lawdCd": "43112",
+   "fullName": "충청북도 청주시 서원구"
+  },
+  {
+   "lawdCd": "43113",
+   "fullName": "충청북도 청주시 흥덕구"
+  },
+  {
+   "lawdCd": "43114",
+   "fullName": "충청북도 청주시 청원구"
+  },
+  {
+   "lawdCd": "43130",
+   "fullName": "충청북도 충주시"
+  },
+  {
+   "lawdCd": "43150",
+   "fullName": "충청북도 제천시"
+  },
+  {
+   "lawdCd": "43720",
+   "fullName": "충청북도 보은군"
+  },
+  {
+   "lawdCd": "43730",
+   "fullName": "충청북도 옥천군"
+  },
+  {
+   "lawdCd": "43740",
+   "fullName": "충청북도 영동군"
+  },
+  {
+   "lawdCd": "43745",
+   "fullName": "충청북도 증평군"
+  },
+  {
+   "lawdCd": "43750",
+   "fullName": "충청북도 진천군"
+  },
+  {
+   "lawdCd": "43760",
+   "fullName": "충청북도 괴산군"
+  },
+  {
+   "lawdCd": "43770",
+   "fullName": "충청북도 음성군"
+  },
+  {
+   "lawdCd": "43800",
+   "fullName": "충청북도 단양군"
+  },
+  {
+   "lawdCd": "44130",
+   "fullName": "충청남도 천안시"
+  },
+  {
+   "lawdCd": "44131",
+   "fullName": "충청남도 천안시 동남구"
+  },
+  {
+   "lawdCd": "44133",
+   "fullName": "충청남도 천안시 서북구"
+  },
+  {
+   "lawdCd": "44150",
+   "fullName": "충청남도 공주시"
+  },
+  {
+   "lawdCd": "44180",
+   "fullName": "충청남도 보령시"
+  },
+  {
+   "lawdCd": "44200",
+   "fullName": "충청남도 아산시"
+  },
+  {
+   "lawdCd": "44210",
+   "fullName": "충청남도 서산시"
+  },
+  {
+   "lawdCd": "44230",
+   "fullName": "충청남도 논산시"
+  },
+  {
+   "lawdCd": "44250",
+   "fullName": "충청남도 계룡시"
+  },
+  {
+   "lawdCd": "44270",
+   "fullName": "충청남도 당진시"
+  },
+  {
+   "lawdCd": "44710",
+   "fullName": "충청남도 금산군"
+  },
+  {
+   "lawdCd": "44760",
+   "fullName": "충청남도 부여군"
+  },
+  {
+   "lawdCd": "44770",
+   "fullName": "충청남도 서천군"
+  },
+  {
+   "lawdCd": "44790",
+   "fullName": "충청남도 청양군"
+  },
+  {
+   "lawdCd": "44800",
+   "fullName": "충청남도 홍성군"
+  },
+  {
+   "lawdCd": "44810",
+   "fullName": "충청남도 예산군"
+  },
+  {
+   "lawdCd": "44825",
+   "fullName": "충청남도 태안군"
+  },
+  {
+   "lawdCd": "45110",
+   "fullName": "전라북도 전주시"
+  },
+  {
+   "lawdCd": "45111",
+   "fullName": "전라북도 전주시 완산구"
+  },
+  {
+   "lawdCd": "45113",
+   "fullName": "전라북도 전주시 덕진구"
+  },
+  {
+   "lawdCd": "45130",
+   "fullName": "전라북도 군산시"
+  },
+  {
+   "lawdCd": "45140",
+   "fullName": "전라북도 익산시"
+  },
+  {
+   "lawdCd": "45180",
+   "fullName": "전라북도 정읍시"
+  },
+  {
+   "lawdCd": "45190",
+   "fullName": "전라북도 남원시"
+  },
+  {
+   "lawdCd": "45210",
+   "fullName": "전라북도 김제시"
+  },
+  {
+   "lawdCd": "45710",
+   "fullName": "전라북도 완주군"
+  },
+  {
+   "lawdCd": "45720",
+   "fullName": "전라북도 진안군"
+  },
+  {
+   "lawdCd": "45730",
+   "fullName": "전라북도 무주군"
+  },
+  {
+   "lawdCd": "45740",
+   "fullName": "전라북도 장수군"
+  },
+  {
+   "lawdCd": "45750",
+   "fullName": "전라북도 임실군"
+  },
+  {
+   "lawdCd": "45770",
+   "fullName": "전라북도 순창군"
+  },
+  {
+   "lawdCd": "45790",
+   "fullName": "전라북도 고창군"
+  },
+  {
+   "lawdCd": "45800",
+   "fullName": "전라북도 부안군"
+  },
+  {
+   "lawdCd": "46110",
+   "fullName": "전라남도 목포시"
+  },
+  {
+   "lawdCd": "46130",
+   "fullName": "전라남도 여수시"
+  },
+  {
+   "lawdCd": "46150",
+   "fullName": "전라남도 순천시"
+  },
+  {
+   "lawdCd": "46170",
+   "fullName": "전라남도 나주시"
+  },
+  {
+   "lawdCd": "46230",
+   "fullName": "전라남도 광양시"
+  },
+  {
+   "lawdCd": "46710",
+   "fullName": "전라남도 담양군"
+  },
+  {
+   "lawdCd": "46720",
+   "fullName": "전라남도 곡성군"
+  },
+  {
+   "lawdCd": "46730",
+   "fullName": "전라남도 구례군"
+  },
+  {
+   "lawdCd": "46770",
+   "fullName": "전라남도 고흥군"
+  },
+  {
+   "lawdCd": "46780",
+   "fullName": "전라남도 보성군"
+  },
+  {
+   "lawdCd": "46790",
+   "fullName": "전라남도 화순군"
+  },
+  {
+   "lawdCd": "46800",
+   "fullName": "전라남도 장흥군"
+  },
+  {
+   "lawdCd": "46810",
+   "fullName": "전라남도 강진군"
+  },
+  {
+   "lawdCd": "46820",
+   "fullName": "전라남도 해남군"
+  },
+  {
+   "lawdCd": "46830",
+   "fullName": "전라남도 영암군"
+  },
+  {
+   "lawdCd": "46840",
+   "fullName": "전라남도 무안군"
+  },
+  {
+   "lawdCd": "46860",
+   "fullName": "전라남도 함평군"
+  },
+  {
+   "lawdCd": "46870",
+   "fullName": "전라남도 영광군"
+  },
+  {
+   "lawdCd": "46880",
+   "fullName": "전라남도 장성군"
+  },
+  {
+   "lawdCd": "46890",
+   "fullName": "전라남도 완도군"
+  },
+  {
+   "lawdCd": "46900",
+   "fullName": "전라남도 진도군"
+  },
+  {
+   "lawdCd": "46910",
+   "fullName": "전라남도 신안군"
+  },
+  {
+   "lawdCd": "47110",
+   "fullName": "경상북도 포항시"
+  },
+  {
+   "lawdCd": "47111",
+   "fullName": "경상북도 포항시 남구"
+  },
+  {
+   "lawdCd": "47113",
+   "fullName": "경상북도 포항시 북구"
+  },
+  {
+   "lawdCd": "47130",
+   "fullName": "경상북도 경주시"
+  },
+  {
+   "lawdCd": "47150",
+   "fullName": "경상북도 김천시"
+  },
+  {
+   "lawdCd": "47170",
+   "fullName": "경상북도 안동시"
+  },
+  {
+   "lawdCd": "47190",
+   "fullName": "경상북도 구미시"
+  },
+  {
+   "lawdCd": "47210",
+   "fullName": "경상북도 영주시"
+  },
+  {
+   "lawdCd": "47230",
+   "fullName": "경상북도 영천시"
+  },
+  {
+   "lawdCd": "47250",
+   "fullName": "경상북도 상주시"
+  },
+  {
+   "lawdCd": "47280",
+   "fullName": "경상북도 문경시"
+  },
+  {
+   "lawdCd": "47290",
+   "fullName": "경상북도 경산시"
+  },
+  {
+   "lawdCd": "47720",
+   "fullName": "경상북도 군위군"
+  },
+  {
+   "lawdCd": "47730",
+   "fullName": "경상북도 의성군"
+  },
+  {
+   "lawdCd": "47750",
+   "fullName": "경상북도 청송군"
+  },
+  {
+   "lawdCd": "47760",
+   "fullName": "경상북도 영양군"
+  },
+  {
+   "lawdCd": "47770",
+   "fullName": "경상북도 영덕군"
+  },
+  {
+   "lawdCd": "47820",
+   "fullName": "경상북도 청도군"
+  },
+  {
+   "lawdCd": "47830",
+   "fullName": "경상북도 고령군"
+  },
+  {
+   "lawdCd": "47840",
+   "fullName": "경상북도 성주군"
+  },
+  {
+   "lawdCd": "47850",
+   "fullName": "경상북도 칠곡군"
+  },
+  {
+   "lawdCd": "47900",
+   "fullName": "경상북도 예천군"
+  },
+  {
+   "lawdCd": "47920",
+   "fullName": "경상북도 봉화군"
+  },
+  {
+   "lawdCd": "47930",
+   "fullName": "경상북도 울진군"
+  },
+  {
+   "lawdCd": "47940",
+   "fullName": "경상북도 울릉군"
+  },
+  {
+   "lawdCd": "48120",
+   "fullName": "경상남도 창원시"
+  },
+  {
+   "lawdCd": "48121",
+   "fullName": "경상남도 창원시 의창구"
+  },
+  {
+   "lawdCd": "48123",
+   "fullName": "경상남도 창원시 성산구"
+  },
+  {
+   "lawdCd": "48125",
+   "fullName": "경상남도 창원시 마산합포구"
+  },
+  {
+   "lawdCd": "48127",
+   "fullName": "경상남도 창원시 마산회원구"
+  },
+  {
+   "lawdCd": "48129",
+   "fullName": "경상남도 창원시 진해구"
+  },
+  {
+   "lawdCd": "48170",
+   "fullName": "경상남도 진주시"
+  },
+  {
+   "lawdCd": "48220",
+   "fullName": "경상남도 통영시"
+  },
+  {
+   "lawdCd": "48240",
+   "fullName": "경상남도 사천시"
+  },
+  {
+   "lawdCd": "48250",
+   "fullName": "경상남도 김해시"
+  },
+  {
+   "lawdCd": "48270",
+   "fullName": "경상남도 밀양시"
+  },
+  {
+   "lawdCd": "48310",
+   "fullName": "경상남도 거제시"
+  },
+  {
+   "lawdCd": "48330",
+   "fullName": "경상남도 양산시"
+  },
+  {
+   "lawdCd": "48720",
+   "fullName": "경상남도 의령군"
+  },
+  {
+   "lawdCd": "48730",
+   "fullName": "경상남도 함안군"
+  },
+  {
+   "lawdCd": "48740",
+   "fullName": "경상남도 창녕군"
+  },
+  {
+   "lawdCd": "48820",
+   "fullName": "경상남도 고성군"
+  },
+  {
+   "lawdCd": "48840",
+   "fullName": "경상남도 남해군"
+  },
+  {
+   "lawdCd": "48850",
+   "fullName": "경상남도 하동군"
+  },
+  {
+   "lawdCd": "48860",
+   "fullName": "경상남도 산청군"
+  },
+  {
+   "lawdCd": "48870",
+   "fullName": "경상남도 함양군"
+  },
+  {
+   "lawdCd": "48880",
+   "fullName": "경상남도 거창군"
+  },
+  {
+   "lawdCd": "48890",
+   "fullName": "경상남도 합천군"
+  },
+  {
+   "lawdCd": "50110",
+   "fullName": "제주특별자치도 제주시"
+  },
+  {
+   "lawdCd": "50130",
+   "fullName": "제주특별자치도 서귀포시"
+  },
+  {
+   "lawdCd": "51110",
+   "fullName": "강원특별자치도 춘천시"
+  },
+  {
+   "lawdCd": "51130",
+   "fullName": "강원특별자치도 원주시"
+  },
+  {
+   "lawdCd": "51150",
+   "fullName": "강원특별자치도 강릉시"
+  },
+  {
+   "lawdCd": "51170",
+   "fullName": "강원특별자치도 동해시"
+  },
+  {
+   "lawdCd": "51190",
+   "fullName": "강원특별자치도 태백시"
+  },
+  {
+   "lawdCd": "51210",
+   "fullName": "강원특별자치도 속초시"
+  },
+  {
+   "lawdCd": "51230",
+   "fullName": "강원특별자치도 삼척시"
+  },
+  {
+   "lawdCd": "51720",
+   "fullName": "강원특별자치도 홍천군"
+  },
+  {
+   "lawdCd": "51730",
+   "fullName": "강원특별자치도 횡성군"
+  },
+  {
+   "lawdCd": "51750",
+   "fullName": "강원특별자치도 영월군"
+  },
+  {
+   "lawdCd": "51760",
+   "fullName": "강원특별자치도 평창군"
+  },
+  {
+   "lawdCd": "51770",
+   "fullName": "강원특별자치도 정선군"
+  },
+  {
+   "lawdCd": "51780",
+   "fullName": "강원특별자치도 철원군"
+  },
+  {
+   "lawdCd": "51790",
+   "fullName": "강원특별자치도 화천군"
+  },
+  {
+   "lawdCd": "51800",
+   "fullName": "강원특별자치도 양구군"
+  },
+  {
+   "lawdCd": "51810",
+   "fullName": "강원특별자치도 인제군"
+  },
+  {
+   "lawdCd": "51820",
+   "fullName": "강원특별자치도 고성군"
+  },
+  {
+   "lawdCd": "51830",
+   "fullName": "강원특별자치도 양양군"
+  }
+ ],
+ "knownGaps": [
+  {
+   "what": "세종특별자치시(36)",
+   "note": "REGCODE_PROXY가 시도·시군구 모두 0행을 준다. 코드를 지어내지 않고 inventory에서 빠진 채로 둔다 — 공식 코드 확인 후 스냅샷 갱신."
+  },
+  {
+   "what": "전북특별자치도(52 계열)",
+   "note": "프록시는 전북을 45 계열로만 준다. 52 계열 코드는 없다."
+  },
+  {
+   "what": "대구 군위군(27720)",
+   "note": "프록시는 군위군을 경북 47720으로만 준다(대구 27 목록에 없음)."
+  },
+  {
+   "what": "부천시·화성시 일반구 자식 코드",
+   "note": "프록시에 41190·41590의 자식 코드가 없다."
+  }
+ ],
+ "reviewNotes": {
+  "45": "CODE_SYSTEM_REVIEW(unverified): 프록시는 45 계열, 2024 전북특별자치도 출범 후 52 계열로 바뀐 것으로 알려짐 — MOLIT LAWD_CD 연속성 probe 전 backfill 금지",
+  "51": "CODE_SYSTEM_REVIEW(unverified): 2023 강원특별자치도 출범으로 42→51 — 과거 달이 51로 조회되는지 probe 필요",
+  "28177": "CODE_SYSTEM_REVIEW(unverified): 미추홀구는 2018 남구(28170)에서 명칭·코드 변경 — 2018 이전 달이 28177로 조회되는지 probe 필요",
+  "41190": "CODE_SYSTEM_REVIEW(unverified): 부천시 일반구 재설치(2024로 알려짐) — 최근 달이 41190으로 조회되는지 probe 필요",
+  "41590": "CODE_SYSTEM_REVIEW(unverified): 화성시 일반구 설치(2026로 알려짐) — 최근 달이 41590으로 조회되는지 probe 필요",
+  "47720": "CODE_SYSTEM_REVIEW(unverified): 군위군 2023 대구 편입(27720으로 알려짐) — 최근 달이 47720으로 조회되는지 probe 필요"
+ }
+}

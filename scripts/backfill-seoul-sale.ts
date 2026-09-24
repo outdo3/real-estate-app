@@ -50,6 +50,11 @@ export interface ReadDb {
   findExisting(lawdCd: string, ym: string): Promise<ExistingTradeRow[]>;
   seoulMasterAptSeqs(): Promise<Set<string>>;
   /**
+   * NATIONAL_BACKFILL_ORCHESTRATOR_V1 — 주어진 구들의 master aptSeq(정확 일치용). 있으면 seoulMasterAptSeqs 대신 쓴다.
+   * sgg_cd 정확 일치로만 읽는다(접두사 LIKE 없음).
+   */
+  masterAptSeqsFor?(lawdCds: readonly string[]): Promise<Set<string>>;
+  /**
    * SEOUL_SALE_NATURAL_KEY_COLLISION_PATCH_V1 — 주어진 자연키 중 **이미 DB에 있는 것**.
    * 자연키에 lawdCd가 없으므로 셀 단위 findExisting으로는 다른 구가 이미 넣은 행을 볼 수 없다.
    * 읽기 전용이며 unique index를 그대로 탄다.
@@ -81,6 +86,12 @@ export interface BackfillOptions {
   reserveCalls: number;
   maxCalls: number | null;
   refetch: boolean;
+  /** NATIONAL_BACKFILL_ORCHESTRATOR_V1 — 허용 구 코드(전국 inventory leaf). 없으면 서울 25구(기존 동작). */
+  allowedDistricts?: ReadonlySet<string>;
+  /** aptSeq 형식 검증에 쓰는 알려진 구 코드. 없으면 서울 25구(기존 동작). */
+  knownCodes?: ReadonlySet<string>;
+  /** 이전 실행에서 PARTIAL(수집 오류)이던 셀을 다시 가져오는가. 서울 CLI 기본값 true(기존 동작), 전국은 명시 플래그로만. */
+  retryPartial?: boolean;
 }
 
 interface CellCheckpoint {
@@ -103,7 +114,7 @@ interface CellCheckpoint {
 
 export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
   const writeJson = (p: string, v: unknown) => fs.writeFileSync(p, JSON.stringify(v, null, 2));
-  const { scope, errors } = resolveScope({ districts: opts.districts, from: opts.from, to: opts.to, now: deps.now() });
+  const { scope, errors } = resolveScope({ districts: opts.districts, from: opts.from, to: opts.to, now: deps.now(), allowedDistricts: opts.allowedDistricts });
   if (!scope) throw new Error(`범위 오류: ${errors.join(', ')}`);
   const cpDir = path.join(opts.outDir, 'checkpoints');
   const rawDir = path.join(opts.outDir, 'raw');
@@ -119,7 +130,8 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
   const saveCp = (d: string) => writeJson(path.join(cpDir, `${d}.json`), loadCp(d));
 
   const db = await deps.readDb();
-  const masters = await db.seoulMasterAptSeqs();
+  const masters = db.masterAptSeqsFor ? await db.masterAptSeqsFor(scope.districts) : await db.seoulMasterAptSeqs();
+  const knownCodes = opts.knownCodes;
   let stop: string | null = null;
   const readyInserts: any[] = [];
   const existingSkipped: any[] = [];
@@ -140,6 +152,8 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
     const cps0 = loadCp(lawdCd);
     const prev = cps0[ym];
     if (prev?.state === 'APPLIED') continue;
+    // 수집 오류 셀은 명시적으로 허용할 때만 다시 가져온다(기본값은 기존 동작 그대로 재시도).
+    if (prev?.state === 'PARTIAL' && opts.retryPartial === false) continue;
     const q = quotaDecision(deps.quotaRemaining(), opts.reserveCalls, calls, opts.maxCalls);
     if (q !== 'CONTINUE') { stop = q; saveCp(lawdCd); break; }
 
@@ -167,7 +181,7 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
     sourceRows += rows.length + invalid.length;
     for (const r of rows) {
       if (r.dealCanceled) canceledRows++; else activeRows++;
-      const mc = classifyTradeMaster(r, masters);
+      const mc = classifyTradeMaster(r, masters, knownCodes);
       masterCounts[mc]++;
       if (mc === 'MASTER_MISSING') {
         const e = masterMissing.get(r.aptSeq!) ?? { rows: 0, name: r.aptName, lastDate: '', lawdCd };
@@ -186,7 +200,7 @@ export async function runBackfill(opts: BackfillOptions, deps: BackfillDeps) {
     const existingKeys = new Set(existing.map((e) => naturalKeyOf({ ...e, dealDate: e.dealDate.toISOString().slice(0, 10) })));
     const matched = rows.filter((r) => existingKeys.has(naturalKeyOf(r)));
     for (const r of matched) existingSkipped.push({ lawdCd, ym, aptSeq: r.aptSeq, dealDate: r.dealDate, dealAmount: r.dealAmount, floor: r.floor, occurrenceIndex: r.occurrenceIndex });
-    for (const r of plan.inserts) readyInserts.push(insertView(lawdCd, ym, r, classifyTradeMaster(r, masters)));
+    for (const r of plan.inserts) readyInserts.push(insertView(lawdCd, ym, r, classifyTradeMaster(r, masters, knownCodes)));
     for (const d of existingRowDrift(plan, existing)) drift.push({ ...d, lawdCd, ym });
     cancel.sourceRows += rows.length;
     cancel.sourceCanceled += rows.filter((r) => r.dealCanceled).length;
@@ -318,6 +332,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const key = () => encodeURIComponent(decodeURIComponent((process.env.DATA_GO_KR_API_KEY || '').trim().replace(/['"]/g, '')));
 const ENDPOINT = 'http://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev';
 const liveQuota = { remaining: null as number | null };
+/** NATIONAL_BACKFILL_ORCHESTRATOR_V1 — 마지막으로 관측한 x-ratelimit-remaining(모르면 null). */
+export const liveQuotaRemaining = (): number | null => liveQuota.remaining;
 let lastAt = 0;
 
 /** 운영 fetcher와 같은 파서(createMolitXmlParser). 초당 제한·타임아웃·5xx만 제한 횟수 재시도, 나머지는 분류(빈 결과로 바꾸지 않음). */
@@ -374,6 +390,10 @@ export async function realReadDb(): Promise<ReadDb> {
       select: { id: true, groupKeyStr: true, dealAmount: true, dealDate: true, floor: true, occurrenceIndex: true, dealCanceled: true, cancelDate: true, aptName: true, dong: true, registryDate: true },
     })),
     seoulMasterAptSeqs: async () => new Set((await ro((tx) => tx.$queryRawUnsafe(`SELECT apt_seq FROM apartment_masters WHERE sgg_cd LIKE '11%' AND apt_seq IS NOT NULL`)) as { apt_seq: string }[]).map((r) => r.apt_seq)),
+    masterAptSeqsFor: async (lawdCds) => new Set((await ro((tx) => tx.apartmentMaster.findMany({
+      where: { sggCd: { in: [...lawdCds] }, aptSeq: { not: null } },
+      select: { aptSeq: true },
+    })) as { aptSeq: string | null }[]).map((r) => r.aptSeq!).filter(Boolean)),
     existingNaturalKeys: async (keys) => {
       const found = new Set<string>();
       if (!keys.length) return found;

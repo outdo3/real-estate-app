@@ -38,12 +38,17 @@ export function monthRange(from: string, to: string): string[] {
 
 export interface Scope { districts: string[]; from: string; to: string; cells: { lawdCd: string; ym: string }[] }
 
-/** 구·기간 → 셀 목록. 서울 25구만, 2005-07 이후, 현재 KST 달 이하. */
-export function resolveScope(input: { districts: string[] | null; from: string | null; to: string | null; now?: Date }): { scope: Scope | null; errors: string[] } {
+/**
+ * 구·기간 → 셀 목록. 2005-07 이후, 현재 KST 달 이하.
+ * 허용 구는 기본이 서울 25구다. NATIONAL_BACKFILL_ORCHESTRATOR_V1은 전국 inventory의 **leaf 코드 집합**을
+ * `allowedDistricts`로 넘긴다(부모 시 코드는 그 집합에 없으므로 여기서 거부된다).
+ */
+export function resolveScope(input: { districts: string[] | null; from: string | null; to: string | null; now?: Date; allowedDistricts?: ReadonlySet<string> }): { scope: Scope | null; errors: string[] } {
   const errors: string[] = [];
   const districts = input.districts ?? [];
+  const allowed = input.allowedDistricts ?? SEOUL_CODES;
   if (!districts.length) errors.push('DISTRICT_REQUIRED');
-  for (const d of districts) if (!SEOUL_CODES.has(d)) errors.push(`NOT_SEOUL_DISTRICT_${d}`);
+  for (const d of districts) if (!allowed.has(d)) errors.push(input.allowedDistricts ? `NOT_ALLOWED_DISTRICT_${d}` : `NOT_SEOUL_DISTRICT_${d}`);
   const latest = kstYm(input.now);
   const from = input.from ?? SEOUL_SALE_START;
   const to = input.to ?? latest;
@@ -57,10 +62,13 @@ export function resolveScope(input: { districts: string[] | null; from: string |
 
 export type MasterClass = 'EXACT_MASTER' | 'MASTER_MISSING' | 'INVALID_APTSEQ' | 'REVIEW_REQUIRED';
 
-/** 거래 → master: aptSeq 정확 일치만(이름·지번 추정 없음). 조회 구와 aptSeq 구가 다르면(이웃 구 오기재) REVIEW. */
-export function classifyTradeMaster(row: Pick<TradeRowInput, 'aptSeq' | 'lawdCd'>, masters: ReadonlySet<string>): MasterClass {
+/**
+ * 거래 → master: aptSeq 정확 일치만(이름·지번 추정 없음). 조회 구와 aptSeq 구가 다르면(이웃 구 오기재) REVIEW.
+ * aptSeq 앞 5자리가 알려진 구 코드(`knownCodes`, 기본 서울 25구)가 아니면 INVALID.
+ */
+export function classifyTradeMaster(row: Pick<TradeRowInput, 'aptSeq' | 'lawdCd'>, masters: ReadonlySet<string>, knownCodes: ReadonlySet<string> = SEOUL_CODES): MasterClass {
   const seq = (row.aptSeq ?? '').trim();
-  if (!/^\d{5}-\d+$/.test(seq) || !SEOUL_CODES.has(seq.slice(0, 5))) return 'INVALID_APTSEQ';
+  if (!/^\d{5}-\d+$/.test(seq) || !knownCodes.has(seq.slice(0, 5))) return 'INVALID_APTSEQ';
   if (seq.slice(0, 5) !== row.lawdCd) return 'REVIEW_REQUIRED';
   return masters.has(seq) ? 'EXACT_MASTER' : 'MASTER_MISSING';
 }

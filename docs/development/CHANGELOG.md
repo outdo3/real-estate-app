@@ -2,6 +2,17 @@
 
 ## 2026-09-24
 
+### E-JIP NATIONAL BACKFILL ORCHESTRATOR V1 — 전국 매매 backfill 오케스트레이터 (구현·읽기 전용 audit)
+
+Production write 0 · apply 0 · 공개/cron 변경 0. 상세: `docs/development/NATIONAL_BACKFILL_ORCHESTRATOR_V1.md`
+
+    추가     scripts/national-backfill/ — inventory 스냅샷(REGCODE_PROXY, registry 89/89 일치) · audit · plan · dry-run · apply 게이트 · verify
+    재사용   서울 driver(runBackfill → planSaleCellWrites / syncOneSaleCell) — 허용 구·알려진 코드·오류 재시도만 선택 인자로 일반화(기본값 불변)
+    audit    COMPLETE 24(부산16+서울8) · PARTIAL 2 · REVIEW 37 · BLOCKED 11 · NOT_STARTED 187
+    quota    10,000 − 예비 2,000 − cron 479 − 앱 1,000(가정) = 6,521 · apply=dry-run(원천 재조회)
+    첫 배치  수원 4구 · 성남 3구 · 의정부 · 광명 = 9구, dry-run 2,817 / 합계 5,634 (dry-run 미실행, 3셀 원천 검증만)
+    검증     orchestrator+driver 58/58 · src 2055/2055 · tsc 신규 0 · eslint 0 · build 0
+
 ### E-JIP SEOUL MOBILE BETA LAUNCH V1 — 서울 8구 모바일 beta 공개 (승인)
 
 `cf2293a`. 상세: `docs/development/SEOUL_MOBILE_BETA_LAUNCH_V1.md`
