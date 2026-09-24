@@ -2,6 +2,14 @@
 
 ## 2026-09-24
 
+### E-JIP NATIONAL FIRST BATCH DRY-RUN V1 — 경기 9구 full-history dry-run (write 0)
+
+상세: `docs/development/NATIONAL_FIRST_BATCH_DRYRUN_V1.md`
+
+    결과     원천 649,392 · 계획 insert 649,388 · 기존 UPDATE 0 · 자연키 skip 0 · 불연속 0 · 수집 오류 0
+    상태     READY 8구 · REVIEW 1구(분당 41135 — 원천 층 공란 4행)
+    호출     추정 2,817 → 실제 2,338(다중 페이지 43달, 최대 2페이지) · quota 8,915 → 6,577
+
 ### E-JIP NATIONAL BACKFILL ORCHESTRATOR V1 — 전국 매매 backfill 오케스트레이터 (구현·읽기 전용 audit)
 
 Production write 0 · apply 0 · 공개/cron 변경 0. 상세: `docs/development/NATIONAL_BACKFILL_ORCHESTRATOR_V1.md`
