@@ -2,6 +2,16 @@
 
 ## 2026-09-24
 
+### E-JIP SEOUL MOBILE BETA LAUNCH V1 — 서울 8구 모바일 beta 공개 (승인)
+
+`cf2293a`. 상세: `docs/development/SEOUL_MOBILE_BETA_LAUNCH_V1.md`
+
+    변경     SEOUL_BETA_ENABLED false → true (allowlist·시도 map·report/stats/sitemap/seoIndex·부산·cron 불변)
+    보정     /api/search 입지 피처 없는 aptSeq만 master 좌표 보충 · /map 좌표 없으면 (0,0) 대신 안내
+    공개     11110 11140 11170 11215 11230 11410 11440 11545 — 검색·상세(DB-first)·지도·선택기
+    차단     강남 11680·나머지 17구·서울 전체·리포트·통계·색인(sitemap 서울 0)
+    검증     src 2055/2055 · tsc src 0 · eslint 0 · build 0 · live API/브라우저 QA
+
 ### E-JIP SEOUL BETA PRE-LAUNCH SEO SAFETY FIX V1 — 차단된 서울 단지 화면 색인 금지
 
 SEOUL_BETA_ENABLED=false 유지 · DB/enablement/sitemap 변경 0. 상세: `docs/development/SEOUL_BETA_PRELAUNCH_SEO_SAFETY_FIX_V1.md`
