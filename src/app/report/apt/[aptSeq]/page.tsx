@@ -6,6 +6,7 @@ import InvalidScope from '@/components/report/InvalidScope';
 import { readApartmentReport, AptReportNotFound } from '@/lib/report/apt-read';
 import { prisma } from '@/lib/prisma';
 import { isSeoulPublicBlocked } from '@/lib/region/enablement';
+import { decideSeoulSeo, lawdCdFromAptSeq, SEOUL_NOINDEX_ROBOTS } from '@/lib/seo/seoul-blocked-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,13 @@ type Props = { params: Promise<{ aptSeq: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { aptSeq } = await params;
+  // SEOUL_BETA_PRELAUNCH_SEO_SAFETY_FIX_V1 — 본문 게이트(아래 isSeoulPublicBlocked(…, 'report'))와 같은 축으로
+  // 메타데이터도 닫는다. 서울 리포트는 beta에서도 전부 막히므로 단지명 조회 자체를 하지 않는다.
+  if (decideSeoulSeo([lawdCdFromAptSeq(decodeURIComponent(aptSeq))], 'report') !== 'NONE') {
+    const title = `단지 리포트 - ${siteConfig.name}`;
+    const description = '이 지역의 단지 리포트는 아직 준비 중입니다.';
+    return { title, description, robots: SEOUL_NOINDEX_ROBOTS, openGraph: buildOpenGraph({ title, description }) };
+  }
   // 제목에 쓸 이름만 가볍게 조회한다. 없으면 이름을 지어내지 않는다.
   const m = await prisma.apartmentMaster
     .findUnique({ where: { aptSeq: decodeURIComponent(aptSeq) }, select: { name: true } })

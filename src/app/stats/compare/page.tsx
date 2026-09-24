@@ -5,6 +5,7 @@ import { siteConfig, buildOpenGraph, absoluteUrl } from '@/config/site';
 import { buildCompareSharePath, parseCompareAptSeqs } from '@/lib/compare-v2/url';
 import { resolveCompareSeeds, EMPTY_COMPARE_SEEDS } from '@/lib/compare-v2/resolve-seeds';
 import CompareV2 from '@/components/compare/CompareV2';
+import { decideSeoulSeo, SEOUL_NOINDEX_ROBOTS } from '@/lib/seo/seoul-blocked-seo';
 
 // COMPARE_SHARE_URL_COMPACT_FIX_V1 — /stats/compare 전용 라우트.
 //
@@ -38,6 +39,21 @@ async function readSeeds(searchParams: Props['searchParams']) {
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { seeds } = await readSeeds(searchParams);
   const [a, b] = seeds;
+
+  // SEOUL_BETA_PRELAUNCH_SEO_SAFETY_FIX_V1 — 공개 차단 서울 단지가 한쪽이라도 끼면 단지명을 제목/OG에 싣지 않고,
+  // 그 조합을 canonical로 삼지 않는다. 판정은 master의 canonical 구 코드(sggCd)로만 한다.
+  if (decideSeoulSeo([a?.lawdCd, b?.lawdCd], 'app') !== 'NONE') {
+    const blockedTitle = `단지 비교 | ${siteConfig.name}`;
+    const blockedDescription = '두 단지의 실거래가·이집점수·입지 데이터를 나란히 비교합니다.';
+    const blockedCanonical = absoluteUrl('/stats/compare');
+    return {
+      title: blockedTitle,
+      description: blockedDescription,
+      alternates: { canonical: blockedCanonical },
+      robots: SEOUL_NOINDEX_ROBOTS,
+      openGraph: { ...buildOpenGraph({ title: blockedTitle, description: blockedDescription }), url: blockedCanonical },
+    };
+  }
 
   // 두 단지가 모두 확정됐을 때만 단지명을 제목에 쓴다. 한쪽만 알면 일반 제목이다 —
   // "OO vs (알 수 없음)" 같은 제목을 만들지 않는다.

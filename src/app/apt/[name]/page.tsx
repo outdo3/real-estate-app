@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { siteConfig, buildOpenGraph } from '@/config/site';
 import { aptDetailHref } from '@/lib/report/report-links';
+import { decideSeoulSeo, lawdCdFromAptSeq, SEOUL_NOINDEX_ROBOTS } from '@/lib/seo/seoul-blocked-seo';
 import KakaoPreconnect from '@/components/KakaoPreconnect';
 import ApartmentDetailClient from './apt-client';
 
@@ -15,18 +16,38 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const { name } = await params;
   const sp = await searchParams;
   const aptName = decodeURIComponent(name);
+
+  // SEOUL_BETA_PRELAUNCH_SEO_SAFETY_FIX_V1 — 공개 차단 서울 단지는 단지명을 색인 가능한 메타데이터로 내보내지 않는다.
+  // 지역은 쿼리 lawdCd와 aptSeq 앞자리로만 판정한다(이름으로 추측하지 않는다). 둘 다 없으면 기존 동작 그대로다.
+  const seoulSeo = decideSeoulSeo([first(sp.lawdCd), lawdCdFromAptSeq(first(sp.aptSeq))], 'app');
+  if (seoulSeo === 'BLOCKED') {
+    const blockedTitle = `아파트 실거래가·시세 - ${siteConfig.name}`;
+    const blockedDescription = '이 지역의 단지 정보는 아직 준비 중입니다.';
+    return {
+      title: blockedTitle,
+      description: blockedDescription,
+      robots: SEOUL_NOINDEX_ROBOTS,
+      openGraph: buildOpenGraph({ title: blockedTitle, description: blockedDescription }),
+    };
+  }
+
   const title = `${aptName} 실거래가·시세 - ${siteConfig.name}`;
   const description = `${aptName}의 실거래가, 시세 변동 추이, 평형별 거래 내역을 확인하세요.`;
 
   // REGIONAL_SEO_KEYWORD_LANDING_V1 §13/§14 — canonical은 **식별이 완전한 주소**(lawdCd+dong+aptSeq)일 때만
   // 싣는다. 경로는 리포트·검색·지도와 같은 단일 정의(aptDetailHref)로 정규화한다 — 평형/탭 같은 부가
   // 쿼리는 빠진다. 이름만 있는 주소는 식별이 불완전하므로 canonical을 지어내지 않는다(기존 동작 그대로).
-  const canonical = aptDetailHref({ name: aptName, aptSeq: first(sp.aptSeq), lawdCd: first(sp.lawdCd), dong: first(sp.dong) });
+  // beta에서 열린 서울 구(NOINDEX)는 사용자에게는 정상 화면이지만 `seoIndex` 축이 닫혀 있어 canonical도 싣지 않는다.
+  const canonical =
+    seoulSeo === 'NOINDEX'
+      ? null
+      : aptDetailHref({ name: aptName, aptSeq: first(sp.aptSeq), lawdCd: first(sp.lawdCd), dong: first(sp.dong) });
 
   return {
     title,
     description,
     ...(canonical ? { alternates: { canonical } } : {}),
+    ...(seoulSeo === 'NOINDEX' ? { robots: SEOUL_NOINDEX_ROBOTS } : {}),
     openGraph: buildOpenGraph({ title, description, path: canonical }),
   };
 }

@@ -1,5 +1,23 @@
 # 이집 개발 변경 기록
 
+## 2026-09-24
+
+### E-JIP SEOUL BETA PRE-LAUNCH SEO SAFETY FIX V1 — 차단된 서울 단지 화면 색인 금지
+
+SEOUL_BETA_ENABLED=false 유지 · DB/enablement/sitemap 변경 0. 상세: `docs/development/SEOUL_BETA_PRELAUNCH_SEO_SAFETY_FIX_V1.md`
+
+    원인     /apt/[name]?lawdCd=11xxx · /report/apt/11xxx-n 이 200 + 단지명 title + self canonical + robots 없음
+    변경     seoul-blocked-seo.ts(enablement 축 위임) — 차단: 일반 제목·noindex,nofollow·canonical 없음 / beta ON 8구 상세: 제목 유지·noindex·canonical 없음
+    대상     상세 · 단지 리포트(master 조회 전 게이트) · /stats/compare 메타데이터 — 부산 불변
+    sitemap  138→140 = 부산 강서구 동 2곳(강동동·화전동) 10건 임계값 통과(EXPECTED) · 서울 0
+    검증     신규 11/11 · src 2052/2052 · tsc src 0 · eslint 0 · build 0
+
+### E-JIP SEOUL 8-DISTRICT FIRST CRON VERIFY V1 — 서울 8구 첫 자동 cron 검증 (READ ONLY)
+
+상세: `docs/development/SEOUL_8_DISTRICT_FIRST_CRON_VERIFY_V1.md`
+
+    판정     PASS — sale-sync 32/32 · recheck 80/80(band 전체) · flip/restore 0 · 부산 회귀 0 · 서울 노출 OFF
+
 ## 2026-09-22
 
 ### E-JIP VERCEL DOCS-ONLY BUILD SKIP ENABLE V1 — 문서 전용 push는 Vercel 빌드 생략 (승인)
