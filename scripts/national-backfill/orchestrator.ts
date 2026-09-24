@@ -389,11 +389,12 @@ export async function runNationalApply(args: { districts: string[]; expectInsert
   });
   if (!gate.allowed) return { allowed: false, reasons: gate.reasons, recomputedPlanHash: recomputed.join('+') };
   // 게이트 통과 시에도 구 하나씩 driver apply(driver 자체 게이트 재통과). 이 STEP에서는 도달하지 않는다.
-  const { realFetchPage, realApplyCell } = await import('../backfill-seoul-sale');
+  // driver의 예비분 정지(quotaDecision)가 apply 중에도 살아 있어야 한다 — 셀마다 관측한 MOLIT 잔여량을 넘긴다.
+  const { realFetchPage, realApplyCell, liveQuotaRemaining } = await import('../backfill-seoul-sale');
   const applied: unknown[] = [];
   for (const d of args.districts) {
     const res = await runBackfill({ outDir: path.join(ROOT_OUT, 'districts', d), districts: [d], from: plan.window.from, to: plan.window.to, apply: true, env: args.env, expectInserts: cps[d]!.plannedInserts, approveExistingUpdates: args.approveExistingUpdates, reserveCalls: args.reserve, maxCalls: null, refetch: false, allowedDistricts: leaves, knownCodes: known, retryPartial: false },
-      { fetchPage: realFetchPage, quotaRemaining: () => null, readDb: realReadDb, applyCell: realApplyCell, now: () => new Date(), log: (m) => console.log(m) });
+      { fetchPage: realFetchPage, quotaRemaining: () => liveQuotaRemaining(), readDb: realReadDb, applyCell: realApplyCell, now: () => new Date(), log: (m) => console.log(m) });
     applied.push({ lawdCd: d, summary: res.summary });
     if (res.summary.stoppedBy) break; // 구 격리: 멈춘 구 뒤로는 진행하지 않는다
   }

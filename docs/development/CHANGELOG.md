@@ -1,5 +1,17 @@
 # 이집 개발 변경 기록
 
+## 2026-09-25
+
+### E-JIP NATIONAL FIRST BATCH APPLY V1 — 경기 8구 full-history 적재 (승인)
+
+상세: `docs/development/NATIONAL_FIRST_BATCH_APPLY_V1.md`
+
+    결과     insert 539,443 · update 0 · delete 0 · 원천↔DB PARITY_EXACT(8/8) · 재계획 pending 0
+    제외     41135 분당 REVIEW 유지(원천 층 공란 4행)
+    수정     orchestrator apply가 driver 예비분 정지를 끄던 결함(quotaRemaining null) — apply 전 수정
+    영향     /report/daily/2026-09-25 WITHHELD_BACKFILL(09-22·09-23과 같은 설계 동작)
+    불변     부산·서울 행 · 공개 범위 · cron · master(경기 0)
+
 ## 2026-09-24
 
 ### E-JIP NATIONAL FIRST BATCH DRY-RUN V1 — 경기 9구 full-history dry-run (write 0)

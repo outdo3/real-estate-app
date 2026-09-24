@@ -367,3 +367,9 @@ test('코드 체계 불연속(긴 앞/뒤 0건 구간·전부 0건)은 REVIEW �
   assert.deepEqual(detectCodeDiscontinuity(series(60, 999)), []);
   assert.deepEqual(detectCodeDiscontinuity({ '202001': 0, '202002': 0 }), ['ALL_MONTHS_EMPTY']);
 });
+
+test('apply 경로는 driver 예비분 정지를 끄지 않는다 — 관측 잔여량(liveQuotaRemaining)을 넘긴다', () => {
+  const c = code('scripts/national-backfill/orchestrator.ts');
+  const applyCall = c.slice(c.indexOf('apply: true, env: args.env'));
+  assert.ok(applyCall.slice(0, 1500).includes('quotaRemaining: () => liveQuotaRemaining()'), 'apply가 quotaRemaining을 null로 넘긴다');
+});
