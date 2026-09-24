@@ -82,7 +82,7 @@ export const SEOUL_BETA_LAWDCDS = [
  * false인 동안 `ENABLEMENT_BY_LAWDCD`는 빈 객체이고, 서울은 모든 축에서 닫혀 있다
  * (즉 이 파일을 제외한 어떤 동작도 지금은 바뀌지 않는다).
  */
-export const SEOUL_BETA_ENABLED = false;
+export const SEOUL_BETA_ENABLED = true;
 
 /**
  * beta에서 실제로 여는 축.

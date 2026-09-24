@@ -31,24 +31,41 @@ const betaOn: SeoulBlockedCheck = (lawdCd, feature) => {
   return !open;
 };
 
-test('§0 beta 스위치는 꺼져 있다(이 STEP은 켜지 않는다)', () => {
-  assert.equal(SEOUL_BETA_ENABLED, false);
+/** beta OFF 시뮬레이션 — 서울은 전 축 닫힘(launch 이전 상태, 롤백 시 상태). */
+const betaOff: SeoulBlockedCheck = (lawdCd) => {
+  const node = REGION_NODES.find((n) => n.lawdCd === lawdCd);
+  return !!node && node.sidoCode === '11';
+};
+
+test('§0 beta 스위치는 켜져 있다(SEOUL_MOBILE_BETA_LAUNCH_V1) — 승인 8구, 강남 제외', () => {
+  assert.equal(SEOUL_BETA_ENABLED, true);
   assert.equal(BETA8.length, 8);
   assert.equal(SEOUL_NON_BETA.length, 17);
   assert.ok(!BETA8.includes(GANGNAM));
 });
 
-test('§1 beta OFF — 승인 8구 상세도 BLOCKED(noindex)', () => {
-  for (const code of BETA8) assert.equal(decideSeoulSeo([code], 'app'), 'BLOCKED', code);
+test('§1 beta OFF(시뮬레이션) — 승인 8구 상세도 BLOCKED(noindex)', () => {
+  for (const code of BETA8) assert.equal(decideSeoulSeo([code], 'app', betaOff), 'BLOCKED', code);
 });
 
-test('§2 beta OFF — 강남 상세 BLOCKED', () => {
+test('§2 강남 상세 BLOCKED — beta OFF·현재(ON) 모두', () => {
+  assert.equal(decideSeoulSeo([GANGNAM], 'app', betaOff), 'BLOCKED');
   assert.equal(decideSeoulSeo([GANGNAM], 'app'), 'BLOCKED');
   assert.equal(decideSeoulSeo([null, lawdCdFromAptSeq('11680-4090')], 'app'), 'BLOCKED');
 });
 
-test('§3 beta OFF — 나머지 17구 상세 BLOCKED', () => {
-  for (const code of SEOUL_NON_BETA) assert.equal(decideSeoulSeo([code], 'app'), 'BLOCKED', code);
+test('§3 나머지 17구 상세 BLOCKED — beta OFF·현재(ON) 모두', () => {
+  for (const code of SEOUL_NON_BETA) {
+    assert.equal(decideSeoulSeo([code], 'app', betaOff), 'BLOCKED', code);
+    assert.equal(decideSeoulSeo([code], 'app'), 'BLOCKED', code);
+  }
+});
+
+test('§3b 현재(ON) 런타임 — 승인 8구 상세는 열리되 NOINDEX, 리포트는 BLOCKED', () => {
+  for (const code of BETA8) {
+    assert.equal(decideSeoulSeo([code], 'app'), 'NOINDEX', code);
+    assert.equal(decideSeoulSeo([code], 'report'), 'BLOCKED', code);
+  }
 });
 
 test('§4 부산 16구·서울 밖 지역은 NONE — 기존 메타데이터 불변', () => {
@@ -120,8 +137,9 @@ test('§10 beta ON이어도 강남·나머지 17구는 BLOCKED, 섞인 식별자
   for (const code of SEOUL_NON_BETA) assert.equal(decideSeoulSeo([code], 'app', betaOn), 'BLOCKED', code);
   // 쿼리 lawdCd는 승인 구인데 aptSeq는 강남 → 막는다.
   assert.equal(decideSeoulSeo(['11440', lawdCdFromAptSeq('11680-4090')], 'app', betaOn), 'BLOCKED');
-  // 쿼리 lawdCd는 부산인데 aptSeq는 서울 → 막는다.
-  assert.equal(decideSeoulSeo(['26350', lawdCdFromAptSeq('11440-136')], 'app'), 'BLOCKED');
+  // 쿼리 lawdCd는 부산인데 aptSeq는 차단 서울 → 막는다.
+  assert.equal(decideSeoulSeo(['26350', lawdCdFromAptSeq('11680-4090')], 'app'), 'BLOCKED');
+  assert.equal(decideSeoulSeo(['26350', lawdCdFromAptSeq('11440-136')], 'app', betaOff), 'BLOCKED');
 });
 
 test('§11 aptSeq 앞자리 추출은 형태가 맞을 때만', () => {

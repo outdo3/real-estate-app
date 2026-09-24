@@ -33,28 +33,30 @@ const LEAK_CASES = [
   { q: '광화문스페이스본', lawdCd: '11110', note: '종로 — beta 승인 구' },
 ];
 
-// ── 현재 상태(beta OFF) ──────────────────────────────────────────────────────
+// ── 현재 상태(beta ON — SEOUL_MOBILE_BETA_LAUNCH_V1) ─────────────────────────
 
-test('§1 beta는 꺼져 있다', () => {
-  assert.equal(SEOUL_BETA_ENABLED, false);
+test('§1 beta는 켜져 있다', () => {
+  assert.equal(SEOUL_BETA_ENABLED, true);
 });
 
-test('§2 leak 3건이 전부 차단된다(은마·남산타운·광화문스페이스본)', () => {
+test('§2 leak 3건 — 강남(은마)은 계속 차단, 승인 구(남산타운·광화문스페이스본)만 열린다', () => {
   for (const c of LEAK_CASES) {
-    assert.equal(isSeoulPublicBlocked(c.lawdCd), true, `${c.q}(${c.lawdCd})가 아직 공개된다 — ${c.note}`);
+    const expectBlocked = !(SEOUL_BETA_LAWDCDS as readonly string[]).includes(c.lawdCd);
+    assert.equal(isSeoulPublicBlocked(c.lawdCd), expectBlocked, `${c.q}(${c.lawdCd}) — ${c.note}`);
   }
+  assert.equal(isSeoulPublicBlocked('11680'), true, '강남이 열렸다');
 });
 
-test('§3 서울 25구 전부 차단 — deny-list도 25개', () => {
-  for (const code of SEOUL_ALL) assert.equal(isSeoulPublicBlocked(code), true, `${code} 미차단`);
-  assert.equal(seoulPublicBlockedLawdCds('app').length, 25);
+test('§3 서울 deny-list는 승인 밖 17구 — 승인 8구만 통과', () => {
+  for (const code of SEOUL_BETA_LAWDCDS) assert.equal(isSeoulPublicBlocked(code), false, `${code} 차단됨`);
+  for (const code of SEOUL_NON_BETA) assert.equal(isSeoulPublicBlocked(code), true, `${code} 미차단`);
+  assert.deepEqual([...seoulPublicBlockedLawdCds('app')].sort(), [...SEOUL_NON_BETA].sort());
   assert.equal(SEOUL_ALL.length, 25);
 });
 
-test('§4 서울은 선택지에서 통째로 숨는다(시도 전체 선택 불가)', () => {
-  assert.equal(isSidoPubliclyHidden('11'), true);
-  // 열린 구가 0개이므로 "부분 공개"가 아니다 — 시도가 아예 목록에 없다.
-  assert.equal(isSidoPartiallyPublic('11'), false);
+test('§4 서울은 선택지에 나타나지만 "서울특별시 전체"는 불가(부분 공개)', () => {
+  assert.equal(isSidoPubliclyHidden('11'), false);
+  assert.equal(isSidoPartiallyPublic('11'), true);
 });
 
 // ── 무회귀: 이 정책은 서울에만 적용된다 ──────────────────────────────────────
@@ -187,4 +189,25 @@ test('§17 allowlist 정적 소속 판정은 스위치와 무관하다', () => {
   assert.equal(isSeoulBetaDistrict('11140'), true);
   assert.equal(isSeoulBetaDistrict('11680'), false);
   assert.equal(isSeoulBetaDistrict('26140'), false);
+});
+
+// ── SEOUL_MOBILE_BETA_LAUNCH_V1 — 서울 검색 결과의 지도 좌표 ─────────────────────
+
+test('§18 검색 좌표: 입지 피처 우선, 피처가 없는 aptSeq만 같은 aptSeq의 master 좌표로 채운다', () => {
+  const src = readCode('src/app/api/search/route.ts');
+  const feature = src.indexOf('prisma.apartmentLocationFeature.findMany');
+  const fallback = src.indexOf('const missingCoordSeqs = aptSeqs.filter((s) => !locationMap.has(s));');
+  assert.ok(feature > 0 && fallback > feature, '피처 조회 뒤에 누락분만 master로 채워야 한다');
+  assert.ok(/where: \{ aptSeq: \{ in: missingCoordSeqs \}, latitude: \{ not: null \}, longitude: \{ not: null \} \}/.test(src),
+    'master 좌표 보충은 aptSeq 일치 + 좌표 존재일 때만');
+  assert.ok(!/normalizedName[^\n]*missingCoordSeqs|name: \{[^\n]*missingCoordSeqs/.test(src), '이름으로 좌표를 찾으면 안 된다');
+});
+
+test('§19 지도: 좌표가 없는 검색 결과로 (0,0)에 이동하지 않는다', () => {
+  const src = readCode('src/app/map/page.tsx');
+  const start = src.indexOf('const handleApartmentSelect = (result: ApartmentSearchResult) => {');
+  assert.ok(start > 0);
+  const guard = src.indexOf('if (!hasUsableHandoffCoords(result)) {', start);
+  const pan = src.indexOf('map.panTo(anchor);', start);
+  assert.ok(guard > start && guard < pan, '좌표 판정이 panTo보다 먼저여야 한다');
 });

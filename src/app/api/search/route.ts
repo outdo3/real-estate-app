@@ -160,6 +160,22 @@ export async function GET(request: Request) {
 
   const locationMap = new Map(locations.map(l => [l.aptSeq, l]));
 
+  // SEOUL_MOBILE_BETA_LAUNCH_V1 — `apartment_location_features`는 부산 전용이라 서울 단지는 좌표가 null로
+  // 내려가 지도가 (0,0)으로 이동했다. 입지 피처가 없는 단지만 **같은 aptSeq의** master 좌표로 채운다
+  // (지도 마커가 이미 쓰는 좌표다). 피처가 있는 단지는 기존 좌표 그대로다. 없으면 null — 지어내지 않는다.
+  const missingCoordSeqs = aptSeqs.filter((s) => !locationMap.has(s));
+  if (missingCoordSeqs.length > 0) {
+    const masterCoords = await prisma.apartmentMaster.findMany({
+      where: { aptSeq: { in: missingCoordSeqs }, latitude: { not: null }, longitude: { not: null } },
+      select: { aptSeq: true, latitude: true, longitude: true },
+    });
+    for (const m of masterCoords) {
+      if (m.aptSeq && m.latitude != null && m.longitude != null) {
+        locationMap.set(m.aptSeq, { aptSeq: m.aptSeq, latitude: m.latitude, longitude: m.longitude });
+      }
+    }
+  }
+
   const apartments: ApartmentSearchResult[] = topApartments.map(a => {
     const loc = a.aptSeq ? locationMap.get(a.aptSeq) : null;
     return {

@@ -5,7 +5,7 @@ import {
   getRegionByLawdCd, getRegionChildren, getMolitLeafRegions,
   getRegionContext, getSidoRegions, getSido,
 } from './registry';
-import { getRegionEnablement, getSidoEnablement, getEnabledSidoCodes } from './enablement';
+import { getRegionEnablement, getSidoEnablement, getEnabledSidoCodes, SEOUL_BETA_LAWDCDS } from './enablement';
 import { BUSAN_DISTRICTS, BUSAN_CURRENT_LAWD_CODES } from '../report/region-scope';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
 import { REGION_DATA } from '../regions';
@@ -268,8 +268,11 @@ test('17b · sitemap/SEO 축이 열린 지역은 부산뿐', () => {
   assert.ok(seoOpen.every((n) => n.sidoCode === '26'));
 });
 
-test('17c · cron 수집 대상도 부산 leaf 16개뿐 — registry가 자동으로 서울/경기를 돌리지 않는다', () => {
+// SEOUL_MOBILE_BETA_LAUNCH_V1 — beta가 켜지면서 서울 승인 8구가 cronSync(=DB-first 읽기) 축에 들어왔다.
+// registry가 **자동으로** 넓히는 것은 여전히 없다: 부산 16 + allowlist 8 외에는 한 곳도 열리지 않는다.
+test('17c · cronSync 축은 부산 leaf 16 + 서울 beta 8뿐 — registry가 자동으로 서울/경기를 돌리지 않는다', () => {
   const cronOpen = getMolitLeafRegions().filter((n) => getRegionEnablement(n.lawdCd).cronSync);
-  assert.equal(cronOpen.length, 16);
-  assert.deepEqual([...BUSAN_LAWDCD_16].sort(), codes(cronOpen).sort());
+  assert.equal(cronOpen.length, 24);
+  assert.deepEqual([...BUSAN_LAWDCD_16, ...SEOUL_BETA_LAWDCDS].sort(), codes(cronOpen).sort());
+  assert.ok(!codes(cronOpen).includes('11680'), '강남이 열렸다');
 });

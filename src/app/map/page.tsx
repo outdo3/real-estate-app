@@ -1800,6 +1800,13 @@ export default function FullscreenMapPage() {
 
   const handleApartmentSelect = (result: ApartmentSearchResult) => {
     perfMark('map:m0-click'); // §12 M0
+    // SEOUL_MOBILE_BETA_LAUNCH_V1 — 좌표가 없는 결과(0,0 = "모름")로 지도를 (0,0)으로 옮기지 않는다.
+    // 오피스텔 경로와 같은 판정·같은 안내를 쓴다(런타임 지오코딩으로 채우지 않는다).
+    if (!hasUsableHandoffCoords(result)) {
+      setOfficetelHandoffNotice(`${result.name}은(는) 위치 정보가 없어 지도에 표시할 수 없습니다.`);
+      return;
+    }
+    setOfficetelHandoffNotice(null);
     const latLng = { lat: result.lat, lng: result.lng };
     setCenter(latLng);
     if (mapRef.current && window.kakao?.maps) {
