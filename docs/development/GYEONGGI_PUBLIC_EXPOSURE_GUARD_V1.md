@@ -84,3 +84,30 @@ npm run build                                                                 ex
 ## 7. 운영 검증
 
 §8에 배포 후 결과를 기록한다(배포 전 기준선은 §1).
+
+## 8. 운영 검증 (배포 68bf522, Vercel success, 2026-09-25 KST)
+
+같은 스크립트로 배포 전/후 GET만 비교(쓰기 0).
+
+| 항목 | 배포 전 | 배포 후 |
+|---|---|---|
+| 검색 해운대 / 경동 / 남산타운 | 15 [26350] / 15 부산 + 지역 11230 / 1 [11140] | 동일 |
+| 검색 은마·반포자이(차단 서울)·동신2단지(경기) | 0 | 0 |
+| 마커 부산 26350 / 26410 | 275 / 236 | 275 / 236 |
+| 마커 서울 8구 11440 / 11110 | 241 / 87 | 241 / 87 |
+| 마커 강남 11680 / 서초 11650 | **375 / 408** | 0 / 0 (`regionUnsupported`) |
+| 마커 경기 41111 / 대구 27110 | 0 / 0 | 0 / 0 (`regionUnsupported`) |
+| 상세 API 부산 센텀현대 / 서울 남산타운 | 38 DB / 137 DB | 동일 |
+| 상세 API 강남 개포주공7단지 | UNSUPPORTED | 동일 |
+| 상세 API 경기 동신2단지 / 대구 황금 | **80 MOLIT** / 0 MOLIT | 0 UNSUPPORTED / 0 UNSUPPORTED |
+| `/apt/동신2단지?lawdCd=41111` 메타 | 단지명 + self canonical, robots 없음 | 일반 제목, noindex·nofollow, canonical 없음 |
+| `/apt/황금?lawdCd=27110` 메타 | 단지명, robots 없음 | 일반 제목, noindex·nofollow |
+| `/apt/센텀현대…`(부산) · `/apt/남산타운…`(서울 8) 메타 | self canonical / NOINDEX | 동일 |
+| `/report/apt/26350-22` | 단지명 + canonical | 동일 |
+| `/report/apt/41111-41` | noindex, follow | noindex, nofollow(BLOCKED) |
+| `/stats/compare?a=26350-22&b=41111-41` | robots 없음 | noindex, nofollow |
+| sitemap | 140 · 경기 0 · 서울 0 | 동일 |
+| 점수 부산 / 강남 | — | OK 51 / UNSUPPORTED_REGION |
+| 정보 부산 / 경기 | — | present / null + regionUnsupported |
+
+지역 선택기는 클라이언트 필터라 정책·소스 테스트(§12 #10)로 확인했다(브라우저 수동 확인은 하지 않음).
