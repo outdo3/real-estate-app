@@ -1,0 +1,263 @@
+// GYEONGGI_MASTER_SEEDING_AUDIT_V1 — 경기 첫 8구 ApartmentMaster seed의 순수 판정(DB·네트워크 없음).
+//
+// 이 파일은 **설계 고정용**이다. 실행기(runner)는 아직 없고 이번 STEP에서 만들지 않는다.
+// 서울 seed(seed-seoul-apartment-master-logic.ts)의 계약을 그대로 따르되, 서울 하드코딩
+// (서울 25구 prefix · `서울 {구}` 주소 · region_1depth '서울')을 지역 인자로 바꾼 것만 다르다.
+//
+// 계약:
+//   - 원천: 이미 적재·검증된 매매 전체 이력 raw 캐시(tmp/national-backfill/districts/<구>/raw). MOLIT 재호출 없음.
+//   - canonical identity = aptSeq. 이름·지번·좌표로 합치거나 만들지 않는다. prefix를 고치지 않는다.
+//   - 대상은 첫 8구 정확히. 41135(분당)는 REVIEW 유지 — 어떤 경로로도 READY가 되지 않는다.
+//   - 최근 24개월 매매가 있는 단지(Tier A)만 seed. 과거 전용 단지는 서울과 같은 정책으로 만들지 않는다
+//     (SEOUL_HISTORICAL_MASTER_MISSING_STRATEGY_V1 §9 — 같은 필지 재건축 승계를 증명할 증거가 없다).
+//   - 좌표: Kakao 주소 검색 정방향 필지 단일 일치 + 역지오코딩 필지 일치(VERIFIED)만 저장. 그 밖은 null.
+//   - create-only. 이 모듈에는 update/upsert/delete 경로가 없다.
+//   - apply 게이트에 **공개 노출 차단 확인**이 들어 있다: master가 생기는 순간 검색·지도가 경기 단지를
+//     싣는 현재 구조(서울 전용 deny-list)에서는 게이트가 닫혀 있다.
+
+import { createHash } from 'crypto';
+import {
+  classifyIdentity,
+  normalizeName,
+  resolveCrossDistrict,
+  type SeedCandidate,
+} from '../seoul-master-seed-plan-logic';
+import { parseJibun } from '../seed-seoul-apartment-master-logic';
+import { getRegionByLawdCd, getSido } from '../../src/lib/region/registry';
+
+export const GYEONGGI_SIDO_CODE = '41';
+/** ApartmentMaster.sido는 registry 축약 표기를 쓴다(부산·서울과 같은 규칙). */
+export const GYEONGGI_SIDO_SHORT: string = getSido(GYEONGGI_SIDO_CODE)!.shortName;
+
+/** 매매 전체 이력 적재 + 원천=DB parity를 통과한 첫 배치 8구(NATIONAL_FIRST_BATCH_APPLY_V1). */
+export const GYEONGGI_FIRST_BATCH = ['41111', '41113', '41115', '41117', '41131', '41133', '41150', '41210'] as const;
+/** 빈 층 원천 4행으로 REVIEW — 매매도 master도 이 구는 건드리지 않는다. */
+export const EXCLUDED_DISTRICTS: ReadonlySet<string> = new Set(['41135']);
+const TARGET_SET: ReadonlySet<string> = new Set(GYEONGGI_FIRST_BATCH);
+
+/**
+ * Kakao/표시용 시군구 이름. registry fullName에서 시도 접두만 뗀다 —
+ * 일반구는 "수원시 장안구"(Kakao region_2depth_name과 같은 형태), 단일 시는 "의정부시".
+ * registry에 없거나 경기가 아니면 null(추정하지 않는다).
+ */
+export function gyeonggiSigungu(lawdCd: string): string | null {
+  const node = getRegionByLawdCd(lawdCd);
+  if (!node || node.sidoCode !== GYEONGGI_SIDO_CODE || !node.isMolitLeaf) return null;
+  const prefix = '경기도 ';
+  return node.fullName.startsWith(prefix) ? node.fullName.slice(prefix.length) : null;
+}
+
+// ───────────────────────── identity 판정 ─────────────────────────
+
+export type SeedStatus =
+  | 'READY'
+  | 'REVIEW'
+  | 'EXISTING_SKIPPED'
+  | 'HISTORICAL_EXCLUDED'
+  | 'OUT_OF_TARGET'
+  | 'EXCLUDED_DISTRICT';
+
+export interface GgSeedRow {
+  aptSeq: string;
+  district: string;
+  sigungu: string;
+  name: string;
+  normalizedName: string;
+  dong: string;
+  umdCd: string;
+  jibun: string;
+  buildYear: number | null;
+  tradeCount: number;
+  latestDealDate: string;
+  status: SeedStatus;
+  reasons: string[];
+}
+
+function toRow(c: SeedCandidate, status: SeedStatus, reasons: string[]): GgSeedRow {
+  const prefix = c.aptSeq.slice(0, 5);
+  return {
+    aptSeq: c.aptSeq, district: prefix, sigungu: gyeonggiSigungu(prefix) ?? '', name: c.name,
+    normalizedName: normalizeName(c.name), dong: c.umdNm, umdCd: c.umdCd, jibun: c.jibun, buildYear: c.buildYear,
+    tradeCount: c.tradeCount, latestDealDate: c.latestDealDate, status, reasons,
+  };
+}
+
+/** 24개월 창 시작일(YYYY-MM-01). asOfYm = 창의 마지막 달(예: '202609' → '2024-10-01'). */
+export function tierAWindowStart(asOfYm: string): string {
+  const y = Number(asOfYm.slice(0, 4));
+  const m = Number(asOfYm.slice(4, 6));
+  const idx = y * 12 + (m - 1) - 23;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}-01`;
+}
+
+/**
+ * 구별 응답에서 모은 후보(같은 aptSeq가 여러 구 응답에 실릴 수 있음) → aptSeq당 1행.
+ *  - aptSeq 앞 5자리가 제외 구(41135)면 EXCLUDED_DISTRICT, 첫 배치 밖이면 OUT_OF_TARGET — prefix를 고치지 않는다.
+ *  - 여러 구 응답에 실렸는데 표기가 다르면 REVIEW(CROSS_DISTRICT_CONFLICT). 같으면 prefix 구가 canonical.
+ *  - classifyIdentity가 REVIEW면 REVIEW(형식·구 불일치·필수 필드·법정동/지번 충돌).
+ *  - 이미 master가 있으면 EXISTING_SKIPPED(비교·수정 없음).
+ *  - 최근 24개월 매매가 없으면 HISTORICAL_EXCLUDED.
+ */
+export function classifyGgCandidates(input: {
+  entriesByAptSeq: ReadonlyMap<string, readonly SeedCandidate[]>;
+  districts: readonly string[];
+  existingAptSeqs: ReadonlySet<string>;
+  windowStart: string;
+}): GgSeedRow[] {
+  const run = new Set(input.districts);
+  const out: GgSeedRow[] = [];
+  for (const [aptSeq, list] of [...input.entriesByAptSeq.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const prefix = aptSeq.slice(0, 5);
+    if (EXCLUDED_DISTRICTS.has(prefix)) { out.push(toRow(list[0], 'EXCLUDED_DISTRICT', [`DISTRICT_${prefix}_EXCLUDED`])); continue; }
+    if (!TARGET_SET.has(prefix) || !run.has(prefix)) { out.push(toRow(list[0], 'OUT_OF_TARGET', [`CANONICAL_DISTRICT_${prefix}_NOT_IN_RUN`])); continue; }
+    const cross = resolveCrossDistrict(list);
+    if (!cross.canonical) { out.push(toRow(list[0], 'REVIEW', ['CROSS_DISTRICT_CONFLICT'])); continue; }
+    const c = cross.kind === 'MISFILED_REPORT' ? { ...cross.canonical, sggCds: [cross.canonical.lawdCd] } : cross.canonical;
+    const v = classifyIdentity(c);
+    if (v.verdict !== 'SEED_READY') { out.push(toRow(c, 'REVIEW', v.reasons)); continue; }
+    if (!/^\d{5}$/.test(c.umdCd)) { out.push(toRow(c, 'REVIEW', ['UMDCD_MALFORMED'])); continue; }
+    if (!gyeonggiSigungu(prefix)) { out.push(toRow(c, 'REVIEW', ['SIGUNGU_UNRESOLVED'])); continue; }
+    if (input.existingAptSeqs.has(aptSeq)) { out.push(toRow(c, 'EXISTING_SKIPPED', [])); continue; }
+    if (c.latestDealDate < input.windowStart) { out.push(toRow(c, 'HISTORICAL_EXCLUDED', ['NO_SALE_IN_24M_WINDOW'])); continue; }
+    out.push(toRow(c, 'READY', []));
+  }
+  return out;
+}
+
+/** 같은 aptSeq가 한 입력에 두 번 들어오면(원천 정리 실패) 어느 쪽도 고르지 않는다. */
+export function findDuplicateAptSeqs(rows: readonly Pick<GgSeedRow, 'aptSeq'>[]): string[] {
+  const seen = new Set<string>();
+  const dup = new Set<string>();
+  for (const r of rows) (seen.has(r.aptSeq) ? dup : seen).add(r.aptSeq);
+  return [...dup].sort();
+}
+
+// ───────────────────────── 좌표(Kakao 주소 검색, 필지 일치 — 지역 인자) ─────────────────────────
+
+export interface LotTarget { sigungu: string; dong: string; jibun: string }
+
+export interface KakaoLotAddress {
+  address_name?: string;
+  region_1depth_name?: string;
+  region_2depth_name?: string;
+  region_3depth_name?: string;
+  mountain_yn?: string;
+  main_address_no?: string;
+  sub_address_no?: string;
+}
+
+const stripZeros = (s: string) => s.replace(/^0+(?=\d)/, '');
+const normSub = (s: string) => { const v = stripZeros(s); return v === '0' ? '' : v; };
+
+/** 정방향 검색어. 이름을 넣지 않는다 — 필지(시군구·법정동·지번)만. */
+export function ggAddressQuery(t: LotTarget): string {
+  return `경기 ${t.sigungu} ${t.dong} ${t.jibun}`;
+}
+
+function sameLot(a: KakaoLotAddress, t: LotTarget): boolean {
+  const lot = parseJibun(t.jibun);
+  if (!lot) return false;
+  return (a.region_1depth_name ?? '').startsWith('경기')
+    && a.region_2depth_name === t.sigungu
+    && a.region_3depth_name === t.dong
+    && (a.mountain_yn === 'Y') === lot.mountain
+    && stripZeros(a.main_address_no ?? '') === lot.main
+    && normSub(a.sub_address_no ?? '') === lot.sub;
+}
+
+export type ForwardStatus = 'EXACT' | 'NO_MATCH' | 'AMBIGUOUS' | 'JIBUN_UNPARSEABLE';
+
+/** 지번 주소 결과(REGION_ADDR) 중 필지가 모두 같은 결과가 **정확히 하나**일 때만 EXACT(중간 단계). */
+export function ggMatchExactLot(
+  docs: readonly { address_type?: string; x?: string; y?: string; address?: KakaoLotAddress | null }[],
+  t: LotTarget
+): { status: ForwardStatus; lat: number | null; lng: number | null } {
+  if (!parseJibun(t.jibun)) return { status: 'JIBUN_UNPARSEABLE', lat: null, lng: null };
+  const hits = docs.filter((d) => d.address_type === 'REGION_ADDR' && d.address && sameLot(d.address, t));
+  if (hits.length === 0) return { status: 'NO_MATCH', lat: null, lng: null };
+  if (hits.length > 1) return { status: 'AMBIGUOUS', lat: null, lng: null };
+  const lat = Number(hits[0].y);
+  const lng = Number(hits[0].x);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { status: 'NO_MATCH', lat: null, lng: null };
+  return { status: 'EXACT', lat, lng };
+}
+
+/** 역지오코딩 필지가 목표 필지와 같을 때만 VERIFIED. 이웃 필지·다른 시군구는 좌표를 버린다. */
+export function ggVerifyReverseLot(doc: { address?: KakaoLotAddress | null } | null, t: LotTarget): 'VERIFIED' | 'REVERSE_MISMATCH' | 'REVERSE_NO_RESULT' {
+  const a = doc?.address;
+  if (!a || !a.main_address_no) return 'REVERSE_NO_RESULT';
+  return sameLot(a, t) ? 'VERIFIED' : 'REVERSE_MISMATCH';
+}
+
+export type CoordinateStatus = 'VERIFIED' | 'FORWARD_NO_MATCH' | 'AMBIGUOUS' | 'JIBUN_UNPARSEABLE' | 'REVERSE_MISMATCH' | 'REVERSE_NO_RESULT' | 'ERROR' | 'RATE_LIMITED' | 'NOT_ATTEMPTED';
+const TERMINAL: ReadonlySet<CoordinateStatus> = new Set<CoordinateStatus>(['VERIFIED', 'FORWARD_NO_MATCH', 'AMBIGUOUS', 'JIBUN_UNPARSEABLE', 'REVERSE_MISMATCH', 'REVERSE_NO_RESULT']);
+
+/** 계획 버킷: READY 행 중 좌표가 VERIFIED가 아니면 GEOCODE_MISSING(좌표 null로 적재 — 만들어 넣지 않는다). */
+export type PlanBucket = 'READY' | 'GEOCODE_MISSING' | 'REVIEW' | 'UNRESOLVED';
+export function planBucket(row: Pick<GgSeedRow, 'status'>, coord: CoordinateStatus): PlanBucket | null {
+  if (row.status === 'REVIEW') return 'REVIEW';
+  if (row.status !== 'READY') return null;
+  if (coord === 'ERROR' || coord === 'RATE_LIMITED' || coord === 'NOT_ATTEMPTED') return 'UNRESOLVED';
+  return coord === 'VERIFIED' ? 'READY' : 'GEOCODE_MISSING';
+}
+
+// ───────────────────────── create 데이터 · plan hash · apply 게이트 ─────────────────────────
+
+/** 현 ApartmentMaster schema의 seed 필드만. enrichment 필드(roadAddress·세대수 등)는 넣지 않는다. */
+export function ggToCreateData(row: GgSeedRow, coord: { status: CoordinateStatus; lat: number | null; lng: number | null }) {
+  if (row.status !== 'READY') throw new Error(`NOT_READY:${row.aptSeq}`);
+  if (!row.aptSeq.startsWith(row.district) || !TARGET_SET.has(row.district)) throw new Error(`DISTRICT_GUARD:${row.aptSeq}`);
+  const verified = coord.status === 'VERIFIED' && coord.lat != null && coord.lng != null;
+  return {
+    aptSeq: row.aptSeq,
+    name: row.name,
+    normalizedName: row.normalizedName,
+    sido: GYEONGGI_SIDO_SHORT,
+    sigungu: row.sigungu,
+    sggCd: row.district,
+    umdName: row.dong,
+    umdCd: row.umdCd,
+    jibun: row.jibun,
+    buildYear: row.buildYear,
+    latitude: verified ? coord.lat : null,
+    longitude: verified ? coord.lng : null,
+    geocodeQuality: verified ? 'exact' : TERMINAL.has(coord.status) ? 'failed' : null,
+  };
+}
+
+/** dry-run이 계획한 create 데이터 전체의 해시. apply는 같은 해시일 때만 진행한다. */
+export function ggPlanHash(creates: readonly ReturnType<typeof ggToCreateData>[]): string {
+  const canon = [...creates].sort((a, b) => a.aptSeq.localeCompare(b.aptSeq)).map((c) => JSON.stringify(c));
+  return createHash('sha256').update(canon.join('\n')).digest('hex');
+}
+
+export interface GgApplyGateInput {
+  applyFlag: boolean;
+  allowProdDbWrite: string | undefined;
+  districts: readonly string[];
+  expectInserts: number | null;
+  plannedInserts: number;
+  expectPlanHash: string | null;
+  planHash: string;
+  coordinatesSkipped: boolean;
+  /** 경기 master가 생겨도 검색·지도·상세·리포트가 경기 단지를 싣지 않음이 검증됐는가(현재 false). */
+  publicExposureGuarded: boolean;
+}
+
+export function evaluateGgApplyGate(g: GgApplyGateInput): { allowed: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  if (!g.applyFlag) reasons.push('NO_APPLY_FLAG');
+  if (g.allowProdDbWrite !== '1') reasons.push('ALLOW_PROD_DB_WRITE_NOT_1');
+  if (g.districts.length === 0) reasons.push('DISTRICT_FILTER_REQUIRED');
+  for (const d of g.districts) {
+    if (EXCLUDED_DISTRICTS.has(d)) reasons.push(`DISTRICT_${d}_EXCLUDED`);
+    else if (!TARGET_SET.has(d)) reasons.push(`DISTRICT_${d}_NOT_IN_FIRST_BATCH`);
+  }
+  if (g.expectInserts == null) reasons.push('EXPECT_INSERTS_REQUIRED');
+  else if (g.expectInserts !== g.plannedInserts) reasons.push(`EXPECT_INSERTS_MISMATCH:${g.expectInserts}!=${g.plannedInserts}`);
+  if (!g.expectPlanHash) reasons.push('EXPECT_PLAN_HASH_REQUIRED');
+  else if (g.expectPlanHash !== g.planHash) reasons.push('PLAN_HASH_MISMATCH');
+  if (g.coordinatesSkipped) reasons.push('COORDINATES_SKIPPED');
+  if (!g.publicExposureGuarded) reasons.push('PUBLIC_EXPOSURE_NOT_GUARDED');
+  return { allowed: reasons.length === 0, reasons };
+}
