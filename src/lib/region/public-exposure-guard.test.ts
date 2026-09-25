@@ -180,8 +180,9 @@ test('18·19·20. seed 게이트 — publicExposureGuarded는 enablement에서 �
   const opened = computePublicExposureGuarded((c, axis) => (c === '41111' && axis === 'search') || isPublicRegionAllowed(c, axis));
   assert.deepEqual(opened, { guarded: false, openAxes: ['41111:search'] });
   const gate = evaluateGgApplyGate({
-    applyFlag: true, allowProdDbWrite: '1', districts: ['41135'], expectInserts: 1, plannedInserts: 1,
+    applyFlag: true, allowProdDbRead: '1', allowProdDbWrite: '1', districts: ['41135'], expectInserts: 1, plannedInserts: 1,
     expectPlanHash: 'h', planHash: 'h', coordinatesSkipped: false, publicExposureGuarded: r.guarded,
+    reviewInScope: 0, unresolvedInScope: 0, unexpectedExistingMasters: 0,
   });
   assert.deepEqual(gate.reasons, ['DISTRICT_41135_EXCLUDED']);
   assert.ok(!(GYEONGGI_FIRST_BATCH as readonly string[]).includes('41135'));

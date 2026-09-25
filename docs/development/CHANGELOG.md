@@ -2,6 +2,15 @@
 
 ## 2026-09-25
 
+### E-JIP GYEONGGI MASTER PILOT APPLY PREP V1 — apply·rollback·verify 경로 + 41115 파일럿 준비 (write 0)
+
+상세: `docs/development/GYEONGGI_MASTER_PILOT_APPLY_PREP_V1.md`
+
+    추가     --preflight · --apply(create-only 단일 트랜잭션) · --verify · --rollback(id 3중 조건) · 파일럿 잠금 41115
+    재계획   41115 READY 116 · 좌표 116/116 · insert 116 · 해시 96c97397… 일치 · 게이트 통과 · Kakao 0
+    거부     41135 · 41131 · 여러 구 · 해시/수 불일치 · 쓰기 승인 없음 — 전부 write 0
+    다음     파일럿 apply 사용자 승인 대기(명령 문서 §7, 미실행)
+
 ### E-JIP GYEONGGI MASTER SEEDING DRY-RUN V1 — 경기 8구 master + 좌표 dry-run (write 0)
 
 상세: `docs/development/GYEONGGI_MASTER_SEEDING_DRYRUN_V1.md`

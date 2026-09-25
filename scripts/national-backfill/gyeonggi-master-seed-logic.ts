@@ -250,8 +250,15 @@ export function computePublicExposureGuarded(
   return { guarded: openAxes.length === 0, openAxes };
 }
 
+/**
+ * GYEONGGI_MASTER_PILOT_APPLY_PREP_V1 — apply가 허용되는 구. **파일럿 잠금**: 지금은 41115 하나뿐이다.
+ * 다른 구를 열려면 이 목록을 바꾸는 코드 변경(= 리뷰·승인)이 필요하다. 41135는 어떤 경우에도 거부된다.
+ */
+export const GG_APPLY_ALLOWED_DISTRICTS: readonly string[] = ['41115'];
+
 export interface GgApplyGateInput {
   applyFlag: boolean;
+  allowProdDbRead: string | undefined;
   allowProdDbWrite: string | undefined;
   districts: readonly string[];
   expectInserts: number | null;
@@ -259,18 +266,26 @@ export interface GgApplyGateInput {
   expectPlanHash: string | null;
   planHash: string;
   coordinatesSkipped: boolean;
-  /** 경기 master가 생겨도 검색·지도·상세·리포트가 경기 단지를 싣지 않음이 검증됐는가(현재 false). */
+  /** 경기 master가 생겨도 검색·지도·상세·리포트가 경기 단지를 싣지 않음이 검증됐는가(computePublicExposureGuarded). */
   publicExposureGuarded: boolean;
+  /** 대상 구 안의 REVIEW·UNRESOLVED 수 — 0이 아니면 계획이 완결되지 않았다. */
+  reviewInScope: number;
+  unresolvedInScope: number;
+  /** 계획에 없는데 이미 있는 경기 master(출처 불명) 수 — 0이 아니면 HOLD. */
+  unexpectedExistingMasters: number;
 }
 
 export function evaluateGgApplyGate(g: GgApplyGateInput): { allowed: boolean; reasons: string[] } {
   const reasons: string[] = [];
   if (!g.applyFlag) reasons.push('NO_APPLY_FLAG');
+  if (g.allowProdDbRead !== '1') reasons.push('ALLOW_PROD_DB_READ_NOT_1');
   if (g.allowProdDbWrite !== '1') reasons.push('ALLOW_PROD_DB_WRITE_NOT_1');
   if (g.districts.length === 0) reasons.push('DISTRICT_FILTER_REQUIRED');
+  else if (g.districts.length !== 1) reasons.push('EXACTLY_ONE_DISTRICT_REQUIRED');
   for (const d of g.districts) {
     if (EXCLUDED_DISTRICTS.has(d)) reasons.push(`DISTRICT_${d}_EXCLUDED`);
     else if (!TARGET_SET.has(d)) reasons.push(`DISTRICT_${d}_NOT_IN_FIRST_BATCH`);
+    else if (!GG_APPLY_ALLOWED_DISTRICTS.includes(d)) reasons.push(`DISTRICT_${d}_NOT_IN_APPLY_SCOPE`);
   }
   if (g.expectInserts == null) reasons.push('EXPECT_INSERTS_REQUIRED');
   else if (g.expectInserts !== g.plannedInserts) reasons.push(`EXPECT_INSERTS_MISMATCH:${g.expectInserts}!=${g.plannedInserts}`);
@@ -278,6 +293,9 @@ export function evaluateGgApplyGate(g: GgApplyGateInput): { allowed: boolean; re
   else if (g.expectPlanHash !== g.planHash) reasons.push('PLAN_HASH_MISMATCH');
   if (g.coordinatesSkipped) reasons.push('COORDINATES_SKIPPED');
   if (!g.publicExposureGuarded) reasons.push('PUBLIC_EXPOSURE_NOT_GUARDED');
+  if (g.reviewInScope > 0) reasons.push(`REVIEW_IN_SCOPE:${g.reviewInScope}`);
+  if (g.unresolvedInScope > 0) reasons.push(`UNRESOLVED_IN_SCOPE:${g.unresolvedInScope}`);
+  if (g.unexpectedExistingMasters > 0) reasons.push(`UNEXPECTED_EXISTING_MASTERS:${g.unexpectedExistingMasters}`);
   return { allowed: reasons.length === 0, reasons };
 }
 
@@ -406,4 +424,151 @@ export function insertSetHashes(records: readonly PlanRecord[]): { withCoords: {
   const ready = records.filter((r) => r.state === 'READY').map((r) => r.fields!);
   const all = records.filter((r) => r.state === 'READY' || r.state === 'GEOCODE_MISSING').map((r) => r.fields!);
   return { withCoords: { count: ready.length, hash: ggPlanHash(ready) }, withNull: { count: all.length, hash: ggPlanHash(all) } };
+}
+
+// ───────────────────────── GYEONGGI_MASTER_PILOT_APPLY_PREP_V1 — insert 집합 · 적용 기록 · rollback · 사후 검증 ─────────────────────────
+
+/**
+ * apply가 실제로 넣을 create 데이터. 대상 구의 READY만 — null 좌표(GEOCODE_MISSING)는 `allowNullCoords`가
+ * 명시적으로 true일 때만 포함한다(정책 미정, 기본 false). aptSeq 순으로 정렬해 해시·순서가 결정적이다.
+ */
+export function selectInsertSet(
+  records: readonly PlanRecord[],
+  districts: readonly string[],
+  opts: { allowNullCoords: boolean }
+): ReturnType<typeof ggToCreateData>[] {
+  return records
+    .filter((r) => districts.includes(r.district))
+    .filter((r) => r.state === 'READY' || (opts.allowNullCoords && r.state === 'GEOCODE_MISSING'))
+    .map((r) => r.fields!)
+    .sort((a, b) => a.aptSeq.localeCompare(b.aptSeq));
+}
+
+export const GG_APPLIED_ARTIFACT_SCHEMA = 'gg-master-seed-applied/v1';
+
+/** createdAt·updatedAt은 insert가 돌려준 값(ISO). rollback은 DB 값이 이것과 같을 때만(= 그 뒤 수정 없음) 지운다. */
+export interface GgInsertedRow { aptSeq: string; id: number; sggCd: string; createdAt: string; updatedAt: string }
+
+export interface GgAppliedArtifact {
+  schema: typeof GG_APPLIED_ARTIFACT_SCHEMA;
+  runId: string;
+  policy: string;
+  district: string;
+  planHash: string;
+  expectInserts: number;
+  dbHostKind: 'PRODUCTION' | 'NON_PRODUCTION';
+  /** DB가 매긴 created_at의 최소·최대(로컬 시계가 아니다). */
+  createdAtMin: string | null;
+  createdAtMax: string | null;
+  inserted: GgInsertedRow[];
+  failed: { aptSeq: string; error: string }[];
+  /** 적용 직전 master 수(시도 코드 앞 2자리별) — 사후 검증에서 "다른 지역 변화 0"을 확인한다. */
+  preCountsBySido: Record<string, number>;
+  rollback: { note: string; sql: string; params: { ids: number[]; sggCd: string; from: string | null; to: string | null } };
+}
+
+/** rollback은 id 목록 + 구 코드 + DB created_at 창 3중 조건이다. 구만으로 지우는 문장은 만들지 않는다. */
+export const GG_ROLLBACK_SQL =
+  'DELETE FROM apartment_masters WHERE id = ANY($1::int[]) AND sgg_cd = $2 AND created_at BETWEEN $3::timestamp AND $4::timestamp';
+
+export function buildGgAppliedArtifact(a: Omit<GgAppliedArtifact, 'schema' | 'createdAtMin' | 'createdAtMax' | 'rollback'>): GgAppliedArtifact {
+  const times = a.inserted.map((r) => r.createdAt).sort();
+  const from = times[0] ?? null;
+  const to = times[times.length - 1] ?? null;
+  return {
+    schema: GG_APPLIED_ARTIFACT_SCHEMA, ...a, createdAtMin: from, createdAtMax: to,
+    rollback: {
+      note: '실행하지 않은 템플릿. --rollback 모드가 run id·삭제 수·행별 대조(aptSeq·구·created_at·updated_at)를 모두 통과해야만 실행한다.',
+      sql: GG_ROLLBACK_SQL,
+      params: { ids: a.inserted.map((r) => r.id), sggCd: a.district, from, to },
+    },
+  };
+}
+
+export interface RollbackDbRow { id: number; apt_seq: string | null; sgg_cd: string | null; created_at: string; updated_at: string }
+
+/**
+ * rollback 게이트. 아래가 전부 맞아야 한다:
+ *   --rollback · ALLOW_PROD_DB_WRITE=1 · --run-id = artifact.runId · --expect-deletes = 적용 기록의 삽입 수 ·
+ *   artifact 구가 apply 범위 안 · DB에서 id로 다시 읽은 행이 **전부** 기록과 같은 aptSeq·구이고 created_at 창 안이며
+ *   그 뒤 수정되지 않았다(updated_at = insert 때 기록한 값). 하나라도 다르면 아무것도 지우지 않는다.
+ */
+export function evaluateRollbackGate(g: {
+  rollbackFlag: boolean;
+  allowProdDbWrite: string | undefined;
+  runIdArg: string | null;
+  expectDeletes: number | null;
+  artifact: GgAppliedArtifact;
+  dbRows: readonly RollbackDbRow[];
+}): { allowed: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const art = g.artifact;
+  if (!g.rollbackFlag) reasons.push('NO_ROLLBACK_FLAG');
+  if (g.allowProdDbWrite !== '1') reasons.push('ALLOW_PROD_DB_WRITE_NOT_1');
+  if (art.schema !== GG_APPLIED_ARTIFACT_SCHEMA) reasons.push('ARTIFACT_SCHEMA_MISMATCH');
+  if (!g.runIdArg || g.runIdArg !== art.runId) reasons.push('RUN_ID_MISMATCH');
+  if (!GG_APPLY_ALLOWED_DISTRICTS.includes(art.district) || EXCLUDED_DISTRICTS.has(art.district)) reasons.push(`DISTRICT_${art.district}_NOT_IN_APPLY_SCOPE`);
+  if (g.expectDeletes == null || g.expectDeletes !== art.inserted.length) reasons.push(`EXPECT_DELETES_MISMATCH:${g.expectDeletes}!=${art.inserted.length}`);
+  if (art.inserted.length === 0 || !art.createdAtMin || !art.createdAtMax) reasons.push('NOTHING_TO_ROLL_BACK');
+  const byId = new Map(g.dbRows.map((r) => [r.id, r]));
+  let missing = 0;
+  let mismatch = 0;
+  let modified = 0;
+  let outside = 0;
+  for (const ins of art.inserted) {
+    const r = byId.get(ins.id);
+    if (!r) { missing++; continue; }
+    if (r.apt_seq !== ins.aptSeq || r.sgg_cd !== art.district) mismatch++;
+    if (art.createdAtMin && art.createdAtMax && (r.created_at < art.createdAtMin || r.created_at > art.createdAtMax)) outside++;
+    if (r.updated_at !== ins.updatedAt) modified++;
+  }
+  if (g.dbRows.length !== art.inserted.length) reasons.push(`DB_ROWS_COUNT:${g.dbRows.length}!=${art.inserted.length}`);
+  if (missing) reasons.push(`ROWS_MISSING:${missing}`);
+  if (mismatch) reasons.push(`ROWS_IDENTITY_MISMATCH:${mismatch}`);
+  if (outside) reasons.push(`ROWS_OUTSIDE_CREATED_WINDOW:${outside}`);
+  if (modified) reasons.push(`ROWS_MODIFIED_SINCE_INSERT:${modified}`);
+  return { allowed: reasons.length === 0, reasons };
+}
+
+export interface PostApplyInput {
+  artifact: GgAppliedArtifact;
+  /** 대상 구의 master 행(적용 후). */
+  districtRows: readonly { apt_seq: string | null; sgg_cd: string | null; latitude: number | null; longitude: number | null }[];
+  postCountsBySido: Record<string, number>;
+  /** 대상 구에서 aptSeq로 연결되는 매매 거래가 있는 aptSeq. */
+  tradeLinkedAptSeqs: ReadonlySet<string>;
+  publicExposureGuarded: boolean;
+  /** 운영 HTTP 확인(선택) — 검색·지도·상세가 막혀 있고 sitemap에 경기가 없는가. */
+  live?: { searchResults: number; mapUnsupported: boolean; detailUnsupported: boolean; sitemapGyeonggi: number } | null;
+}
+
+/** 파일럿 사후 검증(읽기 전용 입력 → 판정). 항목별 PASS/FAIL. */
+export function evaluatePostApply(p: PostApplyInput): { pass: boolean; checks: { name: string; pass: boolean; detail: string }[] } {
+  const a = p.artifact;
+  const n = a.expectInserts;
+  const seqs = p.districtRows.map((r) => r.apt_seq);
+  const planned = new Set(a.inserted.map((r) => r.aptSeq));
+  const sidos = new Set([...Object.keys(a.preCountsBySido), ...Object.keys(p.postCountsBySido)]);
+  const deltas = [...sidos].sort().map((s) => [s, (p.postCountsBySido[s] ?? 0) - (a.preCountsBySido[s] ?? 0)] as const);
+  const coords = p.districtRows.filter((r) => r.latitude != null && r.longitude != null).length;
+  const linked = [...planned].filter((s) => p.tradeLinkedAptSeqs.has(s)).length;
+  const checks = [
+    { name: 'INSERTED_EQUALS_EXPECT', pass: a.inserted.length === n && a.failed.length === 0, detail: `${a.inserted.length}/${n}, failed ${a.failed.length}` },
+    { name: 'MASTER_COUNT_DELTA', pass: deltas.every(([s, d]) => (s === a.district.slice(0, 2) ? d === n : d === 0)), detail: deltas.map(([s, d]) => `${s}:${d >= 0 ? '+' : ''}${d}`).join(' ') },
+    { name: 'DISTRICT_ROWS_EXACT', pass: p.districtRows.length === n && seqs.every((s) => !!s && planned.has(s)), detail: `${p.districtRows.length} rows` },
+    { name: 'NO_DUPLICATE_APTSEQ', pass: new Set(seqs).size === seqs.length, detail: `${new Set(seqs).size}/${seqs.length}` },
+    { name: 'SGG_ALL_DISTRICT', pass: p.districtRows.every((r) => r.sgg_cd === a.district && (r.apt_seq ?? '').startsWith(a.district)), detail: a.district },
+    { name: 'COORDS_COMPLETE', pass: coords === p.districtRows.length, detail: `${coords}/${p.districtRows.length}` },
+    { name: 'TRADE_LINKAGE', pass: linked === planned.size, detail: `${linked}/${planned.size}` },
+    { name: 'PUBLIC_EXPOSURE_GUARDED', pass: p.publicExposureGuarded, detail: String(p.publicExposureGuarded) },
+  ];
+  if (p.live) {
+    checks.push(
+      { name: 'LIVE_SEARCH_BLOCKED', pass: p.live.searchResults === 0, detail: `${p.live.searchResults}` },
+      { name: 'LIVE_MAP_BLOCKED', pass: p.live.mapUnsupported, detail: String(p.live.mapUnsupported) },
+      { name: 'LIVE_DETAIL_BLOCKED', pass: p.live.detailUnsupported, detail: String(p.live.detailUnsupported) },
+      { name: 'LIVE_SITEMAP_GYEONGGI_0', pass: p.live.sitemapGyeonggi === 0, detail: `${p.live.sitemapGyeonggi}` },
+    );
+  }
+  return { pass: checks.every((c) => c.pass), checks };
 }
