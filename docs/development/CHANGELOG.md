@@ -2,6 +2,16 @@
 
 ## 2026-09-25
 
+### E-JIP GYEONGGI MASTER SEEDING DRY-RUN V1 — 경기 8구 master + 좌표 dry-run (write 0)
+
+상세: `docs/development/GYEONGGI_MASTER_SEEDING_DRYRUN_V1.md`
+
+    결과     후보 1,193 · 좌표 검증 1,174(98.41%) · 좌표 없음 19(역조회 필지 불일치) · REVIEW 0 · UNRESOLVED 0 · 과거 제외 131
+    해시     PLAN_HASH f31af588… · insert 좌표만 1,174 / null 포함 1,193 · --resume 재실행 동일(Kakao 0)
+    호출     Kakao 2,386 · MOLIT 0 · DB READ ONLY
+    추가     scripts/national-backfill/gyeonggi-master-seed.ts(dry-run 전용) · 계획 상태/해시 로직 + 테스트
+    다음     파일럿 apply 승인 대기 — 권장 41115 수원 팔달구 116행(좌표 100%)
+
 ### E-JIP GYEONGGI PUBLIC EXPOSURE GUARD V1 — 공개 노출을 전국 공통 allowlist로
 
 상세: `docs/development/GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1.md`

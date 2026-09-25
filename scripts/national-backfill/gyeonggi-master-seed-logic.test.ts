@@ -183,3 +183,83 @@ test('plan hash — any change to a planned create changes the hash; order does 
 function okGate(): GgApplyGateInput {
   return { applyFlag: true, allowProdDbWrite: '1', districts: ['41111'], expectInserts: 2, plannedInserts: 2, expectPlanHash: 'h', planHash: 'h', coordinatesSkipped: false, publicExposureGuarded: true };
 }
+
+// ── GYEONGGI_MASTER_SEEDING_DRYRUN_V1 ────────────────────────────────────────
+
+import {
+  buildPlanHash,
+  buildPlanRecord,
+  classifyForward,
+  insertSetHashes,
+  NOT_ATTEMPTED_EVIDENCE,
+  planState,
+  sharedParcelGroups,
+  type CoordEvidence,
+} from './gyeonggi-master-seed-logic';
+
+const ev = (status: CoordEvidence['status'], lat: number | null = null, lng: number | null = null): CoordEvidence =>
+  ({ ...NOT_ATTEMPTED_EVIDENCE, status, lat, lng });
+
+test('dry-run: forward — 같은 시군구 다른 필지는 NO_MATCH, 다른 시군구뿐이면 CROSS_REGION, 둘 이상 일치는 AMBIGUOUS', () => {
+  assert.equal(classifyForward([lotDoc()], TARGET).status, 'EXACT');
+  assert.equal(classifyForward([lotDoc({ main_address_no: '314' })], TARGET).status, 'FORWARD_NO_MATCH');
+  assert.equal(classifyForward([lotDoc({ region_2depth_name: '수원시 권선구' })], TARGET).status, 'CROSS_REGION');
+  assert.equal(classifyForward([lotDoc({ region_1depth_name: '서울' })], TARGET).status, 'CROSS_REGION');
+  assert.equal(classifyForward([], TARGET).status, 'FORWARD_NO_MATCH');
+  assert.equal(classifyForward([lotDoc(), lotDoc()], TARGET).status, 'AMBIGUOUS');
+});
+
+test('dry-run: 상태는 정확히 하나 — identity가 먼저, 좌표는 READY 후보에만', () => {
+  const r = (status: string, reasons: string[] = []) => ({ status, reasons }) as never;
+  assert.deepEqual(planState(r('READY'), ev('VERIFIED', 1, 2)).state, 'READY');
+  assert.deepEqual(planState(r('READY'), ev('FORWARD_NO_MATCH')).state, 'GEOCODE_MISSING');
+  assert.deepEqual(planState(r('READY'), ev('REVERSE_MISMATCH')).state, 'GEOCODE_MISSING');
+  assert.deepEqual(planState(r('READY'), ev('JIBUN_UNPARSEABLE')).state, 'GEOCODE_MISSING');
+  assert.deepEqual(planState(r('READY'), ev('AMBIGUOUS')), { state: 'REVIEW', reasons: ['COORD_AMBIGUOUS_ADDRESS'] });
+  assert.deepEqual(planState(r('READY'), ev('CROSS_REGION')), { state: 'REVIEW', reasons: ['COORD_CROSS_REGION_RESULT'] });
+  for (const s of ['RATE_LIMITED', 'ERROR', 'NOT_ATTEMPTED'] as const) assert.equal(planState(r('READY'), ev(s)).state, 'UNRESOLVED');
+  assert.equal(planState(r('EXISTING_SKIPPED'), ev('VERIFIED', 1, 2)).state, 'SKIP_EXISTING');
+  assert.equal(planState(r('HISTORICAL_EXCLUDED'), ev('NOT_ATTEMPTED')).state, 'EXCLUDED_HISTORY_ONLY');
+  assert.equal(planState(r('REVIEW', ['SGG_CONFLICT']), ev('VERIFIED', 1, 2)).state, 'REVIEW');
+  assert.equal(planState(r('EXCLUDED_DISTRICT'), ev('NOT_ATTEMPTED')).state, 'REVIEW');
+});
+
+test('dry-run: 계획 레코드 — READY/GEOCODE_MISSING만 create 필드, 좌표는 VERIFIED만', () => {
+  const row = run(entries({ '41111': [item({ aptSeq: '41111-41' })] }))[0];
+  const ready = buildPlanRecord(row, ev('VERIFIED', 37.3, 127.0));
+  assert.deepEqual([ready.state, ready.fields?.latitude, ready.fields?.geocodeQuality], ['READY', 37.3, 'exact']);
+  const miss = buildPlanRecord(row, ev('REVERSE_MISMATCH', 37.3, 127.0));
+  assert.deepEqual([miss.state, miss.fields?.latitude, miss.fields?.geocodeQuality], ['GEOCODE_MISSING', null, 'failed']);
+  assert.equal(buildPlanRecord(row, ev('RATE_LIMITED')).fields, null);
+});
+
+test('dry-run: 같은 필지는 묶어 보고만 하고 aptSeq는 합치지 않는다', () => {
+  const rows = run(entries({ '41117': [item({ aptSeq: '41117-1', umdNm: '이의동', jibun: '1' }), item({ aptSeq: '41117-2', umdNm: '이의동', jibun: '1', aptNm: '다른단지' }), item({ aptSeq: '41117-3', umdNm: '이의동', jibun: '2' })] }));
+  assert.equal(rows.length, 3);
+  assert.deepEqual(sharedParcelGroups(rows), [['41117-1', '41117-2']]);
+});
+
+test('dry-run: plan hash는 결정적이고, 상태·필드·창·정책이 바뀌면 달라진다', () => {
+  const rows = run(entries({ '41111': [item({ aptSeq: '41111-1' }), item({ aptSeq: '41111-2', jibun: '9' })] }));
+  const recs = rows.map((r) => buildPlanRecord(r, ev('VERIFIED', 37.3, 127.0)));
+  const h = buildPlanHash({ asOfYm: '202609', districts: ['41111'], records: recs });
+  assert.equal(h, buildPlanHash({ asOfYm: '202609', districts: ['41111'], records: [...recs].reverse() }));
+  // 증거 부수 필드(문서 수)는 해시에 들어가지 않는다
+  assert.equal(h, buildPlanHash({ asOfYm: '202609', districts: ['41111'], records: recs.map((r) => ({ ...r, coordinate: { ...r.coordinate, forwardDocs: 9 } })) }));
+  assert.notEqual(h, buildPlanHash({ asOfYm: '202608', districts: ['41111'], records: recs }));
+  assert.notEqual(h, buildPlanHash({ asOfYm: '202609', districts: ['41111'], records: [buildPlanRecord(rows[0], ev('FORWARD_NO_MATCH')), recs[1]] }));
+  const hs = insertSetHashes([recs[0], buildPlanRecord(rows[1], ev('FORWARD_NO_MATCH'))]);
+  assert.equal(hs.withCoords.count, 1);
+  assert.equal(hs.withNull.count, 2);
+  assert.notEqual(hs.withCoords.hash, hs.withNull.hash);
+});
+
+test('dry-run 실행기: 쓰기 경로가 없다 — create/update/delete/raw write 0, --apply는 거부, 읽기는 READ ONLY 트랜잭션', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'gyeonggi-master-seed.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  for (const w of ['.create(', '.createMany(', '.update(', '.updateMany(', '.upsert(', '.delete(', '.deleteMany(', 'INSERT ', 'UPDATE ', 'DELETE ']) assert.ok(!src.includes(w), w);
+  assert.equal((src.match(/\$executeRawUnsafe\(/g) || []).length, 1);
+  assert.ok(src.includes("$executeRawUnsafe('SET TRANSACTION READ ONLY')"));
+  assert.ok(/process\.argv\.includes\('--apply'\)\) throw/.test(src));
+  assert.ok(/if \(!guard\.guarded \|\| !selectorHidden\)/.test(src), '공개 가드 확인 전에 계획을 만든다');
+  assert.ok(/realSearchAddress|realReverseGeocode/.test(src) && /from '\.\.\/seed-seoul-apartment-master'/.test(src), '검증된 서울 Kakao 클라이언트(KA/Origin·간격·429)를 쓰지 않는다');
+});

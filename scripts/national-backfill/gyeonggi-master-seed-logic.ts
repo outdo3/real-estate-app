@@ -189,8 +189,9 @@ export function ggVerifyReverseLot(doc: { address?: KakaoLotAddress | null } | n
   return sameLot(a, t) ? 'VERIFIED' : 'REVERSE_MISMATCH';
 }
 
-export type CoordinateStatus = 'VERIFIED' | 'FORWARD_NO_MATCH' | 'AMBIGUOUS' | 'JIBUN_UNPARSEABLE' | 'REVERSE_MISMATCH' | 'REVERSE_NO_RESULT' | 'ERROR' | 'RATE_LIMITED' | 'NOT_ATTEMPTED';
-const TERMINAL: ReadonlySet<CoordinateStatus> = new Set<CoordinateStatus>(['VERIFIED', 'FORWARD_NO_MATCH', 'AMBIGUOUS', 'JIBUN_UNPARSEABLE', 'REVERSE_MISMATCH', 'REVERSE_NO_RESULT']);
+/** CROSS_REGION: 정방향 결과가 목표 필지와 다른 시도·시군구뿐(GYEONGGI_MASTER_SEEDING_DRYRUN_V1 §8 — REVIEW). */
+export type CoordinateStatus = 'VERIFIED' | 'FORWARD_NO_MATCH' | 'CROSS_REGION' | 'AMBIGUOUS' | 'JIBUN_UNPARSEABLE' | 'REVERSE_MISMATCH' | 'REVERSE_NO_RESULT' | 'ERROR' | 'RATE_LIMITED' | 'NOT_ATTEMPTED';
+export const TERMINAL: ReadonlySet<CoordinateStatus> = new Set<CoordinateStatus>(['VERIFIED', 'FORWARD_NO_MATCH', 'CROSS_REGION', 'AMBIGUOUS', 'JIBUN_UNPARSEABLE', 'REVERSE_MISMATCH', 'REVERSE_NO_RESULT']);
 
 /** 계획 버킷: READY 행 중 좌표가 VERIFIED가 아니면 GEOCODE_MISSING(좌표 null로 적재 — 만들어 넣지 않는다). */
 export type PlanBucket = 'READY' | 'GEOCODE_MISSING' | 'REVIEW' | 'UNRESOLVED';
@@ -278,4 +279,131 @@ export function evaluateGgApplyGate(g: GgApplyGateInput): { allowed: boolean; re
   if (g.coordinatesSkipped) reasons.push('COORDINATES_SKIPPED');
   if (!g.publicExposureGuarded) reasons.push('PUBLIC_EXPOSURE_NOT_GUARDED');
   return { allowed: reasons.length === 0, reasons };
+}
+
+// ───────────────────────── GYEONGGI_MASTER_SEEDING_DRYRUN_V1 — 계획 상태·증거·해시 ─────────────────────────
+
+/** 계획 정책 버전. 판정 규칙이 바뀌면 올린다 — plan hash에 들어가므로 규칙 변경이 해시로 드러난다. */
+export const GG_SEED_POLICY_VERSION = 'gg-master-seed/v1';
+
+/** 후보 하나의 최종 상태. 하나의 aptSeq는 정확히 하나의 상태로 끝난다. */
+export type PlanState = 'READY' | 'GEOCODE_MISSING' | 'REVIEW' | 'UNRESOLVED' | 'SKIP_EXISTING' | 'EXCLUDED_HISTORY_ONLY';
+
+export interface CoordEvidence {
+  status: CoordinateStatus;
+  query: string | null;
+  forwardDocs: number;
+  forwardHits: number;
+  /** 정방향 결과의 시도·시군구·법정동·지번 요약(최대 5) — 판정 근거를 남긴다. */
+  forwardSummary: string[];
+  lat: number | null;
+  lng: number | null;
+  reverseLot: string | null;
+  detail: string | null;
+}
+
+export const NOT_ATTEMPTED_EVIDENCE: CoordEvidence = {
+  status: 'NOT_ATTEMPTED', query: null, forwardDocs: 0, forwardHits: 0, forwardSummary: [], lat: null, lng: null, reverseLot: null, detail: null,
+};
+
+type ForwardDoc = { address_type?: string; x?: string; y?: string; address?: KakaoLotAddress | null };
+
+export function summarizeLot(a: KakaoLotAddress | null | undefined): string {
+  if (!a) return '-';
+  const sub = normSub(a.sub_address_no ?? '');
+  return `${a.region_1depth_name ?? ''}|${a.region_2depth_name ?? ''}|${a.region_3depth_name ?? ''}|${a.mountain_yn === 'Y' ? '산' : ''}${stripZeros(a.main_address_no ?? '')}${sub ? `-${sub}` : ''}`;
+}
+
+/**
+ * 정방향 판정 + 교차 지역 구분. ggMatchExactLot가 NO_MATCH인데 결과가 전부 **다른 시도·시군구**면
+ * CROSS_REGION(REVIEW 대상), 같은 시군구 안의 다른 필지·동 대표점이면 FORWARD_NO_MATCH(좌표 없음).
+ */
+export function classifyForward(docs: readonly ForwardDoc[], t: LotTarget): { status: CoordinateStatus | 'EXACT'; lat: number | null; lng: number | null; hits: number; summary: string[] } {
+  const summary = docs.slice(0, 5).map((d) => `${d.address_type ?? '?'}:${summarizeLot(d.address)}`);
+  const m = ggMatchExactLot(docs, t);
+  if (m.status === 'EXACT') return { status: 'EXACT', lat: m.lat, lng: m.lng, hits: 1, summary };
+  if (m.status === 'AMBIGUOUS') return { status: 'AMBIGUOUS', lat: null, lng: null, hits: 2, summary };
+  if (m.status === 'JIBUN_UNPARSEABLE') return { status: 'JIBUN_UNPARSEABLE', lat: null, lng: null, hits: 0, summary };
+  const withAddr = docs.filter((d) => d.address);
+  const cross = withAddr.length > 0 && withAddr.every((d) =>
+    !(d.address!.region_1depth_name ?? '').startsWith('경기') || d.address!.region_2depth_name !== t.sigungu);
+  return { status: cross ? 'CROSS_REGION' : 'FORWARD_NO_MATCH', lat: null, lng: null, hits: 0, summary };
+}
+
+/** 식별 판정(classifyGgCandidates) + 좌표 증거 → 최종 계획 상태와 사유. */
+export function planState(row: Pick<GgSeedRow, 'status' | 'reasons'>, coord: CoordEvidence): { state: PlanState; reasons: string[] } {
+  switch (row.status) {
+    case 'EXISTING_SKIPPED': return { state: 'SKIP_EXISTING', reasons: ['MASTER_ALREADY_EXISTS'] };
+    case 'HISTORICAL_EXCLUDED': return { state: 'EXCLUDED_HISTORY_ONLY', reasons: row.reasons };
+    case 'REVIEW': return { state: 'REVIEW', reasons: row.reasons };
+    case 'OUT_OF_TARGET':
+    case 'EXCLUDED_DISTRICT': return { state: 'REVIEW', reasons: row.reasons };
+    case 'READY': break;
+  }
+  switch (coord.status) {
+    case 'VERIFIED': return { state: 'READY', reasons: [] };
+    case 'AMBIGUOUS': return { state: 'REVIEW', reasons: ['COORD_AMBIGUOUS_ADDRESS'] };
+    case 'CROSS_REGION': return { state: 'REVIEW', reasons: ['COORD_CROSS_REGION_RESULT'] };
+    case 'ERROR':
+    case 'RATE_LIMITED':
+    case 'NOT_ATTEMPTED': return { state: 'UNRESOLVED', reasons: [`COORD_${coord.status}`] };
+    default: return { state: 'GEOCODE_MISSING', reasons: [`COORD_${coord.status}`] };
+  }
+}
+
+/** 같은 구·법정동코드·지번을 쓰는 aptSeq 묶음(합치지 않는다 — 보고용). */
+export function sharedParcelGroups(rows: readonly Pick<GgSeedRow, 'aptSeq' | 'district' | 'umdCd' | 'jibun'>[]): string[][] {
+  const m = new Map<string, string[]>();
+  for (const r of rows) {
+    const k = `${r.district}|${r.umdCd}|${r.jibun}`;
+    m.set(k, [...(m.get(k) ?? []), r.aptSeq]);
+  }
+  return [...m.values()].filter((v) => v.length > 1).map((v) => [...v].sort()).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+export interface PlanRecord {
+  aptSeq: string;
+  district: string;
+  state: PlanState;
+  reasons: string[];
+  /** READY·GEOCODE_MISSING만 — 그대로 create data가 된다. */
+  fields: ReturnType<typeof ggToCreateData> | null;
+  identity: Pick<GgSeedRow, 'name' | 'dong' | 'umdCd' | 'jibun' | 'buildYear' | 'tradeCount' | 'latestDealDate'>;
+  coordinate: CoordEvidence;
+}
+
+export function buildPlanRecord(row: GgSeedRow, coord: CoordEvidence): PlanRecord {
+  const { state, reasons } = planState(row, coord);
+  const insertable = state === 'READY' || state === 'GEOCODE_MISSING';
+  return {
+    aptSeq: row.aptSeq, district: row.district, state, reasons,
+    fields: insertable ? ggToCreateData(row, { status: coord.status, lat: coord.lat, lng: coord.lng }) : null,
+    identity: { name: row.name, dong: row.dong, umdCd: row.umdCd, jibun: row.jibun, buildYear: row.buildYear, tradeCount: row.tradeCount, latestDealDate: row.latestDealDate },
+    coordinate: coord,
+  };
+}
+
+/**
+ * 계획 전체의 결정적 해시: 정책 버전 · 창 · 대상 구 · aptSeq별 (상태, 사유, create 필드).
+ * 좌표 증거의 부수 필드(문서 수·요약)는 넣지 않는다 — 좌표 **결정**(필드의 lat/lng/geocodeQuality)만 들어간다.
+ */
+export function buildPlanHash(input: { asOfYm: string; districts: readonly string[]; records: readonly PlanRecord[] }): string {
+  const body = {
+    policy: GG_SEED_POLICY_VERSION,
+    asOfYm: input.asOfYm,
+    districts: [...input.districts].sort(),
+    records: [...input.records].sort((a, b) => a.aptSeq.localeCompare(b.aptSeq)).map((r) => [r.aptSeq, r.state, r.reasons, r.fields]),
+  };
+  return createHash('sha256').update(JSON.stringify(body)).digest('hex');
+}
+
+/**
+ * apply 대상 create 집합의 해시(= future `--expect-plan-hash`). null 좌표 정책이 미정이라 두 변형을 낸다:
+ *   withCoords  : READY만
+ *   withNull    : READY + GEOCODE_MISSING(좌표 null)
+ */
+export function insertSetHashes(records: readonly PlanRecord[]): { withCoords: { count: number; hash: string }; withNull: { count: number; hash: string } } {
+  const ready = records.filter((r) => r.state === 'READY').map((r) => r.fields!);
+  const all = records.filter((r) => r.state === 'READY' || r.state === 'GEOCODE_MISSING').map((r) => r.fields!);
+  return { withCoords: { count: ready.length, hash: ggPlanHash(ready) }, withNull: { count: all.length, hash: ggPlanHash(all) } };
 }
