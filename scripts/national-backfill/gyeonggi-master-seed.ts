@@ -367,6 +367,7 @@ async function runApply(prisma: PrismaClient, preflight = false) {
 
   const artifact = buildGgAppliedArtifact({
     runId, policy: GG_SEED_POLICY_VERSION, district, planHash, expectInserts: creates.length, dbHostKind, inserted, failed, preCountsBySido,
+    nullCoordAptSeqs: creates.filter((c) => c.latitude == null || c.longitude == null).map((c) => c.aptSeq),
   });
   writeJson(path.join(APPLIED_DIR, `${runId}.json`), artifact);
   console.log(JSON.stringify({ mode: 'APPLIED', runId, district, inserted: inserted.length, planHash, artifact: path.relative(process.cwd(), path.join(APPLIED_DIR, `${runId}.json`)) }, null, 1));

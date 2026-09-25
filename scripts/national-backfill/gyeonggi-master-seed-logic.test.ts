@@ -300,10 +300,14 @@ test('apply 1·2·3 — --apply 플래그, 읽기·쓰기 승인, 공개 가드�
   assert.ok(/if \(modes\[0\] === 'apply'\) await runApply\(prisma\);/.test(RUNNER), 'apply 모드는 --apply로만 들어간다');
 });
 
-test('apply 4·5 — 파일럿 잠금: 41115 하나만, 41135·다른 구·여러 구는 거부', () => {
-  assert.deepEqual([...GG_APPLY_ALLOWED_DISTRICTS], ['41115']);
+test('apply 4·5 — 범위: 첫 배치 8구만(한 번에 한 구), 41135·첫 배치 밖·여러 구는 거부', () => {
+  // GYEONGGI_MASTER_FULL_BATCH_POLICY_V1 — 파일럿 잠금 ['41115']에서 첫 배치 8구로 확장.
+  assert.deepEqual([...GG_APPLY_ALLOWED_DISTRICTS], ['41111', '41113', '41115', '41117', '41131', '41133', '41150', '41210']);
+  assert.ok(!GG_APPLY_ALLOWED_DISTRICTS.includes('41135'));
   assert.equal(evaluateGgApplyGate(okGate()).allowed, true);
-  assert.ok(evaluateGgApplyGate({ ...okGate(), districts: ['41131'] }).reasons.includes('DISTRICT_41131_NOT_IN_APPLY_SCOPE'));
+  for (const d of GG_APPLY_ALLOWED_DISTRICTS) assert.equal(evaluateGgApplyGate({ ...okGate(), districts: [d] }).allowed, true, d);
+  assert.ok(evaluateGgApplyGate({ ...okGate(), districts: ['41171'] }).reasons.includes('DISTRICT_41171_NOT_IN_FIRST_BATCH'));
+  assert.ok(evaluateGgApplyGate({ ...okGate(), districts: ['11110'] }).reasons.includes('DISTRICT_11110_NOT_IN_FIRST_BATCH'));
   assert.ok(evaluateGgApplyGate({ ...okGate(), districts: ['41135'] }).reasons.includes('DISTRICT_41135_EXCLUDED'));
   assert.ok(evaluateGgApplyGate({ ...okGate(), districts: ['41115', '41111'] }).reasons.includes('EXACTLY_ONE_DISTRICT_REQUIRED'));
   assert.ok(evaluateGgApplyGate({ ...okGate(), districts: [] }).reasons.includes('DISTRICT_FILTER_REQUIRED'));
@@ -405,7 +409,12 @@ test('apply 사후 검증 — +116만, 다른 시도 0, 좌표·구·중복·거
   };
   fail({ postCountsBySido: { '11': 6844, '26': 3438, '41': 3 } }, 'MASTER_COUNT_DELTA');
   fail({ districtRows: [...good.districtRows, good.districtRows[0]] }, 'NO_DUPLICATE_APTSEQ');
-  fail({ districtRows: good.districtRows.map((r, i) => (i ? r : { ...r, latitude: null })) }, 'COORDS_COMPLETE');
+  fail({ districtRows: good.districtRows.map((r, i) => (i ? r : { ...r, latitude: null })) }, 'COORDS_AS_PLANNED');
+  // 계획상 null 행: 그 행만 null이면 통과, 좌표가 붙어 있거나 다른 행이 null이면 실패
+  const withNull = { ...good, artifact: { ...a, nullCoordAptSeqs: ['41115-1'] }, districtRows: good.districtRows.map((r, i) => (i ? r : { ...r, latitude: null, longitude: null })) };
+  assert.equal(evaluatePostApply(withNull).pass, true);
+  assert.equal(evaluatePostApply({ ...withNull, districtRows: good.districtRows }).checks.find((c) => c.name === 'COORDS_AS_PLANNED')?.pass, false, '계획상 null인데 좌표가 있다');
+  assert.equal(evaluatePostApply({ ...withNull, districtRows: good.districtRows.map((r, i) => (i === 1 ? { ...r, latitude: null, longitude: null } : r)) }).checks.find((c) => c.name === 'COORDS_AS_PLANNED')?.pass, false, '계획에 없는 행이 null');
   fail({ tradeLinkedAptSeqs: new Set(['41115-1']) }, 'TRADE_LINKAGE');
   fail({ publicExposureGuarded: false }, 'PUBLIC_EXPOSURE_GUARDED');
   fail({ live: { ...good.live, searchResults: 1 } }, 'LIVE_SEARCH_BLOCKED');

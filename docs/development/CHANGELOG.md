@@ -2,6 +2,15 @@
 
 ## 2026-09-25
 
+### E-JIP GYEONGGI MASTER FULL BATCH POLICY V1 — 나머지 7구 정책 결정 + apply 준비 (write 0)
+
+상세: `docs/development/GYEONGGI_MASTER_FULL_BATCH_POLICY_V1.md`
+
+    결정     null 좌표 19행 포함 · 구마다 1회(7회) · 순서 41111→41117→41133→41131→41210→41113→41150
+    재계획   insert 1,077(좌표 1,058 · null 19) · 7구 게이트 allowed · 해시 dry-run과 동일 · Kakao 0
+    변경     apply 허용 구 41115 → 첫 배치 8구(한 번에 한 구 유지) · 사후 검증 COORDS_AS_PLANNED(계획상 null만 허용)
+    다음     7구 apply 사용자 승인 대기(명령 문서 §5, 미실행)
+
 ### E-JIP GYEONGGI MASTER PILOT APPLY V1 — 41115 수원 팔달구 master 116행 적재 (승인)
 
 상세: `docs/development/GYEONGGI_MASTER_PILOT_APPLY_V1.md`

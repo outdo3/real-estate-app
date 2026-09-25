@@ -251,10 +251,11 @@ export function computePublicExposureGuarded(
 }
 
 /**
- * GYEONGGI_MASTER_PILOT_APPLY_PREP_V1 — apply가 허용되는 구. **파일럿 잠금**: 지금은 41115 하나뿐이다.
- * 다른 구를 열려면 이 목록을 바꾸는 코드 변경(= 리뷰·승인)이 필요하다. 41135는 어떤 경우에도 거부된다.
+ * apply가 허용되는 구. 목록을 바꾸는 것은 코드 변경(= 리뷰·승인)이다. 41135는 어떤 경우에도 거부된다.
+ *   GYEONGGI_MASTER_PILOT_APPLY_PREP_V1 — 파일럿 잠금 ['41115'](적용 완료 2026-09-25, 116행).
+ *   GYEONGGI_MASTER_FULL_BATCH_POLICY_V1 — 첫 배치 8구 전체로 확장. **한 번에 한 구**(EXACTLY_ONE_DISTRICT) 규칙은 그대로다.
  */
-export const GG_APPLY_ALLOWED_DISTRICTS: readonly string[] = ['41115'];
+export const GG_APPLY_ALLOWED_DISTRICTS: readonly string[] = [...GYEONGGI_FIRST_BATCH];
 
 export interface GgApplyGateInput {
   applyFlag: boolean;
@@ -464,6 +465,8 @@ export interface GgAppliedArtifact {
   failed: { aptSeq: string; error: string }[];
   /** 적용 직전 master 수(시도 코드 앞 2자리별) — 사후 검증에서 "다른 지역 변화 0"을 확인한다. */
   preCountsBySido: Record<string, number>;
+  /** GYEONGGI_MASTER_FULL_BATCH_POLICY_V1 — 계획상 좌표 null로 넣은 aptSeq(`--allow-null-coords`). 사후 검증은 이 행만 null을 허용한다. 없으면 [](파일럿 기록). */
+  nullCoordAptSeqs?: string[];
   rollback: { note: string; sql: string; params: { ids: number[]; sggCd: string; from: string | null; to: string | null } };
 }
 
@@ -472,6 +475,7 @@ export const GG_ROLLBACK_SQL =
   'DELETE FROM apartment_masters WHERE id = ANY($1::int[]) AND sgg_cd = $2 AND created_at BETWEEN $3::timestamp AND $4::timestamp';
 
 export function buildGgAppliedArtifact(a: Omit<GgAppliedArtifact, 'schema' | 'createdAtMin' | 'createdAtMax' | 'rollback'>): GgAppliedArtifact {
+  // nullCoordAptSeqs는 호출자가 넘긴 그대로(선택) — 파일럿 기록과 형식이 같다.
   const times = a.inserted.map((r) => r.createdAt).sort();
   const from = times[0] ?? null;
   const to = times[times.length - 1] ?? null;
@@ -551,6 +555,13 @@ export function evaluatePostApply(p: PostApplyInput): { pass: boolean; checks: {
   const sidos = new Set([...Object.keys(a.preCountsBySido), ...Object.keys(p.postCountsBySido)]);
   const deltas = [...sidos].sort().map((s) => [s, (p.postCountsBySido[s] ?? 0) - (a.preCountsBySido[s] ?? 0)] as const);
   const coords = p.districtRows.filter((r) => r.latitude != null && r.longitude != null).length;
+  // 좌표는 **계획대로**: 계획상 null인 aptSeq만 null, 나머지는 전부 좌표가 있어야 한다.
+  const expectedNull = new Set(a.nullCoordAptSeqs ?? []);
+  const coordsAsPlanned = p.districtRows.every((r) => {
+    const has = r.latitude != null && r.longitude != null;
+    return expectedNull.has(r.apt_seq ?? '') ? !has : has;
+  });
+  const nullRows = p.districtRows.length - coords;
   const linked = [...planned].filter((s) => p.tradeLinkedAptSeqs.has(s)).length;
   const checks = [
     { name: 'INSERTED_EQUALS_EXPECT', pass: a.inserted.length === n && a.failed.length === 0, detail: `${a.inserted.length}/${n}, failed ${a.failed.length}` },
@@ -558,7 +569,7 @@ export function evaluatePostApply(p: PostApplyInput): { pass: boolean; checks: {
     { name: 'DISTRICT_ROWS_EXACT', pass: p.districtRows.length === n && seqs.every((s) => !!s && planned.has(s)), detail: `${p.districtRows.length} rows` },
     { name: 'NO_DUPLICATE_APTSEQ', pass: new Set(seqs).size === seqs.length, detail: `${new Set(seqs).size}/${seqs.length}` },
     { name: 'SGG_ALL_DISTRICT', pass: p.districtRows.every((r) => r.sgg_cd === a.district && (r.apt_seq ?? '').startsWith(a.district)), detail: a.district },
-    { name: 'COORDS_COMPLETE', pass: coords === p.districtRows.length, detail: `${coords}/${p.districtRows.length}` },
+    { name: 'COORDS_AS_PLANNED', pass: coordsAsPlanned && nullRows === expectedNull.size, detail: `${coords}/${p.districtRows.length} with coords, null ${nullRows}/${expectedNull.size} planned` },
     { name: 'TRADE_LINKAGE', pass: linked === planned.size, detail: `${linked}/${planned.size}` },
     { name: 'PUBLIC_EXPOSURE_GUARDED', pass: p.publicExposureGuarded, detail: String(p.publicExposureGuarded) },
   ];

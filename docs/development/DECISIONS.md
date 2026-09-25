@@ -1765,3 +1765,31 @@ SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1은 "검색/상세는 전국 live MOLIT로 응�
 
 상태:
 구현·배포. 문서: `docs/development/GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1.md`
+
+---
+
+## 14. GYEONGGI MASTER FULL BATCH POLICY V1 — null 좌표 단지도 master로 넣고, 구마다 따로 적용한다
+
+날짜:
+2026-09-25
+
+결정:
+경기 첫 배치 나머지 7구 master 1,077행(좌표 1,058 + null 19)을 적재 대상으로 한다.
+좌표를 검증하지 못한 19행은 lat/lng null · geocodeQuality 'failed'로 넣는다.
+적용은 구마다 한 번씩 7회, 실패하면 그 자리에서 멈춘다.
+
+배경:
+dry-run에서 19행은 정방향 필지는 맞았지만 역지오코딩 필지가 이웃 필지로 나와 좌표를 버렸다.
+서울은 같은 경우를 null 좌표로 넣었고 운영에 117행이 있다.
+
+이유:
+- master는 aptSeq identity의 원천이다. 좌표가 없다고 단지를 빼면 공개 후 그 단지는 검색도 상세 식별도 안 된다.
+- null 좌표 master는 지도에 마커를 만들지 않고, 상세도 이름 검색으로 좌표를 빌려오지 않는다(코드 확인) — 틀린 위치보다 없는 위치가 낫다는 원칙과 맞는다.
+- 구마다 runId·해시·검증·rollback 단위를 따로 두면 문제가 생긴 구만 되돌릴 수 있다.
+
+영향:
+- 경기 master 116 → 1,193 예정(공개는 계속 닫힘).
+- 19행 좌표 보강은 별도 enrichment STEP(update — 승인 필요).
+
+상태:
+사용자 결정 · apply 준비 완료(미실행). 문서: `docs/development/GYEONGGI_MASTER_FULL_BATCH_POLICY_V1.md`
