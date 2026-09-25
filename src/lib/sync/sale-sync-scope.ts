@@ -7,6 +7,7 @@
 // 허용 목록만 받는다 — URL로 임의의 lawdCd를 넘길 수 없다.
 //   scope 없음  → undefined(= 코어의 기본값 BUSAN_LAWDCD_16, 기존 동작 그대로)
 //   scope=seoul → 전체 이력 backfill과 사후 검증이 끝난 서울 구만
+//   scope=gyeonggi → 같은 조건을 통과한 경기 첫 배치 8구만(41135 제외)
 //   그 밖       → 거부(라우트가 400)
 
 /**
@@ -30,7 +31,25 @@ export const SEOUL_SALE_SYNC_LAWDCDS = [
   '11545', // 금천구   — Phase C
 ] as const;
 
-export type SaleSyncScope = 'busan' | 'seoul';
+/**
+ * GYEONGGI_CRON_EXPANSION_V1 — 경기 첫 배치 8구(사용자 승인 2026-09-25). **정확한 허용 목록**이다 — 경기를 동적으로
+ * 모으지 않는다. 근거: NATIONAL_FIRST_BATCH_APPLY_V1 전체 이력 539,443행 적재 + 원천/DB parity exact(취소 7,291 = 원천),
+ * GYEONGGI_MASTER_FULL_BATCH_APPLY_V1 master 1,193 parity exact.
+ * 41135 분당은 원천 층 공란 4행 REVIEW라 적재도 안 됐다 — 넣지 않는다.
+ * 이 목록은 **동기화 범위**일 뿐 공개 범위가 아니다(경기 공개는 enablement GYEONGGI_BETA_ENABLED, 현재 false).
+ */
+export const GYEONGGI_SALE_SYNC_LAWDCDS = [
+  '41111', // 수원시 장안구
+  '41113', // 수원시 권선구
+  '41115', // 수원시 팔달구
+  '41117', // 수원시 영통구
+  '41131', // 성남시 수정구
+  '41133', // 성남시 중원구
+  '41150', // 의정부시
+  '41210', // 광명시
+] as const;
+
+export type SaleSyncScope = 'busan' | 'seoul' | 'gyeonggi';
 
 export type ResolvedSaleSyncScope =
   | { ok: true; scope: SaleSyncScope; lawdCds: string[] | undefined }
@@ -40,5 +59,6 @@ export function resolveSaleSyncScope(raw: string | null): ResolvedSaleSyncScope 
   // 생략만 기본값이다. 빈 문자열(`?scope=`)은 오타일 수 있으므로 기본값으로 삼키지 않는다.
   if (raw === null) return { ok: true, scope: 'busan', lawdCds: undefined };
   if (raw === 'seoul') return { ok: true, scope: 'seoul', lawdCds: [...SEOUL_SALE_SYNC_LAWDCDS] };
+  if (raw === 'gyeonggi') return { ok: true, scope: 'gyeonggi', lawdCds: [...GYEONGGI_SALE_SYNC_LAWDCDS] };
   return { ok: false, error: 'invalid scope' };
 }

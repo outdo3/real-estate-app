@@ -16,6 +16,7 @@
 // 최소 간격 350ms, 스로틀 감지 시 지수 백오프.
 import { createMolitXmlParser, mapMolitItems } from '../src/lib/api-molit';
 import { classifySaleCellCompleteness, type SaleCellStatus } from './sale-pagination-logic';
+import { molitQuotaDecision, type QuotaDecision } from '../src/lib/sync/molit-quota-guard';
 
 const ENDPOINT = 'http://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev';
 const PAGE_SIZE = 1000; // 기존 api-molit.ts와 동일한 관행값
@@ -40,14 +41,26 @@ function buildUrl(lawdCd: string, dealYmd: string, pageNo: number): string {
  */
 export const saleQuotaObserved: { remaining: number | null; at: number | null } = { remaining: null, at: null };
 
+/**
+ * GYEONGGI_CRON_EXPANSION_V1 — 지금 MOLIT 요청을 보내도 되는가(관측값만 사용, 새 요청 없음).
+ * cron 코어가 셀마다, 이 파일이 페이지마다 확인한다. 경계는 molit-quota-guard.ts(remaining > 2,000일 때만 진행).
+ */
+export function saleQuotaDecision(nowMs: number = Date.now()): QuotaDecision {
+  return molitQuotaDecision(saleQuotaObserved, nowMs);
+}
+
 interface RawPageResult {
   ok: boolean;
   rawItems: any[];
   totalCount: number | null;
   rateLimited: boolean;
+  /** 예약분 도달로 요청을 **보내지 않았다**(재시도 금지). */
+  quotaStopped?: boolean;
 }
 
 async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Promise<RawPageResult> {
+  // GYEONGGI_CRON_EXPANSION_V1 — 예약분에 닿았으면 요청 자체를 보내지 않는다.
+  if (!saleQuotaDecision().proceed) return { ok: false, rawItems: [], totalCount: null, rateLimited: false, quotaStopped: true };
   const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastFetchAt));
   if (wait > 0) await sleep(wait);
   lastFetchAt = Date.now();
@@ -101,6 +114,7 @@ async function fetchOnePageWithRetry(lawdCd: string, dealYmd: string, pageNo: nu
   for (let attempt = 0; attempt <= 5; attempt++) {
     last = await fetchOnePage(lawdCd, dealYmd, pageNo);
     if (last.ok) return last;
+    if (last.quotaStopped) return last; // 예약분 도달 — 재시도로 한도를 더 쓰지 않는다
     if (attempt === 5) break;
     const backoffMs = last.rateLimited ? Math.min(2000 * (attempt + 1), 10000) : 500 * (attempt + 1);
     await sleep(backoffMs);
@@ -114,6 +128,8 @@ export interface SaleRegionMonthResult {
   totalCount: number | null;
   collectedCount: number;
   pagesFetched: number;
+  /** GYEONGGI_CRON_EXPANSION_V1 — 예약분 도달로 이 셀을 끝까지 읽지 못했다(셀은 INVALID/PARTIAL → 쓰지 않음). */
+  quotaReserveReached?: boolean;
 }
 
 /**
@@ -131,11 +147,13 @@ export async function fetchSaleRegionMonth(lawdCd: string, dealYmd: string): Pro
       totalCount: null,
       collectedCount: 0,
       pagesFetched: 0,
+      quotaReserveReached: first.quotaStopped === true,
     };
   }
 
   let rawItems = [...first.rawItems];
   let anyLaterPageFailed = false;
+  let quotaReserveReached = false;
   const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
   let pagesFetched = 1;
 
@@ -143,6 +161,7 @@ export async function fetchSaleRegionMonth(lawdCd: string, dealYmd: string): Pro
     const res = await fetchOnePageWithRetry(lawdCd, dealYmd, page);
     if (!res.ok) {
       anyLaterPageFailed = true;
+      quotaReserveReached = res.quotaStopped === true;
       break;
     }
     rawItems = rawItems.concat(res.rawItems);
@@ -161,5 +180,5 @@ export async function fetchSaleRegionMonth(lawdCd: string, dealYmd: string): Pro
   // 쪽에서 와도 변경 없이 그대로 동작한다.
   const items = mapMolitItems(rawItems, 'apt', lawdCd, dealYmd);
 
-  return { items, status, totalCount: first.totalCount, collectedCount: rawItems.length, pagesFetched };
+  return { items, status, totalCount: first.totalCount, collectedCount: rawItems.length, pagesFetched, quotaReserveReached };
 }

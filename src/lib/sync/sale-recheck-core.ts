@@ -20,7 +20,8 @@ import { prisma } from '../prisma';
 import { latestCompleteMonth, subtractMonths } from '../../../scripts/rent-trade-history/incremental-sync-completed-month-logic';
 import { recordCoverageCells, type CoverageCellRecord } from '../sync-coverage';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
-import { syncOneSaleCell } from './sale-sync-core';
+import { observedQuotaToday, syncOneSaleCell } from './sale-sync-core';
+import { saleQuotaDecision } from '../../../scripts/sale-molit-fetch';
 import {
   TimeBudget,
   monthsInRange,
@@ -61,6 +62,10 @@ export interface SaleRecheckSummary {
   cellsProcessed: number;
   /** band를 한 바퀴 다 돌았는가. false는 정상이다(§6 — 예산 기반 회전 sweep). */
   sweepComplete: boolean;
+  /** GYEONGGI_CRON_EXPANSION_V1 — MOLIT 예약분(2,000)에 닿아 남은 셀 요청을 멈췄는가. */
+  quotaReserveReached?: boolean;
+  /** 마지막 관측 x-ratelimit-remaining(같은 KST 날짜만, 없으면 null). */
+  quotaRemainingObserved?: number | null;
   /** 한 번도 원천 대조된 적 없는 band 셀 수(이번 실행 시작 시점). */
   neverVerifiedCells: number;
   /** band에서 가장 오래된 검증 시각(이번 실행 시작 시점). */
@@ -127,6 +132,7 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
   const coverage: CoverageCellRecord[] = [];
   const limit = Math.min(opts.maxCells ?? ordered.length, ordered.length);
   let budgetExhausted = false;
+  let quotaStopped = false;
 
   for (let i = 0; i < limit; i++) {
     if (!budget.hasRoomFor(ESTIMATED_CELL_MS)) {
@@ -134,8 +140,22 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
       log(`BUDGET_STOP elapsed=${budget.elapsedMs()}ms processed=${reports.length}/${cells.length} — 남은 셀은 다음 실행에서 가장 오래된 순으로 먼저 처리된다`);
       break;
     }
+    // GYEONGGI_CRON_EXPANSION_V1 — MOLIT 예약분(2,000)에 닿았으면 새 셀을 시작하지 않는다. 남은 셀은 staleness 순서
+    // 그대로 다음 실행이 이어받는다(요청하지 않은 셀은 coverage를 건드리지 않으므로 순서가 밀리지 않는다).
+    const quota = saleQuotaDecision();
+    if (!quota.proceed) {
+      quotaStopped = true;
+      log(`QUOTA_RESERVE_REACHED remaining=${quota.remaining} processed=${reports.length}/${cells.length} — 남은 셀은 다음 실행에서 처리한다`);
+      break;
+    }
     const cell = ordered[i];
     const report = await syncOneSaleCell(cell.lawdCd, cell.dealYmd, opts.mode, log);
+    if (report.quotaReserveReached) {
+      // 셀 도중 예약분 도달 — 쓰지 않았고 coverage에도 남기지 않는다(verifiedAt을 갱신해 대기열 뒤로 밀지 않기 위해).
+      quotaStopped = true;
+      log(`QUOTA_RESERVE_REACHED during ${cell.lawdCd}:${cell.dealYmd} — 이 셀과 남은 셀은 다음 실행에서 처리한다`);
+      break;
+    }
     reports.push(report);
     // band는 전부 latestComplete 이하이므로 §15 현재월 제외 규칙에 걸리는 셀이 없다.
     coverage.push({
@@ -175,6 +195,8 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
   let status: SyncRunStatus = 'SUCCESS';
   if (reports.length === 0) status = 'PARTIAL_RUN';
   else if (totals.failed > 0) status = 'PARTIAL';
+  // 예약분 정지는 실패가 아니지만 "오늘 band를 멈췄다"는 사실은 207로 드러낸다.
+  if (quotaStopped) status = 'PARTIAL_RUN';
 
   const summary: SaleRecheckSummary = {
     status,
@@ -184,9 +206,11 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
     to,
     bandCells: cells.length,
     cellsProcessed: reports.length,
-    sweepComplete: !budgetExhausted && reports.length === cells.length,
+    sweepComplete: !budgetExhausted && !quotaStopped && reports.length === cells.length,
     neverVerifiedCells: neverVerified,
     oldestVerifiedAt,
+    quotaReserveReached: quotaStopped,
+    quotaRemainingObserved: observedQuotaToday(),
     ...totals,
     coverageRecorded: recorded,
     durationMs: budget.elapsedMs(),
@@ -197,7 +221,7 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
     `DONE sale-recheck status=${status} processed=${reports.length}/${cells.length} sweepComplete=${summary.sweepComplete} ` +
       `inserted=${totals.inserted} flips=${totals.updated} registryUpdated=${totals.registryUpdated} ` +
       `registryAmbiguousSkipped=${totals.registryAmbiguousSkipped} blocked=${totals.blocked} failed=${totals.failed} ` +
-      `coverageRecorded=${recorded} durationMs=${summary.durationMs}`
+      `coverageRecorded=${recorded} durationMs=${summary.durationMs} quotaReserveReached=${quotaStopped} quotaRemaining=${summary.quotaRemainingObserved ?? 'unknown'}`
   );
   return summary;
 }

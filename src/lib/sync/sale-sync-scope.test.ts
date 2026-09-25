@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { SEOUL_SALE_SYNC_LAWDCDS, resolveSaleSyncScope } from './sale-sync-scope';
+import { GYEONGGI_SALE_SYNC_LAWDCDS, SEOUL_SALE_SYNC_LAWDCDS, resolveSaleSyncScope } from './sale-sync-scope';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
 import { getRegionByLawdCd } from '../region/registry';
 import { getSidoEnablement } from '../region/enablement';
@@ -111,7 +111,8 @@ test('§F sale-sync와 sale-recheck 둘 다 scope의 구 목록을 코어에 넘
   assert.ok(/runSaleSync\(\{ mode, districtOffset, districtLimit, lawdCds: resolved\.lawdCds \}, log\)/.test(stripComments(SALE_ROUTE)));
   assert.ok(/lawdCds: resolved\.lawdCds,/.test(stripComments(RECHECK_ROUTE)));
   // 쓰기 경로는 하나 — 서울 전용 sync 로직이 없다.
-  assert.ok(/import \{ syncOneSaleCell \} from '\.\/sale-sync-core';/.test(read('src/lib/sync/sale-recheck-core.ts')));
+  // GYEONGGI_CRON_EXPANSION_V1 — 같은 import에 오늘 관측 한도(observedQuotaToday)만 더했다(쓰기 경로는 여전히 syncOneSaleCell 하나).
+  assert.ok(/import \{ observedQuotaToday, syncOneSaleCell \} from '\.\/sale-sync-core';/.test(read('src/lib/sync/sale-recheck-core.ts')));
 });
 
 test('§G /admin/ops의 매매 coverage는 부산 16구만 센다', () => {
@@ -137,13 +138,16 @@ test('§H cronSync는 그대로 — 서울은 여전히 비공개이고 scope �
 
 const CRONS = (JSON.parse(read('vercel.json')).crons as { path: string; schedule: string }[]);
 
-test('cron: 부산 3개는 그대로 + 승인된 서울 2개만 추가 = 5개, 중복 없음', () => {
+test('cron: 부산 3개 + 서울 2개는 그대로 + 승인된 경기 2개만 추가 = 7개, 중복 없음', () => {
   assert.deepEqual(CRONS, [
     { path: '/api/cron/sale-sync?mode=apply', schedule: '0 19 * * *' },
     { path: '/api/cron/rent-sync?mode=apply', schedule: '0 21 * * *' },
     { path: '/api/cron/sale-recheck?mode=apply', schedule: '0 23 * * *' },
     { path: '/api/cron/sale-sync?mode=apply&scope=seoul', schedule: '15 19 * * *' },
     { path: '/api/cron/sale-recheck?mode=apply&scope=seoul', schedule: '15 23 * * *' },
+    // GYEONGGI_CRON_EXPANSION_V1 — 경기 첫 배치 8구, 서울 뒤(별도 호출 — 부산/서울 예산과 섞지 않는다)
+    { path: '/api/cron/sale-sync?mode=apply&scope=gyeonggi', schedule: '30 19 * * *' },
+    { path: '/api/cron/sale-recheck?mode=apply&scope=gyeonggi', schedule: '30 23 * * *' },
   ]);
   assert.equal(new Set(CRONS.map((c) => c.path)).size, CRONS.length);
 });
@@ -164,6 +168,8 @@ test('cron: 서울 매매 04:15 KST · 서울 recheck 08:15 KST (부산보다 15
   assert.equal(kst('/api/cron/sale-recheck?mode=apply&scope=seoul'), '매일 08:15 KST');
   assert.equal(kst('/api/cron/sale-sync?mode=apply'), '매일 04:00 KST');
   assert.equal(kst('/api/cron/sale-recheck?mode=apply'), '매일 08:00 KST');
+  assert.equal(kst('/api/cron/sale-sync?mode=apply&scope=gyeonggi'), '매일 04:30 KST');
+  assert.equal(kst('/api/cron/sale-recheck?mode=apply&scope=gyeonggi'), '매일 08:30 KST');
 });
 
 test('cron: /admin/ops의 스케줄 표시는 계속 부산 호출을 가리킨다(서울 항목은 뒤에 있다)', () => {
@@ -214,4 +220,42 @@ test('예산: band를 다 못 돌아도 실패가 아니다 — 다음 실행이
     { lawdCd: '11440', dealYmd: '202512' }, // 기록 없음 = 미검증
   ]);
   assert.equal(never[0].lawdCd, '11440');
+});
+
+// ── GYEONGGI_CRON_EXPANSION_V1 — 경기 scope · 셀 수 · 예산 ────────────────────────────────
+
+test('경기 scope: 첫 배치 8구 정확히, 41135·그 밖 경기·부모 시 코드 없음, 모두 MOLIT leaf', () => {
+  assert.deepEqual([...GYEONGGI_SALE_SYNC_LAWDCDS], ['41111', '41113', '41115', '41117', '41131', '41133', '41150', '41210']);
+  assert.ok(!(GYEONGGI_SALE_SYNC_LAWDCDS as readonly string[]).includes('41135'));
+  for (const c of ['41110', '41130', '41171', '41190', '41590']) assert.ok(!(GYEONGGI_SALE_SYNC_LAWDCDS as readonly string[]).includes(c), c);
+  for (const c of GYEONGGI_SALE_SYNC_LAWDCDS) {
+    const n = getRegionByLawdCd(c);
+    assert.ok(n && n.sidoCode === '41' && n.isMolitLeaf, c);
+  }
+  assert.deepEqual(resolveSaleSyncScope('gyeonggi'), { ok: true, scope: 'gyeonggi', lawdCds: [...GYEONGGI_SALE_SYNC_LAWDCDS] });
+  // 허용 목록 문자열 정확 일치만
+  for (const bad of ['Gyeonggi', 'gyeonggi ', 'gg', '41', '41111']) assert.equal(resolveSaleSyncScope(bad).ok, false, bad);
+});
+
+test('경기 scope 추가 후에도 부산 기본값·서울 8구는 그대로', () => {
+  assert.deepEqual(resolveSaleSyncScope(null), { ok: true, scope: 'busan', lawdCds: undefined });
+  assert.deepEqual(resolveSaleSyncScope('seoul'), { ok: true, scope: 'seoul', lawdCds: ['11110', '11140', '11170', '11440', '11410', '11230', '11215', '11545'] });
+  assert.equal(BUSAN_LAWDCD_16.length, 16);
+});
+
+test('예산: 경기 sale sync 8구 × 4개월 = 32셀, recheck 8구 × 10개월 = 80셀 — 각자 예산 안(별도 호출)', () => {
+  const { from, to } = resolveSaleRange('202608', '202609', subtractMonths, {});
+  const saleCells = GYEONGGI_SALE_SYNC_LAWDCDS.length * monthsInRange(from, to).length;
+  assert.equal(saleCells, 32);
+  const band = resolveSaleRecheckBand('202608', subtractMonths);
+  const recheckCells = GYEONGGI_SALE_SYNC_LAWDCDS.length * monthsInRange(band.from, band.to).length;
+  assert.equal(recheckCells, 80);
+  // 경기 월 최대 784행(1쪽). 셀당 600ms/500ms로 보아도 실질 한계(47.5s/42.5s) 안 — 넘으면 셀 경계에서 멈추고 다음 실행이 잇는다.
+  assert.ok(saleCells * 600 < 50_000 - 2_500);
+  assert.ok(recheckCells * 500 < 45_000 - 2_500);
+});
+
+test('경기 cron도 enablement(공개)를 읽지 않는다 — 동기화 범위와 공개 범위는 분리', () => {
+  assert.ok(!/enablement/.test(stripComments(read('src/lib/sync/sale-sync-scope.ts'))));
+  assert.equal(getSidoEnablement('41').app, false);
 });

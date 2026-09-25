@@ -52,8 +52,9 @@ test('1·17. 후보는 정확히 첫 배치 8구(MOLIT leaf, 41135 없음) — s
   assert.deepEqual([...GG8], [...GYEONGGI_FIRST_BATCH]);
   for (const c of GG8) assert.equal(REGION_NODES.find((n) => n.lawdCd === c)?.isMolitLeaf, true, c);
   assert.ok(!GG8.includes('41135'));
-  // cron은 이번 STEP에서 바뀌지 않는다
-  assert.equal(resolveSaleSyncScope('gyeonggi').ok, false);
+  // GYEONGGI_CRON_EXPANSION_V1 — cron 범위는 같은 8구(동기화 범위일 뿐 공개와 무관)
+  const gg = resolveSaleSyncScope('gyeonggi');
+  assert.deepEqual(gg.ok ? gg.lawdCds : null, [...GG8]);
 });
 
 test('1. 켜면: 8구 app·search·map·detail만 열리고 report·stats·sitemap·seoIndex·cronSync는 닫힘', () => {

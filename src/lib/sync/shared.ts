@@ -34,6 +34,8 @@ export interface CellReport {
   unchanged: number;
   /** 이 셀에서 발견된, 자동 적용이 금지된 변경 후보 수(rent first-mutation guard). */
   reviewCandidates: number;
+  /** GYEONGGI_CRON_EXPANSION_V1 — MOLIT 예약분 도달로 이 셀을 끝까지 읽지 못했다(쓰지 않음, 다음 실행 재시도). */
+  quotaReserveReached?: boolean;
   /** TRADE_REGISTRY_DATA_V1.1 §5 — registryDate만 보충한 row 수.
    * `updated`(취소 flip)와 **절대 합치지 않는다** — 서로 다른 사건이다. */
   registryUpdated: number;
@@ -89,6 +91,10 @@ export interface SyncSummary {
   durationMs: number;
   needsReview: ReviewItem[];
   reports: CellReport[];
+  /** GYEONGGI_CRON_EXPANSION_V1 — MOLIT 예약분(2,000)에 닿아 남은 셀 요청을 멈췄는가. */
+  quotaReserveReached?: boolean;
+  /** 마지막으로 관측한 x-ratelimit-remaining(같은 KST 날짜 관측만, 없으면 null). */
+  quotaRemainingObserved?: number | null;
 }
 
 /** §13 — 자동 적용하지 않고 사람에게 보고하는 변경 후보. 개인정보는 담지 않는다

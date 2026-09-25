@@ -150,11 +150,13 @@ test('10. public exposure unchanged — Gyeonggi stays closed on every axis; app
   assert.equal(evaluateGgApplyGate(okGate()).allowed, true);
 });
 
-test('11. cron unchanged — no sale-sync scope contains Gyeonggi', () => {
+test('11. cron scope — 기본은 부산, 서울 8구, 경기는 첫 배치 8구 정확히(GYEONGGI_CRON_EXPANSION_V1 승인)', () => {
   const def = resolveSaleSyncScope(null);
   assert.ok(def.ok && def.scope === 'busan' && def.lawdCds === undefined);
   assert.ok(SEOUL_SALE_SYNC_LAWDCDS.every((c) => c.startsWith('11')));
-  assert.equal(resolveSaleSyncScope('gyeonggi').ok, false);
+  const gg = resolveSaleSyncScope('gyeonggi');
+  assert.ok(gg.ok && gg.scope === 'gyeonggi');
+  assert.deepEqual(gg.ok ? gg.lawdCds : null, [...GYEONGGI_FIRST_BATCH]);
 });
 
 test('12. no schema change — every create field already exists on ApartmentMaster', () => {
@@ -424,9 +426,10 @@ test('apply 사후 검증 — +116만, 다른 시도 0, 좌표·구·중복·거
 
 test('apply 14·15 — 공개·cron 불변: 경기 공개 축 0, sale-sync scope에 경기 없음, 실행기는 enablement를 바꾸지 않는다', () => {
   assert.deepEqual(computePublicExposureGuarded((c, axis) => publicAllowed(c, axis)), { guarded: true, openAxes: [] });
+  // GYEONGGI_CRON_EXPANSION_V1 — cron은 승인된 경기 scope 두 개만 추가됐다(그 밖의 scope·lawdCd 직접 지정 없음).
   const crons = JSON.parse(fs.readFileSync(path.join(__dirname, '../../vercel.json'), 'utf8')).crons as { path: string }[];
-  assert.ok(!crons.some((c) => /gyeonggi|scope=(?!seoul)/.test(c.path)), 'cron에 경기 scope가 있다');
-  assert.equal(resolveSaleSyncScope('gyeonggi').ok, false);
+  assert.deepEqual(crons.filter((c) => /gyeonggi/.test(c.path)).map((c) => c.path).sort(), ['/api/cron/sale-recheck?mode=apply&scope=gyeonggi', '/api/cron/sale-sync?mode=apply&scope=gyeonggi']);
+  assert.ok(!crons.some((c) => /scope=(?!seoul|gyeonggi)/.test(c.path) || /lawdCd/.test(c.path)));
   assert.ok(!/ENABLEMENT|SEOUL_BETA|enablement\.ts'\)\s*\./.test(RUNNER));
   assert.ok(!/writeFileSync\([^)]*src\//.test(RUNNER), '실행기가 소스 파일을 쓴다');
 });

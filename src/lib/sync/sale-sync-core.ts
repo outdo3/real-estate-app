@@ -12,7 +12,8 @@
 // 늘리지 않는다). 전국 backfill은 지금처럼 CLI로 계속 수행한다.
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
-import { fetchSaleRegionMonth } from '../../../scripts/sale-molit-fetch';
+import { fetchSaleRegionMonth, saleQuotaDecision, saleQuotaObserved } from '../../../scripts/sale-molit-fetch';
+import { kstDateOf } from './molit-quota-guard';
 import { normalizeMolitItemsToTradeRows, type TradeRowInput } from '../../../scripts/trade-history-logic';
 import {
   buildRegistryOnlyUpdateFields,
@@ -82,6 +83,7 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
   log(`START sale mode=${opts.mode} runId=${runId} range=[${from},${to}] latestComplete=${latestComplete} districts=${lawdCds.length}(offset=${offset}) cells=${totalCells}`);
 
   let budgetExhausted = false;
+  let quotaStopped = false;
   for (const lawdCd of lawdCds) {
     for (const dealYmd of months) {
       if (!budget.hasRoomFor(ESTIMATED_CELL_MS)) {
@@ -89,7 +91,20 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
         log(`BUDGET_STOP elapsed=${budget.elapsedMs()}ms — 남은 셀은 다음 실행/chunk에서 처리한다`);
         break;
       }
+      // GYEONGGI_CRON_EXPANSION_V1 — MOLIT 예약분(2,000)에 닿았으면 새 셀을 시작하지 않는다(치명 오류 아님, 다음 실행 재개).
+      const quota = saleQuotaDecision();
+      if (!quota.proceed) {
+        quotaStopped = true;
+        log(`QUOTA_RESERVE_REACHED remaining=${quota.remaining} — 남은 셀은 다음 실행에서 처리한다`);
+        break;
+      }
       const report = await syncOneSaleCell(lawdCd, dealYmd, opts.mode, log);
+      if (report.quotaReserveReached) {
+        // 셀 도중 예약분 도달 — 이 셀은 쓰지 않았고(INVALID/PARTIAL) coverage에도 남기지 않는다.
+        quotaStopped = true;
+        log(`QUOTA_RESERVE_REACHED during ${lawdCd}:${dealYmd} — 이 셀과 남은 셀은 다음 실행에서 처리한다`);
+        break;
+      }
       reports.push(report);
       // §15 — 진행 중인 현재월은 동기화는 하되 절대 검증 완료로 기록하지 않는다.
       if (dealYmd <= latestComplete) {
@@ -105,7 +120,7 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
         });
       }
     }
-    if (budgetExhausted) break;
+    if (budgetExhausted || quotaStopped) break;
   }
 
   const { recorded } = await recordCoverageCells(opts.mode, 'SALE', runId, coverage);
@@ -129,7 +144,7 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
   );
 
   let status: SyncRunStatus = 'SUCCESS';
-  if (budgetExhausted) status = 'PARTIAL_RUN';
+  if (budgetExhausted || quotaStopped) status = 'PARTIAL_RUN';
   else if (totals.failed > 0) status = 'PARTIAL';
 
   const summary: SyncSummary = {
@@ -145,13 +160,16 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
     durationMs: budget.elapsedMs(),
     needsReview: [],
     reports,
+    quotaReserveReached: quotaStopped,
+    quotaRemainingObserved: observedQuotaToday(),
   };
   log(
     `DONE sale status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} ` +
       `cancelRestored=${totals.cancelRestored} cancelRestorePending=${totals.cancelRestorePending} cancelReconcileSkipped=${totals.cancelReconcileSkipped} ` +
       `insertCanceled=${totals.insertCanceled} insertReconcileSkipped=${totals.insertReconcileSkipped} ` +
       `registryUpdated=${totals.registryUpdated} registryAmbiguousSkipped=${totals.registryAmbiguousSkipped} ` +
-      `blocked=${totals.blocked} failed=${totals.failed} coverageRecorded=${recorded} durationMs=${summary.durationMs}`
+      `blocked=${totals.blocked} failed=${totals.failed} coverageRecorded=${recorded} durationMs=${summary.durationMs} ` +
+      `quotaReserveReached=${quotaStopped} quotaRemaining=${summary.quotaRemainingObserved ?? 'unknown'}`
   );
   return summary;
 }
@@ -161,6 +179,12 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
  * fetch/completeness/identity/write-policy 판정을 복제하지 않기 위해 export만 추가했고
  * 본문은 변경하지 않았다(shared.ts §4 원칙: "두 경로가 서로 다른 판정 로직을 갖지 않는다").
  */
+/** 오늘(KST) 관측한 MOLIT 남은 한도. 관측이 없거나 다른 날이면 null — 지어내지 않는다. */
+export function observedQuotaToday(nowMs: number = Date.now()): number | null {
+  const o = saleQuotaObserved;
+  return o.remaining != null && o.at != null && kstDateOf(o.at) === kstDateOf(nowMs) ? o.remaining : null;
+}
+
 export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: SyncMode, log: (line: string) => void): Promise<CellReport> {
   const fetchResult = await fetchSaleRegionMonth(lawdCd, dealYmd);
   const base: CellReport = {
@@ -176,6 +200,7 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     updated: 0,
     unchanged: 0,
     reviewCandidates: 0,
+    ...(fetchResult.quotaReserveReached ? { quotaReserveReached: true } : {}),
   };
 
   // §11 — pagination이 끝까지 검증되지 않은 셀은 쓰지 않는다. rent와 동일 원칙.
