@@ -2,6 +2,15 @@
 
 ## 2026-09-25
 
+### E-JIP GYEONGGI MASTER PILOT APPLY V1 — 41115 수원 팔달구 master 116행 적재 (승인)
+
+상세: `docs/development/GYEONGGI_MASTER_PILOT_APPLY_V1.md`
+
+    결과     insert 116 · update 0 · delete 0 · 실패 0 · runId gg-master-41115-2026-09-25T05-17-45-769Z-91ac48
+    검증     MASTER_PARITY_EXACT · 거래 연결 116/116 · 좌표 116/116 · 부산·서울 fingerprint 불변
+    공개     경기 계속 닫힘(검색·지도·상세·리포트·비교·sitemap 0, 가드 true) · 부산/서울 회귀 0
+    영향     일일 리포트 NO_IMPACT(backfill 감지는 거래 행 기준)
+
 ### E-JIP GYEONGGI MASTER PILOT APPLY PREP V1 — apply·rollback·verify 경로 + 41115 파일럿 준비 (write 0)
 
 상세: `docs/development/GYEONGGI_MASTER_PILOT_APPLY_PREP_V1.md`
