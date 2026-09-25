@@ -1,4 +1,4 @@
-import { isTradeDbFirstLawdCd } from '@/lib/region/enablement';
+import { isPublicRegionAllowed, isTradeDbFirstLawdCd } from '@/lib/region/enablement';
 import { NextResponse } from 'next/server';
 import { fetchMolitData, formatKoreanPrice, redactMolitFailureMessage, DataType } from '@/lib/api-molit';
 import { prisma } from '@/lib/prisma';
@@ -105,6 +105,30 @@ export async function GET(request: Request) {
 
     // 1. type과 lawdCd가 있으면 국토부 API 실시간 호출(단, 아래 조건에 맞으면 DB-first)
     if (type && lawdCd) {
+      // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개 접근 게이트(지도 축).
+      //
+      // 아래 `isTradeDbFirstLawdCd`는 DB냐 MOLIT이냐를 고르는 소스 선택기일 뿐 접근 제어가 아니다.
+      // 이 라우트에는 지역 게이트가 없어서, 공개 차단된 서울 구(강남 등)도 live MOLIT 거래에
+      // 서울 master 좌표가 붙어 마커가 그대로 나갔다(운영 실측 2026-09-25: 11680 375개,
+      // 11650 408개). 경기 master가 생기면 경기도 똑같이 열린다. canonical lawdCd의 `map` 축이
+      // 열린 지역만 응답한다 — 거래 데이터를 바꾸지 않고, 다른 지역으로 대체하지도 않는다.
+      // "거래 없음(검증된 0건)"과 구분되도록 regionUnsupported를 명시한다.
+      if (!isPublicRegionAllowed(lawdCd, 'map')) {
+        return NextResponse.json(
+          {
+            transactions: [],
+            regionUnsupported: true,
+            supported: false,
+            reason: 'UNSUPPORTED_REGION',
+            partial: false,
+            failedMonths: [],
+            monthsRequested: 0,
+            monthsSucceeded: 0,
+          },
+          { headers: cacheHeaders(false) }
+        );
+      }
+
       // MAP_PERFORMANCE_V1 — 지도/분위지도/AI조건검색이 실제로 쓰는 정확히 이 모양
       // (apt, 12개월, dong/loadMore 없음)이고 부산 지역이면 DB-first. 캐시는 기존
       // getOrSetCache 재사용(신규 인프라 없음), TTL 30분 — Score/area84가 이미 쓰는

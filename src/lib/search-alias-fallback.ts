@@ -23,7 +23,7 @@
 
 import { prisma } from './prisma';
 import { boundingBoxFor, haversineMeters } from './geo-bounding-box';
-import { isSeoulPublicBlocked } from './region/enablement';
+import { isPublicRegionAllowed } from './region/enablement';
 
 export interface AliasFallbackCandidate {
   id: number;
@@ -115,7 +115,8 @@ export async function resolveApartmentViaKakaoAlias(keyword: string): Promise<Al
         // 또 다음 POI로 넘어가지 않고 **즉시 중단**한다 — 이 POI는 미출시 단지로 정상 해석된
         // 것이므로, 계속 돌다가 이름이 비슷한 **다른 지역** 단지를 집어오면 그게 바로
         // 금지된 지역 대체(부산 fallback)다.
-        if (isSeoulPublicBlocked(m.sggCd)) {
+        // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 서울 deny-list가 아니라 공개 allowlist로 판정한다(경기·전국도 거부).
+        if (!isPublicRegionAllowed(m.sggCd, 'search')) {
           fallbackCache.set(keyword, null);
           return null;
         }

@@ -74,7 +74,7 @@ interface NearbyKindergarten {
 }
 
 interface EducationApiResponse {
-  status: 'OK' | 'NOT_FOUND' | 'AMBIGUOUS' | 'INSUFFICIENT_DATA';
+  status: 'OK' | 'NOT_FOUND' | 'AMBIGUOUS' | 'INSUFFICIENT_DATA' | 'UNSUPPORTED_REGION';
   aptSeq: string | null;
   elementaryAttendanceZone: ElementaryZone | null;
   middleSchoolGroup: MiddleGroup | null;

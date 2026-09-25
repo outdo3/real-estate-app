@@ -7,6 +7,7 @@
 import { isWellFormedAptSeq } from '@/lib/apartment-score/resolve-score-identity';
 import type { CompareSlotSeed } from './url';
 import type { PrismaClient } from '@prisma/client';
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
 
 export interface ResolvedCompareSeeds {
   /** 슬롯 순서 그대로. 해석 실패한 자리는 null. */
@@ -42,6 +43,11 @@ export async function resolveCompareSeeds(
       });
       // 이름·구·동 중 하나라도 없으면 비교 조회를 구성할 수 없다 — 억지로 채우지 않는다.
       if (!master?.aptSeq || !master.name || !master.sggCd || !master.umdName) {
+        unresolved.push(aptSeq);
+        return;
+      }
+      // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개되지 않은 지역 단지는 비교 seed로 풀지 않는다(이름·구·동 노출 금지).
+      if (!isPublicRegionAllowed(master.sggCd, 'detail') || !isPublicRegionAllowed(master.aptSeq.slice(0, 5), 'detail')) {
         unresolved.push(aptSeq);
         return;
       }

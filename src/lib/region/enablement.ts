@@ -19,8 +19,14 @@ import { getRegionByLawdCd, REGION_NODES, type RegionNode } from './registry';
  * 실제로 확장은 이 축들이 서로 다른 시점에 열린다(데이터 적재 → 앱 노출 → 색인).
  */
 export interface RegionEnablement {
-  /** 앱에서 해당 지역 단지/지도/검색을 사용자에게 보여주는가. */
+  /** 앱에서 해당 지역을 고를 수 있는가(지역 선택기·주변 단지 목록 등 지역 단위 노출). */
   app: boolean;
+  /** GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 검색(단지·지역·별칭 fallback) 결과에 싣는가. */
+  search: boolean;
+  /** 지도 마커·/api/transactions 응답을 내주는가. */
+  map: boolean;
+  /** 단지 상세(실거래·정보·점수·교육)와 단지 비교를 내주는가. */
+  detail: boolean;
   /** 한장 리포트가 이 지역을 지원하는가. */
   report: boolean;
   /** 통계 화면이 이 지역을 지원하는가. */
@@ -34,11 +40,11 @@ export interface RegionEnablement {
 }
 
 const NOT_ENABLED: RegionEnablement = {
-  app: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false,
+  app: false, search: false, map: false, detail: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false,
 };
 
 const BUSAN_ENABLED: RegionEnablement = {
-  app: true, report: true, stats: true, sitemap: true, seoIndex: true, cronSync: true,
+  app: true, search: true, map: true, detail: true, report: true, stats: true, sitemap: true, seoIndex: true, cronSync: true,
 };
 
 /**
@@ -96,6 +102,9 @@ export const SEOUL_BETA_ENABLED = true;
  */
 const SEOUL_BETA_ENABLEMENT: RegionEnablement = {
   app: true,
+  search: true,
+  map: true,
+  detail: true,
   report: false,
   stats: false,
   sitemap: false,
@@ -122,6 +131,10 @@ export function isSeoulBetaDistrict(lawdCd: string | null | undefined): boolean 
 }
 
 // ── SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 공개 차단 정책(서울 한정) ────────────────
+//
+// GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 이후 **공개 표면은 이 deny-list를 쓰지 않는다** — 아래
+// `isPublicRegionAllowed`/`publicAllowedLawdCds`(allowlist)를 쓴다. 이 두 함수는 서울 전용 감사
+// 스크립트와 stats/supply(분양 원천, master 무관)를 위해 남겨 둔다.
 //
 // 이 정책은 **서울에만** 적용한다. 부산은 물론이고 경기·대구 등 다른 지역도 건드리지 않는다:
 // 검색/상세는 지금도 전국을 live MOLIT로 응답하는 것이 의도된 동작이고(비부산 **통계**만
@@ -160,19 +173,45 @@ export function seoulPublicBlockedLawdCds(
     .map((n) => n.lawdCd);
 }
 
+// ── GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개 노출은 allowlist로만 판정한다 ────────────
+//
+// 위 서울 정책은 "차단된 서울인가?"(deny-list)를 묻는다. 서울이 아니면 무조건 통과라서,
+// 경기 master가 생기는 순간 검색·지도·상세·리포트에 경기 단지가 그대로 실린다
+// (GYEONGGI_MASTER_SEEDING_AUDIT_V1 §6). 공개 표면은 이제 반대로 묻는다:
+// **"이 지역의 이 기능 축이 열려 있는가?"** — 열린 곳은 부산 16구와 서울 beta 8구뿐이고,
+// 경기·그 밖의 전국·registry에 없는 코드는 전부 닫힘이다.
+//
+// 이것은 **공개 노출** 정책이다. 적재·감사 스크립트(데이터 존재)는 이 판정을 쓰지 않는다 —
+// DATA_EXISTS ≠ PUBLIC_ALLOWED.
+
+/** 이 시군구의 해당 기능 축이 공개돼 있는가. 모르는 코드·null은 닫힘(false). 이름으로 추측하지 않는다. */
+export function isPublicRegionAllowed(
+  lawdCd: string | null | undefined,
+  feature: keyof RegionEnablement
+): boolean {
+  return getRegionEnablement(lawdCd)[feature];
+}
+
 /**
- * 이 시도를 지역 선택지에서 **통째로 감춰야** 하는가 = 공개 가능한 시군구가 하나도 없는가.
+ * 해당 기능 축이 열린 시군구 코드 전체 — DB 질의의 **allowlist**(`sggCd IN (...)`)로 쓴다.
+ * registry에서 파생하므로 새 지역은 enablement를 열어야만 목록에 들어온다.
+ */
+export function publicAllowedLawdCds(feature: keyof RegionEnablement): readonly string[] {
+  return REGION_NODES.filter((n) => getRegionEnablement(n.lawdCd)[feature]).map((n) => n.lawdCd);
+}
+
+/**
+ * 이 시도를 지역 선택지에서 **통째로 감춰야** 하는가 = 공개된 시군구가 하나도 없는가.
  *
- * 서울에만 적용한다(다른 시도는 이 정책의 대상이 아니므로 항상 false). beta가 꺼져 있으면
- * 서울 25구가 전부 닫혀 있으므로 true — 선택 자체가 불가능해진다. beta가 켜지면 8구가
- * 열리므로 false가 되어 서울이 목록에 나타나고, 그 안에서 8구만 고를 수 있다.
+ * 모든 시도에 같은 규칙을 적용한다: 부산(전 구 공개)과 서울(beta 8구)은 보이고,
+ * 경기(0구)와 registry에 없는 시도(대구 등, 공개 노드 0)는 감춘다.
  */
 export function isSidoPubliclyHidden(
   sidoCode: string | null | undefined,
   feature: keyof RegionEnablement = 'app'
 ): boolean {
-  if (sidoCode !== '11') return false;
-  return !REGION_NODES.some((n) => n.sidoCode === '11' && getRegionEnablement(n.lawdCd)[feature]);
+  if (!sidoCode) return true;
+  return !REGION_NODES.some((n) => n.sidoCode === sidoCode && getRegionEnablement(n.lawdCd)[feature]);
 }
 
 /**

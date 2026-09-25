@@ -202,6 +202,8 @@ test('§8 라우트는 해소된 aptSeq를 그대로 계산 엔진에 넘긴다'
     '@/lib/apartment-score/server/calculate',
     '@/lib/log-server-error',
     '@/lib/prisma',
+    // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개 지역 게이트(접근 제어)일 뿐 점수 산식 모듈이 아니다.
+    '@/lib/region/enablement',
     'next/server',
   ]);
 });

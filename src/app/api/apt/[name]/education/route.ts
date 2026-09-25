@@ -4,6 +4,7 @@ import { aptNamesMatch, normalizeAptName } from '@/lib/apt-name-match';
 import { getApartmentEducationZone } from '@/lib/education/attendance-zone';
 import { findNearbyKindergartens, matchCanonicalHighSchool } from '@/lib/education/nearby-education';
 import { logServerError } from '@/lib/log-server-error';
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,10 @@ export async function GET(
 
     if (!lawdCd) {
       return NextResponse.json(emptyResponse('AMBIGUOUS'));
+    }
+    // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개되지 않은 지역은 master 좌표·주변 학교를 내주지 않는다.
+    if (!isPublicRegionAllowed(lawdCd, 'detail')) {
+      return NextResponse.json(emptyResponse('UNSUPPORTED_REGION'));
     }
 
     const candidates = await prisma.apartmentMaster.findMany({
@@ -147,7 +152,7 @@ async function fetchNearbySchoolsByKeyword(keyword: '초등학교' | '고등학�
   }
 }
 
-function emptyResponse(status: 'NOT_FOUND' | 'AMBIGUOUS' | 'INSUFFICIENT_DATA') {
+function emptyResponse(status: 'NOT_FOUND' | 'AMBIGUOUS' | 'INSUFFICIENT_DATA' | 'UNSUPPORTED_REGION') {
   return {
     status,
     aptSeq: null,

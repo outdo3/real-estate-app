@@ -25,6 +25,8 @@ export interface TradeReadState<T> {
   failedMonths: string[];
   monthsRequested: number;
   monthsSucceeded: number;
+  /** GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개되지 않은 지역이라 서버가 응답을 거부함(검증된 0건이 아니다). */
+  regionUnsupported?: boolean;
 }
 
 export const TRADE_API_UNAVAILABLE_MESSAGE = '실거래가 API 요청에 실패했습니다.';
@@ -133,6 +135,8 @@ export interface TransactionsReadPayload<T> {
   failedMonths?: string[];
   monthsRequested?: number;
   monthsSucceeded?: number;
+  /** GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개되지 않은 지역(서버 거부). */
+  regionUnsupported?: boolean;
 }
 
 export function resolveTransactionsReadState<T>(
@@ -185,5 +189,6 @@ export function resolveTransactionsReadState<T>(
     failedMonths: Array.isArray(envelope.failedMonths) ? envelope.failedMonths : [],
     monthsRequested: typeof envelope.monthsRequested === 'number' ? envelope.monthsRequested : 0,
     monthsSucceeded: typeof envelope.monthsSucceeded === 'number' ? envelope.monthsSucceeded : 0,
+    ...(envelope.regionUnsupported === true ? { regionUnsupported: true } : {}),
   };
 }

@@ -5,6 +5,7 @@ import { calculateApartmentScore } from '@/lib/apartment-score/server/calculate'
 import { resolveDisplayedScoreVersion } from '@/lib/apartment-score/resolve-score-version';
 import { getPeerContext } from '@/lib/apartment-score/peer-context';
 import { logServerError } from '@/lib/log-server-error';
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,14 @@ export async function GET(
       return NextResponse.json(emptyResponse(identity.kind));
     }
     const resolvedAptSeq = identity.aptSeq;
+    // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 확정된 단지의 canonical 구(aptSeq 앞 5자리)와 요청 lawdCd가
+    // 모두 공개된 지역일 때만 점수를 낸다(더 닫힌 쪽으로 판정 — 조작 URL도 통과하지 못한다).
+    if (
+      !isPublicRegionAllowed(resolvedAptSeq.slice(0, 5), 'detail') ||
+      (lawdCd && !isPublicRegionAllowed(lawdCd, 'detail'))
+    ) {
+      return NextResponse.json(emptyResponse('UNSUPPORTED_REGION'));
+    }
 
     const result = await calculateApartmentScore(resolvedAptSeq);
     const shadowV2 = (result as any)._shadowV2;
@@ -109,7 +118,7 @@ export async function GET(
   }
 }
 
-function emptyResponse(status: 'NOT_FOUND' | 'AMBIGUOUS' | 'INSUFFICIENT_DATA') {
+function emptyResponse(status: 'NOT_FOUND' | 'AMBIGUOUS' | 'INSUFFICIENT_DATA' | 'UNSUPPORTED_REGION') {
   return {
     status,
     score: null,

@@ -11,6 +11,8 @@ import {
   isSidoPartiallyPublic,
   isSeoulBetaDistrict,
   getRegionEnablement,
+  isPublicRegionAllowed,
+  publicAllowedLawdCds,
 } from './enablement';
 import { REGION_NODES } from './registry';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
@@ -70,12 +72,16 @@ test('§5 부산 16구는 차단 대상이 아니다(동작 불변)', () => {
   assert.equal(isSidoPartiallyPublic('26'), false, '부산은 전 구가 열려 "부분 공개"가 아니다');
 });
 
-test('§6 서울 밖 미출시 지역(경기·대구)은 이 게이트의 대상이 아니다', () => {
-  // 검색/상세의 전국 live MOLIT 동작은 이번 작업 범위가 아니다 — 막으면 과잉 차단이다.
+test('§6 서울 deny-list는 서울만 보지만, 공개 표면은 allowlist로 경기·대구·모르는 코드를 막는다', () => {
+  // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 서울 전용 판정(isSeoulPublicBlocked)은 감사 스크립트용으로 의미가 그대로다.
   for (const code of ['41135', '41111', '27110', '99999']) {
-    assert.equal(isSeoulPublicBlocked(code), false, `${code}가 차단됐다(과잉 차단)`);
+    assert.equal(isSeoulPublicBlocked(code), false, `${code} — 서울 전용 판정의 대상이 아니다`);
+    for (const axis of ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const) {
+      assert.equal(isPublicRegionAllowed(code, axis), false, `${code} ${axis}가 공개돼 있다`);
+    }
   }
-  assert.equal(isSidoPubliclyHidden('41'), false);
+  assert.equal(isSidoPubliclyHidden('41'), true, '경기가 지역 선택지에 나온다');
+  assert.equal(isSidoPubliclyHidden('27'), true, '대구가 지역 선택지에 나온다');
 });
 
 // ── 미래 상태(beta ON) 시뮬레이션 — 실제 스위치는 켜지 않는다 ────────────────
@@ -124,35 +130,42 @@ test('§9 beta ON이어도 stats/sitemap/seoIndex는 닫힌 채다', () => {
 
 test('§10 /api/search 두 쿼리 모두 지역 필터를 쓴다', () => {
   const src = read('src/app/api/search/route.ts');
-  assert.ok(/seoulPublicBlockedLawdCds\('app'\)/.test(src), '검색이 deny-list를 만들지 않는다');
+  const code = readCode('src/app/api/search/route.ts');
+  // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — deny-list(notIn)가 아니라 allowlist(IN)다.
+  assert.ok(/publicAllowedLawdCds\('search'\)/.test(src), '검색이 공개 allowlist를 쓰지 않는다');
   assert.equal((src.match(/\.\.\.regionScope,/g) || []).length, 2, '지역 필터가 두 쿼리에 모두 붙지 않았다');
-  assert.ok(/sggCd: \{ notIn:/.test(src), 'canonical 코드가 아니라 다른 기준으로 거른다');
+  assert.ok(/sggCd: \{ in:/.test(code), 'canonical 코드 allowlist로 거르지 않는다');
+  assert.ok(!/notIn/.test(code) && !/seoulPublicBlockedLawdCds/.test(code), 'deny-list가 남아 있다');
+  const allowed = publicAllowedLawdCds('search');
+  assert.equal(allowed.length, 16 + 8);
+  assert.ok(allowed.every((c) => c.startsWith('26') || (SEOUL_BETA_LAWDCDS as readonly string[]).includes(c)));
 });
 
 test('§11 alias fallback이 검색 필터를 우회하지 못한다', () => {
   const src = read('src/lib/search-alias-fallback.ts');
-  assert.ok(/isSeoulPublicBlocked\(m\.sggCd\)/.test(src), 'alias 경로에 지역 게이트가 없다');
+  assert.ok(/!isPublicRegionAllowed\(m\.sggCd, 'search'\)/.test(src), 'alias 경로에 공개 allowlist 게이트가 없다');
   // 차단 시 다음 POI로 넘어가면 다른 지역 단지를 집어올 수 있다 — 즉시 null이어야 한다.
-  const idx = src.indexOf('isSeoulPublicBlocked(m.sggCd)');
+  const idx = src.indexOf("!isPublicRegionAllowed(m.sggCd, 'search')");
   assert.ok(/return null;/.test(src.slice(idx, idx + 260)), '차단 후 즉시 중단하지 않는다');
 });
 
 test('§12 상세 라우트가 canonical lawdCd로 게이트한다(이름 아님)', () => {
   const src = read('src/app/api/apt/[name]/route.ts');
-  assert.ok(/if \(isSeoulPublicBlocked\(lawdCd\)\)/.test(src), '상세에 접근 게이트가 없다');
+  assert.ok(/if \(!isPublicRegionAllowed\(lawdCd, 'detail'\)\)/.test(src), '상세에 공개 allowlist 게이트가 없다');
   assert.ok(/reason: 'UNSUPPORTED_REGION'/.test(src));
   // import 줄이 아니라 **실제 호출부**와 비교한다.
   assert.ok(
-    src.indexOf('isSeoulPublicBlocked(lawdCd)') < src.indexOf('fetchMolitMonthCached({'),
+    src.indexOf("isPublicRegionAllowed(lawdCd, 'detail')") < src.indexOf('fetchMolitMonthCached({'),
     '게이트가 MOLIT 호출 뒤에 있다'
   );
 });
 
 test('§13 리포트 라우트가 aptSeq 앞 5자리로 게이트한다', () => {
   const src = read('src/app/report/apt/[aptSeq]/page.tsx');
-  assert.ok(/isSeoulPublicBlocked\(id\.slice\(0, 5\), 'report'\)/.test(src), '리포트 게이트가 없다');
+  assert.ok(/const reportLawdCd = lawdCdFromAptSeq\(id\);/.test(src), 'aptSeq 앞자리를 canonical 규칙으로 뽑지 않는다');
+  assert.ok(/!isPublicRegionAllowed\(reportLawdCd, 'report'\)/.test(src), '리포트 공개 allowlist 게이트가 없다');
   assert.ok(
-    src.indexOf('isSeoulPublicBlocked') < src.indexOf('readApartmentReport(id)'),
+    src.indexOf("isPublicRegionAllowed(reportLawdCd, 'report')") < src.indexOf('readApartmentReport(id)'),
     '게이트가 리포트 read 뒤에 있다'
   );
 });
@@ -160,7 +173,7 @@ test('§13 리포트 라우트가 aptSeq 앞 5자리로 게이트한다', () => 
 test('§14 지역 선택 모달이 시도·시군구 두 목록 모두 거른다', () => {
   const src = read('src/components/RegionSelectModal.tsx');
   assert.ok(/isSidoPubliclyHidden\(s\.code\.substring\(0, 2\)\)/.test(src), '시도 목록이 안 걸러진다');
-  assert.ok(/isSeoulPublicBlocked\(item\.code\.substring\(0, 5\)\)/.test(src), '시군구 목록이 안 걸러진다');
+  assert.ok(/isPublicRegionAllowed\(item\.code\.substring\(0, 5\), 'app'\)/.test(src), '시군구 목록이 공개 allowlist로 안 걸러진다');
   assert.ok(/isSidoPartiallyPublic\(sidoCode\)/.test(src), '"시도 전체" 핸들러 가드가 없다');
 });
 

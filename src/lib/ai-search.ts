@@ -257,6 +257,8 @@ export async function runConditionSearch(
   // 요청끼리 서로의 상태를 덮어쓴다).
   const txState = resolveTransactionsReadState<any>(res.ok, await res.json());
   if (txState.apiError) return { complexes: [], partial: false, unavailable: true };
+  // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개되지 않은 지역은 "조건에 맞는 단지 0개"가 아니라 조회 불가다.
+  if (txState.regionUnsupported) return { complexes: [], partial: false, unavailable: true };
   const trades = txState.trades;
   const partial = txState.partial;
 

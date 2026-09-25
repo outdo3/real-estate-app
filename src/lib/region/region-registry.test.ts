@@ -160,7 +160,7 @@ test('13 · fullName은 시도부터 시작하고 name으로 끝난다', () => {
 
 test('14 · 부산은 모든 축에서 열려 있다(기존 상태 보존)', () => {
   const e = getSidoEnablement('26');
-  assert.deepEqual(e, { app: true, report: true, stats: true, sitemap: true, seoIndex: true, cronSync: true });
+  assert.deepEqual(e, { app: true, search: true, map: true, detail: true, report: true, stats: true, sitemap: true, seoIndex: true, cronSync: true });
   assert.deepEqual(getRegionEnablement('26140'), e);
   assert.deepEqual(getEnabledSidoCodes(), ['26'], '앱에 열린 시도는 부산뿐');
 });
@@ -168,7 +168,7 @@ test('14 · 부산은 모든 축에서 열려 있다(기존 상태 보존)', () 
 test('15 · 서울은 registry에 존재하지만 어떤 축도 열려 있지 않다', () => {
   assert.ok(getRegionByLawdCd('11680'), 'registry에는 있어야 한다');
   const e = getSidoEnablement('11');
-  assert.deepEqual(e, { app: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false });
+  assert.deepEqual(e, { app: false, search: false, map: false, detail: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false });
   assert.deepEqual(getRegionEnablement('11680'), e);
 });
 

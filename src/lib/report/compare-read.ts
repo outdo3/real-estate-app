@@ -9,6 +9,7 @@
 // 쓰기는 없다. SELECT만 한다.
 
 import { prisma } from '@/lib/prisma';
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import {
   selectPriceMetric,
@@ -75,6 +76,9 @@ async function loadSide(aptSeq: string): Promise<SideLoad | null> {
     },
   });
   if (!master || !master.aptSeq) return null;
+  // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 비교 리포트가 단지 리포트 게이트의 우회로가 되지 않게 한다.
+  // canonical 구(sggCd)와 aptSeq 앞자리가 모두 `report` 축에 열려 있어야 한다(아니면 "찾을 수 없음"과 같게 거부).
+  if (!isPublicRegionAllowed(master.sggCd, 'report') || !isPublicRegionAllowed(master.aptSeq.slice(0, 5), 'report')) return null;
 
   const since = new Date();
   since.setUTCMonth(since.getUTCMonth() - TRADE_MONTHS);

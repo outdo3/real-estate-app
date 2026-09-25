@@ -6,6 +6,7 @@ import {
   mergeMasterIntoRegistry, mergeLiveIntoRegistry, isFullyPopulated,
   type MasterRegistrySource,
 } from '@/lib/registry-precedence';
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,17 @@ export async function GET(
         info: null,
         unitTypes: null,
         regionUnresolved: true,
+      });
+    }
+
+    // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개되지 않은 지역은 master·건축물대장·스크래핑 정보를 내주지 않는다.
+    if (!isPublicRegionAllowed(lawdCd, 'detail')) {
+      return NextResponse.json({
+        success: true,
+        aptName,
+        info: null,
+        unitTypes: null,
+        regionUnsupported: true,
       });
     }
 

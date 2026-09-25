@@ -1733,3 +1733,35 @@ connection limit 1`로 화면 전체가 500이었다. 처음에는 "그 count가
 구현·배포·운영 검증 완료. 남은 가장 큰 항목은 ops의 cold latency이고, 실질적 해결
 수단은 `@@index([lawdCd, dealCanceled])` 하나인데 **schema 변경이라 승인이 필요**하다.
 문서: `docs/development/ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1.md`
+
+---
+
+## 13. GYEONGGI PUBLIC EXPOSURE GUARD V1 — 공개 노출은 allowlist, 모르는 지역은 닫힘
+
+날짜:
+2026-09-25
+
+결정:
+공개 표면(검색·지도·상세·리포트·비교·선택기·SEO)은 "차단된 서울인가?"가 아니라
+"이 지역의 이 기능 축이 열렸는가?"로만 판정한다. 열린 곳은 부산 16구와 서울 beta 8구뿐이다.
+경기·그 밖의 전국·registry 밖 코드는 전부 닫힘이다.
+
+배경:
+SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1은 "검색/상세는 전국 live MOLIT로 응답하는 것이 의도된 동작"이라며
+서울만 막았다. 그 결과 (1) 경기 master가 생기면 검색·지도·상세·리포트에 바로 실리는 구조였고,
+(2) /api/transactions에는 게이트가 아예 없어 공개 차단 서울 구 마커가 운영에서 새고 있었고(강남 375개),
+(3) 경기 단지 상세가 self canonical로 색인 가능했다.
+
+이유:
+- 데이터 적재(DATA_EXISTS)와 공개(PUBLIC_ALLOWED)를 분리해야 경기 seed를 안전하게 할 수 있다.
+  deny-list는 새 지역이 생길 때마다 기본값이 "열림"이라 적재가 곧 공개가 된다.
+- allowlist는 기본값이 "닫힘"이다. 새 지역은 enablement를 명시적으로 열어야만 노출된다.
+- 사용자 지시(GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1): 그 밖의 전국 지역도 지금은 전부 닫는다.
+
+영향:
+- 대구 등 전국 단지 상세·지도가 "준비 중"이 되고 지역 선택기는 부산·서울만 보인다(예전 설계를 뒤집음).
+- 서울 8구의 /report/compare가 닫힌다(단지 리포트와 같은 report 축).
+- 수집·cron·감사 스크립트는 공개 정책을 읽지 않는다(cronSync 축은 별개로 유지).
+
+상태:
+구현·배포. 문서: `docs/development/GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1.md`

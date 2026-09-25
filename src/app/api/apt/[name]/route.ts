@@ -10,7 +10,7 @@ import {
   type MonthFetchOutcome,
 } from '@/lib/apt-trade-completeness';
 import { logServerError } from '@/lib/log-server-error';
-import { isTradeDbFirstLawdCd, isSeoulPublicBlocked } from '@/lib/region/enablement';
+import { isTradeDbFirstLawdCd, isPublicRegionAllowed } from '@/lib/region/enablement';
 import { resolveStrongIdentityAptSeqs, matchesTradeIdentity, deriveCanonicalAptSeq } from '@/lib/apt-name-match';
 import { resolveCanonicalCoords } from '@/lib/apt-canonical-coords';
 import {
@@ -118,8 +118,11 @@ export async function GET(
     //
     // 판정은 URL의 단지 이름이 아니라 위에서 확정된 **canonical lawdCd**로만 한다
     // (이름으로 지역을 추측하면 대신롯데캐슬 같은 서울/부산 동명 충돌이 그대로 재현된다).
-    // 서울 외 지역은 이 게이트의 대상이 아니다 — 경기·대구 등은 지금처럼 동작한다.
-    if (isSeoulPublicBlocked(lawdCd)) {
+    //
+    // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 서울 deny-list에서 공개 allowlist(`detail` 축)로 바꿨다.
+    // 예전에는 서울 외 지역(경기·대구 등)이 전부 통과해 live MOLIT 전체 이력이 나갔다. 이제 공개된
+    // 지역(부산 16구·서울 beta 8구)만 응답하고, 그 밖은 live MOLIT를 부르기 전에 여기서 끝난다.
+    if (!isPublicRegionAllowed(lawdCd, 'detail')) {
       return NextResponse.json({
         trades: [],
         apiError: null,

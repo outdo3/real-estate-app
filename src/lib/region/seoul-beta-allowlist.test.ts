@@ -68,8 +68,8 @@ test('§4 서울 나머지 17구는 allowlist 밖이다', () => {
 
 test('§5 마스터 스위치가 켜져 있다 — 승인 8구는 app·cronSync만, 나머지 17구는 전 축 닫힘', () => {
   assert.equal(SEOUL_BETA_ENABLED, true, 'beta 스위치가 꺼져 있다');
-  const betaAxes = { app: true, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: true };
-  const allFalse = { app: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false };
+  const betaAxes = { app: true, search: true, map: true, detail: true, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: true };
+  const allFalse = { app: false, search: false, map: false, detail: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false };
   for (const code of SEOUL_BETA_LAWDCDS) {
     assert.deepEqual(getRegionEnablement(code), betaAxes, `${code} 축 구성이 다르다`);
     assert.equal(isBetaAllowlistedLawdCd(code), true, `${code}가 allowlist에 적중하지 않는다`);
@@ -87,7 +87,7 @@ test('§5 마스터 스위치가 켜져 있다 — 승인 8구는 app·cronSync�
 test('§6 시도 층은 건드리지 않았다 — "서울 전체" 요청은 계속 거부된다', () => {
   // 이것이 안전의 핵심이다: sidoCode=11 / ?sido=서울특별시 경로는 시도 층만 보므로
   // 시군구 allowlist가 켜지더라도 시도 전체 질의는 열리지 않는다.
-  const allFalse = { app: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false };
+  const allFalse = { app: false, search: false, map: false, detail: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false };
   assert.deepEqual(getSidoEnablement('11'), allFalse);
   assert.equal(isTradeDbFirstSido('11'), false);
   assert.equal(isStatsRegionSupported({ lawdCd: null, sidoCode: '11', sidoName: null }), false);
@@ -95,7 +95,7 @@ test('§6 시도 층은 건드리지 않았다 — "서울 전체" 요청은 계
 });
 
 test('§7 부산 16구는 이 변경의 영향을 받지 않는다(무회귀)', () => {
-  const allTrue = { app: true, report: true, stats: true, sitemap: true, seoIndex: true, cronSync: true };
+  const allTrue = { app: true, search: true, map: true, detail: true, report: true, stats: true, sitemap: true, seoIndex: true, cronSync: true };
   for (const code of BUSAN_LAWDCD_16) {
     assert.deepEqual(getRegionEnablement(code), allTrue, `부산 ${code}가 닫혔다`);
   }

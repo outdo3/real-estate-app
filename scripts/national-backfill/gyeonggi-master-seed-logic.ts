@@ -231,6 +231,24 @@ export function ggPlanHash(creates: readonly ReturnType<typeof ggToCreateData>[]
   return createHash('sha256').update(canon.join('\n')).digest('hex');
 }
 
+/** 공개 표면이 읽는 축 전부. cronSync는 수집 축이라 여기 없다(DATA_EXISTS ≠ PUBLIC_ALLOWED). */
+export const PUBLIC_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const;
+
+/**
+ * GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — seed 대상 구(와 41135)가 **모든 공개 축에서 닫혀 있는가**.
+ * 공개 표면은 이제 allowlist(`isPublicRegionAllowed`/`publicAllowedLawdCds`)로만 판정하므로, 이 조건이
+ * 참이면 master를 만들어도 검색·지도·상세·리포트·선택기·sitemap 어디에도 실리지 않는다.
+ * apply 게이트의 `publicExposureGuarded`는 이 함수 결과를 넣는다(하드코딩 금지).
+ */
+export function computePublicExposureGuarded(
+  isAllowed: (lawdCd: string, axis: (typeof PUBLIC_AXES)[number]) => boolean,
+  districts: readonly string[] = [...GYEONGGI_FIRST_BATCH, ...EXCLUDED_DISTRICTS]
+): { guarded: boolean; openAxes: string[] } {
+  const openAxes: string[] = [];
+  for (const d of districts) for (const axis of PUBLIC_AXES) if (isAllowed(d, axis)) openAxes.push(`${d}:${axis}`);
+  return { guarded: openAxes.length === 0, openAxes };
+}
+
 export interface GgApplyGateInput {
   applyFlag: boolean;
   allowProdDbWrite: string | undefined;

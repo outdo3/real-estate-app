@@ -143,7 +143,7 @@ test('9. 41135 is excluded everywhere', () => {
 
 test('10. public exposure unchanged — Gyeonggi stays closed on every axis; apply gate requires an exposure guard', () => {
   for (const d of [...GYEONGGI_FIRST_BATCH, '41135']) {
-    assert.deepEqual(getRegionEnablement(d), { app: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false });
+    assert.deepEqual(getRegionEnablement(d), { app: false, search: false, map: false, detail: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false });
   }
   const g = evaluateGgApplyGate({ ...okGate(), publicExposureGuarded: false });
   assert.deepEqual(g.reasons, ['PUBLIC_EXPOSURE_NOT_GUARDED']);

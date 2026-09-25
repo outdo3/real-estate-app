@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { resolveApartmentViaKakaoAlias } from '@/lib/search-alias-fallback';
 import { rankApartmentMatches, normalizeSearchKeyword } from '@/lib/search-ranking';
-import { seoulPublicBlockedLawdCds } from '@/lib/region/enablement';
+import { isPublicRegionAllowed, publicAllowedLawdCds } from '@/lib/region/enablement';
 // OFFICETEL_V1 STEP 4B §1/§2 — 기존 아파트 검색을 대체하지 않고 결과 종류만 추가한다.
 import { searchOfficetels, type OfficetelSearchResult } from '@/lib/officetel/search-read';
 
@@ -57,9 +57,11 @@ export async function GET(request: Request) {
   // 이 테이블은 오랫동안 부산 전용(약 3,400행)이었고 위 주석의 take 제거 근거도 거기서 나왔다.
   // 지금은 서울 master 6,843행이 함께 들어 있어, 필터가 없으면 미출시 지역(강남 포함)이
   // 그대로 공개 검색에 노출된다. 표시 이름이 아니라 **canonical 지역 코드(sggCd)** 로만 거른다.
-  // 부산·그 밖의 지역은 이 목록에 들어가지 않으므로 동작이 바뀌지 않는다.
-  const blockedSggCds = seoulPublicBlockedLawdCds('app');
-  const regionScope = blockedSggCds.length ? { sggCd: { notIn: [...blockedSggCds] } } : {};
+  //
+  // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 위 deny-list(차단된 서울 제외)는 서울이 아닌 지역을 전부
+  // 통과시켰다. 경기 master가 생기면 그대로 검색에 실린다. 이제 **공개된 구만** 싣는다(allowlist).
+  // sggCd가 null이거나 registry에 없는 행은 IN에 걸리지 않아 자동으로 빠진다.
+  const regionScope = { sggCd: { in: [...publicAllowedLawdCds('search')] } };
 
   // Run Region distinct, Apartment and Officetel search in parallel.
   // 오피스텔 쿼리는 5,056행 테이블 하나라 기존 두 쿼리와 나란히 돌려도 지연이 늘지 않는다.
@@ -102,7 +104,8 @@ export async function GET(request: Request) {
         totalHouseholds: true,
       }
     }),
-    searchOfficetels(keyword).catch((e) => {
+    // 오피스텔도 같은 allowlist를 따른다(현재 원천은 부산 전용이라 결과 변화 없음).
+    searchOfficetels(keyword).then((rows) => rows.filter((o) => isPublicRegionAllowed(o.sggCd, 'search'))).catch((e) => {
       console.error('[search] officetel 검색 실패 — 아파트/지역 결과는 그대로 반환한다', e);
       return [] as OfficetelSearchResult[];
     })

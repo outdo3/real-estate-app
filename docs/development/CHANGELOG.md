@@ -2,6 +2,17 @@
 
 ## 2026-09-25
 
+### E-JIP GYEONGGI PUBLIC EXPOSURE GUARD V1 — 공개 노출을 전국 공통 allowlist로
+
+상세: `docs/development/GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1.md`
+
+    모델     isPublicRegionAllowed / publicAllowedLawdCds(축: app·search·map·detail·report·stats·sitemap·seoIndex) — 모르는 코드 닫힘
+    공개     부산 16구 전 축 · 서울 beta 8구 app/search/map/detail · 그 밖(서울 17구·경기·전국) 전부 닫힘
+    수정     /api/transactions 지역 게이트 부재 — 공개 차단 서울 마커 누출(강남 375·서초 408) 차단
+    변경     전국 live 상세·지역 선택기 전국 목록 닫힘 · 서울 8구 /report/compare 닫힘(DECISIONS §13)
+    seed     computePublicExposureGuarded → guarded true(경기 master 생성 시 공개 경로 0)
+    불변     부산 동작 · 서울 8구 검색/지도/상세 · cron · 수집 · DB(write 0)
+
 ### E-JIP NATIONAL FIRST BATCH APPLY V1 — 경기 8구 full-history 적재 (승인)
 
 상세: `docs/development/NATIONAL_FIRST_BATCH_APPLY_V1.md`

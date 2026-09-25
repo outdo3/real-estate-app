@@ -1,5 +1,6 @@
 import { point, distance } from '@turf/turf';
 import { prisma } from '@/lib/prisma';
+import { publicAllowedLawdCds } from '@/lib/region/enablement';
 
 // P2-D4-B1(docs/development/16-presale-nearby-market-design.md §6~7)이 확정한 adaptive
 // radius 정책. B1 API(src/app/api/presales/[id]/nearby-apartments/route.ts)와 B2가 동일
@@ -45,6 +46,9 @@ export async function findNearbyApartments(lat: number, lng: number): Promise<Ne
     where: {
       latitude: { gte: lat - latDelta, lte: lat + latDelta },
       longitude: { gte: lng - lngDelta, lte: lng + lngDelta },
+      // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 행정구역 경계를 넘는 후보는 그대로 두되(위 주석), 공개된 구의
+      // master만 싣는다. 분양·학교는 전국 데이터라 경기/차단 서울 분양 주변에서 그 지역 master가 새지 않게 한다.
+      sggCd: { in: [...publicAllowedLawdCds('app')] },
     },
     select: {
       id: true, aptSeq: true, name: true, latitude: true, longitude: true,

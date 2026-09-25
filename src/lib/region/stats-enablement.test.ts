@@ -83,7 +83,7 @@ test('8 · registry에 없는 코드는 DB-first가 아니다(접두사 추측 �
 test('9 · 비부산 판정이 부산으로 떨어지지 않는다(어떤 축도 true가 되지 않음)', () => {
   for (const sido of ['11', '41', '27', '99']) {
     const e = getSidoEnablement(sido);
-    assert.deepEqual(e, { app: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false }, sido);
+    assert.deepEqual(e, { app: false, search: false, map: false, detail: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false }, sido);
   }
 });
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ name
 
   if (!aptName) {
     return NextResponse.json({ hasTrades: false, hasUnitTypes: false }, { status: 400 });
+  }
+
+  // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — canonical aptSeq가 공개되지 않은 지역이면 "거래 있음"으로 상세 진입을
+  // 안내하지 않는다(경기 거래는 DB에 있지만 공개 대상이 아니다).
+  if (aptSeq && !isPublicRegionAllowed(aptSeq.slice(0, 5), 'detail')) {
+    return NextResponse.json({ hasTrades: false, hasUnitTypes: false, regionUnsupported: true });
   }
 
   const identityKey = aptSeq ? `id:${aptSeq}` : dong ? `nd:${aptName}|${dong}` : null;

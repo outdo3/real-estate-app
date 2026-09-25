@@ -6,7 +6,7 @@ import { REGCODE_PROXY, resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import styles from './RegionSelectModal.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
-import { isSeoulPublicBlocked, isSidoPubliclyHidden, isSidoPartiallyPublic } from '@/lib/region/enablement';
+import { isPublicRegionAllowed, isSidoPubliclyHidden, isSidoPartiallyPublic } from '@/lib/region/enablement';
 
 type RegionOption = { code: string; name: string };
 
@@ -55,7 +55,8 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
         .then((data) => {
           // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 이 목록은 외부 REGCODE 프록시(전국)에서 오므로
           // 공개 범위와 무관하다. 공개 가능한 시군구가 하나도 없는 시도는 아예 내리지 않는다
-          // (지금은 서울이 여기에 해당). 다른 시도는 필터에 걸리지 않아 그대로다.
+          // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 모든 시도에 같은 규칙: 공개된 구가 있는 시도(부산·서울)만 남는다.
+          // 경기·그 밖의 전국 시도는 master 데이터가 생겨도 enablement를 열기 전까지 목록에 없다.
           const all: RegionOption[] = data.regcodes || [];
           setModalSidos(all.filter((s: RegionOption) => !isSidoPubliclyHidden(s.code.substring(0, 2))));
         })
@@ -86,7 +87,8 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
         // 판정은 표시 이름이 아니라 법정동코드 앞 5자리(canonical 구 코드)로 한다.
         const list = (data.regcodes || [])
           .filter((item: RegionOption) => item.code.substring(0, 5) !== `${sidoCode}000`)
-          .filter((item: RegionOption) => !isSeoulPublicBlocked(item.code.substring(0, 5)));
+          // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개 allowlist(`app` 축)에 있는 구만 남긴다.
+          .filter((item: RegionOption) => isPublicRegionAllowed(item.code.substring(0, 5), 'app'));
         setModalSigungus(list);
         setModalStep('sigungu');
       })

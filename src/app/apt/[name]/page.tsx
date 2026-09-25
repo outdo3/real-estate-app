@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { siteConfig, buildOpenGraph } from '@/config/site';
 import { aptDetailHref } from '@/lib/report/report-links';
-import { decideSeoulSeo, lawdCdFromAptSeq, SEOUL_NOINDEX_ROBOTS } from '@/lib/seo/seoul-blocked-seo';
+import { decidePublicSeo, lawdCdFromAptSeq, SEOUL_NOINDEX_ROBOTS } from '@/lib/seo/seoul-blocked-seo';
 import KakaoPreconnect from '@/components/KakaoPreconnect';
 import ApartmentDetailClient from './apt-client';
 
@@ -19,7 +19,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
   // SEOUL_BETA_PRELAUNCH_SEO_SAFETY_FIX_V1 — 공개 차단 서울 단지는 단지명을 색인 가능한 메타데이터로 내보내지 않는다.
   // 지역은 쿼리 lawdCd와 aptSeq 앞자리로만 판정한다(이름으로 추측하지 않는다). 둘 다 없으면 기존 동작 그대로다.
-  const seoulSeo = decideSeoulSeo([first(sp.lawdCd), lawdCdFromAptSeq(first(sp.aptSeq))], 'app');
+  const seoulSeo = decidePublicSeo([first(sp.lawdCd), lawdCdFromAptSeq(first(sp.aptSeq))], 'detail');
   if (seoulSeo === 'BLOCKED') {
     const blockedTitle = `아파트 실거래가·시세 - ${siteConfig.name}`;
     const blockedDescription = '이 지역의 단지 정보는 아직 준비 중입니다.';

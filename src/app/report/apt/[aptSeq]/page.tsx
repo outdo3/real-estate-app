@@ -5,8 +5,8 @@ import ApartmentReportSheet from '@/components/report/ApartmentReportSheet';
 import InvalidScope from '@/components/report/InvalidScope';
 import { readApartmentReport, AptReportNotFound } from '@/lib/report/apt-read';
 import { prisma } from '@/lib/prisma';
-import { isSeoulPublicBlocked } from '@/lib/region/enablement';
-import { decideSeoulSeo, lawdCdFromAptSeq, SEOUL_NOINDEX_ROBOTS } from '@/lib/seo/seoul-blocked-seo';
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
+import { decidePublicSeo, lawdCdFromAptSeq, SEOUL_NOINDEX_ROBOTS } from '@/lib/seo/seoul-blocked-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +14,9 @@ type Props = { params: Promise<{ aptSeq: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { aptSeq } = await params;
-  // SEOUL_BETA_PRELAUNCH_SEO_SAFETY_FIX_V1 — 본문 게이트(아래 isSeoulPublicBlocked(…, 'report'))와 같은 축으로
+  // SEOUL_BETA_PRELAUNCH_SEO_SAFETY_FIX_V1 — 본문 게이트(아래 isPublicRegionAllowed(…, 'report'))와 같은 축으로
   // 메타데이터도 닫는다. 서울 리포트는 beta에서도 전부 막히므로 단지명 조회 자체를 하지 않는다.
-  if (decideSeoulSeo([lawdCdFromAptSeq(decodeURIComponent(aptSeq))], 'report') !== 'NONE') {
+  if (decidePublicSeo([lawdCdFromAptSeq(decodeURIComponent(aptSeq))], 'report') !== 'NONE') {
     const title = `단지 리포트 - ${siteConfig.name}`;
     const description = '이 지역의 단지 리포트는 아직 준비 중입니다.';
     return { title, description, robots: SEOUL_NOINDEX_ROBOTS, openGraph: buildOpenGraph({ title, description }) };
@@ -54,7 +54,10 @@ export default async function ApartmentReportPage({ params }: Props) {
   // 포함해 전부 닫힌다. 리포트/SEO 범위(BUSAN_DISTRICTS)·제목·breadcrumb가 아직 부산 전용이라
   // 상세(`app` 축)보다 **더 엄격해야** 하기 때문이다.
   // 지역은 aptSeq의 앞 5자리(canonical 구 코드)로만 판정한다 — 이름으로 추측하지 않는다.
-  if (isSeoulPublicBlocked(id.slice(0, 5), 'report')) {
+  // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 서울 deny-list에서 공개 allowlist(`report` 축)로 바꿨다. 경기·전국도 막힌다.
+  // aptSeq 형태가 아니면(앞자리 판정 불가) 아래 조회가 '없는 단지'로 답한다(기존 동작).
+  const reportLawdCd = lawdCdFromAptSeq(id);
+  if (reportLawdCd && !isPublicRegionAllowed(reportLawdCd, 'report')) {
     return (
       <InvalidScope reason={`요청하신 단지(${id})가 속한 지역의 리포트는 아직 준비 중입니다.`} />
     );
