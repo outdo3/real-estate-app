@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { point, distance } from '@turf/turf';
 import { prisma } from '@/lib/prisma';
 import { getApartmentsForSchool, type ZoneRelatedApartment } from '@/lib/education/attendance-zone';
+import { shouldUseAttendanceZoneArtifact } from '@/lib/education/school-apartment-relations';
 import { findNearbyApartments } from '@/lib/nearby-apartments';
 import { fetchMolitData } from '@/lib/api-molit';
 import { recentMonths } from '@/lib/molit-months';
@@ -120,10 +121,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     // 2. 관련 아파트 — 공식 통학구역/학교군(artifact 기반, 좌표 불필요) 우선.
-    const zoneRelated: ZoneRelatedApartment[] = getApartmentsForSchool({
-      neisSchoolCode: canonicalSchool?.neisSchoolCode ?? null,
-      schoolName,
-    });
+    // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 부산 전용 artifact를 다른 지역 동명 학교에 쓰지 않는다.
+    const zoneRelated: ZoneRelatedApartment[] = shouldUseAttendanceZoneArtifact({
+      canonicalNeisSchoolCode: canonicalSchool?.neisSchoolCode ?? null,
+      queryLawdCd,
+    })
+      ? getApartmentsForSchool({ neisSchoolCode: canonicalSchool?.neisSchoolCode ?? null, schoolName })
+      : [];
     const zoneAptSeqs = new Set(zoneRelated.map((r) => r.aptSeq));
 
     // 3. nearby(거리 기반) — 위치가 있을 때만, zone/middle-group과 중복되지 않는 것만.

@@ -157,10 +157,7 @@ export async function fetchBuildingRegistryInfo(
     const regData = await regRes.json();
     let fullLawdCd: string | null = null;
 
-    if (regData.regcodes) {
-      const match = regData.regcodes.find((r: any) => (r.name || '').includes(dong) && r.code.startsWith(lawdCd));
-      if (match) fullLawdCd = match.code;
-    }
+    if (regData.regcodes) fullLawdCd = findDongRegcode(regData.regcodes, lawdCd, dong);
     if (!fullLawdCd) return null;
 
     const bjdongCd = fullLawdCd.substring(5, 10);
@@ -240,3 +237,22 @@ export const formatParking = (parkingCount: number, totalHouseholds: number | nu
   const perHousehold = (parkingCount / totalHouseholds).toFixed(2);
   return `세대당 ${perHousehold}대 (${totalStr})`;
 };
+
+/**
+ * GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 법정동 코드는 **이름의 마지막 토큰이 정확히 같은** 항목만 쓴다.
+ * 예전의 `name.includes(dong)`은 같은 구 안의 포함 관계 법정동을 잘못 골랐다(수원 팔달구: 교동 ⊂ 매교동).
+ * 여러 개가 맞으면(있어선 안 되는 상태) 추측하지 않고 null — 다른 건물의 건축물대장을 붙이지 않는다.
+ */
+export function findDongRegcode(
+  regcodes: readonly { code?: string; name?: string }[],
+  lawdCd: string,
+  dong: string
+): string | null {
+  const target = (dong || '').trim();
+  if (!target || !lawdCd) return null;
+  const hits = regcodes.filter((r) => {
+    const tokens = (r.name || '').trim().split(/\s+/);
+    return (r.code || '').startsWith(lawdCd) && tokens[tokens.length - 1] === target;
+  });
+  return hits.length === 1 ? hits[0].code ?? null : null;
+}

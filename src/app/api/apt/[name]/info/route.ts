@@ -117,8 +117,11 @@ export async function GET(
         // 이 라우트에서 얻을 수 있는 가장 강한 identity다(요청 컨텍스트에 aptSeq가 없고,
         // 있었더라도 실측상 같은 건물의 표기 변형 row들이 같은 aptSeq를 공유하는 사례가
         // 확인돼 aptSeq만으로는 이 특정 케이스를 구분하지 못한다 — 문서 §7 참고).
+        // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — legacy 캐시는 name+dong unique라 지역을 모른다.
+        // 부산·경기에 같은 법정동명(금곡동·중동·중앙동 등)이 있어, lawdCd 없이 찾으면 다른 지역 단지의
+        // 세대수·주차·용적률을 이 단지 것처럼 보여 준다. 캐시 행은 전부 lawd_cd를 갖고 있어 부산 조회는 그대로다.
         const cached = await prisma.apartment.findFirst({
-          where: { name: aptName, dong: dongKey },
+          where: { name: aptName, dong: dongKey, lawdCd },
           include: { unitTypes: true }
         });
 
@@ -173,7 +176,7 @@ export async function GET(
           // fetchBuildingRegistryInfo 자체도 아파트명이 아니라 lawdCd+dong+jibun으로
           // 조회하므로, 이 필드들을 이 fallback에서 보충하는 것은 안전하다(변경 없음).
           const byJibun = await prisma.apartment.findFirst({
-            where: { dong: dongKey, jibun: effectiveJibun },
+            where: { dong: dongKey, jibun: effectiveJibun, lawdCd },
             include: { unitTypes: true }
           });
 
@@ -262,6 +265,12 @@ export async function GET(
         if (live.mainPurpose) info['주용도'] = live.mainPurpose;
         if (live.parkingCount || live.far || live.bcr || live.totalHouseholds || live.approvalDate) {
           try {
+            // 같은 name+dong 행이 **다른 지역** 소유면 쓰지 않는다(덮어쓰면 그 지역 단지 정보가 오염된다).
+            const owner = await prisma.apartment.findUnique({
+              where: { name_dong: { name: aptName, dong: dongKey } },
+              select: { lawdCd: true },
+            });
+            if (owner && owner.lawdCd !== lawdCd) throw new Error('CACHE_ROW_OWNED_BY_OTHER_REGION');
             const upserted = await prisma.apartment.upsert({
               where: { name_dong: { name: aptName, dong: dongKey } },
               create: {
@@ -286,7 +295,7 @@ export async function GET(
             });
             // if newly created, unitTypes is empty anyway.
           } catch (e) {
-            console.warn('Apartment DB upsert failed', e);
+            console.warn('Apartment DB upsert skipped/failed', (e as Error)?.message === 'CACHE_ROW_OWNED_BY_OTHER_REGION' ? 'CACHE_ROW_OWNED_BY_OTHER_REGION' : e);
           }
         }
       }

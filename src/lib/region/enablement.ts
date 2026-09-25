@@ -116,9 +116,72 @@ const SEOUL_BETA_ENABLEMENT: RegionEnablement = {
  * 시군구 단위 공개 상태. 스위치가 꺼져 있으면 **빈 객체**이므로 어떤 조회도 시도 층으로 떨어진다.
  * 여기에 없는 시군구는 이 층이 관여하지 않는다(부산은 계속 시도 층이 답한다).
  */
-const ENABLEMENT_BY_LAWDCD: Readonly<Record<string, RegionEnablement>> = SEOUL_BETA_ENABLED
-  ? Object.fromEntries(SEOUL_BETA_LAWDCDS.map((code) => [code, SEOUL_BETA_ENABLEMENT]))
-  : {};
+// ── GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 경기 beta **후보**(스위치 OFF) ─────────────────────
+//
+// 서울 beta 준비(SEOUL_MOBILE_BETA_PREP_V1)와 같은 방식: 대상 구와 축을 코드로 고정해 두고 스위치는 끈다.
+// 스위치가 false인 동안 아래 목록은 ENABLEMENT_BY_LAWDCD에 들어가지 않으므로 **런타임 동작 변화 0**이다.
+// 켜는 것은 별도 승인(GYEONGGI_PUBLIC_BETA_APPROVAL)이며, 그때도:
+//   · 시도 층(ENABLEMENT_BY_SIDO)에 '41'을 넣지 않는다 — 넣으면 48개 노드(41135 포함)가 전부 열린다
+//   · "경기도 전체"는 isSidoPartiallyPublic('41') = true로 계속 막힌다
+//   · report·stats·sitemap·seoIndex는 닫힌 채다
+//   · cronSync(DB-first 읽기 스위치)는 경기 cron이 돌고 검증된 뒤 별도 결정 — 그 전에는 live MOLIT 읽기다
+
+/** 경기 beta 후보 8구 — 매매 전체 이력 적재·parity + master 1,193 적재·parity를 통과한 구만. 41135(분당) 제외. */
+export const GYEONGGI_BETA_LAWDCDS = [
+  '41111', // 수원시 장안구
+  '41113', // 수원시 권선구
+  '41115', // 수원시 팔달구
+  '41117', // 수원시 영통구
+  '41131', // 성남시 수정구
+  '41133', // 성남시 중원구
+  '41150', // 의정부시
+  '41210', // 광명시
+] as const;
+
+/** 경기 beta 스위치. **false = 경기 전 축 닫힘(현재).** */
+export const GYEONGGI_BETA_ENABLED = false;
+
+/** 경기 beta에서 여는 축(제안). 앱·검색·지도·상세만 — 리포트/통계/색인/사이트맵은 닫힘, cronSync는 별도 결정. */
+export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
+  app: true,
+  search: true,
+  map: true,
+  detail: true,
+  report: false,
+  stats: false,
+  sitemap: false,
+  seoIndex: false,
+  cronSync: false,
+};
+
+/**
+ * 시군구 단위 enablement 맵을 만든다(순수). 런타임은 실제 스위치 값으로 한 번 만들고,
+ * 테스트·시뮬레이션은 스위치를 바꿔 "켜면 어떻게 되는가"를 본다(Production 설정은 바꾸지 않는다).
+ */
+export function buildLawdCdEnablementMap(flags: { seoulBeta: boolean; gyeonggiBeta: boolean }): Readonly<Record<string, RegionEnablement>> {
+  return Object.fromEntries([
+    ...(flags.seoulBeta ? SEOUL_BETA_LAWDCDS.map((code) => [code, SEOUL_BETA_ENABLEMENT] as const) : []),
+    ...(flags.gyeonggiBeta ? GYEONGGI_BETA_LAWDCDS.map((code) => [code, GYEONGGI_BETA_ENABLEMENT] as const) : []),
+  ]);
+}
+
+const ENABLEMENT_BY_LAWDCD: Readonly<Record<string, RegionEnablement>> = buildLawdCdEnablementMap({
+  seoulBeta: SEOUL_BETA_ENABLED,
+  gyeonggiBeta: GYEONGGI_BETA_ENABLED,
+});
+
+/**
+ * 시뮬레이션용: 주어진 스위치 조합에서 이 시군구의 enablement(런타임 판정과 같은 규칙 — 시군구 층 먼저, 없으면 시도 층).
+ * Production 판정은 항상 getRegionEnablement()를 쓴다.
+ */
+export function simulateRegionEnablement(
+  lawdCd: string | null | undefined,
+  flags: { seoulBeta: boolean; gyeonggiBeta: boolean }
+): RegionEnablement {
+  const node = getRegionByLawdCd(lawdCd);
+  if (!node) return NOT_ENABLED;
+  return buildLawdCdEnablementMap(flags)[node.lawdCd] ?? getSidoEnablement(node.sidoCode);
+}
 
 /** 이 시군구가 시도와 별개로 직접 열려 있는가(= allowlist 적중). 지금은 항상 false. */
 export function isBetaAllowlistedLawdCd(lawdCd: string | null | undefined): boolean {

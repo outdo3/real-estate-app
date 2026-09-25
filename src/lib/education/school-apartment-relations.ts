@@ -59,3 +59,20 @@ export function findZoneRelatedApartments(
   }
   return results;
 }
+
+/**
+ * GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 통학구역 artifact(부산 전용)를 이 학교에 써도 되는가.
+ *
+ * artifact는 부산 학교만 담고 있고, NEIS 코드가 없는 학교는 **이름 완전일치**로 찾는다. 경기 단지 상세에서
+ * 넘어온 Kakao 학교(예: 의정부 "신곡초등학교")가 이름이 같은 부산 학교의 통학구역 단지를 "공식 통학구역"으로
+ * 받는 일이 생긴다(신곡초 7곳·동신초 43곳 등 동명 학교가 실제로 있다). 그래서:
+ *   · canonical NEIS 코드가 있으면(= 공식 학교 테이블에 있는 학교) → 코드로만 매칭하므로 사용
+ *   · 코드가 없는데 요청 지역(lawdCd)이 부산이 아니면 → 사용하지 않는다(다른 지역으로 대체 금지)
+ *   · lawdCd가 없으면 기존 동작 유지(부산 링크 호환)
+ */
+export function shouldUseAttendanceZoneArtifact(input: { canonicalNeisSchoolCode: string | null; queryLawdCd: string | null }): boolean {
+  if (input.canonicalNeisSchoolCode) return true;
+  const lawdCd = (input.queryLawdCd || '').trim();
+  if (!lawdCd) return true;
+  return /^26\d{3}$/.test(lawdCd);
+}

@@ -13,7 +13,8 @@ import {
   middleSummaryValue,
   shouldRenderZoneSchoolList,
   middleGroupIsSingleSchool,
-  kindergartenSummaryValue,
+  kindergartenSummaryLabel,
+  kindergartenEmptyMessage,
   highSchoolSummaryValue,
   type AttendanceStatus,
 } from '@/lib/education/education-ui-labels';
@@ -81,6 +82,10 @@ interface EducationApiResponse {
   nearbyElementarySchools: NearbyKakaoSchool[];
   nearbyHighSchools: NearbyKakaoSchool[];
   kindergartens: NearbyKindergarten[];
+  /** 단지 좌표가 없어 반경 검색을 하지 않았다(없으면 예전 응답 — false로 본다). */
+  coordinateMissing?: boolean;
+  /** 이 지역에 유치원 데이터가 적재돼 있는가(없으면 예전 응답 — true로 본다). */
+  kindergartenCoverage?: boolean;
 }
 
 interface EducationPanelProps {
@@ -144,7 +149,10 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
   const nearbyHigh = data.nearbyHighSchools || [];
   // 아파트 좌표 자체가 없는 경우(COORDINATE_MISSING) — "반경 내 없음"(검색해서
   // 없었다)과 "확인 불가"(애초에 검색할 좌표가 없었다)를 구분한다.
-  const coordinateUnavailable = zone?.reasonCode === 'COORDINATE_MISSING';
+  // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 통학구역 artifact가 없는 지역(부산 외)은 zone이 null이라
+  // 위 판정만으로는 좌표 없음을 알 수 없다 → 서버가 알려 준 coordinateMissing도 본다.
+  const coordinateUnavailable = zone?.reasonCode === 'COORDINATE_MISSING' || data.coordinateMissing === true;
+  const kindergartenCovered = data.kindergartenCoverage !== false;
 
   return (
     <div className={styles.wrap}>
@@ -152,7 +160,7 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
       <div className={styles.summaryRow}>
         <SummaryChip icon={<School size={16} aria-hidden="true" />} label="초등 통학" value={zone ? ZONE_SUMMARY_LABEL[zone.status] : '확인 불가'} />
         <SummaryChip icon={<GraduationCap size={16} aria-hidden="true" />} label="중학교" value={middleSummaryValue(middle)} />
-        <SummaryChip icon={<Baby size={16} aria-hidden="true" />} label="유치원" value={kindergartenSummaryValue(kindergartens.length, coordinateUnavailable)} />
+        <SummaryChip icon={<Baby size={16} aria-hidden="true" />} label="유치원" value={kindergartenSummaryLabel(kindergartens.length, { coordinateUnavailable, covered: kindergartenCovered })} />
         <SummaryChip icon={<School size={16} aria-hidden="true" />} label="고등학교" value={highSchoolSummaryValue(nearbyHigh.length, coordinateUnavailable)} />
       </div>
 
@@ -229,7 +237,7 @@ export default function EducationPanel({ aptName, lawdCd, dong, ready }: Educati
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>유치원</h3>
         {kindergartens.length === 0 ? (
-          <p className={styles.mutedText}>{coordinateUnavailable ? '단지 위치를 확인할 수 없어 유치원 정보를 표시할 수 없어요.' : '2km 이내 등록된 유치원이 없어요.'}</p>
+          <p className={styles.mutedText}>{kindergartenEmptyMessage({ coordinateUnavailable, covered: kindergartenCovered })}</p>
         ) : (
           <div className={styles.cardList}>
             {kindergartens.map((k) => (

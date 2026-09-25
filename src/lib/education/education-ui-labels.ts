@@ -57,3 +57,20 @@ export function highSchoolSummaryValue(count: number, coordinateUnavailable = fa
   if (coordinateUnavailable) return '확인 불가';
   return count > 0 ? `주변 ${count}곳` : '3km 이내 없음';
 }
+
+/**
+ * GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 유치원 데이터(유치원알리미 적재분)는 부산만 있다.
+ * 적재되지 않은 지역에서 "2km 이내 없음"이라고 하면 **확인된 부재**처럼 보인다 — "준비 중"으로 구분한다.
+ * 우선순위: 좌표 없음(확인 불가) > 데이터 미적재(준비 중) > 검색 결과.
+ */
+export function kindergartenSummaryLabel(count: number, opts: { coordinateUnavailable?: boolean; covered?: boolean } = {}): string {
+  if (opts.coordinateUnavailable) return '확인 불가';
+  if (opts.covered === false) return '준비 중';
+  return kindergartenSummaryValue(count, false);
+}
+
+export function kindergartenEmptyMessage(opts: { coordinateUnavailable?: boolean; covered?: boolean } = {}): string {
+  if (opts.coordinateUnavailable) return '단지 위치를 확인할 수 없어 유치원 정보를 표시할 수 없어요.';
+  if (opts.covered === false) return '이 지역 유치원 정보는 아직 준비 중이에요.';
+  return '2km 이내 등록된 유치원이 없어요.';
+}

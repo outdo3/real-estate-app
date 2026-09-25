@@ -2,6 +2,16 @@
 
 ## 2026-09-25
 
+### E-JIP GYEONGGI CRON AND PUBLIC READINESS AUDIT V1 — 경기 8구 cron·공개 준비도 감사 + 학교/위치 안전장치
+
+상세: `docs/development/GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1.md`
+
+    판정     CRON READY_FOR_USER_APPROVAL(+≤112호출/일, 모든 셀 1쪽) · PUBLIC_BETA HOLD(cron→cronSync, UX 4건, 모바일 실측)
+    연결     12개월 거래 단지 1,114 → master 정답 1,114 · 오연결 0 · 마커 1,098 · 좌표 없음 16(마커 없음)
+    수정     학교 상세가 부산 통학구역 artifact를 경기 동명 학교에 쓰던 경로 차단 · info/facilities 캐시 lawdCd 범위 · 법정동코드 정확 일치 · 유치원 미적재 지역 "준비 중"
+    추가     경기 beta 후보 8구(스위치 OFF, 런타임 변화 0) · 시뮬레이션 · seed 가드 대상 구 단위
+    불변     경기 공개·cron·SEO/sitemap·DB write 0
+
 ### E-JIP GYEONGGI MASTER FULL BATCH APPLY V1 — 경기 7구 master 1,077행 적재 (승인)
 
 상세: `docs/development/GYEONGGI_MASTER_FULL_BATCH_APPLY_V1.md`

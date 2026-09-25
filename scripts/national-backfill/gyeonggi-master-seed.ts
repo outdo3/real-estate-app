@@ -29,7 +29,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env.local'), quiet: true }
 import type { PrismaClient } from '@prisma/client';
 import { aggregateCandidates, type RawTradeItem, type SeedCandidate } from '../seoul-master-seed-plan-logic';
 import { realReverseGeocode, realSearchAddress } from '../seed-seoul-apartment-master';
-import { isPublicRegionAllowed, isSidoPubliclyHidden } from '../../src/lib/region/enablement';
+import { isPublicRegionAllowed } from '../../src/lib/region/enablement';
 import {
   buildGgAppliedArtifact,
   buildPlanHash,
@@ -140,13 +140,19 @@ async function geocode(row: GgSeedRow, calls: { forward: number; reverse: number
     : { ...base, status: v, reverseLot };
 }
 
-/** 공개 노출 가드. 닫혀 있지 않으면 어떤 모드도 진행하지 않는다. */
-function requireGuard() {
-  const guard = computePublicExposureGuarded((c, axis) => isPublicRegionAllowed(c, axis));
-  const selectorHidden = isSidoPubliclyHidden('41');
-  if (!guard.guarded || !selectorHidden) throw new Error(`PUBLIC_EXPOSURE_NOT_GUARDED: ${guard.openAxes.join(',')} selectorHidden=${selectorHidden}`);
-  return { ...guard, selectorHidden };
+/**
+ * 공개 노출 가드. **이번 실행 대상 구**가 모든 공개 축(app·search·map·detail·report·stats·sitemap·seoIndex)에서
+ * 닫혀 있지 않으면 어떤 모드도 진행하지 않는다.
+ * GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 예전에는 첫 배치 8구 전체 + "경기 선택기 숨김"을 봤다. 경기 beta가
+ * 켜지면(8구 app 공개 → 선택기에 경기도 표시) 그 조건이 영구히 거짓이 되어, 아직 닫힌 다른 구의 seed까지 막힌다.
+ * 대상 구 단위로 보면 같은 보호(그 구 master가 생겨도 공개 안 됨)를 유지하면서 그 문제가 없다. 선택기 노출은 구별 app 축에 포함된다.
+ */
+function requireGuard(targets: readonly string[]) {
+  const guard = computePublicExposureGuarded((c, axis) => isPublicRegionAllowed(c, axis), targets);
+  if (!guard.guarded) throw new Error(`PUBLIC_EXPOSURE_NOT_GUARDED: ${guard.openAxes.join(',')}`);
+  return { ...guard, targets: [...targets] };
 }
+
 
 /**
  * 계획 생성(dry-run·apply 공통). `allowGeocode=false`(apply)면 Kakao를 부르지 않고 checkpoint의 종결 좌표만 쓴다.
@@ -210,7 +216,7 @@ async function runDryRun(prisma: PrismaClient) {
   const asOfYm = arg('as-of') ?? '202609';
   const districts = (arg('district') ?? GYEONGGI_FIRST_BATCH.join(',')).split(',').filter(Boolean);
   for (const d of districts) if (!(GYEONGGI_FIRST_BATCH as readonly string[]).includes(d)) throw new Error(`첫 배치 밖 구: ${d}`);
-  const guard = requireGuard();
+  const guard = requireGuard(districts);
   const { rows, records, db, seqParity, rawRows, calls, stoppedBy, windowStart } = await planDistricts(prisma, { districts, asOfYm, resume: flag('resume'), allowGeocode: true });
 
   const candidates = rows.filter((r) => r.status === 'READY' || r.status === 'REVIEW' || r.status === 'EXISTING_SKIPPED');
@@ -287,7 +293,7 @@ async function runApply(prisma: PrismaClient, preflight = false) {
   const asOfYm = arg('as-of') ?? '202609';
   const districts = (arg('district') ?? '').split(',').filter(Boolean);
   const allowNullCoords = flag('allow-null-coords');
-  const guard = requireGuard();
+  const guard = requireGuard(districts);
   // 쓰기 전에 읽기·쓰기 승인 둘 다 확인한다(fail-closed, 호스트는 출력하지 않는다).
   const { assertProductionDbAccessAllowed } = await import('../_prod-db-guard');
   assertProductionDbAccessAllowed('DIAGNOSTIC', 'gyeonggi-master-seed.ts(apply read)');

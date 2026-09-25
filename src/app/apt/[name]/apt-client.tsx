@@ -825,7 +825,11 @@ export default function ApartmentDetail() {
     setActiveModal(modalName);
     if (modalName === '커뮤니티 시설' && facilities === undefined && !facilitiesLoading) {
       setFacilitiesLoading(true);
-      fetch(`/api/apt/${encodeURIComponent(aptName)}/facilities${urlDong ? `?dong=${encodeURIComponent(urlDong)}` : ''}`)
+      // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 지역(lawdCd)까지 넘겨 동명 법정동의 다른 지역 단지를 집지 않게 한다.
+      const facilityQuery = new URLSearchParams();
+      if (urlDong) facilityQuery.set('dong', urlDong);
+      if (lawdCdState) facilityQuery.set('lawdCd', lawdCdState);
+      fetch(`/api/apt/${encodeURIComponent(aptName)}/facilities${facilityQuery.toString() ? `?${facilityQuery.toString()}` : ''}`)
         .then((res) => res.json())
         .then((data) => setFacilities(Array.isArray(data.facilities) ? data.facilities : null))
         .catch(() => setFacilities(null))

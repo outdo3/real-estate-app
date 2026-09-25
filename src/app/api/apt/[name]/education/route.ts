@@ -6,6 +6,9 @@ import { findNearbyKindergartens, matchCanonicalHighSchool } from '@/lib/educati
 import { logServerError } from '@/lib/log-server-error';
 import { isPublicRegionAllowed } from '@/lib/region/enablement';
 
+/** 유치원 데이터가 적재된 시도(scripts/education/ingest-kindergartens.ts DEFAULT_SIDO='26'). */
+const KINDERGARTEN_COVERED_SIDO: ReadonlySet<string> = new Set(['26']);
+
 export const dynamic = 'force-dynamic';
 
 // SCHOOL V2-D1 §22 — 기존 /api/apt/[name]/{info,score,facilities}와 나란한 별도
@@ -96,6 +99,11 @@ export async function GET(
       nearbyHighSchools,
       kindergartens,
       datasetVersion: zone?.datasetVersion ?? null,
+      // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — "검색했는데 없음"과 "확인할 수 없음"을 구분하는 신호.
+      //   coordinateMissing  : 단지 좌표가 없어 반경 검색 자체를 하지 않았다(null 좌표 master)
+      //   kindergartenCoverage: 유치원 데이터가 적재된 지역인가(현재 부산만 — kindergartens 367행 전부 부산)
+      coordinateMissing: apt.latitude == null || apt.longitude == null,
+      kindergartenCoverage: KINDERGARTEN_COVERED_SIDO.has(lawdCd.slice(0, 2)),
     });
   } catch (error) {
     logServerError((error as Error)?.message || 'apt education route error', '/api/apt/[name]/education', (error as Error)?.stack).catch(() => {});

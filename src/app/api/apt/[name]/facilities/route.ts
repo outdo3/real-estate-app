@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,13 +18,19 @@ export async function GET(
     const aptName = decodeURIComponent(name);
     const { searchParams } = new URL(request.url);
     const dong = searchParams.get('dong') || undefined;
+    // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — lawdCd가 오면 지역까지 맞춰 찾고, 공개되지 않은 지역은 답하지 않는다.
+    // (name+dong만으로는 부산·경기 동명 법정동 — 금곡동·중동·중앙동 — 에서 다른 지역 단지를 집을 수 있다.)
+    const lawdCd = searchParams.get('lawdCd') || undefined;
+    if (lawdCd && !isPublicRegionAllowed(lawdCd, 'detail')) {
+      return NextResponse.json({ facilities: null, regionUnsupported: true });
+    }
 
     // BUSAN_DATA_UX_AUTOMATED_QA_V1 §L4/식별자 감사: dong 없이 { name: aptName }만
     // 조회하면 타 지역 동명 단지의 시설 정보를 잘못 노출할 수 있다(실측: 대신롯데캐슬
     // 서울/부산 충돌). 이 라우트엔 lawdCd 파라미터가 없어 dong이 없으면 안전하게
     // facilities: null(미해결 identity)로 남긴다 — 값을 지어내지도, 추측하지도 않는다.
     const record = dong
-      ? await prisma.apartment.findFirst({ where: { name: aptName, dong } })
+      ? await prisma.apartment.findFirst({ where: { name: aptName, dong, ...(lawdCd ? { lawdCd } : {}) } })
       : null;
 
     const facilities = Array.isArray(record?.communityFacilities)

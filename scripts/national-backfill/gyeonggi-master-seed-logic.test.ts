@@ -293,7 +293,8 @@ test('apply 1·2·3 — --apply 플래그, 읽기·쓰기 승인, 공개 가드�
   assert.deepEqual(evaluateGgApplyGate({ ...okGate(), allowProdDbRead: '0' }).reasons, ['ALLOW_PROD_DB_READ_NOT_1']);
   assert.deepEqual(evaluateGgApplyGate({ ...okGate(), publicExposureGuarded: false }).reasons, ['PUBLIC_EXPOSURE_NOT_GUARDED']);
   const apply = fnBody('runApply');
-  assert.ok(apply.indexOf('requireGuard()') < apply.indexOf('planDistricts('), '가드 확인 전에 계획한다');
+  assert.ok(apply.indexOf('requireGuard(districts)') < apply.indexOf('planDistricts('), '가드 확인 전에 계획한다');
+  assert.ok(RUNNER.includes('computePublicExposureGuarded((c, axis) => isPublicRegionAllowed(c, axis), targets)'), '가드가 실행 대상 구를 보지 않는다');
   assert.ok(/if \(!preflight\) assertProductionDbAccessAllowed\('BACKFILL'/.test(apply), '쓰기 승인(ALLOW_PROD_DB_WRITE) 확인이 없다');
   assert.ok(apply.indexOf("assertProductionDbAccessAllowed('BACKFILL'") < apply.indexOf('$transaction'), '쓰기 승인 확인이 트랜잭션 뒤다');
   assert.ok(apply.indexOf('if (!gate.allowed)') < apply.indexOf('apartmentMaster.create('), '게이트가 insert 뒤다');
