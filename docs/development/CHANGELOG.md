@@ -2,6 +2,15 @@
 
 ## 2026-09-25
 
+### E-JIP GYEONGGI MASTER FULL BATCH APPLY V1 — 경기 7구 master 1,077행 적재 (승인)
+
+상세: `docs/development/GYEONGGI_MASTER_FULL_BATCH_APPLY_V1.md`
+
+    결과     7구 × 1회, 전부 PASS · insert 1,077(좌표 1,058 · null 19) · update 0 · delete 0 · 실패 0
+    합계     경기 master 1,193(좌표 1,174 · null 19) · MASTER_PARITY_EXACT · 거래 연결 1,193/1,193
+    불변     부산·서울 fingerprint · 41135 0 · 과거 전용 131 미적재 · 일일 리포트 NO_IMPACT
+    공개     경기 계속 닫힘(8구 검색·지도·상세·리포트·비교·stats·sitemap 누출 0) · 부산/서울 회귀 0
+
 ### E-JIP GYEONGGI MASTER FULL BATCH POLICY V1 — 나머지 7구 정책 결정 + apply 준비 (write 0)
 
 상세: `docs/development/GYEONGGI_MASTER_FULL_BATCH_POLICY_V1.md`
