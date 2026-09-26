@@ -169,7 +169,8 @@ test('분위 지도는 불완전하면 분위 색을 쓰지 않는다', () => {
 test('지도 마커 캐시는 partial 플래그를 함께 저장한다', () => {
   const src = read('app/map/page.tsx');
   assert.ok(
-    /markers: AptMarker\[\]; partial: boolean; ts: number/.test(src),
+    // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — regionUnsupported도 함께 저장한다(캐시 히트에서 "미지원"이 "0건"으로 바뀌지 않게).
+    /markers: AptMarker\[\]; partial: boolean; regionUnsupported: boolean; ts: number/.test(src),
     'partial을 빼고 markers만 캐시하면 캐시 히트에서 불완전이 완전으로 둔갑한다'
   );
   assert.ok(/markerCacheRef\.current\.set\(lawdCd, \{ markers, partial: txState\.partial/.test(src));

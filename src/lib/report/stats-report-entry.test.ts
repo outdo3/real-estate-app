@@ -237,11 +237,12 @@ test('§7-8 통계의 기존 액션이 그대로다', () => {
 
 test('§7-8 다른 화면의 리포트 진입점은 건드리지 않았다', () => {
   // 단지 상세 / 비교 / 도구는 기존 진입점을 그대로 쓴다.
-  assert.ok(/aptReportHref/.test(read('src/app/apt/[name]/apt-client.tsx')));
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — report 축 게이트가 붙은 publicAptReportHref/publicCompareReportHref도 같은 진입점이다.
+  assert.ok(/[aA]ptReportHref/.test(read('src/app/apt/[name]/apt-client.tsx')));
   // APT_DETAIL_REPORT_CTA_FLOW_V1 — 지도 → 상세 → 리포트 흐름으로 바꾸며 지도 카드의 단지 리포트
   // 바로가기는 의도적으로 뺐다(상세페이지 중후반 카드가 진입점). 계약: src/lib/report/apt-report-cta-flow.test.ts
   assert.ok(!/report\/apt\//.test(read('src/app/map/page.tsx')));
-  assert.ok(/compareReportHref/.test(read('src/components/compare/CompareV2.tsx')));
+  assert.ok(/[cC]ompareReportHref/.test(read('src/components/compare/CompareV2.tsx')));
   assert.ok(/cityReportHref/.test(read('src/app/tools/page.tsx')));
 });
 

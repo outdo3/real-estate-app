@@ -17,7 +17,7 @@ import { formatHeadlineBullet, scoreDomainSummary } from '@/lib/compare-v2/forma
 import { buildCompareUrl, buildCompareSharePath, parseCompareUrl, type CompareSlotSeed } from '@/lib/compare-v2/url';
 import { absoluteShareUrl } from '@/lib/share/shareUtils';
 import { compareShareCopy } from '@/lib/share/ejipShareCard';
-import { compareReportHref, REPORT_LABELS } from '@/lib/report/report-links';
+import { publicCompareReportHref, REPORT_LABELS } from '@/lib/report/report-links';
 import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
 import LoginModal from '@/components/LoginModal';
 import { useFitPreference } from '@/hooks/useFitPreference';
@@ -134,8 +134,9 @@ export default function CompareV2({ initialSeeds, unresolvedAptSeqs }: CompareV2
   // REPORT-7 §3 — 비교 리포트 진입. 두 슬롯이 **모두 canonical aptSeq로 해석된
   // 경우에만** 링크를 만든다. 이름으로만 잡힌 단지가 섞이면 compareReportHref가
   // null을 주고, 그러면 CTA 자체를 렌더하지 않는다(깨진 리포트로 보내지 않는다).
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 두 단지 지역 모두 `report` 축이 열려 있어야 한다.
   const compareReportUrl = both
-    ? compareReportHref(
+    ? publicCompareReportHref(
         both[0].identity.kind === 'aptSeq' ? both[0].identity.aptSeq : null,
         both[1].identity.kind === 'aptSeq' ? both[1].identity.aptSeq : null
       )

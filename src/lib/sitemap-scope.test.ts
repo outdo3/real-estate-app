@@ -198,9 +198,11 @@ const NOTICE = read('src/components/map/OutOfBusanNotice.tsx');
 const NOTICE_CSS = read('src/components/map/OutOfBusanNotice.module.css');
 const MAP = read('src/app/map/page.tsx');
 
-test('§4 안내 문구는 지정된 카피 그대로다', () => {
-  assert.ok(NOTICE.includes('현재 위치는 부산 외 지역입니다.'));
-  assert.ok(NOTICE.includes('이집은 현재 부산 지역 데이터를 우선 제공하고 있습니다.'));
+// GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 문구는 특정 시도를 말하지 않는 중립 문구로 바뀌었다
+// (서울·경기 beta 구에서 "부산 외 지역"이 뜨던 문제). 문구 자체는 apt-map-notice.ts 한 곳에 있다.
+test('§4 안내 문구는 중립 문구다 — "부산 외 지역"을 말하지 않는다', () => {
+  assert.ok(/MAP_REGION_NOTICE_TITLE/.test(NOTICE) && /MAP_REGION_NOTICE_BODY/.test(NOTICE));
+  assert.ok(!/부산 외 지역|부산 지역 데이터를 우선/.test(NOTICE.replace(/\/\*[\s\S]*?\*\//g, '')));
 });
 
 test('§4 세션당 한 번 — pan/zoom마다 다시 뜨지 않는다', () => {
@@ -220,7 +222,7 @@ test('§4 안내가 지도 조작을 막지 않는다', () => {
 });
 
 test('§4/§6 지도는 현재 위치 동작을 유지한다 — 부산으로 강제 이동시키지 않는다', () => {
-  assert.ok(/<OutOfBusanNotice lat=\{center\.lat\} lng=\{center\.lng\} \/>/.test(MAP));
+  assert.ok(/<OutOfBusanNotice lawdCd=\{currentLawdCd\} \/>/.test(MAP));
   // 안내를 넣으면서 center를 부산으로 되돌리는 코드를 끼워넣지 않았다.
   assert.ok(!/setCenter\(BUSAN|forceBusan|resetToBusan/.test(MAP));
 });

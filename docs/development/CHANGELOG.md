@@ -21,6 +21,18 @@
     시간     MOLIT 시도마다 남은 예산 확인(시도 타임아웃 min(10s, 남은−대기−2s), 최소 2s) · backoff 사전 확인 · DEADLINE_REACHED 별도 사유
     불변     예산 50/45/50s · 쿼터 예약분 2,000 · 쓰기 판정·취소·등기 · scope(부산16·서울8·경기8, 41135 없음) · 스케줄 · enablement
 
+## 2026-09-26
+
+### E-JIP GYEONGGI PUBLIC BETA BLOCKER FIX PREP V1 — 경기 공개 전 UX blocker 4건 (로컬 전용, 미배포)
+
+상세: `docs/development/GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1.md`
+
+    지도     닫힌 지역 = "아직 지원하지 않는 지역"(0건 문구와 분리, 캐시 보존) · "부산 외 지역" 안내 → map 축 기준 중립 문구
+    리포트   상세·비교 리포트 CTA가 report 축을 본다(서울·경기 beta 숨김, 부산 그대로)
+    학교     시/군/구 전체 파싱 + canonical lawdCd 우선 — 수원 4구·성남 2구 분리, 연속 토큰 정확 일치
+    좌표     null 좌표 master: 마커 없음·0,0 이동 없음 — 기존 동작 테스트로 고정
+    불변     GYEONGGI_BETA_ENABLED=false · push/deploy/env/cron/DB write 0
+
 ## 2026-09-25
 
 ### E-JIP GYEONGGI CRON AND PUBLIC READINESS AUDIT V1 — 경기 8구 cron·공개 준비도 감사 + 학교/위치 안전장치

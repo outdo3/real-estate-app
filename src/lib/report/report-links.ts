@@ -8,6 +8,9 @@
 //   canonical identity가 없으면 **null**을 돌려준다. 이름으로 지어내지 않는다.
 //   호출부는 null이면 CTA 자체를 렌더하지 않는다 — 깨진 링크를 만들지 않기 위해.
 
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
+import { lawdCdFromAptSeq } from '@/lib/seo/seoul-blocked-seo';
+
 /**
  * 리포트 → 단지 상세. BUSAN_LAUNCH_FINAL_RELEASE_GATE_V1 — 예전 `/apt/{name}?aptSeq=`만 싣던 링크는
  * 상세가 이름(+동 없음)으로 거래를 찾아 **동명 다른 단지**를 열었다(Production: 우동 롯데 → 서울 롯데,
@@ -51,6 +54,39 @@ export function dongReportHref(
 export function aptReportHref(aptSeq: string | null | undefined): string | null {
   const v = (aptSeq || '').trim();
   return v ? `/report/apt/${encodeURIComponent(v)}` : null;
+}
+
+// ── GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 진입 CTA는 `report` 축이 열린 지역에만 ─────────
+//
+// 리포트 페이지(/report/apt, /report/compare)는 서버에서 이미 `report` 축으로 막는다. 그런데 상세·비교의
+// **진입 CTA**는 축을 보지 않아, 서울 beta 8구(report=false)에서도 "한장 리포트" 카드가 보였고 누르면
+// 닫힌 리포트로 갔다. 경기 beta도 같은 축 구성(report=false)이다.
+// 지역은 canonical aptSeq 앞 5자리(= 리포트 페이지 게이트와 같은 기준)로 판정한다 — 이름·경로·시도 이름으로
+// 추측하지 않는다. aptSeq 형태가 아니면 지역을 모르는 것이므로 CTA를 만들지 않는다(fail-closed).
+// 아래 두 함수는 **진입 CTA 전용**이다. 리포트 페이지 자신의 canonical/share 경로는 기존 함수를 그대로 쓴다.
+// `isAllowed`는 테스트가 beta 스위치 조합을 시뮬레이션할 때만 바꾼다(런타임은 항상 isPublicRegionAllowed).
+type RegionAxisCheck = (lawdCd: string, feature: 'report') => boolean;
+
+/** 단지 리포트 진입 CTA — 그 단지 지역의 `report` 축이 열려 있을 때만 href, 아니면 null. */
+export function publicAptReportHref(
+  aptSeq: string | null | undefined,
+  isAllowed: RegionAxisCheck = isPublicRegionAllowed
+): string | null {
+  const lawdCd = lawdCdFromAptSeq(aptSeq);
+  if (!lawdCd || !isAllowed(lawdCd, 'report')) return null;
+  return aptReportHref(aptSeq);
+}
+
+/** 비교 리포트 진입 CTA — 두 단지 모두 `report` 축이 열린 지역일 때만 href. */
+export function publicCompareReportHref(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  isAllowed: RegionAxisCheck = isPublicRegionAllowed
+): string | null {
+  const la = lawdCdFromAptSeq(a);
+  const lb = lawdCdFromAptSeq(b);
+  if (!la || !lb || !isAllowed(la, 'report') || !isAllowed(lb, 'report')) return null;
+  return compareReportHref(a, b);
 }
 
 /** 비교 리포트 — a/b 순서가 곧 화면 순서다. 둘 다 있어야 한다. */

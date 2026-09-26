@@ -54,7 +54,8 @@ test('3. 상세보기 이동 경로는 그대로(이름+lawdCd+dong+canonical ap
 });
 
 test('4. 상세페이지가 리포트 카드를 canonical aptSeq 기반 기존 route로 렌더한다', () => {
-  assert.match(DETAIL, /const reportHref = aptReportHref\(canonicalAptSeq\);/);
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 같은 canonical route, 단 `report` 축이 닫힌 지역은 null.
+  assert.match(DETAIL, /const reportHref = publicAptReportHref\(canonicalAptSeq\);/);
   assert.match(DETAIL, /\{addressReady && reportHref && \(\s*<div className=\{`container \$\{styles\.sectionBlock\}`\}>\s*<AptReportEntryCard href=\{reportHref\} aptName=\{displayName \|\| aptName\} \/>/);
   assert.match(CARD_CODE, /href=\{href\}/);
   assert.ok(!/report\/apt/.test(CARD_CODE), '카드가 route를 따로 조립하지 않는다');

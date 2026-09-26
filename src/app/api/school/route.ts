@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server';
-import { bucketForTab, classifySchoolKind, resolveNeisEduCode, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
+import { bucketForTab, classifySchoolKind, resolveNeisEduCode, resolveSchoolRegionQuery, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
 import { getOrSetCache } from '@/lib/server-cache';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const region = searchParams.get('region') || '부산광역시 서구';
   const type = searchParams.get('type') || '중등';
-  const [sido] = region.split(' ');
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 시/군/구는 시도 뒤 **전체**("수원시 장안구")다.
+  // canonical lawdCd가 오면 그 코드가 우선한다(resolveSchoolRegionQuery).
+  const { sido, sigungu } = resolveSchoolRegionQuery(
+    searchParams.get('region') || '부산광역시 서구',
+    searchParams.get('lawdCd')
+  );
+  const region = `${sido} ${sigungu}`;
 
   // NEIS API KEY (환경변수 또는 샘플)
   const apiKey = process.env.NEIS_API_KEY || 'sample';
@@ -48,8 +53,7 @@ export async function GET(request: Request) {
       // 이름 기반 예외가 있었다. 주소 기준이 아니라 **학교명**으로 넣는 규칙이라 다른 구의
       // 동명 학교를 끌어올 수 있었다. 실측해 보니 대신여자중·대신초·부산대신중 셋 다
       // 주소가 "부산광역시 서구 …"라 주소 규칙만으로 정상 포함된다 — 예외가 불필요하다.
-      const gungu = region.split(' ')[1] || '';
-      let filtered = rawSchools.filter((s: any) => schoolBelongsToRegion(s, region, gungu));
+      let filtered = rawSchools.filter((s: any) => schoolBelongsToRegion(s, region, sigungu));
 
       // COUNT_CONTRACT_FIX_V1 §5/§8 — "전체"는 그 지역 **모든 학교 유형**을 그대로 둔다
       // (특수학교·외국인학교·각종학교를 숨기지 않는다). 초등/중등/고등 탭만 해당 버킷으로 좁힌다.
