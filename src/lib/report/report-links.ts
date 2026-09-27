@@ -8,6 +8,8 @@
 //   canonical identity가 없으면 **null**을 돌려준다. 이름으로 지어내지 않는다.
 //   호출부는 null이면 CTA 자체를 렌더하지 않는다 — 깨진 링크를 만들지 않기 위해.
 
+import { isPublicRegionAllowed } from '@/lib/region/enablement';
+
 /**
  * 리포트 → 단지 상세. BUSAN_LAUNCH_FINAL_RELEASE_GATE_V1 — 예전 `/apt/{name}?aptSeq=`만 싣던 링크는
  * 상세가 이름(+동 없음)으로 거래를 찾아 **동명 다른 단지**를 열었다(Production: 우동 롯데 → 서울 롯데,
@@ -51,6 +53,17 @@ export function dongReportHref(
 export function aptReportHref(aptSeq: string | null | undefined): string | null {
   const v = (aptSeq || '').trim();
   return v ? `/report/apt/${encodeURIComponent(v)}` : null;
+}
+
+/**
+ * SEOUL_25_PUBLIC_BETA_PREP_V1 — 이 단지의 **지역**이 리포트를 지원하는가(aptSeq 앞 5자리 canonical 구 코드의 `report` 축).
+ * 진입 CTA 전용 판정이다: 리포트 페이지는 이미 report 축으로 막혀 "준비 중"을 보여 주므로, 닫힌 지역(서울 beta 등)에서
+ * CTA를 띄우면 막힌 화면으로 보내게 된다. 형태가 다르거나 모르는 코드는 false(이름으로 추측하지 않는다).
+ * 공유·내보내기 canonical URL(aptReportHref)은 바꾸지 않는다.
+ */
+export function isReportRegionOpen(aptSeq: string | null | undefined): boolean {
+  const m = /^(\d{5})-\d+$/.exec((aptSeq || '').trim());
+  return !!m && isPublicRegionAllowed(m[1], 'report');
 }
 
 /** 비교 리포트 — a/b 순서가 곧 화면 순서다. 둘 다 있어야 한다. */

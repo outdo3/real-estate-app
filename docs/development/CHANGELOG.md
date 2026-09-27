@@ -11,6 +11,17 @@
 
 ## 2026-09-27
 
+### E-JIP SEOUL 25 PUBLIC BETA PREP V1 — 서울 25구 beta 준비(Preview 전용 스위치 · 기본 닫힘) (LOCAL)
+
+상세: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
+
+    스위치   서울 17구 SEOUL_17_BETA_LAWDCDS — NEXT_PUBLIC_VERCEL_ENV=preview + NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW=true일 때만(fail-closed)
+    축       17구 app·search·map·detail만 · report·stats·seoIndex·sitemap·cronSync(DB-first 읽기) OFF
+    선택기   "서울특별시 전체" — isSidoWholeQuerySupported(시도 층 출시 시도만) · 25구가 다 열려도 없음 · 부산 전체 유지
+    리포트   상세·비교 리포트 CTA가 report 축을 보도록(서울 8구 포함 막힌 리포트로 보내지 않음)
+    cron     seoul-b 9 · seoul-c 8 patch 준비만(docs/development/patches, 적용 안 함) ≤238 MOLIT/일
+    불변     Production 공개 8구 그대로 · Production DB 0 · env/배포/push 0
+
 ### E-JIP CRON DURABILITY FIX DEPLOY V1 — cron 진행 영속화·시간 한도 Production 반영 (승인)
 
 상세: `docs/development/CRON_DURABLE_PROGRESS_DEADLINE_SAFETY_FIX_V1.md` §9
