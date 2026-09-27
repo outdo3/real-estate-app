@@ -1,6 +1,6 @@
 # CRON DURABLE PROGRESS + DEADLINE SAFETY FIX V1
 
-LOCAL ONLY — 브랜치 `cron-durable-progress-v1`(기준 `5d03257`). push 0 · 배포 0 · Production cron 호출 0 · Production DB write 0 · 스케줄 변경 0 · 경기 공개 0 · 41135 0.
+**PRODUCTION 반영 2026-09-27(사용자 승인) — `eb87b2e`, 아래 §9.** 구현 당시: 브랜치 `cron-durable-progress-v1`(기준 `5d03257`), Production cron 호출 0 · Production DB write 0 · 스케줄 변경 0 · 경기 공개 0 · 41135 0.
 선행: `GYEONGGI_SALE_CRON_INCOMPLETE_ROOT_CAUSE_AUDIT_V1.md`(HOLD — PROGRESS_DURABLE=NO, SALE_RUNTIME_SAFE=NO).
 
 ## 1. 목적
@@ -140,3 +140,22 @@ src 2 fail(`community-launch.test.ts §15`, `recent-auth-parity.test.ts §5`): �
 ## 8. 다음 STEP
 
 사용자 승인 → main 병합·push(= Production 배포) → 다음 04:00–05:00 KST 실행에서 `stopReason`·`coverageRecorded`·구 순서(`ORDER sale`) 사후 검증. 경기 첫 cron 판정(HOLD)은 그 검증 뒤. 8527c6e(경기 beta blocker)와는 별개다.
+
+## 9. Production 배포 (CRON DURABILITY FIX DEPLOY V1, 2026-09-27)
+
+- 승인: 사용자 명시 승인. **INVALID/PARTIAL이 이전 COMPLETE 기록을 덮지 않는 동작(§3.1) 승인**(검증된 DB-first 상태 유지 · 일시 실패로 강등하지 않음 · 실패 셀 verifiedAt 갱신 안 함 · 실패/미완료 셀 우선 재시도).
+- 반영: `main` `5d03257` → `eb87b2e` fast-forward(부모가 정확히 5d03257 — 테스트한 커밋 그대로). 15파일, package·vercel.json·enablement·region 변경 0. `8527c6e`(경기 beta blocker) 미포함·미push.
+- push 전 게이트(main 체크아웃): sync+cron-auth+public-exposure 104/104 · shared.test.mjs 20/20 · src 전체 2,697/2,697 · scripts 전체 650/650 · eslint exit 0 · tsc 추적 파일 21개 기존 script 오류(변경 파일 0, 추가 6개는 사용자 미추적 tmp/audit 파일) · build exit 0.
+- 배포: Vercel `dpl_DaXAvwKAsV3j5t3H8d22Metm8yBN`(park11/real-estate-app) · target production · READY · githubCommitSha `eb87b2e` · alias e-jip.com / www.e-jip.com · GitHub status "Deployment has completed". 배포 메타의 crons 7개 = 5d03257과 동일(경기 sale 19:30Z = 04:30 KST, 경기 recheck 23:30Z = 08:30 KST).
+- 배포 코드 지문: eb87b2e 로컬 build의 sync 청크에 `COVERAGE_PERSIST_FAILED` · `ORDER sale` · `ORDER_FALLBACK` · `DEADLINE_REACHED` · `deadlineStopped` 포함, 쿼터 가드(`QUOTA_RESERVE_REACHED`) 유지.
+- 공개 노출(라이브 GET): 경기 8구 검색 누출 0(단지명 8 + 지역어 5) · 지도 8/8 regionUnsupported · 상세 8/8 unsupported · 단지 리포트 8/8 noindex·단지명 없음 · 구 리포트 8/8 noindex · /stats/compare 8/8 noindex · large-complex sido41 UNSUPPORTED · sitemap 경기 0(전체 139, 부산 132) · 홈/지도 경기 selector 문구 없음 · `GYEONGGI_BETA_ENABLED = false`(코드 상수, env 아님). 부산 지도 274 · 서울 지도 238 · 부산 검색 정상 · 부산 리포트 index. 미인증 cron GET 3개 모두 401(실행 없음).
+- 참고(기존 동작, 이번 배포와 무관): `/api/search?q=해운대구`의 `regions`가 비어 있다 — 직전 배포(5d03257)도 동일.
+- Production cron 수동 호출 0 · CRON_SECRET 조회 0.
+
+### 다음 자연 실행 검증(PENDING)
+
+READ ONLY 스크립트 `scripts/audit-cron-durability-runtime-verify.ts`(로컬 미추적 — 커밋하면 배포가 일어나므로 문서만 push).
+- `--snapshot`: 2026-09-27T02:23Z 저장(`tmp/cron-durability-verify/`). 경기 sale 완료월 0/24 기록(09-26 사고 뒤 한 번도 기록 안 됨) · 경기 band 80/80 · 다음 경기 sale 예상 순서 = scope 순서(전부 미검증 동률) · 자연키 중복 0.
+- `--verify`(09-28 09:00 KST 이후): scope별 실행마다 셀 수 · 셀별 verifiedAt 분리(per-cell 영속 증거) · 비검증 상태 기록 0 · 관측 구 순서 vs 스냅샷 기반 예상 순서 · recheck staleness 순위 · insert/취소 증가/복원(0이어야 함)/등기 보충/등기 삭제(0)/자연키 중복(0) · rent 실행.
+- CLOSED 판정은 실제 예약 실행 검증 뒤에만 한다.
+

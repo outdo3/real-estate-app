@@ -2,6 +2,15 @@
 
 ## 2026-09-27
 
+### E-JIP CRON DURABILITY FIX DEPLOY V1 — cron 진행 영속화·시간 한도 Production 반영 (승인)
+
+상세: `docs/development/CRON_DURABLE_PROGRESS_DEADLINE_SAFETY_FIX_V1.md` §9
+
+    반영     main 5d03257 → eb87b2e(fast-forward) · Vercel dpl_DaXAvwKAsV3j5t3H8d22Metm8yBN production READY
+    승인     INVALID/PARTIAL이 이전 COMPLETE coverage를 덮지 않음
+    확인     경기 공개 전 축 닫힘 · sitemap 경기 0 · crons 7개 불변 · 미인증 cron 401 · 부산/서울 정상
+    대기     다음 자연 실행(09-28 04:30/08:30 KST) 검증 — audit-cron-durability-runtime-verify --verify
+
 ### E-JIP CRON DURABLE PROGRESS + DEADLINE SAFETY FIX V1 — 매매·recheck·전월세 cron 진행 영속화 + 실행 시간 한도 (LOCAL, 미배포)
 
 상세: `docs/development/CRON_DURABLE_PROGRESS_DEADLINE_SAFETY_FIX_V1.md`
