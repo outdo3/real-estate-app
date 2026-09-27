@@ -79,7 +79,9 @@ test('cron 코어: 셀을 시작하기 전에 확인하고, 예약분이면 안�
     const core = code(p);
     const g = core.indexOf('const quota = saleQuotaDecision();');
     assert.ok(g > 0, `${p}: 셀 전 확인이 없다`);
-    assert.ok(g < core.indexOf('await syncOneSaleCell('), `${p}: 셀 요청 뒤에 확인한다`);
+    // CRON_DURABLE_PROGRESS_V1 — 셀 호출은 주입 가능한 syncCell(기본값 = syncOneSaleCell)을 거친다.
+    assert.ok(/const syncCell = deps\.syncCell \?\? syncOneSaleCell;/.test(core), `${p}: 기본 쓰기 경로가 syncOneSaleCell이 아니다`);
+    assert.ok(g < core.indexOf('await syncCell('), `${p}: 셀 요청 뒤에 확인한다`);
     assert.ok(/QUOTA_RESERVE_REACHED/.test(core), `${p}: 정지 로그가 없다`);
     // 셀 도중 정지한 결과는 reports/coverage에 넣지 않고 멈춘다(다음 실행이 그 셀부터)
     const during = core.indexOf('if (report.quotaReserveReached) {');
@@ -89,12 +91,14 @@ test('cron 코어: 셀을 시작하기 전에 확인하고, 예약분이면 안�
   }
   // 예산 정지 규칙은 그대로(부분 sweep은 정상, 셀 0개일 때만 PARTIAL_RUN)
   assert.ok(/if \(reports\.length === 0\) status = 'PARTIAL_RUN';/.test(code('src/lib/sync/sale-recheck-core.ts')));
-  assert.ok(/sweepComplete: !budgetExhausted && !quotaStopped && reports\.length === cells\.length,/.test(code('src/lib/sync/sale-recheck-core.ts')));
+  // CRON_DURABLE_PROGRESS_V1 — 예산·예약분·시간 한도·coverage 실패 어느 정지든 sweepComplete가 아니다.
+  assert.ok(/sweepComplete: stopReason === null && reports\.length === cells\.length,/.test(code('src/lib/sync/sale-recheck-core.ts')));
 });
 
 test('시간 예산·페이지 크기는 바뀌지 않았다(sale 50s · recheck 45s · 셀 여유 2.5s · 1,000행/쪽 · 350ms 간격)', () => {
-  assert.ok(/new TimeBudget\(opts\.budgetMs \?\? 50_000\)/.test(code('src/lib/sync/sale-sync-core.ts')));
-  assert.ok(/new TimeBudget\(opts\.budgetMs \?\? 45_000\)/.test(code('src/lib/sync/sale-recheck-core.ts')));
+  // CRON_DURABLE_PROGRESS_V1 — 예산 값은 그대로, 시계만 테스트용으로 주입 가능(운영 = Date.now).
+  assert.ok(/new TimeBudget\(opts\.budgetMs \?\? 50_000, deps\.clock\)/.test(code('src/lib/sync/sale-sync-core.ts')));
+  assert.ok(/new TimeBudget\(opts\.budgetMs \?\? 45_000, deps\.clock\)/.test(code('src/lib/sync/sale-recheck-core.ts')));
   const fetcher = readFileSync(resolve(ROOT, 'scripts/sale-molit-fetch.ts'), 'utf8');
   assert.ok(/const PAGE_SIZE = 1000;/.test(fetcher));
   assert.ok(/const MIN_INTERVAL_MS = 350;/.test(fetcher));

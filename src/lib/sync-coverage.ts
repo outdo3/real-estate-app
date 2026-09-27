@@ -105,6 +105,21 @@ export async function loadVerifiedSaleCellKeys(lawdCds: string[], months: string
   return keys;
 }
 
+/**
+ * CRON_DURABLE_PROGRESS_V1 — daily sale 구 순서(orderSaleDistrictsByStaleness)용 읽기. 상태와 verifiedAt만 읽는다(쓰기 없음).
+ */
+export async function loadSaleCoverageTimestamps(
+  lawdCds: readonly string[],
+  months: readonly string[]
+): Promise<{ lawdCd: string; dealYmd: string; status: string; verifiedAtMs: number }[]> {
+  if (lawdCds.length === 0 || months.length === 0) return [];
+  const rows = await prisma.syncCoverageCell.findMany({
+    where: { dataset: 'SALE', lawdCd: { in: [...lawdCds] }, dealYmd: { in: [...months] } },
+    select: { lawdCd: true, dealYmd: true, status: true, verifiedAt: true },
+  });
+  return rows.map((r) => ({ lawdCd: r.lawdCd, dealYmd: r.dealYmd, status: r.status, verifiedAtMs: r.verifiedAt.getTime() }));
+}
+
 export interface CoverageCellRecord {
   lawdCd: string;
   dealYmd: string;

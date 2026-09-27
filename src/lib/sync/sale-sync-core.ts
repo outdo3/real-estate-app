@@ -12,7 +12,7 @@
 // 늘리지 않는다). 전국 backfill은 지금처럼 CLI로 계속 수행한다.
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
-import { fetchSaleRegionMonth, saleQuotaDecision, saleQuotaObserved } from '../../../scripts/sale-molit-fetch';
+import { MIN_INTERVAL_MS, fetchSaleRegionMonth, saleQuotaDecision, saleQuotaObserved } from '../../../scripts/sale-molit-fetch';
 import { kstDateOf } from './molit-quota-guard';
 import { normalizeMolitItemsToTradeRows, type TradeRowInput } from '../../../scripts/trade-history-logic';
 import {
@@ -24,9 +24,26 @@ import {
   occurrenceGroupKey,
 } from '../../../scripts/write-policy-logic';
 import { latestCompleteMonth, subtractMonths } from '../../../scripts/rent-trade-history/incremental-sync-completed-month-logic';
-import { recordCoverageCells, type CoverageCellRecord } from '../sync-coverage';
-import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
-import { TimeBudget, currentCalendarMonth, monthsInRange, newRunId, resolveSaleRange as resolveSaleRangePure, type CellReport, type SyncMode, type SyncRunStatus, type SyncSummary } from './shared';
+import { loadSaleCoverageTimestamps, recordCoverageCells } from '../sync-coverage';
+import { BUSAN_LAWDCD_16, isVerifiedCellStatus } from '../rent-verified-range';
+import {
+  TimeBudget,
+  coverageRecordOf,
+  currentCalendarMonth,
+  monthsInRange,
+  newRunId,
+  orderSaleDistrictsByStaleness,
+  persistCellCoverage,
+  resolveSaleRange as resolveSaleRangePure,
+  type CellReport,
+  type CoverageTimestamp,
+  type RecordCoverageFn,
+  type RunStopReason,
+  type SyncMode,
+  type SyncRunStatus,
+  type SyncSummary,
+} from './shared';
+import { hasRoomForCell, type RequestDeadline } from './run-deadline';
 
 export { SALE_DEFAULT_OVERLAP_MONTHS } from './shared';
 
@@ -68,62 +85,96 @@ export function resolveSaleRange(opts: SaleSyncOptions): { from: string; to: str
   return { from, to, latestComplete };
 }
 
-export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => void): Promise<SyncSummary> {
-  const budget = new TimeBudget(opts.budgetMs ?? 50_000);
+/** 셀 하나를 처리할 때 코어가 넘기는 실행 문맥. */
+export interface SaleCellOptions {
+  /** CRON_DURABLE_PROGRESS_V1 — 실행의 남은 시간. MOLIT 시도·재시도·backoff가 이 한도를 넘지 않는다. */
+  deadline?: RequestDeadline;
+}
+
+/** CRON_DURABLE_PROGRESS_V1 — 결정적 테스트용 주입점. 운영 호출(route)은 넘기지 않는다(전부 기본값). */
+export interface SaleSyncDeps {
+  syncCell?: (lawdCd: string, dealYmd: string, mode: SyncMode, log: (line: string) => void, cellOpts: SaleCellOptions) => Promise<CellReport>;
+  recordCoverage?: RecordCoverageFn;
+  loadCoverage?: (lawdCds: readonly string[], months: readonly string[]) => Promise<CoverageTimestamp[]>;
+  clock?: () => number;
+}
+
+export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => void, deps: SaleSyncDeps = {}): Promise<SyncSummary> {
+  const syncCell = deps.syncCell ?? syncOneSaleCell;
+  const record = deps.recordCoverage ?? recordCoverageCells;
+  const budget = new TimeBudget(opts.budgetMs ?? 50_000, deps.clock);
   const runId = newRunId('sale');
   const all = opts.lawdCds ?? BUSAN_LAWDCD_16;
   const offset = opts.districtOffset ?? 0;
-  const lawdCds = all.slice(offset, offset + (opts.districtLimit ?? all.length));
+  const scoped = all.slice(offset, offset + (opts.districtLimit ?? all.length));
   const { from, to, latestComplete } = resolveSaleRange(opts);
   const months = monthsInRange(from, to);
+  const completedMonths = months.filter((m) => m <= latestComplete);
   const reports: CellReport[] = [];
-  const coverage: CoverageCellRecord[] = [];
-  const totalCells = lawdCds.length * months.length;
+  const totalCells = scoped.length * months.length;
+
+  // CRON_DURABLE_PROGRESS_V1 — 구 순서를 coverage staleness로 정한다(미검증 → 오래된 검증 → 최근 검증).
+  // 순서는 최적화일 뿐이라 조회가 실패해도 실행을 막지 않는다 — scope 순서(기존 동작)로 진행한다.
+  let lawdCds: string[] = [...scoped];
+  try {
+    const observed = await (deps.loadCoverage ?? loadSaleCoverageTimestamps)(scoped, completedMonths);
+    lawdCds = orderSaleDistrictsByStaleness(scoped, completedMonths, observed, isVerifiedCellStatus);
+  } catch (e) {
+    log(`ORDER_FALLBACK coverage 조회 실패 — scope 순서로 진행한다 (${e instanceof Error ? e.message : String(e)})`);
+  }
 
   log(`START sale mode=${opts.mode} runId=${runId} range=[${from},${to}] latestComplete=${latestComplete} districts=${lawdCds.length}(offset=${offset}) cells=${totalCells}`);
+  log(`ORDER sale ${lawdCds.join(',')}`);
 
-  let budgetExhausted = false;
   let quotaStopped = false;
-  for (const lawdCd of lawdCds) {
+  let stopReason: RunStopReason | null = null;
+  let recorded = 0;
+  districts: for (const lawdCd of lawdCds) {
     for (const dealYmd of months) {
-      if (!budget.hasRoomFor(ESTIMATED_CELL_MS)) {
-        budgetExhausted = true;
-        log(`BUDGET_STOP elapsed=${budget.elapsedMs()}ms — 남은 셀은 다음 실행/chunk에서 처리한다`);
-        break;
-      }
+      // 셀 경계 확인 순서: ① MOLIT 예약분 → ② 시간(둘 다 요청 0회로 멈춤). 요청마다의 확인은 sale-molit-fetch가 같은 순서로 한다.
       // GYEONGGI_CRON_EXPANSION_V1 — MOLIT 예약분(2,000)에 닿았으면 새 셀을 시작하지 않는다(치명 오류 아님, 다음 실행 재개).
       const quota = saleQuotaDecision();
       if (!quota.proceed) {
         quotaStopped = true;
+        stopReason = 'QUOTA_RESERVE_REACHED';
         log(`QUOTA_RESERVE_REACHED remaining=${quota.remaining} — 남은 셀은 다음 실행에서 처리한다`);
-        break;
+        break districts;
       }
-      const report = await syncOneSaleCell(lawdCd, dealYmd, opts.mode, log);
+      if (!hasRoomForCell(budget, ESTIMATED_CELL_MS, MIN_INTERVAL_MS)) {
+        stopReason = 'BUDGET_EXHAUSTED';
+        log(`BUDGET_STOP elapsed=${budget.elapsedMs()}ms — 남은 셀은 다음 실행/chunk에서 처리한다`);
+        break districts;
+      }
+      const report = await syncCell(lawdCd, dealYmd, opts.mode, log, { deadline: budget });
       if (report.quotaReserveReached) {
         // 셀 도중 예약분 도달 — 이 셀은 쓰지 않았고(INVALID/PARTIAL) coverage에도 남기지 않는다.
         quotaStopped = true;
+        stopReason = 'QUOTA_RESERVE_REACHED';
         log(`QUOTA_RESERVE_REACHED during ${lawdCd}:${dealYmd} — 이 셀과 남은 셀은 다음 실행에서 처리한다`);
-        break;
+        break districts;
+      }
+      if (report.deadlineReached) {
+        // CRON_DURABLE_PROGRESS_V1 — 시간 한도로 셀 도중 멈춤. 쓰지 않았고 기록하지 않는다(원천 INVALID/EMPTY가 아니다).
+        stopReason = 'DEADLINE_REACHED';
+        log(`DEADLINE_REACHED during ${lawdCd}:${dealYmd} elapsed=${budget.elapsedMs()}ms — 이 셀과 남은 셀은 다음 실행에서 처리한다`);
+        break districts;
       }
       reports.push(report);
+      // CRON_DURABLE_PROGRESS_V1 — syncCell이 반환했다 = 그 셀의 모든 쓰기가 커밋됐다. 그 **직후** 이 셀 하나만 기록한다.
+      // 기록 대상은 검증된 상태(COMPLETE/EMPTY_VALID)뿐이다 — INVALID/PARTIAL은 기록하지 않아 이전 검증 기록과
+      // 순서(verifiedAt)를 건드리지 않고, 다음 실행이 그 셀을 먼저 다시 본다.
       // §15 — 진행 중인 현재월은 동기화는 하되 절대 검증 완료로 기록하지 않는다.
-      if (dealYmd <= latestComplete) {
-        coverage.push({
-          lawdCd,
-          dealYmd,
-          status: report.status,
-          sourceTotalCount: report.sourceTotalCount,
-          fetchedCount: report.fetched,
-          blockedCount: report.blocked,
-          insertedCount: report.inserted,
-          updatedCount: report.updated,
-        });
+      if (dealYmd <= latestComplete && isVerifiedCellStatus(report.status)) {
+        const persisted = await persistCellCoverage(record, opts.mode, 'SALE', runId, coverageRecordOf(report));
+        if (!persisted.ok) {
+          stopReason = 'COVERAGE_PERSIST_FAILED';
+          log(`COVERAGE_PERSIST_FAILED ${lawdCd}:${dealYmd} error=${persisted.error} — 진행 상태를 모르는 채 계속하지 않는다(커밋된 행은 그대로, 재실행 멱등)`);
+          break districts;
+        }
+        recorded += persisted.recorded;
       }
     }
-    if (budgetExhausted || quotaStopped) break;
   }
-
-  const { recorded } = await recordCoverageCells(opts.mode, 'SALE', runId, coverage);
 
   const totals = reports.reduce(
     (a, r) => ({
@@ -144,7 +195,8 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
   );
 
   let status: SyncRunStatus = 'SUCCESS';
-  if (budgetExhausted || quotaStopped) status = 'PARTIAL_RUN';
+  if (stopReason === 'COVERAGE_PERSIST_FAILED') status = 'FAILED';
+  else if (stopReason) status = 'PARTIAL_RUN';
   else if (totals.failed > 0) status = 'PARTIAL';
 
   const summary: SyncSummary = {
@@ -162,6 +214,8 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
     reports,
     quotaReserveReached: quotaStopped,
     quotaRemainingObserved: observedQuotaToday(),
+    stopReason,
+    deadlineReached: stopReason === 'DEADLINE_REACHED',
   };
   log(
     `DONE sale status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} ` +
@@ -169,7 +223,7 @@ export async function runSaleSync(opts: SaleSyncOptions, log: (line: string) => 
       `insertCanceled=${totals.insertCanceled} insertReconcileSkipped=${totals.insertReconcileSkipped} ` +
       `registryUpdated=${totals.registryUpdated} registryAmbiguousSkipped=${totals.registryAmbiguousSkipped} ` +
       `blocked=${totals.blocked} failed=${totals.failed} coverageRecorded=${recorded} durationMs=${summary.durationMs} ` +
-      `quotaReserveReached=${quotaStopped} quotaRemaining=${summary.quotaRemainingObserved ?? 'unknown'}`
+      `stopReason=${stopReason ?? 'none'} quotaReserveReached=${quotaStopped} quotaRemaining=${summary.quotaRemainingObserved ?? 'unknown'}`
   );
   return summary;
 }
@@ -185,8 +239,14 @@ export function observedQuotaToday(nowMs: number = Date.now()): number | null {
   return o.remaining != null && o.at != null && kstDateOf(o.at) === kstDateOf(nowMs) ? o.remaining : null;
 }
 
-export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: SyncMode, log: (line: string) => void): Promise<CellReport> {
-  const fetchResult = await fetchSaleRegionMonth(lawdCd, dealYmd);
+export async function syncOneSaleCell(
+  lawdCd: string,
+  dealYmd: string,
+  mode: SyncMode,
+  log: (line: string) => void,
+  cellOpts: SaleCellOptions = {}
+): Promise<CellReport> {
+  const fetchResult = await fetchSaleRegionMonth(lawdCd, dealYmd, { deadline: cellOpts.deadline });
   const base: CellReport = {
     lawdCd,
     dealYmd,
@@ -202,6 +262,12 @@ export async function syncOneSaleCell(lawdCd: string, dealYmd: string, mode: Syn
     reviewCandidates: 0,
     ...(fetchResult.quotaReserveReached ? { quotaReserveReached: true } : {}),
   };
+
+  // CRON_DURABLE_PROGRESS_V1 — 시간 한도로 끝까지 읽지 못한 셀은 원천 판정(INVALID/PARTIAL)으로 보고하지 않는다. 쓰지 않는다.
+  if (fetchResult.deadlineReached) {
+    log(`DEADLINE_REACHED ${lawdCd}:${dealYmd} fetched=${fetchResult.collectedCount}/${fetchResult.totalCount ?? '?'} — 시간 한도, 쓰기 건너뜀, 다음 실행 재시도`);
+    return { ...base, deadlineReached: true };
+  }
 
   // §11 — pagination이 끝까지 검증되지 않은 셀은 쓰지 않는다. rent와 동일 원칙.
   if (fetchResult.status === 'INVALID' || fetchResult.status === 'PARTIAL') {

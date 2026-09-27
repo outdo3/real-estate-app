@@ -12,6 +12,8 @@
 // Function에서 module load 자체가 실패한다(Phase 2 감사 §B6). 반면 위의 순수 모듈들은 그런
 // 부작용이 전혀 없어 그대로 재사용할 수 있음을 확인했다.
 
+import type { CoverageCellRecord, SyncDatasetName } from '../sync-coverage';
+
 export type SyncMode = 'dry-run' | 'apply';
 
 /** §19 HTTP status policy — 무조건 200 금지. 호출부가 이 값으로 상태 코드를 정한다. */
@@ -21,6 +23,15 @@ export type SyncRunStatus =
   | 'NEEDS_REVIEW' // 사람이 봐야 하는 사건 발생(예: rent 첫 true mutation)
   | 'PARTIAL_RUN' // 시간 예산 초과로 남은 셀을 처리하지 못함
   | 'FAILED';
+
+/**
+ * CRON_DURABLE_PROGRESS_V1 — 실행이 셀 목록 끝에 닿기 전에 멈춘 이유. 서로 합치지 않는다.
+ *   BUDGET_EXHAUSTED        : 셀 경계에서 다음 셀을 시작할 시간이 없었다(요청 0회)
+ *   QUOTA_RESERVE_REACHED   : MOLIT 일일 예약분(2,000)에 닿았다
+ *   DEADLINE_REACHED        : 이미 시작한 셀의 재시도·다음 쪽을 시간 한도 때문에 보내지 않았다
+ *   COVERAGE_PERSIST_FAILED : 커밋된 셀의 coverage를 영속화하지 못했다 — 진행 상태를 모르는 채 계속하지 않는다
+ */
+export type RunStopReason = 'BUDGET_EXHAUSTED' | 'QUOTA_RESERVE_REACHED' | 'DEADLINE_REACHED' | 'COVERAGE_PERSIST_FAILED';
 
 export interface CellReport {
   lawdCd: string;
@@ -36,6 +47,9 @@ export interface CellReport {
   reviewCandidates: number;
   /** GYEONGGI_CRON_EXPANSION_V1 — MOLIT 예약분 도달로 이 셀을 끝까지 읽지 못했다(쓰지 않음, 다음 실행 재시도). */
   quotaReserveReached?: boolean;
+  /** CRON_DURABLE_PROGRESS_V1 — 실행 시간 한도로 이 셀을 끝까지 읽지 못했다(쓰지 않음·coverage 미기록, 다음 실행 재시도).
+   * 이때 status는 원천 판정이 아니다 — 이 셀은 reports에 넣지 않고 INVALID/EMPTY로 집계하지 않는다. */
+  deadlineReached?: boolean;
   /** TRADE_REGISTRY_DATA_V1.1 §5 — registryDate만 보충한 row 수.
    * `updated`(취소 flip)와 **절대 합치지 않는다** — 서로 다른 사건이다. */
   registryUpdated: number;
@@ -95,6 +109,10 @@ export interface SyncSummary {
   quotaReserveReached?: boolean;
   /** 마지막으로 관측한 x-ratelimit-remaining(같은 KST 날짜 관측만, 없으면 null). */
   quotaRemainingObserved?: number | null;
+  /** CRON_DURABLE_PROGRESS_V1 — 셀 목록 끝 전에 멈췄다면 그 이유(끝까지 돌았으면 null). */
+  stopReason?: RunStopReason | null;
+  /** CRON_DURABLE_PROGRESS_V1 — 실행 시간 한도로 셀 도중에 멈췄는가. */
+  deadlineReached?: boolean;
 }
 
 /** §13 — 자동 적용하지 않고 사람에게 보고하는 변경 후보. 개인정보는 담지 않는다
@@ -118,12 +136,19 @@ export class TimeBudget {
   // --experimental-strip-types(strip-only)가 지원하지 않아 테스트가 실행되지 않는다.
   private readonly startedAt: number;
   private readonly budgetMs: number;
-  constructor(budgetMs: number) {
+  private readonly clock: () => number;
+  /** `clock`은 테스트용(결정적 시간). 운영은 Date.now. */
+  constructor(budgetMs: number, clock: () => number = Date.now) {
     this.budgetMs = budgetMs;
-    this.startedAt = Date.now();
+    this.clock = clock;
+    this.startedAt = clock();
   }
   elapsedMs(): number {
-    return Date.now() - this.startedAt;
+    return this.clock() - this.startedAt;
+  }
+  /** CRON_DURABLE_PROGRESS_V1 — 작업 예산의 남은 시간(run-deadline.ts RequestDeadline). 음수가 될 수 있다. */
+  remainingMs(): number {
+    return this.budgetMs - this.elapsedMs();
   }
   /** 다음 셀을 시작해도 되는가. 한 셀의 통상 소요시간을 여유로 남겨둔다. */
   hasRoomFor(estimatedCellMs: number): boolean {
@@ -212,6 +237,102 @@ export function orderRecheckCellsByStaleness(cells: RecheckCell[]): RecheckCell[
     if (a.dealYmd !== b.dealYmd) return a.dealYmd > b.dealYmd ? -1 : 1;
     return a.lawdCd < b.lawdCd ? -1 : a.lawdCd > b.lawdCd ? 1 : 0;
   });
+}
+
+/** 한 셀(구·월)의 SALE coverage 관측 — 상태와 검증 시각. */
+export interface CoverageTimestamp {
+  lawdCd: string;
+  dealYmd: string;
+  status: string;
+  verifiedAtMs: number;
+}
+
+/**
+ * CRON_DURABLE_PROGRESS_V1 — daily sale 구 순서를 coverage staleness로 정한다(recheck의 least-recently-verified-first와 같은 생각).
+ *
+ * 예전에는 매번 scope 목록 첫 구부터 돌아, 느린 밤이 반복되면 목록 끝 구(경기 41150·41210)가 계속 굶었다.
+ * 구 단위로 정렬하고(한 구의 월은 기존처럼 오름차순으로 함께 처리), 판정은 **완료월 셀만** 본다 —
+ * 진행 중인 현재월은 절대 기록되지 않으므로(§15) 판정에 넣으면 모든 구가 늘 "미검증"이 된다.
+ *
+ * 정렬 키:
+ *   1. 완료월 중 검증 기록(COMPLETE/EMPTY_VALID)이 없는 셀이 있는 구가 먼저(한 번도 검증 안 됨·실패 후 미기록)
+ *   2. 그 구의 검증된 셀 중 가장 오래된 verifiedAt 오름차순(검증된 셀이 없으면 가장 앞)
+ *   3. 동률은 scope 목록 순서(결정적)
+ * 셀별 coverage가 커밋 직후 기록되므로, 중단된 실행이 처리한 구는 다음 실행에서 뒤로 가고 못 한 구가 앞으로 온다.
+ */
+export function orderSaleDistrictsByStaleness(
+  lawdCds: readonly string[],
+  completedMonths: readonly string[],
+  coverage: readonly CoverageTimestamp[],
+  isVerified: (status: string) => boolean
+): string[] {
+  const verifiedAt = new Map<string, number>();
+  for (const c of coverage) {
+    if (isVerified(c.status)) verifiedAt.set(`${c.lawdCd}:${c.dealYmd}`, c.verifiedAtMs);
+  }
+  const keyed = lawdCds.map((lawdCd, index) => {
+    let hasUnverified = false;
+    let oldest = Number.NEGATIVE_INFINITY;
+    let seen = false;
+    for (const ym of completedMonths) {
+      const at = verifiedAt.get(`${lawdCd}:${ym}`);
+      if (at == null) {
+        hasUnverified = true;
+        continue;
+      }
+      if (!seen || at < oldest) oldest = at;
+      seen = true;
+    }
+    return { lawdCd, index, hasUnverified, oldest: seen ? oldest : Number.NEGATIVE_INFINITY };
+  });
+  keyed.sort((a, b) => {
+    if (a.hasUnverified !== b.hasUnverified) return a.hasUnverified ? -1 : 1;
+    if (a.oldest !== b.oldest) return a.oldest < b.oldest ? -1 : 1;
+    return a.index - b.index;
+  });
+  return keyed.map((k) => k.lawdCd);
+}
+
+export type RecordCoverageFn = (
+  mode: SyncMode,
+  dataset: SyncDatasetName,
+  runId: string,
+  cells: CoverageCellRecord[]
+) => Promise<{ recorded: number; skippedReason?: string }>;
+
+/**
+ * CRON_DURABLE_PROGRESS_V1 — 셀 하나의 coverage를 **그 셀의 DB 쓰기가 커밋된 직후** 영속화한다.
+ * 호출부는 syncOne*Cell이 반환한 뒤(= 그 셀의 모든 await된 쓰기가 끝난 뒤)에만 부른다.
+ * 실패하면 throw하지 않고 ok:false를 돌려준다 — 호출부는 COVERAGE_PERSIST_FAILED로 실행을 멈춘다
+ * (이미 커밋된 원천 데이터는 되돌리지 않는다. 재실행은 멱등이다).
+ */
+export async function persistCellCoverage(
+  record: RecordCoverageFn,
+  mode: SyncMode,
+  dataset: SyncDatasetName,
+  runId: string,
+  cell: CoverageCellRecord
+): Promise<{ ok: true; recorded: number } | { ok: false; error: string }> {
+  try {
+    const { recorded } = await record(mode, dataset, runId, [cell]);
+    return { ok: true, recorded };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** CellReport → coverage 레코드(필드 매핑은 기존 세 코어와 동일). */
+export function coverageRecordOf(report: CellReport): CoverageCellRecord {
+  return {
+    lawdCd: report.lawdCd,
+    dealYmd: report.dealYmd,
+    status: report.status,
+    sourceTotalCount: report.sourceTotalCount,
+    fetchedCount: report.fetched,
+    blockedCount: report.blocked,
+    insertedCount: report.inserted,
+    updatedCount: report.updated,
+  };
 }
 
 export function currentCalendarMonth(now: Date): string {

@@ -1793,3 +1793,35 @@ dry-run에서 19행은 정방향 필지는 맞았지만 역지오코딩 필지�
 
 상태:
 사용자 결정 · apply 준비 완료(미실행). 문서: `docs/development/GYEONGGI_MASTER_FULL_BATCH_POLICY_V1.md`
+
+---
+
+## 15. CRON DURABLE PROGRESS V1 — coverage는 셀 커밋 직후, 검증된 셀만 기록한다
+
+날짜:
+2026-09-27
+
+결정:
+sale·recheck·rent cron은 셀 하나의 DB 쓰기가 끝나는 즉시 그 셀의 coverage를 기록한다.
+기록하는 상태는 COMPLETE/EMPTY_VALID뿐이다 — INVALID/PARTIAL/시간 한도/쿼터 정지 셀은 기록하지 않는다.
+MOLIT 요청은 시도마다 남은 실행 시간을 확인하고, 모자라면 보내지 않는다(DEADLINE_REACHED).
+daily sale은 coverage staleness 순으로 구를 돈다.
+
+배경:
+2026-09-26 새벽 부산·서울·경기 sale과 부산 rent가 행은 썼지만 coverage 0으로 끝났다.
+coverage가 실행 끝에서만 영속화돼, 60s 한도 등 비정상 종료가 커밋된 진행까지 지웠다(GYEONGGI_SALE_CRON_INCOMPLETE_ROOT_CAUSE_AUDIT_V1).
+
+이유:
+- 커밋된 진행은 종료 방식과 무관하게 남아야 한다. 쓰기는 이미 멱등이라 셀 단위 기록이 가장 단순하고 안전하다.
+- INVALID를 기록하면 verifiedAt이 갱신돼 실패한 셀이 대기열 뒤로 밀리고, 검증된 셀을 강등한다. 실패는 "아직 확인 못 함"이지 새 사실이 아니다.
+- 예산 확인이 셀 사이에만 있으면 셀 하나가 약 70s까지 늘어날 수 있다 — 한도는 요청 단위로 내려가야 한다.
+- 순서를 staleness로 바꾸지 않으면 반복되는 느린 밤에 목록 끝 구가 영원히 굶는다.
+
+영향:
+- 강등 신호가 사라진다: 전날 COMPLETE 셀이 오늘 실패해도 DB-first 읽기는 마지막 검증 데이터를 계속 쓴다(하루 늦은 신선도).
+- coverage 쓰기 수는 같고 예산 안으로 들어온다 — recheck 실행당 처리 셀이 몇 개 준다(0.8s/셀 모델 54 → 51).
+- COVERAGE_PERSIST_FAILED는 FAILED(500), recheck의 DEADLINE_REACHED는 PARTIAL_RUN(207).
+
+상태:
+LOCAL 구현·테스트 완료, 사용자 승인 대기(push·배포 전). 문서: `docs/development/CRON_DURABLE_PROGRESS_DEADLINE_SAFETY_FIX_V1.md`
+

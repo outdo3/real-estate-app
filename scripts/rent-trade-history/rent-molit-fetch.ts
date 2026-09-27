@@ -13,6 +13,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import type { RawMolitRentItem } from './rent-history-logic';
 import { classifyRentCellCompleteness, type RentCellStatus } from './rent-completeness-logic';
+import { planRequestAttempt, type RequestDeadline } from '../../src/lib/sync/run-deadline';
 
 const ENDPOINT = 'http://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent';
 const PAGE_SIZE = 1000; // 기존 api-molit.ts와 동일한 관행값
@@ -23,7 +24,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // throttle을 유발하므로 라이브 트래픽용 GLOBAL_MOLIT_CONCURRENCY(동시 6)가 아니라
 // 훨씬 보수적인 순차 fetcher(동시 1, 최소 간격, 지수 백오프)를 쓴다(§30/§51/§52 재사용
 // 권고 + 이미 검증된 상수 재사용).
-const MIN_INTERVAL_MS = 350;
+export const MIN_INTERVAL_MS = 350;
 let lastFetchAt = 0;
 
 function buildUrl(lawdCd: string, dealYmd: string, pageNo: number): string {
@@ -42,10 +43,14 @@ interface RawPageResult {
   items: RawMolitRentItem[];
   totalCount: number | null;
   rateLimited: boolean;
+  /** CRON_DURABLE_PROGRESS_V1 — 실행 시간 한도 때문에 요청을 **보내지 않았다**(재시도 금지). 원천 오류가 아니다. */
+  deadlineStopped?: boolean;
 }
 
-async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Promise<RawPageResult> {
+async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number, deadline?: RequestDeadline): Promise<RawPageResult> {
   const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastFetchAt));
+  const attempt = planRequestAttempt(deadline, wait);
+  if (!attempt.ok) return { ok: false, items: [], totalCount: null, rateLimited: false, deadlineStopped: true };
   if (wait > 0) await sleep(wait);
   lastFetchAt = Date.now();
 
@@ -54,7 +59,7 @@ async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Pr
     const response = await fetch(url, {
       method: 'GET',
       headers: { Accept: 'application/xml, text/xml, */*' },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(attempt.timeoutMs),
     });
     const textData = await response.text();
     const parser = new XMLParser({ ignoreAttributes: false, parseTagValue: true });
@@ -84,13 +89,16 @@ async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Pr
   }
 }
 
-async function fetchOnePageWithRetry(lawdCd: string, dealYmd: string, pageNo: number): Promise<RawPageResult> {
+async function fetchOnePageWithRetry(lawdCd: string, dealYmd: string, pageNo: number, deadline?: RequestDeadline): Promise<RawPageResult> {
   let last: RawPageResult = { ok: false, items: [], totalCount: null, rateLimited: false };
   for (let attempt = 0; attempt <= 5; attempt++) {
-    last = await fetchOnePage(lawdCd, dealYmd, pageNo);
+    last = await fetchOnePage(lawdCd, dealYmd, pageNo, deadline);
     if (last.ok) return last;
+    if (last.deadlineStopped) return last; // 실행 시간 한도 — 더 시도하지 않는다
     if (attempt === 5) break;
     const backoffMs = last.rateLimited ? Math.min(2000 * (attempt + 1), 10000) : 500 * (attempt + 1);
+    // CRON_DURABLE_PROGRESS_V1 — backoff로 잠든 뒤 시도할 시간이 없다면 잠들지도 않는다.
+    if (!planRequestAttempt(deadline, backoffMs).ok) return { ...last, deadlineStopped: true };
     await sleep(backoffMs);
   }
   return last;
@@ -102,6 +110,13 @@ export interface RentRegionMonthResult {
   totalCount: number | null;
   collectedCount: number;
   pagesFetched: number;
+  /** CRON_DURABLE_PROGRESS_V1 — 실행 시간 한도로 이 셀을 끝까지 읽지 못했다(원천 판정 아님, 쓰지·기록하지 않는다). */
+  deadlineReached?: boolean;
+}
+
+export interface RentFetchOptions {
+  /** cron 실행의 남은 시간. 없으면 기존 동작(10s × 6회) 그대로. */
+  deadline?: RequestDeadline;
 }
 
 /**
@@ -109,8 +124,8 @@ export interface RentRegionMonthResult {
  * 읽는다(한 page만 읽고 COMPLETE로 판정 금지). §32 — 페이지별 재시도, 재시도 소진 후
  * 실패한 지역-월은 0건이 아니라 PARTIAL/INVALID로 명확히 남긴다.
  */
-export async function fetchRentRegionMonth(lawdCd: string, dealYmd: string): Promise<RentRegionMonthResult> {
-  const first = await fetchOnePageWithRetry(lawdCd, dealYmd, 1);
+export async function fetchRentRegionMonth(lawdCd: string, dealYmd: string, opts: RentFetchOptions = {}): Promise<RentRegionMonthResult> {
+  const first = await fetchOnePageWithRetry(lawdCd, dealYmd, 1, opts.deadline);
   if (!first.ok || first.totalCount === null) {
     return {
       items: [],
@@ -118,18 +133,21 @@ export async function fetchRentRegionMonth(lawdCd: string, dealYmd: string): Pro
       totalCount: null,
       collectedCount: 0,
       pagesFetched: 0,
+      deadlineReached: first.deadlineStopped === true,
     };
   }
 
   let items = [...first.items];
   let anyLaterPageFailed = false;
+  let deadlineReached = false;
   const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
   let pagesFetched = 1;
 
   for (let page = 2; page <= totalPages; page++) {
-    const res = await fetchOnePageWithRetry(lawdCd, dealYmd, page);
+    const res = await fetchOnePageWithRetry(lawdCd, dealYmd, page, opts.deadline);
     if (!res.ok) {
       anyLaterPageFailed = true;
+      deadlineReached = res.deadlineStopped === true;
       break;
     }
     items = items.concat(res.items);
@@ -143,5 +161,5 @@ export async function fetchRentRegionMonth(lawdCd: string, dealYmd: string): Pro
     anyLaterPageFailed,
   });
 
-  return { items, status, totalCount: first.totalCount, collectedCount: items.length, pagesFetched };
+  return { items, status, totalCount: first.totalCount, collectedCount: items.length, pagesFetched, deadlineReached };
 }

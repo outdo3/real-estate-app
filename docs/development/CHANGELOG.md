@@ -1,5 +1,17 @@
 # 이집 개발 변경 기록
 
+## 2026-09-27
+
+### E-JIP CRON DURABLE PROGRESS + DEADLINE SAFETY FIX V1 — 매매·recheck·전월세 cron 진행 영속화 + 실행 시간 한도 (LOCAL, 미배포)
+
+상세: `docs/development/CRON_DURABLE_PROGRESS_DEADLINE_SAFETY_FIX_V1.md`
+
+    변경     coverage를 실행 끝 일괄 → 셀 커밋 직후 1셀씩 기록(sale·recheck·rent) · 기록 실패 시 COVERAGE_PERSIST_FAILED로 정지
+    기록     검증 상태(COMPLETE/EMPTY_VALID)만 — INVALID/PARTIAL은 이전 기록을 덮지 않는다(의미 변경, 승인 대상)
+    순서     sale 구 순서 = coverage staleness(미검증 → 오래된 검증), 경기 끝 구 starvation 제거 · recheck·rent 순서 불변
+    시간     MOLIT 시도마다 남은 예산 확인(시도 타임아웃 min(10s, 남은−대기−2s), 최소 2s) · backoff 사전 확인 · DEADLINE_REACHED 별도 사유
+    불변     예산 50/45/50s · 쿼터 예약분 2,000 · 쓰기 판정·취소·등기 · scope(부산16·서울8·경기8, 41135 없음) · 스케줄 · enablement
+
 ## 2026-09-25
 
 ### E-JIP GYEONGGI CRON AND PUBLIC READINESS AUDIT V1 — 경기 8구 cron·공개 준비도 감사 + 학교/위치 안전장치

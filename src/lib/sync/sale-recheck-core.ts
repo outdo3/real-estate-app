@@ -18,21 +18,25 @@
 // write-policy(false→true only, aptSeq gate, conflict skip)가 daily 경로와 100% 동일하다.
 import { prisma } from '../prisma';
 import { latestCompleteMonth, subtractMonths } from '../../../scripts/rent-trade-history/incremental-sync-completed-month-logic';
-import { recordCoverageCells, type CoverageCellRecord } from '../sync-coverage';
-import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
-import { observedQuotaToday, syncOneSaleCell } from './sale-sync-core';
-import { saleQuotaDecision } from '../../../scripts/sale-molit-fetch';
+import { recordCoverageCells } from '../sync-coverage';
+import { BUSAN_LAWDCD_16, isVerifiedCellStatus } from '../rent-verified-range';
+import { observedQuotaToday, syncOneSaleCell, type SaleSyncDeps } from './sale-sync-core';
+import { MIN_INTERVAL_MS, saleQuotaDecision } from '../../../scripts/sale-molit-fetch';
 import {
   TimeBudget,
+  coverageRecordOf,
   monthsInRange,
   newRunId,
   orderRecheckCellsByStaleness,
+  persistCellCoverage,
   resolveSaleRecheckBand,
   type CellReport,
   type RecheckCell,
+  type RunStopReason,
   type SyncMode,
   type SyncRunStatus,
 } from './shared';
+import { hasRoomForCell } from './run-deadline';
 
 export { SALE_RECHECK_MIN_MONTHS_BACK, SALE_RECHECK_MAX_MONTHS_BACK } from './shared';
 
@@ -85,6 +89,18 @@ export interface SaleRecheckSummary {
   coverageRecorded: number;
   durationMs: number;
   reports: CellReport[];
+  /** CRON_DURABLE_PROGRESS_V1 — band 끝 전에 멈췄다면 그 이유(예산 정지는 이 sweep에서 정상이다). */
+  stopReason?: RunStopReason | null;
+  /** CRON_DURABLE_PROGRESS_V1 — 실행 시간 한도로 셀 도중에 멈췄는가. */
+  deadlineReached?: boolean;
+}
+
+/** CRON_DURABLE_PROGRESS_V1 — 결정적 테스트용 주입점. 운영 호출(route)은 넘기지 않는다. */
+export interface SaleRecheckDeps {
+  syncCell?: SaleSyncDeps['syncCell'];
+  recordCoverage?: SaleSyncDeps['recordCoverage'];
+  loadCells?: (from: string, to: string, lawdCds: string[]) => Promise<RecheckCell[]>;
+  clock?: () => number;
 }
 
 /** band 안의 (구 × 월) 셀 전체와, 각 셀의 마지막 원천 대조 시각을 합친다. */
@@ -106,8 +122,14 @@ export async function loadRecheckCells(from: string, to: string, lawdCds: string
   return cells;
 }
 
-export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: string) => void): Promise<SaleRecheckSummary> {
-  const budget = new TimeBudget(opts.budgetMs ?? 45_000);
+export async function runSaleRecheckSweep(
+  opts: SaleRecheckOptions,
+  log: (line: string) => void,
+  deps: SaleRecheckDeps = {}
+): Promise<SaleRecheckSummary> {
+  const syncCell = deps.syncCell ?? syncOneSaleCell;
+  const record = deps.recordCoverage ?? recordCoverageCells;
+  const budget = new TimeBudget(opts.budgetMs ?? 45_000, deps.clock);
   const runId = newRunId('sale-recheck');
   const now = opts.now ?? new Date();
   const latestComplete = latestCompleteMonth(now);
@@ -117,7 +139,7 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
     maxMonthsBack: opts.maxMonthsBack,
   });
 
-  const cells = await loadRecheckCells(from, to, lawdCds);
+  const cells = await (deps.loadCells ?? loadRecheckCells)(from, to, lawdCds);
   const ordered = orderRecheckCellsByStaleness(cells);
   const neverVerified = cells.filter((c) => c.lastVerifiedAtMs == null).length;
   const verifiedTimes = cells.map((c) => c.lastVerifiedAtMs).filter((v): v is number => v != null);
@@ -129,48 +151,55 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
   );
 
   const reports: CellReport[] = [];
-  const coverage: CoverageCellRecord[] = [];
   const limit = Math.min(opts.maxCells ?? ordered.length, ordered.length);
-  let budgetExhausted = false;
   let quotaStopped = false;
+  let stopReason: RunStopReason | null = null;
+  let recorded = 0;
 
   for (let i = 0; i < limit; i++) {
-    if (!budget.hasRoomFor(ESTIMATED_CELL_MS)) {
-      budgetExhausted = true;
-      log(`BUDGET_STOP elapsed=${budget.elapsedMs()}ms processed=${reports.length}/${cells.length} — 남은 셀은 다음 실행에서 가장 오래된 순으로 먼저 처리된다`);
-      break;
-    }
+    // 셀 경계 확인 순서: ① MOLIT 예약분 → ② 시간(둘 다 요청 0회로 멈춤).
     // GYEONGGI_CRON_EXPANSION_V1 — MOLIT 예약분(2,000)에 닿았으면 새 셀을 시작하지 않는다. 남은 셀은 staleness 순서
     // 그대로 다음 실행이 이어받는다(요청하지 않은 셀은 coverage를 건드리지 않으므로 순서가 밀리지 않는다).
     const quota = saleQuotaDecision();
     if (!quota.proceed) {
       quotaStopped = true;
+      stopReason = 'QUOTA_RESERVE_REACHED';
       log(`QUOTA_RESERVE_REACHED remaining=${quota.remaining} processed=${reports.length}/${cells.length} — 남은 셀은 다음 실행에서 처리한다`);
       break;
     }
+    if (!hasRoomForCell(budget, ESTIMATED_CELL_MS, MIN_INTERVAL_MS)) {
+      stopReason = 'BUDGET_EXHAUSTED';
+      log(`BUDGET_STOP elapsed=${budget.elapsedMs()}ms processed=${reports.length}/${cells.length} — 남은 셀은 다음 실행에서 가장 오래된 순으로 먼저 처리된다`);
+      break;
+    }
     const cell = ordered[i];
-    const report = await syncOneSaleCell(cell.lawdCd, cell.dealYmd, opts.mode, log);
+    const report = await syncCell(cell.lawdCd, cell.dealYmd, opts.mode, log, { deadline: budget });
     if (report.quotaReserveReached) {
       // 셀 도중 예약분 도달 — 쓰지 않았고 coverage에도 남기지 않는다(verifiedAt을 갱신해 대기열 뒤로 밀지 않기 위해).
       quotaStopped = true;
+      stopReason = 'QUOTA_RESERVE_REACHED';
       log(`QUOTA_RESERVE_REACHED during ${cell.lawdCd}:${cell.dealYmd} — 이 셀과 남은 셀은 다음 실행에서 처리한다`);
       break;
     }
+    if (report.deadlineReached) {
+      // CRON_DURABLE_PROGRESS_V1 — 시간 한도로 셀 도중 멈춤. 쓰지 않았고 기록하지 않는다 — 그 셀은 대기열 앞에 남는다.
+      stopReason = 'DEADLINE_REACHED';
+      log(`DEADLINE_REACHED during ${cell.lawdCd}:${cell.dealYmd} elapsed=${budget.elapsedMs()}ms processed=${reports.length}/${cells.length} — 이 셀과 남은 셀은 다음 실행에서 처리한다`);
+      break;
+    }
     reports.push(report);
-    // band는 전부 latestComplete 이하이므로 §15 현재월 제외 규칙에 걸리는 셀이 없다.
-    coverage.push({
-      lawdCd: cell.lawdCd,
-      dealYmd: cell.dealYmd,
-      status: report.status,
-      sourceTotalCount: report.sourceTotalCount,
-      fetchedCount: report.fetched,
-      blockedCount: report.blocked,
-      insertedCount: report.inserted,
-      updatedCount: report.updated,
-    });
+    // CRON_DURABLE_PROGRESS_V1 — 셀 커밋 직후 그 셀 하나만 기록한다(검증된 상태만). band는 전부 latestComplete 이하이므로
+    // §15 현재월 제외 규칙에 걸리는 셀이 없다. INVALID/PARTIAL은 기록하지 않아 verifiedAt이 갱신되지 않고 대기열 앞에 남는다.
+    if (isVerifiedCellStatus(report.status)) {
+      const persisted = await persistCellCoverage(record, opts.mode, 'SALE', runId, coverageRecordOf(report));
+      if (!persisted.ok) {
+        stopReason = 'COVERAGE_PERSIST_FAILED';
+        log(`COVERAGE_PERSIST_FAILED ${cell.lawdCd}:${cell.dealYmd} error=${persisted.error} — 진행 상태를 모르는 채 계속하지 않는다(커밋된 행은 그대로, 재실행 멱등)`);
+        break;
+      }
+      recorded += persisted.recorded;
+    }
   }
-
-  const { recorded } = await recordCoverageCells(opts.mode, 'SALE', runId, coverage);
 
   const totals = reports.reduce(
     (a, r) => ({
@@ -197,6 +226,9 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
   else if (totals.failed > 0) status = 'PARTIAL';
   // 예약분 정지는 실패가 아니지만 "오늘 band를 멈췄다"는 사실은 207로 드러낸다.
   if (quotaStopped) status = 'PARTIAL_RUN';
+  // CRON_DURABLE_PROGRESS_V1 — 시간 한도로 **시작한 셀**이 잘린 것은 예산 정지(정상)와 달리 느린 원천의 신호다 → 207.
+  if (stopReason === 'DEADLINE_REACHED') status = 'PARTIAL_RUN';
+  if (stopReason === 'COVERAGE_PERSIST_FAILED') status = 'FAILED';
 
   const summary: SaleRecheckSummary = {
     status,
@@ -206,7 +238,7 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
     to,
     bandCells: cells.length,
     cellsProcessed: reports.length,
-    sweepComplete: !budgetExhausted && !quotaStopped && reports.length === cells.length,
+    sweepComplete: stopReason === null && reports.length === cells.length,
     neverVerifiedCells: neverVerified,
     oldestVerifiedAt,
     quotaReserveReached: quotaStopped,
@@ -215,13 +247,15 @@ export async function runSaleRecheckSweep(opts: SaleRecheckOptions, log: (line: 
     coverageRecorded: recorded,
     durationMs: budget.elapsedMs(),
     reports,
+    stopReason,
+    deadlineReached: stopReason === 'DEADLINE_REACHED',
   };
 
   log(
     `DONE sale-recheck status=${status} processed=${reports.length}/${cells.length} sweepComplete=${summary.sweepComplete} ` +
       `inserted=${totals.inserted} flips=${totals.updated} registryUpdated=${totals.registryUpdated} ` +
       `registryAmbiguousSkipped=${totals.registryAmbiguousSkipped} blocked=${totals.blocked} failed=${totals.failed} ` +
-      `coverageRecorded=${recorded} durationMs=${summary.durationMs} quotaReserveReached=${quotaStopped} quotaRemaining=${summary.quotaRemainingObserved ?? 'unknown'}`
+      `coverageRecorded=${recorded} durationMs=${summary.durationMs} stopReason=${stopReason ?? 'none'} quotaReserveReached=${quotaStopped} quotaRemaining=${summary.quotaRemainingObserved ?? 'unknown'}`
   );
   return summary;
 }

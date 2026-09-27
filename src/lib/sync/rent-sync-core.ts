@@ -9,7 +9,7 @@
 //   - 완료월/overlap 계산                : incremental-sync-completed-month-logic.ts
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
-import { fetchRentRegionMonth } from '../../../scripts/rent-trade-history/rent-molit-fetch';
+import { MIN_INTERVAL_MS, fetchRentRegionMonth } from '../../../scripts/rent-trade-history/rent-molit-fetch';
 import { normalizeMolitRentItemsToRentRows, type RentRowInput } from '../../../scripts/rent-trade-history/rent-history-logic';
 import { shouldPersistCellRows } from '../../../scripts/rent-trade-history/rent-completeness-logic';
 // RENT_OCCURRENCE_SAFETY_V1 §3 — Option E group insert guard. 판정은 순수 모듈에 있고
@@ -20,9 +20,24 @@ import {
   type RentCompareField,
 } from '../../../scripts/rent-trade-history/rent-group-guard-logic';
 import { latestCompleteMonth, subtractMonths } from '../../../scripts/rent-trade-history/incremental-sync-completed-month-logic';
-import { recordCoverageCells, type CoverageCellRecord } from '../sync-coverage';
-import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
-import { TimeBudget, monthsInRange, newRunId, resolveRentRange as resolveRentRangePure, type CellReport, type ReviewItem, type SyncMode, type SyncRunStatus, type SyncSummary } from './shared';
+import { recordCoverageCells } from '../sync-coverage';
+import { BUSAN_LAWDCD_16, isVerifiedCellStatus } from '../rent-verified-range';
+import {
+  TimeBudget,
+  coverageRecordOf,
+  monthsInRange,
+  newRunId,
+  persistCellCoverage,
+  resolveRentRange as resolveRentRangePure,
+  type CellReport,
+  type RecordCoverageFn,
+  type ReviewItem,
+  type RunStopReason,
+  type SyncMode,
+  type SyncRunStatus,
+  type SyncSummary,
+} from './shared';
+import { hasRoomForCell, type RequestDeadline } from './run-deadline';
 
 export { RENT_DEFAULT_OVERLAP_MONTHS } from './shared';
 
@@ -80,50 +95,72 @@ export function resolveRentRange(opts: RentSyncOptions): { from: string; to: str
   return resolveRentRangePure(latest, subtractMonths, opts);
 }
 
-export async function runRentSync(opts: RentSyncOptions, log: (line: string) => void): Promise<SyncSummary> {
-  const budget = new TimeBudget(opts.budgetMs ?? 50_000);
+/** 셀 하나를 처리할 때 코어가 넘기는 실행 문맥. */
+export interface RentCellOptions {
+  /** CRON_DURABLE_PROGRESS_V1 — 실행의 남은 시간. MOLIT 시도·재시도·backoff가 이 한도를 넘지 않는다. */
+  deadline?: RequestDeadline;
+}
+
+/** CRON_DURABLE_PROGRESS_V1 — 결정적 테스트용 주입점. 운영 호출(route)은 넘기지 않는다. */
+export interface RentSyncDeps {
+  syncCell?: (
+    lawdCd: string,
+    dealYmd: string,
+    mode: SyncMode,
+    needsReview: ReviewItem[],
+    log: (line: string) => void,
+    cellOpts: RentCellOptions
+  ) => Promise<CellReport>;
+  recordCoverage?: RecordCoverageFn;
+  clock?: () => number;
+}
+
+export async function runRentSync(opts: RentSyncOptions, log: (line: string) => void, deps: RentSyncDeps = {}): Promise<SyncSummary> {
+  const syncCell = deps.syncCell ?? syncOneRentCell;
+  const record = deps.recordCoverage ?? recordCoverageCells;
+  const budget = new TimeBudget(opts.budgetMs ?? 50_000, deps.clock);
   const runId = newRunId('rent');
   const lawdCds = opts.lawdCds ?? BUSAN_LAWDCD_16;
   const { from, to } = resolveRentRange(opts);
   const months = monthsInRange(from, to);
   const reports: CellReport[] = [];
   const needsReview: ReviewItem[] = [];
-  const coverage: CoverageCellRecord[] = [];
   const totalCells = lawdCds.length * months.length;
 
   log(`START rent mode=${opts.mode} runId=${runId} range=[${from},${to}] districts=${lawdCds.length} cells=${totalCells}`);
 
-  let budgetExhausted = false;
-  for (const lawdCd of lawdCds) {
+  let stopReason: RunStopReason | null = null;
+  let recorded = 0;
+  districts: for (const lawdCd of lawdCds) {
     for (const dealYmd of months) {
-      if (!budget.hasRoomFor(ESTIMATED_CELL_MS)) {
-        budgetExhausted = true;
+      if (!hasRoomForCell(budget, ESTIMATED_CELL_MS, MIN_INTERVAL_MS)) {
+        stopReason = 'BUDGET_EXHAUSTED';
         log(`BUDGET_STOP elapsed=${budget.elapsedMs()}ms — 남은 셀은 다음 실행에서 처리한다`);
-        break;
+        break districts;
       }
-      const report = await syncOneRentCell(lawdCd, dealYmd, opts.mode, needsReview, log);
+      const report = await syncCell(lawdCd, dealYmd, opts.mode, needsReview, log, { deadline: budget });
+      if (report.deadlineReached) {
+        // CRON_DURABLE_PROGRESS_V1 — 시간 한도로 셀 도중 멈춤. 쓰지 않았고 기록하지 않는다(원천 INVALID가 아니다).
+        stopReason = 'DEADLINE_REACHED';
+        log(`DEADLINE_REACHED during ${lawdCd}:${dealYmd} elapsed=${budget.elapsedMs()}ms — 이 셀과 남은 셀은 다음 실행에서 처리한다`);
+        break districts;
+      }
       reports.push(report);
-      // §14 — 검증 상태를 그대로 기록한다. 단, 사람이 검토해야 할 변경 후보가 있는 셀은
-      // **아예 기록하지 않는다**: 기록이 없으면 coverage가 전진하지 않고(부재 = 미검증)
-      // 다음 실행에서 자연스럽게 재시도된다. PARTIAL로 위장해 기록하는 것보다 정직하다.
-      if (report.reviewCandidates === 0) {
-        coverage.push({
-          lawdCd,
-          dealYmd,
-          status: report.status,
-          sourceTotalCount: report.sourceTotalCount,
-          fetchedCount: report.fetched,
-          blockedCount: report.blocked,
-          insertedCount: report.inserted,
-          updatedCount: report.updated,
-        });
+      // §14 — 사람이 검토해야 할 변경 후보가 있는 셀은 **아예 기록하지 않는다**: 기록이 없으면 coverage가
+      // 전진하지 않고(부재 = 미검증) 다음 실행에서 자연스럽게 재시도된다. PARTIAL로 위장해 기록하는 것보다 정직하다.
+      // CRON_DURABLE_PROGRESS_V1 — 그 셀의 쓰기가 커밋된 **직후** 그 셀 하나만 기록한다. 검증된 상태(COMPLETE/EMPTY_VALID)만
+      // 기록한다 — INVALID/PARTIAL이 이전 검증 기록을 덮지 않는다(부재·미검증은 검증범위 계산에서 같은 뜻이다).
+      if (report.reviewCandidates === 0 && isVerifiedCellStatus(report.status)) {
+        const persisted = await persistCellCoverage(record, opts.mode, 'RENT', runId, coverageRecordOf(report));
+        if (!persisted.ok) {
+          stopReason = 'COVERAGE_PERSIST_FAILED';
+          log(`COVERAGE_PERSIST_FAILED ${lawdCd}:${dealYmd} error=${persisted.error} — 진행 상태를 모르는 채 계속하지 않는다(커밋된 행은 그대로, 재실행 멱등)`);
+          break districts;
+        }
+        recorded += persisted.recorded;
       }
     }
-    if (budgetExhausted) break;
   }
-
-  // §5/§14 — dry-run은 recordCoverageCells 내부에서도 다시 한 번 차단된다(이중 안전장치).
-  const { recorded } = await recordCoverageCells(opts.mode, 'RENT', runId, coverage);
 
   const totals = reports.reduce(
     (a, r) => ({
@@ -140,8 +177,9 @@ export async function runRentSync(opts: RentSyncOptions, log: (line: string) => 
   );
 
   let status: SyncRunStatus = 'SUCCESS';
-  if (needsReview.length > 0) status = 'NEEDS_REVIEW';
-  else if (budgetExhausted) status = 'PARTIAL_RUN';
+  if (stopReason === 'COVERAGE_PERSIST_FAILED') status = 'FAILED';
+  else if (needsReview.length > 0) status = 'NEEDS_REVIEW';
+  else if (stopReason) status = 'PARTIAL_RUN';
   else if (totals.failed > 0) status = 'PARTIAL';
 
   const summary: SyncSummary = {
@@ -162,23 +200,26 @@ export async function runRentSync(opts: RentSyncOptions, log: (line: string) => 
     durationMs: budget.elapsedMs(),
     needsReview,
     reports,
+    stopReason,
+    deadlineReached: stopReason === 'DEADLINE_REACHED',
   };
   log(
     `DONE rent status=${status} processed=${reports.length}/${totalCells} inserted=${totals.inserted} updated=${totals.updated} ` +
       `blocked=${totals.blocked} guardedInsertsSkipped=${totals.guardedInsertsSkipped} failed=${totals.failed} ` +
-      `coverageRecorded=${recorded} durationMs=${summary.durationMs}`
+      `coverageRecorded=${recorded} durationMs=${summary.durationMs} stopReason=${stopReason ?? 'none'}`
   );
   return summary;
 }
 
-async function syncOneRentCell(
+export async function syncOneRentCell(
   lawdCd: string,
   dealYmd: string,
   mode: SyncMode,
   needsReview: ReviewItem[],
-  log: (line: string) => void
+  log: (line: string) => void,
+  cellOpts: RentCellOptions = {}
 ): Promise<CellReport> {
-  const fetchResult = await fetchRentRegionMonth(lawdCd, dealYmd);
+  const fetchResult = await fetchRentRegionMonth(lawdCd, dealYmd, { deadline: cellOpts.deadline });
   const base: CellReport = {
     lawdCd,
     dealYmd,
@@ -196,6 +237,12 @@ async function syncOneRentCell(
     // RENT_OCCURRENCE_SAFETY_V1 §5 — group guard가 보류한 INSERT 수.
     guardedInsertsSkipped: 0,
   };
+
+  // CRON_DURABLE_PROGRESS_V1 — 시간 한도로 끝까지 읽지 못한 셀은 원천 판정(INVALID/PARTIAL)으로 보고하지 않는다. 쓰지 않는다.
+  if (fetchResult.deadlineReached) {
+    log(`DEADLINE_REACHED ${lawdCd}:${dealYmd} fetched=${fetchResult.collectedCount}/${fetchResult.totalCount ?? '?'} — 시간 한도, 쓰기 건너뜀, 다음 실행 재시도`);
+    return { ...base, deadlineReached: true };
+  }
 
   if (fetchResult.status === 'INVALID') {
     log(`INVALID ${lawdCd}:${dealYmd} — fetch 실패(재시도 소진). EMPTY_VALID로 기록하지 않는다`);

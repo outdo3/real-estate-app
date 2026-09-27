@@ -112,7 +112,9 @@ test('§F sale-sync와 sale-recheck 둘 다 scope의 구 목록을 코어에 넘
   assert.ok(/lawdCds: resolved\.lawdCds,/.test(stripComments(RECHECK_ROUTE)));
   // 쓰기 경로는 하나 — 서울 전용 sync 로직이 없다.
   // GYEONGGI_CRON_EXPANSION_V1 — 같은 import에 오늘 관측 한도(observedQuotaToday)만 더했다(쓰기 경로는 여전히 syncOneSaleCell 하나).
-  assert.ok(/import \{ observedQuotaToday, syncOneSaleCell \} from '\.\/sale-sync-core';/.test(read('src/lib/sync/sale-recheck-core.ts')));
+  // CRON_DURABLE_PROGRESS_V1 — 테스트 주입 타입(SaleSyncDeps)만 더했다. 기본 쓰기 경로는 여전히 syncOneSaleCell 하나.
+  assert.ok(/import \{ observedQuotaToday, syncOneSaleCell, type SaleSyncDeps \} from '\.\/sale-sync-core';/.test(read('src/lib/sync/sale-recheck-core.ts')));
+  assert.ok(/const syncCell = deps\.syncCell \?\? syncOneSaleCell;/.test(read('src/lib/sync/sale-recheck-core.ts')));
 });
 
 test('§G /admin/ops의 매매 coverage는 부산 16구만 센다', () => {

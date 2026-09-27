@@ -17,13 +17,14 @@
 import { createMolitXmlParser, mapMolitItems } from '../src/lib/api-molit';
 import { classifySaleCellCompleteness, type SaleCellStatus } from './sale-pagination-logic';
 import { molitQuotaDecision, type QuotaDecision } from '../src/lib/sync/molit-quota-guard';
+import { planRequestAttempt, type RequestDeadline } from '../src/lib/sync/run-deadline';
 
 const ENDPOINT = 'http://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev';
 const PAGE_SIZE = 1000; // 기존 api-molit.ts와 동일한 관행값
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const MIN_INTERVAL_MS = 350;
+export const MIN_INTERVAL_MS = 350;
 let lastFetchAt = 0;
 
 function buildUrl(lawdCd: string, dealYmd: string, pageNo: number): string {
@@ -56,12 +57,17 @@ interface RawPageResult {
   rateLimited: boolean;
   /** 예약분 도달로 요청을 **보내지 않았다**(재시도 금지). */
   quotaStopped?: boolean;
+  /** CRON_DURABLE_PROGRESS_V1 — 실행 시간 한도 때문에 요청을 **보내지 않았다**(재시도 금지). 원천 오류가 아니다. */
+  deadlineStopped?: boolean;
 }
 
-async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Promise<RawPageResult> {
+async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number, deadline?: RequestDeadline): Promise<RawPageResult> {
   // GYEONGGI_CRON_EXPANSION_V1 — 예약분에 닿았으면 요청 자체를 보내지 않는다.
+  // 순서: ① 쿼터 예약분 → ② 실행 deadline → ③ 요청. 둘 다 요청을 보내지 않고 멈춘다.
   if (!saleQuotaDecision().proceed) return { ok: false, rawItems: [], totalCount: null, rateLimited: false, quotaStopped: true };
   const wait = Math.max(0, MIN_INTERVAL_MS - (Date.now() - lastFetchAt));
+  const attempt = planRequestAttempt(deadline, wait);
+  if (!attempt.ok) return { ok: false, rawItems: [], totalCount: null, rateLimited: false, deadlineStopped: true };
   if (wait > 0) await sleep(wait);
   lastFetchAt = Date.now();
 
@@ -70,7 +76,7 @@ async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Pr
     const response = await fetch(url, {
       method: 'GET',
       headers: { Accept: 'application/xml, text/xml, */*' },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(attempt.timeoutMs),
     });
     const remainingHeader = response.headers?.get?.('x-ratelimit-remaining');
     if (remainingHeader != null && remainingHeader !== '' && Number.isFinite(Number(remainingHeader))) {
@@ -109,14 +115,17 @@ async function fetchOnePage(lawdCd: string, dealYmd: string, pageNo: number): Pr
   }
 }
 
-async function fetchOnePageWithRetry(lawdCd: string, dealYmd: string, pageNo: number): Promise<RawPageResult> {
+async function fetchOnePageWithRetry(lawdCd: string, dealYmd: string, pageNo: number, deadline?: RequestDeadline): Promise<RawPageResult> {
   let last: RawPageResult = { ok: false, rawItems: [], totalCount: null, rateLimited: false };
   for (let attempt = 0; attempt <= 5; attempt++) {
-    last = await fetchOnePage(lawdCd, dealYmd, pageNo);
+    last = await fetchOnePage(lawdCd, dealYmd, pageNo, deadline);
     if (last.ok) return last;
     if (last.quotaStopped) return last; // 예약분 도달 — 재시도로 한도를 더 쓰지 않는다
+    if (last.deadlineStopped) return last; // 실행 시간 한도 — 더 시도하지 않는다
     if (attempt === 5) break;
     const backoffMs = last.rateLimited ? Math.min(2000 * (attempt + 1), 10000) : 500 * (attempt + 1);
+    // CRON_DURABLE_PROGRESS_V1 — backoff로 잠든 뒤 시도할 시간이 없다면 잠들지도 않는다(backoff가 한도를 넘기지 않게).
+    if (!planRequestAttempt(deadline, backoffMs).ok) return { ...last, deadlineStopped: true };
     await sleep(backoffMs);
   }
   return last;
@@ -130,6 +139,14 @@ export interface SaleRegionMonthResult {
   pagesFetched: number;
   /** GYEONGGI_CRON_EXPANSION_V1 — 예약분 도달로 이 셀을 끝까지 읽지 못했다(셀은 INVALID/PARTIAL → 쓰지 않음). */
   quotaReserveReached?: boolean;
+  /** CRON_DURABLE_PROGRESS_V1 — 실행 시간 한도로 이 셀을 끝까지 읽지 못했다. status는 쓰지 않기 위한 값일 뿐
+   * 원천 판정이 아니다 — 호출부는 이 셀을 INVALID/EMPTY로 보고·기록하지 않고 DEADLINE_REACHED로 멈춘다. */
+  deadlineReached?: boolean;
+}
+
+export interface SaleFetchOptions {
+  /** cron 실행의 남은 시간. 없으면 기존 동작(10s × 6회) 그대로. */
+  deadline?: RequestDeadline;
 }
 
 /**
@@ -138,8 +155,8 @@ export interface SaleRegionMonthResult {
  * 후 실패하면 PARTIAL로 분류하고, 호출부(sale-molit-fetch 소비자)는 PARTIAL을 절대
  * COMPLETE로 취급하지 않아야 한다.
  */
-export async function fetchSaleRegionMonth(lawdCd: string, dealYmd: string): Promise<SaleRegionMonthResult> {
-  const first = await fetchOnePageWithRetry(lawdCd, dealYmd, 1);
+export async function fetchSaleRegionMonth(lawdCd: string, dealYmd: string, opts: SaleFetchOptions = {}): Promise<SaleRegionMonthResult> {
+  const first = await fetchOnePageWithRetry(lawdCd, dealYmd, 1, opts.deadline);
   if (!first.ok || first.totalCount === null) {
     return {
       items: [],
@@ -148,20 +165,23 @@ export async function fetchSaleRegionMonth(lawdCd: string, dealYmd: string): Pro
       collectedCount: 0,
       pagesFetched: 0,
       quotaReserveReached: first.quotaStopped === true,
+      deadlineReached: first.deadlineStopped === true,
     };
   }
 
   let rawItems = [...first.rawItems];
   let anyLaterPageFailed = false;
   let quotaReserveReached = false;
+  let deadlineReached = false;
   const totalPages = Math.max(1, Math.ceil(first.totalCount / PAGE_SIZE));
   let pagesFetched = 1;
 
   for (let page = 2; page <= totalPages; page++) {
-    const res = await fetchOnePageWithRetry(lawdCd, dealYmd, page);
+    const res = await fetchOnePageWithRetry(lawdCd, dealYmd, page, opts.deadline);
     if (!res.ok) {
       anyLaterPageFailed = true;
       quotaReserveReached = res.quotaStopped === true;
+      deadlineReached = res.deadlineStopped === true;
       break;
     }
     rawItems = rawItems.concat(res.rawItems);
@@ -180,5 +200,5 @@ export async function fetchSaleRegionMonth(lawdCd: string, dealYmd: string): Pro
   // 쪽에서 와도 변경 없이 그대로 동작한다.
   const items = mapMolitItems(rawItems, 'apt', lawdCd, dealYmd);
 
-  return { items, status, totalCount: first.totalCount, collectedCount: rawItems.length, pagesFetched, quotaReserveReached };
+  return { items, status, totalCount: first.totalCount, collectedCount: rawItems.length, pagesFetched, quotaReserveReached, deadlineReached };
 }
