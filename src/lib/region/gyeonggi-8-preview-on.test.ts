@@ -12,7 +12,7 @@ let r: R;
 
 const GG8 = ['41111', '41113', '41115', '41117', '41131', '41133', '41150', '41210'];
 const OPEN_AXES = ['app', 'search', 'map', 'detail'] as const;
-const CLOSED_AXES = ['report', 'stats', 'sitemap', 'seoIndex', 'cronSync'] as const;
+const CLOSED_AXES = ['report', 'stats', 'supply', 'sitemap', 'seoIndex', 'cronSync'] as const;
 const ALL_AXES = [...OPEN_AXES, ...CLOSED_AXES] as const;
 
 before(async () => {
@@ -140,4 +140,15 @@ test('Preview env: 학교 지역 해석 — canonical lawdCd가 구 전체를 �
   assert.equal(addressMatchesRegion('경기도 수원시 권선구 권선동 1', '', '수원시 장안구'), false);
   assert.equal(addressMatchesRegion('경기도 성남시 분당구 정자동 1', '', '성남시 수정구'), false);
   assert.equal(addressMatchesRegion('경기도 성남시 수정구 태평동 1', '', '성남시 중원구'), false);
+});
+
+test('Preview env: /api/stats/supply 게이트 — 경기 8구·41135·경기 전체 차단, 부산·서울 8구 그대로', async () => {
+  const { decideSupplyRegion } = await import('../stats/supply-region-gate');
+  const gg = r.REGION_NODES.filter((n) => n.sidoCode === '41');
+  for (const n of gg) assert.equal(decideSupplyRegion('경기도', n.name).allowed, false, n.lawdCd);
+  for (const n of gg) assert.equal(decideSupplyRegion('경기도', n.fullName.replace(/^경기도 /, '')).allowed, false, `${n.lawdCd} 선택기 이름`);
+  assert.equal(decideSupplyRegion('경기도', null).allowed, false);
+  assert.equal(decideSupplyRegion('부산광역시', null).allowed, true);
+  assert.equal(decideSupplyRegion('서울특별시', '마포구').allowed, true);
+  assert.equal(decideSupplyRegion('서울특별시', '강남구').allowed, false);
 });

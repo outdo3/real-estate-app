@@ -196,10 +196,11 @@ test('18·19·20. seed 게이트 — publicExposureGuarded는 enablement에서 �
   for (const c of GYEONGGI_ALL) assert.deepEqual(Object.values(getRegionEnablement(c)).filter(Boolean), []);
 });
 
-test('모든 공개 소비자가 서울 deny-list에서 벗어났다(stats/supply는 분양 원천이라 예외)', () => {
+test('모든 공개 소비자가 서울 deny-list에서 벗어났다(stats/supply 포함 — supply 축 allowlist)', () => {
   for (const p of [
     'src/app/api/search/route.ts', 'src/lib/search-alias-fallback.ts', 'src/app/api/apt/[name]/route.ts',
     'src/app/report/apt/[aptSeq]/page.tsx', 'src/components/RegionSelectModal.tsx', 'src/lib/seo/seoul-blocked-seo.ts',
+    'src/app/api/stats/supply/route.ts', 'src/lib/stats/supply-region-gate.ts',
   ]) {
     const c = code(p);
     assert.ok(!/isSeoulPublicBlocked|seoulPublicBlockedLawdCds/.test(c), `${p}가 아직 서울 deny-list를 쓴다`);

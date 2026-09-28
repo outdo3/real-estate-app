@@ -18,7 +18,7 @@ import { REGION_NODES } from './registry';
 
 const ROOT = resolve(__dirname, '../../..');
 const GG_ALL = REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd);
-const AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex', 'cronSync'] as const;
+const AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'supply', 'sitemap', 'seoIndex', 'cronSync'] as const;
 
 test('판정은 정확히 VERCEL_ENV=preview + 플래그 "true"일 때만 true', () => {
   assert.equal(resolveGyeonggi8PreviewFlag('preview', 'true'), true);

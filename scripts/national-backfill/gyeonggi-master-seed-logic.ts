@@ -233,7 +233,7 @@ export function ggPlanHash(creates: readonly ReturnType<typeof ggToCreateData>[]
 }
 
 /** 공개 표면이 읽는 축 전부. cronSync는 수집 축이라 여기 없다(DATA_EXISTS ≠ PUBLIC_ALLOWED). */
-export const PUBLIC_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const;
+export const PUBLIC_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'supply', 'sitemap', 'seoIndex'] as const;
 
 /**
  * GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — seed 대상 구(와 41135)가 **모든 공개 축에서 닫혀 있는가**.

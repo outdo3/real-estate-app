@@ -21,7 +21,7 @@ test('Production env + 플래그 true(오설정): 스위치 OFF · 경기 전 �
   assert.equal(e.GYEONGGI_BETA_ENABLED, false);
   const gg = r.REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd);
   for (const c of gg) {
-    for (const axis of ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex', 'cronSync'] as const) {
+    for (const axis of ['app', 'search', 'map', 'detail', 'report', 'stats', 'supply', 'sitemap', 'seoIndex', 'cronSync'] as const) {
       assert.equal(e.isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
     }
   }

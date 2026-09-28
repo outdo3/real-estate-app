@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sidoFullToShort, parsePresaleSigungu, currentYm, isFutureOrCurrentYm, addMonthsToYm } from '@/lib/presale-region';
-import { isSeoulPublicBlocked } from '@/lib/region/enablement';
-import { getSidoRegions } from '@/lib/region/registry';
-
-/** 청약홈 축약 표기의 서울(= sidoFullToShort('서울특별시')). */
-const SEOUL_SHORT = '서울';
+import { decideSupplyRegion } from '@/lib/stats/supply-region-gate';
 
 // STATISTICS V2.1-4 — SUPPLY(공급). 입주지도 + 공급추이를 한 번의 fetch로 함께 계산한다
 // (§14/§41 — Presale 총 1,046건은 큰 데이터가 아니라 매 요청마다 새로 fetch해도 무리가
@@ -41,18 +37,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ status: 'OK', scope: { sido: sidoFull, sigungu: null, nationwide: false }, period: { preset }, summary: { totalCount: 0, mapCount: 0 }, mapMarkers: [], list: [], trend: [], interpretation: [] });
     }
 
-    // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 서울 공개 범위 게이트.
-    //
-    // 이 라우트는 시도(`subscriptionAreaName`) 단위라 "서울 전체" 집계가 자연스럽게 가능한데,
-    // 승인 범위는 8개 구뿐이므로 **구를 지정하지 않은 서울 요청은 항상 막는다**(부분 범위를
-    // 전체인 것처럼 답하지 않는다). 구를 지정한 경우에만 그 구의 공개 여부로 판정한다.
-    // 구 이름은 registry의 서울 노드에서 canonical 코드로 바꿔서 본다 — 이름 비교로 끝내지 않는다.
-    // 다른 시도(부산 등)는 이 분기에 들어오지 않아 동작이 그대로다.
-    if (sidoShort === SEOUL_SHORT) {
-      const node = sigunguShort
-        ? getSidoRegions('11').find((n) => n.name === sigunguShort)
-        : null;
-      if (!node || isSeoulPublicBlocked(node.lawdCd)) {
+    // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — "서울 전체"처럼 일부 구만 열린 시도의 전체 집계는 막는다(부분을 전체로 답하지 않는다).
+    // GYEONGGI_8_PREVIEW_FINAL_BLOCKER_V1 — 예전에는 서울만 막는 deny-list라 경기(전 축 닫힘)·registry 밖 시도가 그대로
+    // 통과했다. 이제 지역을 지정한 요청은 enablement `supply` 축(allowlist)으로만 판정한다(decideSupplyRegion).
+    // 부산 전체·부산 구·서울 beta 8구는 전과 같고, 경기(Preview에서 열린 8구 포함 — supply 축 닫힘)·41135·모르는 지역은 막힌다.
+    // 시도를 지정하지 않은 "전국" 요청은 이 게이트 밖이다(기존 동작 그대로 — 별도 제품 결정 대상).
+    if (sidoFull) {
+      const decision = decideSupplyRegion(sidoFull, sigunguShort);
+      if (!decision.allowed) {
         return NextResponse.json({
           status: 'UNSUPPORTED',
           supported: false,
