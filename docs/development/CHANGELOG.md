@@ -2,6 +2,15 @@
 
 ## 2026-09-28
 
+### E-JIP GYEONGGI 8 PREVIEW FINAL BLOCKER + DEPLOY V1 — 공급 API 게이트 + 브랜치 Preview 배포
+
+상세: `docs/development/GYEONGGI_8_PREVIEW_FINAL_BLOCKER_DEPLOY_V1.md`
+
+    수정     /api/stats/supply 서울 deny-list → enablement `supply` 축(부산·서울 8구 유지, 경기 전부·41135·모르는 지역 차단, 전국 불변)
+    Vercel   NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW=true — Preview·이 브랜치 한정(Production 0)
+    배포     브랜치 push + Preview 재배포(target preview) · main/Production 불변
+    보류     Preview에 DATABASE_URL 없음 → 검색·지도·상세·모바일 QA HOLD(사용자 결정)
+
 ### E-JIP GYEONGGI 8 PUBLIC BETA PREP + PREVIEW QA V1 — 경기 8구 Preview 전용 공개 스위치 (로컬 전용, 미배포)
 
 상세: `docs/development/GYEONGGI_8_PUBLIC_BETA_PREVIEW_PREP_V1.md`

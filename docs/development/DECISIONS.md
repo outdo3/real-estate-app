@@ -1851,3 +1851,30 @@ LOCAL 구현·테스트 완료, 사용자 승인 대기(push·배포 전). 문�
 
 상태:
 LOCAL 구현·테스트 완료, Preview 배포는 사용자 승인 대기.
+
+---
+
+## 17. GYEONGGI 8 PREVIEW FINAL BLOCKER V1 — 공급(청약홈)은 별도 `supply` 축으로 공개한다
+
+날짜:
+2026-09-28
+
+결정:
+`/api/stats/supply`의 지역 지정 요청은 enablement `supply` 축으로만 판정한다.
+부산(시도 층)과 서울 beta 8구는 true, 경기 beta는 false, 그 밖은 false다. "전국" 요청은 바꾸지 않는다.
+
+배경:
+서울 전용 deny-list라 경기(전 축 닫힘)가 공급에서만 열려 있었다(Production 경기도 186건).
+
+이유:
+- `stats` 축을 쓰면 서울 8구의 기존 공급 노출(SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1)이 조용히 사라진다.
+- `app` 축을 쓰면 Preview·beta 경기 8구가 공급에서 열린다.
+- 실거래·master와 원천이 다른 기능이므로 축을 나눠 명시하는 것이 allowlist 모델과 맞다.
+
+영향:
+- 이 브랜치가 Production에 들어가기 전까지 Production 경기 공급 누출은 남는다.
+- registry 밖 시도의 지역 지정 공급 요청이 막힌다(UI로는 도달 불가).
+- "전국" 목록에 경기 행이 포함되는 것은 별도 제품 결정 대상이다.
+
+상태:
+브랜치 커밋 4401d13(Preview 배포), main 미병합.
