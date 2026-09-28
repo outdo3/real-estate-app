@@ -1825,3 +1825,29 @@ coverage가 실행 끝에서만 영속화돼, 60s 한도 등 비정상 종료가
 상태:
 LOCAL 구현·테스트 완료, 사용자 승인 대기(push·배포 전). 문서: `docs/development/CRON_DURABLE_PROGRESS_DEADLINE_SAFETY_FIX_V1.md`
 
+
+---
+
+## 16. GYEONGGI 8 PUBLIC BETA PREVIEW V1 — 경기 8구는 Preview 빌드에서만 먼저 연다
+
+날짜:
+2026-09-28
+
+결정:
+경기 8구 공개는 Production 스위치(`GYEONGGI_BETA_ENABLED`)를 건드리지 않고 Preview 전용 스위치로 먼저 연다.
+두 값이 모두 참일 때만 열린다: `NEXT_PUBLIC_VERCEL_ENV === 'preview'`, `NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW === 'true'`.
+여는 목록·축은 Production 스위치와 같다(8구 × app·search·map·detail). cronSync는 바꾸지 않는다.
+
+배경:
+모바일 실측 QA는 실제 배포 환경이 필요하다. 그러나 cron 런타임 검증이 끝나지 않아 Production 공개는 HOLD다.
+
+이유:
+- VERCEL_ENV 조건이 있어 Production에 플래그를 잘못 넣어도 열리지 않는다(fail-closed).
+- 목록·축을 새로 만들지 않고 기존 상수를 재사용한다. 그래서 Preview에서 본 동작이 곧 Production 스위치를 켰을 때의 동작이다.
+
+영향:
+- Production·로컬·테스트 런타임 변화 0.
+- 플래그를 브랜치 한정으로 넣지 않으면 모든 Preview에서 경기가 열린다. 운영 절차로 막는다.
+
+상태:
+LOCAL 구현·테스트 완료, Preview 배포는 사용자 승인 대기.

@@ -154,6 +154,28 @@ export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
   cronSync: false,
 };
 
+// ── GYEONGGI_8_PUBLIC_BETA_PREVIEW_V1 — 경기 8구 **Preview 전용** 스위치(기본 닫힘) ─────────────────────
+//
+// Production 스위치(GYEONGGI_BETA_ENABLED)는 false 그대로 두고, Preview 빌드에서만 위 8구·위 축을 연다.
+// 두 조건이 **모두** 참일 때만 열린다:
+//   · NEXT_PUBLIC_VERCEL_ENV === 'preview'                (Vercel이 빌드 시 넣는 시스템 값 — Production 빌드는 'production')
+//   · NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW === 'true'      (Preview 환경에만 넣는 명시 플래그)
+// 둘 다 빌드 시 리터럴로 인라인된다(클라이언트 선택기와 서버 라우트가 같은 값을 본다). 값이 없거나 다르면 닫힘 —
+// Production 환경에 플래그를 잘못 넣어도 VERCEL_ENV가 'production'이라 열리지 않는다. 로컬·테스트도 닫힘.
+// 여는 범위는 Production 스위치를 켤 때와 **완전히 같다**(같은 목록·같은 축): 41135·나머지 경기·"경기도 전체"는 닫힘,
+// report·stats·sitemap·seoIndex 닫힘, cronSync(DB-first 읽기 스위치)도 닫힘 — 이 STEP에서 바꾸지 않는다.
+
+/** Preview 전용 스위치 판정(순수). 두 값이 정확히 'preview'·'true'일 때만 true — 그 밖(없음·공백·대소문자 차이)은 전부 false. */
+export function resolveGyeonggi8PreviewFlag(vercelEnv: string | undefined, previewFlag: string | undefined): boolean {
+  return vercelEnv === 'preview' && previewFlag === 'true';
+}
+
+/** 이 빌드에서 경기 8구 Preview 공개가 켜졌는가. Production·로컬·테스트 기본값은 false. */
+export const GYEONGGI_8_BETA_PREVIEW_ENABLED = resolveGyeonggi8PreviewFlag(
+  process.env.NEXT_PUBLIC_VERCEL_ENV,
+  process.env.NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW
+);
+
 /**
  * 시군구 단위 enablement 맵을 만든다(순수). 런타임은 실제 스위치 값으로 한 번 만들고,
  * 테스트·시뮬레이션은 스위치를 바꿔 "켜면 어떻게 되는가"를 본다(Production 설정은 바꾸지 않는다).
@@ -167,7 +189,8 @@ export function buildLawdCdEnablementMap(flags: { seoulBeta: boolean; gyeonggiBe
 
 const ENABLEMENT_BY_LAWDCD: Readonly<Record<string, RegionEnablement>> = buildLawdCdEnablementMap({
   seoulBeta: SEOUL_BETA_ENABLED,
-  gyeonggiBeta: GYEONGGI_BETA_ENABLED,
+  // Production 스위치 **또는** Preview 전용 스위치 — 어느 쪽이든 여는 목록·축은 같다.
+  gyeonggiBeta: GYEONGGI_BETA_ENABLED || GYEONGGI_8_BETA_PREVIEW_ENABLED,
 });
 
 /**

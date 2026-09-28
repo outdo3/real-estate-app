@@ -1,5 +1,16 @@
 # 이집 개발 변경 기록
 
+## 2026-09-28
+
+### E-JIP GYEONGGI 8 PUBLIC BETA PREP + PREVIEW QA V1 — 경기 8구 Preview 전용 공개 스위치 (로컬 전용, 미배포)
+
+상세: `docs/development/GYEONGGI_8_PUBLIC_BETA_PREVIEW_PREP_V1.md`
+
+    재사용   8527c6e blocker 준비 전체 cherry-pick(b7bc120) — 현재 main과 코드 겹침 0
+    스위치   NEXT_PUBLIC_VERCEL_ENV=preview + NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW=true 둘 다일 때만 경기 8구 app·search·map·detail
+    닫힘     report·stats·sitemap·seoIndex·cronSync · 41135 · 나머지 경기 · "경기도 전체" · Production(오설정 포함)
+    불변     GYEONGGI_BETA_ENABLED=false · push/deploy/env/cron/DB write 0
+
 ## 2026-09-27
 
 ### E-JIP CRON DURABILITY FIX DEPLOY V1 — cron 진행 영속화·시간 한도 Production 반영 (승인)
