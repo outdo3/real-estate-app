@@ -58,7 +58,7 @@ test('1·17. 후보는 정확히 첫 배치 8구(MOLIT leaf, 41135 없음) — s
 });
 
 test('1. 켜면: 8구 app·search·map·detail만 열리고 report·stats·sitemap·seoIndex·cronSync는 닫힘', () => {
-  assert.deepEqual(GYEONGGI_BETA_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false });
+  assert.deepEqual(GYEONGGI_BETA_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
   for (const c of GG8) {
     for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(sim(c, axis), true, `${c} ${axis}`);
     for (const axis of ['report', 'stats', 'sitemap', 'seoIndex', 'cronSync'] as const) assert.equal(sim(c, axis), false, `${c} ${axis}`);

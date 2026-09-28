@@ -31,6 +31,12 @@ export interface RegionEnablement {
   report: boolean;
   /** 통계 화면이 이 지역을 지원하는가. */
   stats: boolean;
+  /**
+   * GYEONGGI_8_PREVIEW_FINAL_BLOCKER_V1 — 공급(청약홈 분양 원천, `/api/stats/supply`)의 시도·시군구 단위 조회를 내주는가.
+   * `stats`와 분리한 이유: 공급은 실거래·master와 무관한 공공 원천이라 서울 beta 8구는 stats가 닫힌 채로 공급을
+   * 내주고 있었다(SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1). 그 정책을 여기로 옮겨 명시하고, 경기 beta는 닫는다.
+   */
+  supply: boolean;
   /** sitemap에 URL을 넣는가. */
   sitemap: boolean;
   /** 검색엔진 색인을 허용하는가. */
@@ -40,11 +46,11 @@ export interface RegionEnablement {
 }
 
 const NOT_ENABLED: RegionEnablement = {
-  app: false, search: false, map: false, detail: false, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false,
+  app: false, search: false, map: false, detail: false, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false,
 };
 
 const BUSAN_ENABLED: RegionEnablement = {
-  app: true, search: true, map: true, detail: true, report: true, stats: true, sitemap: true, seoIndex: true, cronSync: true,
+  app: true, search: true, map: true, detail: true, report: true, stats: true, supply: true, sitemap: true, seoIndex: true, cronSync: true,
 };
 
 /**
@@ -107,6 +113,8 @@ const SEOUL_BETA_ENABLEMENT: RegionEnablement = {
   detail: true,
   report: false,
   stats: false,
+  // 공급(청약홈)은 기존 정책대로 8구 단위 조회를 내준다(SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — "서울 전체"는 시도 층이 닫혀 계속 막힘).
+  supply: true,
   sitemap: false,
   seoIndex: false,
   cronSync: true,
@@ -141,7 +149,7 @@ export const GYEONGGI_BETA_LAWDCDS = [
 /** 경기 beta 스위치. **false = 경기 전 축 닫힘(현재).** */
 export const GYEONGGI_BETA_ENABLED = false;
 
-/** 경기 beta에서 여는 축(제안). 앱·검색·지도·상세만 — 리포트/통계/색인/사이트맵은 닫힘, cronSync는 별도 결정. */
+/** 경기 beta에서 여는 축(제안). 앱·검색·지도·상세만 — 리포트/통계/공급/색인/사이트맵은 닫힘, cronSync는 별도 결정. */
 export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
   app: true,
   search: true,
@@ -149,6 +157,7 @@ export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
   detail: true,
   report: false,
   stats: false,
+  supply: false,
   sitemap: false,
   seoIndex: false,
   cronSync: false,
@@ -197,7 +206,7 @@ export function isSeoulBetaDistrict(lawdCd: string | null | undefined): boolean 
 //
 // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 이후 **공개 표면은 이 deny-list를 쓰지 않는다** — 아래
 // `isPublicRegionAllowed`/`publicAllowedLawdCds`(allowlist)를 쓴다. 이 두 함수는 서울 전용 감사
-// 스크립트와 stats/supply(분양 원천, master 무관)를 위해 남겨 둔다.
+// 스크립트를 위해 남겨 둔다(stats/supply도 GYEONGGI_8_PREVIEW_FINAL_BLOCKER_V1부터 `supply` 축 allowlist를 쓴다).
 //
 // 이 정책은 **서울에만** 적용한다. 부산은 물론이고 경기·대구 등 다른 지역도 건드리지 않는다:
 // 검색/상세는 지금도 전국을 live MOLIT로 응답하는 것이 의도된 동작이고(비부산 **통계**만

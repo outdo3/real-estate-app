@@ -1,5 +1,14 @@
 # 이집 개발 변경 기록
 
+## 2026-09-28
+
+### E-JIP GYEONGGI SUPPLY LEAK HOTFIX V1 — /api/stats/supply 경기 노출 차단 (승인, Production)
+
+    원인     공급 라우트가 서울만 막는 deny-list — 경기(전 축 닫힘)가 공급에서만 열림(Production 경기도 186건 · 수원시 12건)
+    수정     enablement `supply` 축 + decideSupplyRegion: 부산 전체·16구, 서울 beta 8구 그대로 · 서울 전체·차단 17구·경기 전부·부모 시·모르는 지역·이름 변형 차단
+    불변     "전국"(sido 없음) 요청 · GYEONGGI_BETA_ENABLED=false · Preview 스위치 미포함 · env/cron/DB write 0
+    출처     브랜치 gyeonggi-8-public-beta-preview-v1 4401d13에서 공급 수정만 이식(Preview 테스트 3파일 제외)
+
 ## 2026-09-27
 
 ### E-JIP CRON DURABILITY FIX DEPLOY V1 — cron 진행 영속화·시간 한도 Production 반영 (승인)

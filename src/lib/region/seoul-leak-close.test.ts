@@ -16,6 +16,7 @@ import {
 } from './enablement';
 import { REGION_NODES } from './registry';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
+import { decideSupplyRegion } from '../stats/supply-region-gate';
 
 // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 실제로 새던 경로에 대한 회귀 테스트.
 
@@ -177,11 +178,15 @@ test('§14 지역 선택 모달이 시도·시군구 두 목록 모두 거른다
   assert.ok(/isSidoPartiallyPublic\(sidoCode\)/.test(src), '"시도 전체" 핸들러 가드가 없다');
 });
 
+// GYEONGGI_8_PREVIEW_FINAL_BLOCKER_V1 — 서울 전용 분기가 enablement `supply` 축 게이트(decideSupplyRegion)로 바뀌었다.
+// 서울 판정 자체(8구 허용·전체/차단 17구 거부)는 supply-region-gate.test.ts가 동작으로 고정한다.
 test('§15 supply 라우트가 서울 전체 집계를 막고 구 단위로만 판정한다', () => {
   const src = read('src/app/api/stats/supply/route.ts');
-  assert.ok(/sidoShort === SEOUL_SHORT/.test(src), 'supply에 서울 분기가 없다');
-  assert.ok(/isSeoulPublicBlocked\(node\.lawdCd\)/.test(src), 'canonical 코드로 판정하지 않는다');
-  assert.ok(/!node \|\| isSeoulPublicBlocked/.test(src), '구 미지정(서울 전체) 요청이 통과한다');
+  assert.ok(/decideSupplyRegion\(sidoFull, sigunguShort\)/.test(src), 'supply가 지역 게이트를 거치지 않는다');
+  const d = decideSupplyRegion('서울특별시', null);
+  assert.equal(d.allowed, false, '구 미지정(서울 전체) 요청이 통과한다');
+  assert.equal(decideSupplyRegion('서울특별시', '마포구').allowed, true);
+  assert.equal(decideSupplyRegion('서울특별시', '강남구').allowed, false);
 });
 
 test('§16 어떤 게이트도 접두사 판정을 쓰지 않는다', () => {
