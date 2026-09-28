@@ -98,7 +98,7 @@ ENABLEMENT_BY_LAWDCD.gyeonggiBeta = GYEONGGI_BETA_ENABLED(false) || GYEONGGI_8_B
 |---|---|
 | `npx tsx --test` 신규 3파일 | 14/14 |
 | `npx tsx --test src/lib/region/*.test.ts src/lib/report/*.test.ts src/lib/sitemap-scope.test.ts src/lib/seo/*.test.ts src/lib/map/*.test.ts` | 456/456 |
-| `npx tsx --test` src 전체(193파일, integration 제외, DB env 없음) | 2724/2726 — 실패 2건(community-launch §15, recent-auth-parity §5)은 **main 2343646에서도 동일하게 실패**(기존) |
+| `npx tsx --test` src 전체(193파일, integration 제외, DB env 없음) | 2724/2726 — 실패 2건(community-launch §15, recent-auth-parity §5)은 소스 정규식 테스트로, 워크트리 CRLF 체크아웃에서만 실패. 같은 두 파일을 main 체크아웃에서 돌리면 46/46 통과 → 변경과 무관 |
 | `npx eslint` 변경 파일 | 0 errors, 2 warnings(apt-client 749·773 기존 unused disable) |
 | `npx tsc --noEmit` | 21 errors 전부 `scripts/`(기존), src 0 → FAIL_EXISTING_SCRIPT_ERRORS |
 | `npm run build`(Preview env 없음 = Production 동등) | exit 0 |
