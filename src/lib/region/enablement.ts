@@ -172,10 +172,11 @@ export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
 // 둘 다 빌드 시 **리터럴로 인라인**된다(클라이언트 선택기와 서버 라우트가 같은 값을 본다). 값이 없거나 다르면 닫힘.
 // Production 환경에 플래그를 잘못 넣어도 VERCEL_ENV가 'production'이라 열리지 않는다.
 //
-// 축은 앱·검색·지도·상세만. report·stats·supply·sitemap·seoIndex는 닫힘. cronSync(= 상세·지도 DB-first **읽기** 스위치)도
-// 닫힘 — 17구는 정기 수집(cron) 범위 밖이라 동결 적재 이후 최신 월이 비어 있을 수 있고, DB-first로 읽으면 그 빈 달이
-// "거래 0건"처럼 보인다(cron 확장·첫 실행 검증 뒤 Production 공개 단계에서 켠다). Preview의 17구는
-// 지금 공개 지역과 같은 live MOLIT 경로를 탄다(정기 수집 범위는 sale-sync-scope.ts가 따로 정한다 — 여기서 바뀌지 않음).
+// 축은 앱·검색·지도·상세만. report·stats·supply·sitemap·seoIndex는 닫힘.
+// SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview에서는 cronSync(= 상세·지도 DB-first **읽기** 스위치)를 켜서 적재된
+// 전체 이력(200507–202609, 1,180,587건)을 read-only 연결(db-url-policy.ts)로 읽는다. 쓰기·cron은 없다(정기 수집
+// 범위는 sale-sync-scope.ts가 따로 정한다 — 여기서 바뀌지 않음). 그리고 Preview의 17구는 **live MOLIT를 부르지 않는다**
+// (`isPreviewDbOnlyLawdCd` — api-molit 단일 관문에서 닫힘). Production 프로필은 이 파일 밖 단계에서 정한다.
 
 /** 서울 나머지 17구 — Production 적재·사후 검증 후 공개 예정. 현재 Production 공개 0. */
 export const SEOUL_17_BETA_LAWDCDS = [
@@ -209,7 +210,7 @@ export const SEOUL_25_BETA_PREVIEW_ENABLED = resolveSeoul25PreviewFlag(
   process.env.NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW
 );
 
-/** Preview 17구에서 여는 축. 앱·검색·지도·상세만. supply·cronSync(DB-first 읽기)는 Production 공개 단계 전까지 닫힘. */
+/** Preview 17구에서 여는 축. 앱·검색·지도·상세 + DB-first 읽기(cronSync). supply는 Production 공개 단계 전까지 닫힘. */
 export const SEOUL_17_PREVIEW_ENABLEMENT: RegionEnablement = {
   app: true,
   search: true,
@@ -222,8 +223,19 @@ export const SEOUL_17_PREVIEW_ENABLEMENT: RegionEnablement = {
   supply: false,
   sitemap: false,
   seoIndex: false,
-  cronSync: false,
+  // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview 전용 DB-first 읽기(적재 완료 데이터). 이 프로필은 Preview 빌드에서만 쓰인다.
+  cronSync: true,
 };
+
+/** Preview DB 전용 판정(순수): Preview 스위치가 켜졌고 서울 17구면 live MOLIT 없이 DB만 읽는다. */
+export function resolvePreviewDbOnly(previewEnabled: boolean, lawdCd: string | null | undefined): boolean {
+  return previewEnabled && !!lawdCd && (SEOUL_17_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
+}
+
+/** 이 빌드에서 이 구가 "DB만 읽고 live MOLIT는 부르지 않는" Preview 17구인가. Production·로컬은 항상 false. */
+export function isPreviewDbOnlyLawdCd(lawdCd: string | null | undefined): boolean {
+  return resolvePreviewDbOnly(SEOUL_25_BETA_PREVIEW_ENABLED, lawdCd);
+}
 
 /**
  * 시군구 단위 enablement 맵을 만든다(순수). 런타임은 실제 스위치 값으로 한 번 만들고,

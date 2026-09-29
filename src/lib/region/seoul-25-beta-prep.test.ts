@@ -123,8 +123,8 @@ test('3 · "서울특별시 전체": 8구 부분 공개 · 25구 공개(시뮬�
   assert.ok(!/'11': /.test(enable.slice(enable.indexOf('const ENABLEMENT_BY_SIDO'), enable.indexOf('export const SEOUL_BETA_LAWDCDS'))), '서울이 시도 층에 들어갔다');
 });
 
-test('2·4·5·6 · Preview 시뮬레이션: 25구 app·search·map·detail 열림, report·stats·sitemap·seoIndex·cronSync 닫힘', () => {
-  assert.deepEqual(SEOUL_17_PREVIEW_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
+test('2·4·5·6 · Preview 시뮬레이션: 25구 app·search·map·detail·DB 읽기 열림, report·stats·supply·sitemap·seoIndex 닫힘', () => {
+  assert.deepEqual(SEOUL_17_PREVIEW_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true });
   for (const c of SEOUL_ALL) {
     for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(sim(c, axis), true, `${c} ${axis}`);
     for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) assert.equal(sim(c, axis), false, `${c} ${axis}`);
@@ -137,8 +137,8 @@ test('2·4·5·6 · Preview 시뮬레이션: 25구 app·search·map·detail 열�
   assert.equal(decideSupplyRegion('서울특별시', '마포구', previewSupply).allowed, true, 'Preview 8구 공급');
   assert.equal(decideSupplyRegion('서울특별시', null, previewSupply).allowed, false, 'Preview 서울 전체 공급');
   assert.equal(decideSupplyRegion('경기도', '수원시 장안구', previewSupply).allowed, false, 'Preview 경기 공급');
-  // cronSync = DB-first 읽기 스위치: 17구는 cron 범위 밖이라 닫힘(최신 월 빈 DB를 "0건"으로 보이지 않게), 공개 8구는 그대로 열림
-  for (const c of S17) assert.equal(sim(c, 'cronSync'), false, c);
+  // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — cronSync = DB-first 읽기 스위치: Preview 17구는 적재 데이터를 읽는다(쓰기·cron 없음), 공개 8구는 그대로 열림
+  for (const c of S17) assert.equal(sim(c, 'cronSync'), true, c);
   for (const c of S8) assert.equal(sim(c, 'cronSync'), true, c);
   // 검색·지도 allowlist = 부산 16 + 서울 25, 경기·그 밖 없음
   for (const axis of ['search', 'map', 'detail'] as const) {
@@ -175,7 +175,7 @@ test('5 · 지도: 닫힌 구는 MOLIT 전에 regionUnsupported · 17구 Preview
   assert.deepEqual(resolveApartmentCoords(idx, '대치동', '래미안아파트'), { aptSeq: null, completionYear: null, lat: null, lng: null }, '이름 포함 관계로 잡지 않는다');
 });
 
-test('6 · 상세: 공개 게이트가 MOLIT·DB보다 먼저 · DB-first는 aptSeq 구 코드의 cronSync(17구 Preview는 live) · 좌표 없으면 NO_COORDINATE', () => {
+test('6 · 상세: 공개 게이트가 MOLIT·DB보다 먼저 · DB-first는 aptSeq 구 코드의 cronSync(17구 Preview는 DB만) · 좌표 없으면 NO_COORDINATE', () => {
   const d = code('src/app/api/apt/[name]/route.ts');
   assert.ok(d.indexOf("isPublicRegionAllowed(lawdCd, 'detail')") < d.indexOf('fetchMolitMonthCached({'));
   assert.ok(/if \(aptSeq && isTradeDbFirstLawdCd\(aptSeq\.slice\(0, 5\)\)\)/.test(d));

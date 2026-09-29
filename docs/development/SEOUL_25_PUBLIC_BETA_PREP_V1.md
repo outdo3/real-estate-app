@@ -138,3 +138,11 @@ null 좌표 → 마커 없음 · canonical master가 있으면 상세 접근 가
 | eslint 변경 파일 | exit 0(경고 2 = apt-client 기존) |
 | `npx tsc --noEmit` | 21 기존 scripts 오류, scripts 밖 0 → FAIL_EXISTING_SCRIPT_ERRORS |
 | `npm run build` | exit 0 |
+
+## 14. SEOUL25 PREVIEW READ-ONLY DB + DB-READ QA V1 (2026-09-29, 승인)
+
+- **read-only 역할**: Production DB에 `ejip_preview_ro` 생성(승인) — LOGIN · NOSUPERUSER/NOCREATEDB/NOCREATEROLE/NOBYPASSRLS · CONNECTION LIMIT 5 · `default_transaction_read_only=on` · `statement_timeout=15s` · `USAGE ON SCHEMA public` + **SELECT만** 공개 데이터 22개 테이블(실거래·전월세·master·평형·오피스텔·학교/유치원/어린이집·분양·재개발·sync coverage). users·accounts·sessions·favorites·feedback·page_views·게시판 등은 권한 없음.
+- **검증**(Supabase pooler 경유): SELECT 통과 · INSERT/UPDATE/DELETE/CREATE/TRUNCATE 전부 거부(기본 read-only 25006, 세션을 read-write로 바꿔도 권한 42501) · 개인정보 테이블 읽기 거부 · 비-SELECT grant 0 · 멤버십 0.
+- **env**: `PREVIEW_DATABASE_URL`(sensitive · preview · 브랜치 `seoul-25-public-beta-prep-v2` 전용). `DATABASE_URL`은 Production 전용 그대로. 자격증명은 출력·기록하지 않음(임시 파일 즉시 삭제).
+- **코드**: `db-url-policy.ts` — `VERCEL_ENV==='preview'`면 `PREVIEW_DATABASE_URL`만, 없으면 `.invalid` 주소로 닫힘(DATABASE_URL로 떨어지지 않음). Production·로컬·테스트는 override 없음(불변). `SEOUL_17_PREVIEW_ENABLEMENT.cronSync=true`(Preview DB-first 읽기). `fetchMolitData` 단일 관문: Preview 17구는 네트워크 없이 실패 플레이스홀더(FAILED — "0건" 위장 없음). 상세 라우트는 DB를 쓰면 MOLIT 실패를 apiError로 올리지 않는 기존 규칙 그대로.
+- **실제 client 검증**: DATABASE_URL 없이 `VERCEL_ENV=preview` + read-only URL → `current_user=ejip_preview_ro`, 강남 86,188행 읽음, UPDATE 25006 거부. PREVIEW_DATABASE_URL 없음 → `preview-db-not-configured.invalid` 연결 실패(닫힘).

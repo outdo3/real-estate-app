@@ -2,6 +2,14 @@
 
 ## 2026-09-29
 
+### E-JIP SEOUL25 PREVIEW READ-ONLY DB + DB-READ QA V1 — Preview 전용 read-only DB · 17구 DB 읽기 (승인)
+
+상세: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md` §14
+
+    DB       ejip_preview_ro(SELECT 22 공개 테이블 · read-only 기본) · PREVIEW_DATABASE_URL(preview+브랜치, sensitive)
+    코드     db-url-policy(Preview는 전용 연결만, 없으면 닫힘) · Preview 17구 cronSync=true · fetchMolitData Preview 17구 차단
+    불변     Production DATABASE_URL·배포·17구 차단 · report/stats/SEO/sitemap/supply 닫힘 · cron 0 · MOLIT 0
+
 ### E-JIP SEOUL25 BETA PREP REBASE + COMPILE FIX V1 — Preview 준비 브랜치를 main 84e1c61 위로 (LOCAL)
 
 상세: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md` §13
