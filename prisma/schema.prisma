@@ -39,6 +39,9 @@ model User {
   recentViews    RecentView[]
   userPreference UserPreference?
 
+  // REALTOR_PRO_MVP_V1 — relation 필드만(users 테이블 컬럼 변경 없음). docs/pro/REALTOR_PRO_V1_SCHEMA_DRAFT.md
+  realtorProfile RealtorProfile?
+
   @@map("users")
 }
 
@@ -1714,4 +1717,314 @@ model OfficetelRentHistory {
   @@index([canonicalKey, dealDate])
   @@index([lawdCd, dealDate])
   @@map("officetel_rent_histories")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REALTOR_PRO_MVP_V1 — 중개사 Pro(비공개 매물·고객 CRM·매칭·브리핑).
+// docs/pro/REALTOR_PRO_V1_SCHEMA_DRAFT.md · docs/pro/REALTOR_PRO_MIGRATION_APPLY_PLAN.md
+//
+// 규칙:
+//  - 모든 행은 realtor_id(= realtor_profiles.id) 소유. 자식 테이블도 realtor_id를 중복 보관해 모든 쿼리를
+//    `where realtorId = ?` 한 조건으로 강제한다(앱 레이어 1차 통제). RLS는 migration에서 심층 방어로 켠다.
+//  - 단지 참조는 apt_seq(FK 아님 — apartment_masters는 배치 재구축 테이블) + 표시용 이름 스냅샷. 이름 재식별 금지.
+//  - 상태값은 TEXT + CHECK(migration). 금액은 만원 정수. 면적은 canonicalExclusiveArea 값(㎡) 그대로.
+//  - 연락처·자격번호는 암호화 텍스트(*_enc) + 조회용 HMAC(*_hash)만 저장. 평문 컬럼 없음.
+//  - 출입 비밀번호·열쇠 보관 위치·공동현관 번호 등은 저장 필드 자체가 없다(SENSITIVE_DO_NOT_STORE).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model RealtorProfile {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id")
+
+  displayName   String  @map("display_name")
+  officeName    String? @map("office_name")
+  officePhone   String? @map("office_phone") // 중개사가 브리핑 공개용으로 직접 입력한 사무소 번호
+  officeAddress String? @map("office_address")
+  logoUrl       String? @map("logo_url")
+
+  licenseNumberEnc String? @map("license_number_enc") // 공인중개사 자격번호(암호화)
+  officeRegNoEnc   String? @map("office_reg_no_enc") // 중개사무소 등록번호(암호화)
+  businessRegNoEnc String? @map("business_reg_no_enc") // 사업자등록번호(암호화, 선택)
+
+  status           String    @default("PENDING_REVIEW") // PENDING_REVIEW | VERIFIED | REJECTED | SUSPENDED
+  statusReason     String?   @map("status_reason")
+  reviewedByUserId String?   @map("reviewed_by_user_id")
+  reviewedAt       DateTime? @map("reviewed_at")
+  termsAgreedAt    DateTime  @map("terms_agreed_at")
+  termsVersion     String    @map("terms_version")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptions RealtorSubscription[]
+  listings      RealtorListing[]
+  customers     RealtorCustomer[]
+
+  @@index([status, createdAt])
+  @@map("realtor_profiles")
+}
+
+model RealtorSubscription {
+  id        String @id @default(cuid())
+  realtorId String @map("realtor_id")
+
+  plan               String // FREE | PRO
+  status             String // ACTIVE | BETA_GRANT | GRACE | CANCELED | EXPIRED
+  currentPeriodStart DateTime  @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  provider           String? // 결제사(Phase 3) — MVP 미사용
+  providerRef        String?   @map("provider_ref")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  realtor RealtorProfile @relation(fields: [realtorId], references: [id], onDelete: Cascade)
+
+  @@index([realtorId, status])
+  @@map("realtor_subscriptions")
+}
+
+model RealtorListing {
+  id        String @id @default(cuid())
+  realtorId String @map("realtor_id")
+
+  aptSeq          String? @map("apt_seq")
+  lawdCd          String? @map("lawd_cd")
+  umdName         String? @map("umd_name")
+  aptNameSnapshot String  @map("apt_name_snapshot")
+
+  buildingDong String? @map("building_dong")
+  unitHo       String? @map("unit_ho")
+  floor        Int?
+  floorBand    String? @map("floor_band") // LOW | MID | HIGH
+
+  exclusiveAreaM2 Decimal? @map("exclusive_area_m2")
+  unitTypeRef     Int?     @map("unit_type_ref")
+
+  dealType          String @map("deal_type") // SALE | JEONSE | MONTHLY
+  askingPriceManwon Int?   @map("asking_price_manwon")
+  depositManwon     Int?   @map("deposit_manwon")
+  monthlyRentManwon Int?   @map("monthly_rent_manwon")
+
+  ownerName      String? @map("owner_name")
+  ownerPhoneEnc  String? @map("owner_phone_enc")
+  ownerPhoneHash String? @map("owner_phone_hash")
+
+  tenantStatus      String?   @map("tenant_status") // VACANT | OWNER_OCCUPIED | TENANTED
+  tenantLeaseEndsAt DateTime? @map("tenant_lease_ends_at")
+  moveInAvailableAt DateTime? @map("move_in_available_at")
+  moveInNegotiable  Boolean   @default(false) @map("move_in_negotiable")
+
+  repairStatus     String?  @map("repair_status") // ORIGINAL | PARTIAL | FULL
+  repairNote       String?  @map("repair_note")
+  parkingNote      String?  @map("parking_note")
+  parkingAvailable Boolean? @map("parking_available")
+  petAllowed       Boolean? @map("pet_allowed")
+
+  viewingMethod String  @default("CONTACT_REALTOR") @map("viewing_method") // CONTACT_REALTOR | OWNER_PRESENT | TENANT_COORDINATION | VACANT_CONTACT_REALTOR
+  viewingNote   String? @map("viewing_note")
+
+  source String? // OWNER_DIRECT | CO_BROKER | WALK_IN | OTHER
+  memo   String?
+  tags   String[] @default([])
+
+  isActive       Boolean   @default(true) @map("is_active")
+  closedAt       DateTime? @map("closed_at")
+  priceChangedAt DateTime? @map("price_changed_at")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  realtor   RealtorProfile       @relation(fields: [realtorId], references: [id], onDelete: Cascade)
+  notes     RealtorListingNote[]
+  matches   RealtorMatch[]
+  followups RealtorFollowup[]
+  briefings RealtorBriefing[]
+
+  @@index([realtorId, isActive, updatedAt(sort: Desc)])
+  @@index([realtorId, aptSeq])
+  @@index([realtorId, tenantLeaseEndsAt])
+  @@map("realtor_listings")
+}
+
+model RealtorListingNote {
+  id        String @id @default(cuid())
+  realtorId String @map("realtor_id")
+  listingId String @map("listing_id")
+
+  kind            String // NOTE | PRICE_CHANGE | STATUS_CHANGE
+  body            String?
+  prevPriceManwon Int?     @map("prev_price_manwon")
+  newPriceManwon  Int?     @map("new_price_manwon")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  listing RealtorListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([realtorId, listingId, createdAt(sort: Desc)])
+  @@map("realtor_listing_notes")
+}
+
+model RealtorCustomer {
+  id        String @id @default(cuid())
+  realtorId String @map("realtor_id")
+
+  name           String
+  phoneEnc       String?   @map("phone_enc")
+  phoneHash      String?   @map("phone_hash")
+  emailEnc       String?   @map("email_enc")
+  emailHash      String?   @map("email_hash")
+  status         String    @default("NEW") // NEW | ACTIVE | ON_HOLD | CONTRACTED | CLOSED
+  priority       Int       @default(2) // 1 높음 ~ 3 낮음
+  nextFollowUpAt DateTime? @map("next_follow_up_at")
+  memo           String?
+
+  consentStatus     String    @default("NOT_RECORDED") @map("consent_status") // NOT_RECORDED | VERBAL | WRITTEN | WITHDRAWN
+  consentRecordedAt DateTime? @map("consent_recorded_at")
+
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  realtor     RealtorProfile              @relation(fields: [realtorId], references: [id], onDelete: Cascade)
+  preferences RealtorCustomerPreference[]
+  matches     RealtorMatch[]
+  followups   RealtorFollowup[]
+  briefings   RealtorBriefing[]
+
+  @@index([realtorId, status, priority])
+  @@index([realtorId, nextFollowUpAt])
+  @@index([realtorId, phoneHash])
+  @@map("realtor_customers")
+}
+
+model RealtorCustomerPreference {
+  id         String @id @default(cuid())
+  realtorId  String @map("realtor_id")
+  customerId String @map("customer_id")
+  label      String @default("기본")
+
+  dealTypes            String[] @map("deal_types")
+  budgetMinManwon      Int?     @map("budget_min_manwon")
+  budgetMaxManwon      Int?     @map("budget_max_manwon")
+  budgetTolerancePct   Int      @default(0) @map("budget_tolerance_pct")
+  monthlyRentMaxManwon Int?     @map("monthly_rent_max_manwon")
+
+  lawdCds        String[]  @default([]) @map("lawd_cds")
+  aptSeqs        String[]  @default([]) @map("apt_seqs")
+  areaMinM2      Decimal?  @map("area_min_m2")
+  areaMaxM2      Decimal?  @map("area_max_m2")
+  moveInTargetAt DateTime? @map("move_in_target_at")
+
+  commuteLabel      String?  @map("commute_label")
+  commuteLat        Float?   @map("commute_lat")
+  commuteLng        Float?   @map("commute_lng")
+  schoolIds         Int[]    @default([]) @map("school_ids")
+  preferNewBuild    Boolean? @map("prefer_new_build")
+  parkingRequired   Boolean? @map("parking_required")
+  floorPreference   String?  @map("floor_preference") // LOW | MID | HIGH
+  petRequired       Boolean? @map("pet_required")
+  mustHaveKeys      String[] @default([]) @map("must_have_keys")
+  specialConditions String?  @map("special_conditions") // 구조화 불가 조건(표시용, 매칭 입력 아님)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer RealtorCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  matches  RealtorMatch[]
+
+  @@index([realtorId, customerId])
+  @@map("realtor_customer_preferences")
+}
+
+model RealtorMatch {
+  id           String @id @default(cuid())
+  realtorId    String @map("realtor_id")
+  customerId   String @map("customer_id")
+  preferenceId String @map("preference_id")
+  listingId    String @map("listing_id")
+
+  score         Int?
+  confidence    String // SUFFICIENT | INSUFFICIENT
+  passedHard    Boolean  @map("passed_hard")
+  reasons       Json
+  engineVersion String   @map("engine_version")
+  inputHash     String   @map("input_hash")
+  state         String   @default("NEW") // NEW | SEEN | SHORTLISTED | DISMISSED
+  computedAt    DateTime @map("computed_at")
+
+  customer   RealtorCustomer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  preference RealtorCustomerPreference @relation(fields: [preferenceId], references: [id], onDelete: Cascade)
+  listing    RealtorListing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([preferenceId, listingId])
+  @@index([realtorId, state, score(sort: Desc)])
+  @@index([realtorId, listingId])
+  @@map("realtor_matches")
+}
+
+model RealtorFollowup {
+  id         String  @id @default(cuid())
+  realtorId  String  @map("realtor_id")
+  customerId String? @map("customer_id")
+  listingId  String? @map("listing_id")
+
+  kind       String // CALL | VIEWING | CONTRACT | MOVE_IN | OTHER
+  status     String    @default("OPEN") // OPEN | DONE | CANCELED
+  dueAt      DateTime  @map("due_at")
+  note       String?
+  doneAt     DateTime? @map("done_at")
+  repeatRule String?   @map("repeat_rule") // Pro 전용(WEEKLY | MONTHLY) — MVP는 저장만
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer RealtorCustomer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  listing  RealtorListing?  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([realtorId, status, dueAt])
+  @@index([realtorId, customerId])
+  @@map("realtor_followups")
+}
+
+model RealtorBriefing {
+  id         String  @id @default(cuid())
+  realtorId  String  @map("realtor_id")
+  customerId String? @map("customer_id")
+  listingId  String? @map("listing_id")
+  aptSeq     String? @map("apt_seq")
+
+  tokenHash     String    @unique @map("token_hash") // HMAC-SHA256(토큰) — 원문 저장 안 함
+  snapshot      Json? // 공개 가능한 표시 필드만. 만료 +90일 후 null
+  dataAsOf      DateTime  @map("data_as_of")
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  firstViewedAt DateTime? @map("first_viewed_at")
+  viewCount     Int       @default(0) @map("view_count")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  customer RealtorCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  listing  RealtorListing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@index([realtorId, createdAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("realtor_briefings")
+}
+
+model RealtorAuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?  @map("actor_user_id")
+  actorRole   String   @map("actor_role") // REALTOR | ADMIN | SYSTEM
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id")
+  realtorId   String?  @map("realtor_id")
+  reason      String?
+  meta        Json? // allowlist 키만(개수·상태값). 연락처·메모·토큰 원문 금지
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([realtorId, createdAt(sort: Desc)])
+  @@index([action, createdAt])
+  @@map("realtor_audit_logs")
 }
