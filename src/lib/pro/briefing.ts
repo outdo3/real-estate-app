@@ -87,7 +87,7 @@ export function buildBriefingSnapshot(input: SnapshotInput): BriefingSnapshot {
 
   return {
     version: 1,
-    customerLabel: `${nameInitial(input.customerName ?? '')} 고객님`,
+    customerLabel: nameInitial(input.customerName ?? '') === '고객' ? '고객님' : `${nameInitial(input.customerName ?? '')} 고객님`,
     apartment: publicInfo
       ? { name: publicInfo.name, umdName: publicInfo.umdName, buildYear: publicInfo.buildYear, totalHouseholds: publicInfo.totalHouseholds }
       : listing

@@ -509,9 +509,10 @@ export function maskPhone(digits: string | null): string | null {
 
 /** 브리핑·목록용 이름 이니셜("박OO"). */
 export function nameInitial(name: string): string {
-  const t = name.trim();
-  if (!t) return '고객';
-  return `${t.slice(0, 1)}OO`;
+  // 앞머리 꼬리표([VIP] 등)·기호를 건너뛰고 첫 글자(한글·영문)만 쓴다. 글자가 없으면 이니셜 없이 '고객'
+  const t = name.replace(/^\s*(\[[^\]]*\]|\([^)]*\))\s*/, '');
+  const first = t.match(/\p{L}/u)?.[0];
+  return first ? `${first}OO` : '고객';
 }
 
 /** 층 → 저/중/고 구간(단지 최고층 모를 때의 보수적 기본: 1–3 저, 4–10 중, 그 이상 고). */

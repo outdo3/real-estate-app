@@ -31,3 +31,13 @@ test('오류 로그 요약에 메시지(PII 가능)가 들어가지 않는다', 
   assert.equal(summarizeErrorForLog('x'), 'unknown');
   assert.equal(summarizeErrorForLog(Object.assign(new Error('m'), { code: '홍길동' })), 'Error');
 });
+
+import { nameInitial } from './rules';
+
+test('고객 이니셜: 꼬리표·기호 건너뛰고 첫 글자만', () => {
+  assert.equal(nameInitial('홍길동'), '홍OO');
+  assert.equal(nameInitial('[데모] 박고객'), '박OO');
+  assert.equal(nameInitial('(VIP) Kim'), 'KOO');
+  assert.equal(nameInitial('  '), '고객');
+  assert.equal(nameInitial('010'), '고객');
+});

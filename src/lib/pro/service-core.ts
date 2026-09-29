@@ -63,11 +63,12 @@ export async function audit(deps: ProDeps, actor: ProActor, realtorId: string | 
 
 // ── DTO(클라이언트로 내보내는 모양): 암호문·해시·소유 id를 싣지 않는다 ─────────────
 
-export type ListingDto = Omit<ListingRow, 'realtorId' | 'ownerPhoneEnc' | 'ownerPhoneHash' | 'deletedAt'> & { hasOwnerPhone: boolean };
+export type ListingDto = Omit<ListingRow, 'realtorId' | 'ownerName' | 'ownerPhoneEnc' | 'ownerPhoneHash' | 'deletedAt'> & { hasOwnerName: boolean; hasOwnerPhone: boolean };
 
 export function toListingDto(l: ListingRow): ListingDto {
-  const { realtorId: _r, ownerPhoneEnc, ownerPhoneHash: _h, deletedAt: _d, ...rest } = l;
-  return { ...rest, hasOwnerPhone: !!ownerPhoneEnc };
+  // 소유자 이름도 연락처처럼 목록·상세 응답에 싣지 않는다 — '연락처 보기'(감사로그·속도 제한)로만 연다
+  const { realtorId: _r, ownerName, ownerPhoneEnc, ownerPhoneHash: _h, deletedAt: _d, ...rest } = l;
+  return { ...rest, hasOwnerName: !!ownerName, hasOwnerPhone: !!ownerPhoneEnc };
 }
 
 export type CustomerDto = Omit<CustomerRow, 'realtorId' | 'phoneEnc' | 'phoneHash' | 'emailEnc' | 'emailHash' | 'deletedAt'> & { hasPhone: boolean; hasEmail: boolean };

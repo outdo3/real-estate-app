@@ -143,6 +143,9 @@ test('8 · 저장된 연락처는 평문이 아니다(암호문 + HMAC 해시) �
   const dto = JSON.stringify([l, c]);
   assert.ok(!/pii\.v1\.|Enc"|Hash"/.test(dto));
   assert.equal((l as { hasOwnerPhone: boolean }).hasOwnerPhone, true);
+  // 소유자 이름도 응답에 없음(연락처 보기로만) — 존재 여부만
+  assert.ok(!('ownerName' in l) && !dto.includes('소유자'));
+  assert.equal((l as { hasOwnerName: boolean }).hasOwnerName, true);
   // 명시적 조회만 복호화 + 감사로그(필드 이름만)
   const rev = await revealCustomerContact(deps, A, c.id);
   assert.ok(rev.ok && rev.data.phone === '01044445555' && rev.data.email === 'test@example.com');

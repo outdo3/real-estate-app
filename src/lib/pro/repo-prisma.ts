@@ -34,7 +34,6 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 const mapProfile = (r: any): RealtorProfileRow => ({ ...r });
 const mapSub = (r: any): SubscriptionRow => ({ id: r.id, realtorId: r.realtorId, plan: r.plan, status: r.status, currentPeriodStart: r.currentPeriodStart, currentPeriodEnd: r.currentPeriodEnd, createdAt: r.createdAt, updatedAt: r.updatedAt });
 const mapListing = (r: any): ListingRow => ({ ...r, exclusiveAreaM2: dec(r.exclusiveAreaM2) });
@@ -44,7 +43,6 @@ const mapMatch = (r: any): MatchRow => ({ ...r, reasons: (r.reasons ?? []) as Ma
 const mapBriefing = (r: any): BriefingRow => ({ ...r, snapshot: (r.snapshot ?? null) as BriefingSnapshot | null });
 const mapNote = (r: any): ListingNoteRow => ({ ...r });
 const mapFollowup = (r: any): FollowupRow => ({ ...r });
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 const listingData = (d: Partial<ListingRow>) => {
   const { exclusiveAreaM2, ...rest } = d;
