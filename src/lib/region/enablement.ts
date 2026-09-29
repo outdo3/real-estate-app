@@ -165,15 +165,16 @@ export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
 
 // ── SEOUL_25_PUBLIC_BETA_PREP_V1 — 서울 나머지 17구(**Preview 전용, 기본 닫힘**) ─────────────────────
 //
-// 서울 25구 전체 beta를 위한 준비. 17구의 Production 전체 이력 적재는 아직 PARTIAL(HOLD)이므로 Production에서는
-// 이 목록이 **절대 열리지 않는다**. 열리는 경로는 Preview 빌드 하나뿐이고, 두 조건이 **모두** 참일 때만이다:
+// 서울 25구 전체 beta를 위한 준비. 17구의 Production 전체 이력 적재는 2026-09-29 완료·검증됐지만(1,180,587건, drift 0),
+// Production 공개는 별도 승인 단계(스위치·cronSync·cron 확장)이므로 이 파일에서 Production은 이 목록을 **절대 열지 않는다**. 열리는 경로는 Preview 빌드 하나뿐이고, 두 조건이 **모두** 참일 때만이다:
 //   · NEXT_PUBLIC_VERCEL_ENV === 'preview'           (Vercel이 빌드 시 넣는 시스템 값 — Production 빌드는 'production')
 //   · NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW === 'true'   (Preview 환경에만 넣는 명시 플래그)
 // 둘 다 빌드 시 **리터럴로 인라인**된다(클라이언트 선택기와 서버 라우트가 같은 값을 본다). 값이 없거나 다르면 닫힘.
 // Production 환경에 플래그를 잘못 넣어도 VERCEL_ENV가 'production'이라 열리지 않는다.
 //
-// 축은 앱·검색·지도·상세만. report·stats·sitemap·seoIndex는 닫힘. cronSync(= 상세·지도 DB-first **읽기** 스위치)도
-// 닫힘 — 17구 DB 적재가 끝나지 않았으므로 DB-first로 읽으면 빈 DB가 "거래 0건"처럼 보인다. Preview의 17구는
+// 축은 앱·검색·지도·상세만. report·stats·supply·sitemap·seoIndex는 닫힘. cronSync(= 상세·지도 DB-first **읽기** 스위치)도
+// 닫힘 — 17구는 정기 수집(cron) 범위 밖이라 동결 적재 이후 최신 월이 비어 있을 수 있고, DB-first로 읽으면 그 빈 달이
+// "거래 0건"처럼 보인다(cron 확장·첫 실행 검증 뒤 Production 공개 단계에서 켠다). Preview의 17구는
 // 지금 공개 지역과 같은 live MOLIT 경로를 탄다(정기 수집 범위는 sale-sync-scope.ts가 따로 정한다 — 여기서 바뀌지 않음).
 
 /** 서울 나머지 17구 — Production 적재·사후 검증 후 공개 예정. 현재 Production 공개 0. */
@@ -208,7 +209,7 @@ export const SEOUL_25_BETA_PREVIEW_ENABLED = resolveSeoul25PreviewFlag(
   process.env.NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW
 );
 
-/** Preview 17구에서 여는 축. 앱·검색·지도·상세만. cronSync(DB-first 읽기)는 적재 완료 전까지 닫힘. */
+/** Preview 17구에서 여는 축. 앱·검색·지도·상세만. supply·cronSync(DB-first 읽기)는 Production 공개 단계 전까지 닫힘. */
 export const SEOUL_17_PREVIEW_ENABLEMENT: RegionEnablement = {
   app: true,
   search: true,
@@ -216,6 +217,9 @@ export const SEOUL_17_PREVIEW_ENABLEMENT: RegionEnablement = {
   detail: true,
   report: false,
   stats: false,
+  // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — 공급(청약홈)도 닫힘. 이 Preview 프로필은 앱·검색·지도·상세만 여는 계약이다
+  // (경기 beta 프로필과 같은 정책). 17구 공급 공개는 Production 공개 단계(서울 8구 프로필로 옮길 때)에서 따로 정한다.
+  supply: false,
   sitemap: false,
   seoIndex: false,
   cronSync: false,

@@ -1,5 +1,15 @@
 # 이집 개발 변경 기록
 
+## 2026-09-29
+
+### E-JIP SEOUL25 BETA PREP REBASE + COMPILE FIX V1 — Preview 준비 브랜치를 main 84e1c61 위로 (LOCAL)
+
+상세: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md` §13
+
+    통합     seoul-25-public-beta-prep-v2 = main 84e1c61 + d9622da cherry-pick(충돌 0)
+    수정     SEOUL_17_PREVIEW_ENABLEMENT.supply = false(필수 축 누락 → tsc·build 실패 해소) · 적재 완료 주석
+    불변     Production 17구 전 축 닫힘 · 경기 supply 닫힘(84e1c61) · 서울 8구·부산 그대로 · push/배포/env/cron/DB 0
+
 ## 2026-09-28
 
 ### E-JIP GYEONGGI SUPPLY LEAK HOTFIX V1 — /api/stats/supply 경기 노출 차단 (승인, Production)

@@ -24,7 +24,10 @@ test('Preview env: 스위치 켜짐 · 서울 25구 app·search·map·detail 공
     for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(e.isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
     for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) assert.equal(e.isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
   }
-  for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isTradeDbFirstLawdCd(c), false, `${c} DB-first(적재 미완료)`);
+  for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isTradeDbFirstLawdCd(c), false, `${c} DB-first(cron 범위 밖 — Production 공개 단계에서 켬)`);
+  // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — Preview에서도 17구 공급은 닫힘, 8구는 그대로
+  for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), false, `${c} supply`);
+  for (const c of e.SEOUL_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), true, `${c} supply`);
   assert.equal(e.publicAllowedLawdCds('search').length, 41);
   assert.equal(e.publicAllowedLawdCds('report').filter((c) => c.startsWith('11')).length, 0);
 });
@@ -39,6 +42,16 @@ test('Preview env: 25구가 다 열려도 "서울특별시 전체"는 없다 · 
     for (const axis of ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex', 'cronSync'] as const) assert.equal(e.isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
   }
   for (const c of r.REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd)) assert.equal(e.isPublicRegionAllowed(c, 'app'), false, c);
+});
+
+test('Preview env: 공급 라우트 — 17구·서울 전체·경기 거부, 공개 8구·부산 허용(84e1c61 유지)', async () => {
+  const { decideSupplyRegion } = await import('../stats/supply-region-gate');
+  for (const g of ['강남구', '서초구', '관악구', '성북구']) assert.equal(decideSupplyRegion('서울특별시', g).allowed, false, g);
+  assert.equal(decideSupplyRegion('서울특별시', null).allowed, false);
+  assert.equal(decideSupplyRegion('경기도', null).allowed, false);
+  assert.equal(decideSupplyRegion('경기도', '수원시 장안구').allowed, false);
+  assert.equal(decideSupplyRegion('서울특별시', '마포구').allowed, true);
+  assert.equal(decideSupplyRegion('부산광역시', null).allowed, true);
 });
 
 test('Preview env: SEO — 서울 상세는 NOINDEX, 리포트는 BLOCKED', async () => {

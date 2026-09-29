@@ -8,6 +8,7 @@ import {
   SEOUL_25_BETA_PREVIEW_ENABLED,
   SEOUL_BETA_LAWDCDS,
   getRegionEnablement,
+  getSidoEnablement,
   isPublicRegionAllowed,
   isSidoPartiallyPublic,
   isSidoPubliclyHidden,
@@ -27,6 +28,7 @@ import { kindergartenSummaryLabel } from '../education/education-ui-labels';
 import { findDongRegcode } from '../apt-building-info';
 import { buildDongRoutes, buildLaunchRegionRoutes } from '../sitemap-scope';
 import { resolveSaleSyncScope, SEOUL_SALE_SYNC_LAWDCDS } from '../sync/sale-sync-scope';
+import { decideSupplyRegion, supplyCheckFrom } from '../stats/supply-region-gate';
 
 // SEOUL_25_PUBLIC_BETA_PREP_V1 — Production과 같은 설정(Preview env 없음)에서 서울 17구는 전 축 닫힘이고,
 // "켜면"은 simulateRegionEnablement(seoul17Preview)로만 본다. Preview 빌드에서 실제로 켜진 상태는
@@ -80,6 +82,15 @@ test('14 · Production 설정: 서울 17구는 전 축 닫힘 · 공개 8구·�
     assert.equal(set.length, 16 + 8, axis);
     assert.ok(!set.some((c) => S17.includes(c)), axis);
   }
+  // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — supply(84e1c61): 17구·경기·서울 전체 닫힘, 공개 8구·부산 열림
+  for (const c of S17) assert.equal(getRegionEnablement(c).supply, false, `${c} supply`);
+  for (const c of GG_ALL) assert.equal(getRegionEnablement(c).supply, false, `${c} supply`);
+  for (const c of S8) assert.equal(getRegionEnablement(c).supply, true, `${c} supply`);
+  for (const c of BUSAN_LAWDCD_16) assert.equal(getRegionEnablement(c).supply, true, `${c} supply`);
+  assert.equal(decideSupplyRegion('서울특별시', '강남구').allowed, false);
+  assert.equal(decideSupplyRegion('서울특별시', null).allowed, false);
+  assert.equal(decideSupplyRegion('경기도', null).allowed, false);
+  assert.equal(decideSupplyRegion('서울특별시', '마포구').allowed, true);
   // 시뮬레이션 PROD(= Preview 스위치 없음) == 런타임
   for (const n of REGION_NODES) assert.deepEqual(simulateRegionEnablement(n.lawdCd, PROD), getRegionEnablement(n.lawdCd), n.lawdCd);
 });
@@ -113,12 +124,20 @@ test('3 · "서울특별시 전체": 8구 부분 공개 · 25구 공개(시뮬�
 });
 
 test('2·4·5·6 · Preview 시뮬레이션: 25구 app·search·map·detail 열림, report·stats·sitemap·seoIndex·cronSync 닫힘', () => {
-  assert.deepEqual(SEOUL_17_PREVIEW_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, sitemap: false, seoIndex: false, cronSync: false });
+  assert.deepEqual(SEOUL_17_PREVIEW_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
   for (const c of SEOUL_ALL) {
     for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(sim(c, axis), true, `${c} ${axis}`);
     for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) assert.equal(sim(c, axis), false, `${c} ${axis}`);
   }
-  // cronSync = DB-first 읽기 스위치: 17구는 적재 미완료라 닫힘(빈 DB를 "0건"으로 보이지 않게), 공개 8구는 그대로 열림
+  // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — supply(청약홈): Preview 17구는 닫힘, 공개 8구는 기존 정책대로 열림
+  for (const c of S17) assert.equal(sim(c, 'supply'), false, `${c} supply`);
+  for (const c of S8) assert.equal(sim(c, 'supply'), true, `${c} supply`);
+  const previewSupply = supplyCheckFrom((c) => simulateRegionEnablement(c, PREVIEW), getSidoEnablement);
+  assert.equal(decideSupplyRegion('서울특별시', '강남구', previewSupply).allowed, false, 'Preview 17구 공급');
+  assert.equal(decideSupplyRegion('서울특별시', '마포구', previewSupply).allowed, true, 'Preview 8구 공급');
+  assert.equal(decideSupplyRegion('서울특별시', null, previewSupply).allowed, false, 'Preview 서울 전체 공급');
+  assert.equal(decideSupplyRegion('경기도', '수원시 장안구', previewSupply).allowed, false, 'Preview 경기 공급');
+  // cronSync = DB-first 읽기 스위치: 17구는 cron 범위 밖이라 닫힘(최신 월 빈 DB를 "0건"으로 보이지 않게), 공개 8구는 그대로 열림
   for (const c of S17) assert.equal(sim(c, 'cronSync'), false, c);
   for (const c of S8) assert.equal(sim(c, 'cronSync'), true, c);
   // 검색·지도 allowlist = 부산 16 + 서울 25, 경기·그 밖 없음

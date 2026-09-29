@@ -119,3 +119,22 @@ null 좌표 → 마커 없음 · canonical master가 있으면 상세 접근 가
 | `npm run build` | exit 0 |
 
 기존 소스 고정 테스트 2개(`seoul-leak-close` §14 · `apt-report-cta-flow` 4)는 새 가드 형태로 갱신(더 강한 조건).
+
+## 13. SEOUL25 BETA PREP REBASE + COMPILE FIX V1 (2026-09-29, LOCAL)
+
+- **통합**: 새 브랜치 `seoul-25-public-beta-prep-v2` = main `84e1c61` + d9622da cherry-pick(충돌 0 — `enablement.ts`·`seoul-leak-close.test.ts`·CHANGELOG 자동 병합) + 이 수정. 기존 `-v1` 브랜치(d9622da)는 그대로 둠(히스토리 재작성 없음).
+- **컴파일 수정**: main이 `RegionEnablement.supply`를 필수로 만들었다 → `SEOUL_17_PREVIEW_ENABLEMENT.supply = false`. 이 Preview 프로필은 앱·검색·지도·상세만 여는 계약이고(경기 beta와 같은 정책), 17구 공급 공개는 Production 공개 단계에서 따로 정한다. Production에서 17구는 여전히 전 축(supply 포함) 닫힘.
+- **적재 상태 반영**: 17구 전체 이력 적재 완료(2026-09-29, 1,180,587건, drift 0) — 주석 갱신. cronSync는 계속 닫힘: 17구는 cron 범위 밖이라 동결 이후 최신 월이 비어 DB-first가 "0건"처럼 보일 수 있다(cron patch 적용·첫 실행 검증 뒤 Production 공개 단계에서 켬).
+- **테스트 추가**: Production 17구·경기 supply 닫힘 · 8구·부산 열림 · `decideSupplyRegion`(강남·서울 전체·경기 거부, 마포 허용) · Preview 시뮬레이션/실제 Preview env에서도 17구 supply 닫힘.
+- **cron patch**: `git apply --check` 통과(적용 안 함). seoul-b 9 · seoul-c 8 = 17구, 중복·누락 0, 서울 8구 scope 불변, 기존 일정(19:00·19:15·19:30·23:00·23:15·23:30·21:00)과 충돌 없음. ≤238 MOLIT/일.
+- **최신 월**: 동결 창 200507–202609(원천 2026-09-27 수집). 첫 cron(sale = latestComplete−2 ~ 현재월 4개월, recheck = 3~12개월 전)이 202606 이후 늦은 신고·취소를 자동으로 따라잡는다 → 별도 catch-up 작업 불필요, 첫 실행 검증만 필요(≈238 호출).
+- **NEXT_PUBLIC_VERCEL_ENV**: 저장소에서 이 값을 쓰는 곳은 이 스위치 하나 — Vercel 프로젝트의 "Automatically expose System Environment Variables" 설정 확인 필요. 꺼져 있으면 Preview에서도 8구만 보인다(fail-closed, Production 안전).
+
+| 명령 | 결과 |
+|---|---|
+| region·supply·report 대상 테스트 10파일 | 136 pass · 0 fail |
+| src 전체 | 2,723 · 2,716 pass · 2 fail(worktree CRLF — `community-launch` §15 · `recent-auth-parity` §5, main checkout에서는 pass) |
+| scripts 전체 | 603 · 601 pass · 1 fail(`score-v2-step4b/benchmark` — worktree에 DATABASE_URL 없음, main checkout pass) |
+| eslint 변경 파일 | exit 0(경고 2 = apt-client 기존) |
+| `npx tsc --noEmit` | 21 기존 scripts 오류, scripts 밖 0 → FAIL_EXISTING_SCRIPT_ERRORS |
+| `npm run build` | exit 0 |
