@@ -4,6 +4,7 @@ import { requireAdmin } from '@/lib/auth-helpers';
 import { adminGrantBetaPro, adminSetStatus } from '@/lib/pro/profile-service';
 import { getProDeps, getProMode, jsonResult, readJsonBody, sameOriginOrReject } from '@/lib/pro/runtime';
 import { ProStoreUnavailableError } from '@/lib/pro/repo';
+import { summarizeErrorForLog } from '@/lib/pro/request-guards';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,8 @@ async function guarded(request: Request, run: (deps: Awaited<ReturnType<typeof g
     return await run(await getProDeps(mode), adminUserId, parsed.body);
   } catch (e) {
     if (e instanceof ProStoreUnavailableError) return NextResponse.json({ success: false, code: 'PRO_NOT_MIGRATED', error: '중개사 Pro 저장소가 아직 준비되지 않았습니다.' }, { status: 503 });
-    throw e;
+    console.error('[pro-admin] request failed:', summarizeErrorForLog(e));
+    return NextResponse.json({ success: false, code: 'SERVER_ERROR', error: '처리하지 못했습니다.' }, { status: 500 });
   }
 }
 

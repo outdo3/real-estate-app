@@ -38,6 +38,41 @@ export interface SnapshotInput {
 }
 
 const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+const uniq = (a: string[]) => [...new Set(a)];
+
+// 브리핑용 고정 문구(고객 조건 값 없음). 키는 matching.ts의 사유 key.
+export const FIT_MATCH_LABELS: Record<string, string> = {
+  budget: '예산 범위 안',
+  area: '요청 면적과 일치',
+  moveIn: '희망 입주 시기와 맞음',
+  commute: '통근 거리 조건 충족(직선거리 기준)',
+  floor: '선호 층과 일치',
+  newBuild: '신축 선호 충족',
+  parking: '주차 가능',
+  pet: '반려동물 가능',
+};
+export const FIT_DIFF_LABELS: Record<string, string> = {
+  budget: '예산과 차이가 있습니다(중개사와 상담)',
+  budgetMax: '예산과 차이가 있습니다(중개사와 상담)',
+  monthlyRentMax: '월세 조건과 차이가 있습니다(중개사와 상담)',
+  area: '요청 면적과 차이가 있습니다',
+  mustArea: '요청 면적과 차이가 있습니다',
+  moveIn: '입주 시기 조율이 필요합니다',
+  mustMoveIn: '입주 시기 조율이 필요합니다',
+  commute: '통근 거리가 먼 편입니다',
+  floor: '선호 층과 다릅니다',
+  newBuild: '신축 선호와 다릅니다',
+  parking: '주차 조건과 다릅니다',
+  mustParking: '주차 조건과 다릅니다',
+  pet: '반려동물 조건과 다릅니다',
+  mustPet: '반려동물 조건과 다릅니다',
+  region: '희망 지역 밖입니다',
+  dealType: '거래 유형이 다릅니다',
+  active: '현재 거래 가능한 매물이 아닙니다',
+};
+export const FIT_UNKNOWN_LABELS: Record<string, string> = {
+  budget: '가격', area: '면적', moveIn: '입주 가능일', commute: '통근 거리', school: '학교 조건', floor: '층', newBuild: '준공연도', parking: '주차', pet: '반려동물',
+};
 
 export function buildBriefingSnapshot(input: SnapshotInput): BriefingSnapshot {
   const { listing, publicInfo, match } = input;
@@ -75,12 +110,13 @@ export function buildBriefingSnapshot(input: SnapshotInput): BriefingSnapshot {
       ? {
           score: match.passedHard ? match.score : null,
           confidence: match.confidence,
-          // 예산 사유는 원문 금액 대신 "예산 범위 안/밖"만(고객 예산을 링크에 남기지 않음)
-          matched: match.reasons.filter((r) => r.verdict === 'MATCH').map((r) => (r.key === 'budget' ? '예산 범위 안' : r.detail)),
-          differences: [...match.exclusions, ...match.reasons.filter((r) => r.verdict === 'PARTIAL' || r.verdict === 'MISS')].map((r) =>
-            r.key === 'budget' || r.key === 'budgetMax' ? '예산과 차이가 있습니다(중개사와 상담)' : r.detail
+          // 사유 문장(r.detail)에는 고객 조건 값(예산·월세 상한·통근지 이름·면적 범위·희망일)이 들어 있다 →
+          // 링크로 전달되는 스냅샷에는 **값 없는 고정 문구**만 싣는다(SECURITY_REVIEW MEDIUM 수정).
+          matched: uniq(match.reasons.filter((r) => r.verdict === 'MATCH').map((r) => FIT_MATCH_LABELS[r.key] ?? '조건과 일치')),
+          differences: uniq(
+            [...match.exclusions, ...match.reasons.filter((r) => r.verdict === 'PARTIAL' || r.verdict === 'MISS')].map((r) => FIT_DIFF_LABELS[r.key] ?? '조건과 차이가 있습니다(중개사와 상담)')
           ),
-          unknown: match.reasons.filter((r) => r.verdict === 'UNKNOWN').map((r) => r.detail),
+          unknown: uniq(match.reasons.filter((r) => r.verdict === 'UNKNOWN').map((r) => `${FIT_UNKNOWN_LABELS[r.key] ?? '일부 조건'} 확인 필요`)),
         }
       : null,
     realtor: { displayName: input.realtor.displayName, officeName: input.realtor.officeName, officePhone: input.realtor.officePhone },

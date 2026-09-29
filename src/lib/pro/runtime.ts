@@ -11,7 +11,8 @@
 import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth-helpers';
-import { redactSensitive } from '@/lib/log-redaction';
+import { createInMemoryRequestLimiter } from '@/lib/community/image-upload-rate-limit';
+import { isJsonContentType, isSameOriginWrite, summarizeErrorForLog } from './request-guards';
 import { loadPiiKeyring, type PiiKeyring } from './crypto';
 import { createMemoryProRepo, emptyMemoryState, type MemoryState } from './repo-memory';
 import { ProStoreUnavailableError, type ProRepo } from './repo';
@@ -93,7 +94,8 @@ export async function withPro(handler: (deps: ProDeps, actor: ProActor) => Promi
     if (e instanceof ProStoreUnavailableError) {
       return NextResponse.json({ success: false, code: e.reason === 'NOT_MIGRATED' ? 'PRO_NOT_MIGRATED' : 'PRO_STORE_UNAVAILABLE', error: '중개사 Pro 저장소가 아직 준비되지 않았습니다.' }, { status: 503, headers: NO_STORE });
     }
-    console.error('[pro] request failed:', redactSensitive(e instanceof Error ? `${e.name}: ${e.message}`.slice(0, 300) : 'unknown'));
+    // 메시지는 남기지 않는다(Prisma 검증 오류 메시지에는 쿼리 인자 = 고객 이름·메모·암호문이 들어갈 수 있음)
+    console.error('[pro] request failed:', summarizeErrorForLog(e));
     return NextResponse.json({ success: false, code: 'SERVER_ERROR', error: '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.' }, { status: 500, headers: NO_STORE });
   }
 }
@@ -101,6 +103,9 @@ export async function withPro(handler: (deps: ProDeps, actor: ProActor) => Promi
 const BODY_MAX_BYTES = 32 * 1024;
 
 export async function readJsonBody(request: Request): Promise<{ ok: true; body: unknown } | { ok: false; response: NextResponse }> {
+  if (!isJsonContentType(request.headers)) {
+    return { ok: false, response: NextResponse.json({ success: false, code: 'UNSUPPORTED_MEDIA_TYPE', error: 'JSON 요청만 받습니다.' }, { status: 415 }) };
+  }
   try {
     const raw = await request.text();
     if (raw.length > BODY_MAX_BYTES) return { ok: false, response: NextResponse.json({ success: false, code: 'BODY_TOO_LARGE', error: '요청이 너무 큽니다.' }, { status: 413 }) };
@@ -110,15 +115,17 @@ export async function readJsonBody(request: Request): Promise<{ ok: true; body: 
   }
 }
 
-/** 같은 출처 요청만 쓰기 허용(CSRF 보조 — 세션 쿠키 SameSite=Lax와 함께). Origin이 없으면(서버 간 호출 등) 통과. */
+/** 같은 출처 쓰기만 허용(request-guards.ts 규칙). SameSite=Lax 쿠키와 함께 CSRF를 막는다. */
 export function sameOriginOrReject(request: Request): NextResponse | null {
-  const origin = request.headers.get('origin');
-  if (!origin) return null;
-  try {
-    const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
-    if (host && new URL(origin).host === host) return null;
-  } catch {
-    /* fallthrough */
-  }
+  if (isSameOriginWrite(request.headers)) return null;
   return NextResponse.json({ success: false, code: 'CROSS_ORIGIN', error: '허용되지 않은 요청입니다.' }, { status: 403 });
+}
+
+// 연락처 복호화 속도 제한(인스턴스 로컬 보조 가드): 사용자당 10분 60회. 초과 시 429 — 감사로그와 함께 대량 조회를 늦춘다.
+const contactRevealLimiter = createInMemoryRequestLimiter({ windowMs: 10 * 60 * 1000, max: 60, maxKeys: 5000 });
+
+export function contactRevealAllowed(actor: ProActor, nowMs = Date.now()): NextResponse | null {
+  const r = contactRevealLimiter.hit(`reveal:${actor.userId}`, nowMs);
+  if (r.allowed) return null;
+  return NextResponse.json({ success: false, code: 'RATE_LIMITED', error: '연락처 조회가 너무 잦습니다. 잠시 후 다시 시도해 주세요.' }, { status: 429, headers: NO_STORE });
 }

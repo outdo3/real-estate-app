@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth-helpers';
 import { adminListApplications } from '@/lib/pro/profile-service';
 import { getProDeps, getProMode, jsonResult } from '@/lib/pro/runtime';
 import { ProStoreUnavailableError } from '@/lib/pro/repo';
+import { summarizeErrorForLog } from '@/lib/pro/request-guards';
 import { PROFILE_STATUSES, type ProfileStatus } from '@/lib/pro/rules';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
     return jsonResult(await adminListApplications(await getProDeps(mode), status));
   } catch (e) {
     if (e instanceof ProStoreUnavailableError) return NextResponse.json({ success: false, code: 'PRO_NOT_MIGRATED', error: '중개사 Pro 저장소가 아직 준비되지 않았습니다.' }, { status: 503 });
-    throw e;
+    console.error('[pro-admin] request failed:', summarizeErrorForLog(e));
+    return NextResponse.json({ success: false, code: 'SERVER_ERROR', error: '처리하지 못했습니다.' }, { status: 500 });
   }
 }

@@ -285,6 +285,8 @@ test('브리핑 스냅샷에 소유자·호수·메모·연락처·예산 원문
   const s = JSON.stringify(snap);
   for (const bad of ['1203', '101동', '소유자', '010-2222-3333', '남향', '평일 저녁 조율', '박테스트', '9.5억', '95000']) assert.ok(!s.includes(bad), bad);
   assert.equal(snap.customerLabel, '박OO 고객님');
+  // 적합도 문구에 고객 조건 값이 없다(면적 범위 80~90㎡ 등)
+  assert.ok(!/80㎡|90㎡|8억|9\.5억/.test(JSON.stringify(snap.fit)), JSON.stringify(snap.fit));
   assert.ok(snap.listing && !('floor' in snap.listing) && !('unitHo' in snap.listing), '매물 정확 층·호수는 스냅샷에 없다');
   assert.equal(snap.publicData.state, 'REGION_NOT_OPEN');
   assert.deepEqual(snap.publicData.recentTrades, []);
@@ -377,4 +379,18 @@ test('삭제한 고객은 404이고 연락처·메모가 즉시 비워진다', a
   assert.equal(raw.phoneEnc, null);
   assert.equal(raw.emailEnc, null);
   assert.equal(raw.memo, null);
+});
+
+test('브리핑 적합도 문구에 고객 조건 값(월세 상한·통근지·면적·희망일)이 없다', async () => {
+  const deps = makeDeps({ publicData: { lookup: async () => publicInfo() } });
+  addProfile(deps.state, A.userId);
+  const l = await aListing(deps, { aptSeq: '26350-100', lawdCd: '26350', dealType: 'MONTHLY', askingPriceManwon: null, depositManwon: 5000, monthlyRentManwon: 170, exclusiveAreaM2: 97.3, moveInAvailableAt: '2027-03-15' });
+  const c = await aCustomer(deps);
+  await savePreference(deps, A, c.id, null, { dealTypes: ['MONTHLY'], budgetMaxManwon: 6000, monthlyRentMaxManwon: 123, areaMinM2: 71.5, areaMaxM2: 88.8, moveInTargetAt: '2026-12-24', commuteLabel: '비밀회사본사', commuteLat: 35.5, commuteLng: 129.5 });
+  const b = await createBriefing(deps, A, { listingId: l.id, customerId: c.id });
+  assert.ok(b.ok);
+  if (!b.ok) return;
+  const s = JSON.stringify(b.data.snapshot);
+  for (const leak of ['123', '비밀회사본사', '71.5', '88.8', '2026-12-24', '6000', '6,000']) assert.ok(!s.includes(leak), leak);
+  assert.ok(b.data.snapshot.fit!.differences.length > 0);
 });
