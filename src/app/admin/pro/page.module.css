@@ -1,0 +1,16 @@
+/* REALTOR_PRO_MVP_V1 — 관리자 Pro 심사 화면 레이아웃. */
+
+.main {
+  min-height: 100vh;
+  background: var(--bg-color);
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+}
+
+.inner {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
