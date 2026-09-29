@@ -1,5 +1,16 @@
 # 이집 개발 변경 기록
 
+## 2026-09-30
+
+### REALTOR PRO MVP OVERNIGHT BUILD V1 — 중개사 Pro MVP 로컬 구현 (push·배포·DB 적용 없음)
+
+상세: `docs/development/REALTOR_PRO_MVP_OVERNIGHT_BUILD_V1.md` · 아침 가이드 `docs/pro/REALTOR_PRO_MVP_MORNING_WALKTHROUGH.md`
+
+    범위     스키마 10모델 + migration(미적용) · PII 암호화 · 프로필/매물/CRM/팔로업/매칭/브리핑/대시보드/감사로그 · /pro UI · /b/[token]
+    스위치   REALTOR_PRO_ENABLED 기본 OFF(페이지 "준비 중", API 404) · DEMO는 로컬 개발에서만
+    불변     Production DB·env·배포·cron·MOLIT 0 · 기존 테이블 SQL 변경 0 · 기존 인증 그대로
+    승인대기 migration 적용 · 암호화 키 등록 · 테스트 중개사 계정 · Preview 배포 · /b/* 광고 로더 제외
+
 ## 2026-09-29
 
 ### E-JIP SEOUL25 CRON PATCH APPLY V1 — 서울 나머지 17구 일일 매매 동기화(승인, Production)
