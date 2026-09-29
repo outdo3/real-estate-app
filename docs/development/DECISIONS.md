@@ -1825,3 +1825,26 @@ coverage가 실행 끝에서만 영속화돼, 60s 한도 등 비정상 종료가
 상태:
 LOCAL 구현·테스트 완료, 사용자 승인 대기(push·배포 전). 문서: `docs/development/CRON_DURABLE_PROGRESS_DEADLINE_SAFETY_FIX_V1.md`
 
+---
+
+## 18. 서울 25 beta: 17구는 Preview 전용 스위치로 먼저, "시도 전체"는 시도 층 출시 시도만
+
+날짜:
+2026-09-27
+
+결정:
+서울 나머지 17구는 `NEXT_PUBLIC_VERCEL_ENV=preview`와 `NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW=true`가 모두 참인 빌드에서만
+app·search·map·detail을 연다(report·stats·seoIndex·sitemap·cronSync OFF). "OO 전체" 선택은 "일부만 공개"가 아니라
+"시도 층에서 통째로 출시된 시도인가"로 판정한다(지금은 부산만).
+
+배경:
+17구 Production 적재가 PARTIAL/HOLD다. 기존 선택기 가드는 8/25라는 우연한 상태에 기대 25/25가 되면 "서울특별시 전체"를 되살린다.
+
+이유:
+- Preview QA를 적재 완료 전에 할 수 있고, Production 빌드에서는 플래그가 잘못 들어가도 열리지 않는다.
+- cronSync는 DB-first 읽기 스위치라, 적재 전 켜면 빈 DB가 "거래 0건"으로 보인다 — Production 공개 때 8구 프로필로 옮긴다.
+- 서울 전체 질의 경로는 없다 — 구현 전까지 선택지에서도 만들지 않는다.
+
+상태:
+LOCAL 구현·테스트 완료. Preview 배포·Production 공개는 별도 승인. 문서: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
+

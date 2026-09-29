@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import { dedupMolitInFlight, runMolitGuarded, type MolitAttemptOutcome, type MolitGuardDeps } from './molit-rate-guard';
+import { isDbOnlyLawdCd } from './region/enablement';
 
 const API_KEY = process.env.DATA_GO_KR_API_KEY;
 
@@ -272,6 +273,10 @@ async function fetchAllPagesGuarded(
 // 실패한 이 월 하나에 대해 bounded backoff로 재시도한다(잠금 중에는 호출 없이 실패). 반환 계약은 그대로다: 성공은 거래 배열,
 // 정상 0건은 [], 최종 실패는 typeLabel:'에러' 플레이스홀더 1건.
 export async function fetchMolitData(params: FetchParams, deps?: MolitFetchDeps) {
+  // SEOUL25_PREVIEW_READ_ONLY_DB_V1 · SEOUL25_GO_LIVE_PREP_V1 — 17구가 열린 빌드(Preview 또는 Production 공개 스위치)에서
+  // 서울 17구는 적재된 DB만 읽는다. live MOLIT는 이 단일 관문에서
+  // 네트워크 없이 **실패로** 닫는다(빈 배열 = "거래 0건"으로 위장하지 않는다). 17구가 닫힌 빌드는 항상 통과(판정 false).
+  if (isDbOnlyLawdCd(params.lawdCd)) return molitFailurePlaceholder(params, DB_ONLY_MOLIT_MESSAGE);
   // dedup 키는 **셀 단위**(유형:지역:월)다 — 한 셀의 페이지들은 아래에서 순차로 읽으므로
   // 같은 페이지를 두 번 요청하는 일이 없고, 동시에 같은 셀을 원한 호출부들은 여전히
   // 네트워크 시퀀스 하나를 공유한다.
@@ -316,6 +321,14 @@ async function fetchMolitDataGuarded(params: FetchParams, deps?: MolitFetchDeps)
   const safeMessage = redactMolitFailureMessage(outcome.message);
   console.log(`MOLIT API Error or Timeout (${type}, ${dealYmd}). ${safeMessage}`);
   // Instead of failing silently, return a special error object so the frontend can display it
+  return molitFailurePlaceholder({ lawdCd, dealYmd, type }, safeMessage);
+}
+
+/** DB 전용 지역(서울 17구)에서 live MOLIT를 막았을 때의 실패 사유(비밀값 없음 · 화면에 노출될 수 있는 문구). */
+export const DB_ONLY_MOLIT_MESSAGE = '이 지역의 이 거래 유형은 아직 제공 준비 중입니다';
+
+// 실패 월 플레이스홀더(typeLabel '에러' 1건) — 기존 계약 그대로. classifyMolitMonthResult가 FAILED로 분류한다.
+function molitFailurePlaceholder({ lawdCd, dealYmd, type }: FetchParams, safeMessage: string) {
   return [{
     id: `error-${type}-${lawdCd}-${dealYmd}`,
     rank: 1,

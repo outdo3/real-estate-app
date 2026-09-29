@@ -175,7 +175,9 @@ test('§14 지역 선택 모달이 시도·시군구 두 목록 모두 거른다
   const src = read('src/components/RegionSelectModal.tsx');
   assert.ok(/isSidoPubliclyHidden\(s\.code\.substring\(0, 2\)\)/.test(src), '시도 목록이 안 걸러진다');
   assert.ok(/isPublicRegionAllowed\(item\.code\.substring\(0, 5\), 'app'\)/.test(src), '시군구 목록이 공개 allowlist로 안 걸러진다');
-  assert.ok(/isSidoPartiallyPublic\(sidoCode\)/.test(src), '"시도 전체" 핸들러 가드가 없다');
+  // SEOUL_25_PUBLIC_BETA_PREP_V1 — "일부 공개" 판정 대신 "시도 단위 질의 지원" 판정으로 강화(25구가 다 열려도 서울 전체 없음).
+  assert.ok(/if \(!isSidoWholeQuerySupported\(sidoCode\)\) return;/.test(src), '"시도 전체" 핸들러 가드가 없다');
+  assert.ok(/\{isSidoWholeQuerySupported\(selectedSido\?\.code\.substring\(0, 2\)\) && \(/.test(src), '"시도 전체" 버튼 가드가 없다');
 });
 
 // GYEONGGI_8_PREVIEW_FINAL_BLOCKER_V1 — 서울 전용 분기가 enablement `supply` 축 게이트(decideSupplyRegion)로 바뀌었다.

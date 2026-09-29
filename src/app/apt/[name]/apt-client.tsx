@@ -33,7 +33,7 @@ import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } fr
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import type { NextAction } from '@/lib/decision-journey/types';
 import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
-import { aptReportHref } from '@/lib/report/report-links';
+import { aptReportHref, isReportRegionOpen } from '@/lib/report/report-links';
 import AptReportEntryCard from '@/components/report/AptReportEntryCard';
 import { fetchDetailTrades } from '@/lib/detail-trade-cache';
 import { fetchCachedResource, DETAIL_RESOURCE_TTL_MS } from '@/lib/detail-resource-cache';
@@ -639,7 +639,8 @@ export default function ApartmentDetail() {
 
   // REPORT-7 §2 — 한장 리포트 진입. canonical aptSeq가 확정됐을 때만 노출한다
   // (이름 기반 식별 금지 — aptSeq가 없으면 CTA 자체를 만들지 않는다).
-  const reportHref = aptReportHref(canonicalAptSeq);
+  // SEOUL_25_PUBLIC_BETA_PREP_V1 — 리포트를 지원하지 않는 지역(서울 beta 등)에서는 CTA를 만들지 않는다(막힌 화면으로 보내지 않음).
+  const reportHref = isReportRegionOpen(canonicalAptSeq) ? aptReportHref(canonicalAptSeq) : null;
 
   // APT_DETAIL_REPORT_CTA_FLOW_V1 — 리포트 진입은 여기(상단 다음 행동)에서 빼고, 가격·위치 구역을 지난
   // 중후반의 AptReportEntryCard 하나로 옮겼다. 페이지 안에 리포트 CTA를 두 번 두지 않는다.

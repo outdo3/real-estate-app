@@ -72,7 +72,7 @@ import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
 import ShareAction from '@/components/ShareAction';
 import mapMarkerStyles from './map-marker.module.css';
-import OutOfBusanNotice from '@/components/map/OutOfBusanNotice';
+import UnsupportedRegionNotice from '@/components/map/UnsupportedRegionNotice';
 import {
   IP_LOOKUP_TIMEOUT_MS,
   MAP_LOCATING_MESSAGE,
@@ -2154,7 +2154,7 @@ export default function FullscreenMapPage() {
           안내. 현재 위치로 지도를 여는 동작은 그대로 두고(§4 — 사용자를 부산으로
           강제로 끌어오지 않는다), 데이터가 부산 우선이라는 사실만 정직하게 말한다.
           세션당 한 번, 닫으면 끝 — pan/zoom마다 다시 뜨지 않는다. */}
-      <OutOfBusanNotice lat={center.lat} lng={center.lng} />
+      <UnsupportedRegionNotice lawdCd={currentLawdCd} />
 
       {/* E-JIP FINAL DEVICE UX FIX V1 — 현재 위치를 못 받아 IP/기본 지역으로 열었을 때만,
           지금 보이는 곳이 현재 위치가 아니라는 사실을 말한다. 지도를 옮기면 사라진다. */}

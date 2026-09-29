@@ -1,5 +1,17 @@
 # 이집 개발 변경 기록
 
+## 2026-09-30
+
+### E-JIP SEOUL25 GO-LIVE PREP V1 — 서울 17구 Production 공개 준비(스위치 꺼짐, LOCAL)
+
+상세: `docs/development/SEOUL_25_GO_LIVE_CHECKLIST_V1.md` · `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
+
+    포함     Preview 준비 3커밋(2f6ac27·cc4f0a2·e7e8baf)을 main 377acf7 위에 통합 — 선택기 서울 전체 가드 · 리포트 CTA 누수 · supply 축 · Preview read-only DB
+    스위치   enablement SEOUL_17_PUBLIC_ENABLED = false(단일 지점) → true면 17구 app·search·map·detail·DB 읽기, report·stats·supply·sitemap·seoIndex 닫힘
+    데이터   17구가 열리면 DB 전용 — fetchMolitData 관문(isDbOnlyLawdCd)에서 live MOLIT 네트워크 없이 차단
+    안내     지도 OutOfBusanNotice → UnsupportedRegionNotice: 부산 경계 대신 공개 allowlist 판정, 지역 이름 없는 문구
+    불변     Production 공개 상태 전부(17구 닫힘) · cron · DB 0 · push/배포 0
+
 ## 2026-09-29
 
 ### E-JIP SEOUL25 CRON PATCH APPLY V1 — 서울 나머지 17구 일일 매매 동기화(승인, Production)
