@@ -49,7 +49,18 @@ export const GYEONGGI_SALE_SYNC_LAWDCDS = [
   '41210', // 광명시
 ] as const;
 
-export type SaleSyncScope = 'busan' | 'seoul' | 'gyeonggi';
+/**
+ * SEOUL_17_CRON_EXPANSION_V1(승인 2026-09-29) — 서울 나머지 17구를 2개 shard로 나눈다(한 scope 17구는 60초 창을 넘길 수 있다).
+ * shard 크기는 이미 검증된 서울 8구 scope(sale 32셀 · recheck 80셀)와 같게 맞췄다.
+ *   seoul-b 9구: sale 36 · recheck 90  |  seoul-c 8구: sale 32 · recheck 80  → 합계 ≤ 238 MOLIT 호출/일
+ * **전제 충족**: 17구 전체 이력 적재 완료 2026-09-29 — 1,180,587행, 원천/DB parity drift 0, missing 0,
+ * review 32/32 source-bound(승인 중복 2행은 11590 소유). 이 목록은 **동기화 범위**일 뿐 공개 범위가 아니다
+ * (17구 Production 공개는 enablement에서 따로 — 현재 닫힘). 11680 강남 포함(이제 전체 이력).
+ */
+export const SEOUL_SALE_SYNC_LAWDCDS_B = ['11200', '11260', '11290', '11305', '11320', '11350', '11380', '11470', '11500'] as const;
+export const SEOUL_SALE_SYNC_LAWDCDS_C = ['11530', '11560', '11590', '11620', '11650', '11680', '11710', '11740'] as const;
+
+export type SaleSyncScope = 'busan' | 'seoul' | 'seoul-b' | 'seoul-c' | 'gyeonggi';
 
 export type ResolvedSaleSyncScope =
   | { ok: true; scope: SaleSyncScope; lawdCds: string[] | undefined }
@@ -59,6 +70,8 @@ export function resolveSaleSyncScope(raw: string | null): ResolvedSaleSyncScope 
   // 생략만 기본값이다. 빈 문자열(`?scope=`)은 오타일 수 있으므로 기본값으로 삼키지 않는다.
   if (raw === null) return { ok: true, scope: 'busan', lawdCds: undefined };
   if (raw === 'seoul') return { ok: true, scope: 'seoul', lawdCds: [...SEOUL_SALE_SYNC_LAWDCDS] };
+  if (raw === 'seoul-b') return { ok: true, scope: 'seoul-b', lawdCds: [...SEOUL_SALE_SYNC_LAWDCDS_B] };
+  if (raw === 'seoul-c') return { ok: true, scope: 'seoul-c', lawdCds: [...SEOUL_SALE_SYNC_LAWDCDS_C] };
   if (raw === 'gyeonggi') return { ok: true, scope: 'gyeonggi', lawdCds: [...GYEONGGI_SALE_SYNC_LAWDCDS] };
   return { ok: false, error: 'invalid scope' };
 }

@@ -1,5 +1,15 @@
 # 이집 개발 변경 기록
 
+## 2026-09-29
+
+### E-JIP SEOUL25 CRON PATCH APPLY V1 — 서울 나머지 17구 일일 매매 동기화(승인, Production)
+
+    범위     sale-sync-scope seoul-b 9구(11200·11260·11290·11305·11320·11350·11380·11470·11500) · seoul-c 8구(11530·11560·11590·11620·11650·11680·11710·11740)
+    일정     sale 19:45Z(seoul-b)·20:00Z(seoul-c) · recheck 23:45Z(seoul-b)·00:00Z(seoul-c) — 기존 7개 cron 불변
+    예산     구당 매매 4개월 + recheck 10개월 = 14셀 → 17구 238 MOLIT/일
+    근거     17구 전체 이력 적재 완료(1,180,587행 · drift 0 · review 32/32)
+    불변     공개 범위(enablement) 변경 없음 — 17구 Production 공개·cronSync(읽기) 닫힘 · 부산·서울 8구·경기 scope 그대로
+
 ## 2026-09-28
 
 ### E-JIP GYEONGGI SUPPLY LEAK HOTFIX V1 — /api/stats/supply 경기 노출 차단 (승인, Production)
