@@ -57,6 +57,17 @@ Production 변경 0 · push 0 · 배포 0.
 - 합성 "테스트중개사"는 OAuth로 만들 수 없다 → 선택: (a) 사용자가 본인 계정으로 Preview에 로그인(그 계정 이름·이메일이 Preview DB에 저장) 또는
   (b) Preview 전용 테스트 로그인 추가(인증 동작 변경 = 별도 승인).
 
+## hosted 테스트 DB migration (2026-09-30, 사용자 승인)
+
+- 대상: Supabase `ejip-pro-preview`(ref `xzfd…`, Postgres 17.6) — Production(`ztln…`)과 다른 프로젝트. 연결은 로컬 `.env.pro-preview.local`(git 제외)에서만, 값 출력 0
+- 안전장치: 적용 직전 offline guard(ref 일치 · Production ref와 다름 · 5432/6543 · sslmode·pgbouncer·connection_limit) PASS → read-only probe(빈 DB 확인) PASS
+- 개수 정정: migration은 **23개**(`0_baseline` + 22). V1 문서의 "24개"는 잘못 센 값
+- `prisma migrate deploy`: 23개 전부 적용 · `migrate status` up to date · `migrate diff` No difference
+- Pro 객체: 테이블 10 · RLS 활성 10(FORCE 0) · 정책 30 · CHECK 26 · FK 13 · anon/authenticated/service_role 권한 0
+- 계정 테이블 7개 API 권한 0 · anon/authenticated 권한이 있으면서 RLS 꺼진 public 테이블 0
+- 실 RLS 음성 테스트 15/15 PASS(A 자기 것만 · B→A 0 · 문맥 없음 0 · anon/authenticated/service_role 거부 · 정지 중개사 쓰기 거부 · 남의 소유 삽입 거부 · 소유권 이전 거부 · 남의 행 수정/삭제 0 · 감사로그 쓰기 거부 · 정지 상태 자기 승격 0 · 데이터 불변). 전부 한 트랜잭션 안에서 실행 후 ROLLBACK — 남은 행 0, probe 역할 0
+- Production DB 접속·변경 0 · Vercel 배포 0 · MOLIT 호출 0
+
 ## 다음 단계 (hosted DB가 생긴 뒤)
 
 1. Pro 브랜치 한정 Preview env: `PREVIEW_DATABASE_URL`(Pro DB) · `NEXTAUTH_SECRET`(Preview 전용) · `REALTOR_PRO_ENABLED=true` · `REALTOR_PRO_PII_KEY`·`_KEY_ID`·`_LOOKUP_PEPPER`(새로 생성, Production 재사용 금지)
