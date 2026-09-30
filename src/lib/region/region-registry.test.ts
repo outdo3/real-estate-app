@@ -165,11 +165,11 @@ test('14 · 부산은 모든 축에서 열려 있다(기존 상태 보존)', () 
   assert.deepEqual(getEnabledSidoCodes(), ['26'], '앱에 열린 시도는 부산뿐');
 });
 
-test('15 · 서울은 registry에 존재하지만 어떤 축도 열려 있지 않다', () => {
+test('15 · 서울 시도 층은 닫힘 — 구는 개별 공개(2026-09-30 서울 17구 공개: 앱·검색·지도·상세·DB 읽기만)', () => {
   assert.ok(getRegionByLawdCd('11680'), 'registry에는 있어야 한다');
   const e = getSidoEnablement('11');
   assert.deepEqual(e, { app: false, search: false, map: false, detail: false, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
-  assert.deepEqual(getRegionEnablement('11680'), e);
+  assert.deepEqual(getRegionEnablement('11680'), { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true });
 });
 
 test('16 · 경기도 동일 — 존재하지만 미출시', () => {
@@ -270,9 +270,11 @@ test('17b · sitemap/SEO 축이 열린 지역은 부산뿐', () => {
 
 // SEOUL_MOBILE_BETA_LAUNCH_V1 — beta가 켜지면서 서울 승인 8구가 cronSync(=DB-first 읽기) 축에 들어왔다.
 // registry가 **자동으로** 넓히는 것은 여전히 없다: 부산 16 + allowlist 8 외에는 한 곳도 열리지 않는다.
-test('17c · cronSync 축은 부산 leaf 16 + 서울 beta 8뿐 — registry가 자동으로 서울/경기를 돌리지 않는다', () => {
+test('17c · cronSync(DB-first 읽기) 축은 부산 leaf 16 + 서울 25구 — 경기는 자동으로 돌지 않는다', () => {
   const cronOpen = getMolitLeafRegions().filter((n) => getRegionEnablement(n.lawdCd).cronSync);
-  assert.equal(cronOpen.length, 24);
-  assert.deepEqual([...BUSAN_LAWDCD_16, ...SEOUL_BETA_LAWDCDS].sort(), codes(cronOpen).sort());
-  assert.ok(!codes(cronOpen).includes('11680'), '강남이 열렸다');
+  // SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 서울 17구 공개로 서울 25구 전부 DB-first
+  assert.equal(cronOpen.length, 41);
+  assert.ok(codes(cronOpen).includes('11680'));
+  assert.ok(codes(cronOpen).every((c) => c.startsWith('26') || c.startsWith('11')), '경기 등 다른 시도가 열렸다');
+  for (const c of BUSAN_LAWDCD_16) assert.ok(codes(cronOpen).includes(c), c);
 });

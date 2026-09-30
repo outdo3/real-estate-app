@@ -17,13 +17,9 @@ import {
   APT_MAP_ZERO_MESSAGE,
   APT_MAP_ERROR_MESSAGE,
   APT_MAP_PARTIAL_MESSAGE,
-  MAP_REGION_NOTICE_BODY,
-  MAP_REGION_NOTICE_TITLE,
   resolveAptMapNotice,
-  shouldShowMapRegionNotice,
 } from '../map/apt-map-notice';
 import { resolveTransactionsReadState } from '../trade-read-state';
-import { publicAptReportHref, publicCompareReportHref, aptReportHref } from '../report/report-links';
 import {
   addressMatchesRegion,
   dongTokenAfterSigungu,
@@ -98,66 +94,6 @@ test('2b. 지도 페이지가 regionUnsupported를 읽고 캐시에도 보존한
 });
 
 // ── BLOCKER 2 — 부산 전용 지도 문구 ────────────────────────────────────────
-
-test('3. 지도 안내에서 부산 전용 문구가 사라졌다', () => {
-  const notice = codeNoJsxComments('src/components/map/OutOfBusanNotice.tsx');
-  const map = codeNoJsxComments('src/app/map/page.tsx');
-  for (const src of [notice, map]) {
-    assert.ok(!/부산 외 지역|부산 지역 데이터를 우선|부산 데이터를 우선/.test(src), '부산 전용 문구가 남아 있다');
-  }
-  for (const text of [MAP_REGION_NOTICE_TITLE, MAP_REGION_NOTICE_BODY, APT_MAP_UNSUPPORTED_REGION_MESSAGE]) {
-    assert.ok(!/부산|서울|경기/.test(text), `특정 시도를 말한다: ${text}`);
-  }
-  assert.ok(!/isInsideBusanBounds/.test(notice), '판정이 아직 부산 좌표 상자다');
-});
-
-test('3b. 상단 지역 안내: 공개 지역(부산·서울 beta)에는 뜨지 않고, 닫힌 지역에만 뜬다', () => {
-  for (const c of BUSAN16) assert.equal(shouldShowMapRegionNotice(c), false, `부산 ${c}`);
-  for (const c of SEOUL8) assert.equal(shouldShowMapRegionNotice(c), false, `서울 beta ${c}`);
-  for (const c of SEOUL_BLOCKED) assert.equal(shouldShowMapRegionNotice(c), true, `차단 서울 ${c}`);
-  for (const c of [...GG8, ...GG_OTHER]) assert.equal(shouldShowMapRegionNotice(c), true, `경기(현재 OFF) ${c}`);
-  assert.equal(shouldShowMapRegionNotice('27110'), true, 'registry 밖 전국(대구)');
-  // 지역을 아직 모르면 "미지원"이라 하지 않는다.
-  assert.equal(shouldShowMapRegionNotice(null), false);
-  assert.equal(shouldShowMapRegionNotice(''), false);
-});
-
-// ── BLOCKER 3 — 리포트 진입 CTA ───────────────────────────────────────────
-
-test('4. 리포트 CTA: 부산은 그대로 노출(기존 route 동일)', () => {
-  for (const c of BUSAN16) assert.equal(publicAptReportHref(aptSeq(c)), aptReportHref(aptSeq(c)), c);
-  assert.equal(publicAptReportHref('26140-1164'), '/report/apt/26140-1164');
-  assert.equal(publicCompareReportHref('26140-1164', '26140-1356'), '/report/compare?a=26140-1164&b=26140-1356');
-});
-
-test('5. 리포트 CTA: 서울 beta 8구는 숨김(report 축 닫힘), 차단 서울도 숨김', () => {
-  for (const c of [...SEOUL8, ...SEOUL_BLOCKED]) assert.equal(publicAptReportHref(aptSeq(c)), null, c);
-  assert.equal(publicCompareReportHref('26140-1164', '11440-1'), null, '한쪽이라도 닫히면 비교 리포트 CTA 없음');
-  assert.equal(publicCompareReportHref('11440-1', '26140-1164'), null);
-});
-
-test('6. 리포트 CTA: 경기 beta 8구는 현재도, 켜도(시뮬레이션) 숨김', () => {
-  for (const c of GG8) {
-    assert.equal(publicAptReportHref(aptSeq(c)), null, `현재 ${c}`);
-    assert.equal(publicAptReportHref(aptSeq(c), allowWith(ON)), null, `켜면 ${c}`);
-    assert.equal(publicCompareReportHref(aptSeq(c), '26140-1164', allowWith(ON)), null, `켜면 비교 ${c}`);
-  }
-  // 켜도 부산은 그대로 열려 있다.
-  assert.equal(publicAptReportHref('26140-1164', allowWith(ON)), '/report/apt/26140-1164');
-});
-
-test('6b. 리포트 CTA는 canonical aptSeq로만 판정한다 — 형태가 아니면 fail-closed, 상세·비교가 게이트를 쓴다', () => {
-  assert.equal(publicAptReportHref(null), null);
-  assert.equal(publicAptReportHref('롯데캐슬'), null);
-  assert.equal(publicAptReportHref('2614-1'), null);
-  assert.equal(publicAptReportHref('99999-1'), null, 'registry 밖 코드');
-  assert.ok(/const reportHref = publicAptReportHref\(canonicalAptSeq\);/.test(code('src/app/apt/[name]/apt-client.tsx')));
-  assert.ok(/publicCompareReportHref\(/.test(code('src/components/compare/CompareV2.tsx')));
-  const links = code('src/lib/report/report-links.ts');
-  assert.ok(!/pathname|startsWith\('11'\)|서울/.test(links), '경로·시도 하드코딩으로 판정한다');
-});
-
-// ── BLOCKER 4 — 학교 시/군/구 파싱 ────────────────────────────────────────
 
 const GG_GU: Record<string, string> = {
   '41111': '수원시 장안구',
@@ -259,71 +195,3 @@ test('10·11. null 좌표 master는 마커가 없고 0,0이나 다른 단지 좌
 });
 
 // ── STEP 6 — beta 설정 시뮬레이션 ─────────────────────────────────────────
-
-test('6-sim. 켜면 경기 8구만 app·search·map·detail이 열리고 report는 닫힘, 지도 안내도 따라간다', () => {
-  const allow = allowWith(ON);
-  for (const c of GG8) {
-    for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(allow(c, axis), true, `${c} ${axis}`);
-    for (const axis of ['report', 'stats', 'sitemap', 'seoIndex', 'cronSync'] as const) assert.equal(allow(c, axis), false, `${c} ${axis}`);
-    assert.equal(shouldShowMapRegionNotice(c, allow), false, `켜면 ${c}는 지원 지역`);
-    assert.equal(getRegionByLawdCd(c)?.isMolitLeaf, true);
-  }
-});
-
-// ── STEP 7 — 회귀 ─────────────────────────────────────────────────────────
-
-const ALL_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const;
-
-test('12. 나머지 경기는 현재도·켜도 전 축 닫힘(부모 시 포함), 지도 안내 표시·리포트 없음', () => {
-  for (const flags of [NOW, ON]) {
-    for (const c of GG_OTHER) {
-      for (const axis of ALL_AXES) assert.equal(allowWith(flags)(c, axis), false, `${c} ${axis}`);
-      assert.equal(shouldShowMapRegionNotice(c, allowWith(flags)), true, c);
-      assert.equal(publicAptReportHref(aptSeq(c), allowWith(flags)), null, c);
-    }
-  }
-  for (const c of [...GG8, ...GG_OTHER]) for (const axis of ALL_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `런타임 ${c} ${axis}`);
-});
-
-test('13. 41135(분당)는 켜도 전 축 닫힘', () => {
-  assert.ok(!GG8.includes('41135'));
-  for (const axis of [...ALL_AXES, 'cronSync'] as const) assert.equal(allowWith(ON)('41135', axis), false, axis);
-  assert.equal(shouldShowMapRegionNotice('41135', allowWith(ON)), true);
-});
-
-test('14. 부산 16구 회귀: 전 축 열림, 안내 없음, 리포트 CTA 그대로, 학교 파싱 결과 동일', () => {
-  assert.equal(BUSAN16.length, 16);
-  for (const flags of [NOW, ON]) {
-    for (const c of BUSAN16) {
-      for (const axis of [...ALL_AXES, 'cronSync'] as const) assert.equal(allowWith(flags)(c, axis), true, `${c} ${axis}`);
-      assert.equal(shouldShowMapRegionNotice(c, allowWith(flags)), false);
-      assert.equal(publicAptReportHref(aptSeq(c), allowWith(flags)), `/report/apt/${c}-1`);
-    }
-  }
-  for (const c of BUSAN16) {
-    const node = getRegionByLawdCd(c)!;
-    const gu = node.fullName.replace(/^부산광역시 /, '');
-    const region = `부산광역시 ${gu}`;
-    // 예전 파서(region.split(' ')[1])와 같은 결과 — lawdCd가 있든 없든.
-    assert.equal(resolveSchoolRegionQuery(region).sigungu, region.split(' ')[1], c);
-    assert.equal(resolveSchoolRegionQuery(region, c).sigungu, region.split(' ')[1], c);
-    assert.equal(resolveSchoolRegionQuery(region, c).sido, '부산광역시');
-  }
-  // "서구"는 "강서구" 학교를 잡지 않는다(기존 계약).
-  assert.equal(addressMatchesRegion('부산광역시 강서구 명지국제7로 60', '부산광역시 서구', '서구'), false);
-  assert.equal(addressMatchesRegion('부산광역시 서구 구덕로 225', '부산광역시 서구', '서구'), true);
-});
-
-test('15. 서울 회귀: 승인 8구 search·map·detail 유지 + report 닫힘, 차단 17구는 계속 차단', () => {
-  assert.equal(SEOUL8.length, 8);
-  assert.equal(SEOUL_BLOCKED.length, 17);
-  for (const flags of [NOW, ON]) {
-    for (const c of SEOUL8) {
-      for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(allowWith(flags)(c, axis), true, `${c} ${axis}`);
-      for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) assert.equal(allowWith(flags)(c, axis), false, `${c} ${axis}`);
-    }
-    for (const c of SEOUL_BLOCKED) for (const axis of ALL_AXES) assert.equal(allowWith(flags)(c, axis), false, `${c} ${axis}`);
-  }
-  // 전국(registry 밖·그 밖 시도)은 닫힘.
-  for (const c of ['27110', '28110', '99999']) for (const axis of ALL_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
-});

@@ -1825,56 +1825,33 @@ coverage가 실행 끝에서만 영속화돼, 60s 한도 등 비정상 종료가
 상태:
 LOCAL 구현·테스트 완료, 사용자 승인 대기(push·배포 전). 문서: `docs/development/CRON_DURABLE_PROGRESS_DEADLINE_SAFETY_FIX_V1.md`
 
-
 ---
 
-## 16. GYEONGGI 8 PUBLIC BETA PREVIEW V1 — 경기 8구는 Preview 빌드에서만 먼저 연다
+## 18. 서울 25 beta: 17구는 Preview 전용 스위치로 먼저, "시도 전체"는 시도 층 출시 시도만
 
 날짜:
-2026-09-28
+2026-09-27
 
 결정:
-경기 8구 공개는 Production 스위치(`GYEONGGI_BETA_ENABLED`)를 건드리지 않고 Preview 전용 스위치로 먼저 연다.
-두 값이 모두 참일 때만 열린다: `NEXT_PUBLIC_VERCEL_ENV === 'preview'`, `NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW === 'true'`.
-여는 목록·축은 Production 스위치와 같다(8구 × app·search·map·detail). cronSync는 바꾸지 않는다.
+서울 나머지 17구는 `NEXT_PUBLIC_VERCEL_ENV=preview`와 `NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW=true`가 모두 참인 빌드에서만
+app·search·map·detail을 연다(report·stats·seoIndex·sitemap·cronSync OFF). "OO 전체" 선택은 "일부만 공개"가 아니라
+"시도 층에서 통째로 출시된 시도인가"로 판정한다(지금은 부산만).
 
 배경:
-모바일 실측 QA는 실제 배포 환경이 필요하다. 그러나 cron 런타임 검증이 끝나지 않아 Production 공개는 HOLD다.
+17구 Production 적재가 PARTIAL/HOLD다. 기존 선택기 가드는 8/25라는 우연한 상태에 기대 25/25가 되면 "서울특별시 전체"를 되살린다.
 
 이유:
-- VERCEL_ENV 조건이 있어 Production에 플래그를 잘못 넣어도 열리지 않는다(fail-closed).
-- 목록·축을 새로 만들지 않고 기존 상수를 재사용한다. 그래서 Preview에서 본 동작이 곧 Production 스위치를 켰을 때의 동작이다.
-
-영향:
-- Production·로컬·테스트 런타임 변화 0.
-- 플래그를 브랜치 한정으로 넣지 않으면 모든 Preview에서 경기가 열린다. 운영 절차로 막는다.
+- Preview QA를 적재 완료 전에 할 수 있고, Production 빌드에서는 플래그가 잘못 들어가도 열리지 않는다.
+- cronSync는 DB-first 읽기 스위치라, 적재 전 켜면 빈 DB가 "거래 0건"으로 보인다 — Production 공개 때 8구 프로필로 옮긴다.
+- 서울 전체 질의 경로는 없다 — 구현 전까지 선택지에서도 만들지 않는다.
 
 상태:
-LOCAL 구현·테스트 완료, Preview 배포는 사용자 승인 대기.
+LOCAL 구현·테스트 완료. Preview 배포·Production 공개는 별도 승인. 문서: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
 
----
+## 2026-09-30 — 경기 8구 공개 프로필: DB-first 읽기 + live MOLIT 차단 (GYEONGGI8_FINAL_PREVIEW_PREP_V2)
 
-## 17. GYEONGGI 8 PREVIEW FINAL BLOCKER V1 — 공급(청약홈)은 별도 `supply` 축으로 공개한다
+- 결정: 경기 8구가 열리면(Preview 스위치 또는 승인 뒤 Production 스위치) 서울 17구와 같이 적재된 DB를 읽고(`cronSync: true`), live MOLIT는 `isDbOnlyLawdCd` 관문에서 닫는다. 전월세처럼 적재되지 않은 유형은 "준비 중".
+- 이유: 8구 전체 이력 539,443건 적재·parity 확인, 경기 매매 cron이 2026-09-29/30 자연 실행에서 전 셀 COMPLETE. live MOLIT 읽기는 쿼터·불완전 응답 위험이 있고 QA 중 MOLIT 호출 금지 원칙과 맞지 않는다.
+- 이전 제안(`cronSync: false`, "cron 검증 뒤 별도 결정")을 대체한다. 스위치가 모두 꺼진 Production에는 영향 없음.
+- 미결: 경기 이집점수 표시 정책, 경기 Production 공개 승인.
 
-날짜:
-2026-09-28
-
-결정:
-`/api/stats/supply`의 지역 지정 요청은 enablement `supply` 축으로만 판정한다.
-부산(시도 층)과 서울 beta 8구는 true, 경기 beta는 false, 그 밖은 false다. "전국" 요청은 바꾸지 않는다.
-
-배경:
-서울 전용 deny-list라 경기(전 축 닫힘)가 공급에서만 열려 있었다(Production 경기도 186건).
-
-이유:
-- `stats` 축을 쓰면 서울 8구의 기존 공급 노출(SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1)이 조용히 사라진다.
-- `app` 축을 쓰면 Preview·beta 경기 8구가 공급에서 열린다.
-- 실거래·master와 원천이 다른 기능이므로 축을 나눠 명시하는 것이 allowlist 모델과 맞다.
-
-영향:
-- 이 브랜치가 Production에 들어가기 전까지 Production 경기 공급 누출은 남는다.
-- registry 밖 시도의 지역 지정 공급 요청이 막힌다(UI로는 도달 불가).
-- "전국" 목록에 경기 행이 포함되는 것은 별도 제품 결정 대상이다.
-
-상태:
-브랜치 커밋 4401d13(Preview 배포), main 미병합.

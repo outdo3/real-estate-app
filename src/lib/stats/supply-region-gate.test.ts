@@ -7,8 +7,7 @@ import { GYEONGGI_BETA_LAWDCDS, SEOUL_BETA_LAWDCDS, getSidoEnablement, simulateR
 import { REGION_NODES } from '../region/registry';
 
 // GYEONGGI_8_PREVIEW_FINAL_BLOCKER_V1 — /api/stats/supply 지역 게이트 회귀 테스트(DB·네트워크 0).
-// 런타임(= Production 설정) 판정 + 경기 beta 스위치를 켠 시뮬레이션(= Preview 8구와 같은 축) 둘 다 본다.
-// 실제 Preview env 재로딩 판정은 region/gyeonggi-8-preview-on.test.ts.
+// 런타임(= Production 설정) 판정 + 경기 beta 스위치를 켠 시뮬레이션(beta 8구 축) 둘 다 본다.
 
 const ROOT = resolve(__dirname, '../../..');
 const nameOf = (lawdCd: string) => REGION_NODES.find((n) => n.lawdCd === lawdCd)!.name;
@@ -24,7 +23,7 @@ test('1·2. Production: 41111 장안구·41135 분당구 차단', () => {
   for (const c of GYEONGGI_BETA_LAWDCDS) assert.equal(decideSupplyRegion(GG, nameOf(c)).allowed, false, c);
 });
 
-test('3·4. 경기 beta를 켜도(Preview 8구와 같은 축) 8구·41135 모두 차단 — supply 축 닫힘', () => {
+test('3·4. 경기 beta를 켜도(시뮬레이션) 8구·41135 모두 차단 — supply 축 닫힘', () => {
   for (const c of GYEONGGI_BETA_LAWDCDS) {
     assert.equal(simulateRegionEnablement(c, { seoulBeta: true, gyeonggiBeta: true }).app, true, `${c} 시뮬레이션이 켜지지 않았다`);
     assert.deepEqual(decideSupplyRegion(GG, nameOf(c), BETA_ON), { allowed: false, reason: 'REGION_NOT_ENABLED' }, c);

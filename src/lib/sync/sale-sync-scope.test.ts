@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { GYEONGGI_SALE_SYNC_LAWDCDS, SEOUL_SALE_SYNC_LAWDCDS, resolveSaleSyncScope } from './sale-sync-scope';
+import { GYEONGGI_SALE_SYNC_LAWDCDS, SEOUL_SALE_SYNC_LAWDCDS, SEOUL_SALE_SYNC_LAWDCDS_B, SEOUL_SALE_SYNC_LAWDCDS_C, resolveSaleSyncScope } from './sale-sync-scope';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
 import { getRegionByLawdCd } from '../region/registry';
 import { getSidoEnablement } from '../region/enablement';
@@ -140,7 +140,7 @@ test('§H cronSync는 그대로 — 서울은 여전히 비공개이고 scope �
 
 const CRONS = (JSON.parse(read('vercel.json')).crons as { path: string; schedule: string }[]);
 
-test('cron: 부산 3개 + 서울 2개는 그대로 + 승인된 경기 2개만 추가 = 7개, 중복 없음', () => {
+test('cron: 부산 3개 + 서울 2개 + 경기 2개는 그대로 + 승인된 서울 17구 4개만 추가 = 11개, 중복 없음', () => {
   assert.deepEqual(CRONS, [
     { path: '/api/cron/sale-sync?mode=apply', schedule: '0 19 * * *' },
     { path: '/api/cron/rent-sync?mode=apply', schedule: '0 21 * * *' },
@@ -150,8 +150,14 @@ test('cron: 부산 3개 + 서울 2개는 그대로 + 승인된 경기 2개만 �
     // GYEONGGI_CRON_EXPANSION_V1 — 경기 첫 배치 8구, 서울 뒤(별도 호출 — 부산/서울 예산과 섞지 않는다)
     { path: '/api/cron/sale-sync?mode=apply&scope=gyeonggi', schedule: '30 19 * * *' },
     { path: '/api/cron/sale-recheck?mode=apply&scope=gyeonggi', schedule: '30 23 * * *' },
+    // SEOUL_17_CRON_EXPANSION_V1 — 서울 나머지 17구(seoul-b 9 · seoul-c 8), 경기 뒤 15분 간격
+    { path: '/api/cron/sale-sync?mode=apply&scope=seoul-b', schedule: '45 19 * * *' },
+    { path: '/api/cron/sale-sync?mode=apply&scope=seoul-c', schedule: '0 20 * * *' },
+    { path: '/api/cron/sale-recheck?mode=apply&scope=seoul-b', schedule: '45 23 * * *' },
+    { path: '/api/cron/sale-recheck?mode=apply&scope=seoul-c', schedule: '0 0 * * *' },
   ]);
   assert.equal(new Set(CRONS.map((c) => c.path)).size, CRONS.length);
+  assert.equal(new Set(CRONS.map((c) => c.schedule)).size, CRONS.length, '같은 시각에 두 cron');
 });
 
 test('cron: 서울 호출의 scope는 허용 목록으로 해석되고 강남·임의 구를 싣지 않는다', () => {
@@ -172,6 +178,58 @@ test('cron: 서울 매매 04:15 KST · 서울 recheck 08:15 KST (부산보다 15
   assert.equal(kst('/api/cron/sale-recheck?mode=apply'), '매일 08:00 KST');
   assert.equal(kst('/api/cron/sale-sync?mode=apply&scope=gyeonggi'), '매일 04:30 KST');
   assert.equal(kst('/api/cron/sale-recheck?mode=apply&scope=gyeonggi'), '매일 08:30 KST');
+  assert.equal(kst('/api/cron/sale-sync?mode=apply&scope=seoul-b'), '매일 04:45 KST');
+  assert.equal(kst('/api/cron/sale-sync?mode=apply&scope=seoul-c'), '매일 05:00 KST');
+  assert.equal(kst('/api/cron/sale-recheck?mode=apply&scope=seoul-b'), '매일 08:45 KST');
+  assert.equal(kst('/api/cron/sale-recheck?mode=apply&scope=seoul-c'), '매일 09:00 KST');
+});
+
+// ── SEOUL_17_CRON_EXPANSION_V1 — 서울 나머지 17구 동기화 범위 ─────────────────────────
+
+const SEOUL_17 = ['11200', '11260', '11290', '11305', '11320', '11350', '11380', '11470', '11500', '11530', '11560', '11590', '11620', '11650', '11680', '11710', '11740'];
+
+test('seoul-b 9 · seoul-c 8 = 서울 나머지 17구 정확히 · 중복 0 · 서울 8구·부산·경기와 겹치지 않음', () => {
+  assert.deepEqual([...SEOUL_SALE_SYNC_LAWDCDS_B], ['11200', '11260', '11290', '11305', '11320', '11350', '11380', '11470', '11500']);
+  assert.deepEqual([...SEOUL_SALE_SYNC_LAWDCDS_C], ['11530', '11560', '11590', '11620', '11650', '11680', '11710', '11740']);
+  const all = [...SEOUL_SALE_SYNC_LAWDCDS_B, ...SEOUL_SALE_SYNC_LAWDCDS_C];
+  assert.equal(new Set(all).size, 17);
+  assert.deepEqual([...all].sort(), [...SEOUL_17].sort());
+  for (const c of all) {
+    assert.ok(!(SEOUL_SALE_SYNC_LAWDCDS as readonly string[]).includes(c), c);
+    assert.ok(!(BUSAN_LAWDCD_16 as readonly string[]).includes(c), c);
+    assert.ok(!(GYEONGGI_SALE_SYNC_LAWDCDS as readonly string[]).includes(c), c);
+    assert.equal(getRegionByLawdCd(c)?.sidoCode, '11', c);
+    assert.equal(getRegionByLawdCd(c)?.isMolitLeaf, true, c);
+  }
+  // 서울 8구 scope 불변
+  assert.deepEqual([...SEOUL_SALE_SYNC_LAWDCDS], ['11110', '11140', '11170', '11440', '11410', '11230', '11215', '11545']);
+  assert.equal(new Set([...SEOUL_SALE_SYNC_LAWDCDS, ...all]).size, 25);
+});
+
+test('seoul-b/seoul-c scope 해석 · 그 밖 값은 계속 거부', () => {
+  assert.deepEqual(resolveSaleSyncScope('seoul-b'), { ok: true, scope: 'seoul-b', lawdCds: [...SEOUL_SALE_SYNC_LAWDCDS_B] });
+  assert.deepEqual(resolveSaleSyncScope('seoul-c'), { ok: true, scope: 'seoul-c', lawdCds: [...SEOUL_SALE_SYNC_LAWDCDS_C] });
+  for (const bad of ['seoul-a', 'seoul-d', 'SEOUL-B', 'seoul-b ', 'seoul,seoul-b', '11680', '']) assert.equal(resolveSaleSyncScope(bad).ok, false, bad);
+});
+
+test('17구 일일 MOLIT 예산: 매매 4개월 + recheck 10개월 = 구당 14셀 → 238호출 이하(서울 8구 32+80과 같은 shard 크기)', () => {
+  // 운영과 같은 식으로 범위를 구한다(재구현 아님).
+  const r = resolveSaleRange('202608', '202609', subtractMonths, {});
+  const sale = monthsInRange(r.from, r.to).length;
+  const band = resolveSaleRecheckBand('202608', subtractMonths);
+  const recheck = monthsInRange(band.from, band.to).length;
+  assert.equal(sale, 4);
+  assert.equal(recheck, 10);
+  const B = SEOUL_SALE_SYNC_LAWDCDS_B.length;
+  const C = SEOUL_SALE_SYNC_LAWDCDS_C.length;
+  assert.equal(B * (sale + recheck) + C * (sale + recheck), 238);
+  // shard 크기: 검증된 서울 8구 scope(sale 32 · recheck 80)와 같은 급 — 60초 창 안(위 서울 8구 예산 테스트와 같은 셀당 추정)
+  assert.equal(B * sale, 36);
+  assert.equal(C * sale, 32);
+  assert.ok(B * sale * 600 < 50_000 - 2_500, 'seoul-b sale 예산');
+  // recheck 90셀: 관측 셀당 ~350ms(2026-09-23 서울·부산) → ~31.5s로 예산 안. 최악(500ms)이면 45s라 한 번에 못 끝날 수 있지만
+  // 실패가 아니다 — 다음 실행이 가장 오래된 셀부터 이어받는다(아래 'band를 다 못 돌아도' 테스트).
+  assert.ok(B * recheck * 400 < 45_000 - 2_500, 'seoul-b recheck 관측 속도 예산');
 });
 
 test('cron: /admin/ops의 스케줄 표시는 계속 부산 호출을 가리킨다(서울 항목은 뒤에 있다)', () => {

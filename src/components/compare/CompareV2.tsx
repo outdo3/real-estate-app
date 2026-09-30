@@ -17,7 +17,7 @@ import { formatHeadlineBullet, scoreDomainSummary } from '@/lib/compare-v2/forma
 import { buildCompareUrl, buildCompareSharePath, parseCompareUrl, type CompareSlotSeed } from '@/lib/compare-v2/url';
 import { absoluteShareUrl } from '@/lib/share/shareUtils';
 import { compareShareCopy } from '@/lib/share/ejipShareCard';
-import { publicCompareReportHref, REPORT_LABELS } from '@/lib/report/report-links';
+import { compareReportHref, isReportRegionOpen, REPORT_LABELS } from '@/lib/report/report-links';
 import { buildFinanceFitUrl } from '@/lib/finance-fit/url';
 import LoginModal from '@/components/LoginModal';
 import { useFitPreference } from '@/hooks/useFitPreference';
@@ -134,13 +134,10 @@ export default function CompareV2({ initialSeeds, unresolvedAptSeqs }: CompareV2
   // REPORT-7 §3 — 비교 리포트 진입. 두 슬롯이 **모두 canonical aptSeq로 해석된
   // 경우에만** 링크를 만든다. 이름으로만 잡힌 단지가 섞이면 compareReportHref가
   // null을 주고, 그러면 CTA 자체를 렌더하지 않는다(깨진 리포트로 보내지 않는다).
-  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 두 단지 지역 모두 `report` 축이 열려 있어야 한다.
-  const compareReportUrl = both
-    ? publicCompareReportHref(
-        both[0].identity.kind === 'aptSeq' ? both[0].identity.aptSeq : null,
-        both[1].identity.kind === 'aptSeq' ? both[1].identity.aptSeq : null
-      )
-    : null;
+  const seqA = both && both[0].identity.kind === 'aptSeq' ? both[0].identity.aptSeq : null;
+  const seqB = both && both[1].identity.kind === 'aptSeq' ? both[1].identity.aptSeq : null;
+  // SEOUL_25_PUBLIC_BETA_PREP_V1 — 두 단지 모두 리포트 지원 지역일 때만(서울 beta 등이 섞이면 CTA 없음).
+  const compareReportUrl = both && isReportRegionOpen(seqA) && isReportRegionOpen(seqB) ? compareReportHref(seqA, seqB) : null;
 
   // COMPARE_SHARE_URL_COMPACT_FIX_V1 §2 — 공유 링크에는 canonical aptSeq 둘만 들어간다.
   // 이름·동·구코드를 실으면 한글이 퍼센트 인코딩돼 300자가 넘고, 카카오톡에서 OG 카드

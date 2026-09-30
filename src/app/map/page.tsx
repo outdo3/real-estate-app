@@ -72,7 +72,7 @@ import AdContainer from '@/components/AdContainer';
 import BottomNav from '@/components/ui/BottomNav';
 import ShareAction from '@/components/ShareAction';
 import mapMarkerStyles from './map-marker.module.css';
-import OutOfBusanNotice from '@/components/map/OutOfBusanNotice';
+import UnsupportedRegionNotice from '@/components/map/UnsupportedRegionNotice';
 import { resolveAptMapNotice } from '@/lib/map/apt-map-notice';
 import {
   IP_LOOKUP_TIMEOUT_MS,
@@ -515,8 +515,7 @@ export default function FullscreenMapPage() {
   // OfficetelLayerStatus는 오피스텔 지도 계약과 공유하는 타입이라 건드리지 않고,
   // 아파트 레이어 전용 플래그를 따로 둔다.
   const [aptPartial, setAptPartial] = useState(false);
-  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 서버가 "공개되지 않은 지역"이라고 답했는가.
-  // 빈 마커 목록이라도 이 경우는 검증된 0건이 아니다(하단 안내 문구를 구분한다).
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 서버가 "공개되지 않은 지역"이라고 답했는가(빈 목록이어도 검증된 0건이 아니다).
   const [aptRegionUnsupported, setAptRegionUnsupported] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
 
@@ -2152,13 +2151,11 @@ export default function FullscreenMapPage() {
           pointerEvents: 'none',
         }}
       >
-      {/* BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §4 — 지도가 지원하지 않는 지역에서 열렸을 때만 뜨는
-          안내. 현재 위치로 지도를 여는 동작은 그대로 두고(§4 — 사용자를 특정 지역으로
-          강제로 끌어오지 않는다), 아직 지원하지 않는 지역이라는 사실만 정직하게 말한다.
-          GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 판정은 부산 좌표 상자가 아니라 조회한 구의
-          `map` 축이다(서울·경기 beta 구에서 "부산 외 지역"이 뜨지 않도록).
+      {/* BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §4 — 지도가 부산 밖에서 열렸을 때만 뜨는
+          안내. 현재 위치로 지도를 여는 동작은 그대로 두고(§4 — 사용자를 부산으로
+          강제로 끌어오지 않는다), 데이터가 부산 우선이라는 사실만 정직하게 말한다.
           세션당 한 번, 닫으면 끝 — pan/zoom마다 다시 뜨지 않는다. */}
-      <OutOfBusanNotice lawdCd={currentLawdCd} />
+      <UnsupportedRegionNotice lawdCd={currentLawdCd} />
 
       {/* E-JIP FINAL DEVICE UX FIX V1 — 현재 위치를 못 받아 IP/기본 지역으로 열었을 때만,
           지금 보이는 곳이 현재 위치가 아니라는 사실을 말한다. 지도를 옮기면 사라진다. */}

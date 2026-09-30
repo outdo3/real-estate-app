@@ -15,7 +15,8 @@ import { classifyMolitMonthResult } from './apt-trade-completeness';
 // "전부"라고 말했다.
 
 const instant = async () => {};
-const LAWD = '11680';
+// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 11680(강남)은 이제 DB 전용이라 live 페이징 관문에 오지 않는다. 페이징 동작만 보는 테스트라 서울 8구 코드를 쓴다.
+const LAWD = '11110';
 
 beforeEach(() => __resetMolitGateForTest());
 
@@ -129,7 +130,7 @@ test('행 순서는 서버 페이지 순서 그대로이고 id/rank 인덱스가
   // rank/id는 합쳐진 전체 배열 기준으로 한 번만 매겨진다(페이지마다 1부터 다시 시작하지 않는다).
   assert.equal(items[1000].rank, 1001);
   assert.equal(items[2090].rank, 2091);
-  assert.equal(items[1000].id, 'rent-11680-202603-1000');
+  assert.equal(items[1000].id, `rent-${LAWD}-202603-1000`);
   assert.equal(new Set(items.map((i: { id: string }) => i.id)).size, 2091, '중복 행 없음');
 });
 

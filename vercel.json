@@ -29,6 +29,22 @@
     {
       "path": "/api/cron/sale-recheck?mode=apply&scope=gyeonggi",
       "schedule": "30 23 * * *"
+    },
+    {
+      "path": "/api/cron/sale-sync?mode=apply&scope=seoul-b",
+      "schedule": "45 19 * * *"
+    },
+    {
+      "path": "/api/cron/sale-sync?mode=apply&scope=seoul-c",
+      "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/sale-recheck?mode=apply&scope=seoul-b",
+      "schedule": "45 23 * * *"
+    },
+    {
+      "path": "/api/cron/sale-recheck?mode=apply&scope=seoul-c",
+      "schedule": "0 0 * * *"
     }
   ]
 }

@@ -33,14 +33,14 @@ import { buildDetailMapUrl, buildDetailCompareUrl, buildDetailFinanceFitUrl } fr
 import { trackEvent } from '@/lib/analytics/trackEvent';
 import type { NextAction } from '@/lib/decision-journey/types';
 import { deriveCanonicalAptSeq } from '@/lib/apt-name-match';
-import { publicAptReportHref } from '@/lib/report/report-links';
+import { aptReportHref, isReportRegionOpen } from '@/lib/report/report-links';
 import AptReportEntryCard from '@/components/report/AptReportEntryCard';
 import { fetchDetailTrades } from '@/lib/detail-trade-cache';
 import { fetchCachedResource, DETAIL_RESOURCE_TTL_MS } from '@/lib/detail-resource-cache';
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
-import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
+import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE, TRADE_PREPARING_MESSAGE } from '@/lib/trade-read-state';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
 import { useSession } from 'next-auth/react';
@@ -544,7 +544,8 @@ export default function ApartmentDetail() {
   // 불러온 상태"(trades 자체가 비어 있음 — 기존부터 있던 별개의 로딩/무데이터 표시)와
   // "선택한 평형+거래유형에만 거래가 없는 상태"를 구분해, 후자도 다른 평형 가격을
   // 빌려오지 않고 짧게 "거래 없음"으로만 표시한다.
-  const latestPrice = heroTrade ? heroTrade.priceStr : (trades.length > 0 ? '거래 없음' : '조회 중...');
+  // SEOUL25_FINAL_QA_V1 — DB 전용 지역의 미제공 거래 유형(서울 신규 17구 전월세)은 '조회 중'에 머물지 않고 '준비 중'으로 끝난다.
+  const latestPrice = heroTrade ? heroTrade.priceStr : (trades.length > 0 ? '거래 없음' : tradeIncompleteMessage === TRADE_PREPARING_MESSAGE ? '준비 중' : '조회 중...');
   const latestPriceNum = heroTrade ? heroTrade.price : 0; // 억 단위 정수
 
   const renderHeroAreaLabel = (area: string, labels: Map<number, string>) => {
@@ -639,9 +640,8 @@ export default function ApartmentDetail() {
 
   // REPORT-7 §2 — 한장 리포트 진입. canonical aptSeq가 확정됐을 때만 노출한다
   // (이름 기반 식별 금지 — aptSeq가 없으면 CTA 자체를 만들지 않는다).
-  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 그 단지 지역의 `report` 축이 닫혀 있으면(서울·경기 beta)
-  // CTA를 만들지 않는다. 부산은 report 축이 열려 있어 그대로 노출된다.
-  const reportHref = publicAptReportHref(canonicalAptSeq);
+  // SEOUL_25_PUBLIC_BETA_PREP_V1 — 리포트를 지원하지 않는 지역(서울 beta 등)에서는 CTA를 만들지 않는다(막힌 화면으로 보내지 않음).
+  const reportHref = isReportRegionOpen(canonicalAptSeq) ? aptReportHref(canonicalAptSeq) : null;
 
   // APT_DETAIL_REPORT_CTA_FLOW_V1 — 리포트 진입은 여기(상단 다음 행동)에서 빼고, 가격·위치 구역을 지난
   // 중후반의 AptReportEntryCard 하나로 옮겼다. 페이지 안에 리포트 CTA를 두 번 두지 않는다.
@@ -1360,7 +1360,7 @@ export default function ApartmentDetail() {
         <div className={styles.panel}>
           <div>
             <div className={styles.timelineFilters}>
-              <span className={styles.timelineSummary}>{selectedTradeArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedTradeArea, areaLabels)} · 총 {filteredTrades.length}건</span>
+              <span className={styles.timelineSummary}>{selectedTradeArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedTradeArea, areaLabels)} · {filteredTrades.length === 0 && tradeIncompleteMessage === TRADE_PREPARING_MESSAGE ? '준비 중' : `총 ${filteredTrades.length}건`}</span>
               <div className={styles.timelineControls}>
                 <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
                   {['1년', '3년', '5년', '전체'].map(p => (

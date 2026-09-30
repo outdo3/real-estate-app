@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — "서울 전체"처럼 일부 구만 열린 시도의 전체 집계는 막는다(부분을 전체로 답하지 않는다).
     // GYEONGGI_8_PREVIEW_FINAL_BLOCKER_V1 — 예전에는 서울만 막는 deny-list라 경기(전 축 닫힘)·registry 밖 시도가 그대로
     // 통과했다. 이제 지역을 지정한 요청은 enablement `supply` 축(allowlist)으로만 판정한다(decideSupplyRegion).
-    // 부산 전체·부산 구·서울 beta 8구는 전과 같고, 경기(Preview에서 열린 8구 포함 — supply 축 닫힘)·41135·모르는 지역은 막힌다.
+    // 부산 전체·부산 구·서울 beta 8구는 전과 같고, 경기(beta 후보 8구 포함 — supply 축 닫힘)·41135·모르는 지역은 막힌다.
     // 시도를 지정하지 않은 "전국" 요청은 이 게이트 밖이다(기존 동작 그대로 — 별도 제품 결정 대상).
     if (sidoFull) {
       const decision = decideSupplyRegion(sidoFull, sigunguShort);
