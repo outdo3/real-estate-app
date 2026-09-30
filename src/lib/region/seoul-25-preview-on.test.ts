@@ -26,8 +26,8 @@ test('Preview env: 스위치 켜짐 · 서울 25구 app·search·map·detail 공
   }
   // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview 17구는 DB-first로 읽고 live MOLIT는 부르지 않는다
   for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isTradeDbFirstLawdCd(c), true, `${c} DB-first`);
-  for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isPreviewDbOnlyLawdCd(c), true, `${c} DB only`);
-  for (const c of [...e.SEOUL_BETA_LAWDCDS, '26350', '41111', '99999']) assert.equal(e.isPreviewDbOnlyLawdCd(c), false, `${c} not DB-only`);
+  for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isDbOnlyLawdCd(c), true, `${c} DB only`);
+  for (const c of [...e.SEOUL_BETA_LAWDCDS, '26350', '41111', '99999']) assert.equal(e.isDbOnlyLawdCd(c), false, `${c} not DB-only`);
   // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — Preview에서도 17구 공급은 닫힘, 8구는 그대로
   for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), false, `${c} supply`);
   for (const c of e.SEOUL_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), true, `${c} supply`);
@@ -58,7 +58,7 @@ test('Preview env: 공급 라우트 — 17구·서울 전체·경기 거부, 공
 });
 
 test('Preview env: 17구 live MOLIT는 네트워크 없이 실패로 닫힘 · 8구·부산은 그대로 MOLIT 경로', async () => {
-  const { fetchMolitData, PREVIEW_DB_ONLY_MOLIT_MESSAGE } = await import('../api-molit');
+  const { fetchMolitData, DB_ONLY_MOLIT_MESSAGE } = await import('../api-molit');
   const { classifyMolitMonthResult } = await import('../apt-trade-completeness');
   let calls = 0;
   const fetchOnce = async () => { calls++; return []; };
@@ -67,7 +67,7 @@ test('Preview env: 17구 live MOLIT는 네트워크 없이 실패로 닫힘 · 8
       const r = await fetchMolitData({ lawdCd: c, dealYmd: '202608', type }, { fetchOnce });
       assert.equal(r.length, 1, c);
       assert.equal(r[0].typeLabel, '에러', `${c} 실패 플레이스홀더(빈 배열 = 0건 위장 금지)`);
-      assert.ok(String(r[0].name).includes(PREVIEW_DB_ONLY_MOLIT_MESSAGE), c);
+      assert.ok(String(r[0].name).includes(DB_ONLY_MOLIT_MESSAGE), c);
       assert.equal(classifyMolitMonthResult(r), 'FAILED', c);
     }
   }

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   SEOUL_17_BETA_LAWDCDS,
-  SEOUL_17_PREVIEW_ENABLEMENT,
+  SEOUL_17_ENABLEMENT,
   SEOUL_25_BETA_PREVIEW_ENABLED,
   SEOUL_BETA_LAWDCDS,
   getRegionEnablement,
@@ -31,7 +31,7 @@ import { resolveSaleSyncScope, SEOUL_SALE_SYNC_LAWDCDS } from '../sync/sale-sync
 import { decideSupplyRegion, supplyCheckFrom } from '../stats/supply-region-gate';
 
 // SEOUL_25_PUBLIC_BETA_PREP_V1 — Production과 같은 설정(Preview env 없음)에서 서울 17구는 전 축 닫힘이고,
-// "켜면"은 simulateRegionEnablement(seoul17Preview)로만 본다. Preview 빌드에서 실제로 켜진 상태는
+// "켜면"은 simulateRegionEnablement(seoul17Open)로만 본다. Preview 빌드에서 실제로 켜진 상태는
 // seoul-25-preview-on.test.ts(env를 넣고 모듈을 새로 읽음)가 본다.
 
 const ROOT = resolve(__dirname, '../../..');
@@ -42,9 +42,9 @@ const S17 = SEOUL_17_BETA_LAWDCDS as readonly string[];
 const SEOUL_ALL = REGION_NODES.filter((n) => n.sidoCode === '11').map((n) => n.lawdCd);
 const GG_ALL = REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd);
 const PUBLIC_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const;
-const PREVIEW = { seoulBeta: true, gyeonggiBeta: false, seoul17Preview: true } as const;
+const PREVIEW = { seoulBeta: true, gyeonggiBeta: false, seoul17Open: true } as const;
 const PROD = { seoulBeta: true, gyeonggiBeta: false } as const;
-const sim = (c: string, axis: keyof RegionEnablement, flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Preview?: boolean } = PREVIEW) => simulateRegionEnablement(c, flags)[axis];
+const sim = (c: string, axis: keyof RegionEnablement, flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Open?: boolean } = PREVIEW) => simulateRegionEnablement(c, flags)[axis];
 const REP = { 강남: '11680', 서초: '11650', 송파: '11710', 노원: '11350', 강서: '11500', 관악: '11620', 성북: '11290', 은평: '11380' } as const;
 
 test('0 · 17구 목록 = 서울 25 − 공개 8 (중복·누락 없음, 전부 MOLIT leaf)', () => {
@@ -124,7 +124,7 @@ test('3 · "서울특별시 전체": 8구 부분 공개 · 25구 공개(시뮬�
 });
 
 test('2·4·5·6 · Preview 시뮬레이션: 25구 app·search·map·detail·DB 읽기 열림, report·stats·supply·sitemap·seoIndex 닫힘', () => {
-  assert.deepEqual(SEOUL_17_PREVIEW_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true });
+  assert.deepEqual(SEOUL_17_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true });
   for (const c of SEOUL_ALL) {
     for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(sim(c, axis), true, `${c} ${axis}`);
     for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) assert.equal(sim(c, axis), false, `${c} ${axis}`);
@@ -149,7 +149,7 @@ test('2·4·5·6 · Preview 시뮬레이션: 25구 app·search·map·detail·DB 
   // 경기·registry 밖 코드는 Preview에서도 닫힘
   for (const c of [...GG_ALL, '27110', '99999', '1168', '11680x']) for (const axis of PUBLIC_AXES) assert.equal(sim(c, axis), false, `${c} ${axis}`);
   // Preview 스위치만 켜고 서울 beta가 꺼지면 25구 전부 닫힘(서울 마스터 스위치가 우선)
-  for (const c of SEOUL_ALL) assert.equal(simulateRegionEnablement(c, { seoulBeta: false, gyeonggiBeta: false, seoul17Preview: true }).app, false, c);
+  for (const c of SEOUL_ALL) assert.equal(simulateRegionEnablement(c, { seoulBeta: false, gyeonggiBeta: false, seoul17Open: true }).app, false, c);
 });
 
 test('4 · 검색: 공개 allowlist(sggCd IN) 하나로만 좁힌다 — 이름·시도 전체 fallback 없음', () => {
@@ -221,15 +221,17 @@ test('9 · 학교·위치: 부산 전용 artifact·유치원·동 코드가 서�
   assert.ok(/if \(owner && owner\.lawdCd !== lawdCd\) throw new Error\('CACHE_ROW_OWNED_BY_OTHER_REGION'\)/.test(info));
 });
 
-test('13 · cron: 이번 STEP에서 범위 불변 — 서울 8 · 부산 기본 · 경기 8, 17구 없음', () => {
+// SEOUL25_GO_LIVE_PREP_V1 — cron 확장은 main 377acf7에서 적용·배포됐다(SEOUL_17_CRON_EXPANSION_V1). 서울 8구 scope는 그대로.
+test('13 · cron: 서울 8구 scope 불변 + 17구는 seoul-b 9 · seoul-c 8 별도 scope(공개 스위치와 무관)', () => {
   const seoul = resolveSaleSyncScope('seoul');
   assert.deepEqual(seoul.ok ? [...(seoul.lawdCds ?? [])].sort() : null, [...S8].sort());
   assert.deepEqual([...SEOUL_SALE_SYNC_LAWDCDS].sort(), [...S8].sort());
-  assert.equal(resolveSaleSyncScope('seoul-b').ok, false, '준비만 — seoul-b는 아직 없는 scope');
-  assert.equal(resolveSaleSyncScope('seoul-c').ok, false);
-  const crons = (JSON.parse(readFileSync(resolve(ROOT, 'vercel.json'), 'utf8')).crons as { path: string }[]).map((c) => c.path);
-  assert.equal(crons.length, 7);
-  assert.ok(!crons.some((p) => /seoul-b|seoul-c/.test(p)));
+  const b = resolveSaleSyncScope('seoul-b'); const c = resolveSaleSyncScope('seoul-c');
+  assert.ok(b.ok && c.ok);
+  assert.deepEqual([...((b.ok && b.lawdCds) || []), ...((c.ok && c.lawdCds) || [])].sort(), [...S17].sort());
+  const crons = (JSON.parse(readFileSync(resolve(ROOT, 'vercel.json'), 'utf8')).crons as { path: string }[]).map((x) => x.path);
+  assert.equal(crons.length, 11);
+  assert.equal(crons.filter((p) => /scope=seoul-b|scope=seoul-c/.test(p)).length, 4);
 });
 
 test('7 · 리포트 CTA: 리포트 미지원 지역(서울 25 전부)에서는 상세·비교 CTA를 만들지 않는다 · 부산은 그대로', async () => {
@@ -243,17 +245,3 @@ test('7 · 리포트 CTA: 리포트 미지원 지역(서울 25 전부)에서는 
   assert.ok(/const compareReportUrl = both && isReportRegionOpen\(seqA\) && isReportRegionOpen\(seqB\) \? compareReportHref\(seqA, seqB\) : null;/.test(cmp));
 });
 
-test('13b · 준비된 cron patch(적용 안 함): seoul-b 9구 + seoul-c 8구 = 17구 정확 · 공개 8구·부산·경기 목록 불변', () => {
-  const patch = readFileSync(resolve(ROOT, 'docs/development/patches/SEOUL_17_CRON_EXPANSION_V1.patch'), 'utf8');
-  const list = (name: string) => JSON.parse((patch.match(new RegExp(`${name} = (\\[[^\\]]*\\])`))?.[1] ?? '[]').replace(/'/g, '"')) as string[];
-  const b = list('SEOUL_SALE_SYNC_LAWDCDS_B');
-  const c = list('SEOUL_SALE_SYNC_LAWDCDS_C');
-  assert.deepEqual(b, ['11200', '11260', '11290', '11305', '11320', '11350', '11380', '11470', '11500']);
-  assert.deepEqual(c, ['11530', '11560', '11590', '11620', '11650', '11680', '11710', '11740']);
-  assert.deepEqual([...b, ...c].sort(), [...S17].sort());
-  // 호출 예산: 구당 sale 4 + recheck 10 → (9 + 8) × 14 = 238
-  assert.equal((b.length + c.length) * (4 + 10), 238);
-  // patch는 기존 scope·cron 줄을 지우지 않는다(추가만)
-  assert.ok(!/^-.*(SEOUL_SALE_SYNC_LAWDCDS = |GYEONGGI_SALE_SYNC_LAWDCDS|scope=seoul"|scope=gyeonggi|sale-sync\?mode=apply")/m.test(patch));
-  assert.equal((patch.match(/^\+.*"path": "\/api\/cron\/sale-(sync|recheck)\?mode=apply&scope=seoul-[bc]"/gm) ?? []).length, 4);
-});

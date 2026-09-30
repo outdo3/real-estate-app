@@ -194,13 +194,20 @@ test('§11 학교 좌표 검증이 같은 박스를 계속 쓴다 — 사본이 
 
 // ── E. 지도 안내 동작 계약(§4) ─────────────────────────────────────────────
 
-const NOTICE = read('src/components/map/OutOfBusanNotice.tsx');
-const NOTICE_CSS = read('src/components/map/OutOfBusanNotice.module.css');
+const NOTICE = read('src/components/map/UnsupportedRegionNotice.tsx');
+const NOTICE_CSS = read('src/components/map/UnsupportedRegionNotice.module.css');
 const MAP = read('src/app/map/page.tsx');
 
-test('§4 안내 문구는 지정된 카피 그대로다', () => {
-  assert.ok(NOTICE.includes('현재 위치는 부산 외 지역입니다.'));
-  assert.ok(NOTICE.includes('이집은 현재 부산 지역 데이터를 우선 제공하고 있습니다.'));
+// SEOUL25_GO_LIVE_PREP_V1 — "부산 우선" 문구는 서울 8구 공개 뒤로 이미 틀렸다. 지역 이름 없는 일반 문구 + 공개 allowlist 판정.
+test('§4 안내 문구는 지역 이름 없이 미공개 지역만 말한다(공개 지역이 늘어도 다시 틀리지 않는다)', () => {
+  assert.ok(NOTICE.includes('지금 보고 계신 지역은 아직 이집 정보가 준비되지 않았어요.'));
+  assert.ok(NOTICE.includes('제공 지역은 차례로 넓혀가고 있습니다.'));
+  const copy = NOTICE.slice(NOTICE.indexOf('<p className'), NOTICE.indexOf('</p>'));
+  assert.ok(!/부산|서울|경기/.test(copy), '안내 문구에 특정 지역 이름이 박혀 있다');
+  assert.ok(/isPublicRegionAllowed\(lawdCd, 'map'\)/.test(NOTICE), '공개 allowlist로 판정하지 않는다');
+  assert.ok(!/isInsideBusanBounds/.test(NOTICE), '부산 경계로 판정한다');
+  // 지역을 아직 모르면 띄우지 않는다(추측으로 "지원 안 함"이라고 말하지 않는다)
+  assert.ok(/!!lawdCd && !isPublicRegionAllowed/.test(NOTICE));
 });
 
 test('§4 세션당 한 번 — pan/zoom마다 다시 뜨지 않는다', () => {
@@ -220,7 +227,7 @@ test('§4 안내가 지도 조작을 막지 않는다', () => {
 });
 
 test('§4/§6 지도는 현재 위치 동작을 유지한다 — 부산으로 강제 이동시키지 않는다', () => {
-  assert.ok(/<OutOfBusanNotice lat=\{center\.lat\} lng=\{center\.lng\} \/>/.test(MAP));
+  assert.ok(/<UnsupportedRegionNotice lawdCd=\{currentLawdCd\} \/>/.test(MAP));
   // 안내를 넣으면서 center를 부산으로 되돌리는 코드를 끼워넣지 않았다.
   assert.ok(!/setCenter\(BUSAN|forceBusan|resetToBusan/.test(MAP));
 });

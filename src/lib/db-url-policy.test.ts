@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { PREVIEW_DB_NOT_CONFIGURED_URL, resolveRuntimeDatabaseUrl } from './db-url-policy';
-import { resolvePreviewDbOnly, isPreviewDbOnlyLawdCd, getRegionEnablement, SEOUL_17_BETA_LAWDCDS, SEOUL_BETA_LAWDCDS } from './region/enablement';
+import { resolveDbOnly, isDbOnlyLawdCd, getRegionEnablement, SEOUL_17_BETA_LAWDCDS, SEOUL_BETA_LAWDCDS } from './region/enablement';
 import { REGION_NODES } from './region/registry';
 
 // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview는 read-only 전용 연결만, Production·로컬은 그대로. Production DB·네트워크 0.
@@ -61,14 +61,14 @@ test('DB 자격증명은 클라이언트로 나가지 않는다 — NEXT_PUBLIC_
 
 test('Preview DB 전용 판정: 스위치가 켜졌을 때 서울 17구만', () => {
   for (const c of SEOUL_17_BETA_LAWDCDS) {
-    assert.equal(resolvePreviewDbOnly(true, c), true, c);
-    assert.equal(resolvePreviewDbOnly(false, c), false, c);
+    assert.equal(resolveDbOnly(true, c), true, c);
+    assert.equal(resolveDbOnly(false, c), false, c);
   }
-  for (const c of [...SEOUL_BETA_LAWDCDS, '26350', '26440', '41111', '11', '1168', '11680x', '', null, undefined]) assert.equal(resolvePreviewDbOnly(true, c as string), false, String(c));
+  for (const c of [...SEOUL_BETA_LAWDCDS, '26350', '26440', '41111', '11', '1168', '11680x', '', null, undefined]) assert.equal(resolveDbOnly(true, c as string), false, String(c));
 });
 
 test('Production 런타임(이 테스트 env): DB 전용 0 · 17구 DB-first 읽기 닫힘 · 8구·부산 DB-first 그대로', () => {
-  for (const n of REGION_NODES) assert.equal(isPreviewDbOnlyLawdCd(n.lawdCd), false, n.lawdCd);
+  for (const n of REGION_NODES) assert.equal(isDbOnlyLawdCd(n.lawdCd), false, n.lawdCd);
   for (const c of SEOUL_17_BETA_LAWDCDS) assert.equal(getRegionEnablement(c).cronSync, false, c);
   for (const c of SEOUL_BETA_LAWDCDS) assert.equal(getRegionEnablement(c).cronSync, true, c);
   assert.equal(getRegionEnablement('26350').cronSync, true);

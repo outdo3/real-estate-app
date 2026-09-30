@@ -391,7 +391,7 @@ test('23 · 공개 enablement 불변(서울 beta on · 경기 beta off), 동기�
   }
 });
 
-test('24 · cron 스케줄 불변(7개 · 경로·시각 정확히)', () => {
+test('24 · cron 스케줄 불변(11개 · 경로·시각 정확히)', () => {
   const crons = JSON.parse(read('vercel.json')).crons;
   assert.deepEqual(crons, [
     { path: '/api/cron/sale-sync?mode=apply', schedule: '0 19 * * *' },
@@ -401,6 +401,11 @@ test('24 · cron 스케줄 불변(7개 · 경로·시각 정확히)', () => {
     { path: '/api/cron/sale-recheck?mode=apply&scope=seoul', schedule: '15 23 * * *' },
     { path: '/api/cron/sale-sync?mode=apply&scope=gyeonggi', schedule: '30 19 * * *' },
     { path: '/api/cron/sale-recheck?mode=apply&scope=gyeonggi', schedule: '30 23 * * *' },
+    // SEOUL_17_CRON_EXPANSION_V1 — 서울 나머지 17구(seoul-b 9 · seoul-c 8), 경기 뒤 15분 간격
+    { path: '/api/cron/sale-sync?mode=apply&scope=seoul-b', schedule: '45 19 * * *' },
+    { path: '/api/cron/sale-sync?mode=apply&scope=seoul-c', schedule: '0 20 * * *' },
+    { path: '/api/cron/sale-recheck?mode=apply&scope=seoul-b', schedule: '45 23 * * *' },
+    { path: '/api/cron/sale-recheck?mode=apply&scope=seoul-c', schedule: '0 0 * * *' },
   ]);
 });
 

@@ -1,4 +1,4 @@
-/* BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §4 — 지도 하단 상태 스택 안에 들어가는 안내 카드.
+/* BUSAN_LAUNCH_SCOPE_SITEMAP_FIX_V1 §4 · SEOUL25_GO_LIVE_PREP_V1 — 지도 하단 상태 스택 안에 들어가는 미공개 지역 안내 카드.
    스택 컨테이너가 pointer-events: none이라, 닫기 버튼을 누를 수 있으려면 여기서 auto로
    되돌려야 한다(스택의 나머지 영역은 계속 지도로 통과된다 — 지도 조작을 막지 않는다). */
 .notice {

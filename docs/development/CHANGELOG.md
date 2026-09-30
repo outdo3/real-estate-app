@@ -1,22 +1,26 @@
 # 이집 개발 변경 기록
 
+## 2026-09-30
+
+### E-JIP SEOUL25 GO-LIVE PREP V1 — 서울 17구 Production 공개 준비(스위치 꺼짐, LOCAL)
+
+상세: `docs/development/SEOUL_25_GO_LIVE_CHECKLIST_V1.md` · `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
+
+    포함     Preview 준비 3커밋(2f6ac27·cc4f0a2·e7e8baf)을 main 377acf7 위에 통합 — 선택기 서울 전체 가드 · 리포트 CTA 누수 · supply 축 · Preview read-only DB
+    스위치   enablement SEOUL_17_PUBLIC_ENABLED = false(단일 지점) → true면 17구 app·search·map·detail·DB 읽기, report·stats·supply·sitemap·seoIndex 닫힘
+    데이터   17구가 열리면 DB 전용 — fetchMolitData 관문(isDbOnlyLawdCd)에서 live MOLIT 네트워크 없이 차단
+    안내     지도 OutOfBusanNotice → UnsupportedRegionNotice: 부산 경계 대신 공개 allowlist 판정, 지역 이름 없는 문구
+    불변     Production 공개 상태 전부(17구 닫힘) · cron · DB 0 · push/배포 0
+
 ## 2026-09-29
 
-### E-JIP SEOUL25 PREVIEW READ-ONLY DB + DB-READ QA V1 — Preview 전용 read-only DB · 17구 DB 읽기 (승인)
+### E-JIP SEOUL25 CRON PATCH APPLY V1 — 서울 나머지 17구 일일 매매 동기화(승인, Production)
 
-상세: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md` §14
-
-    DB       ejip_preview_ro(SELECT 22 공개 테이블 · read-only 기본) · PREVIEW_DATABASE_URL(preview+브랜치, sensitive)
-    코드     db-url-policy(Preview는 전용 연결만, 없으면 닫힘) · Preview 17구 cronSync=true · fetchMolitData Preview 17구 차단
-    불변     Production DATABASE_URL·배포·17구 차단 · report/stats/SEO/sitemap/supply 닫힘 · cron 0 · MOLIT 0
-
-### E-JIP SEOUL25 BETA PREP REBASE + COMPILE FIX V1 — Preview 준비 브랜치를 main 84e1c61 위로 (LOCAL)
-
-상세: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md` §13
-
-    통합     seoul-25-public-beta-prep-v2 = main 84e1c61 + d9622da cherry-pick(충돌 0)
-    수정     SEOUL_17_PREVIEW_ENABLEMENT.supply = false(필수 축 누락 → tsc·build 실패 해소) · 적재 완료 주석
-    불변     Production 17구 전 축 닫힘 · 경기 supply 닫힘(84e1c61) · 서울 8구·부산 그대로 · push/배포/env/cron/DB 0
+    범위     sale-sync-scope seoul-b 9구(11200·11260·11290·11305·11320·11350·11380·11470·11500) · seoul-c 8구(11530·11560·11590·11620·11650·11680·11710·11740)
+    일정     sale 19:45Z(seoul-b)·20:00Z(seoul-c) · recheck 23:45Z(seoul-b)·00:00Z(seoul-c) — 기존 7개 cron 불변
+    예산     구당 매매 4개월 + recheck 10개월 = 14셀 → 17구 238 MOLIT/일
+    근거     17구 전체 이력 적재 완료(1,180,587행 · drift 0 · review 32/32)
+    불변     공개 범위(enablement) 변경 없음 — 17구 Production 공개·cronSync(읽기) 닫힘 · 부산·서울 8구·경기 scope 그대로
 
 ## 2026-09-28
 
@@ -28,17 +32,6 @@
     출처     브랜치 gyeonggi-8-public-beta-preview-v1 4401d13에서 공급 수정만 이식(Preview 테스트 3파일 제외)
 
 ## 2026-09-27
-
-### E-JIP SEOUL 25 PUBLIC BETA PREP V1 — 서울 25구 beta 준비(Preview 전용 스위치 · 기본 닫힘) (LOCAL)
-
-상세: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
-
-    스위치   서울 17구 SEOUL_17_BETA_LAWDCDS — NEXT_PUBLIC_VERCEL_ENV=preview + NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW=true일 때만(fail-closed)
-    축       17구 app·search·map·detail만 · report·stats·seoIndex·sitemap·cronSync(DB-first 읽기) OFF
-    선택기   "서울특별시 전체" — isSidoWholeQuerySupported(시도 층 출시 시도만) · 25구가 다 열려도 없음 · 부산 전체 유지
-    리포트   상세·비교 리포트 CTA가 report 축을 보도록(서울 8구 포함 막힌 리포트로 보내지 않음)
-    cron     seoul-b 9 · seoul-c 8 patch 준비만(docs/development/patches, 적용 안 함) ≤238 MOLIT/일
-    불변     Production 공개 8구 그대로 · Production DB 0 · env/배포/push 0
 
 ### E-JIP CRON DURABILITY FIX DEPLOY V1 — cron 진행 영속화·시간 한도 Production 반영 (승인)
 
