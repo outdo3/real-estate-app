@@ -76,6 +76,24 @@ Production 변경 0 · push 0 · 배포 0.
 - 열어 둠(화면 동작에 필요): Kakao 지도 SDK·로컬 검색, OAuth, 지역코드 프록시, 브라우저 쪽 요청
 - 테스트 `src/lib/preview-external-guard.test.ts` 7/7(조건 진리표 · 호스트 판정 · 네트워크 0 · 설치 1회 · MOLIT 관문 · 설치 지점 · Preview DB가 DATABASE_URL로 떨어지지 않음)
 
+## Preview 배포 + hosted 검증 (2026-09-30, 사용자 승인)
+
+| 항목 | 결과 |
+|---|---|
+| 배포 | 브랜치 `realtor-pro-mvp-overnight-v1` `1e3a162` push(main 불변 `b78c0c4`) → `dpl_GZVh1F7peu68uqDwDTMs69Ua5dX5` READY · 브랜치 URL이 이 배포를 가리킴 |
+| env(이름·범위) | Pro 6개 모두 브랜치 값이 적용 · `SUPABASE_SERVICE_ROLE_KEY`·`SUPABASE_KEY`·`DATABASE_URL`·`NEXTAUTH_URL`은 Production 전용 → Pro Preview에 없음 |
+| DB 대상 | **ejip-pro-preview 확인(DB 쪽 증거)**: pg_stat_statements 기준, 대기 중 스냅샷 2회 변화 0 → Preview 검색 2회 뒤 아파트 테이블 쿼리 +6(첫 회 3회 검색 +10). Preview 검색 "은마" 0건(Production에는 있음) → Production 아님. Prisma(transaction pooler) 오류 없음. migration 23. 진단 경로 추가 없음 |
+| Pro 스위치 | `/api/pro/*` → `LOGIN_REQUIRED`(꺼져 있으면 `PRO_DISABLED`) → `REALTOR_PRO_ENABLED=true` 런타임 확인. `/api/auth/providers` 200 → 브랜치 `NEXTAUTH_SECRET` 존재 |
+| 외부 API 관문 | 런타임 로그 `preview external data blocked`: apis.data.go.kr 4(건축물대장·TAGO) · Gemini 2 · NEIS 2. MOLIT는 api-molit 관문에서 요청 전 차단(상세 `apiError` = Preview 차단 문구, 거래 목록 `failedMonths` 3/3 — 0건 위장 없음). 로그에 URL·서비스키 0. Resend 키는 Production 전용이라 Preview 발송 불가 · IndexNow는 런타임 경로 없음(스크립트 전용) |
+| 익명 접근 | Pro API 전 라우트·전 메서드 401(없는 메서드 405) · `/admin/pro` → `/my` · `/pro/*`는 빈 껍데기(데이터는 API 401) |
+| 브리핑 위조 토큰 | 404 · `Referrer-Policy: no-referrer` · `X-Robots-Tag: noindex, nofollow, noarchive` · `no-store` · 엄격 CSP · AdSense·GA·Kakao·ipinfo·canonical 0 |
+| /pro 페이지 | `noindex, nofollow` · no-referrer · CSP(`connect-src 'self'`, `frame-ancestors 'none'`) · 광고·GA·Kakao·ipinfo 0 |
+| 공개 라우트 회귀 | `/`·`/map`·상세·`/community`·`/privacy`·`/terms` 200(공개 레이아웃, AdSense 그대로, Pro 메타 섞임 0) · robots·sitemap·ads.txt 200 · 없는 URL 404. GA는 Production과 같이 클라이언트 로드 |
+| Production(읽기) | e-jip.com 200 · 서울25 은마 · 경기8 매교역 검색 정상 · 41115 마커 107 |
+| 테스트 DB 쓰기 | 0(users 0 · profiles 0) |
+
+**중단 지점 — 로그인 필요(STEP 8~13, 15):** Preview 로그인은 OAuth뿐이고 Preview에 자격이 있는 제공자는 Google 하나(Kakao·Naver 키는 Production 전용). Google OAuth 클라이언트에 이 Preview 콜백이 등록돼야 한다. 계정·권한은 임의로 만들지 않았다.
+
 ## 다음 단계 (hosted DB가 생긴 뒤)
 
 1. Pro 브랜치 한정 Preview env: `PREVIEW_DATABASE_URL`(Pro DB) · `NEXTAUTH_SECRET`(Preview 전용) · `REALTOR_PRO_ENABLED=true` · `REALTOR_PRO_PII_KEY`·`_KEY_ID`·`_LOOKUP_PEPPER`(새로 생성, Production 재사용 금지)

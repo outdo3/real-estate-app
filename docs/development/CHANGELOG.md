@@ -2,6 +2,16 @@
 
 ## 2026-09-30
 
+### REALTOR PRO PREVIEW DEPLOY + HOSTED E2E V1 — Preview 배포·DB 대상·외부 API 관문 확인, 로그인 필요 단계에서 중단
+
+상세: `docs/pro/REALTOR_PRO_PREVIEW_SMOKE_V2.md`
+
+    배포     realtor-pro-mvp-overnight-v1 1e3a162 → dpl_GZVh1F7peu68uqDwDTMs69Ua5dX5 READY (main·Production 불변)
+    테스트DB ejip-pro-preview migration 23/23 · Pro 10 테이블 · RLS 30 · CHECK 26 · FK 13 · 실 RLS 15/15(ROLLBACK, 잔여 0)
+    관문     VERCEL_ENV=preview + REALTOR_PRO_ENABLED=true에서만 외부 데이터 API(공공데이터·NEIS·학교알리미·Gemini·Resend·IndexNow) 차단 — 런타임 로그로 확인
+    확인     DB 대상(쿼리 통계) · Pro 스위치 · 익명 차단 · 브리핑 위조 토큰·개인정보 헤더 · 공개 라우트 회귀 · Production 읽기
+    중단     로그인 필요 E2E — Google OAuth 콜백 등록(사용자) 대기
+
 ### REALTOR PRO PREVIEW DB + MIGRATION + E2E SMOKE V1 — Preview 보류, 로컬 격리 DB에서 전 과정 검증
 
 상세: `docs/pro/REALTOR_PRO_PREVIEW_SMOKE_V1.md`
