@@ -40,7 +40,7 @@ import { fetchCachedResource, DETAIL_RESOURCE_TTL_MS } from '@/lib/detail-resour
 import { getAreaDetailLabel, getUniqueAreaLabels, getAreaLabelsForUnit, type AreaUnit, type DisplayUnit, groupToDisplayUnits } from '@/lib/area-utils';
 import { buildAptBrief } from '@/lib/apt-brief';
 import type { ApartmentScoreApiResponse } from '@/lib/apartment-score/client-types';
-import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE } from '@/lib/trade-read-state';
+import { resolveTradeReadState, TRADE_API_UNAVAILABLE_MESSAGE, TRADE_PREPARING_MESSAGE } from '@/lib/trade-read-state';
 import { getClientSessionId, setCurrentAptName } from '@/lib/live-presence';
 import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
 import { useSession } from 'next-auth/react';
@@ -544,7 +544,8 @@ export default function ApartmentDetail() {
   // 불러온 상태"(trades 자체가 비어 있음 — 기존부터 있던 별개의 로딩/무데이터 표시)와
   // "선택한 평형+거래유형에만 거래가 없는 상태"를 구분해, 후자도 다른 평형 가격을
   // 빌려오지 않고 짧게 "거래 없음"으로만 표시한다.
-  const latestPrice = heroTrade ? heroTrade.priceStr : (trades.length > 0 ? '거래 없음' : '조회 중...');
+  // SEOUL25_FINAL_QA_V1 — DB 전용 지역의 미제공 거래 유형(서울 신규 17구 전월세)은 '조회 중'에 머물지 않고 '준비 중'으로 끝난다.
+  const latestPrice = heroTrade ? heroTrade.priceStr : (trades.length > 0 ? '거래 없음' : tradeIncompleteMessage === TRADE_PREPARING_MESSAGE ? '준비 중' : '조회 중...');
   const latestPriceNum = heroTrade ? heroTrade.price : 0; // 억 단위 정수
 
   const renderHeroAreaLabel = (area: string, labels: Map<number, string>) => {

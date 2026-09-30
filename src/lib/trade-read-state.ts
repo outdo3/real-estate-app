@@ -27,9 +27,15 @@ export interface TradeReadState<T> {
   monthsSucceeded: number;
   /** GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개되지 않은 지역이라 서버가 응답을 거부함(검증된 0건이 아니다). */
   regionUnsupported?: boolean;
+  /** SEOUL25_FINAL_QA_V1 — 이 지역·거래 유형은 아직 제공하지 않음(DB 전용 지역의 전월세 등). 실패도, 0건도 아니다. */
+  preparing?: boolean;
 }
 
 export const TRADE_API_UNAVAILABLE_MESSAGE = '실거래가 API 요청에 실패했습니다.';
+
+// SEOUL25_FINAL_QA_V1 — DB 전용 지역(서울 신규 17구)에서 적재되지 않은 거래 유형(전월세)을 live MOLIT 없이 닫을 때의 문구.
+// 서버(api-molit.ts의 DB_ONLY_MOLIT_MESSAGE)와 화면이 같은 값을 쓴다 — "요청 실패"나 "거래 없음"으로 보이지 않게.
+export const TRADE_PREPARING_MESSAGE = '이 지역의 이 거래 유형은 아직 제공 준비 중입니다';
 
 // 사용자에게 보여줄 문구. 원본 오류 메시지(예: "초당 서비스 요청제한 횟수 초과 에러")를
 // 그대로 노출하지 않고, "거래 없음"이라고 말하지도 않는다.
@@ -56,6 +62,7 @@ export function resolveTradeReadState<T>(
   }
 
   const apiError = payload.apiError || null;
+  const preparing = apiError === TRADE_PREPARING_MESSAGE;
   // 전체 실패(apiError)와 일부 실패(partial)를 모두 "불완전"으로 다루되, 문구는 구분한다.
   const partial = apiError ? false : !!payload.partial;
 
@@ -63,10 +70,11 @@ export function resolveTradeReadState<T>(
     trades: Array.isArray(payload.trades) ? payload.trades : [],
     apiError,
     partial,
-    incompleteMessage: apiError ? TRADE_API_UNAVAILABLE_MESSAGE : partial ? TRADE_PARTIAL_MESSAGE : null,
+    incompleteMessage: preparing ? TRADE_PREPARING_MESSAGE : apiError ? TRADE_API_UNAVAILABLE_MESSAGE : partial ? TRADE_PARTIAL_MESSAGE : null,
     failedMonths: Array.isArray(payload.failedMonths) ? payload.failedMonths : [],
     monthsRequested: typeof payload.monthsRequested === 'number' ? payload.monthsRequested : 0,
     monthsSucceeded: typeof payload.monthsSucceeded === 'number' ? payload.monthsSucceeded : 0,
+    ...(preparing ? { preparing: true } : {}),
   };
 }
 
