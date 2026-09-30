@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { REGION_DATA } from '@/lib/regions';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
+import { isTokenizedPrivatePath } from '@/lib/privacy/private-routes';
 
 export interface RegionState {
   /**
@@ -89,6 +90,8 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
   // 헤더 위장이 필요 없다).
   useEffect(() => {
     if (typeof window === 'undefined' || !navigator.geolocation) return;
+    // REALTOR_PRO_BRIEFING_ADS_ISOLATION_V1 — 고객 브리핑(/b/<token>)에서는 위치 권한을 묻지 않고 외부(Kakao) 호출도 하지 않는다.
+    if (isTokenizedPrivatePath(window.location.pathname)) return;
     const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
     if (!kakaoKey) return;
 

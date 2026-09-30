@@ -37,17 +37,27 @@ test('실제 public/ads.txt 파일이 그 한 줄과 정확히 같다', () => {
   assert.equal(onDisk, ADSENSE_ADS_TXT_LINE, 'public/ads.txt와 상수가 어긋났다');
 });
 
-test('루트 레이아웃이 로더를 상수로 심는다 — ID를 직접 적지 않는다', () => {
-  const layout = fs.readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
-  assert.match(layout, /src=\{ADSENSE_SCRIPT_SRC\}/, '레이아웃이 상수를 써야 한다');
-  assert.match(layout, /strategy="afterInteractive"/);
-  assert.match(layout, /crossOrigin="anonymous"/);
-  assert.ok(!/ca-pub-\d/.test(layout), '레이아웃에 ID를 하드코딩하지 않는다');
+// REALTOR_PRO_BRIEFING_ADS_ISOLATION_V1 — 로더는 루트 layout <head>가 아니라 경로 판정을 거치는
+// AdSenseLoader(루트 layout <body>에 1회 마운트)에 있다. 계약(상수 사용·afterInteractive·ID 비하드코딩)은 그대로.
+const readLoader = () => fs.readFileSync(new URL('../components/analytics/AdSenseLoader.tsx', import.meta.url), 'utf8');
+const readLayout = () => fs.readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
+
+test('루트 레이아웃이 로더 컴포넌트를 마운트하고, 로더는 상수를 쓴다 — ID를 직접 적지 않는다', () => {
+  const layout = readLayout();
+  const loader = readLoader();
+  assert.match(layout, /<AdSenseLoader \/>/, '루트 레이아웃이 AdSenseLoader를 마운트해야 한다');
+  assert.ok(!/<Script[\s\S]*ADSENSE_SCRIPT_SRC/.test(layout), '루트 레이아웃이 로더를 직접(판정 없이) 싣지 않는다');
+  assert.match(loader, /src=\{ADSENSE_SCRIPT_SRC\}/, '로더가 상수를 써야 한다');
+  assert.match(loader, /strategy="afterInteractive"/);
+  assert.match(loader, /crossOrigin="anonymous"/);
+  assert.match(loader, /isAdFreePath\(pathname\)/, '비공개 경로 판정을 거쳐야 한다');
+  for (const src of [layout, loader]) assert.ok(!/ca-pub-d/.test(src), 'ID를 하드코딩하지 않는다');
 });
 
 // 이번 단계는 사이트 확인만 — 광고는 아직 내보내지 않는다.
 test('광고 슬롯도 Auto Ads도 아직 없다', () => {
-  const layout = fs.readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
-  assert.ok(!/adsbygoogle/.test(layout.replace(/ADSENSE_SCRIPT_SRC/g, '')), '슬롯 push 코드가 없어야 한다');
-  assert.ok(!/enable_page_level_ads|data-ad-slot/.test(layout), 'Auto Ads/슬롯 속성이 없어야 한다');
+  for (const src of [readLayout(), readLoader()]) {
+    assert.ok(!/adsbygoogle/.test(src.replace(/ADSENSE_SCRIPT_SRC/g, '')), '슬롯 push 코드가 없어야 한다');
+    assert.ok(!/enable_page_level_ads|data-ad-slot/.test(src), 'Auto Ads/슬롯 속성이 없어야 한다');
+  }
 });

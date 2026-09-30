@@ -1,6 +1,7 @@
 'use client';
 
 import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
+import { allowsThirdPartyAnalytics, isTokenizedPrivateHref } from '@/lib/privacy/private-routes';
 
 /**
  * GA4_INTEGRATION_V1 — GA4(마케팅/유입 분석) 클라이언트.
@@ -139,6 +140,8 @@ export function isGaEnvEnabled(
 export function gaRuntimeEnabled(): boolean {
   if (typeof window === 'undefined') return false;
   if (!isGaEnvEnabled()) return false;
+  // REALTOR_PRO_BRIEFING_ADS_ISOLATION_V1 — 토큰 경로(/b/<token>)에서는 어떤 이벤트도 보내지 않는다.
+  if (!allowsThirdPartyAnalytics(window.location.pathname)) return false;
   return !isQaSuppressed();
 }
 
@@ -243,7 +246,16 @@ const INITIAL_LOCATION_HREF: string | null =
   typeof window !== 'undefined' ? sanitizeAnalyticsUrl(window.location.href) : null;
 
 export function getInitialLocationHref(): string | null {
-  return INITIAL_LOCATION_HREF;
+  return safeInitialLocationHref(INITIAL_LOCATION_HREF);
+}
+
+/**
+ * REALTOR_PRO_BRIEFING_ADS_ISOLATION_V1 — 유입 스냅샷이 토큰 경로(/b/<token>)면 버린다.
+ * (브리핑에서 앱의 다른 화면으로 옮긴 뒤 GA가 처음 붙으면, 스냅샷 = 브리핑 URL이 첫 page_view로 나갈 수 있었다.)
+ * null이면 호출부가 현재 주소를 쓴다.
+ */
+export function safeInitialLocationHref(href: string | null): string | null {
+  return href && isTokenizedPrivateHref(href) ? null : href;
 }
 
 /**

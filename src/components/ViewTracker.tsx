@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { getClientSessionId, getCurrentAptName } from '@/lib/live-presence';
 import { initQaSuppressionFromUrl, isQaSuppressed } from '@/lib/analytics/qa-suppression';
+import { allowsFirstPartyAnalytics } from '@/lib/privacy/private-routes';
 
 // 30초 간격 하트비트 — 관리자 대시보드의 "실시간 접속자"가 이 간격을 전제로 한다
 // (presence-server.ts의 ONLINE_WINDOW_MS와 세트).
@@ -27,6 +28,8 @@ export default function ViewTracker() {
     // /apt/[name]은 apt-client.tsx가 실제로 매칭된 단지명(complexId)까지 포함한 더
     // 정확한 조회 로그를 직접 남긴다 — 여기서 또 남기면 단지명 없는 중복 로그가 쌓인다.
     if (pathname.startsWith('/apt/')) return;
+    // REALTOR_PRO_BRIEFING_ADS_ISOLATION_V1 — 접근 토큰이 든 경로(/b/<token>)는 자체 방문 로그에도 남기지 않는다.
+    if (!allowsFirstPartyAnalytics(pathname)) return;
     if (isQaSuppressed()) return;
     const sessionId = getClientSessionId();
     if (!sessionId) return;
@@ -40,6 +43,7 @@ export default function ViewTracker() {
 
   useEffect(() => {
     const sendHeartbeat = () => {
+      if (!allowsFirstPartyAnalytics(pathname)) return;
       if (isQaSuppressed()) return;
       const sessionId = getClientSessionId();
       if (!sessionId) return;

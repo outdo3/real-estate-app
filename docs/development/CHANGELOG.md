@@ -2,6 +2,15 @@
 
 ## 2026-09-30
 
+### REALTOR PRO SECURITY PATCH — BRIEFING ADS ISOLATION V1 (로컬, push·배포 없음)
+
+상세: `docs/pro/REALTOR_PRO_V1_SECURITY.md` §1
+
+    원인     루트 layout·AppProviders가 모든 경로에 AdSense·GA4·자체 방문 로그·위치 조회를 실음 → 토큰 URL(/b/<token>)이 제3자·자체 로그에 남을 수 있음
+    수정     src/lib/privacy/private-routes.ts 단일 판정 · AdSenseLoader(경로 판정) · GA/ViewTracker/RegionContext 가드 · /b/* CSP + no-referrer + X-Robots-Tag · 브리핑 og/twitter 고정 문구, canonical 없음
+    범위     광고 제외 /b·/pro, 분석 제외 /b만 · 일반 공개 화면 광고·분석 그대로
+    확인     next start: /b 외부 스크립트 0(폰트 CDN만) · CSP 위반 0 · /privacy AdSense 그대로 · 빌드 라우트 static/dynamic 동일
+
 ### REALTOR PRO MVP OVERNIGHT BUILD V1 — 중개사 Pro MVP 로컬 구현 (push·배포·DB 적용 없음)
 
 상세: `docs/development/REALTOR_PRO_MVP_OVERNIGHT_BUILD_V1.md` · 아침 가이드 `docs/pro/REALTOR_PRO_MVP_MORNING_WALKTHROUGH.md`

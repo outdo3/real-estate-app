@@ -11,6 +11,7 @@ import {
   gaRuntimeEnabled,
   getInitialLocationHref,
 } from '@/lib/analytics/ga';
+import { allowsThirdPartyAnalytics } from '@/lib/privacy/private-routes';
 
 /**
  * GA4_INTEGRATION_V1 §3/§4 — GA4 로더 + App Router page_view.
@@ -45,17 +46,20 @@ export default function GoogleAnalytics() {
     setEnabled(gaRuntimeEnabled());
   }, []);
 
+  // REALTOR_PRO_BRIEFING_ADS_ISOLATION_V1 — 접근 토큰이 URL에 든 경로(/b/<token>)에는 GA를 싣지도, 보내지도 않는다.
+  const blocked = !allowsThirdPartyAnalytics(pathname);
+
   useEffect(() => {
-    if (!enabled || !pathname) return;
+    if (!enabled || !pathname || blocked) return;
     if (isFirstPageView.current) {
       isFirstPageView.current = false;
       gaPageView(getInitialLocationHref());
       return;
     }
     gaPageView(null);
-  }, [enabled, pathname]);
+  }, [enabled, pathname, blocked]);
 
-  if (!enabled) return null;
+  if (!enabled || blocked) return null;
 
   return (
     <>
