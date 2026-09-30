@@ -1,5 +1,5 @@
 // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 경기 8구 공개 beta 준비(현재 main 4be3c02 기준 재구성) 회귀 테스트.
-// Production 스위치(GYEONGGI_BETA_ENABLED)는 false, Preview 전용 스위치는 env 두 개가 모두 맞을 때만 열린다.
+// Production 스위치(GYEONGGI_BETA_ENABLED)는 2026-09-30 true(공개), Preview 전용 스위치는 env 두 개가 모두 맞을 때만 열린다.
 // "켜면"은 simulateRegionEnablement로 본다(런타임 설정은 바꾸지 않는다).
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -70,24 +70,35 @@ test('2 · Preview 스위치 진리표 — Vercel Preview + 명시 플래그 둘
   assert.equal(resolveGyeonggi8Open(false, true), true);
 });
 
-test('3 · 스위치는 env 두 개를 리터럴로 읽는다(빌드 인라인) · Production 스위치 false · 런타임 맵은 GYEONGGI_8_OPEN을 따른다', () => {
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구 공개: Production 스위치 true(한 줄). 3·4·10은 공개 뒤 런타임을 고정한다.
+test('3 · 스위치는 env 두 개를 리터럴로 읽는다(빌드 인라인) · Production 스위치 true(2026-09-30 공개) · 런타임 맵은 GYEONGGI_8_OPEN을 따른다', () => {
   const en = code('src/lib/region/enablement.ts');
   assert.match(en, /resolveGyeonggi8PreviewFlag\(\s*process\.env\.NEXT_PUBLIC_VERCEL_ENV,\s*process\.env\.NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW\s*\)/);
-  assert.match(en, /export const GYEONGGI_BETA_ENABLED = false;/);
+  assert.match(en, /export const GYEONGGI_BETA_ENABLED = true;/);
   assert.match(en, /gyeonggiBeta: GYEONGGI_8_OPEN,/);
   assert.ok(!/'41'\s*:/.test(en), '시도 층에 경기(41)가 들어가면 48개 노드가 전부 열린다');
 });
 
-test('4 · 현재 빌드(테스트 env = Production과 같음): 경기 전 축 닫힘 · DB 전용 아님 · 선택기에 경기 없음', () => {
-  assert.equal(GYEONGGI_BETA_ENABLED, false);
-  assert.equal(GYEONGGI_8_BETA_PREVIEW_ENABLED, false);
-  assert.equal(GYEONGGI_8_OPEN, false);
-  for (const c of GG_ALL) {
+test('4 · 현재 빌드(테스트 env = Production과 같음, 2026-09-30 공개): 경기 8구만 app·search·map·detail·DB 읽기 + DB 전용 · 41135·나머지 경기 전 축 닫힘', () => {
+  assert.equal(GYEONGGI_BETA_ENABLED, true);
+  assert.equal(GYEONGGI_8_BETA_PREVIEW_ENABLED, false); // Production 빌드에서 Preview 스위치는 여전히 닫힘
+  assert.equal(GYEONGGI_8_OPEN, true);
+  for (const c of GG8) {
+    for (const axis of OPEN_AXES) assert.equal(isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
+    for (const axis of CLOSED_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
+    assert.deepEqual(getRegionEnablement(c), sim(c, ON), `${c} 런타임 ≠ 시뮬레이션 ON`);
+    assert.equal(isDbOnlyLawdCd(c), true, c);
+  }
+  for (const c of [...GG_OTHER, '41135', '41110', '41130']) {
     for (const axis of AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
     assert.equal(isDbOnlyLawdCd(c), false, c);
   }
-  assert.equal(isSidoPubliclyHidden('41'), true, '선택기에 경기가 나온다');
-  for (const axis of ['search', 'map'] as const) assert.ok(!publicAllowedLawdCds(axis).some((c) => c.startsWith('41')), axis);
+  // 선택기에 경기가 나오되(8구만) "경기도 전체"는 없다
+  assert.equal(isSidoPubliclyHidden('41'), false);
+  assert.equal(isSidoWholeQuerySupported('41'), false);
+  for (const axis of ['search', 'map'] as const) {
+    assert.deepEqual(publicAllowedLawdCds(axis).filter((c) => c.startsWith('41')).sort(), [...GG8].sort(), axis);
+  }
 });
 
 test('5 · 켜면(Preview 또는 승인 뒤 Production): 8구만 app·search·map·detail·DB 읽기, 나머지 축 닫힘', () => {
@@ -153,15 +164,18 @@ test('9 · 리포트·통계 닫힘: 경기 aptSeq는 리포트 CTA가 없고, �
   assert.equal(isReportRegionOpen('26350-164'), true, '부산 리포트 CTA가 사라졌다');
 });
 
-test('10 · SEO: 경기 상세는 지금 BLOCKED, 켜도 NOINDEX(색인 금지) · sitemap에 경기 없음 · 리포트 BLOCKED', () => {
+test('10 · SEO: 경기 상세는 공개 뒤에도 NOINDEX(색인 금지) · sitemap에 경기 없음 · 리포트 BLOCKED · 41135 BLOCKED', () => {
   const blockedOn = (c: string, f: keyof RegionEnablement) => !sim(c, ON)[f];
   for (const c of GG8) {
-    assert.equal(decidePublicSeo([c], 'detail'), 'BLOCKED', c);
+    assert.equal(decidePublicSeo([c], 'detail'), 'NOINDEX', c);
+    assert.equal(decidePublicSeo([c], 'report'), 'BLOCKED', c);
     assert.equal(decidePublicSeo([c], 'detail', blockedOn), 'NOINDEX', c);
     assert.equal(decidePublicSeo([c], 'report', blockedOn), 'BLOCKED', c);
   }
   // 섞인 식별자는 덜 열린 쪽(41135 aptSeq면 막힘)
   assert.equal(decidePublicSeo(['41111', '41135'], 'detail', blockedOn), 'BLOCKED');
+  assert.equal(decidePublicSeo(['41111', '41135'], 'detail'), 'BLOCKED');
+  assert.equal(decidePublicSeo(['41135'], 'detail'), 'BLOCKED');
   const paths = buildLaunchRegionRoutes().map((r) => decodeURIComponent(r.path));
   assert.ok(!paths.some((p) => /\/41\d{3}/.test(p) || p.includes('경기')), '사이트맵에 경기가 있다');
 });

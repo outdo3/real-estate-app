@@ -30,7 +30,7 @@ import { buildMasterCoordIndex, resolveApartmentCoords } from '../map-marker-coo
 import { hasUsableHandoffCoords } from '../map-property-focus';
 
 // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 경기 beta 공개 전 blocker 4건 + null 좌표 UX 회귀 테스트.
-// "켜면"은 simulateRegionEnablement로만 본다 — Production 스위치(GYEONGGI_BETA_ENABLED)는 false 그대로다.
+// "켜면"은 simulateRegionEnablement로 본다 — Production 스위치(GYEONGGI_BETA_ENABLED)는 2026-09-30 true(공개).
 
 const ROOT = resolve(__dirname, '../../..');
 const code = (p: string) => readFileSync(resolve(ROOT, p), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -47,11 +47,14 @@ const allowWith = (flags: { seoulBeta: boolean; gyeonggiBeta: boolean }) =>
   (lawdCd: string, axis: keyof RegionEnablement) => simulateRegionEnablement(lawdCd, flags)[axis];
 const aptSeq = (lawdCd: string) => `${lawdCd}-1`;
 
-test('0. Production 스위치는 그대로 OFF — 이 STEP은 경기를 열지 않는다', () => {
-  assert.equal(GYEONGGI_BETA_ENABLED, false);
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구 공개(스위치 true). 공개 범위는 8구 lawdCd 층뿐, 시도 층(41)은 계속 없음.
+test('0. Production 스위치 ON(2026-09-30) — 8구 lawdCd 층만, 시도 층(41) 없음 · 41135·나머지 경기 닫힘', () => {
+  assert.equal(GYEONGGI_BETA_ENABLED, true);
   const src = code('src/lib/region/enablement.ts');
-  assert.ok(/export const GYEONGGI_BETA_ENABLED = false;/.test(src));
+  assert.ok(/export const GYEONGGI_BETA_ENABLED = true;/.test(src));
   assert.ok(!/'41': /.test(src), '시도 층에 경기가 들어갔다');
+  for (const c of GG8) assert.equal(isPublicRegionAllowed(c, 'map'), true, c);
+  for (const c of [...GG_OTHER, '41135']) assert.equal(isPublicRegionAllowed(c, 'map'), false, c);
 });
 
 // ── BLOCKER 1 — 공개되지 않은 지역 지도 상태 ────────────────────────────────

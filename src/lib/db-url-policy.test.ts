@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { PREVIEW_DB_NOT_CONFIGURED_URL, resolveRuntimeDatabaseUrl } from './db-url-policy';
-import { resolveDbOnly, isDbOnlyLawdCd, getRegionEnablement, SEOUL_17_BETA_LAWDCDS, SEOUL_BETA_LAWDCDS } from './region/enablement';
+import { resolveDbOnly, isDbOnlyLawdCd, getRegionEnablement, GYEONGGI_BETA_LAWDCDS, SEOUL_17_BETA_LAWDCDS, SEOUL_BETA_LAWDCDS } from './region/enablement';
 import { REGION_NODES } from './region/registry';
 
 // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview는 read-only 전용 연결만, Production·로컬은 그대로. Production DB·네트워크 0.
@@ -68,10 +68,13 @@ test('Preview DB 전용 판정: 스위치가 켜졌을 때 서울 17구만', () 
 });
 
 // SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 공개 뒤: DB 전용은 정확히 서울 17구, 17구 DB-first 읽기 열림.
-test('Production 런타임(이 테스트 env): DB 전용 = 서울 17구뿐 · 17구 DB-first 읽기 열림 · 8구·부산 DB-first 그대로', () => {
-  const s17 = SEOUL_17_BETA_LAWDCDS as readonly string[];
-  for (const n of REGION_NODES) assert.equal(isDbOnlyLawdCd(n.lawdCd), s17.includes(n.lawdCd), n.lawdCd);
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 같은 날 경기 8구 공개: DB 전용 = 서울 17구 + 경기 8구(41135·나머지 경기 아님).
+test('Production 런타임(이 테스트 env): DB 전용 = 서울 17구 + 경기 8구뿐 · 둘 다 DB-first 읽기 열림 · 서울 8구·부산 DB-first 그대로', () => {
+  const dbOnly = [...SEOUL_17_BETA_LAWDCDS, ...GYEONGGI_BETA_LAWDCDS] as readonly string[];
+  for (const n of REGION_NODES) assert.equal(isDbOnlyLawdCd(n.lawdCd), dbOnly.includes(n.lawdCd), n.lawdCd);
+  assert.equal(isDbOnlyLawdCd('41135'), false);
   for (const c of SEOUL_17_BETA_LAWDCDS) assert.equal(getRegionEnablement(c).cronSync, true, c);
+  for (const c of GYEONGGI_BETA_LAWDCDS) assert.equal(getRegionEnablement(c).cronSync, true, c);
   for (const c of SEOUL_BETA_LAWDCDS) assert.equal(getRegionEnablement(c).cronSync, true, c);
   assert.equal(getRegionEnablement('26350').cronSync, true);
 });

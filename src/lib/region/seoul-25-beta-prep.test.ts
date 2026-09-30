@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
+  GYEONGGI_BETA_LAWDCDS,
   SEOUL_17_BETA_LAWDCDS,
   SEOUL_17_ENABLEMENT,
   SEOUL_25_BETA_PREVIEW_ENABLED,
@@ -44,7 +45,9 @@ const GG_ALL = REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawd
 const PUBLIC_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const;
 const PREVIEW = { seoulBeta: true, gyeonggiBeta: false, seoul17Open: true } as const;
 // SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30부터 Production도 17구 공개(Preview와 같은 프로필).
-const PROD = { seoulBeta: true, gyeonggiBeta: false, seoul17Open: true } as const;
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 같은 날 경기 8구도 공개(gyeonggiBeta). 서울 판정은 경기 스위치와 독립.
+const PROD = { seoulBeta: true, gyeonggiBeta: true, seoul17Open: true } as const;
+const GG8 = GYEONGGI_BETA_LAWDCDS as readonly string[];
 const sim = (c: string, axis: keyof RegionEnablement, flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Open?: boolean } = PREVIEW) => simulateRegionEnablement(c, flags)[axis];
 const REP = { 강남: '11680', 서초: '11650', 송파: '11710', 노원: '11350', 강서: '11500', 관악: '11620', 성북: '11290', 은평: '11380' } as const;
 
@@ -69,7 +72,7 @@ test('1 · Preview 스위치는 두 값이 정확할 때만 켜진다(fail-close
   assert.match(src, /resolveSeoul25PreviewFlag\(\s*process\.env\.NEXT_PUBLIC_VERCEL_ENV,\s*process\.env\.NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW\s*\)/);
 });
 
-test('14 · Production 설정(2026-09-30 공개): 서울 17구는 앱·검색·지도·상세·DB 읽기만 · 공개 8구·부산·경기는 그대로', () => {
+test('14 · Production 설정(2026-09-30 공개): 서울 17구는 앱·검색·지도·상세·DB 읽기만 · 공개 8구·부산 그대로 · 경기는 8구만(41135 닫힘)', () => {
   for (const c of S17) {
     for (const axis of ['app', 'search', 'map', 'detail', 'cronSync'] as const) assert.equal(isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
     for (const axis of ['report', 'stats', 'supply', 'sitemap', 'seoIndex'] as const) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
@@ -77,11 +80,16 @@ test('14 · Production 설정(2026-09-30 공개): 서울 17구는 앱·검색·�
     assert.equal(decidePublicSeo([c], 'report'), 'BLOCKED', c);
   }
   for (const c of S8) for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
-  for (const c of GG_ALL) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
+  for (const c of GG_ALL) {
+    for (const axis of PUBLIC_AXES) {
+      const open = GG8.includes(c) && (['app', 'search', 'map', 'detail'] as readonly string[]).includes(axis);
+      assert.equal(isPublicRegionAllowed(c, axis), open, `${c} ${axis}`);
+    }
+  }
   for (const c of BUSAN_LAWDCD_16) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
   for (const axis of ['search', 'map', 'detail', 'app'] as const) {
     const set = publicAllowedLawdCds(axis);
-    assert.equal(set.length, 16 + 8 + 17, axis);
+    assert.equal(set.length, 16 + 8 + 17 + 8, axis); // + 경기 8구(2026-09-30)
     assert.ok(S17.every((c) => set.includes(c)), axis);
   }
   // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — supply(84e1c61): 17구·경기·서울 전체 닫힘, 공개 8구·부산 열림
@@ -114,7 +122,9 @@ test('3 · "서울특별시 전체": 8구 부분 공개 · 25구 공개(시뮬�
   assert.equal(isSidoPartiallyPublic('26'), false);
   // 4) 미출시·모르는 시도
   for (const s of ['41', '27', '', null, undefined]) assert.equal(isSidoWholeQuerySupported(s), false, String(s));
-  assert.equal(isSidoPubliclyHidden('41'), true);
+  // 경기는 2026-09-30 8구 공개로 선택지에 나오지만 "경기도 전체"는 위에서처럼 없다
+  assert.equal(isSidoPubliclyHidden('41'), false);
+  assert.equal(isSidoPubliclyHidden('27'), true);
   // 선택기는 새 가드로만 "시도 전체"를 만든다(버튼·핸들러 둘 다)
   const modal = code('src/components/RegionSelectModal.tsx');
   assert.ok(/if \(!isSidoWholeQuerySupported\(sidoCode\)\) return;/.test(modal));

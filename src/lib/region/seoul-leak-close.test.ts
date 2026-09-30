@@ -75,13 +75,16 @@ test('§5 부산 16구는 차단 대상이 아니다(동작 불변)', () => {
 
 test('§6 서울 deny-list는 서울만 보지만, 공개 표면은 allowlist로 경기·대구·모르는 코드를 막는다', () => {
   // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 서울 전용 판정(isSeoulPublicBlocked)은 감사 스크립트용으로 의미가 그대로다.
-  for (const code of ['41135', '41111', '27110', '99999']) {
+  // GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구(41111 등) 공개. 미출시 경기 예시는 41135·41287.
+  for (const code of ['41135', '41287', '27110', '99999']) {
     assert.equal(isSeoulPublicBlocked(code), false, `${code} — 서울 전용 판정의 대상이 아니다`);
     for (const axis of ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const) {
       assert.equal(isPublicRegionAllowed(code, axis), false, `${code} ${axis}가 공개돼 있다`);
     }
   }
-  assert.equal(isSidoPubliclyHidden('41'), true, '경기가 지역 선택지에 나온다');
+  assert.equal(isSeoulPublicBlocked('41111'), false);
+  for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) assert.equal(isPublicRegionAllowed('41111', axis), false, `41111 ${axis}`);
+  assert.equal(isSidoPubliclyHidden('41'), false, '경기 8구가 지역 선택지에 없다');
   assert.equal(isSidoPubliclyHidden('27'), true, '대구가 지역 선택지에 나온다');
 });
 
@@ -138,8 +141,9 @@ test('§10 /api/search 두 쿼리 모두 지역 필터를 쓴다', () => {
   assert.ok(/sggCd: \{ in:/.test(code), 'canonical 코드 allowlist로 거르지 않는다');
   assert.ok(!/notIn/.test(code) && !/seoulPublicBlockedLawdCds/.test(code), 'deny-list가 남아 있다');
   const allowed = publicAllowedLawdCds('search');
-  assert.equal(allowed.length, 16 + 25);
-  assert.ok(allowed.every((c) => c.startsWith('26') || c.startsWith('11')));
+  assert.equal(allowed.length, 16 + 25 + 8); // + 경기 8구(2026-09-30)
+  assert.ok(allowed.every((c) => c.startsWith('26') || c.startsWith('11') || c.startsWith('41')));
+  assert.ok(!allowed.includes('41135'));
 });
 
 test('§11 alias fallback이 검색 필터를 우회하지 못한다', () => {

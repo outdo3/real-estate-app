@@ -147,7 +147,7 @@ export const GYEONGGI_BETA_LAWDCDS = [
 ] as const;
 
 /** 경기 beta 스위치. **false = 경기 전 축 닫힘(현재).** */
-export const GYEONGGI_BETA_ENABLED = false;
+export const GYEONGGI_BETA_ENABLED = true;
 
 /** 경기 beta에서 여는 축. 앱·검색·지도·상세 + DB-first 읽기(cronSync) — 리포트/통계/공급/색인/사이트맵은 닫힘. */
 export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {

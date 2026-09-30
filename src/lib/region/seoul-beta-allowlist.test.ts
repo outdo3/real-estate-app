@@ -105,20 +105,23 @@ test('§7 부산 16구는 이 변경의 영향을 받지 않는다(무회귀)', 
   assert.deepEqual(getTradeDbFirstSidoCodes(), ['26']);
 });
 
-test('§8 축별 열린 지역 — app·cronSync는 부산 16 + 서울 25(2026-09-30), 나머지 축은 부산 16뿐', () => {
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구 공개로 app·cronSync에 경기 8구가 더해졌다(41135 아님).
+test('§8 축별 열린 지역 — app·cronSync는 부산 16 + 서울 25 + 경기 8(2026-09-30), 나머지 축은 부산 16뿐', () => {
   const seoul25 = REGION_NODES.filter((n) => n.sidoCode === '11' && n.isMolitLeaf).map((n) => n.lawdCd).sort();
+  const gg8 = ['41111', '41113', '41115', '41117', '41131', '41133', '41150', '41210'];
   for (const axis of ['app', 'cronSync'] as const) {
     const open = getEnabledRegions(axis, REGION_NODES);
-    assert.equal(open.length, 41, `${axis} 축이 41개가 아니다`);
+    assert.equal(open.length, 49, `${axis} 축이 49개가 아니다`);
     assert.deepEqual(open.filter((n) => n.sidoCode === '11').map((n) => n.lawdCd).sort(), seoul25, `${axis} 축의 서울이 25구가 아니다`);
     assert.equal(open.filter((n) => n.sidoCode === '26').length, 16);
+    assert.deepEqual(open.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd).sort(), gg8, `${axis} 축의 경기가 8구가 아니다`);
   }
   for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) {
     const open = getEnabledRegions(axis, REGION_NODES);
     assert.equal(open.length, 16, `${axis} 축이 16개가 아니다`);
     assert.ok(open.every((n) => n.sidoCode === '26'), `${axis} 축에 비부산이 있다`);
   }
-  assert.equal(getMolitLeafRegions().filter((n) => getRegionEnablement(n.lawdCd).cronSync).length, 41);
+  assert.equal(getMolitLeafRegions().filter((n) => getRegionEnablement(n.lawdCd).cronSync).length, 49);
 });
 
 // ── 소스 수준 가드 ───────────────────────────────────────────────────────────

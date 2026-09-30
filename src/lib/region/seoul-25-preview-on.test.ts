@@ -27,11 +27,13 @@ test('Preview env: 스위치 켜짐 · 서울 25구 app·search·map·detail 공
   // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview 17구는 DB-first로 읽고 live MOLIT는 부르지 않는다
   for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isTradeDbFirstLawdCd(c), true, `${c} DB-first`);
   for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isDbOnlyLawdCd(c), true, `${c} DB only`);
-  for (const c of [...e.SEOUL_BETA_LAWDCDS, '26350', '41111', '99999']) assert.equal(e.isDbOnlyLawdCd(c), false, `${c} not DB-only`);
+  for (const c of [...e.SEOUL_BETA_LAWDCDS, '26350', '41135', '99999']) assert.equal(e.isDbOnlyLawdCd(c), false, `${c} not DB-only`);
+  // GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 경기 8구는 2026-09-30 공개로 모든 빌드에서 DB 전용
+  for (const c of e.GYEONGGI_BETA_LAWDCDS) assert.equal(e.isDbOnlyLawdCd(c), true, `${c} DB only`);
   // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — Preview에서도 17구 공급은 닫힘, 8구는 그대로
   for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), false, `${c} supply`);
   for (const c of e.SEOUL_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), true, `${c} supply`);
-  assert.equal(e.publicAllowedLawdCds('search').length, 41);
+  assert.equal(e.publicAllowedLawdCds('search').length, 49); // 부산 16 + 서울 25 + 경기 8(2026-09-30)
   assert.equal(e.publicAllowedLawdCds('report').filter((c) => c.startsWith('11')).length, 0);
 });
 
@@ -44,7 +46,10 @@ test('Preview env: 25구가 다 열려도 "서울특별시 전체"는 없다 · 
   for (const c of r.REGION_NODES.filter((n) => n.sidoCode === '26').map((n) => n.lawdCd)) {
     for (const axis of ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex', 'cronSync'] as const) assert.equal(e.isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
   }
-  for (const c of r.REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd)) assert.equal(e.isPublicRegionAllowed(c, 'app'), false, c);
+  // 경기는 2026-09-30부터 8구만 app 공개(41135·나머지 닫힘)
+  const gg8 = e.GYEONGGI_BETA_LAWDCDS as readonly string[];
+  for (const c of r.REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd)) assert.equal(e.isPublicRegionAllowed(c, 'app'), gg8.includes(c), c);
+  assert.equal(e.isPublicRegionAllowed('41135', 'app'), false);
 });
 
 test('Preview env: 공급 라우트 — 17구·서울 전체·경기 거부, 공개 8구·부산 허용(84e1c61 유지)', async () => {

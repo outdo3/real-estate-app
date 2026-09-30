@@ -76,7 +76,9 @@ test('go-live 시뮬레이션: 서울 8구·부산·경기는 켜기 전과 완�
   for (const n of REGION_NODES) {
     if (S17.includes(n.lawdCd)) continue;
     assert.deepEqual(simulateRegionEnablement(n.lawdCd, LIVE), simulateRegionEnablement(n.lawdCd, NOW), n.lawdCd);
-    assert.deepEqual(simulateRegionEnablement(n.lawdCd, NOW), getRegionEnablement(n.lawdCd), n.lawdCd);
+    // GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 경기 8구는 별도 스위치(2026-09-30 on)로 런타임이 바뀌었다. 서울 스위치와는 독립.
+    const runtimeFlags = GG.includes(n.lawdCd) ? { ...NOW, gyeonggiBeta: true } : NOW;
+    assert.deepEqual(simulateRegionEnablement(n.lawdCd, runtimeFlags), getRegionEnablement(n.lawdCd), n.lawdCd);
   }
   for (const c of S8) assert.equal(sim(c, 'supply'), true, c);
   for (const c of BUSAN_LAWDCD_16) assert.equal(sim(c, 'report'), true, c);

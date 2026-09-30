@@ -141,10 +141,12 @@ test('9. 41135 is excluded everywhere', () => {
   assert.ok(!(GYEONGGI_FIRST_BATCH as readonly string[]).includes('41135'));
 });
 
-test('10. public exposure unchanged — Gyeonggi stays closed on every axis; apply gate requires an exposure guard', () => {
-  for (const d of [...GYEONGGI_FIRST_BATCH, '41135']) {
-    assert.deepEqual(getRegionEnablement(d), { app: false, search: false, map: false, detail: false, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 첫 배치 8구 공개(app·search·map·detail·DB 읽기). 41135는 전 축 닫힘.
+test('10. public exposure — first batch 8 open (2026-09-30) for app/search/map/detail/DB read only, 41135 closed on every axis; apply gate requires an exposure guard', () => {
+  for (const d of GYEONGGI_FIRST_BATCH) {
+    assert.deepEqual(getRegionEnablement(d), { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true }, d);
   }
+  assert.deepEqual(getRegionEnablement('41135'), { app: false, search: false, map: false, detail: false, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
   const g = evaluateGgApplyGate({ ...okGate(), publicExposureGuarded: false });
   assert.deepEqual(g.reasons, ['PUBLIC_EXPOSURE_NOT_GUARDED']);
   assert.equal(evaluateGgApplyGate(okGate()).allowed, true);
@@ -424,8 +426,12 @@ test('apply 사후 검증 — +116만, 다른 시도 0, 좌표·구·중복·거
   fail({ live: { ...good.live, sitemapGyeonggi: 2 } }, 'LIVE_SITEMAP_GYEONGGI_0');
 });
 
-test('apply 14·15 — 공개·cron 불변: 경기 공개 축 0, sale-sync scope에 경기 없음, 실행기는 enablement를 바꾸지 않는다', () => {
-  assert.deepEqual(computePublicExposureGuarded((c, axis) => publicAllowed(c, axis)), { guarded: true, openAxes: [] });
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 공개 뒤 노출 가드는 8구 × 4축을 열린 것으로 계산 → seed apply는 PUBLIC_EXPOSURE_NOT_GUARDED로 거부(보수적).
+test('apply 14·15 — 공개(2026-09-30)·cron 불변: 경기 공개 축 = 8구 × app·search·map·detail뿐(41135 0), 실행기는 enablement를 바꾸지 않는다', () => {
+  const guard = computePublicExposureGuarded((c, axis) => publicAllowed(c, axis));
+  assert.equal(guard.guarded, false);
+  assert.deepEqual(guard.openAxes, [...GYEONGGI_FIRST_BATCH].flatMap((c) => ['app', 'search', 'map', 'detail'].map((a) => `${c}:${a}`)));
+  assert.deepEqual(computePublicExposureGuarded((c, axis) => publicAllowed(c, axis), ['41135']), { guarded: true, openAxes: [] });
   // GYEONGGI_CRON_EXPANSION_V1 — cron은 승인된 경기 scope 두 개만 추가됐다(그 밖의 scope·lawdCd 직접 지정 없음).
   const crons = JSON.parse(fs.readFileSync(path.join(__dirname, '../../vercel.json'), 'utf8')).crons as { path: string }[];
   assert.deepEqual(crons.filter((c) => /gyeonggi/.test(c.path)).map((c) => c.path).sort(), ['/api/cron/sale-recheck?mode=apply&scope=gyeonggi', '/api/cron/sale-sync?mode=apply&scope=gyeonggi']);

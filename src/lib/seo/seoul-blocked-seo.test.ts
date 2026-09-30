@@ -79,11 +79,14 @@ test('§4 부산 16구는 NONE(불변), 서울 밖 미출시 지역은 BLOCKED',
   }
   for (const code of BUSAN_LAWDCD_16) assert.equal(decidePublicSeo([code], 'detail'), 'NONE', code);
   // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 서울 밖 미출시 지역(경기·대구)·registry 밖 코드는 이제 BLOCKED다(예전엔 NONE).
-  for (const code of ['41135', '41111', '27110', '99999']) {
+  // GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구 공개: 41111 상세는 NOINDEX(색인 금지), 리포트 BLOCKED.
+  for (const code of ['41135', '41287', '27110', '99999']) {
     for (const axis of ['app', 'detail', 'report'] as const) assert.equal(decidePublicSeo([code], axis), 'BLOCKED', `${code} ${axis}`);
   }
-  // 부산 + 경기 조작 URL은 덜 열린 쪽(BLOCKED)
-  assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('41111-41')], 'detail'), 'BLOCKED');
+  assert.equal(decidePublicSeo(['41111'], 'detail'), 'NOINDEX');
+  assert.equal(decidePublicSeo(['41111'], 'report'), 'BLOCKED');
+  // 부산 + 미출시 경기 조작 URL은 덜 열린 쪽(BLOCKED)
+  assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('41135-41')], 'detail'), 'BLOCKED');
   // 식별자가 없으면(이름만 있는 주소) 판정하지 않는다 — 이름으로 지역을 추측하지 않는다.
   assert.equal(decidePublicSeo([null, undefined, ''], 'app'), 'NONE');
 });

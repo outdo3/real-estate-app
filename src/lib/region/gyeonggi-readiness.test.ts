@@ -25,7 +25,7 @@ import { resolveSaleSyncScope } from '../sync/sale-sync-scope';
 import { GYEONGGI_FIRST_BATCH } from '../../../scripts/national-backfill/gyeonggi-master-seed-logic';
 
 // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 경기 beta 후보(스위치 OFF)와 공개 전 안전장치 회귀 테스트.
-// "켜면"은 simulateRegionEnablement로만 본다 — Production 설정(GYEONGGI_BETA_ENABLED)은 false 그대로다.
+// "켜면"은 simulateRegionEnablement로 본다 — Production 설정(GYEONGGI_BETA_ENABLED)은 2026-09-30 true(공개).
 
 const ROOT = resolve(__dirname, '../../..');
 const code = (p: string) => readFileSync(resolve(ROOT, p), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -42,10 +42,14 @@ const PUBLIC_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitem
 const sim = (c: string, axis: keyof RegionEnablement, flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Open?: boolean } = ON) => simulateRegionEnablement(c, flags)[axis];
 const allowedSet = (axis: keyof RegionEnablement, flags = ON) => REGION_NODES.filter((n) => sim(n.lawdCd, axis, flags)).map((n) => n.lawdCd);
 
-test('0. 현재 런타임: 경기 beta 스위치 OFF — 경기 전 축 닫힘, 시뮬레이션 NOW = 런타임', () => {
-  assert.equal(GYEONGGI_BETA_ENABLED, false);
-  for (const c of GG_ALL) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
-  for (const n of REGION_NODES) assert.deepEqual(simulateRegionEnablement(n.lawdCd, NOW), getRegionEnablement(n.lawdCd), n.lawdCd);
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구 공개: 런타임 = 시뮬레이션 ON. NOW(공개 전)는 비교 기준으로만 남는다.
+test('0. 현재 런타임: 경기 beta 스위치 ON(2026-09-30) — 8구만 열림, 41135·나머지 경기 전 축 닫힘, 시뮬레이션 ON = 런타임', () => {
+  assert.equal(GYEONGGI_BETA_ENABLED, true);
+  for (const c of GG8) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), ['app', 'search', 'map', 'detail'].includes(axis), `${c} ${axis}`);
+  for (const c of [...GG_OTHER, '41135']) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
+  for (const n of REGION_NODES) assert.deepEqual(simulateRegionEnablement(n.lawdCd, ON), getRegionEnablement(n.lawdCd), n.lawdCd);
+  // 경기 밖은 공개 전(NOW)과 같다
+  for (const n of REGION_NODES.filter((x) => x.sidoCode !== '41')) assert.deepEqual(simulateRegionEnablement(n.lawdCd, NOW), getRegionEnablement(n.lawdCd), n.lawdCd);
 });
 
 test('1·17. 후보는 정확히 첫 배치 8구(MOLIT leaf, 41135 없음) — seed·cron 후보와 같은 목록', () => {
@@ -148,10 +152,12 @@ test('13·14·15·16. 켜도 리포트·통계 닫힘, 상세 SEO는 noindex, si
     const blocked = (lawd: string, axis: keyof RegionEnablement) => !sim(lawd, axis);
     assert.equal(decidePublicSeo([c], 'detail', blocked), 'NOINDEX', c);
     assert.equal(decidePublicSeo([c], 'report', blocked), 'BLOCKED', c);
-    // 현재 런타임은 BLOCKED
-    assert.equal(decidePublicSeo([c], 'detail'), 'BLOCKED', c);
+    // 현재 런타임(2026-09-30 공개)도 같다: 상세 NOINDEX, 리포트 BLOCKED
+    assert.equal(decidePublicSeo([c], 'detail'), 'NOINDEX', c);
+    assert.equal(decidePublicSeo([c], 'report'), 'BLOCKED', c);
   }
   assert.equal(decidePublicSeo(['41135'], 'detail', (l, a) => !sim(l, a)), 'BLOCKED');
+  assert.equal(decidePublicSeo(['41135'], 'detail'), 'BLOCKED');
   const routes = [...buildLaunchRegionRoutes(), ...buildDongRoutes(GG8.map((lawdCd) => ({ lawdCd, dong: '정자동', count: 9999 })))].map((r) => decodeURIComponent(r.path));
   assert.deepEqual(routes.filter((p) => /41\d{3}|경기|수원|성남|의정부|광명/.test(p)), []);
 });
