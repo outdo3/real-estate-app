@@ -1360,7 +1360,7 @@ export default function ApartmentDetail() {
         <div className={styles.panel}>
           <div>
             <div className={styles.timelineFilters}>
-              <span className={styles.timelineSummary}>{selectedTradeArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedTradeArea, areaLabels)} · 총 {filteredTrades.length}건</span>
+              <span className={styles.timelineSummary}>{selectedTradeArea === '전체' ? '전체 평형' : renderHeroAreaLabel(selectedTradeArea, areaLabels)} · {filteredTrades.length === 0 && tradeIncompleteMessage === TRADE_PREPARING_MESSAGE ? '준비 중' : `총 ${filteredTrades.length}건`}</span>
               <div className={styles.timelineControls}>
                 <div style={{ display: 'flex', background: 'var(--bg-color)', borderRadius: '4px', padding: '0.25rem' }}>
                   {['1년', '3년', '5년', '전체'].map(p => (
