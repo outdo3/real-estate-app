@@ -127,6 +127,8 @@ export async function updateListing(deps: ProDeps, actor: ProActor, id: string, 
     phone = deps.ring ? protectPhone(v.value.ownerPhone ?? null, deps.ring) : { enc: null, hash: null };
   }
   const data = toWrite(v.value, phone);
+  // 허용된 필드가 하나도 없으면(예: realtorId·deletedAt만 보낸 요청) 바꿀 것이 없다 — 404가 아니라 현재 행 그대로
+  if (Object.keys(data).length === 0) return ok(toListingDto(cur));
   const priceKey = cur.dealType === 'SALE' ? 'askingPriceManwon' : 'depositManwon';
   const prevPrice = cur[priceKey];
   const nextPrice = (data as Record<string, unknown>)[priceKey] as number | null | undefined;

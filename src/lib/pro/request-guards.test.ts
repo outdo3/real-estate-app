@@ -41,3 +41,11 @@ test('고객 이니셜: 꼬리표·기호 건너뛰고 첫 글자만', () => {
   assert.equal(nameInitial('  '), '고객');
   assert.equal(nameInitial('010'), '고객');
 });
+
+import { ymdKst } from './briefing';
+
+test('브리핑 날짜는 KST 달력 기준(KST 자정 입력이 하루 앞당겨지지 않는다)', () => {
+  assert.equal(ymdKst(new Date('2026-12-01T00:00:00+09:00')), '2026-12-01'); // 입력 화면이 보내는 값
+  assert.equal(ymdKst(new Date('2026-12-01T00:00:00Z')), '2026-12-01'); // API에 날짜만 보낸 경우
+  assert.equal(ymdKst(null), null);
+});

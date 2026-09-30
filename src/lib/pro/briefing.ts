@@ -37,7 +37,10 @@ export interface SnapshotInput {
   now: Date;
 }
 
-const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+// 날짜는 KST 달력 기준(입력 화면이 KST 자정으로 보낸다 — UTC로 자르면 하루 앞당겨진다)
+const KST_OFFSET_MS = 9 * 3600 * 1000;
+export const ymdKst = (d: Date | null) => (d ? new Date(d.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10) : null);
+const ymd = ymdKst;
 const uniq = (a: string[]) => [...new Set(a)];
 
 // 브리핑용 고정 문구(고객 조건 값 없음). 키는 matching.ts의 사유 key.

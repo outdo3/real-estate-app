@@ -215,6 +215,9 @@ function softReasons(l: MatchListingInput, p: MatchPreferenceInput, now: Date): 
       const s = km <= 5 ? 1 : km <= 10 ? 0.6 : 0.2;
       add('commute', '통근', s, s === 1 ? 'MATCH' : 'PARTIAL', `${target}까지 직선 ${km.toFixed(1)}km(직선거리 기준)`);
     }
+  } else if (p.commuteLabel) {
+    // 통근지 이름만 있고 좌표가 없으면(현재 입력 화면은 지오코딩 없음) 조용히 빼지 않고 '확인 필요'로 보인다 — 점수 분모에는 들어가지 않음
+    add('commute', '통근', null, 'UNKNOWN', `통근지(${p.commuteLabel})까지 거리 확인 필요(통근지 좌표 없음)`);
   }
 
   // 학교: V1은 단지↔학교 배정·거리 데이터를 매칭에 연결하지 않는다 → 희망 학교가 있으면 확인 필요

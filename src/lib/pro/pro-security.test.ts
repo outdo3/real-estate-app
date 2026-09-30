@@ -397,3 +397,17 @@ test('브리핑 적합도 문구에 고객 조건 값(월세 상한·통근지·
   for (const leak of ['123', '비밀회사본사', '71.5', '88.8', '2026-12-24', '6000', '6,000']) assert.ok(!s.includes(leak), leak);
   assert.ok(b.data.snapshot.fit!.differences.length > 0);
 });
+
+test('24b · 허용 필드가 하나도 없는 매물 수정은 404가 아니라 변경 없이 현재 행(소유자 본인)', async () => {
+  const deps = twoRealtors();
+  const l = await aListing(deps);
+  const r = await updateListing(deps, A, l.id, { realtorId: 'rp_user-b', deletedAt: '2020-01-01', ownerPhoneEnc: 'pii.v1.x' });
+  assert.ok(r.ok, JSON.stringify(r));
+  const raw = deps.state.listings.find((x) => x.id === l.id)!;
+  assert.equal(raw.realtorId, deps.state.profiles.find((p) => p.userId === A.userId)!.id);
+  assert.equal(raw.deletedAt, null);
+  assert.ok(raw.ownerPhoneEnc?.startsWith('pii.v1.') && raw.ownerPhoneEnc !== 'pii.v1.x');
+  // 다른 중개사는 여전히 404
+  const other = await updateListing(deps, B, l.id, { realtorId: 'x' });
+  assert.ok(!other.ok && other.status === 404);
+});

@@ -167,3 +167,12 @@ test('E-JIP Score·개인화 점수와 분리 — 엔진은 그 모듈을 import
   assert.ok(!/apartment-score|personalized-score|ejip-score|score-v2/i.test(src.replace(/^\s*\/\/.*$/gm, '')));
   assert.ok(!/prisma|fetch\(|openai|gemini/i.test(src.replace(/^\s*\/\/.*$/gm, '')));
 });
+
+test('통근지 이름만 있고 좌표가 없으면 통근은 UNKNOWN(확인 필요) — 점수는 그대로', () => {
+  const withLabel = evaluateMatch(L(), P({ commuteLabel: '회사', commuteLat: null, commuteLng: null }), NOW);
+  const without = evaluateMatch(L(), P({ commuteLabel: null, commuteLat: null, commuteLng: null }), NOW);
+  const c = withLabel.reasons.find((r) => r.key === 'commute');
+  assert.ok(c && c.verdict === 'UNKNOWN' && c.detail.includes('확인 필요'), JSON.stringify(c));
+  assert.equal(withLabel.score, without.score);
+  assert.equal(without.reasons.some((r) => r.key === 'commute'), false);
+});

@@ -2,6 +2,16 @@
 
 ## 2026-09-30
 
+### REALTOR PRO PREVIEW DB + MIGRATION + E2E SMOKE V1 — Preview 보류, 로컬 격리 DB에서 전 과정 검증
+
+상세: `docs/pro/REALTOR_PRO_PREVIEW_SMOKE_V1.md`
+
+    보류     격리 쓰기 가능 Preview DB 없음(기존 Preview DB = Production 읽기 전용 역할, Supabase CLI·토큰 없음, 추가 프로젝트 과금 가능) → push·Preview 배포·Preview 키 미실시
+    검증     로컬 Docker Supabase Postgres 17.6: migration 24개 적용·드리프트 0·RLS 10/정책 30/CHECK 26/FK 13 · 실 RLS 음성 11항목 PASS
+             Prisma 저장소 E2E 38/38 · LIVE 모드 API·UI(신청→승인→매물→고객→조건→팔로업→매칭→브리핑→익명 열람→회수) · 모바일 16회 · 공개 회귀
+    수정     매칭: 좌표 없는 통근지 = UNKNOWN(확인 필요) 표시 · 브리핑 날짜 KST 기준(하루 앞당김 버그) · 허용 필드 없는 매물 PATCH 404 → 현재 행
+    불변     Production DB·env·배포 0 · MOLIT 0
+
 ### REALTOR PRO PRIVATE APP ISOLATION V1 — 공개 / Pro / 브리핑 루트 layout 분리 (로컬, push·배포 없음)
 
 상세: `docs/pro/REALTOR_PRO_V1_SECURITY.md` §0
