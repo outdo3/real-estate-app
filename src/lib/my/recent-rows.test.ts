@@ -22,8 +22,8 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 /** 주석은 바뀐 내력을 설명하느라 옛 코드를 언급한다 — 배선 검사는 코드만 본다. */
 const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-const MY_PAGE = read('src/app/my/page.tsx');
-const MY_CSS = read('src/app/my/page.module.css');
+const MY_PAGE = read('src/app/(public)/my/page.tsx');
+const MY_CSS = read('src/app/(public)/my/page.module.css');
 const RECENT_API = read('src/app/api/my/recent/route.ts');
 
 /** 실제 항목과 같은 모양의 최소 샘플(순서 확인용 index 포함). */

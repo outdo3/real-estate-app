@@ -1,5 +1,5 @@
 // SEARCH_MAP_PERFORMANCE_V2_2 §13/§14 — SELECTED MARKER FIRST의 순수 판정 로직만
-// 분리했다. src/app/map/page.tsx(DB/Kakao SDK/React state 부작용 있음)와 분리해
+// 분리했다. src/app/(public)/map/page.tsx(DB/Kakao SDK/React state 부작용 있음)와 분리해
 // 부작용 없이 단위 테스트할 수 있다(scripts/backfill-basic-data-logic.ts와 동일 관례).
 
 export interface AptMarker {

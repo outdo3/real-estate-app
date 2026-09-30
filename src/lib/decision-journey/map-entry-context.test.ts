@@ -19,8 +19,8 @@ const ROOT = resolve(__dirname, '../../..');
 const strip = (s: string) =>
   s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const code = (p: string) => strip(readFileSync(join(ROOT, p), 'utf8'));
-const MAP = code('src/app/map/page.tsx');
-const DETAIL = code('src/app/apt/[name]/apt-client.tsx');
+const MAP = code('src/app/(public)/map/page.tsx');
+const DETAIL = code('src/app/(public)/apt/[name]/apt-client.tsx');
 
 function scanMapLiterals(): Record<string, number> {
   const out: Record<string, number> = {};
@@ -41,14 +41,14 @@ function scanMapLiterals(): Record<string, number> {
 // 코드 안의 '/map' 문자열 전부와 그 의미. 새 진입점이 생기면 이 표에서 분류하고 컨텍스트 규칙을 확인한다.
 const INVENTORY: Record<string, { count: number; kind: string }> = {
   'src/lib/bottom-nav-items.tsx': { count: 2, kind: 'A 하단 탭/헤더 "지도"(href + isActive) — router.push' },
-  'src/app/home-client.tsx': { count: 1, kind: 'A 홈 "지도에서 찾기" — Link' },
-  'src/app/my/page.tsx': { count: 1, kind: 'A MY 빈 상태 "지도에서 찾아보기" — Link' },
-  'src/app/report/page.tsx': { count: 1, kind: 'A 리포트 허브 가이드 카드 — Link' },
+  'src/app/(public)/home-client.tsx': { count: 1, kind: 'A 홈 "지도에서 찾기" — Link' },
+  'src/app/(public)/my/page.tsx': { count: 1, kind: 'A MY 빈 상태 "지도에서 찾아보기" — Link' },
+  'src/app/(public)/report/page.tsx': { count: 1, kind: 'A 리포트 허브 가이드 카드 — Link' },
   'src/components/report/ReportActions.tsx': { count: 1, kind: 'A 지역/일일 리포트 "지도 보기"(detailHref 없을 때) — Link' },
   'src/lib/decision-journey/registry.ts': { count: 3, kind: 'B buildDetailMapUrl · C buildRegionMapUrl(+좌표 없음 /map) — assign' },
-  'src/app/map/page.tsx': { count: 1, kind: '지도 자신: URL 읽기 가드(pathname === /map)' },
+  'src/app/(public)/map/page.tsx': { count: 1, kind: '지도 자신: URL 읽기 가드(pathname === /map)' },
   'src/lib/admin-analytics/query.ts': { count: 1, kind: '진입점 아님: 관리자 집계 SQL' },
-  'src/app/map/layout.tsx': { count: 1, kind: '진입점 아님: 지도 SEO canonical/og:url 경로(메타데이터, REGIONAL_SEO_KEYWORD_LANDING_V1)' },
+  'src/app/(public)/map/layout.tsx': { count: 1, kind: '진입점 아님: 지도 SEO canonical/og:url 경로(메타데이터, REGIONAL_SEO_KEYWORD_LANDING_V1)' },
 };
 
 const GENERIC = { lat: 35.1907501823457, lng: 129.08614968725 };

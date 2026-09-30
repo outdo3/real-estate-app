@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { Home, Map, BarChart3, Building2, User } from 'lucide-react';
 
-// [MAIN UI-B2] Header.tsx의 모바일 하단탭바와 src/app/map/page.tsx의 MapBottomNav는
+// [MAIN UI-B2] Header.tsx의 모바일 하단탭바와 src/app/(public)/map/page.tsx의 MapBottomNav는
 // 동일한 5개 메뉴를 각자 렌더링한다(지도 페이지는 전체화면 커스텀 UI라 Header 자체를
 // 렌더링하지 않기 때문 — Header.tsx 10번 줄 주석 참고). 두 곳이 서로 다른 아이콘/active
 // 판정으로 갈라지지 않도록 이 설정 하나를 공유한다.

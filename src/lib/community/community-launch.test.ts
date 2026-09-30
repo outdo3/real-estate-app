@@ -22,10 +22,10 @@ const POST_ID = read('src/app/api/community/posts/[id]/route.ts');
 const COMMENTS = read('src/app/api/community/posts/[id]/comments/route.ts');
 const COMMENT_ID = read('src/app/api/community/comments/[id]/route.ts');
 const PIN = read('src/app/api/community/posts/[id]/pin/route.ts');
-const LIST = read('src/app/community/page.tsx');
-const DETAIL = read('src/app/community/[id]/post-client.tsx');
-const DETAIL_PAGE = read('src/app/community/[id]/page.tsx');
-const WRITE = read('src/app/community/write/page.tsx');
+const LIST = read('src/app/(public)/community/page.tsx');
+const DETAIL = read('src/app/(public)/community/[id]/post-client.tsx');
+const DETAIL_PAGE = read('src/app/(public)/community/[id]/page.tsx');
+const WRITE = read('src/app/(public)/community/write/page.tsx');
 const SCHEMA = read('prisma/schema.prisma');
 const ROBOTS = read('src/app/robots.ts');
 
@@ -205,8 +205,8 @@ test('§5 상세에서 목록으로 돌아갈 수 있다', () => {
 });
 
 test('§15 20자 닉네임이 레이아웃을 밀어내지 않는다', () => {
-  const listCss = read('src/app/community/page.module.css');
-  const detailCss = read('src/app/community/[id]/page.module.css');
+  const listCss = read('src/app/(public)/community/page.module.css');
+  const detailCss = read('src/app/(public)/community/[id]/page.module.css');
   for (const [name, css, cls] of [['list', listCss, '.authorName'], ['detail', detailCss, '.commentAuthor']] as const) {
     const rule = css.slice(css.indexOf(`${cls} {`), css.indexOf(`${cls} {`) + 240);
     assert.ok(/max-width/.test(rule) && /text-overflow: ellipsis/.test(rule), `${name}의 닉네임 폭 제한이 없다`);

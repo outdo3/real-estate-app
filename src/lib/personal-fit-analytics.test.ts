@@ -236,7 +236,7 @@ test('기존 analytics 호출 불변: 지도·상세·리포트·커뮤니티·�
   for (const [f, names] of Object.entries(unchanged)) {
     assert.deepEqual([...code(f).matchAll(/trackEvent\('([a-z_]+)'/g)].map((m) => m[1]).sort(), names);
   }
-  for (const f of ['src/app/map/page.tsx', 'src/components/partners/PartnerCtaCard.tsx', 'src/components/LoginModal.tsx', 'src/components/report/ReportActions.tsx']) {
+  for (const f of ['src/app/(public)/map/page.tsx', 'src/components/partners/PartnerCtaCard.tsx', 'src/components/LoginModal.tsx', 'src/components/report/ReportActions.tsx']) {
     let src = '';
     try {
       src = code(f);

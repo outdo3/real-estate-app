@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import styles from '@/app/page.module.css';
+import styles from '@/app/(public)/page.module.css';
 
 const TABS = ['아파트', '전월세', '분양권', '오피스텔', '빌라'];
 

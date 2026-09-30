@@ -53,7 +53,7 @@ test('쿼리 결합 — 이미 쿼리가 있으면 &로 잇는다', () => {
 });
 
 test('배선 — 통계 상세 CTA는 화면이 알려준 기간으로 링크를 만들고, 기간을 가진 두 화면이 그 기간을 올려 보낸다', () => {
-  const page = codeOf('src/app/stats/[type]/type-client.tsx');
+  const page = codeOf('src/app/(public)/stats/[type]/type-client.tsx');
   assert.match(page, /const target = statsBriefingTarget\(entry, briefingPeriod\);/);
   assert.match(page, /<Link href=\{target\.href\} className=\{styles\.reportCta\}>/);
   assert.ok(!/<Link href=\{entry\.href\} className=\{styles\.reportCta\}>/.test(page), 'CTA가 여전히 기간 없는 경로를 쓴다');

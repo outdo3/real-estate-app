@@ -122,12 +122,12 @@ check('AreaSelector.tsx의 chip 생성 로직에 자체 평 계산이 없음(res
   assert.ok(src.includes('resolveAreaChipDisplay'), 'AreaSelector.tsx가 더 이상 resolveAreaChipDisplay를 쓰지 않음');
 });
 check('apt-client.tsx toggle 렌더링에 자체 평 계산이 없음', () => {
-  const src = readSrc('src/app/apt/[name]/apt-client.tsx');
+  const src = readSrc('src/app/(public)/apt/[name]/apt-client.tsx');
   const code = stripComments(src);
   assert.ok(!/3\.3058/.test(code), 'apt-client.tsx 코드(주석 제외)에 3.3058 계산이 재도입됨');
 });
 check('㎡/평 toggle UI가 Unit Master 존재 여부로 조건부 렌더링되지 않음(항상 노출, §5)', () => {
-  const src = readSrc('src/app/apt/[name]/apt-client.tsx');
+  const src = readSrc('src/app/(public)/apt/[name]/apt-client.tsx');
   const toggleIdx = src.indexOf("(['㎡', '평'] as AreaUnit[]).map");
   assert.ok(toggleIdx >= 0, 'toggle 렌더 블록을 찾을 수 없음');
   // toggle 블록 시작 지점 이전 300자 내에 "hasUnitMaster &&" 같은 게이트가 toggle
@@ -157,7 +157,7 @@ check('FavoriteButton.tsx의 렌더 children(가시 텍스트)이 상태와 무�
   assert.ok(src.includes("{!compact && '관심단지'}"), 'FavoriteButton.tsx의 non-compact 텍스트가 더 이상 고정 문자열이 아님');
 });
 check('detail.module.css의 stickyActionRow가 3-column 고정 grid(overflow 방지, §17)', () => {
-  const src = readSrc('src/app/apt/[name]/detail.module.css');
+  const src = readSrc('src/app/(public)/apt/[name]/detail.module.css');
   const idx = src.indexOf('.stickyActionRow');
   assert.ok(idx >= 0, '.stickyActionRow 규칙을 찾을 수 없음');
   const block = src.slice(idx, src.indexOf('}', idx));

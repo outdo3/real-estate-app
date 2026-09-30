@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import AppProviders from '@/components/AppProviders';
 import { siteConfig, absoluteUrl } from '@/config/site';
 import { BRAND_NAME, MAIN_DESCRIPTION, MAIN_TITLE } from '@/lib/seo/site-seo';
-import './globals.css';
+import '../globals.css';
 import AdSenseLoader from '@/components/analytics/AdSenseLoader';
 
 /**

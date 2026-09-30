@@ -15,7 +15,7 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*(\/\/|--).*$/gm, '');
 const QUERY = read('src/lib/admin-analytics/query.ts');
 const ROUTE = read('src/app/api/admin/behavior/route.ts');
-const PAGE = read('src/app/admin/behavior/page.tsx');
+const PAGE = read('src/app/(public)/admin/behavior/page.tsx');
 const summaryBody = () => {
   const code = stripComments(QUERY);
   const start = code.indexOf('export async function getBehaviorSummary');

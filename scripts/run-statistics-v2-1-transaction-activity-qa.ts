@@ -255,7 +255,7 @@ async function main() {
   // 'top-traded' 줄 하나만 대상으로 해 §23과 무관한 slug='popular'(진짜 미래
   // 인기 기능, 아직 soon)를 오탐하지 않는다.
   try {
-    const menuContent = fs.readFileSync(path.resolve(__dirname, '..', 'src/app/stats/statsMenu.ts'), 'utf8');
+    const menuContent = fs.readFileSync(path.resolve(__dirname, '..', 'src/app/(public)/stats/statsMenu.ts'), 'utf8');
     const topTradedLine = menuContent.split('\n').find((l) => l.includes("slug: 'top-traded'"));
     if (topTradedLine && (topTradedLine.includes("title: '인기'") || topTradedLine.includes("colorToken: 'popular'"))) {
       push({ severity: 'P0_OVERCLAIM', screen: 'static', region: '(static guard)', detail: `statsMenu.ts의 top-traded 항목이 다시 "인기" title/popular 색상으로 회귀함` });

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { MessageSquarePlus } from 'lucide-react';
 import FavoriteButton from './FavoriteButton';
 import KakaoShareButton from './KakaoShareButton';
-import styles from '@/app/apt/[name]/detail.module.css';
+import styles from '@/app/(public)/apt/[name]/detail.module.css';
 
 interface StickyActionBarProps {
   aptName: string;

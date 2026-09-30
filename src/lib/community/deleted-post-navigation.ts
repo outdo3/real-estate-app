@@ -8,8 +8,8 @@
 //  - 404가 아닌 실패(통신 끊김·500)는 "없는 글"이 아니다 — 기존 오류·다시 시도 화면을 유지한다(AGENTS.md 데이터 진실성).
 //
 // SWR 키는 실제 화면이 쓰는 값 그대로다(추측 키 금지).
-//  - 상세: src/app/community/[id]/post-client.tsx `useSWR(`/api/community/posts/${postId}`)`, 수정 저장 후 캐시 기록도 같은 키
-//  - 목록: src/app/community/page.tsx `/api/community/posts?page=${page}${aptName ? `&aptName=...` : ''}`
+//  - 상세: src/app/(public)/community/[id]/post-client.tsx `useSWR(`/api/community/posts/${postId}`)`, 수정 저장 후 캐시 기록도 같은 키
+//  - 목록: src/app/(public)/community/page.tsx `/api/community/posts?page=${page}${aptName ? `&aptName=...` : ''}`
 //  - 수정 화면은 SWR을 쓰지 않는다(fetch no-store) — 지울 캐시가 없다.
 
 export const COMMUNITY_LIST_PATH = '/community';

@@ -233,13 +233,13 @@ test('21·25. 수정 preload(V2·legacy): 저장 순서 그대로 + 작성기 �
     { type: 'image', existingImageId: 'img1' },
     { type: 'image', existingImageId: 'img2' },
   ]);
-  const edit = codeOf(read('src/app/community/[id]/edit/page.tsx'));
+  const edit = codeOf(read('src/app/(public)/community/[id]/edit/page.tsx'));
   assert.ok(/normalizeComposerBlocks\(editorBlocksFromViews\(data\.blocks \?\? \[\], newBlockKey\), newBlockKey\)/.test(edit));
   assert.ok(/setInitialSnapshot\(editorSnapshot\(data\.title, initialBlocks\)\)/.test(edit));
 });
 
 test('22·23·24. 수정 저장·409·기존 사진 수명주기는 V2 경로 그대로(작성기 변경이 저장 요청을 바꾸지 않음)', () => {
-  const edit = codeOf(read('src/app/community/[id]/edit/page.tsx'));
+  const edit = codeOf(read('src/app/(public)/community/[id]/edit/page.tsx'));
   assert.ok(/submitBlockPost\(\{ mode: 'edit', postId: post\.id, title, expectedUpdatedAt: post\.updatedAt, blocks, onStatus: setStatus \}\)/.test(edit));
   const handlers = codeOf(read('src/lib/community/post-write-handlers.ts'));
   assert.ok(/if \(expected\.getTime\(\) !== post\.updatedAt\.getTime\(\)\) return fail\(409, EDIT_ERROR_MESSAGES\.STALE\);/.test(handlers));
@@ -275,7 +275,7 @@ test('27·28·29. 블록 수 표시·"+ 내용 추가"·상시 ↑↓ 없음, �
   assert.ok(/\{selected && image\.status === 'ready' && \(/.test(code), '사진 조작은 선택 시에만 렌더');
   for (const label of ['이미지 위로 이동', '이미지 아래로 이동', '이미지 삭제']) assert.ok(code.includes(`aria-label="${label}"`), label);
   assert.ok(/\{blockLimitReached && \(/.test(code) && /BLOCK_LIMIT_MESSAGE = '내용을 더 추가할 수 없어요\.'/.test(code), '상한 안내는 닿았을 때만');
-  for (const page of ['src/app/community/write/page.tsx', 'src/app/community/[id]/edit/page.tsx']) {
+  for (const page of ['src/app/(public)/community/write/page.tsx', 'src/app/(public)/community/[id]/edit/page.tsx']) {
     const p = codeOf(read(page));
     assert.ok(/<SimpleInlineComposer blocks=\{blocks\} onBlocksChange=\{setBlocks\} onError=\{setError\} disabled=\{submitting\} \/>/.test(p), page);
     assert.ok(!/CommunityBlockEditor/.test(p), page);

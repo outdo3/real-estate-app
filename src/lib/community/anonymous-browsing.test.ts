@@ -18,10 +18,10 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 /** 주석은 고친 내력을 설명하느라 옛 구조를 언급한다 — 배선 검사는 코드만 본다. */
 const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-const LIST = read('src/app/community/page.tsx');
-const DETAIL = read('src/app/community/[id]/post-client.tsx');
-const WRITE = read('src/app/community/write/page.tsx');
-const MY = read('src/app/my/page.tsx');
+const LIST = read('src/app/(public)/community/page.tsx');
+const DETAIL = read('src/app/(public)/community/[id]/post-client.tsx');
+const WRITE = read('src/app/(public)/community/write/page.tsx');
+const MY = read('src/app/(public)/my/page.tsx');
 const AUTH_GATE = read('src/components/AuthGate.tsx');
 const POSTS_API = read('src/app/api/community/posts/route.ts');
 const POST_API = read('src/app/api/community/posts/[id]/route.ts');
@@ -61,7 +61,7 @@ test('§7 AuthGate 컴포넌트 자체는 남아 있고 비공개 화면은 그�
   assert.ok(/<AuthGate>/.test(WRITE), '글쓰기 보호가 사라졌다');
   assert.ok(/<AuthGate>/.test(MY), 'MY 보호가 사라졌다');
   // 관리자 화면도 그대로.
-  for (const p of ['src/app/admin/dashboard/page.tsx', 'src/app/admin/users/page.tsx', 'src/app/admin/behavior/page.tsx']) {
+  for (const p of ['src/app/(public)/admin/dashboard/page.tsx', 'src/app/(public)/admin/users/page.tsx', 'src/app/(public)/admin/behavior/page.tsx']) {
     assert.ok(/<AuthGate>/.test(read(p)), `${p}의 보호가 사라졌다`);
   }
 });
@@ -138,7 +138,7 @@ test('§6 검색/공유로 들어온 본문이 모달에 가리지 않는다', (
 });
 
 test('§6 metadata/canonical은 직전 STEP 상태를 유지한다', () => {
-  const page = codeOf(read('src/app/community/[id]/page.tsx'));
+  const page = codeOf(read('src/app/(public)/community/[id]/page.tsx'));
   assert.ok(/alternates: \{ canonical \}/.test(page), 'canonical이 사라졌다');
   assert.ok(/url: canonical/.test(page), 'og:url이 사라졌다');
   assert.ok(/generateMetadata/.test(page), '메타데이터 생성이 사라졌다');

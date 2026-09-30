@@ -73,7 +73,7 @@ check('src/components/ui/BottomNav.tsx가 BOTTOM_NAV_ITEMS를 공유해서 씀',
   assert.ok(src.includes("from '@/lib/bottom-nav-items'"));
 });
 check('map/page.tsx가 인라인 MapBottomNav 대신 공용 BottomNav를 사용함', () => {
-  const src = readSrc('src/app/map/page.tsx');
+  const src = readSrc('src/app/(public)/map/page.tsx');
   assert.ok(!src.includes('function MapBottomNav'), '인라인 MapBottomNav가 남아있으면 안 됨');
   assert.ok(src.includes("from '@/components/ui/BottomNav'"));
   assert.ok(src.includes('<BottomNav'));
@@ -92,11 +92,11 @@ check('ErrorState.tsx는 mascot <img>을 렌더링하지 않음', () => {
   assert.ok(!/<img[^>]*mascot/.test(src), 'Error 상태에 마스코트 <img>를 쓰면 안 됨(신뢰감 우선 원칙)');
 });
 check('presales-client.tsx의 에러 상태에서 ejipy-error 마스코트가 제거됨', () => {
-  const src = readSrc('src/app/presales/presales-client.tsx');
+  const src = readSrc('src/app/(public)/presales/presales-client.tsx');
   assert.ok(!src.includes('ejipy-error'), '에러 상태에 마스코트가 남아있으면 안 됨');
 });
 check('RedevelopmentListSection.tsx의 에러 상태에서 ejipy-error 마스코트가 제거됨', () => {
-  const src = readSrc('src/app/redevelopment/RedevelopmentListSection.tsx');
+  const src = readSrc('src/app/(public)/redevelopment/RedevelopmentListSection.tsx');
   assert.ok(!src.includes('ejipy-error'));
 });
 
@@ -114,7 +114,7 @@ check('Empty.tsx: notReady는 ejipy-guide, noData/noResult는 ejipy-empty', () =
 // ---- 6. Redevelopment 탭 emoji → Lucide 교체(§22, 이 STEP에서 손댄 영역만) ----
 console.log('--- Redevelopment tab emoji removal (touched-area only, §22) ---');
 check('redevelopment-client.tsx 탭에 🏢/🏗️ emoji가 더 이상 없음', () => {
-  const src = readSrc('src/app/redevelopment/redevelopment-client.tsx');
+  const src = readSrc('src/app/(public)/redevelopment/redevelopment-client.tsx');
   assert.ok(!src.includes('🏢') && !src.includes('🏗️'));
   assert.ok(src.includes("from 'lucide-react'"), 'Lucide import가 있어야 함');
 });
@@ -131,17 +131,17 @@ check('colgroup 4개 col의 width%가 정확히 100으로 합산됨', () => {
 // ---- 8. 공용 Button/Card/Filter 컴포넌트가 실제로 wiring됨(정적 확인) ----
 console.log('--- Foundation component adoption (static check) ---');
 check('presales-client.tsx가 FilterBar/SelectFilter/Card/Empty/ErrorState/Button을 모두 사용함', () => {
-  const src = readSrc('src/app/presales/presales-client.tsx');
+  const src = readSrc('src/app/(public)/presales/presales-client.tsx');
   for (const name of ['FilterBar', 'SelectFilter', 'Card', 'Empty', 'ErrorState', 'Button']) {
     assert.ok(src.includes(`from '@/components/ui/${name}'`), `${name} import가 없음`);
   }
 });
 check('home-client.tsx가 공용 Button을 사용함(quickActionsRow)', () => {
-  const src = readSrc('src/app/home-client.tsx');
+  const src = readSrc('src/app/(public)/home-client.tsx');
   assert.ok(src.includes("from '@/components/ui/Button'"));
 });
 check('apt-client.tsx가 공용 Button을 사용함(지도/로드뷰/대출한도 quick buttons)', () => {
-  const src = readSrc('src/app/apt/[name]/apt-client.tsx');
+  const src = readSrc('src/app/(public)/apt/[name]/apt-client.tsx');
   assert.ok(src.includes("from '@/components/ui/Button'"));
 });
 

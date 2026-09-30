@@ -50,9 +50,9 @@ const ORIGIN = 'https://e-jip.com';
 
 test('1 메인 title이 사용자 확정값과 정확히 같다', () => {
   assert.equal(MAIN_TITLE, '이집(E-JIP) - 아파트 실거래가·거래량·학군·부동산 데이터');
-  const home = codeOf(read('src/app/page.tsx'));
+  const home = codeOf(read('src/app/(public)/page.tsx'));
   assert.ok(/title: MAIN_TITLE,/.test(home), '홈 title이 단일 출처를 쓰지 않는다');
-  const layout = codeOf(read('src/app/layout.tsx'));
+  const layout = codeOf(read('src/app/(public)/layout.tsx'));
   assert.ok(/^\s*title: MAIN_TITLE,/m.test(layout), '루트 기본 title이 메인 title이 아니다');
 });
 
@@ -61,20 +61,20 @@ test('2 메인 description이 사용자 확정값과 정확히 같다', () => {
     MAIN_DESCRIPTION,
     '복잡한 부동산, 이집으로 쉽게. 아파트 실거래가부터 거래량, 학군, 교통, 단지 비교까지 한눈에 확인하세요.'
   );
-  assert.ok(/description: MAIN_DESCRIPTION,/.test(codeOf(read('src/app/page.tsx'))));
+  assert.ok(/description: MAIN_DESCRIPTION,/.test(codeOf(read('src/app/(public)/page.tsx'))));
   // 옛 문구가 메타데이터 코드에 남아 있지 않다.
-  for (const p of ['src/app/page.tsx', 'src/app/layout.tsx', 'src/config/site.ts']) {
+  for (const p of ['src/app/(public)/page.tsx', 'src/app/(public)/layout.tsx', 'src/config/site.ts']) {
     assert.ok(!codeOf(read(p)).includes('언제 어디서나 쉽게'), `${p}에 옛 설명이 남아 있다`);
   }
 });
 
 test('3 메인 OG/twitter가 같은 title·description을 쓰고 og:url이 홈을 가리킨다', () => {
-  const home = codeOf(read('src/app/page.tsx'));
+  const home = codeOf(read('src/app/(public)/page.tsx'));
   assert.ok(/openGraph: buildOpenGraph\(\{ title: MAIN_TITLE, description: MAIN_DESCRIPTION, path: '\/' \}\)/.test(home));
   assert.ok(/alternates: \{ canonical: '\/' \}/.test(home));
   // 홈 twitter는 card/images를 포함한 buildTwitter로 명시한다.
   assert.ok(/twitter: buildTwitter\(\{ title: MAIN_TITLE, description: MAIN_DESCRIPTION \}\)/.test(home));
-  const layout = codeOf(read('src/app/layout.tsx'));
+  const layout = codeOf(read('src/app/(public)/layout.tsx'));
   const og = layout.slice(layout.indexOf('openGraph: {'), layout.indexOf('twitter: {'));
   assert.ok(/title: MAIN_TITLE/.test(og) && /description: MAIN_DESCRIPTION/.test(og));
   // 루트 twitter에는 제목을 두지 않는다 — 다른 화면이 메인 제목을 물려받지 않게.
@@ -158,41 +158,41 @@ test('8 canonical은 쿼리 없는 깨끗한 경로다', () => {
 
 test('9 쿼리 변형(?period=, ?sido=&sigungu=)은 같은 canonical로 모인다', () => {
   // 지역 리포트: generateMetadata가 searchParams를 읽지 않는다 → ?period=90도 같은 canonical.
-  for (const p of ['src/app/report/city/busan/page.tsx', 'src/app/report/district/[lawdCd]/page.tsx', 'src/app/report/dong/[lawdCd]/[dong]/page.tsx']) {
+  for (const p of ['src/app/(public)/report/city/busan/page.tsx', 'src/app/(public)/report/district/[lawdCd]/page.tsx', 'src/app/(public)/report/dong/[lawdCd]/[dong]/page.tsx']) {
     const code = codeOf(read(p));
     const meta = code.slice(code.indexOf('export async function generateMetadata'), code.indexOf('export default'));
     assert.ok(!/searchParams/.test(meta), `${p} 메타데이터가 쿼리에 따라 달라진다`);
     assert.ok(/alternates: \{ canonical: seo\.canonicalPath \}/.test(meta), `${p} canonical이 템플릿에서 오지 않는다`);
   }
   // 공유용 지역 쿼리 화면은 깨끗한 경로가 canonical이다.
-  assert.ok(/alternates: \{ canonical: '\/stats' \}/.test(codeOf(read('src/app/stats/page.tsx'))));
-  assert.ok(/alternates: \{ canonical: '\/school' \}/.test(codeOf(read('src/app/school/page.tsx'))));
-  const mapLayout = codeOf(read('src/app/map/layout.tsx'));
+  assert.ok(/alternates: \{ canonical: '\/stats' \}/.test(codeOf(read('src/app/(public)/stats/page.tsx'))));
+  assert.ok(/alternates: \{ canonical: '\/school' \}/.test(codeOf(read('src/app/(public)/school/page.tsx'))));
+  const mapLayout = codeOf(read('src/app/(public)/map/layout.tsx'));
   assert.ok(/const MAP_PATH = '\/map';/.test(mapLayout) && /alternates: \{ canonical: MAP_PATH \}/.test(mapLayout));
-  assert.ok(/alternates: \{ canonical: '\/report' \}/.test(codeOf(read('src/app/report/page.tsx'))));
-  const typePage = codeOf(read('src/app/stats/[type]/page.tsx'));
+  assert.ok(/alternates: \{ canonical: '\/report' \}/.test(codeOf(read('src/app/(public)/report/page.tsx'))));
+  const typePage = codeOf(read('src/app/(public)/stats/[type]/page.tsx'));
   assert.ok(/`\/stats\/\$\{encodeURIComponent\(type\)\}`/.test(typePage));
   assert.ok(/item\?\.status === 'soon' \? \{ robots: \{ index: false, follow: true \} \}/.test(typePage), '준비 중 통계 메뉴가 색인된다');
   // 단지 상세: 식별이 완전할 때만, 단일 경로 정의로 정규화한다.
-  assert.ok(/aptDetailHref\(\{ name: aptName/.test(codeOf(read('src/app/apt/[name]/page.tsx'))));
+  assert.ok(/aptDetailHref\(\{ name: aptName/.test(codeOf(read('src/app/(public)/apt/[name]/page.tsx'))));
 });
 
 // ── 10. noindex ────────────────────────────────────────────────────────────
 
 test('10 사용자별·임시 상태 화면은 noindex다', () => {
   const noindexFollowFalse = /robots: \{ index: false, follow: false \}/;
-  for (const p of ['src/app/my/layout.tsx', 'src/app/admin/layout.tsx', 'src/app/community/write/layout.tsx', 'src/app/community/[id]/edit/layout.tsx', 'src/app/feedback/page.tsx']) {
+  for (const p of ['src/app/(public)/my/layout.tsx', 'src/app/(public)/admin/layout.tsx', 'src/app/(public)/community/write/layout.tsx', 'src/app/(public)/community/[id]/edit/layout.tsx', 'src/app/(public)/feedback/page.tsx']) {
     assert.ok(noindexFollowFalse.test(codeOf(read(p))), `${p}가 noindex가 아니다`);
   }
   // 글쓰기·수정은 부모(/community) canonical을 물려받지 않는다.
-  for (const p of ['src/app/community/write/layout.tsx', 'src/app/community/[id]/edit/layout.tsx']) {
+  for (const p of ['src/app/(public)/community/write/layout.tsx', 'src/app/(public)/community/[id]/edit/layout.tsx']) {
     assert.ok(/alternates: \{ canonical: null \}/.test(codeOf(read(p))), `${p}가 /community canonical을 상속한다`);
   }
-  assert.ok(/robots: \{ index: false, follow: true \}/.test(codeOf(read('src/app/report/compare/page.tsx'))));
-  assert.ok(/robots: \{ index: false, follow: true \}/.test(codeOf(read('src/app/ai-search/page.tsx'))));
-  assert.ok(/a && b \? \{ robots: \{ index: false, follow: true \} \}/.test(codeOf(read('src/app/stats/compare/page.tsx'))));
+  assert.ok(/robots: \{ index: false, follow: true \}/.test(codeOf(read('src/app/(public)/report/compare/page.tsx'))));
+  assert.ok(/robots: \{ index: false, follow: true \}/.test(codeOf(read('src/app/(public)/ai-search/page.tsx'))));
+  assert.ok(/a && b \? \{ robots: \{ index: false, follow: true \} \}/.test(codeOf(read('src/app/(public)/stats/compare/page.tsx'))));
   // 레이아웃은 메타데이터만 싣는다 — 접근 제어를 대신하거나 바꾸지 않는다.
-  assert.ok(!/AuthGate|redirect|getServerSession/.test(codeOf(read('src/app/admin/layout.tsx'))));
+  assert.ok(!/AuthGate|redirect|getServerSession/.test(codeOf(read('src/app/(public)/admin/layout.tsx'))));
   // robots.txt 규칙은 그대로다.
   const robots = read('src/app/robots.ts');
   for (const d of ['/api/', '/admin', '/my', '/community/write']) assert.ok(robots.includes(`'${d}'`));
@@ -315,7 +315,7 @@ test('15 경기 이름 — 시도+시+구 2단계, 길면 보조 키워드부터
 
 test('16 구 이름을 SEO 코드에 반복해서 적지 않는다 — 단일 출처(BUSAN_DISTRICTS)에서만 나온다', () => {
   const names = BUSAN_DISTRICTS.map((d) => d.name).filter((n) => n.length >= 3); // '서구' 같은 짧은 이름은 문구에 우연히 섞인다
-  const files = ['src/lib/seo/region-seo.ts', 'src/lib/seo/report-region-seo.ts', 'src/lib/seo/site-seo.ts', 'src/lib/seo/region-seo-read.ts', 'src/app/sitemap.ts', 'src/lib/sitemap-scope.ts', 'src/app/report/district/[lawdCd]/page.tsx', 'src/app/report/dong/[lawdCd]/[dong]/page.tsx', 'src/app/report/city/busan/page.tsx'];
+  const files = ['src/lib/seo/region-seo.ts', 'src/lib/seo/report-region-seo.ts', 'src/lib/seo/site-seo.ts', 'src/lib/seo/region-seo-read.ts', 'src/app/sitemap.ts', 'src/lib/sitemap-scope.ts', 'src/app/(public)/report/district/[lawdCd]/page.tsx', 'src/app/(public)/report/dong/[lawdCd]/[dong]/page.tsx', 'src/app/(public)/report/city/busan/page.tsx'];
   for (const f of files) {
     const code = codeOf(read(f));
     for (const n of names) assert.ok(!code.includes(`'${n}'`) && !code.includes(`${n} 아파트`), `${f}에 ${n}이 하드코딩돼 있다`);
@@ -336,13 +336,13 @@ test('17 사이트 이름이 og:site_name·WebSite·Organization·앱 이름에�
   assert.equal(site.url, `${ORIGIN}/`, '이중 슬래시/누락');
   assert.deepEqual(site.alternateName, ['E-JIP', '이집(E-JIP)']);
   assert.equal(buildOrganizationJsonLd(ORIGIN).name, BRAND_NAME);
-  const layout = codeOf(read('src/app/layout.tsx'));
+  const layout = codeOf(read('src/app/(public)/layout.tsx'));
   assert.ok(/siteName: BRAND_NAME/.test(layout) && /applicationName: BRAND_NAME/.test(layout));
   assert.ok(/title: '이집',\s*statusBarStyle/.test(layout), '홈 화면 앱 이름이 바뀌었다');
   assert.ok(/name: BRAND_NAME,/.test(codeOf(read('src/config/site.ts'))));
   // 구조화 데이터는 홈에만 — 모든 페이지에 WebSite를 반복하지 않는다.
-  assert.ok(/buildWebSiteJsonLd\(siteConfig\.url\)/.test(codeOf(read('src/app/page.tsx'))));
-  assert.ok(!/buildWebSiteJsonLd/.test(codeOf(read('src/app/layout.tsx'))));
+  assert.ok(/buildWebSiteJsonLd\(siteConfig\.url\)/.test(codeOf(read('src/app/(public)/page.tsx'))));
+  assert.ok(!/buildWebSiteJsonLd/.test(codeOf(read('src/app/(public)/layout.tsx'))));
 });
 
 test('17 구조화 데이터에 부동산 가격·평점을 넣지 않고, 스크립트 탈출 문자를 막는다', () => {

@@ -239,9 +239,9 @@ test('7 기간 거래 0건 envelope에서는 어떤 단계든 최근·시세·�
 
 test('7 페이지 배선: 설명은 기본 기간 envelope에서, page와 같은 캐시 조회를 공유한다', () => {
   for (const [p, level] of [
-    ['src/app/report/city/busan/page.tsx', 'CITY'],
-    ['src/app/report/district/[lawdCd]/page.tsx', 'DISTRICT'],
-    ['src/app/report/dong/[lawdCd]/[dong]/page.tsx', 'DONG'],
+    ['src/app/(public)/report/city/busan/page.tsx', 'CITY'],
+    ['src/app/(public)/report/district/[lawdCd]/page.tsx', 'DISTRICT'],
+    ['src/app/(public)/report/dong/[lawdCd]/[dong]/page.tsx', 'DONG'],
   ] as const) {
     const code = codeOf(read(p));
     const meta = code.slice(code.indexOf('export async function generateMetadata'), code.indexOf('export default'));

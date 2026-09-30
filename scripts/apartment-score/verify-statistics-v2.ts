@@ -11,7 +11,7 @@ import * as path from 'path';
 import assert from 'assert';
 import { directionColor, formatPercentChange, formatTradeCount, isLowSample } from '@/lib/stats-format';
 import { buildRankingInsight } from '@/lib/stats-insight';
-import { STATS_MENU, STATS_CATEGORIES } from '@/app/stats/statsMenu';
+import { STATS_MENU, STATS_CATEGORIES } from '@/app/(public)/stats/statsMenu';
 
 let passed = 0;
 function check(label: string, fn: () => void) {
@@ -107,13 +107,13 @@ check('soon 메뉴는 전부 soonReason이 있음(임의 추정치 대신 이유
 // ---- 4. RankingRow/공용 컴포넌트 wiring(정적 확인, §8) ----
 console.log('--- RankingRow/foundation wiring (static check, §8) ---');
 check('type-client.tsx가 RankingRow/RankingList/Empty/ErrorState/SectionHeader/FilterChip/InlineLoading을 모두 사용함', () => {
-  const src = readSrc('src/app/stats/[type]/type-client.tsx');
+  const src = readSrc('src/app/(public)/stats/[type]/type-client.tsx');
   for (const name of ['RankingRow', 'RankingList', 'Empty', 'ErrorState', 'SectionHeader', 'FilterChip', 'InlineLoading']) {
     assert.ok(src.includes(name), `${name}를 찾을 수 없음`);
   }
 });
 check('RANKING_CONFIGS 5개 전부 criterionPhrase(§27/§44 판단 근거)를 가짐', () => {
-  const src = readSrc('src/app/stats/[type]/type-client.tsx');
+  const src = readSrc('src/app/(public)/stats/[type]/type-client.tsx');
   const matches = [...src.matchAll(/criterionPhrase:\s*'[^']+'/g)];
   assert.strictEqual(matches.length, 5, `criterionPhrase 5개를 찾아야 하는데 ${matches.length}개 찾음`);
 });
@@ -122,12 +122,12 @@ check('RANKING_CONFIGS 5개 전부 criterionPhrase(§27/§44 판단 근거)를 �
 console.log('--- emoji removal in touched Statistics files (§12) ---');
 const EMOJI_PATTERN = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 check('type-client.tsx에 더 이상 emoji가 없음', () => {
-  const src = readSrc('src/app/stats/[type]/type-client.tsx');
+  const src = readSrc('src/app/(public)/stats/[type]/type-client.tsx');
   const codeOnly = src.split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
   assert.ok(!EMOJI_PATTERN.test(codeOnly), 'emoji 문자가 코드에 남아있음');
 });
 check('stats-client.tsx(landing)에 더 이상 emoji가 없음', () => {
-  const src = readSrc('src/app/stats/stats-client.tsx');
+  const src = readSrc('src/app/(public)/stats/stats-client.tsx');
   const codeOnly = src.split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
   assert.ok(!EMOJI_PATTERN.test(codeOnly), 'emoji 문자가 코드에 남아있음');
 });
@@ -135,7 +135,7 @@ check('stats-client.tsx(landing)에 더 이상 emoji가 없음', () => {
 // ---- 6. gapInvest 데이터 정확성 disclaimer(§3/§17 audit finding) ----
 console.log('--- gapInvest disclaimer (data-audit finding, §17) ---');
 check('갭투자 화면에 면적/시점 불일치 가능성 disclaimer가 있음(계산 로직은 미변경)', () => {
-  const src = readSrc('src/app/stats/[type]/type-client.tsx');
+  const src = readSrc('src/app/(public)/stats/[type]/type-client.tsx');
   assert.ok(src.includes('면적') && src.includes('시점'), 'gapInvest disclaimer 문구가 없음');
 });
 check('gapInvest API 계산 로직은 이 STEP(V2) 시점에는 변경하지 않았음(계산 자체는 STATISTICS V2.1에서 수정 — verify-statistics-v2-1-gap-invest.ts 참고)', () => {
@@ -146,7 +146,7 @@ check('gapInvest API 계산 로직은 이 STEP(V2) 시점에는 변경하지 않
 // ---- 7. 12px 이하 typography 금지(§38) ----
 console.log('--- 12px floor (§38) ---');
 check('stats/page.module.css에 0.6rem/0.65rem/0.72rem font-size가 더 이상 없음', () => {
-  const src = readSrc('src/app/stats/page.module.css');
+  const src = readSrc('src/app/(public)/stats/page.module.css');
   const violations = [...src.matchAll(/font-size:\s*0\.(?:[1-5]\d?|6|65|7|72)rem/g)];
   assert.strictEqual(violations.length, 0, `12px 미만 font-size ${violations.length}건 발견`);
 });

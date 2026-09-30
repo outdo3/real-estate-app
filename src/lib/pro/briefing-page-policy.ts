@@ -1,5 +1,5 @@
 // REALTOR_PRO_BRIEFING_ADS_ISOLATION_V1 — 고객 브리핑 공개 페이지(/b/[token])의 메타데이터·열람 집계 정책(순수).
-// 페이지(src/app/b/[token]/page.tsx)가 그대로 쓰고, 테스트는 next 런타임 없이 이 모듈만 검사한다.
+// 페이지(src/app/(briefing)/b/[token]/page.tsx)가 그대로 쓰고, 테스트는 next 런타임 없이 이 모듈만 검사한다.
 //
 // · 색인·팔로우·보관 금지, 리퍼러 전송 금지.
 // · 루트 layout의 openGraph(og:url 등)를 **덮어쓴다** — 공유 미리보기 카드에 고객·매물·토큰 정보가 실리지 않게

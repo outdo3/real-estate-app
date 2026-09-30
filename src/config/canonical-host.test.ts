@@ -95,5 +95,5 @@ test('인증 설정은 바꾸지 않았다 — 쿠키/SameSite/Domain/checks/세
 
 test('공유/메타데이터 오리진에 레거시 호스트가 남지 않는다', () => {
   assert.ok(!read('src/config/site.ts').includes(LEGACY_PRODUCTION_HOST));
-  assert.ok(!read('src/app/layout.tsx').includes(LEGACY_PRODUCTION_HOST));
+  assert.ok(!read('src/app/(public)/layout.tsx').includes(LEGACY_PRODUCTION_HOST));
 });

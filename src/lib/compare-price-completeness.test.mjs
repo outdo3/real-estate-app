@@ -144,7 +144,7 @@ test('InvestmentMetrics는 자체 안내 배너를 두지 않는다(상세 페�
 });
 
 test('multi-compare 차트가 계열별 불완전 여부를 추적하고 표시한다', () => {
-  const source = read('app/stats/[type]/type-client.tsx');
+  const source = read('app/(public)/stats/[type]/type-client.tsx');
   assert.ok(source.includes('incompleteNames'), '계열별 불완전 상태를 추적하지 않는다');
   assert.ok(source.includes('resolveTradeReadState'), '공유 완전성 계약을 쓰지 않는다');
   assert.ok(source.includes('compareIncompleteNotice'), '불완전 안내 배너가 없다');

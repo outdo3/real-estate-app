@@ -12,7 +12,7 @@ import { resolve } from 'node:path';
  */
 
 const ROOT = resolve(__dirname, '../..');
-const LAYOUT = readFileSync(resolve(ROOT, 'src/app/layout.tsx'), 'utf8');
+const LAYOUT = readFileSync(resolve(ROOT, 'src/app/(public)/layout.tsx'), 'utf8');
 const SITE = readFileSync(resolve(ROOT, 'src/config/site.ts'), 'utf8');
 
 const LEGACY_HOST = 'real-estate-app-park11.vercel.app';

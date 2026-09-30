@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import LivingEnvironmentPanel from '@/components/LivingEnvironmentPanel';
 import NeighborhoodInfoPanel from '@/components/NeighborhoodInfoPanel';
 import EducationPanel from '@/components/EducationPanel';
-import styles from '@/app/apt/[name]/detail.module.css';
+import styles from '@/app/(public)/apt/[name]/detail.module.css';
 
 export type InfraTab = '환경' | '교통' | '학군';
 

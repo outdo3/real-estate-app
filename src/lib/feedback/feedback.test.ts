@@ -438,7 +438,7 @@ test('22. analytics 금지 값(메시지·사용자·이메일·aptSeq·단지�
   assert.equal(feedbackActionType('report_view', 'BUG'), null);
   const tracker = code('src/lib/analytics/track-feedback.ts');
   assert.ok(!/complexId|aptName|message|userId|aptSeq|pagePath|userAgent|ipHash/.test(tracker));
-  const client = code('src/app/feedback/feedback-client.tsx');
+  const client = code('src/app/(public)/feedback/feedback-client.tsx');
   assert.match(client, /trackFeedbackSubmit\(category\);/);
   assert.match(client, /trackFeedbackOpen\(\);/);
   assert.equal((client.match(/trackFeedback(Open|Submit)\(/g) ?? []).length, 2);
@@ -480,26 +480,26 @@ test('24. Data API 가정 유지 — 의견 코드는 Supabase 클라이언트·
     'src/app/api/admin/feedback/[id]/route.ts',
     'src/lib/feedback/feedback-repo-prisma.ts',
     'src/lib/feedback/feedback-service.ts',
-    'src/app/feedback/feedback-client.tsx',
-    'src/app/admin/feedback/page.tsx',
+    'src/app/(public)/feedback/feedback-client.tsx',
+    'src/app/(public)/admin/feedback/page.tsx',
   ];
   for (const f of files) {
     const src = read(f);
     assert.ok(!/@supabase|createClient\(|SUPABASE_SERVICE_ROLE_KEY|SUPABASE_KEY|\/rest\/v1/.test(src), `${f}: Supabase Data API 경로 없음`);
   }
   assert.match(read('src/lib/feedback/feedback-repo-prisma.ts'), /import 'server-only';/);
-  const client = read('src/app/feedback/feedback-client.tsx') + read('src/app/admin/feedback/page.tsx');
+  const client = read('src/app/(public)/feedback/feedback-client.tsx') + read('src/app/(public)/admin/feedback/page.tsx');
   assert.ok(!/RESEND_API_KEY|FEEDBACK_NOTIFICATION_EMAIL|FEEDBACK_EMAIL_FROM|FEEDBACK_HASH_SECRET|NEXTAUTH_SECRET/.test(client), '클라이언트에 서버 env 이름 없음');
   assert.ok(!/NEXT_PUBLIC_(RESEND|FEEDBACK)/.test(read('src/app/api/feedback/route.ts') + read('src/lib/feedback/feedback-email.ts')));
 });
 
 test('모바일 폼 — 44px 이상 터치 영역, 16px 입력, 제출 중 비활성, 성공/실패 문구', () => {
-  const css = read('src/app/feedback/page.module.css');
+  const css = read('src/app/(public)/feedback/page.module.css');
   assert.match(css, /\.categoryBtn \{[\s\S]*?min-height: 44px;/);
   assert.match(css, /\.submitBtn \{[\s\S]*?min-height: 48px;/);
   assert.match(css, /\.textarea \{[\s\S]*?font-size: 16px;/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  const client = code('src/app/feedback/feedback-client.tsx');
+  const client = code('src/app/(public)/feedback/feedback-client.tsx');
   assert.match(client, /disabled=\{!canSubmit\}/);
   assert.match(client, /&& !submitting;/);
   assert.match(client, /maxLength=\{FEEDBACK_MESSAGE_MAX\}/);
@@ -507,7 +507,7 @@ test('모바일 폼 — 44px 이상 터치 영역, 16px 입력, 제출 중 비�
   assert.equal(FEEDBACK_COPY.failure, '의견을 보내지 못했어요. 잠시 후 다시 시도해 주세요.');
   assert.equal(FEEDBACK_COPY.placeholder, '어떤 점이 불편했는지 알려주세요.');
   // 진입점: MY에서 로그인 여부와 무관하게(세션 분기 밖) 노출
-  const my = code('src/app/my/page.tsx');
+  const my = code('src/app/(public)/my/page.tsx');
   const logoutEnd = my.indexOf('로그아웃');
   const entry = my.indexOf('href="/feedback?from=%2Fmy"');
   assert.ok(entry > logoutEnd, '로그인 분기(로그아웃 버튼) 뒤, 공통 영역에 있다');

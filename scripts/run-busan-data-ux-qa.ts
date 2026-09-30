@@ -946,7 +946,7 @@ async function runMapMarkerQa(repSet: RepApartment[]) {
     }
 
     // /api/transactions는 "거래(trade) 목록"이라 같은 단지가 12개월치 여러 건으로 반복되는
-    // 것 자체는 정상이다(다건 매매) — src/app/map/page.tsx의 실제 마커 소비 로직과 동일하게
+    // 것 자체는 정상이다(다건 매매) — src/app/(public)/map/page.tsx의 실제 마커 소비 로직과 동일하게
     // (dong, name) 기준으로 먼저 단지 단위 마커로 축약한 다음에야 "중복 aptSeq"를 판정해야
     // 한다. 그렇지 않으면 인기 단지의 정상적인 다건 거래를 전부 "중복"으로 오판한다.
     const byComplex = new Map<string, any>();

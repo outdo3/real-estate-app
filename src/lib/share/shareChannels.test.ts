@@ -183,7 +183,7 @@ test('§B 가용성은 렌더 시점이 아니라 시트를 여는 순간에 잰
 
 // ── I. HOME_SHARE_ENTRY_V1 — 홈도 같은 시트를 쓴다 ─────────────────────────────
 
-const HOME = read('src/app/home-client.tsx');
+const HOME = read('src/app/(public)/home-client.tsx');
 const HEADER = read('src/components/Header.tsx');
 
 test('§I 홈 공유 URL은 어느 호스트에서 눌러도 https://e-jip.com/ 이다', () => {

@@ -34,12 +34,12 @@ const checks: Check[] = [
     required: [/직선거리 약 \$\{c\.nearestSchool\.distanceM\}m/],
   },
   {
-    file: 'src/app/ai-search/ai-search-client.tsx',
+    file: 'src/app/(public)/ai-search/ai-search-client.tsx',
     forbidden: [/walkMinutes: number/, /도보 \$\{c\.nearestSchool\.walkMinutes\}분/],
     required: [/직선거리 약 \$\{c\.nearestSchool\.distanceM\}m/],
   },
   {
-    file: 'src/app/school/[id]/school-detail-client.tsx',
+    file: 'src/app/(public)/school/[id]/school-detail-client.tsx',
     forbidden: [/\{apt\.walkTime\} · \{apt\.price\}/],
     required: [/\{apt\.distanceLabel \?\? apt\.walkTime\} · \{apt\.price\}/, /직선거리 기준이며/],
   },

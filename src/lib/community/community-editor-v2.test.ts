@@ -366,11 +366,11 @@ test('21·22. 관리자 수정: role ADMIN과 ADMIN_EMAIL 둘 다 서버 규칙(
 });
 
 test('23. UI 관리자 판정 = 서버 규칙: 세션 isAdmin(isAdminSessionUser로 계산)만 사용, role 직접 비교 없음', () => {
-  const detail = codeOf(read('src/app/community/[id]/post-client.tsx'));
+  const detail = codeOf(read('src/app/(public)/community/[id]/post-client.tsx'));
   assert.ok(/const isAdmin = session\?\.user\?\.isAdmin === true;/.test(detail));
   assert.ok(!/session\?\.user\?\.role === 'ADMIN'/.test(detail));
   assert.ok(/\(isOwner \|\| isAdmin\) && \(\s*<Link href=\{`\/community\/\$\{postId\}\/edit`\}/.test(detail), '수정 버튼');
-  const edit = codeOf(read('src/app/community/[id]/edit/page.tsx'));
+  const edit = codeOf(read('src/app/(public)/community/[id]/edit/page.tsx'));
   assert.ok(/session\?\.user\?\.id === post\.authorId \|\| session\?\.user\?\.isAdmin === true/.test(edit));
   const auth = read('src/lib/auth.ts');
   assert.ok(/\.isAdmin = isAdminSessionUser\(/.test(auth), '세션 isAdmin이 서버 규칙으로 계산되지 않는다');
@@ -498,7 +498,7 @@ test('36·37. 파생 평문과 SEO description: 텍스트 블록만 빈 줄로 �
   assert.equal(buildPostDescription('A\n\nB', '제목'), 'A B');
   assert.equal(buildPostDescription('', '사진만 있는 글'), '사진만 있는 글');
   assert.equal(buildPostDescription('x'.repeat(300), 't').length, 120);
-  const page = codeOf(read('src/app/community/[id]/page.tsx'));
+  const page = codeOf(read('src/app/(public)/community/[id]/page.tsx'));
   assert.ok(/const description = buildPostDescription\(post\.content, post\.title\)/.test(page));
   assert.ok(!/\.blocks\b|blocks:|select: \{[^}]*blocks/.test(page), '메타데이터에 블록 구조를 노출하지 않는다');
   assert.ok(/select: \{ title: true, content: true \}/.test(page));
@@ -512,7 +512,7 @@ test('38. HTML/스크립트 문자열은 텍스트로만 저장·렌더(해석·
   const renderer = codeOf(read('src/components/community/CommunityPostContent.tsx'));
   assert.ok(!/dangerouslySetInnerHTML|innerHTML/.test(renderer));
   assert.ok(/\{block\.text\}/.test(renderer));
-  for (const f of ['src/components/community/SimpleInlineComposer.tsx', 'src/app/community/[id]/post-client.tsx', 'src/app/community/[id]/edit/page.tsx']) {
+  for (const f of ['src/components/community/SimpleInlineComposer.tsx', 'src/app/(public)/community/[id]/post-client.tsx', 'src/app/(public)/community/[id]/edit/page.tsx']) {
     assert.ok(!/dangerouslySetInnerHTML/.test(read(f)), f);
   }
 });
@@ -574,7 +574,7 @@ test('이탈 경고: beforeunload·링크 클릭·뒤로 가기(popstate) + 저�
   assert.ok(/document\.addEventListener\('click', onClick, true\)/.test(guard));
   assert.ok(/addEventListener\('popstate'/.test(guard));
   assert.ok(/\.\.\.\(window\.history\.state \?\? \{\}\)/.test(guard), 'Next 내부 history state 보존');
-  for (const f of ['src/app/community/write/page.tsx', 'src/app/community/[id]/edit/page.tsx']) {
+  for (const f of ['src/app/(public)/community/write/page.tsx', 'src/app/(public)/community/[id]/edit/page.tsx']) {
     const src = codeOf(read(f));
     assert.ok(/useLeaveGuard\(dirty \|\| submitting\)/.test(src), f);
     assert.ok(/release\(\);[\s\S]{0,400}router\.replace\(/.test(src), f);
@@ -583,7 +583,7 @@ test('이탈 경고: beforeunload·링크 클릭·뒤로 가기(popstate) + 저�
 });
 
 test('수정 저장 후 상세 캐시 갱신: 이동 전에 SWR 캐시를 다시 받아 수정 전 내용이 보이지 않는다(Production QA 회귀)', () => {
-  const edit = codeOf(read('src/app/community/[id]/edit/page.tsx'));
+  const edit = codeOf(read('src/app/(public)/community/[id]/edit/page.tsx'));
   assert.ok(/const \{ mutate \} = useSWRConfig\(\);/.test(edit));
   const save = edit.slice(edit.indexOf('if (result.ok) {'));
   // 데이터 없이 mutate(key)만 부르면 언마운트된 상세 캐시는 갱신되지 않는다(SWR 2.5 internalMutate: args.length < 3 → 마운트된 훅만).
@@ -593,7 +593,7 @@ test('수정 저장 후 상세 캐시 갱신: 이동 전에 SWR 캐시를 다시
   const m = save.indexOf('await mutate(');
   const r = save.indexOf('router.replace(`/community/${post.id}`)');
   assert.ok(m > 0 && r > m, '캐시 갱신이 이동보다 먼저여야 한다');
-  const detail = codeOf(read('src/app/community/[id]/post-client.tsx'));
+  const detail = codeOf(read('src/app/(public)/community/[id]/post-client.tsx'));
   // (COMMUNITY_DELETE_NAVIGATION_CLEANUP_V1: 키는 communityPostDetailKey로, 삭제 확인된 글은 null 키)
   assert.ok(/const detailKey = communityPostDetailKey\(postId\);/.test(detail) && /useSWR\(knownDeleted \? null : detailKey, fetcher\)/.test(detail), '상세 SWR 키가 바뀌면 캐시 갱신 키도 같이 바꿔야 한다');
   assert.ok(/export const communityPostDetailKey = \(postId: string\) => `\/api\/community\/posts\/\$\{postId\}`;/.test(read('src/lib/community/deleted-post-navigation.ts')));
@@ -612,7 +612,7 @@ test('관련 단지는 수정 API에서 읽지 않는다(정책 유지), 수정 
   const route = codeOf(read('src/app/api/community/posts/[id]/route.ts'));
   const patch = route.slice(route.indexOf('export async function PATCH'), route.indexOf('export async function DELETE'));
   assert.ok(!/aptName/.test(patch));
-  const edit = codeOf(read('src/app/community/[id]/edit/page.tsx'));
+  const edit = codeOf(read('src/app/(public)/community/[id]/edit/page.tsx'));
   assert.ok(!/ApartmentAutocomplete|setAptName/.test(edit));
   const submit = codeOf(read('src/lib/community/submit-block-post.ts'));
   const editBody = submit.slice(submit.indexOf("method: 'PATCH'"), submit.indexOf(": await fetchImpl('/api/community/posts'"));

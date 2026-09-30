@@ -1,7 +1,7 @@
 'use client';
 
 import { isQaSuppressed } from '@/lib/analytics/qa-suppression';
-import { allowsThirdPartyAnalytics, isTokenizedPrivateHref } from '@/lib/privacy/private-routes';
+import { allowsThirdPartyAnalytics, isPrivateZoneHref } from '@/lib/privacy/private-routes';
 
 /**
  * GA4_INTEGRATION_V1 — GA4(마케팅/유입 분석) 클라이언트.
@@ -233,7 +233,7 @@ function droppedQueryValues(href: string): string[] {
  * 유입 시점의 URL 스냅샷(§6).
  *
  * 왜 필요한가: `/map`은 지도가 준비된 뒤 400ms 디바운스로 `history.replaceState`를 써
- * 쿼리를 **지도 파라미터만으로 다시 만든다**(src/app/map/page.tsx). 즉 `?utm_source=...`로
+ * 쿼리를 **지도 파라미터만으로 다시 만든다**(src/app/(public)/map/page.tsx). 즉 `?utm_source=...`로
  * 들어온 `/map` 랜딩은 잠시 뒤 주소창에서 utm이 사라진다. gtag.js는 afterInteractive로
  * 느리게 붙기 때문에, 그때 `window.location.href`를 읽으면 이미 utm이 지워진 뒤일 수
  * 있다. 그래서 **클라이언트 모듈이 평가되는 가장 이른 시점**에 원본 URL을 붙잡아 두고,
@@ -255,7 +255,7 @@ export function getInitialLocationHref(): string | null {
  * null이면 호출부가 현재 주소를 쓴다.
  */
 export function safeInitialLocationHref(href: string | null): string | null {
-  return href && isTokenizedPrivateHref(href) ? null : href;
+  return href && isPrivateZoneHref(href) ? null : href;
 }
 
 /**
@@ -306,7 +306,7 @@ export function sanitizeGaParams(params: Record<string, unknown> | null | undefi
  * ### page_title 반향(echo) 검사가 필요한 이유
  *
  * URL만 정제하면 충분해 보이지만 아니다. `/ai-search`의 generateMetadata는 제목을
- * `"<검색어>" AI 검색 결과 - 이집` 으로 만든다(src/app/ai-search/page.tsx). 즉 쿼리에서
+ * `"<검색어>" AI 검색 결과 - 이집` 으로 만든다(src/app/(public)/ai-search/page.tsx). 즉 쿼리에서
  * `q`를 잘라내도 **같은 값이 document.title을 통해 그대로 나갈 수 있다.**
  *
  * 그래서 경로 목록(denylist)을 만드는 대신, **우리가 방금 버린 쿼리 값이 제목에 들어

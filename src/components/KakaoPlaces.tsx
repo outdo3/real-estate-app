@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { loadKakaoMapsSdk } from '@/lib/kakao/maps-sdk';
 import { kakaoSdkErrorMessage } from '@/lib/kakao/map-embed-logic';
-import styles from '@/app/apt/[name]/detail.module.css';
+import styles from '@/app/(public)/apt/[name]/detail.module.css';
 
 // 카카오 로컬 카테고리 코드 중 이 컴포넌트에서 실제로 사용하는 7종.
 // SC4(학교), SW8(지하철), HP8(병원), MT1(대형마트), CS2(편의점), PM9(약국),

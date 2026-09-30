@@ -40,7 +40,7 @@ test('실제 public/ads.txt 파일이 그 한 줄과 정확히 같다', () => {
 // REALTOR_PRO_BRIEFING_ADS_ISOLATION_V1 — 로더는 루트 layout <head>가 아니라 경로 판정을 거치는
 // AdSenseLoader(루트 layout <body>에 1회 마운트)에 있다. 계약(상수 사용·afterInteractive·ID 비하드코딩)은 그대로.
 const readLoader = () => fs.readFileSync(new URL('../components/analytics/AdSenseLoader.tsx', import.meta.url), 'utf8');
-const readLayout = () => fs.readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
+const readLayout = () => fs.readFileSync(new URL('../app/(public)/layout.tsx', import.meta.url), 'utf8');
 
 test('루트 레이아웃이 로더 컴포넌트를 마운트하고, 로더는 상수를 쓴다 — ID를 직접 적지 않는다', () => {
   const layout = readLayout();

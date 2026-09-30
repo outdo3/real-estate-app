@@ -113,7 +113,7 @@ test('7. 상세 — 본 API·정보·교육·점수·검증 전부 detail 축으
 });
 
 test('8·9. 리포트·비교 — 단지 리포트 게이트를 비교가 우회하지 못한다', () => {
-  const report = code('src/app/report/apt/[aptSeq]/page.tsx');
+  const report = code('src/app/(public)/report/apt/[aptSeq]/page.tsx');
   assert.ok(/!isPublicRegionAllowed\(reportLawdCd, 'report'\)/.test(report));
   const cmp = code('src/lib/report/compare-read.ts');
   const g = cmp.indexOf("isPublicRegionAllowed(master.sggCd, 'report')");
@@ -121,7 +121,7 @@ test('8·9. 리포트·비교 — 단지 리포트 게이트를 비교가 우회
   assert.ok(/isPublicRegionAllowed\(master\.aptSeq\.slice\(0, 5\), 'report'\)/.test(cmp));
   const seeds = code('src/lib/compare-v2/resolve-seeds.ts');
   assert.ok(/isPublicRegionAllowed\(master\.sggCd, 'detail'\)/.test(seeds), '/stats/compare seed가 공개 게이트를 안 탄다');
-  const statsCompare = code('src/app/stats/compare/page.tsx');
+  const statsCompare = code('src/app/(public)/stats/compare/page.tsx');
   assert.ok(/decidePublicSeo\(\[a\?\.lawdCd, b\?\.lawdCd, \.\.\.requestedLawdCds\], 'detail'\)/.test(statsCompare));
   for (const c of GYEONGGI_ALL) assert.equal(isPublicRegionAllowed(c, 'report'), false);
   assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('41111-41')], 'report'), 'BLOCKED');
@@ -198,7 +198,7 @@ test('18·19·20. seed 게이트 — publicExposureGuarded는 enablement에서 �
 test('모든 공개 소비자가 서울 deny-list에서 벗어났다(stats/supply 포함 — supply 축 allowlist)', () => {
   for (const p of [
     'src/app/api/search/route.ts', 'src/lib/search-alias-fallback.ts', 'src/app/api/apt/[name]/route.ts',
-    'src/app/report/apt/[aptSeq]/page.tsx', 'src/components/RegionSelectModal.tsx', 'src/lib/seo/seoul-blocked-seo.ts',
+    'src/app/(public)/report/apt/[aptSeq]/page.tsx', 'src/components/RegionSelectModal.tsx', 'src/lib/seo/seoul-blocked-seo.ts',
     'src/app/api/stats/supply/route.ts', 'src/lib/stats/supply-region-gate.ts',
   ]) {
     const c = code(p);

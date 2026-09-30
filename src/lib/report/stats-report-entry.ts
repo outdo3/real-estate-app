@@ -12,7 +12,7 @@
 // 위 게이트가 false라 **어떤 통계 화면에서도 리포트 진입점이 보이지 않았다.** 게다가
 // 통계 메인(`/stats`)에는 진입점이 애초에 없었다. `/report/city/busan` route는 살아
 // 있었고(`/tools`에서만 링크) 시 리포트는 통계에서 한 번도 연결된 적이 없다
-// (`git log --all -S "REPORT_LABELS.city" -- src/app/stats/` 결과 0건).
+// (`git log --all -S "REPORT_LABELS.city" -- src/app/(public)/stats/` 결과 0건).
 //
 // → "통계에 리포트 기능이 빠졌다"는 관찰의 실체는 **삭제가 아니라 미연결**이다.
 //

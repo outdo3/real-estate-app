@@ -1,4 +1,4 @@
-// MAP_SURROUNDING_MARKER_PERFORMANCE_V1 §14/§15 — src/app/map/page.tsx의 fetchAptMarkers가
+// MAP_SURROUNDING_MARKER_PERFORMANCE_V1 §14/§15 — src/app/(public)/map/page.tsx의 fetchAptMarkers가
 // 쓰는 두 가지 순수 판정만 분리했다(부작용 없음 — map-selected-marker.ts와 동일 관례).
 // 1) STALE BOUNDS REQUEST PROTECTION: 빠르게 연속으로 지역이 바뀌면 먼저 보낸 요청의
 //    응답이 나중에 보낸 요청보다 늦게 도착할 수 있다 — 자신이 여전히 "가장 최근 요청"일

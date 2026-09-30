@@ -94,7 +94,7 @@ test('12·13 · 통계 카드 → 브리핑 링크가 선택 기간 키를 그�
   assert.ok(!/periodDays/.test(card), '예전의 30/90일 치환이 남아 있다');
   assert.ok(!/선택 기간과 기준이 달라요/.test(card));
   // 세 리포트 페이지가 키를 그대로 해석하고, 읽기 계층이 그 키로 범위를 만든다.
-  for (const p of ['src/app/report/city/busan/page.tsx', 'src/app/report/district/[lawdCd]/page.tsx', 'src/app/report/dong/[lawdCd]/[dong]/page.tsx']) {
+  for (const p of ['src/app/(public)/report/city/busan/page.tsx', 'src/app/(public)/report/district/[lawdCd]/page.tsx', 'src/app/(public)/report/dong/[lawdCd]/[dong]/page.tsx']) {
     const src = code(p);
     assert.match(src, /parseReportPeriodKey\(sp\?\.period\)/, p);
     assert.ok(!/parsePeriodParam/.test(src), `${p}가 여전히 30/90/365 전용 파서를 쓴다`);

@@ -26,7 +26,7 @@ import { withBriefingPeriod } from '@/lib/report/stats-report-entry';
 import { REGION_PRICE_LOW_SAMPLE_BELOW, formatRegionAvgPrice, type RegionPriceComparison } from '@/lib/stats/region-price-comparison';
 import type { SalePriceKpi } from '@/lib/stats/sale-price-kpi';
 import { priceBandLabel, priceBandRangeText } from '@/lib/stats/price-band-label';
-import pageStyles from '@/app/stats/page.module.css';
+import pageStyles from '@/app/(public)/stats/page.module.css';
 import styles from './VolumeChartCard.module.css';
 
 // STATISTICS V2.1-2A — TRANSACTION VOLUME CHART UI POLISH. 거래량 화면 전용

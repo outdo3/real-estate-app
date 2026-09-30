@@ -22,10 +22,10 @@ import {
 const ROOT = resolve(__dirname, '../../..');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
-const DETAIL = 'src/app/community/[id]/post-client.tsx';
-const EDIT = 'src/app/community/[id]/edit/page.tsx';
-const LAYOUT = 'src/app/community/[id]/layout.tsx';
-const LIST = 'src/app/community/page.tsx';
+const DETAIL = 'src/app/(public)/community/[id]/post-client.tsx';
+const EDIT = 'src/app/(public)/community/[id]/edit/page.tsx';
+const LAYOUT = 'src/app/(public)/community/[id]/layout.tsx';
+const LIST = 'src/app/(public)/community/page.tsx';
 
 class MemoryStorage {
   map = new Map<string, string>();
@@ -116,7 +116,7 @@ test('10·11. 삭제된/잘못된 id 주소를 직접 열면 서버에서 화면
   assert.ok(redirectAt > tryEnd && tryEnd > 0);
   assert.ok(/return children;/.test(layout));
   // 레이아웃은 상세·수정 둘 다 감싼다([id] 폴더)
-  const files = readdirSync(resolve(ROOT, 'src/app/community/[id]'));
+  const files = readdirSync(resolve(ROOT, 'src/app/(public)/community/[id]'));
   assert.ok(files.includes('layout.tsx') && files.includes('page.tsx') && files.includes('edit'));
   // 권한·인증 판정은 하지 않는다
   assert.ok(!/getServerSession|requireUser|auth\(|isAdmin/.test(layout));

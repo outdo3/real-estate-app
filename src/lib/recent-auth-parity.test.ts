@@ -28,9 +28,9 @@ const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\
 const STORE = read('src/lib/recent-apartments.ts');
 const HOOK = read('src/hooks/useRecentApartments.ts');
 const SYNC = read('src/hooks/useRecentSync.ts');
-const HOME = read('src/app/home-client.tsx');
-const MY = read('src/app/my/page.tsx');
-const APT = read('src/app/apt/[name]/apt-client.tsx');
+const HOME = read('src/app/(public)/home-client.tsx');
+const MY = read('src/app/(public)/my/page.tsx');
+const APT = read('src/app/(public)/apt/[name]/apt-client.tsx');
 const RECENT_API = read('src/app/api/my/recent/route.ts');
 
 // ── A. 출처 분기(§2/§4) ────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ test('§9 더보기/접기 접근성', () => {
   assert.ok(/aria-expanded=\{recentExpanded\}/.test(HOME));
   assert.ok(/'최근 본 단지 접기'/.test(HOME));
   assert.ok(/'최근 본 단지 더보기'/.test(HOME));
-  const css = read('src/app/home-client.module.css');
+  const css = read('src/app/(public)/home-client.module.css');
   const rule = css.slice(css.indexOf('.recentToggle {'), css.indexOf('.recentToggle:hover'));
   assert.ok(/min-height: 44px/.test(rule), '터치 타깃이 작다');
 });

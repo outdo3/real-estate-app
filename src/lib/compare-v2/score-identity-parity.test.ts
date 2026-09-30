@@ -27,7 +27,7 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 const COMPARE_FETCH = read('src/lib/compare-v2/fetch.ts');
-const DETAIL = read('src/app/apt/[name]/apt-client.tsx');
+const DETAIL = read('src/app/(public)/apt/[name]/apt-client.tsx');
 const REPORT = read('src/lib/report/apt-read.ts');
 const SEEDS = read('src/lib/compare-v2/resolve-seeds.ts');
 const RESOLVER = read('src/lib/apartment-score/resolve-score-identity.ts');

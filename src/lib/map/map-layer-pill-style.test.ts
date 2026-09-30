@@ -27,7 +27,7 @@ import {
  */
 
 const ROOT = resolve(__dirname, '../../..');
-const PAGE = readFileSync(resolve(ROOT, 'src/app/map/page.tsx'), 'utf8');
+const PAGE = readFileSync(resolve(ROOT, 'src/app/(public)/map/page.tsx'), 'utf8');
 const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 const stackJsx = () => {
   const code = codeOf(PAGE);

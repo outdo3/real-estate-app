@@ -218,7 +218,7 @@ test('§6 · 목록과 요약 카드가 같은 분류 함수를 쓴다(계약 �
 // ── REGION TRANSITION (P0) ──────────────────────────────────────────────────
 
 test('§1~§3 · 지역 전환 시 이전 목록을 버리고, 늦은 응답이 덮지 못한다', () => {
-  const client = read('src/app/school/school-client.tsx');
+  const client = read('src/app/(public)/school/school-client.tsx');
   assert.ok(client.includes('setSchools([])'), '지역/탭 변경 시 목록 초기화가 없다');
   assert.ok(client.includes('setStats(EMPTY_STATS)'), '지역 변경 시 통계 초기화가 없다');
   assert.ok(client.includes('AbortController'), '요청 취소 가드가 없다');

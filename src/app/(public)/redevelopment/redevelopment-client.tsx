@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { FileText, Building2 } from 'lucide-react';
 import Header from '@/components/Header';
 import RedevelopmentListSection from './RedevelopmentListSection';
-import { PresaleListSection } from '@/app/presales/presales-client';
+import { PresaleListSection } from '@/app/(public)/presales/presales-client';
 import styles from './redevelopment.module.css';
 
 // [DESIGN SYSTEM 3 §22] 이 파일을 이번 STEP에서 직접 손대는 김에 탭 emoji를

@@ -157,7 +157,7 @@ test('DB 경로는 부분 상태가 없다(단일 쿼리 — 성공 아니면 �
 });
 
 test('분위 지도는 불완전하면 분위 색을 쓰지 않는다', () => {
-  const src = read('app/stats/[type]/type-client.tsx');
+  const src = read('app/(public)/stats/[type]/type-client.tsx');
   assert.ok(src.includes('resolveTransactionsReadState'), '공유 리더를 쓰지 않는다');
   assert.ok(
     src.includes('incomplete ? \'#94a3b8\' : QUINTILE_COLORS[m.tier]'),
@@ -167,7 +167,7 @@ test('분위 지도는 불완전하면 분위 색을 쓰지 않는다', () => {
 });
 
 test('지도 마커 캐시는 partial 플래그를 함께 저장한다', () => {
-  const src = read('app/map/page.tsx');
+  const src = read('app/(public)/map/page.tsx');
   assert.ok(
     /markers: AptMarker\[\]; partial: boolean; ts: number/.test(src),
     'partial을 빼고 markers만 캐시하면 캐시 히트에서 불완전이 완전으로 둔갑한다'
@@ -184,8 +184,8 @@ test('AI 조건검색은 빈 목록의 이유(실패/부분/진짜 없음)를 �
 });
 
 test('사용자 문구에 내부 용어가 노출되지 않는다', () => {
-  const mapSrc = read('app/map/page.tsx');
-  const statsSrc = read('app/stats/[type]/type-client.tsx');
+  const mapSrc = read('app/(public)/map/page.tsx');
+  const statsSrc = read('app/(public)/stats/[type]/type-client.tsx');
   for (const src of [mapSrc, statsSrc]) {
     for (const forbidden of ['MOLIT', '초당 서비스', 'serviceKey', 'DATA_GO_KR']) {
       assert.ok(!src.includes(`'${forbidden}`), `사용자 문구에 ${forbidden}가 들어가면 안 된다`);

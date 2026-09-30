@@ -183,12 +183,12 @@ function stripComments(src: string): string {
 
 // 5. BLACK_SELECTED_OUTLINE — #1e293b 검은 강조가 map/page.tsx에서 완전히 제거됨
 check('5. map/page.tsx에 검은 selected 강조(#1e293b)가 재도입되지 않음', () => {
-  const code = stripComments(readSrc('src/app/map/page.tsx'));
+  const code = stripComments(readSrc('src/app/(public)/map/page.tsx'));
   assert.ok(!code.includes('#1e293b'), 'map/page.tsx에 #1e293b(검은 선택 강조)가 남아있음');
 });
 // 6. SELECTED_MARKER_UX — 이집 Green fill이 selected 스타일로 쓰이고 있음
 check('6. map/page.tsx의 renderMarkerChip이 selected 상태에 이집 Green(--ejip-green)을 사용', () => {
-  const code = readSrc('src/app/map/page.tsx');
+  const code = readSrc('src/app/(public)/map/page.tsx');
   const fnStart = code.indexOf('const renderMarkerChip');
   assert.ok(fnStart >= 0, 'renderMarkerChip을 찾을 수 없음');
   const fnBody = code.slice(fnStart, code.indexOf('\n  };', fnStart));
@@ -196,14 +196,14 @@ check('6. map/page.tsx의 renderMarkerChip이 selected 상태에 이집 Green(--
 });
 // 3. FAKE_PYEONG — exclusiveArea/3.3058류 계산이 지도 코드에 없음
 check('3. map/page.tsx, map-marker-format.ts에 exclusiveArea/3.3058 같은 추정 평형 계산이 없음', () => {
-  for (const rel of ['src/app/map/page.tsx', 'src/lib/map-marker-format.ts']) {
+  for (const rel of ['src/app/(public)/map/page.tsx', 'src/lib/map-marker-format.ts']) {
     const code = stripComments(readSrc(rel));
     assert.ok(!/3\.3058/.test(code), `${rel}에 3.3058 계산이 있음(가짜 평형 금지 위반)`);
   }
 });
 // 29. 취소 거래 필터링 — dealCanceled를 건너뛰는 코드가 fetchAptMarkers에 있음
 check('취소(dealCanceled)된 거래는 대표 거래 후보에서 제외됨', () => {
-  const code = readSrc('src/app/map/page.tsx');
+  const code = readSrc('src/app/(public)/map/page.tsx');
   const fnStart = code.indexOf('const fetchAptMarkers');
   assert.ok(fnStart >= 0);
   const fnBody = code.slice(fnStart, code.indexOf('\n  };', fnStart));
@@ -211,7 +211,7 @@ check('취소(dealCanceled)된 거래는 대표 거래 후보에서 제외됨', 
 });
 // 10. NO PER-MARKER FETCH — renderMarkerChip 안에는 fetch(가 없어야 한다(마커 렌더마다 개별 호출 금지)
 check('10. renderMarkerChip 안에 fetch() 호출이 없음(N+1 금지)', () => {
-  const code = readSrc('src/app/map/page.tsx');
+  const code = readSrc('src/app/(public)/map/page.tsx');
   const fnStart = code.indexOf('const renderMarkerChip');
   const fnEnd = code.indexOf('\n  };', fnStart);
   assert.ok(fnStart >= 0 && fnEnd > fnStart);

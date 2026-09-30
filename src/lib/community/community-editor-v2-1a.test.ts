@@ -169,7 +169,7 @@ test('10. 한글 보존: 한글 글·조합 결과 문자열이 합치기·교�
 });
 
 test('11·12. 글쓰기·수정 동일: 두 화면 모두 같은 작성기, 수정 화면의 기존 사진 삭제 → 바로 추가도 같은 자리', () => {
-  for (const page of ['src/app/community/write/page.tsx', 'src/app/community/[id]/edit/page.tsx']) {
+  for (const page of ['src/app/(public)/community/write/page.tsx', 'src/app/(public)/community/[id]/edit/page.tsx']) {
     assert.ok(/<SimpleInlineComposer blocks=\{blocks\} onBlocksChange=\{setBlocks\}/.test(read(page)), page);
   }
   // 수정 화면 preload(V2 저장 블록) → 기존 사진 삭제 → 바로 새 사진

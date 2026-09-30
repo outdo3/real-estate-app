@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import styles from '@/app/page.module.css';
+import styles from '@/app/(public)/page.module.css';
 import { RankData } from './RankCard';
 
 import { useRouter } from 'next/navigation';

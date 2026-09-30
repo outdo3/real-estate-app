@@ -162,7 +162,7 @@ test('§12 상세 라우트가 canonical lawdCd로 게이트한다(이름 아님
 });
 
 test('§13 리포트 라우트가 aptSeq 앞 5자리로 게이트한다', () => {
-  const src = read('src/app/report/apt/[aptSeq]/page.tsx');
+  const src = read('src/app/(public)/report/apt/[aptSeq]/page.tsx');
   assert.ok(/const reportLawdCd = lawdCdFromAptSeq\(id\);/.test(src), 'aptSeq 앞자리를 canonical 규칙으로 뽑지 않는다');
   assert.ok(/!isPublicRegionAllowed\(reportLawdCd, 'report'\)/.test(src), '리포트 공개 allowlist 게이트가 없다');
   assert.ok(
@@ -194,7 +194,7 @@ test('§16 어떤 게이트도 접두사 판정을 쓰지 않는다', () => {
     'src/app/api/search/route.ts',
     'src/lib/search-alias-fallback.ts',
     'src/app/api/apt/[name]/route.ts',
-    'src/app/report/apt/[aptSeq]/page.tsx',
+    'src/app/(public)/report/apt/[aptSeq]/page.tsx',
     'src/components/RegionSelectModal.tsx',
     'src/app/api/stats/supply/route.ts',
     'src/lib/region/enablement.ts',
@@ -222,7 +222,7 @@ test('§18 검색 좌표: 입지 피처 우선, 피처가 없는 aptSeq만 같�
 });
 
 test('§19 지도: 좌표가 없는 검색 결과로 (0,0)에 이동하지 않는다', () => {
-  const src = readCode('src/app/map/page.tsx');
+  const src = readCode('src/app/(public)/map/page.tsx');
   const start = src.indexOf('const handleApartmentSelect = (result: ApartmentSearchResult) => {');
   assert.ok(start > 0);
   const guard = src.indexOf('if (!hasUsableHandoffCoords(result)) {', start);

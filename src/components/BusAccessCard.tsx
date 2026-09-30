@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { formatEta } from './KakaoPlaces';
-import styles from '@/app/apt/[name]/detail.module.css';
+import styles from '@/app/(public)/apt/[name]/detail.module.css';
 
 interface Props {
   // PERCEIVED_PERFORMANCE_V2_DATAFLOW §2/§3/§4/§9 — 주소 문자열이 아니라 서버가 준

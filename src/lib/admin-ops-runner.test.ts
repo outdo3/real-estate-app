@@ -88,7 +88,7 @@ const ROOT = resolve(__dirname, '../..');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const OPS_ROUTE = read('src/app/api/admin/ops/route.ts');
-const OPS_UI = read('src/app/admin/ops/page.tsx');
+const OPS_UI = read('src/app/(public)/admin/ops/page.tsx');
 
 test('§6 ops 라우트가 DB 쿼리를 Promise.all로 동시에 띄우지 않는다', () => {
   const code = stripComments(OPS_ROUTE);
@@ -223,7 +223,7 @@ test('§4 부분 실패한 요약을 5분 내내 고정하지 않는다', () => 
 // ── ADMIN_DASHBOARD_CONNECTION_POOL_SAFETY_V1 §8 — 같은 패턴을 대시보드에도 적용했는지 ──
 
 const DASH_ROUTE = read('src/app/api/admin/dashboard/route.ts');
-const DASH_UI = read('src/app/admin/dashboard/page.tsx');
+const DASH_UI = read('src/app/(public)/admin/dashboard/page.tsx');
 
 test('§1/§2 대시보드도 DB 쿼리를 Promise.all로 동시에 띄우지 않는다', () => {
   const code = stripComments(DASH_ROUTE);

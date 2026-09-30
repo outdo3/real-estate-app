@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 import { buildCanonicalHostRedirects } from "./src/config/canonical-host";
-import { privateBriefingHeaders } from "./src/lib/privacy/private-routes";
+import { privateAppHeaders, privateBriefingHeaders } from "./src/lib/privacy/private-routes";
 
 const nextConfig: NextConfig = {
   // E-JIP CANONICAL HOST REDIRECT V1 — 기본 Vercel 호스트로 들어오면 경로·쿼리를 유지한 채
@@ -14,10 +14,15 @@ const nextConfig: NextConfig = {
   // CSP로 외부 스크립트·연결을 막고(로더가 코드 회귀로 다시 실려도 브라우저가 거부), 리퍼러·색인을 끈다.
   // 판정·헤더 값은 src/lib/privacy/private-routes.ts 한 곳에서 만든다.
   async headers() {
-    const value = privateBriefingHeaders({ dev: process.env.NODE_ENV !== 'production' });
+    const dev = process.env.NODE_ENV !== 'production';
+    const value = privateBriefingHeaders({ dev });
+    // REALTOR_PRO_PRIVATE_APP_ISOLATION_V1 — 중개사 Pro: 외부 스크립트·연결 차단 CSP · no-referrer · noindex · frame 차단.
+    const pro = privateAppHeaders({ dev });
     return [
       { source: '/b', headers: value },
       { source: '/b/:path*', headers: value },
+      { source: '/pro', headers: pro },
+      { source: '/pro/:path*', headers: pro },
     ];
   },
   typescript: {

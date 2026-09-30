@@ -134,7 +134,7 @@ test('13. purposes만 수정 → fitImportance 유지 (MY 화면의 기존 요�
   const res = await handlePutPreferences(authAs('u1'), { purposes: ['SELL'] }, store);
   assert.deepEqual(res.body, { success: true, data: { purposes: ['SELL'], fitImportance: VALID } });
   assert.deepEqual(rows.get('u1')!.fitImportance, VALID);
-  assert.match(read('src/app/my/page.tsx'), /body: JSON\.stringify\(\{ purposes: next \}\)/);
+  assert.match(read('src/app/(public)/my/page.tsx'), /body: JSON\.stringify\(\{ purposes: next \}\)/);
 });
 
 test('14. fitImportance만 수정 → purposes 유지, 행이 없으면 purposes [] 기본값으로 생성', async () => {
@@ -253,7 +253,7 @@ test('범위: 중요도 사용처는 API·계산 엔진(P2-B)·상세 카드/MY 
     users.sort(),
     [
       'src/app/api/my/preferences/route.ts',
-      'src/app/my/page.tsx', // FitImportanceSettings 렌더만(값은 만지지 않음)
+      'src/app/(public)/my/page.tsx', // FitImportanceSettings 렌더만(값은 만지지 않음)
       'src/components/my/FitImportanceSettings.tsx',
       'src/hooks/useFitPreference.ts',
       'src/lib/fit-importance.ts',

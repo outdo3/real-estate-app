@@ -337,7 +337,7 @@ test('§6 창 시작 시각이 정확하다', () => {
 // ── H. 배선 가드 (§12, §14, §17) ───────────────────────────────────────────
 
 const API = read('src/app/api/admin/system-health/route.ts');
-const PAGE = read('src/app/admin/system/page.tsx');
+const PAGE = read('src/app/(public)/admin/system/page.tsx');
 
 test('§15-1/§12 API는 기존 admin guard를 재사용한다', () => {
   const code = codeOf(API);
@@ -401,7 +401,7 @@ test('§10 수집하지 않는 오류 종류를 "0건"으로 보이게 하지 �
 });
 
 test('§17 기존 관리자 대시보드의 원시 로그 카드를 제거하지 않았다', () => {
-  const dash = read('src/app/admin/dashboard/page.tsx');
+  const dash = read('src/app/(public)/admin/dashboard/page.tsx');
   assert.ok(dash.includes('시스템 에러 로그 (최근 20건)'), '기존 카드가 사라졌다(regression)');
   assert.ok(dash.includes('/admin/system'), '새 화면으로 가는 길이 없다');
 });

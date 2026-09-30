@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import ApartmentAutocomplete, { ApartmentSearchResult } from './ApartmentAutocomplete';
 import { buildRegionMapUrl } from '@/lib/decision-journey/registry';
-import styles from '@/app/home-client.module.css';
+import styles from '@/app/(public)/home-client.module.css';
 
 // [MAIN UI-B1] 홈 첫 화면의 Primary 검색. ApartmentAutocomplete(카카오 키워드 검색,
 // /map·/stats·상세페이지에서 이미 쓰는 컴포넌트)를 그대로 재사용한다. 선택 시

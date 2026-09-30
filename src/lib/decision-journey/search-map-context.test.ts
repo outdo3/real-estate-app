@@ -21,7 +21,7 @@ const HOME = code('src/components/HomeApartmentSearch.tsx');
 const QUICK = code('src/components/ApartmentQuickSearch.tsx');
 const AUTO = code('src/components/ApartmentAutocomplete.tsx');
 const SEARCH_API = code('src/app/api/search/route.ts');
-const MAP = code('src/app/map/page.tsx');
+const MAP = code('src/app/(public)/map/page.tsx');
 
 const regionBranch = (src: string) => {
   const start = src.indexOf("if (result.type === 'REGION') {");

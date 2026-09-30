@@ -3,7 +3,7 @@
 // 이전에는 같은 판정이 세 곳에 흩어져 있었고, 그중 하나가 달랐다:
 //   - src/lib/auth-helpers.ts requireAdmin()  : role==='ADMIN' || email===ADMIN_EMAIL
 //   - src/proxy.ts (admin route gate)         : 같은 로직을 **복제**
-//   - src/app/admin/*/page.tsx                : role==='ADMIN' **만** ← 불일치
+//   - src/app/(public)/admin/*/page.tsx                : role==='ADMIN' **만** ← 불일치
 //
 // 그 결과 ADMIN_EMAIL로 승격된 운영자는 proxy와 API는 통과하지만 페이지 컴포넌트가
 // 스스로를 non-admin으로 판정해 데이터를 아예 요청하지 않는 상태가 된다. 판정을 이

@@ -143,7 +143,7 @@ test('8 · 런타임 코드에 강남구(11680) 기본값이 남아 있지 않�
   const runtime = [
     'src/app/api/apt/[name]/route.ts',
     'src/app/api/apt/[name]/info/route.ts',
-    'src/app/apt/[name]/apt-client.tsx',
+    'src/app/(public)/apt/[name]/apt-client.tsx',
     'src/components/RankCard.tsx',
     'src/components/TableList.tsx',
   ];

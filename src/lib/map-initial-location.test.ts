@@ -94,7 +94,7 @@ test('위치 확인 중에는 확정하지 않는다 — 권한 프롬프트가 
 });
 
 test('페이지는 위치 확정 전에는 지도를 그리지 않고 "현재 위치를 확인하고 있어요"를 보인다', () => {
-  const page = readFileSync(path.resolve(__dirname, '..', 'app', 'map', 'page.tsx'), 'utf8');
+  const page = readFileSync(path.resolve(__dirname, '..', 'app', '(public)', 'map', 'page.tsx'), 'utf8');
   const sdkGate = page.indexOf('if (!isMapReady) {\r\n    return <FullPageLoader') >= 0
     ? page.indexOf('if (!isMapReady) {\r\n    return <FullPageLoader')
     : page.indexOf('if (!isMapReady) {\n    return <FullPageLoader');
@@ -209,7 +209,7 @@ test('옛 위치 flash 없음 — 확정은 정확히 한 번, 취소 후에는 
 });
 
 test('공유/복원 링크는 기존대로 URL center로 바로 열린다(지오로케이션 생략)', () => {
-  const page = readFileSync(path.resolve(__dirname, '..', 'app', 'map', 'page.tsx'), 'utf8');
+  const page = readFileSync(path.resolve(__dirname, '..', 'app', '(public)', 'map', 'page.tsx'), 'utf8');
   assert.match(page, /fromUrl\s*\?\s*\{ resolved: true, source: 'url', center: fromUrl \}/);
   assert.match(page, /useEffect\(\(\) => \{\s*if \(initialShareLawdCdRef\.current\) return;\s*const geolocation/);
 });
@@ -233,7 +233,7 @@ test('로드뷰와 지도 진입 경로는 이 수정의 영향을 받지 않는
   }
   const nav = readFileSync(path.join(root, 'src/lib/bottom-nav-items.tsx'), 'utf8');
   assert.match(nav, /href: '\/map'/);
-  const page = readFileSync(path.join(root, 'src/app/map/page.tsx'), 'utf8');
+  const page = readFileSync(path.join(root, 'src/app/(public)/map/page.tsx'), 'utf8');
   // "내 위치" 버튼과 드래그 갱신은 그대로다.
   assert.match(page, /📍 내 위치/);
   assert.match(page, /const handleDragEnd = \(\) => \{/);

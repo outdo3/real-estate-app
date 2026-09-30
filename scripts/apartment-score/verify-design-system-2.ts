@@ -108,11 +108,11 @@ check('undefined 토큰(--background-color/--bg-light)이 --bg-color alias로 �
 // ---- 4. 하드코딩 그린 literal 제거(DS-2 §29, 정적 확인) ----
 console.log('--- hardcoded green literal cleanup (static check) ---');
 check('stats/page.module.css의 하드코딩 #03C75A가 --primary-color로 교체됨', () => {
-  const src = readSrc('src/app/stats/page.module.css');
+  const src = readSrc('src/app/(public)/stats/page.module.css');
   assert.ok(!/#03[cC]75[aA]/.test(src), '#03c75a 하드코딩이 남아있으면 안 됨');
 });
 check('page.module.css의 하드코딩 #03C75A가 --primary-color로 교체됨', () => {
-  const src = readSrc('src/app/page.module.css');
+  const src = readSrc('src/app/(public)/page.module.css');
   assert.ok(!/#03[cC]75[aA]/.test(src), '#03c75a 하드코딩이 남아있으면 안 됨');
 });
 

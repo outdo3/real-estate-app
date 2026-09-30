@@ -196,7 +196,7 @@ test('§11 학교 좌표 검증이 같은 박스를 계속 쓴다 — 사본이 
 
 const NOTICE = read('src/components/map/OutOfBusanNotice.tsx');
 const NOTICE_CSS = read('src/components/map/OutOfBusanNotice.module.css');
-const MAP = read('src/app/map/page.tsx');
+const MAP = read('src/app/(public)/map/page.tsx');
 
 test('§4 안내 문구는 지정된 카피 그대로다', () => {
   assert.ok(NOTICE.includes('현재 위치는 부산 외 지역입니다.'));

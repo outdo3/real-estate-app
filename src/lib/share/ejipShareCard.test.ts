@@ -288,7 +288,7 @@ test('§10 NEXT_PUBLIC_SITE_URL이 없는 클라이언트 번들에서 localhost
 });
 
 test('§12 Open Graph 폴백을 지운 게 아니다 — 메신저/검색엔진용 메타데이터는 그대로다', () => {
-  const LAYOUT = read('src/app/layout.tsx');
+  const LAYOUT = read('src/app/(public)/layout.tsx');
   assert.ok(/openGraph/.test(LAYOUT));
   assert.ok(/brand\/og\/ejip-og-main-1200x630\.jpg/.test(LAYOUT));
 });

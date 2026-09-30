@@ -28,7 +28,7 @@ const H = (o: Record<string, string>) => ({ get: (n: string) => o[n.toLowerCase(
 
 test('1 · /b/<token>에는 AdSense 로더가 없다(경로 판정 + 루트 layout이 로더를 직접 싣지 않음)', () => {
   for (const p of [`/b/${SYNTH_TOKEN}`, '/b', '/b/', `/b/${SYNTH_TOKEN}?x=1`]) assert.equal(isAdFreePath(p), true, p);
-  const layout = read('src/app/layout.tsx');
+  const layout = read('src/app/(public)/layout.tsx');
   assert.ok(!/ADSENSE_SCRIPT_SRC|googlesyndication/.test(layout), '루트 layout은 광고 로더를 직접 싣지 않는다');
   const loader = read('src/components/analytics/AdSenseLoader.tsx');
   assert.match(loader, /if \(isAdFreePath\(pathname\)\) return null;/);
@@ -44,9 +44,9 @@ test('2 · /b/<token>에는 GA·자체 방문 로그·위치 조회가 없다', 
   // 자체 방문 로그(조회·하트비트) 둘 다 판정을 거친다
   assert.equal((read('src/components/ViewTracker.tsx').match(/allowsFirstPartyAnalytics\(pathname\)/g) ?? []).length, 2);
   // 위치 권한 요청 + Kakao 역지오코딩은 브리핑에서 건너뛴다
-  assert.match(read('src/contexts/RegionContext.tsx'), /if \(isTokenizedPrivatePath\(window\.location\.pathname\)\) return;/);
+  assert.match(read('src/contexts/RegionContext.tsx'), /if \(!allowsLocationLookup\(window\.location\.pathname\)\) return;/);
   // 루트 layout·AppProviders에 판정 없는 다른 서드파티 로더가 새로 붙지 않았다
-  for (const f of ['src/app/layout.tsx', 'src/components/AppProviders.tsx']) {
+  for (const f of ['src/app/(public)/layout.tsx', 'src/components/AppProviders.tsx']) {
     assert.ok(!/<Script|<script|googletagmanager|connect\.facebook|clarity\.ms|hotjar|sentry/i.test(read(f)), f);
   }
 });
@@ -57,9 +57,9 @@ test('3 · 일반 공개 화면은 광고·분석을 그대로 싣는다', () =>
     assert.equal(allowsThirdPartyAnalytics(p), true, p);
     assert.equal(allowsFirstPartyAnalytics(p), true, p);
   }
-  // 중개사 Pro 화면은 광고만 뺀다(고객 정보·브리핑 링크가 화면에 표시됨), 분석은 유지
+  // 중개사 Pro는 PRIVATE_APP_ISOLATION_V1부터 광고·분석·방문 로그 모두 제외(pro-private-app-isolation.test.ts)
   assert.equal(isAdFreePath('/pro/briefings/new'), true);
-  assert.equal(allowsThirdPartyAnalytics('/pro/dashboard'), true);
+  assert.equal(allowsThirdPartyAnalytics('/pro/dashboard'), false);
 });
 
 test('4 · 5 · 6 · 브리핑 메타데이터: noindex·nofollow·no-referrer·canonical/og:url 없음·고정 문구만', () => {
@@ -128,7 +128,7 @@ test('8 · 만료된 토큰은 내용 없음', async () => {
 test('9 · 모르는 토큰(형식 맞는 합성값 포함)은 NOT_FOUND(페이지 404)', async () => {
   const { deps } = await setup();
   for (const t of [SYNTH_TOKEN, 'x', '']) assert.equal((await viewBriefingByToken(deps, t, { countView: true })).access, 'NOT_FOUND');
-  assert.match(read('src/app/b/[token]/page.tsx'), /if \(result\.access === 'NOT_FOUND'\) notFound\(\);/);
+  assert.match(read('src/app/(briefing)/b/[token]/page.tsx'), /if \(result\.access === 'NOT_FOUND'\) notFound\(\);/);
 });
 
 test('10 · 11 · 공개 브리핑에 고객 비공개 메모·중개사 노트·소유자 정보가 없다', async () => {

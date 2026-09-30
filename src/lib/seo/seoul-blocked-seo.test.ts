@@ -109,7 +109,7 @@ test('§6·§7 sitemap — 서울·강남 URL 0(서울 동 거래가 들어와�
 test('§8 차단 화면은 단지명을 색인 가능한 메타데이터로 내보내지 않는다(소스 수준)', () => {
   assert.deepEqual({ ...SEOUL_NOINDEX_ROBOTS }, { index: false, follow: false });
 
-  const detail = readCode('src/app/apt/[name]/page.tsx');
+  const detail = readCode('src/app/(public)/apt/[name]/page.tsx');
   const blockedBranch = /if \(seoulSeo === 'BLOCKED'\) \{([\s\S]*?)\n  \}/.exec(detail)?.[1] ?? '';
   assert.ok(blockedBranch, '상세 BLOCKED 분기가 없다');
   assert.ok(/robots: SEOUL_NOINDEX_ROBOTS/.test(blockedBranch));
@@ -118,12 +118,12 @@ test('§8 차단 화면은 단지명을 색인 가능한 메타데이터로 내�
   // 게이트는 제목을 만들기 전에 판정한다.
   assert.ok(detail.indexOf("seoulSeo === 'BLOCKED'") < detail.indexOf('const title = `${aptName}'));
 
-  const report = readCode('src/app/report/apt/[aptSeq]/page.tsx');
+  const report = readCode('src/app/(public)/report/apt/[aptSeq]/page.tsx');
   const gate = report.indexOf("'report') !== 'NONE'");
   assert.ok(gate > 0, '리포트 메타데이터 게이트가 없다');
   assert.ok(gate < report.indexOf('apartmentMaster'), '단지명 조회가 게이트보다 먼저다');
 
-  const compare = readCode('src/app/stats/compare/page.tsx');
+  const compare = readCode('src/app/(public)/stats/compare/page.tsx');
   const cGate = compare.indexOf("'detail') !== 'NONE'");
   assert.ok(cGate > 0 && cGate < compare.indexOf('${a.name} vs ${b.name}'), '비교 제목이 게이트보다 먼저다');
 });
@@ -133,7 +133,7 @@ test('§9 beta ON 시뮬레이션 — 승인 8구 상세는 열리되(NOINDEX) �
     assert.equal(decidePublicSeo([code], 'app', betaOn), 'NOINDEX', code);
     assert.equal(decidePublicSeo([null, `${code}-1`].map((v) => v && lawdCdFromAptSeq(v)), 'app', betaOn), 'NOINDEX');
   }
-  const detail = readCode('src/app/apt/[name]/page.tsx');
+  const detail = readCode('src/app/(public)/apt/[name]/page.tsx');
   assert.ok(/seoulSeo === 'NOINDEX'\s*\?\s*null/.test(detail), 'NOINDEX인데 canonical을 싣는다');
   assert.ok(/seoulSeo === 'NOINDEX' \? \{ robots: SEOUL_NOINDEX_ROBOTS \}/.test(detail), 'NOINDEX인데 robots가 없다');
 });

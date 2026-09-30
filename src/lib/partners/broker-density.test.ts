@@ -26,7 +26,7 @@ const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\
 
 const LEGAL_CARD = read('src/components/partner/PartnerCtaCard.tsx');
 const BROKER_CARD = read('src/components/partner/BrokerCtaCard.tsx');
-const APT_CLIENT = read('src/app/apt/[name]/apt-client.tsx');
+const APT_CLIENT = read('src/app/(public)/apt/[name]/apt-client.tsx');
 const TIMELINE = read('src/components/TradeTimelineList.tsx');
 
 // ── A. 사용자에게 보이는 문구(§2) ──────────────────────────────────────────
@@ -202,7 +202,7 @@ test('§23 중개사는 자금 계획(finance)에 올라가지 않는다', () =>
   assert.equal(getBrokerForLocation({ lawdCd: '26140', dong: '서대신동3가' }, 'finance'), null);
   const b = allPartners().find((p) => p.type === 'brokerage')!;
   assert.deepEqual([...b.placements], ['apt_detail']);
-  const FINANCE = read('src/app/finance-fit/finance-fit-client.tsx');
+  const FINANCE = read('src/app/(public)/finance-fit/finance-fit-client.tsx');
   assert.ok(!/BrokerCtaCard/.test(FINANCE), '자금 계획에 중개사 카드가 들어갔다');
 });
 

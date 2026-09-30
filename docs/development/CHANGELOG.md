@@ -2,6 +2,17 @@
 
 ## 2026-09-30
 
+### REALTOR PRO PRIVATE APP ISOLATION V1 — 공개 / Pro / 브리핑 루트 layout 분리 (로컬, push·배포 없음)
+
+상세: `docs/pro/REALTOR_PRO_V1_SECURITY.md` §0
+
+    원인     루트 layout이 하나라 공개 → /pro 이동이 클라이언트 전환 — 공개 화면에서 로드된 AdSense·GA·ViewTracker가 Pro 문서에 남음
+    수정     app/(public)·(pro)·(briefing) 루트 layout 3개(URL 불변) — 구역 간 이동은 전체 문서 로드 · Pro 루트는 세션만, 브리핑 루트는 공급자 0
+             private-routes.ts 구역 판정 + 스크립트 등록부(허용 구역 선언) · /pro CSP(외부 스크립트·연결 차단)·no-referrer·noindex·frame 차단
+    이동     공개 화면 파일 22개 → app/(public)/ (git mv, 내용 불변 — globals.css 상대 경로 1줄만), 경로 문자열 참조 테스트·@/app import 갱신
+    확인     빌드 라우트 표·렌더 모드 변경 없음 · 실측: 공개 → /pro(router.push) 새 문서·추적 0 · Pro → 공개 referrer 빈 값 · 합성 비밀 문자열 외부 전송 0
+    변화     어떤 라우트에도 맞지 않는 URL의 404는 Next 기본 루트로 렌더(그 화면에 광고·GA 없음)
+
 ### REALTOR PRO SECURITY PATCH — BRIEFING ADS ISOLATION V1 (로컬, push·배포 없음)
 
 상세: `docs/pro/REALTOR_PRO_V1_SECURITY.md` §1

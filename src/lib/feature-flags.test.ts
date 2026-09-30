@@ -20,8 +20,8 @@ const exists = (p: string) => existsSync(resolve(ROOT, p));
 /** 주석은 왜 숨겼는지 설명하느라 관련 단어를 언급한다 — 배선 검사는 코드만 본다. */
 const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-const HOME = read('src/app/home-client.tsx');
-const HOME_CSS = read('src/app/home-client.module.css');
+const HOME = read('src/app/(public)/home-client.tsx');
+const HOME_CSS = read('src/app/(public)/home-client.module.css');
 const NAV = read('src/lib/bottom-nav-items.tsx');
 
 // ── A. 진입점이 숨겨졌다 ───────────────────────────────────────────────────
@@ -47,9 +47,9 @@ test('다른 사용자 진입점이 남아 있지 않다', () => {
   for (const p of [
     'src/components/Header.tsx',
     'src/components/ui/BottomNav.tsx',
-    'src/app/map/page.tsx',
-    'src/app/stats/page.tsx',
-    'src/app/my/page.tsx',
+    'src/app/(public)/map/page.tsx',
+    'src/app/(public)/stats/page.tsx',
+    'src/app/(public)/my/page.tsx',
   ]) {
     if (!exists(p)) continue;
     assert.ok(!/href=["'{]?\/ai-search/.test(codeOf(read(p))), `${p}에 진입점이 남아 있다`);
@@ -60,8 +60,8 @@ test('다른 사용자 진입점이 남아 있지 않다', () => {
 
 test('라우트·API·컴포넌트·로직 파일이 모두 남아 있다', () => {
   for (const p of [
-    'src/app/ai-search/page.tsx',
-    'src/app/ai-search/ai-search-client.tsx',
+    'src/app/(public)/ai-search/page.tsx',
+    'src/app/(public)/ai-search/ai-search-client.tsx',
     'src/app/api/ai-search/route.ts',
     'src/lib/ai-search.ts',
   ]) {
@@ -80,7 +80,7 @@ test('검색/추천 로직이 그대로다 — 다른 모듈이 계속 쓰고 �
 });
 
 test('직접 URL 접근 경로가 살아 있다 — 라우트가 여전히 페이지를 렌더한다', () => {
-  const page = read('src/app/ai-search/page.tsx');
+  const page = read('src/app/(public)/ai-search/page.tsx');
   assert.ok(/export default/.test(page), '페이지 컴포넌트가 없다');
   assert.ok(/generateMetadata/.test(page), '메타데이터 생성이 사라졌다');
   const api = read('src/app/api/ai-search/route.ts');
@@ -99,9 +99,9 @@ test('CSS로 숨기지 않았다 — display:none을 흩뿌리지 않는다', ()
 
 test('플래그를 읽는 곳이 진입점 하나뿐이다 — 되돌릴 자리가 흩어지지 않았다', () => {
   const uses = [
-    'src/app/home-client.tsx',
+    'src/app/(public)/home-client.tsx',
   ].filter((p) => /conditionalHomeFindEntry/.test(read(p)));
-  assert.deepEqual(uses, ['src/app/home-client.tsx']);
+  assert.deepEqual(uses, ['src/app/(public)/home-client.tsx']);
 });
 
 test('플래그 타입이 좁게 강제된다 — 임의 문자열을 넣을 수 없다', () => {

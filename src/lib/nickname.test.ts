@@ -21,7 +21,7 @@ const codeOf = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\
 
 const ROUTE = read('src/app/api/my/profile/route.ts');
 const AUTH = read('src/lib/auth.ts');
-const MY_PAGE = read('src/app/my/page.tsx');
+const MY_PAGE = read('src/app/(public)/my/page.tsx');
 const SCHEMA = read('prisma/schema.prisma');
 
 const ok = (body: unknown) => {
@@ -226,7 +226,7 @@ test('§8 저장 중 비활성화와 피드백이 있다', () => {
 });
 
 test('§8 모바일에서 입력 확대(zoom)를 유발하지 않는다', () => {
-  const css = read('src/app/my/page.module.css');
+  const css = read('src/app/(public)/my/page.module.css');
   const rule = css.slice(css.indexOf('.nicknameInput {'), css.indexOf('.nicknameInput:focus'));
   assert.ok(/font-size: 16px/.test(rule), '16px 미만이면 iOS/안드로이드가 자동 확대한다');
 });

@@ -17,8 +17,8 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 // 주석을 걷어낸 코드(주석 안의 설명 문구가 검사에 걸리지 않게).
 const codeOf = (src: string) => src.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-const MAP = codeOf(read('src/app/map/page.tsx'));
-const DETAIL = codeOf(read('src/app/apt/[name]/apt-client.tsx'));
+const MAP = codeOf(read('src/app/(public)/map/page.tsx'));
+const DETAIL = codeOf(read('src/app/(public)/apt/[name]/apt-client.tsx'));
 const CARD = read('src/components/report/AptReportEntryCard.tsx');
 const CARD_CODE = codeOf(CARD);
 const CARD_CSS = read('src/components/report/AptReportEntryCard.module.css');
@@ -87,7 +87,7 @@ test('7. 리포트 CTA 중복 없음: 카드 1회, 상단 다음 행동에서 RE
 test('8. 기존 리포트 route·생성 페이지 그대로', () => {
   assert.equal(aptReportHref('26350-9'), '/report/apt/26350-9');
   assert.equal(aptReportHref(null), null);
-  assert.ok(existsSync(resolve(ROOT, 'src/app/report/apt/[aptSeq]')));
+  assert.ok(existsSync(resolve(ROOT, 'src/app/(public)/report/apt/[aptSeq]')));
   assert.ok(existsSync(resolve(ROOT, 'src/components/report/ApartmentReportSheet.tsx')));
   assert.ok(existsSync(resolve(ROOT, 'src/components/report/ReportActions.tsx')));
 });

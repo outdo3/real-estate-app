@@ -366,7 +366,7 @@ test('12. 저장 경로: posts/{userId}/{session}/{uuid}.ext — 원본 파일�
   assert.throws(() => buildImagePath(USER, 'photo.jpg', SESSION, 'jpg'));
   const deps2 = read('src/lib/supabase/community-image-deps.ts');
   assert.ok(/newUuid: \(\) => randomUUID\(\)/.test(deps2));
-  assert.ok(!/file\.name|\.name\b.*path/.test(codeOf(read('src/app/community/write/page.tsx'))));
+  assert.ok(!/file\.name|\.name\b.*path/.test(codeOf(read('src/app/(public)/community/write/page.tsx'))));
 });
 
 // ── 14/15. 비로그인·차단 ────────────────────────────────────────────────────────

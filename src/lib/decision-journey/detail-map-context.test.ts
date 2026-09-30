@@ -17,8 +17,8 @@ import { shouldApplyLateGps } from '../map-initial-location';
 const ROOT = resolve(__dirname, '../../..');
 const code = (p: string) =>
   readFileSync(join(ROOT, p), 'utf8').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-const DETAIL = code('src/app/apt/[name]/apt-client.tsx');
-const MAP = code('src/app/map/page.tsx');
+const DETAIL = code('src/app/(public)/apt/[name]/apt-client.tsx');
+const MAP = code('src/app/(public)/map/page.tsx');
 const handler = DETAIL.slice(DETAIL.indexOf('const handleViewOnMap = async () => {'), DETAIL.indexOf('const reportHref'));
 
 const SAMPLE = { lawdCd: '26350', dong: '우동', name: '롯데', aptSeq: '26350-9', lat: 35.1634441587193, lng: 129.147619699842 };

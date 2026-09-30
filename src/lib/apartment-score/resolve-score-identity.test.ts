@@ -166,7 +166,7 @@ test('§3 aptSeq 형태 판정', () => {
 // ── 호출부 계약(§3/§7) ─────────────────────────────────────────────────────
 
 const ROOT = resolvePath(__dirname, '../../..');
-const CLIENT = readFileSync(resolvePath(ROOT, 'src/app/apt/[name]/apt-client.tsx'), 'utf8');
+const CLIENT = readFileSync(resolvePath(ROOT, 'src/app/(public)/apt/[name]/apt-client.tsx'), 'utf8');
 const ROUTE = readFileSync(resolvePath(ROOT, 'src/app/api/apt/[name]/score/route.ts'), 'utf8');
 
 test('§3 상세는 URL의 aptSeq가 아니라 검증된 canonical aptSeq를 보낸다', () => {

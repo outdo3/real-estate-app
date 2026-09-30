@@ -32,8 +32,8 @@ const code = (p: string) => read(p).replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace
 const CARD = code('src/components/PersonalFitCard.tsx');
 const SETTINGS = code('src/components/my/FitImportanceSettings.tsx');
 const HOOK = code('src/hooks/useFitPreference.ts');
-const DETAIL = code('src/app/apt/[name]/apt-client.tsx');
-const MY = code('src/app/my/page.tsx');
+const DETAIL = code('src/app/(public)/apt/[name]/apt-client.tsx');
+const MY = code('src/app/(public)/my/page.tsx');
 
 const IMP: FitImportance = { transport: 5, living: 3, newness: 4, parking: 5, elementarySchoolAccess: 2 };
 

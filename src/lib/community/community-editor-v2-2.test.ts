@@ -81,7 +81,7 @@ test('2. 게시글 상세 사진은 그대로: 복사·다운로드·공유를 �
   assert.ok(!/onContextMenu|onDragStart|draggable=\{false\}/.test(detail));
   assert.ok(!/touch-callout|user-drag|user-select:\s*none|pointer-events:\s*none/.test(detailCss));
   // 막는 코드는 작성기 모듈에만 있다
-  for (const dir of ['src/app/community', 'src/components/community']) {
+  for (const dir of ['src/app/(public)/community', 'src/components/community']) {
     for (const f of readdirSync(resolve(ROOT, dir), { recursive: true }) as string[]) {
       if (!/\.(tsx|css)$/.test(f) || /SimpleInlineComposer/.test(f)) continue;
       assert.ok(!/touch-callout|onContextMenu/.test(read(`${dir}/${f.replace(/\\/g, '/')}`)), `${dir}/${f}`);
@@ -170,7 +170,7 @@ test('10·18. 모바일: 같은 [사진 추가]를 본문 아래·하단 탭바(
   // 탭바(z-index 1000)보다 아래 층 — 탭바를 덮지 않는다
   assert.ok(/z-index: 5/.test(toolbar));
   // 글쓰기·수정 화면은 하단 탭바를 숨기지 않는다(오프셋 전제)
-  for (const page of ['src/app/community/write/page.tsx', 'src/app/community/[id]/edit/page.tsx']) {
+  for (const page of ['src/app/(public)/community/write/page.tsx', 'src/app/(public)/community/[id]/edit/page.tsx']) {
     assert.ok(/<Header pageTitle="[^"]+" \/>/.test(read(page)) && !/hideMobileNav/.test(read(page)), page);
   }
 });
@@ -231,7 +231,7 @@ test('13(접근성). 버튼 이름은 "사진 추가"로 시작, 조작 버튼 a
 });
 
 test('17. 글쓰기·수정 동일: 두 화면 모두 같은 작성기', () => {
-  for (const page of ['src/app/community/write/page.tsx', 'src/app/community/[id]/edit/page.tsx']) {
+  for (const page of ['src/app/(public)/community/write/page.tsx', 'src/app/(public)/community/[id]/edit/page.tsx']) {
     assert.ok(/<SimpleInlineComposer blocks=\{blocks\} onBlocksChange=\{setBlocks\}/.test(read(page)), page);
   }
 });

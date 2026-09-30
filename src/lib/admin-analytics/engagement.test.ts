@@ -105,9 +105,9 @@ const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 
 test('자동 이벤트가 정말 자동인지 코드로 확인한다 — effect/노출 안에서 호출된다', () => {
   const autoSites: [string, string, RegExp][] = [
-    ['finance_fit_start', 'src/app/finance-fit/finance-fit-client.tsx', /useEffect\(\(\) => \{\s*if \(startTracked\.current\) return;[\s\S]{0,200}trackEvent\('finance_fit_start'/],
+    ['finance_fit_start', 'src/app/(public)/finance-fit/finance-fit-client.tsx', /useEffect\(\(\) => \{\s*if \(startTracked\.current\) return;[\s\S]{0,200}trackEvent\('finance_fit_start'/],
     ['report_view', 'src/components/report/ReportActions.tsx', /useEffect\(\(\) => \{[\s\S]{0,300}trackEvent\('report_view'/],
-    ['feedback_open', 'src/app/feedback/feedback-client.tsx', /useEffect\(\(\) => \{[\s\S]{0,120}trackFeedbackOpen\(\)/],
+    ['feedback_open', 'src/app/(public)/feedback/feedback-client.tsx', /useEffect\(\(\) => \{[\s\S]{0,120}trackFeedbackOpen\(\)/],
     ['partner_cta_impression', 'src/components/partner/usePartnerCta.ts', /isIntersecting[\s\S]{0,300}trackEvent\('partner_cta_impression'/],
   ];
   for (const [name, file, re] of autoSites) assert.ok(re.test(read(file)), `${name}의 발생 위치가 바뀌었다 — 분류를 다시 확인하라`);
