@@ -2,6 +2,16 @@
 
 ## 2026-09-30
 
+### E-JIP SEOUL25 FINAL PRE-GO-LIVE QA V1 — 17구 공개 직전 최종 검증 (Production 스위치 OFF 유지)
+
+상세: `docs/development/SEOUL_25_FINAL_PRE_GO_LIVE_QA_V1.md`
+
+    Preview  go-live 트리(0a1a088)를 seoul-25-public-beta-prep-v2에 그대로 복사해 push → dpl_DCnc6MmGfSzHYHTQw2h2kMhfcvmo(17구 시뮬레이션 ON, 읽기 전용 DB, env 변경 0)
+    결과     셀렉터 25/25 · 검색·지도 6개 구 격리 0 누수 · 상세 4곳 DB · 닫힌 면 유지 · 안내 문구 경기에만 · 모바일 375/390 · 회귀 없음
+    수정     17구 전월세 "조회 중"/"요청 실패"/"총 0건" → "준비 중" · 미래 사용승인일(은마 2034) 표시 안 함
+    주의     부산 회귀 확인 중 없는 단지명으로 live MOLIT 약 24회 이하 발생(내 실수) — 17구 경로는 MOLIT 0
+    불변     SEOUL_17_PUBLIC_ENABLED=false · Production 배포·DB 쓰기·cron 수동 실행 0
+
 ### E-JIP SEOUL25 GO-LIVE PREP V1 — 서울 17구 Production 공개 준비(스위치 꺼짐, LOCAL)
 
 상세: `docs/development/SEOUL_25_GO_LIVE_CHECKLIST_V1.md` · `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
