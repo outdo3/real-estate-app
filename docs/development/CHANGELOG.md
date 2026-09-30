@@ -2,6 +2,15 @@
 
 ## 2026-09-30
 
+### E-JIP SEOUL25 PRODUCTION PUBLIC ENABLE V1 — 서울 25구 공개 beta LIVE (승인)
+
+상세: `docs/development/SEOUL_25_PRODUCTION_GO_LIVE_V1.md`
+
+    반영     main 377acf7 → cd5706f(fast-forward) · Vercel dpl_GxqQTbPSzoAHFfvQCZKn7hg9yorx production READY(2026-09-30 04:45Z)
+    공개     서울 신규 17구 셀렉터·검색·지도·상세·DB 읽기 ON · 전월세 "준비 중" · 17구 live MOLIT 차단
+    유지     리포트·통계·공급·SEO·sitemap OFF · "서울특별시 전체" 없음 · 서울 8구·부산·경기 불변
+    스모크   셀렉터 25/25 · 검색·지도 6개 구 격리 · 상세 DB 4곳 · 닫힌 면 · 안내 문구 · 모바일 375/390 · 회귀 없음 · 롤백 불필요
+
 ### E-JIP SEOUL25 FINAL PRE-GO-LIVE QA V1 — 17구 공개 직전 최종 검증 (Production 스위치 OFF 유지)
 
 상세: `docs/development/SEOUL_25_FINAL_PRE_GO_LIVE_QA_V1.md`
