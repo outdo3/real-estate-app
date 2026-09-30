@@ -73,6 +73,7 @@ import BottomNav from '@/components/ui/BottomNav';
 import ShareAction from '@/components/ShareAction';
 import mapMarkerStyles from './map-marker.module.css';
 import UnsupportedRegionNotice from '@/components/map/UnsupportedRegionNotice';
+import { resolveAptMapNotice } from '@/lib/map/apt-map-notice';
 import {
   IP_LOOKUP_TIMEOUT_MS,
   MAP_LOCATING_MESSAGE,
@@ -494,7 +495,7 @@ export default function FullscreenMapPage() {
   // TRANSACTIONS_API_TRUST_V1 §7 — 부분 실패 여부를 markers와 **같이** 캐시한다.
   // 플래그를 빼고 markers만 캐시하면 60초 안의 캐시 히트에서 불완전한 결과가 완전한
   // 결과로 되살아난다(PARTIAL이 COMPLETE로 둔갑하는 정확히 그 경로).
-  const markerCacheRef = useRef<Map<string, { markers: AptMarker[]; partial: boolean; ts: number }>>(new Map());
+  const markerCacheRef = useRef<Map<string, { markers: AptMarker[]; partial: boolean; regionUnsupported: boolean; ts: number }>>(new Map());
   const MARKER_CACHE_TTL_MS = 60_000;
   // 오피스텔도 같은 관례(순번 + exact-key TTL 캐시)를 각자 별도로 갖는다 — 두 레이어의
   // 응답이 서로의 stale 판정을 오염시키지 않게 하기 위해 ref를 공유하지 않는다.
@@ -514,6 +515,8 @@ export default function FullscreenMapPage() {
   // OfficetelLayerStatus는 오피스텔 지도 계약과 공유하는 타입이라 건드리지 않고,
   // 아파트 레이어 전용 플래그를 따로 둔다.
   const [aptPartial, setAptPartial] = useState(false);
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 서버가 "공개되지 않은 지역"이라고 답했는가(빈 목록이어도 검증된 0건이 아니다).
+  const [aptRegionUnsupported, setAptRegionUnsupported] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
 
   // PERCEIVED_PERFORMANCE_V2_5 §1 — 이 컴포넌트가 실제로 mount된 시점 = 이 라우트의
@@ -785,6 +788,7 @@ export default function FullscreenMapPage() {
       if (cached && isMarkerCacheFresh(cached.ts, Date.now(), MARKER_CACHE_TTL_MS)) {
         setAptMarkers(cached.markers);
         setAptPartial(cached.partial);
+        setAptRegionUnsupported(cached.regionUnsupported);
         setIsLoadingData(false);
         setAptStatus('ready');
         perfMeasure('map: click→surrounding markers ready', 'map:m0-click');
@@ -854,9 +858,11 @@ export default function FullscreenMapPage() {
           hasNewPost: (recentActivity[item.name] || 0) > 0,
         }));
 
-        markerCacheRef.current.set(lawdCd, { markers, partial: txState.partial, ts: Date.now() });
+        const regionUnsupported = txState.regionUnsupported === true;
+        markerCacheRef.current.set(lawdCd, { markers, partial: txState.partial, regionUnsupported, ts: Date.now() });
         setAptMarkers(markers);
         setAptPartial(txState.partial);
+        setAptRegionUnsupported(regionUnsupported);
         setAptStatus('ready');
         // §12 M6 — 주변 마커 전체 dataset 준비 완료(M0 클릭 흐름에서 호출된 경우에만
         // 의미 있음 — 드래그/현재위치 등 다른 호출부에서도 공유되는 mark라 클릭 흐름이
@@ -868,6 +874,7 @@ export default function FullscreenMapPage() {
         // 남겨두지도 않는다(§11 stale marker leakage 금지).
         if (isStaleMarkerResponse(mySeq, requestSeqRef.current)) return;
         setAptMarkers([]);
+        setAptRegionUnsupported(false);
         setAptStatus('error');
       } finally {
         if (!isStaleMarkerResponse(mySeq, requestSeqRef.current)) setIsLoadingData(false);
@@ -1978,21 +1985,15 @@ export default function FullscreenMapPage() {
 
   // §13 — 아파트도 실패(FAILED)와 진짜 0건(ZERO)을 구분한다. 혼합 모드에서 한쪽만
   // 실패하면 그 레이어만 실패로 말하고, 성공한 레이어는 그대로 쓸 수 있어야 한다.
-  const aptNotice: { text: string; tone: 'info' | 'error' } | null = (() => {
-    if (!layers.apt) return null;
-    if (aptStatus === 'error') return { text: '아파트 정보를 불러오지 못했습니다.', tone: 'error' };
-    if (aptStatus !== 'ready') return null;
-    // TRANSACTIONS_API_TRUST_V1 — 부분 실패는 전체 실패도, 진짜 0건도 아니다. 마커가
-    // 0건이면 "없다"가 아니라 "못 불러왔다"에 가깝고, 마커가 있어도 실제보다 적을 수
-    // 있으므로 두 경우 모두 부분 실패를 먼저 말한다.
-    if (aptPartial) {
-      return { text: '일부 거래 정보를 불러오지 못해 아파트가 실제보다 적게 표시될 수 있습니다.', tone: 'info' };
-    }
-    if (aptMarkers.length === 0) {
-      return { text: '현재 지도 범위에 표시할 아파트가 없습니다.', tone: 'info' };
-    }
-    return null;
-  })();
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 공개되지 않은 지역(서버 regionUnsupported)은
+  // "표시할 아파트가 없습니다"(검증된 0건)와 다른 문구로 말한다. 판정 순서는 resolveAptMapNotice 참고.
+  const aptNotice = resolveAptMapNotice({
+    layerOn: layers.apt,
+    status: aptStatus,
+    partial: aptPartial,
+    regionUnsupported: aptRegionUnsupported,
+    markerCount: aptMarkers.length,
+  });
 
   // §14 — 실패(FAILED)와 진짜 0건(ZERO)을 절대 같은 문구로 접지 않는다.
   const officetelNotice: { text: string; tone: 'info' | 'error' } | null = (() => {

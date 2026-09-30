@@ -2,6 +2,17 @@
 
 ## 2026-09-30
 
+### E-JIP GYEONGGI8 FINAL PREVIEW PREP V2 — 현재 main 위 경기 8구 Preview 준비 (로컬, push·배포 없음)
+
+상세: `docs/development/GYEONGGI_8_FINAL_PREVIEW_PREP_V2.md`
+
+    기반     origin/main 4be3c02(서울25 공개) · 예전 경기 Preview 브랜치(567cd19)에서 유효한 부분만 재구성
+    스위치   GYEONGGI_BETA_ENABLED=false 유지 · Preview 전용(Vercel Preview + NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW=true)
+    데이터   열리면 경기 8구 DB-first(cronSync) + live MOLIT 관문 닫힘(전월세 "준비 중") · 리포트·통계·공급·SEO·sitemap 닫힘
+    이식     학교 일반구 해석(수원 4구·성남 2구 분리) · 지도 하단 "지원하지 않는 지역" 문구(검증된 0건과 구분)
+    감사     master 1,193/좌표 1,174/null 19 · 매매 539,661(자연키 중복 0, 다른 구 0, 41135 0) · 경기 cron 자연 실행 PASS
+    불변     Production 노출·서울25·부산·공급 게이트 · DB·env 변경 0
+
 ### E-JIP SEOUL25 PRODUCTION PUBLIC ENABLE V1 — 서울 25구 공개 beta LIVE (승인)
 
 상세: `docs/development/SEOUL_25_PRODUCTION_GO_LIVE_V1.md`

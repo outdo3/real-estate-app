@@ -197,7 +197,9 @@ test('18·19·20. seed 게이트 — publicExposureGuarded는 enablement에서 �
   assert.ok(!/'41'\s*:/.test(en), 'ENABLEMENT_BY_SIDO에 경기가 들어갔다');
   // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 경기 8구는 beta **후보 목록**으로만 존재하고 스위치는 꺼져 있다.
   assert.ok(/export const GYEONGGI_BETA_ENABLED = false;/.test(en), '경기 beta 스위치가 켜졌다');
-  assert.ok(/gyeonggiBeta: GYEONGGI_BETA_ENABLED,/.test(en), '런타임 맵이 스위치를 따르지 않는다');
+  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 런타임 맵은 Production 스위치 또는 Preview 전용 스위치(GYEONGGI_8_OPEN)를 따른다(Production 빌드 = false).
+  assert.ok(/gyeonggiBeta: GYEONGGI_8_OPEN,/.test(en), '런타임 맵이 스위치를 따르지 않는다');
+  assert.ok(/export const GYEONGGI_8_OPEN = resolveGyeonggi8Open\(GYEONGGI_BETA_ENABLED, GYEONGGI_8_BETA_PREVIEW_ENABLED\);/.test(en));
   for (const c of GYEONGGI_ALL) assert.deepEqual(Object.values(getRegionEnablement(c)).filter(Boolean), []);
 });
 

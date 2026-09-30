@@ -149,7 +149,7 @@ export const GYEONGGI_BETA_LAWDCDS = [
 /** 경기 beta 스위치. **false = 경기 전 축 닫힘(현재).** */
 export const GYEONGGI_BETA_ENABLED = false;
 
-/** 경기 beta에서 여는 축(제안). 앱·검색·지도·상세만 — 리포트/통계/공급/색인/사이트맵은 닫힘, cronSync는 별도 결정. */
+/** 경기 beta에서 여는 축. 앱·검색·지도·상세 + DB-first 읽기(cronSync) — 리포트/통계/공급/색인/사이트맵은 닫힘. */
 export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
   app: true,
   search: true,
@@ -160,8 +160,41 @@ export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
   supply: false,
   sitemap: false,
   seoIndex: false,
-  cronSync: false,
+  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 서울25와 같은 방식: 열리면 적재된 DB를 읽고(DB-first), live MOLIT는
+  // api-molit 단일 관문(isDbOnlyLawdCd)에서 닫힌다(전월세 등 미적재 유형은 "준비 중"). 이 프로필은 경기 8구가
+  // 열린 빌드(Preview 전용 스위치 또는 Production 스위치)에서만 쓰이므로 스위치가 꺼진 Production 동작 변화 0.
+  // Production 공개 전 조건: 경기 매매 cron 자연 실행 검증(GYEONGGI_CRON_RUNTIME) — 별도 승인 단계.
+  cronSync: true,
 };
+
+// ── GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 경기 8구 **Preview 전용** 스위치(기본 닫힘) ─────────────────────
+//
+// (예전 GYEONGGI_8_PUBLIC_BETA_PREVIEW_V1 b52c6c8를 현재 main 구조로 다시 만든 것.) Production 스위치
+// (GYEONGGI_BETA_ENABLED)는 false 그대로 두고, Preview 빌드에서만 위 8구·위 축을 연다. 두 조건이 **모두** 참일 때만:
+//   · NEXT_PUBLIC_VERCEL_ENV === 'preview'                (Vercel이 빌드 시 넣는 시스템 값 — Production 빌드는 'production')
+//   · NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW === 'true'      (Preview 환경에만 넣는 명시 플래그)
+// 둘 다 빌드 시 리터럴로 인라인된다(클라이언트 선택기와 서버 라우트가 같은 값을 본다). 값이 없거나 다르면 닫힘 —
+// Production 환경에 플래그를 잘못 넣어도 VERCEL_ENV가 'production'이라 열리지 않는다. 로컬·테스트도 닫힘.
+// 여는 범위는 Production 스위치를 켤 때와 **완전히 같다**(같은 목록·같은 축): 41135·나머지 경기·"경기도 전체"는 닫힘.
+
+/** Preview 전용 스위치 판정(순수). 두 값이 정확히 'preview'·'true'일 때만 true — 그 밖(없음·공백·대소문자 차이)은 전부 false. */
+export function resolveGyeonggi8PreviewFlag(vercelEnv: string | undefined, previewFlag: string | undefined): boolean {
+  return vercelEnv === 'preview' && previewFlag === 'true';
+}
+
+/** 이 빌드에서 경기 8구 Preview 공개가 켜졌는가. Production·로컬·테스트 기본값은 false. */
+export const GYEONGGI_8_BETA_PREVIEW_ENABLED = resolveGyeonggi8PreviewFlag(
+  process.env.NEXT_PUBLIC_VERCEL_ENV,
+  process.env.NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW
+);
+
+/** 경기 8구가 열리는가(순수): Production 스위치 또는 Preview 전용 스위치 — 어느 쪽이든 여는 목록·축은 같다. */
+export function resolveGyeonggi8Open(productionEnabled: boolean, previewEnabled: boolean): boolean {
+  return productionEnabled || previewEnabled;
+}
+
+/** 이 빌드에서 경기 8구가 열렸는가. 현재 Production = false(스위치 꺼짐 · Preview env 없음). */
+export const GYEONGGI_8_OPEN = resolveGyeonggi8Open(GYEONGGI_BETA_ENABLED, GYEONGGI_8_BETA_PREVIEW_ENABLED);
 
 // ── SEOUL_25_PUBLIC_BETA_PREP_V1 — 서울 나머지 17구(**Preview 전용, 기본 닫힘**) ─────────────────────
 //
@@ -253,9 +286,17 @@ export function resolveDbOnly(seoul17Open: boolean, lawdCd: string | null | unde
   return seoul17Open && !!lawdCd && (SEOUL_17_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
 }
 
-/** 이 빌드에서 이 구가 "DB만 읽고 live MOLIT는 부르지 않는" 17구인가. 17구가 닫힌 빌드에서는 항상 false. */
+/** DB 전용 판정(순수) — 경기 8구: 경기 8구가 열렸고(Production 또는 Preview) 그 8구면 live MOLIT 없이 DB만 읽는다. */
+export function resolveGyeonggiDbOnly(gyeonggi8Open: boolean, lawdCd: string | null | undefined): boolean {
+  return gyeonggi8Open && !!lawdCd && (GYEONGGI_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
+}
+
+/**
+ * 이 빌드에서 이 구가 "DB만 읽고 live MOLIT는 부르지 않는" 구인가: 서울 17구(열렸을 때) · 경기 8구(열렸을 때).
+ * 닫힌 구에서는 항상 false(서울 8구·부산의 기존 live 경로 불변).
+ */
 export function isDbOnlyLawdCd(lawdCd: string | null | undefined): boolean {
-  return resolveDbOnly(SEOUL_17_OPEN, lawdCd);
+  return resolveDbOnly(SEOUL_17_OPEN, lawdCd) || resolveGyeonggiDbOnly(GYEONGGI_8_OPEN, lawdCd);
 }
 
 /**
@@ -273,7 +314,8 @@ export function buildLawdCdEnablementMap(flags: { seoulBeta: boolean; gyeonggiBe
 
 const ENABLEMENT_BY_LAWDCD: Readonly<Record<string, RegionEnablement>> = buildLawdCdEnablementMap({
   seoulBeta: SEOUL_BETA_ENABLED,
-  gyeonggiBeta: GYEONGGI_BETA_ENABLED,
+  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — Production 스위치 **또는** Preview 전용 스위치(Production 빌드에서는 항상 false).
+  gyeonggiBeta: GYEONGGI_8_OPEN,
   seoul17Open: SEOUL_17_OPEN,
 });
 

@@ -102,7 +102,8 @@ test('go-live: 17구는 DB 전용 — live MOLIT 관문에서 닫힘, 다른 지
   // 관문은 fetchMolitData 맨 앞 한 곳이고, 17구 판정은 enablement의 같은 열림 값을 쓴다
   const molit = code('src/lib/api-molit.ts');
   assert.match(molit, /if \(isDbOnlyLawdCd\(params\.lawdCd\)\) return molitFailurePlaceholder\(params, DB_ONLY_MOLIT_MESSAGE\);/);
-  assert.match(code('src/lib/region/enablement.ts'), /return resolveDbOnly\(SEOUL_17_OPEN, lawdCd\);/);
+  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 같은 관문에 경기 8구(열렸을 때)가 붙는다. 서울 17구 판정은 그대로.
+  assert.match(code('src/lib/region/enablement.ts'), /return resolveDbOnly\(SEOUL_17_OPEN, lawdCd\) \|\| resolveGyeonggiDbOnly\(GYEONGGI_8_OPEN, lawdCd\);/);
   // 상세·지도는 cronSync(=DB-first) 축으로 DB를 읽는다
   assert.ok(/if \(aptSeq && isTradeDbFirstLawdCd\(aptSeq\.slice\(0, 5\)\)\)/.test(code('src/app/api/apt/[name]/route.ts')));
   assert.ok(/const isDbFirstEligible = isMapMarkerShape && isTradeDbFirstLawdCd\(lawdCd\);/.test(code('src/app/api/transactions/route.ts')));

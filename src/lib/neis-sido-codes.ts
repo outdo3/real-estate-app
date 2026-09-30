@@ -1,3 +1,5 @@
+import { getRegionByLawdCd, getSido } from './region/registry';
+
 // NEIS(교육정보 개방포털) 시/도 교육청 코드
 export const NEIS_SIDO_CODES: Record<string, string> = {
   '서울특별시': 'B10', '부산광역시': 'C10', '대구광역시': 'D10', '인천광역시': 'E10',
@@ -25,12 +27,65 @@ export function resolveNeisEduCode(sido: string): string | null {
  * 규칙은 하나다: **주소 토큰 중 시/군/구와 완전히 같은 것이 있어야 한다.**
  * - `"강서구"`는 토큰 `"서구"`와 같지 않으므로 서구 목록에 들어오지 않는다.
  * - 시/군/구를 모르면 **false**다. 다른 구 데이터로 대체하지 않는다(wrong data < no data).
+ *
+ * GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 경기 일반구는 시/군/구가 **두 토큰**이다("수원시 장안구").
+ * 예전 호출부는 region을 공백으로 잘라 두 번째 토큰("수원시")만 넘겨 수원 4구가 한 목록으로 합쳐졌다.
+ * 이제 gungu의 토큰 전체가 주소에 **연속으로, 정확히** 나와야 한다(부분 문자열 아님). 한 토큰인
+ * 부산·서울 자치구는 예전 판정과 같다.
  */
 export function addressMatchesRegion(addr: string, _region: string, gungu: string): boolean {
   if (!addr) return false;
   // 시/군/구가 없으면 "그 지역"이라고 말할 근거가 없다 — 전 지역을 열어주지 않는다.
   if (!gungu || !gungu.trim()) return false;
-  return addr.split(/\s+/).includes(gungu.trim());
+  const want = gungu.trim().split(/\s+/);
+  const tokens = addr.split(/\s+/);
+  for (let i = 0; i + want.length <= tokens.length; i++) {
+    if (want.every((w, j) => tokens[i + j] === w)) return true;
+  }
+  return false;
+}
+
+/**
+ * 학교 목록/요약 API가 받은 지역을 **시도 + 시/군/구 전체**로 정한다.
+ *
+ * GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 예전에는 `region.split(' ')[1]`이라 "경기도 수원시 장안구"가
+ * "수원시"가 됐다. 규칙:
+ *   1. 시/군/구 이름이 비어 있으면("부산광역시 " = 시도 전체) 그대로 빈 값 — 기존 계약(빈 목록) 유지.
+ *      lawdCd가 와도 시도 전체 요청을 특정 구로 바꾸지 않는다.
+ *   2. registry에 있는 lawdCd가 오면 **그 코드가 정답**이다(canonical) — 시도·시/군/구 이름을 registry
+ *      fullName에서 가져온다. 41111 → "경기도" / "수원시 장안구".
+ *   3. lawdCd가 없거나 registry에 없으면 이름 문자열에서 시도 뒤의 **토큰 전부**를 시/군/구로 쓴다.
+ */
+export interface SchoolRegionQuery {
+  sido: string;
+  sigungu: string;
+  source: 'LAWD_CD' | 'REGION_NAME';
+}
+
+export function resolveSchoolRegionQuery(region: string, lawdCd?: string | null): SchoolRegionQuery {
+  const tokens = (region || '').trim().split(/\s+/).filter(Boolean);
+  const nameSido = tokens[0] || '';
+  const nameSigungu = tokens.slice(1).join(' ');
+  if (!nameSigungu) return { sido: nameSido, sigungu: '', source: 'REGION_NAME' };
+
+  const node = getRegionByLawdCd((lawdCd || '').trim() || null);
+  const sidoName = node ? getSido(node.sidoCode)?.name ?? '' : '';
+  if (node && sidoName && node.fullName.startsWith(`${sidoName} `)) {
+    return { sido: sidoName, sigungu: node.fullName.slice(sidoName.length + 1), source: 'LAWD_CD' };
+  }
+  return { sido: nameSido, sigungu: nameSigungu, source: 'REGION_NAME' };
+}
+
+/**
+ * 주소("경기 수원시 장안구 정자동 111")에서 시/군/구 다음의 읍/면/동 토큰을 꺼낸다(학원 위치 라벨용).
+ * 예전에는 `parts[2]`로 고정이라 경기 일반구 주소에서는 "장안구"가 동 이름으로 잡혔다.
+ * 시도 토큰 뒤로 "시·군·구"로 끝나는 토큰을 모두 건너뛴 첫 토큰이다. 없으면 null(추측하지 않는다).
+ */
+export function dongTokenAfterSigungu(address: string | null | undefined): string | null {
+  const parts = (address || '').trim().split(/\s+/).filter(Boolean);
+  let i = 1;
+  while (i < parts.length && /[시군구]$/.test(parts[i])) i++;
+  return i > 1 && i < parts.length ? parts[i] : null;
 }
 
 /**

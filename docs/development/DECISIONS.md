@@ -1848,3 +1848,10 @@ app·search·map·detail을 연다(report·stats·seoIndex·sitemap·cronSync OF
 상태:
 LOCAL 구현·테스트 완료. Preview 배포·Production 공개는 별도 승인. 문서: `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
 
+## 2026-09-30 — 경기 8구 공개 프로필: DB-first 읽기 + live MOLIT 차단 (GYEONGGI8_FINAL_PREVIEW_PREP_V2)
+
+- 결정: 경기 8구가 열리면(Preview 스위치 또는 승인 뒤 Production 스위치) 서울 17구와 같이 적재된 DB를 읽고(`cronSync: true`), live MOLIT는 `isDbOnlyLawdCd` 관문에서 닫는다. 전월세처럼 적재되지 않은 유형은 "준비 중".
+- 이유: 8구 전체 이력 539,443건 적재·parity 확인, 경기 매매 cron이 2026-09-29/30 자연 실행에서 전 셀 COMPLETE. live MOLIT 읽기는 쿼터·불완전 응답 위험이 있고 QA 중 MOLIT 호출 금지 원칙과 맞지 않는다.
+- 이전 제안(`cronSync: false`, "cron 검증 뒤 별도 결정")을 대체한다. 스위치가 모두 꺼진 Production에는 영향 없음.
+- 미결: 경기 이집점수 표시 정책, 경기 Production 공개 승인.
+

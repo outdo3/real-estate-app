@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { classifySchoolKind, resolveNeisEduCode, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
+import { classifySchoolKind, dongTokenAfterSigungu, resolveNeisEduCode, resolveSchoolRegionQuery, schoolBelongsToRegion } from '@/lib/neis-sido-codes';
 import { getOrSetCache } from '@/lib/server-cache';
 
 // PERFORMANCE_V2.1 §5 — 이 라우트는 요청마다 외부 API를 약 7회 부른다:
@@ -15,8 +15,13 @@ const SCHOOL_STATS_TTL_MS = 6 * 60 * 60 * 1000;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const region = searchParams.get('region') || '부산광역시 서구';
-  const [sido, gungu] = region.split(' ');
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 예전 `region.split(' ')`은 "경기도 수원시 장안구"의 시/군/구를
+  // "수원시"로 잘라 수원 4구를 합산했다. 시도 뒤 전체를 쓰고, canonical lawdCd가 오면 그 코드가 우선한다.
+  const { sido, sigungu: gungu } = resolveSchoolRegionQuery(
+    searchParams.get('region') || '부산광역시 서구',
+    searchParams.get('lawdCd')
+  );
+  const region = `${sido} ${gungu}`;
 
   const apiKey = process.env.NEIS_API_KEY || 'sample';
   const eduCode = resolveNeisEduCode(sido) || 'C10';
@@ -109,8 +114,9 @@ export async function GET(request: Request) {
           docs.forEach((doc: any) => {
             if (seenIds.has(doc.id)) return;
             seenIds.add(doc.id);
-            const parts = (doc.address_name || '').split(' ');
-            const dong = parts[2] || gungu; // 예: "부산 서구 서대신동3가" -> "서대신동3가"
+            // 예: "부산 서구 서대신동3가" -> "서대신동3가", "경기 수원시 장안구 정자동" -> "정자동"
+            // (예전 parts[2] 고정은 경기 일반구 주소에서 "장안구"를 동으로 집었다)
+            const dong = dongTokenAfterSigungu(doc.address_name) || gungu;
             dongCounts[dong] = (dongCounts[dong] || 0) + 1;
           });
           if (catData.meta?.is_end !== false) break; // 마지막 페이지면 중단
