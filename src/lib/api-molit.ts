@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { dedupMolitInFlight, runMolitGuarded, type MolitAttemptOutcome, type MolitGuardDeps } from './molit-rate-guard';
 import { isDbOnlyLawdCd } from './region/enablement';
+import { TRADE_PREPARING_MESSAGE } from './trade-read-state';
 
 const API_KEY = process.env.DATA_GO_KR_API_KEY;
 
@@ -325,7 +326,7 @@ async function fetchMolitDataGuarded(params: FetchParams, deps?: MolitFetchDeps)
 }
 
 /** DB 전용 지역(서울 17구)에서 live MOLIT를 막았을 때의 실패 사유(비밀값 없음 · 화면에 노출될 수 있는 문구). */
-export const DB_ONLY_MOLIT_MESSAGE = '이 지역의 이 거래 유형은 아직 제공 준비 중입니다';
+export const DB_ONLY_MOLIT_MESSAGE = TRADE_PREPARING_MESSAGE;
 
 // 실패 월 플레이스홀더(typeLabel '에러' 1건) — 기존 계약 그대로. classifyMolitMonthResult가 FAILED로 분류한다.
 function molitFailurePlaceholder({ lawdCd, dealYmd, type }: FetchParams, safeMessage: string) {

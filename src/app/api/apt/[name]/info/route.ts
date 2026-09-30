@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { fetchBuildingRegistryInfo, formatRatio, formatParking } from '@/lib/apt-building-info';
+import { fetchBuildingRegistryInfo, formatRatio, formatParking, plausibleApprovalYearLabel } from '@/lib/apt-building-info';
 import { shouldAdoptFallbackUnitTypes, normalizeAptName } from '@/lib/apt-name-match';
 import {
   mergeMasterIntoRegistry, mergeLiveIntoRegistry, isFullyPopulated,
@@ -307,11 +307,9 @@ export async function GET(
       info['세대수'] = naverHouseholds;
     }
 
-    if (registry?.approvalDate) {
-      info['사용승인일'] = registry.approvalDate;
-    } else if (naverApprovalYear) {
-      info['사용승인일'] = naverApprovalYear;
-    }
+    // SEOUL25_FINAL_QA_V1 — 미래 연도 등 불가능한 사용승인일은 어느 출처든 표시하지 않는다(다음 출처로 넘어감).
+    const approvalLabel = plausibleApprovalYearLabel(registry?.approvalDate) ?? plausibleApprovalYearLabel(naverApprovalYear);
+    if (approvalLabel) info['사용승인일'] = approvalLabel;
 
     if (registry?.parkingCount) {
       const totalHouseholds = info['세대수'] ? parseInt(info['세대수'].replace(/,/g, ''), 10) : null;
