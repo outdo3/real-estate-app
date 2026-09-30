@@ -2,6 +2,16 @@
 
 ## 2026-09-30
 
+### E-JIP GYEONGGI8 PREVIEW DEPLOY + FULL QA V1 — 경기 8구 Preview 배포, 지도는 Kakao 도메인 등록 대기
+
+상세: `docs/development/GYEONGGI_8_PREVIEW_FULL_QA_V1.md`
+
+    배포     gyeonggi-8-public-beta-preview-v1 567cd19 → b057386(트리 = c6a1f15, fast-forward) · dpl_BuNKKyjULXcQ7Z9p92FsohbwRxWm Ready
+    env      PREVIEW_DATABASE_URL(기존 ejip_preview_ro, sensitive) 적용 브랜치를 서울25 Preview → 경기 Preview로 이동 · Production env 불변
+    QA       셀렉터 8구(분당·경기도 전체 없음) · 검색 8/8 · 상세 8/8 DB · 전월세 준비 중 · 닫힌 면 · 점수 "데이터 부족" · 학교 일반구 분리 · 모바일(지도 제외)
+    대기     Kakao JS SDK가 Preview 도메인 거부 → 사용자 등록 필요(지도·마커·지도 안내 QA 보류)
+    불변     Production 경기 차단 · 서울25·부산 정상 · MOLIT 0 · DB 쓰기·권한·cron 0
+
 ### E-JIP GYEONGGI8 FINAL PREVIEW PREP V2 — 현재 main 위 경기 8구 Preview 준비 (로컬, push·배포 없음)
 
 상세: `docs/development/GYEONGGI_8_FINAL_PREVIEW_PREP_V2.md`
