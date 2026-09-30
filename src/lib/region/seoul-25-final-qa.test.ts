@@ -51,3 +51,8 @@ test('info 라우트는 모든 출처의 사용승인일에 같은 검사를 쓴
   assert.match(src, /plausibleApprovalYearLabel\(registry\?\.approvalDate\) \?\? plausibleApprovalYearLabel\(naverApprovalYear\)/);
   assert.ok(!/info\['사용승인일'\] = registry\.approvalDate/.test(src));
 });
+
+test('실거래 타임라인 요약도 준비 중이면 "총 0건"(검증된 0으로 읽힘)을 쓰지 않는다', () => {
+  const src = readFileSync(resolve(ROOT, 'src/app/apt/[name]/apt-client.tsx'), 'utf8');
+  assert.match(src, /filteredTrades\.length === 0 && tradeIncompleteMessage === TRADE_PREPARING_MESSAGE \? '준비 중' : `총 \$\{filteredTrades\.length\}건`/);
+});
