@@ -25,7 +25,7 @@ import { resolveSaleSyncScope } from '../sync/sale-sync-scope';
 import { GYEONGGI_FIRST_BATCH } from '../../../scripts/national-backfill/gyeonggi-master-seed-logic';
 
 // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 경기 beta 후보(스위치 OFF)와 공개 전 안전장치 회귀 테스트.
-// "켜면"은 simulateRegionEnablement로만 본다 — Production 설정(GYEONGGI_BETA_ENABLED)은 false 그대로다.
+// "켜면"은 simulateRegionEnablement로 본다 — Production 설정(GYEONGGI_BETA_ENABLED)은 2026-09-30 true(공개).
 
 const ROOT = resolve(__dirname, '../../..');
 const code = (p: string) => readFileSync(resolve(ROOT, p), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -35,16 +35,21 @@ const SEOUL8 = SEOUL_BETA_LAWDCDS as readonly string[];
 const GG_ALL = REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd);
 const GG_OTHER = GG_ALL.filter((c) => !GG8.includes(c));
 const SEOUL_BLOCKED = REGION_NODES.filter((n) => n.sidoCode === '11' && !SEOUL8.includes(n.lawdCd)).map((n) => n.lawdCd);
-const ON = { seoulBeta: true, gyeonggiBeta: true } as const;
-const NOW = { seoulBeta: true, gyeonggiBeta: false } as const;
+// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30부터 서울 17구 공개(seoul17Open). 경기 스위치만 가정을 바꾼다.
+const ON = { seoulBeta: true, gyeonggiBeta: true, seoul17Open: true } as const;
+const NOW = { seoulBeta: true, gyeonggiBeta: false, seoul17Open: true } as const;
 const PUBLIC_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const;
-const sim = (c: string, axis: keyof RegionEnablement, flags: { seoulBeta: boolean; gyeonggiBeta: boolean } = ON) => simulateRegionEnablement(c, flags)[axis];
+const sim = (c: string, axis: keyof RegionEnablement, flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Open?: boolean } = ON) => simulateRegionEnablement(c, flags)[axis];
 const allowedSet = (axis: keyof RegionEnablement, flags = ON) => REGION_NODES.filter((n) => sim(n.lawdCd, axis, flags)).map((n) => n.lawdCd);
 
-test('0. 현재 런타임: 경기 beta 스위치 OFF — 경기 전 축 닫힘, 시뮬레이션 NOW = 런타임', () => {
-  assert.equal(GYEONGGI_BETA_ENABLED, false);
-  for (const c of GG_ALL) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
-  for (const n of REGION_NODES) assert.deepEqual(simulateRegionEnablement(n.lawdCd, NOW), getRegionEnablement(n.lawdCd), n.lawdCd);
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구 공개: 런타임 = 시뮬레이션 ON. NOW(공개 전)는 비교 기준으로만 남는다.
+test('0. 현재 런타임: 경기 beta 스위치 ON(2026-09-30) — 8구만 열림, 41135·나머지 경기 전 축 닫힘, 시뮬레이션 ON = 런타임', () => {
+  assert.equal(GYEONGGI_BETA_ENABLED, true);
+  for (const c of GG8) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), ['app', 'search', 'map', 'detail'].includes(axis), `${c} ${axis}`);
+  for (const c of [...GG_OTHER, '41135']) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
+  for (const n of REGION_NODES) assert.deepEqual(simulateRegionEnablement(n.lawdCd, ON), getRegionEnablement(n.lawdCd), n.lawdCd);
+  // 경기 밖은 공개 전(NOW)과 같다
+  for (const n of REGION_NODES.filter((x) => x.sidoCode !== '41')) assert.deepEqual(simulateRegionEnablement(n.lawdCd, NOW), getRegionEnablement(n.lawdCd), n.lawdCd);
 });
 
 test('1·17. 후보는 정확히 첫 배치 8구(MOLIT leaf, 41135 없음) — seed·cron 후보와 같은 목록', () => {
@@ -57,11 +62,12 @@ test('1·17. 후보는 정확히 첫 배치 8구(MOLIT leaf, 41135 없음) — s
   assert.deepEqual(gg.ok ? gg.lawdCds : null, [...GG8]);
 });
 
-test('1. 켜면: 8구 app·search·map·detail만 열리고 report·stats·sitemap·seoIndex·cronSync는 닫힘', () => {
-  assert.deepEqual(GYEONGGI_BETA_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
+// GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 열리면 적재 DB를 읽는다(cronSync = DB-first, live MOLIT는 DB 전용 관문에서 닫힘).
+test('1. 켜면: 8구 app·search·map·detail·DB 읽기만 열리고 report·stats·supply·sitemap·seoIndex는 닫힘', () => {
+  assert.deepEqual(GYEONGGI_BETA_ENABLEMENT, { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true });
   for (const c of GG8) {
-    for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(sim(c, axis), true, `${c} ${axis}`);
-    for (const axis of ['report', 'stats', 'sitemap', 'seoIndex', 'cronSync'] as const) assert.equal(sim(c, axis), false, `${c} ${axis}`);
+    for (const axis of ['app', 'search', 'map', 'detail', 'cronSync'] as const) assert.equal(sim(c, axis), true, `${c} ${axis}`);
+    for (const axis of ['report', 'stats', 'supply', 'sitemap', 'seoIndex'] as const) assert.equal(sim(c, axis), false, `${c} ${axis}`);
   }
 });
 
@@ -70,11 +76,11 @@ test('2·3. 켜도 나머지 경기(부모 시 41110·41130 포함)와 41135는 
   for (const c of [...GG_OTHER, '41135', '41110', '41130']) for (const axis of PUBLIC_AXES) assert.equal(sim(c, axis), false, `${c} ${axis}`);
 });
 
-test('4·5. 켜면 검색·지도 allowlist = 부산 16 + 서울 8 + 경기 8 = 32, 그 밖 없음', () => {
+test('4·5. 켜면 검색·지도 allowlist = 부산 16 + 서울 25 + 경기 8 = 49, 그 밖 없음', () => {
   for (const axis of ['search', 'map'] as const) {
     const set = allowedSet(axis);
-    assert.equal(set.length, 32, axis);
-    assert.ok(set.every((c) => c.startsWith('26') || SEOUL8.includes(c) || GG8.includes(c)), axis);
+    assert.equal(set.length, 49, axis);
+    assert.ok(set.every((c) => c.startsWith('26') || SEOUL8.includes(c) || SEOUL_BLOCKED.includes(c) || GG8.includes(c)), axis);
   }
   // 소비자는 allowlist로만 판정한다(서울 deny-list 아님) — 이름으로 지역을 넓히지 않는다
   assert.ok(/sggCd: \{ in: \[\.\.\.publicAllowedLawdCds\('search'\)\] \}/.test(code('src/app/api/search/route.ts')));
@@ -146,15 +152,17 @@ test('13·14·15·16. 켜도 리포트·통계 닫힘, 상세 SEO는 noindex, si
     const blocked = (lawd: string, axis: keyof RegionEnablement) => !sim(lawd, axis);
     assert.equal(decidePublicSeo([c], 'detail', blocked), 'NOINDEX', c);
     assert.equal(decidePublicSeo([c], 'report', blocked), 'BLOCKED', c);
-    // 현재 런타임은 BLOCKED
-    assert.equal(decidePublicSeo([c], 'detail'), 'BLOCKED', c);
+    // 현재 런타임(2026-09-30 공개)도 같다: 상세 NOINDEX, 리포트 BLOCKED
+    assert.equal(decidePublicSeo([c], 'detail'), 'NOINDEX', c);
+    assert.equal(decidePublicSeo([c], 'report'), 'BLOCKED', c);
   }
   assert.equal(decidePublicSeo(['41135'], 'detail', (l, a) => !sim(l, a)), 'BLOCKED');
+  assert.equal(decidePublicSeo(['41135'], 'detail'), 'BLOCKED');
   const routes = [...buildLaunchRegionRoutes(), ...buildDongRoutes(GG8.map((lawdCd) => ({ lawdCd, dong: '정자동', count: 9999 })))].map((r) => decodeURIComponent(r.path));
   assert.deepEqual(routes.filter((p) => /41\d{3}|경기|수원|성남|의정부|광명/.test(p)), []);
 });
 
-test('18·19·20. 켜도 부산 16·서울 승인 8·차단 서울 17은 지금과 같다', () => {
+test('18·19·20. 경기를 켜도 부산 16·서울 8·서울 17(공개)은 지금과 같다', () => {
   for (const c of [...BUSAN_LAWDCD_16, ...SEOUL8, ...SEOUL_BLOCKED]) {
     assert.deepEqual(simulateRegionEnablement(c, ON), getRegionEnablement(c), c);
   }

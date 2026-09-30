@@ -5,7 +5,7 @@ import {
   getRegionByLawdCd, getRegionChildren, getMolitLeafRegions,
   getRegionContext, getSidoRegions, getSido,
 } from './registry';
-import { getRegionEnablement, getSidoEnablement, getEnabledSidoCodes, SEOUL_BETA_LAWDCDS } from './enablement';
+import { getRegionEnablement, getSidoEnablement, getEnabledSidoCodes, GYEONGGI_BETA_LAWDCDS, SEOUL_BETA_LAWDCDS } from './enablement';
 import { BUSAN_DISTRICTS, BUSAN_CURRENT_LAWD_CODES } from '../report/region-scope';
 import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
 import { REGION_DATA } from '../regions';
@@ -165,21 +165,30 @@ test('14 · 부산은 모든 축에서 열려 있다(기존 상태 보존)', () 
   assert.deepEqual(getEnabledSidoCodes(), ['26'], '앱에 열린 시도는 부산뿐');
 });
 
-test('15 · 서울은 registry에 존재하지만 어떤 축도 열려 있지 않다', () => {
+test('15 · 서울 시도 층은 닫힘 — 구는 개별 공개(2026-09-30 서울 17구 공개: 앱·검색·지도·상세·DB 읽기만)', () => {
   assert.ok(getRegionByLawdCd('11680'), 'registry에는 있어야 한다');
   const e = getSidoEnablement('11');
   assert.deepEqual(e, { app: false, search: false, map: false, detail: false, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
-  assert.deepEqual(getRegionEnablement('11680'), e);
+  assert.deepEqual(getRegionEnablement('11680'), { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true });
 });
 
-test('16 · 경기도 동일 — 존재하지만 미출시', () => {
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구(41117 포함) 공개. 41135·나머지 경기는 존재하지만 미출시.
+test('16 · 경기도 — 8구만 공개(색인·sitemap 닫힘), 41135·나머지는 존재하지만 미출시', () => {
   assert.ok(getRegionByLawdCd('41135'));
-  for (const code of ['41135', '41117', '41287', '41570']) {
+  assert.deepEqual(getSidoEnablement('41'), { app: false, search: false, map: false, detail: false, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false });
+  for (const code of ['41135', '41287', '41570', '41110', '41130']) {
     const e = getRegionEnablement(code);
     assert.equal(e.app, false);
     assert.equal(e.sitemap, false);
     assert.equal(e.seoIndex, false);
     assert.equal(e.cronSync, false);
+  }
+  for (const code of GYEONGGI_BETA_LAWDCDS) {
+    const e = getRegionEnablement(code);
+    assert.equal(e.app, true, code);
+    assert.equal(e.sitemap, false, code);
+    assert.equal(e.seoIndex, false, code);
+    assert.equal(e.cronSync, true, code);
   }
   // 모르는 코드도 닫힘이 기본값이다.
   assert.equal(getRegionEnablement('99999').app, false);
@@ -270,9 +279,14 @@ test('17b · sitemap/SEO 축이 열린 지역은 부산뿐', () => {
 
 // SEOUL_MOBILE_BETA_LAUNCH_V1 — beta가 켜지면서 서울 승인 8구가 cronSync(=DB-first 읽기) 축에 들어왔다.
 // registry가 **자동으로** 넓히는 것은 여전히 없다: 부산 16 + allowlist 8 외에는 한 곳도 열리지 않는다.
-test('17c · cronSync 축은 부산 leaf 16 + 서울 beta 8뿐 — registry가 자동으로 서울/경기를 돌리지 않는다', () => {
+test('17c · cronSync(DB-first 읽기) 축은 부산 leaf 16 + 서울 25구 + 경기 8구 — 그 밖의 경기는 자동으로 돌지 않는다', () => {
   const cronOpen = getMolitLeafRegions().filter((n) => getRegionEnablement(n.lawdCd).cronSync);
-  assert.equal(cronOpen.length, 24);
-  assert.deepEqual([...BUSAN_LAWDCD_16, ...SEOUL_BETA_LAWDCDS].sort(), codes(cronOpen).sort());
-  assert.ok(!codes(cronOpen).includes('11680'), '강남이 열렸다');
+  // SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 서울 17구 공개로 서울 25구 전부 DB-first
+  // GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 같은 날 경기 8구 공개로 8구 DB-first(41135 아님)
+  assert.equal(cronOpen.length, 49);
+  assert.ok(codes(cronOpen).includes('11680'));
+  assert.deepEqual(codes(cronOpen).filter((c) => c.startsWith('41')).sort(), [...GYEONGGI_BETA_LAWDCDS].sort());
+  assert.ok(!codes(cronOpen).includes('41135'));
+  assert.ok(codes(cronOpen).every((c) => c.startsWith('26') || c.startsWith('11') || c.startsWith('41')), '다른 시도가 열렸다');
+  for (const c of BUSAN_LAWDCD_16) assert.ok(codes(cronOpen).includes(c), c);
 });

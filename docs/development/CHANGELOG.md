@@ -40,6 +40,73 @@
     스위치   REALTOR_PRO_ENABLED 기본 OFF(페이지 "준비 중", API 404) · DEMO는 로컬 개발에서만
     불변     Production DB·env·배포·cron·MOLIT 0 · 기존 테이블 SQL 변경 0 · 기존 인증 그대로
     승인대기 migration 적용 · 암호화 키 등록 · 테스트 중개사 계정 · Preview 배포 · /b/* 광고 로더 제외
+### E-JIP GYEONGGI8 PRODUCTION PUBLIC ENABLE + FINAL SMOKE V1 — 경기 8구 공개 beta LIVE
+
+상세: `docs/development/GYEONGGI_8_PRODUCTION_GO_LIVE_V1.md`
+
+    공개     GYEONGGI_BETA_ENABLED true(a3f8267) · Production dpl_8UHcVcGiZZhEBCRvQjJFCDDBUswR READY
+    범위     8구 app·search·map·detail·DB 읽기 · live MOLIT 닫힘(전월세 준비 중) · report·stats·supply·SEO·sitemap·41135·나머지 경기 닫힘
+    smoke    선택기·검색 8/8·지도 1,097 마커·마커→상세·상세 8/8·전월세·점수 "데이터 부족"·닫힌 면·모바일 375/390·NEIS 전부 PASS
+    안전     경기 MOLIT 0 · DB 최대 15/60 대기 0 · DB 쓰기 0 · cron 불변 · 롤백 불필요
+
+### E-JIP GYEONGGI8 PREVIEW MAP QA COMPLETION V1 — Kakao 등록 뒤 지도 QA 통과(재배포 없음)
+
+상세: `docs/development/GYEONGGI_8_PREVIEW_FULL_QA_V1.md` §지도 QA 완료
+
+    지도     Kakao SDK 초기화 OK · 8구 마커 1,097(다른 구 aptSeq 0, null/0,0 좌표 0) · 선택 시트·상세보기 → 같은 aptSeq 상세
+    닫힘     41135·41173 마커 0 + 상단 안내 + "지원하지 않는 지역" · null 좌표 19개 마커 0, 딥링크는 시트 없이 안전하게 무시
+    모바일   375/390 가로 넘침 0 · 시트 버튼 48px · 하단 탭과 겹침 0
+    안전     경기 MOLIT 0 · Preview DB 연결 최대 11/15, 대기 0, 연결 오류 0 · Production 변경 0
+
+### E-JIP GYEONGGI8 PREVIEW DEPLOY + FULL QA V1 — 경기 8구 Preview 배포, 지도는 Kakao 도메인 등록 대기
+
+상세: `docs/development/GYEONGGI_8_PREVIEW_FULL_QA_V1.md`
+
+    배포     gyeonggi-8-public-beta-preview-v1 567cd19 → b057386(트리 = c6a1f15, fast-forward) · dpl_BuNKKyjULXcQ7Z9p92FsohbwRxWm Ready
+    env      PREVIEW_DATABASE_URL(기존 ejip_preview_ro, sensitive) 적용 브랜치를 서울25 Preview → 경기 Preview로 이동 · Production env 불변
+    QA       셀렉터 8구(분당·경기도 전체 없음) · 검색 8/8 · 상세 8/8 DB · 전월세 준비 중 · 닫힌 면 · 점수 "데이터 부족" · 학교 일반구 분리 · 모바일(지도 제외)
+    대기     Kakao JS SDK가 Preview 도메인 거부 → 사용자 등록 필요(지도·마커·지도 안내 QA 보류)
+    불변     Production 경기 차단 · 서울25·부산 정상 · MOLIT 0 · DB 쓰기·권한·cron 0
+
+### E-JIP GYEONGGI8 FINAL PREVIEW PREP V2 — 현재 main 위 경기 8구 Preview 준비 (로컬, push·배포 없음)
+
+상세: `docs/development/GYEONGGI_8_FINAL_PREVIEW_PREP_V2.md`
+
+    기반     origin/main 4be3c02(서울25 공개) · 예전 경기 Preview 브랜치(567cd19)에서 유효한 부분만 재구성
+    스위치   GYEONGGI_BETA_ENABLED=false 유지 · Preview 전용(Vercel Preview + NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW=true)
+    데이터   열리면 경기 8구 DB-first(cronSync) + live MOLIT 관문 닫힘(전월세 "준비 중") · 리포트·통계·공급·SEO·sitemap 닫힘
+    이식     학교 일반구 해석(수원 4구·성남 2구 분리) · 지도 하단 "지원하지 않는 지역" 문구(검증된 0건과 구분)
+    감사     master 1,193/좌표 1,174/null 19 · 매매 539,661(자연키 중복 0, 다른 구 0, 41135 0) · 경기 cron 자연 실행 PASS
+    불변     Production 노출·서울25·부산·공급 게이트 · DB·env 변경 0
+
+### E-JIP SEOUL25 PRODUCTION PUBLIC ENABLE V1 — 서울 25구 공개 beta LIVE (승인)
+
+상세: `docs/development/SEOUL_25_PRODUCTION_GO_LIVE_V1.md`
+
+    반영     main 377acf7 → cd5706f(fast-forward) · Vercel dpl_GxqQTbPSzoAHFfvQCZKn7hg9yorx production READY(2026-09-30 04:45Z)
+    공개     서울 신규 17구 셀렉터·검색·지도·상세·DB 읽기 ON · 전월세 "준비 중" · 17구 live MOLIT 차단
+    유지     리포트·통계·공급·SEO·sitemap OFF · "서울특별시 전체" 없음 · 서울 8구·부산·경기 불변
+    스모크   셀렉터 25/25 · 검색·지도 6개 구 격리 · 상세 DB 4곳 · 닫힌 면 · 안내 문구 · 모바일 375/390 · 회귀 없음 · 롤백 불필요
+
+### E-JIP SEOUL25 FINAL PRE-GO-LIVE QA V1 — 17구 공개 직전 최종 검증 (Production 스위치 OFF 유지)
+
+상세: `docs/development/SEOUL_25_FINAL_PRE_GO_LIVE_QA_V1.md`
+
+    Preview  go-live 트리(0a1a088)를 seoul-25-public-beta-prep-v2에 그대로 복사해 push → dpl_DCnc6MmGfSzHYHTQw2h2kMhfcvmo(17구 시뮬레이션 ON, 읽기 전용 DB, env 변경 0)
+    결과     셀렉터 25/25 · 검색·지도 6개 구 격리 0 누수 · 상세 4곳 DB · 닫힌 면 유지 · 안내 문구 경기에만 · 모바일 375/390 · 회귀 없음
+    수정     17구 전월세 "조회 중"/"요청 실패"/"총 0건" → "준비 중" · 미래 사용승인일(은마 2034) 표시 안 함
+    주의     부산 회귀 확인 중 없는 단지명으로 live MOLIT 약 24회 이하 발생(내 실수) — 17구 경로는 MOLIT 0
+    불변     SEOUL_17_PUBLIC_ENABLED=false · Production 배포·DB 쓰기·cron 수동 실행 0
+
+### E-JIP SEOUL25 GO-LIVE PREP V1 — 서울 17구 Production 공개 준비(스위치 꺼짐, LOCAL)
+
+상세: `docs/development/SEOUL_25_GO_LIVE_CHECKLIST_V1.md` · `docs/development/SEOUL_25_PUBLIC_BETA_PREP_V1.md`
+
+    포함     Preview 준비 3커밋(2f6ac27·cc4f0a2·e7e8baf)을 main 377acf7 위에 통합 — 선택기 서울 전체 가드 · 리포트 CTA 누수 · supply 축 · Preview read-only DB
+    스위치   enablement SEOUL_17_PUBLIC_ENABLED = false(단일 지점) → true면 17구 app·search·map·detail·DB 읽기, report·stats·supply·sitemap·seoIndex 닫힘
+    데이터   17구가 열리면 DB 전용 — fetchMolitData 관문(isDbOnlyLawdCd)에서 live MOLIT 네트워크 없이 차단
+    안내     지도 OutOfBusanNotice → UnsupportedRegionNotice: 부산 경계 대신 공개 allowlist 판정, 지역 이름 없는 문구
+    불변     Production 공개 상태 전부(17구 닫힘) · cron · DB 0 · push/배포 0
 
 ## 2026-09-29
 

@@ -382,10 +382,11 @@ test('19–22 · scope: 부산 16 · 서울 승인 8 · 경기 정확히 8 · 41
   assert.deepEqual(shared.orderSaleDistrictsByStaleness(GG(), months, [], isVerified).sort(), GG().sort());
 });
 
-test('23 · 공개 enablement 불변(서울 beta on · 경기 beta off), 동기화 코드는 enablement를 읽지 않는다', () => {
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구 공개로 경기 스위치 on. 동기화 코드가 enablement를 읽지 않는 것은 그대로.
+test('23 · 공개 enablement(서울 beta on · 경기 beta on, 2026-09-30), 동기화 코드는 enablement를 읽지 않는다', () => {
   const en = code('src/lib/region/enablement.ts');
   assert.ok(/export const SEOUL_BETA_ENABLED = true;/.test(en));
-  assert.ok(/export const GYEONGGI_BETA_ENABLED = false;/.test(en));
+  assert.ok(/export const GYEONGGI_BETA_ENABLED = true;/.test(en));
   for (const p of ['src/lib/sync/sale-sync-core.ts', 'src/lib/sync/sale-recheck-core.ts', 'src/lib/sync/rent-sync-core.ts', 'src/lib/sync/shared.ts', 'src/lib/sync/run-deadline.ts']) {
     assert.ok(!/enablement/.test(code(p)), p);
   }

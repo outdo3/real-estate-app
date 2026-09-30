@@ -6,7 +6,7 @@ import { REGCODE_PROXY, resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import styles from './RegionSelectModal.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
-import { isPublicRegionAllowed, isSidoPubliclyHidden, isSidoPartiallyPublic } from '@/lib/region/enablement';
+import { isPublicRegionAllowed, isSidoPubliclyHidden, isSidoWholeQuerySupported } from '@/lib/region/enablement';
 
 type RegionOption = { code: string; name: string };
 
@@ -104,8 +104,9 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     if (!selectedSido) return;
     const sidoCode = selectedSido.code.substring(0, 2);
     // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 일부 구만 공개된 시도는 "시도 전체"를 만들지 않는다.
-    // 8/25구만 열린 상태에서 "서울특별시 전체"는 부분 집계를 전체로 보이게 하는 잘못된 질의다.
-    if (isSidoPartiallyPublic(sidoCode)) return;
+    // SEOUL_25_PUBLIC_BETA_PREP_V1 — 판정을 "일부만 열렸다"에서 "시도 단위 질의 경로가 있다"로 바꿨다.
+    // 서울은 25구가 전부 열려도 시도 층이 닫혀 있어 "서울특별시 전체" 질의를 지원하지 않는다.
+    if (!isSidoWholeQuerySupported(sidoCode)) return;
     finalize({
       lawdCd: null,
       sidoCode,
@@ -302,7 +303,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
 
               {modalStep === 'sigungu' && (
                 <>
-                  {!isSidoPartiallyPublic(selectedSido?.code.substring(0, 2)) && (
+                  {isSidoWholeQuerySupported(selectedSido?.code.substring(0, 2)) && (
                     <button className={styles.gridBtn} onClick={selectSidoAll}>
                       {selectedSido?.name} 전체
                     </button>

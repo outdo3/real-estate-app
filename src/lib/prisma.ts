@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { assertTestWriteAllowed, resolveTestDbPolicy } from '@/lib/test-db-guard';
+import { resolveRuntimeDatabaseUrl } from '@/lib/db-url-policy';
 
 // Next.js 개발 모드의 핫 리로드마다 새 PrismaClient를 만들면 커넥션이 계속 쌓이므로,
 // 전역에 싱글턴으로 캐싱해 재사용한다 (Prisma 공식 권장 패턴).
@@ -9,10 +10,14 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 // 운영 런타임은 이 분기에 들어오지 않으므로 동작이 바뀌지 않는다.
 const policy = resolveTestDbPolicy(process.env as Record<string, string | undefined>, process.execArgv);
 const testUrl = policy.testSignal && process.env.TEST_DATABASE_URL ? process.env.TEST_DATABASE_URL : null;
+// SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Vercel Preview는 read-only 전용 연결만 쓴다(없으면 닫힘, DATABASE_URL로 떨어지지 않음).
+// Production·로컬은 runtimeDb.url이 null이라 지금과 같다.
+const runtimeDb = resolveRuntimeDatabaseUrl(process.env as Record<string, string | undefined>);
 
 function createClient(): PrismaClient {
-  const client = testUrl
-    ? new PrismaClient({ datasources: { db: { url: testUrl } } })
+  const overrideUrl = testUrl ?? runtimeDb.url;
+  const client = overrideUrl
+    ? new PrismaClient({ datasources: { db: { url: overrideUrl } } })
     : new PrismaClient();
 
   // §7/§9 — 테스트 러너일 때만 쓰기 차단 미들웨어를 단다. 운영 런타임에는 붙지 않으므로

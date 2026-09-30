@@ -167,12 +167,14 @@ test('lawdCd가 없으면 DB 경로를 시도하지 않는다(지역 미확정 �
 
 // SEOUL_DETAIL_DB_FIRST_GATE — DB 1차 소스는 정기 수집(cronSync) 지역의 aptSeq에만.
 // 서울 강남구 1회성 파일럿 46행처럼 일부 달만 있는 DB가 전체 이력을 가리면 안 된다.
-test('상세 DB-first는 aptSeq 구 코드가 cronSync 지역일 때만(부산 유지 · 서울 MOLIT)', async () => {
+test('상세 DB-first는 aptSeq 구 코드가 cronSync 지역일 때만(부산·서울 25구 DB · 미공개 경기 아님)', async () => {
   const { readFileSync } = await import('node:fs');
   const { resolve } = await import('node:path');
   const { isTradeDbFirstLawdCd } = await import('./region/enablement');
   const route = readFileSync(resolve(__dirname, '../app/api/apt/[name]/route.ts'), 'utf8');
   assert.match(route, /if \(aptSeq && isTradeDbFirstLawdCd\(aptSeq\.slice\(0, 5\)\)\) \{\s*const db = await readDetailSaleTradesFromDb\(aptSeq, period\);/);
   assert.equal(isTradeDbFirstLawdCd('26140-1164'.slice(0, 5)), true, '부산은 기존 DB-first 그대로');
-  assert.equal(isTradeDbFirstLawdCd('11680-218'.slice(0, 5)), false, '서울은 MOLIT 유지');
+  // SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 서울 17구 공개(DB 전용) 뒤로 강남도 DB-first. 미공개 경기는 아니다.
+  assert.equal(isTradeDbFirstLawdCd('11680-218'.slice(0, 5)), true, '서울 17구(공개)는 DB-first');
+  assert.equal(isTradeDbFirstLawdCd('41135-1'.slice(0, 5)), false, '미공개 경기는 DB-first 아님');
 });

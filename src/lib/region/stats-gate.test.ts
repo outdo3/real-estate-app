@@ -76,9 +76,9 @@ test('15 · 미래 활성화 fixture — stats 축만 열면 같은 판정이 �
 test('15b · 게이트 뒤의 라우팅은 여전히 DB 보유(cronSync) 축을 따른다 — 서울을 열 때는 두 축을 함께 연다', () => {
   // 부산은 두 축 모두 열려 있어 게이트 통과 후 DB-first 경로를 탄다.
   assert.equal(isTradeDbFirstLawdCd('26140'), true);
-  // 서울은 아직 두 축 모두 닫혀 있다. stats만 열고 cronSync를 닫아 두면 live 경로로 떨어지므로,
-  // enablement.ts에서 서울을 열 때는 DB 적재 완료와 함께 두 축을 같이 연다(문서화된 운영 규칙).
-  assert.equal(isTradeDbFirstLawdCd('11680'), false);
+  // 서울 17구는 2026-09-30 DB 적재 완료 뒤 cronSync(DB 읽기)와 함께 공개됐다(stats는 닫힌 채).
+  // stats를 열 때도 cronSync가 이미 열려 있어 live 경로로 떨어지지 않는다(문서화된 운영 규칙).
+  assert.equal(isTradeDbFirstLawdCd('11680'), true);
   const src = readFileSync(path.join(process.cwd(), 'src/lib/region/enablement.ts'), 'utf8');
   assert.match(src, /'26': BUSAN_ENABLED/);
   assert.ok(!/^\s*'11'\s*:/m.test(src), '서울이 enablement에 활성화돼 있다 — 이번 STEP 범위 밖');

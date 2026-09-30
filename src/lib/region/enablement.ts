@@ -147,9 +147,9 @@ export const GYEONGGI_BETA_LAWDCDS = [
 ] as const;
 
 /** 경기 beta 스위치. **false = 경기 전 축 닫힘(현재).** */
-export const GYEONGGI_BETA_ENABLED = false;
+export const GYEONGGI_BETA_ENABLED = true;
 
-/** 경기 beta에서 여는 축(제안). 앱·검색·지도·상세만 — 리포트/통계/공급/색인/사이트맵은 닫힘, cronSync는 별도 결정. */
+/** 경기 beta에서 여는 축. 앱·검색·지도·상세 + DB-first 읽기(cronSync) — 리포트/통계/공급/색인/사이트맵은 닫힘. */
 export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
   app: true,
   search: true,
@@ -160,23 +160,163 @@ export const GYEONGGI_BETA_ENABLEMENT: RegionEnablement = {
   supply: false,
   sitemap: false,
   seoIndex: false,
-  cronSync: false,
+  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 서울25와 같은 방식: 열리면 적재된 DB를 읽고(DB-first), live MOLIT는
+  // api-molit 단일 관문(isDbOnlyLawdCd)에서 닫힌다(전월세 등 미적재 유형은 "준비 중"). 이 프로필은 경기 8구가
+  // 열린 빌드(Preview 전용 스위치 또는 Production 스위치)에서만 쓰이므로 스위치가 꺼진 Production 동작 변화 0.
+  // Production 공개 전 조건: 경기 매매 cron 자연 실행 검증(GYEONGGI_CRON_RUNTIME) — 별도 승인 단계.
+  cronSync: true,
 };
+
+// ── GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 경기 8구 **Preview 전용** 스위치(기본 닫힘) ─────────────────────
+//
+// (예전 GYEONGGI_8_PUBLIC_BETA_PREVIEW_V1 b52c6c8를 현재 main 구조로 다시 만든 것.) Production 스위치
+// (GYEONGGI_BETA_ENABLED)는 false 그대로 두고, Preview 빌드에서만 위 8구·위 축을 연다. 두 조건이 **모두** 참일 때만:
+//   · NEXT_PUBLIC_VERCEL_ENV === 'preview'                (Vercel이 빌드 시 넣는 시스템 값 — Production 빌드는 'production')
+//   · NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW === 'true'      (Preview 환경에만 넣는 명시 플래그)
+// 둘 다 빌드 시 리터럴로 인라인된다(클라이언트 선택기와 서버 라우트가 같은 값을 본다). 값이 없거나 다르면 닫힘 —
+// Production 환경에 플래그를 잘못 넣어도 VERCEL_ENV가 'production'이라 열리지 않는다. 로컬·테스트도 닫힘.
+// 여는 범위는 Production 스위치를 켤 때와 **완전히 같다**(같은 목록·같은 축): 41135·나머지 경기·"경기도 전체"는 닫힘.
+
+/** Preview 전용 스위치 판정(순수). 두 값이 정확히 'preview'·'true'일 때만 true — 그 밖(없음·공백·대소문자 차이)은 전부 false. */
+export function resolveGyeonggi8PreviewFlag(vercelEnv: string | undefined, previewFlag: string | undefined): boolean {
+  return vercelEnv === 'preview' && previewFlag === 'true';
+}
+
+/** 이 빌드에서 경기 8구 Preview 공개가 켜졌는가. Production·로컬·테스트 기본값은 false. */
+export const GYEONGGI_8_BETA_PREVIEW_ENABLED = resolveGyeonggi8PreviewFlag(
+  process.env.NEXT_PUBLIC_VERCEL_ENV,
+  process.env.NEXT_PUBLIC_GYEONGGI_8_BETA_PREVIEW
+);
+
+/** 경기 8구가 열리는가(순수): Production 스위치 또는 Preview 전용 스위치 — 어느 쪽이든 여는 목록·축은 같다. */
+export function resolveGyeonggi8Open(productionEnabled: boolean, previewEnabled: boolean): boolean {
+  return productionEnabled || previewEnabled;
+}
+
+/** 이 빌드에서 경기 8구가 열렸는가. 현재 Production = false(스위치 꺼짐 · Preview env 없음). */
+export const GYEONGGI_8_OPEN = resolveGyeonggi8Open(GYEONGGI_BETA_ENABLED, GYEONGGI_8_BETA_PREVIEW_ENABLED);
+
+// ── SEOUL_25_PUBLIC_BETA_PREP_V1 — 서울 나머지 17구(**Preview 전용, 기본 닫힘**) ─────────────────────
+//
+// 서울 25구 전체 beta를 위한 준비. 17구의 Production 전체 이력 적재는 2026-09-29 완료·검증됐지만(1,180,587건, drift 0),
+// Production 공개는 별도 승인 단계(스위치·cronSync·cron 확장)이므로 이 파일에서 Production은 이 목록을 **절대 열지 않는다**. 열리는 경로는 Preview 빌드 하나뿐이고, 두 조건이 **모두** 참일 때만이다:
+//   · NEXT_PUBLIC_VERCEL_ENV === 'preview'           (Vercel이 빌드 시 넣는 시스템 값 — Production 빌드는 'production')
+//   · NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW === 'true'   (Preview 환경에만 넣는 명시 플래그)
+// 둘 다 빌드 시 **리터럴로 인라인**된다(클라이언트 선택기와 서버 라우트가 같은 값을 본다). 값이 없거나 다르면 닫힘.
+// Production 환경에 플래그를 잘못 넣어도 VERCEL_ENV가 'production'이라 열리지 않는다.
+//
+// 축은 앱·검색·지도·상세만. report·stats·supply·sitemap·seoIndex는 닫힘.
+// SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview에서는 cronSync(= 상세·지도 DB-first **읽기** 스위치)를 켜서 적재된
+// 전체 이력(200507–202609, 1,180,587건)을 read-only 연결(db-url-policy.ts)로 읽는다. 쓰기·cron은 없다(정기 수집
+// 범위는 sale-sync-scope.ts가 따로 정한다 — 여기서 바뀌지 않음). 그리고 Preview의 17구는 **live MOLIT를 부르지 않는다**
+// (`isDbOnlyLawdCd` — api-molit 단일 관문에서 닫힘). Production 공개는 아래 SEOUL_17_PUBLIC_ENABLED 한 줄이 정한다.
+
+/** 서울 나머지 17구 — Production 적재·사후 검증 후 공개 예정. 현재 Production 공개 0. */
+export const SEOUL_17_BETA_LAWDCDS = [
+  '11200', // 성동구
+  '11260', // 중랑구
+  '11290', // 성북구
+  '11305', // 강북구
+  '11320', // 도봉구
+  '11350', // 노원구
+  '11380', // 은평구
+  '11470', // 양천구
+  '11500', // 강서구
+  '11530', // 구로구
+  '11560', // 영등포구
+  '11590', // 동작구
+  '11620', // 관악구
+  '11650', // 서초구
+  '11680', // 강남구
+  '11710', // 송파구
+  '11740', // 강동구
+] as const;
+
+/** Preview 전용 스위치 판정(순수). 두 값이 정확히 'preview'·'true'일 때만 true — 그 밖(없음·공백·대소문자 차이)은 전부 false. */
+export function resolveSeoul25PreviewFlag(vercelEnv: string | undefined, previewFlag: string | undefined): boolean {
+  return vercelEnv === 'preview' && previewFlag === 'true';
+}
+
+/** 이 빌드에서 서울 17구 Preview 공개가 켜졌는가. Production·로컬·테스트 기본값은 false. */
+export const SEOUL_25_BETA_PREVIEW_ENABLED = resolveSeoul25PreviewFlag(
+  process.env.NEXT_PUBLIC_VERCEL_ENV,
+  process.env.NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW
+);
+
+// ── SEOUL25_GO_LIVE_PREP_V1 — Production 공개 스위치(단일 지점) ───────────────────────────────────────
+//
+// GO-LIVE: 아래 SEOUL_17_PUBLIC_ENABLED를 true로 바꾸는 **한 줄**이 17구 Production 공개의 전부다.
+//   · 여는 축은 Preview에서 검증한 SEOUL_17_ENABLEMENT 그대로(앱·검색·지도·상세 + DB 읽기). report·stats·supply·
+//     sitemap·seoIndex는 닫힌 채다 — 그 축들은 별도 제품 결정 없이 이 스위치로 열리지 않는다.
+//   · 켜지면 17구는 DB 전용이다: live MOLIT는 api-molit 단일 관문(isDbOnlyLawdCd)에서 네트워크 없이 실패로 닫힌다.
+//   · 정기 수집(cron, sale-sync-scope.ts seoul-b/seoul-c)과 적재 데이터는 이 스위치와 무관하다.
+// ROLLBACK: 같은 줄을 false로 되돌려 배포 → 17구는 전 축 닫힘(데이터·cron·서울 8구·부산·경기 불변, DB 롤백 없음).
+// 문서: docs/development/SEOUL_25_GO_LIVE_CHECKLIST_V1.md
+
+/** 서울 17구 Production 공개 스위치. **false = 17구 Production 닫힘(현재).** 사용자 최종 승인 뒤에만 true. */
+export const SEOUL_17_PUBLIC_ENABLED = true;
+
+/** 17구가 이 빌드에서 열리는가(순수): Production 스위치 또는 Preview 전용 스위치. */
+export function resolveSeoul17Open(publicEnabled: boolean, previewEnabled: boolean): boolean {
+  return publicEnabled || previewEnabled;
+}
+
+/** 이 빌드에서 17구가 열렸는가. 현재 Production = false(스위치 꺼짐 · Preview env 없음). */
+export const SEOUL_17_OPEN = resolveSeoul17Open(SEOUL_17_PUBLIC_ENABLED, SEOUL_25_BETA_PREVIEW_ENABLED);
+
+/** 17구에서 여는 축(Preview와 Production 공개가 같은 프로필). 앱·검색·지도·상세 + DB-first 읽기(cronSync). supply는 닫힘. */
+export const SEOUL_17_ENABLEMENT: RegionEnablement = {
+  app: true,
+  search: true,
+  map: true,
+  detail: true,
+  report: false,
+  stats: false,
+  // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — 공급(청약홈)도 닫힘. 이 Preview 프로필은 앱·검색·지도·상세만 여는 계약이다
+  // (경기 beta 프로필과 같은 정책). 17구 공급 공개는 Production 공개 단계(서울 8구 프로필로 옮길 때)에서 따로 정한다.
+  supply: false,
+  sitemap: false,
+  seoIndex: false,
+  // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview 전용 DB-first 읽기(적재 완료 데이터). 이 프로필은 Preview 빌드에서만 쓰인다.
+  cronSync: true,
+};
+
+/** DB 전용 판정(순수): 17구가 열렸고(Production 공개 또는 Preview) 서울 17구면 live MOLIT 없이 DB만 읽는다. */
+export function resolveDbOnly(seoul17Open: boolean, lawdCd: string | null | undefined): boolean {
+  return seoul17Open && !!lawdCd && (SEOUL_17_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
+}
+
+/** DB 전용 판정(순수) — 경기 8구: 경기 8구가 열렸고(Production 또는 Preview) 그 8구면 live MOLIT 없이 DB만 읽는다. */
+export function resolveGyeonggiDbOnly(gyeonggi8Open: boolean, lawdCd: string | null | undefined): boolean {
+  return gyeonggi8Open && !!lawdCd && (GYEONGGI_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
+}
+
+/**
+ * 이 빌드에서 이 구가 "DB만 읽고 live MOLIT는 부르지 않는" 구인가: 서울 17구(열렸을 때) · 경기 8구(열렸을 때).
+ * 닫힌 구에서는 항상 false(서울 8구·부산의 기존 live 경로 불변).
+ */
+export function isDbOnlyLawdCd(lawdCd: string | null | undefined): boolean {
+  return resolveDbOnly(SEOUL_17_OPEN, lawdCd) || resolveGyeonggiDbOnly(GYEONGGI_8_OPEN, lawdCd);
+}
 
 /**
  * 시군구 단위 enablement 맵을 만든다(순수). 런타임은 실제 스위치 값으로 한 번 만들고,
  * 테스트·시뮬레이션은 스위치를 바꿔 "켜면 어떻게 되는가"를 본다(Production 설정은 바꾸지 않는다).
+ * `seoul17Open`은 서울 beta가 켜져 있을 때만 의미가 있다(서울 beta가 꺼지면 25구 전부 닫힘).
  */
-export function buildLawdCdEnablementMap(flags: { seoulBeta: boolean; gyeonggiBeta: boolean }): Readonly<Record<string, RegionEnablement>> {
+export function buildLawdCdEnablementMap(flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Open?: boolean }): Readonly<Record<string, RegionEnablement>> {
   return Object.fromEntries([
     ...(flags.seoulBeta ? SEOUL_BETA_LAWDCDS.map((code) => [code, SEOUL_BETA_ENABLEMENT] as const) : []),
+    ...(flags.seoulBeta && flags.seoul17Open === true ? SEOUL_17_BETA_LAWDCDS.map((code) => [code, SEOUL_17_ENABLEMENT] as const) : []),
     ...(flags.gyeonggiBeta ? GYEONGGI_BETA_LAWDCDS.map((code) => [code, GYEONGGI_BETA_ENABLEMENT] as const) : []),
   ]);
 }
 
 const ENABLEMENT_BY_LAWDCD: Readonly<Record<string, RegionEnablement>> = buildLawdCdEnablementMap({
   seoulBeta: SEOUL_BETA_ENABLED,
-  gyeonggiBeta: GYEONGGI_BETA_ENABLED,
+  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — Production 스위치 **또는** Preview 전용 스위치(Production 빌드에서는 항상 false).
+  gyeonggiBeta: GYEONGGI_8_OPEN,
+  seoul17Open: SEOUL_17_OPEN,
 });
 
 /**
@@ -185,7 +325,7 @@ const ENABLEMENT_BY_LAWDCD: Readonly<Record<string, RegionEnablement>> = buildLa
  */
 export function simulateRegionEnablement(
   lawdCd: string | null | undefined,
-  flags: { seoulBeta: boolean; gyeonggiBeta: boolean }
+  flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Open?: boolean }
 ): RegionEnablement {
   const node = getRegionByLawdCd(lawdCd);
   if (!node) return NOT_ENABLED;
@@ -302,6 +442,25 @@ export function isSidoPartiallyPublic(
   if (nodes.length === 0) return false;
   const open = nodes.filter((n) => getRegionEnablement(n.lawdCd)[feature]).length;
   return open > 0 && open < nodes.length;
+}
+
+/**
+ * SEOUL_25_PUBLIC_BETA_PREP_V1 — "OO 전체"(시군구를 특정하지 않는 시도 단위 질의)를 **만들어도 되는가**.
+ *
+ * 예전에는 선택기가 `!isSidoPartiallyPublic`만 봤다. 그 판정은 "일부만 열렸다"는 **우연한 상태**에 기대므로,
+ * 서울 25구가 전부 열리는 순간 false가 되어 "서울특별시 전체"가 되살아난다 — 그런데 서울은 시도 층이 닫혀 있어
+ * 시도 단위 질의(통계·피드·DB-first 전부 `getSidoEnablement('11')` 기반)가 **지원되지 않는다**.
+ * 그래서 명시적으로 묻는다: 이 시도가 **시도 층에서 통째로 출시**됐고(= 시도 단위 질의 경로가 있다),
+ * 공개 구가 있고, 일부만 열린 상태도 아닌가. 지금은 부산만 true다. 서울은 구가 몇 개 열려도 false.
+ * 서울 전체 질의 경로를 따로 구현하기 전까지 이 값은 바뀌지 않는다.
+ */
+export function isSidoWholeQuerySupported(
+  sidoCode: string | null | undefined,
+  feature: keyof RegionEnablement = 'app'
+): boolean {
+  if (!sidoCode) return false;
+  if (!getSidoEnablement(sidoCode)[feature]) return false;
+  return !isSidoPubliclyHidden(sidoCode, feature) && !isSidoPartiallyPublic(sidoCode, feature);
 }
 
 export function getSidoEnablement(sidoCode: string | null | undefined): RegionEnablement {

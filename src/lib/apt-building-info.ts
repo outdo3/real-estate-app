@@ -225,6 +225,18 @@ export async function fetchBuildingRegistryInfo(
 }
 
 // 용적률/건폐율을 "245%"처럼 불필요한 소수점 없이 깔끔하게 표기한다(소수점이 있는 경우만 1자리).
+/**
+ * SEOUL25_FINAL_QA_V1 — 사용승인일(“YYYY년”) 표시값의 최소 타당성 검사.
+ * 이미 사용 중인 단지의 사용승인일이 미래일 수는 없다(예: 은마 11680-218 총괄표제부가 2034년을 돌려줌 — 재건축 계획값으로 보임).
+ * 원천을 고치지 않고, 틀린 값을 준공연도로 보이지 않게만 한다 — 미래·1900년 이전·형식 불명이면 null(표시 생략).
+ */
+export function plausibleApprovalYearLabel(value: string | null | undefined, now: Date = new Date()): string | null {
+  if (!value) return null;
+  const year = parseInt(value, 10);
+  const currentYearKst = new Date(now.getTime() + 9 * 3600 * 1000).getUTCFullYear();
+  return Number.isFinite(year) && year >= 1900 && year <= currentYearKst ? value : null;
+}
+
 export const formatRatio = (value: number): string => {
   const rounded = Math.round(value * 10) / 10;
   return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}%`;

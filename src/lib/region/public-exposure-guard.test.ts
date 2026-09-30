@@ -8,8 +8,10 @@ import {
   isPublicRegionAllowed,
   isSidoPubliclyHidden,
   isSidoPartiallyPublic,
+  isSidoWholeQuerySupported,
   isTradeDbFirstLawdCd,
   publicAllowedLawdCds,
+  GYEONGGI_BETA_LAWDCDS,
   SEOUL_BETA_LAWDCDS,
 } from './enablement';
 import { REGION_NODES } from './registry';
@@ -36,6 +38,9 @@ const BETA8 = SEOUL_BETA_LAWDCDS as readonly string[];
 const SEOUL_ALL = REGION_NODES.filter((n) => n.sidoCode === '11').map((n) => n.lawdCd);
 const SEOUL_BLOCKED = SEOUL_ALL.filter((c) => !BETA8.includes(c));
 const GYEONGGI_ALL = REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd);
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 경기 8구 공개(app·search·map·detail·DB 읽기). 41135·나머지 경기는 닫힘.
+const GG8 = GYEONGGI_BETA_LAWDCDS as readonly string[];
+const GYEONGGI_CLOSED = GYEONGGI_ALL.filter((c) => !GG8.includes(c));
 const GANGNAM = '11680';
 const APP_SAFE = ['app', 'search', 'map', 'detail'] as const;
 
@@ -60,19 +65,23 @@ test('2·3. 서울 승인 8구 — 검색·지도·상세는 열림, 리포트·
   }
 });
 
-test('4. 공개 차단 서울(강남 + 나머지 16구) — 모든 공개 축 닫힘', () => {
+// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 서울 17구 공개: 앱·검색·지도·상세만 열리고 나머지 공개 축은 닫힌 채, 상세는 NOINDEX.
+test('4. 서울 17구(강남 포함, 2026-09-30 공개) — app·search·map·detail만 열림, report·stats·supply·sitemap·seoIndex 닫힘', () => {
   assert.equal(SEOUL_BLOCKED.length, 17);
   assert.ok(SEOUL_BLOCKED.includes(GANGNAM));
   for (const c of SEOUL_BLOCKED) {
-    for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
-    assert.equal(decidePublicSeo([c], 'detail'), 'BLOCKED');
+    for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), (APP_SAFE as readonly string[]).includes(axis), `${c} ${axis}`);
+    assert.equal(decidePublicSeo([c], 'detail'), 'NOINDEX');
+    assert.equal(decidePublicSeo([c], 'report'), 'BLOCKED');
   }
 });
 
 test('5·14·16. 검색 — allowlist(IN)만, alias fallback도 같은 게이트, 다른 지역으로 대체하지 않는다', () => {
   const allowed = new Set(publicAllowedLawdCds('search'));
-  assert.equal(allowed.size, 24);
-  for (const c of GYEONGGI_ALL) assert.ok(!allowed.has(c), `경기 ${c}가 검색 allowlist에 있다`);
+  assert.equal(allowed.size, 49); // 부산 16 + 서울 25 + 경기 8(2026-09-30 공개)
+  for (const c of GG8) assert.ok(allowed.has(c), `경기 8구 ${c}가 검색 allowlist에 없다`);
+  for (const c of GYEONGGI_CLOSED) assert.ok(!allowed.has(c), `경기 ${c}가 검색 allowlist에 있다`);
+  assert.ok(!allowed.has('41135'));
   const search = code('src/app/api/search/route.ts');
   assert.ok(/const regionScope = \{ sggCd: \{ in: \[\.\.\.publicAllowedLawdCds\('search'\)\] \} \};/.test(search));
   assert.equal((search.match(/\.\.\.regionScope,/g) || []).length, 2, '지역·단지 두 쿼리 모두');
@@ -91,7 +100,9 @@ test('6·15. 지도/transactions — map 축이 닫힌 lawdCd는 MOLIT·master �
   assert.ok(gate < src.indexOf('fetchMolitData({ lawdCd'), 'MOLIT 호출보다 뒤');
   assert.ok(gate < src.indexOf('getMasterCoords(lawdCd)'), 'master 좌표 조회보다 뒤');
   assert.ok(/regionUnsupported: true/.test(src.slice(gate, gate + 400)));
-  for (const c of [...GYEONGGI_ALL, ...SEOUL_BLOCKED, '27110', '99999']) assert.equal(isPublicRegionAllowed(c, 'map'), false, c);
+  for (const c of [...GYEONGGI_CLOSED, '41135', '27110', '99999']) assert.equal(isPublicRegionAllowed(c, 'map'), false, c);
+  for (const c of GG8) assert.equal(isPublicRegionAllowed(c, 'map'), true, c); // 2026-09-30 공개
+  for (const c of SEOUL_BLOCKED) assert.equal(isPublicRegionAllowed(c, 'map'), true, c); // 2026-09-30 공개
   // 차단 응답은 "검증된 0건"으로 읽히지 않는다.
   const s = resolveTransactionsReadState(true, { transactions: [], regionUnsupported: true, partial: false });
   assert.equal(s.regionUnsupported, true);
@@ -109,7 +120,8 @@ test('7. 상세 — 본 API·정보·교육·점수·검증 전부 detail 축으
   assert.ok(/isPublicRegionAllowed\(lawdCd, 'detail'\)/.test(code('src/app/api/apt/[name]/education/route.ts')));
   assert.ok(/isPublicRegionAllowed\(resolvedAptSeq\.slice\(0, 5\), 'detail'\)/.test(code('src/app/api/apt/[name]/score/route.ts')));
   assert.ok(/isPublicRegionAllowed\(aptSeq\.slice\(0, 5\), 'detail'\)/.test(code('src/app/api/apt/[name]/verify/route.ts')));
-  for (const c of [...GYEONGGI_ALL, '27110']) assert.equal(decidePublicSeo([c], 'detail'), 'BLOCKED', c);
+  for (const c of [...GYEONGGI_CLOSED, '41135', '27110']) assert.equal(decidePublicSeo([c], 'detail'), 'BLOCKED', c);
+  for (const c of GG8) assert.equal(decidePublicSeo([c], 'detail'), 'NOINDEX', c); // 2026-09-30 공개, 색인은 계속 금지
 });
 
 test('8·9. 리포트·비교 — 단지 리포트 게이트를 비교가 우회하지 못한다', () => {
@@ -127,11 +139,17 @@ test('8·9. 리포트·비교 — 단지 리포트 게이트를 비교가 우회
   assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('41111-41')], 'report'), 'BLOCKED');
 });
 
-test('10. 지역 선택기 — 부산·서울만(서울은 8구, "서울 전체" 없음), 경기·그 밖 시도 없음', () => {
+test('10. 지역 선택기 — 부산·서울(25구, "서울 전체" 없음)·경기(8구만, "경기도 전체" 없음), 그 밖 시도 없음', () => {
   assert.equal(isSidoPubliclyHidden('26'), false);
   assert.equal(isSidoPubliclyHidden('11'), false);
-  assert.equal(isSidoPartiallyPublic('11'), true);
-  for (const sido of ['41', '27', '28', '29', '30', '31', '36', '42', '43', '44', '45', '46', '47', '48', '50', '51', '52', '', null]) {
+  // 2026-09-30 서울 25구 전부 app 공개 → 더는 "일부 공개"가 아니지만, 시도 단위 질의는 여전히 없다("서울특별시 전체" 없음)
+  assert.equal(isSidoPartiallyPublic('11'), false);
+  assert.equal(isSidoWholeQuerySupported('11'), false);
+  // 2026-09-30 경기 8구 공개 → 경기가 선택지에 나오되 일부 공개라 "경기도 전체"는 없다
+  assert.equal(isSidoPubliclyHidden('41'), false);
+  assert.equal(isSidoPartiallyPublic('41'), true);
+  assert.equal(isSidoWholeQuerySupported('41'), false);
+  for (const sido of ['27', '28', '29', '30', '31', '36', '42', '43', '44', '45', '46', '47', '48', '50', '51', '52', '', null]) {
     assert.equal(isSidoPubliclyHidden(sido), true, `시도 ${sido}가 선택지에 나온다`);
   }
   const modal = code('src/components/RegionSelectModal.tsx');
@@ -164,7 +182,9 @@ test('13. 그 밖의 전국·registry 밖 코드는 기본 닫힘(fallback 없�
 test('17. 수집·감사 경로는 공개 정책에 묶이지 않는다(DATA_EXISTS ≠ PUBLIC_ALLOWED)', () => {
   // cronSync(DB-first 소스 선택)는 공개 축과 별개로 그대로다.
   for (const c of BUSAN_LAWDCD_16) assert.equal(isTradeDbFirstLawdCd(c), true);
-  for (const c of GYEONGGI_ALL) assert.equal(isTradeDbFirstLawdCd(c), false, '경기 cronSync는 여전히 닫힘');
+  // 2026-09-30 경기 8구 공개 = DB-first 읽기(cronSync) 열림, 41135·나머지 경기는 닫힘
+  for (const c of GG8) assert.equal(isTradeDbFirstLawdCd(c), true, c);
+  for (const c of [...GYEONGGI_CLOSED, '41135']) assert.equal(isTradeDbFirstLawdCd(c), false, `경기 ${c} cronSync는 닫힘`);
   // 수집 코어·scope·오케스트레이터 적재 경로는 공개 allowlist를 읽지 않는다.
   for (const p of ['src/lib/sync/sale-sync-scope.ts', 'src/lib/sync/sale-sync-core.ts', 'scripts/national-backfill/orchestrator-logic.ts']) {
     assert.ok(!/isPublicRegionAllowed|publicAllowedLawdCds/.test(code(p)), `${p}가 공개 정책에 묶였다`);
@@ -173,26 +193,42 @@ test('17. 수집·감사 경로는 공개 정책에 묶이지 않는다(DATA_EXI
   assert.ok(/export function seoulPublicBlockedLawdCds/.test(code('src/lib/region/enablement.ts')));
 });
 
-test('18·19·20. seed 게이트 — publicExposureGuarded는 enablement에서 계산되어 true, 41135 제외 유지, 경기 enablement 추가 없음', () => {
+// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 공개 뒤 8구는 app·search·map·detail이 열려 있으므로 seed 게이트는 guarded=false를 계산한다.
+// 즉 경기 master seed apply는 이제 PUBLIC_EXPOSURE_NOT_GUARDED로 거부된다(더 보수적인 방향 — master 1,193은 이미 적재됨).
+test('18·19·20. seed 게이트 — publicExposureGuarded는 enablement에서 계산(공개 뒤 8구 × 4축만 열림 → false), 41135 제외 유지', () => {
   const r = computePublicExposureGuarded((c, axis) => isPublicRegionAllowed(c, axis));
-  assert.deepEqual(r, { guarded: true, openAxes: [] });
-  // 누군가 경기 축 하나라도 열면 즉시 false가 된다.
-  const opened = computePublicExposureGuarded((c, axis) => (c === '41111' && axis === 'search') || isPublicRegionAllowed(c, axis));
-  assert.deepEqual(opened, { guarded: false, openAxes: ['41111:search'] });
+  assert.equal(r.guarded, false);
+  assert.deepEqual(r.openAxes, GG8.flatMap((c) => ['app', 'search', 'map', 'detail'].map((a) => `${c}:${a}`)));
+  assert.ok(!r.openAxes.some((x) => x.startsWith('41135:')), '41135 축이 열렸다');
+  // 41135만 보면 여전히 닫혀 있다.
+  const only41135 = computePublicExposureGuarded((c, axis) => isPublicRegionAllowed(c, axis), ['41135']);
+  assert.deepEqual(only41135, { guarded: true, openAxes: [] });
   const gate = evaluateGgApplyGate({
     applyFlag: true, allowProdDbRead: '1', allowProdDbWrite: '1', districts: ['41135'], expectInserts: 1, plannedInserts: 1,
-    expectPlanHash: 'h', planHash: 'h', coordinatesSkipped: false, publicExposureGuarded: r.guarded,
+    expectPlanHash: 'h', planHash: 'h', coordinatesSkipped: false, publicExposureGuarded: only41135.guarded,
     reviewInScope: 0, unresolvedInScope: 0, unexpectedExistingMasters: 0,
   });
   assert.deepEqual(gate.reasons, ['DISTRICT_41135_EXCLUDED']);
+  // 8구 apply는 공개 뒤 노출 게이트에서 거부된다.
+  const gate8 = evaluateGgApplyGate({
+    applyFlag: true, allowProdDbRead: '1', allowProdDbWrite: '1', districts: ['41111'], expectInserts: 1, plannedInserts: 1,
+    expectPlanHash: 'h', planHash: 'h', coordinatesSkipped: false, publicExposureGuarded: r.guarded,
+    reviewInScope: 0, unresolvedInScope: 0, unexpectedExistingMasters: 0,
+  });
+  assert.deepEqual(gate8.reasons, ['PUBLIC_EXPOSURE_NOT_GUARDED']);
   assert.ok(!(GYEONGGI_FIRST_BATCH as readonly string[]).includes('41135'));
   // enablement 소스에 경기 활성화가 없다.
   const en = code('src/lib/region/enablement.ts');
   assert.ok(!/'41'\s*:/.test(en), 'ENABLEMENT_BY_SIDO에 경기가 들어갔다');
-  // GYEONGGI_CRON_AND_PUBLIC_READINESS_AUDIT_V1 — 경기 8구는 beta **후보 목록**으로만 존재하고 스위치는 꺼져 있다.
-  assert.ok(/export const GYEONGGI_BETA_ENABLED = false;/.test(en), '경기 beta 스위치가 켜졌다');
-  assert.ok(/gyeonggiBeta: GYEONGGI_BETA_ENABLED,/.test(en), '런타임 맵이 스위치를 따르지 않는다');
-  for (const c of GYEONGGI_ALL) assert.deepEqual(Object.values(getRegionEnablement(c)).filter(Boolean), []);
+  // GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 경기 8구 스위치 ON(2026-09-30). 공개는 8구 lawdCd 층뿐.
+  assert.ok(/export const GYEONGGI_BETA_ENABLED = true;/.test(en), '경기 beta 스위치 상태가 공개 결정과 다르다');
+  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 런타임 맵은 Production 스위치 또는 Preview 전용 스위치(GYEONGGI_8_OPEN)를 따른다(Production 빌드 = false).
+  assert.ok(/gyeonggiBeta: GYEONGGI_8_OPEN,/.test(en), '런타임 맵이 스위치를 따르지 않는다');
+  assert.ok(/export const GYEONGGI_8_OPEN = resolveGyeonggi8Open\(GYEONGGI_BETA_ENABLED, GYEONGGI_8_BETA_PREVIEW_ENABLED\);/.test(en));
+  for (const c of [...GYEONGGI_CLOSED, '41135']) assert.deepEqual(Object.values(getRegionEnablement(c)).filter(Boolean), [], c);
+  for (const c of GG8) {
+    assert.deepEqual(getRegionEnablement(c), { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true }, c);
+  }
 });
 
 test('모든 공개 소비자가 서울 deny-list에서 벗어났다(stats/supply 포함 — supply 축 allowlist)', () => {

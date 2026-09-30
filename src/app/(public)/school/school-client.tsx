@@ -71,6 +71,11 @@ export default function SchoolInfoPage() {
   // 이제는 0건이다. 0건을 "불러오지 못했습니다"(실패)로 보여주면 안 되므로 상태를 구분한다.
   const hasDistrict = !!region.sigungu && region.sigungu.trim().length > 0;
   const regionLabel = regionName.trim();
+  // GYEONGGI_PUBLIC_BETA_BLOCKER_FIX_PREP_V1 — 시/군/구를 골랐으면 canonical lawdCd도 함께 보낸다.
+  // 서버는 코드가 있으면 그것으로 시/군/구 전체("수원시 장안구")를 정한다(이름을 잘라 "수원시"로 합치지 않는다).
+  const schoolRegionQuery = `region=${encodeURIComponent(regionName)}${
+    hasDistrict && region.lawdCd ? `&lawdCd=${encodeURIComponent(region.lawdCd)}` : ''
+  }`;
 
   // 통계 상태 관리
   const [stats, setStats] = useState<SchoolStats>(EMPTY_STATS);
@@ -93,7 +98,7 @@ export default function SchoolInfoPage() {
     (async () => {
       try {
         const res = await fetch(
-          `/api/school?region=${encodeURIComponent(regionName)}&type=${encodeURIComponent(activeTab)}`,
+          `/api/school?${schoolRegionQuery}&type=${encodeURIComponent(activeTab)}`,
           { signal: controller.signal }
         );
         const json = await res.json();
@@ -112,7 +117,7 @@ export default function SchoolInfoPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [regionName, activeTab]);
+  }, [schoolRegionQuery, activeTab]);
 
   // 지역 전체 통계 불러오기 (지역 변경 시에만 업데이트하여 숫자 널뛰기 방지)
   useEffect(() => {
@@ -123,7 +128,7 @@ export default function SchoolInfoPage() {
 
     (async () => {
       try {
-        const statsRes = await fetch(`/api/school/stats?region=${encodeURIComponent(regionName)}`, {
+        const statsRes = await fetch(`/api/school/stats?${schoolRegionQuery}`, {
           signal: controller.signal,
         });
         const statsJson = await statsRes.json();
@@ -140,7 +145,7 @@ export default function SchoolInfoPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [regionName]);
+  }, [schoolRegionQuery]);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
