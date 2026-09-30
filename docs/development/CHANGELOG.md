@@ -2,6 +2,15 @@
 
 ## 2026-09-30
 
+### E-JIP GYEONGGI8 PREVIEW MAP QA COMPLETION V1 — Kakao 등록 뒤 지도 QA 통과(재배포 없음)
+
+상세: `docs/development/GYEONGGI_8_PREVIEW_FULL_QA_V1.md` §지도 QA 완료
+
+    지도     Kakao SDK 초기화 OK · 8구 마커 1,097(다른 구 aptSeq 0, null/0,0 좌표 0) · 선택 시트·상세보기 → 같은 aptSeq 상세
+    닫힘     41135·41173 마커 0 + 상단 안내 + "지원하지 않는 지역" · null 좌표 19개 마커 0, 딥링크는 시트 없이 안전하게 무시
+    모바일   375/390 가로 넘침 0 · 시트 버튼 48px · 하단 탭과 겹침 0
+    안전     경기 MOLIT 0 · Preview DB 연결 최대 11/15, 대기 0, 연결 오류 0 · Production 변경 0
+
 ### E-JIP GYEONGGI8 PREVIEW DEPLOY + FULL QA V1 — 경기 8구 Preview 배포, 지도는 Kakao 도메인 등록 대기
 
 상세: `docs/development/GYEONGGI_8_PREVIEW_FULL_QA_V1.md`
