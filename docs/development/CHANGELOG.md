@@ -2,6 +2,15 @@
 
 ## 2026-09-30
 
+### E-JIP GYEONGGI8 PRODUCTION PUBLIC ENABLE + FINAL SMOKE V1 — 경기 8구 공개 beta LIVE
+
+상세: `docs/development/GYEONGGI_8_PRODUCTION_GO_LIVE_V1.md`
+
+    공개     GYEONGGI_BETA_ENABLED true(a3f8267) · Production dpl_8UHcVcGiZZhEBCRvQjJFCDDBUswR READY
+    범위     8구 app·search·map·detail·DB 읽기 · live MOLIT 닫힘(전월세 준비 중) · report·stats·supply·SEO·sitemap·41135·나머지 경기 닫힘
+    smoke    선택기·검색 8/8·지도 1,097 마커·마커→상세·상세 8/8·전월세·점수 "데이터 부족"·닫힌 면·모바일 375/390·NEIS 전부 PASS
+    안전     경기 MOLIT 0 · DB 최대 15/60 대기 0 · DB 쓰기 0 · cron 불변 · 롤백 불필요
+
 ### E-JIP GYEONGGI8 PREVIEW MAP QA COMPLETION V1 — Kakao 등록 뒤 지도 QA 통과(재배포 없음)
 
 상세: `docs/development/GYEONGGI_8_PREVIEW_FULL_QA_V1.md` §지도 QA 완료
