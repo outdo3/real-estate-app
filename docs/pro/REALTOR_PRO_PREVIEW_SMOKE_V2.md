@@ -68,6 +68,14 @@ Production 변경 0 · push 0 · 배포 0.
 - 실 RLS 음성 테스트 15/15 PASS(A 자기 것만 · B→A 0 · 문맥 없음 0 · anon/authenticated/service_role 거부 · 정지 중개사 쓰기 거부 · 남의 소유 삽입 거부 · 소유권 이전 거부 · 남의 행 수정/삭제 0 · 감사로그 쓰기 거부 · 정지 상태 자기 승격 0 · 데이터 불변). 전부 한 트랜잭션 안에서 실행 후 ROLLBACK — 남은 행 0, probe 역할 0
 - Production DB 접속·변경 0 · Vercel 배포 0 · MOLIT 호출 0
 
+## Preview 외부 데이터 관문 (REALTOR_PRO_PREVIEW_EXTERNAL_GUARD_V1)
+
+- 조건: `VERCEL_ENV=preview` **그리고** `REALTOR_PRO_ENABLED=true` — Production·로컬·다른 Preview는 꺼짐(테스트 고정)
+- 방식: `src/instrumentation.ts`의 `register()`가 서버 시작 때 전역 fetch를 한 번 감싼다 → 아래 호스트는 네트워크 없이 `PreviewExternalBlockedError`(오류에 URL·서비스키 없음). MOLIT 거래는 `api-molit.ts` 단일 관문에서도 페이지 요청 0으로 실패 플레이스홀더(0건으로 위장하지 않음)
+- 막음: `apis.data.go.kr`(MOLIT·건축물대장·TAGO·준공연도) · `api.odcloud.kr`(청약홈) · `open.neis.go.kr` · `www.schoolinfo.go.kr` · `generativelanguage.googleapis.com`(Gemini) · `api.resend.com`(메일) · `api.indexnow.org`
+- 열어 둠(화면 동작에 필요): Kakao 지도 SDK·로컬 검색, OAuth, 지역코드 프록시, 브라우저 쪽 요청
+- 테스트 `src/lib/preview-external-guard.test.ts` 7/7(조건 진리표 · 호스트 판정 · 네트워크 0 · 설치 1회 · MOLIT 관문 · 설치 지점 · Preview DB가 DATABASE_URL로 떨어지지 않음)
+
 ## 다음 단계 (hosted DB가 생긴 뒤)
 
 1. Pro 브랜치 한정 Preview env: `PREVIEW_DATABASE_URL`(Pro DB) · `NEXTAUTH_SECRET`(Preview 전용) · `REALTOR_PRO_ENABLED=true` · `REALTOR_PRO_PII_KEY`·`_KEY_ID`·`_LOOKUP_PEPPER`(새로 생성, Production 재사용 금지)

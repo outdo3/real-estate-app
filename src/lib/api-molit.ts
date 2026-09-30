@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { dedupMolitInFlight, runMolitGuarded, type MolitAttemptOutcome, type MolitGuardDeps } from './molit-rate-guard';
 import { isDbOnlyLawdCd } from './region/enablement';
+import { isPreviewExternalDataBlocked, PREVIEW_EXTERNAL_BLOCKED_MESSAGE } from './preview-external-guard';
 import { TRADE_PREPARING_MESSAGE } from './trade-read-state';
 
 const API_KEY = process.env.DATA_GO_KR_API_KEY;
@@ -278,6 +279,10 @@ export async function fetchMolitData(params: FetchParams, deps?: MolitFetchDeps)
   // 서울 17구는 적재된 DB만 읽는다. live MOLIT는 이 단일 관문에서
   // 네트워크 없이 **실패로** 닫는다(빈 배열 = "거래 0건"으로 위장하지 않는다). 17구가 닫힌 빌드는 항상 통과(판정 false).
   if (isDbOnlyLawdCd(params.lawdCd)) return molitFailurePlaceholder(params, DB_ONLY_MOLIT_MESSAGE);
+  // REALTOR_PRO_PREVIEW_EXTERNAL_GUARD_V1 — Realtor Pro Preview는 live MOLIT를 부르지 않는다(전역 fetch 관문과 별개로 한 번 더).
+  if (isPreviewExternalDataBlocked(process.env as Record<string, string | undefined>)) {
+    return molitFailurePlaceholder(params, PREVIEW_EXTERNAL_BLOCKED_MESSAGE);
+  }
   // dedup 키는 **셀 단위**(유형:지역:월)다 — 한 셀의 페이지들은 아래에서 순차로 읽으므로
   // 같은 페이지를 두 번 요청하는 일이 없고, 동시에 같은 셀을 원한 호출부들은 여전히
   // 네트워크 시퀀스 하나를 공유한다.
