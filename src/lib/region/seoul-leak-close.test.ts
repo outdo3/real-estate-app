@@ -9,6 +9,7 @@ import {
   seoulPublicBlockedLawdCds,
   isSidoPubliclyHidden,
   isSidoPartiallyPublic,
+  isSidoWholeQuerySupported,
   isSeoulBetaDistrict,
   getRegionEnablement,
   isPublicRegionAllowed,
@@ -42,24 +43,23 @@ test('§1 beta는 켜져 있다', () => {
   assert.equal(SEOUL_BETA_ENABLED, true);
 });
 
-test('§2 leak 3건 — 강남(은마)은 계속 차단, 승인 구(남산타운·광화문스페이스본)만 열린다', () => {
-  for (const c of LEAK_CASES) {
-    const expectBlocked = !(SEOUL_BETA_LAWDCDS as readonly string[]).includes(c.lawdCd);
-    assert.equal(isSeoulPublicBlocked(c.lawdCd), expectBlocked, `${c.q}(${c.lawdCd}) — ${c.note}`);
-  }
-  assert.equal(isSeoulPublicBlocked('11680'), true, '강남이 열렸다');
+// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 서울 25구 전부 app 공개. 예전 leak 3건(강남 은마 등)은 이제 정상 공개 대상이다.
+test('§2 leak 3건 — 2026-09-30 공개 뒤로 강남(은마)도 app 공개 · 차단된 서울 구 없음', () => {
+  for (const c of LEAK_CASES) assert.equal(isSeoulPublicBlocked(c.lawdCd), false, `${c.q}(${c.lawdCd}) — ${c.note}`);
+  assert.equal(isSeoulPublicBlocked('11680'), false, '강남이 닫혀 있다');
 });
 
-test('§3 서울 deny-list는 승인 밖 17구 — 승인 8구만 통과', () => {
+test('§3 서울 deny-list(app)는 비었다 — 25구 전부 통과(2026-09-30)', () => {
   for (const code of SEOUL_BETA_LAWDCDS) assert.equal(isSeoulPublicBlocked(code), false, `${code} 차단됨`);
-  for (const code of SEOUL_NON_BETA) assert.equal(isSeoulPublicBlocked(code), true, `${code} 미차단`);
-  assert.deepEqual([...seoulPublicBlockedLawdCds('app')].sort(), [...SEOUL_NON_BETA].sort());
+  for (const code of SEOUL_NON_BETA) assert.equal(isSeoulPublicBlocked(code), false, `${code} 차단됨`);
+  assert.deepEqual([...seoulPublicBlockedLawdCds('app')], []);
   assert.equal(SEOUL_ALL.length, 25);
 });
 
-test('§4 서울은 선택지에 나타나지만 "서울특별시 전체"는 불가(부분 공개)', () => {
+test('§4 서울은 선택지에 나타나고(25구 전부), "서울특별시 전체"는 여전히 불가(시도 층 닫힘)', () => {
   assert.equal(isSidoPubliclyHidden('11'), false);
-  assert.equal(isSidoPartiallyPublic('11'), true);
+  assert.equal(isSidoPartiallyPublic('11'), false);
+  assert.equal(isSidoWholeQuerySupported('11'), false);
 });
 
 // ── 무회귀: 이 정책은 서울에만 적용된다 ──────────────────────────────────────
@@ -138,8 +138,8 @@ test('§10 /api/search 두 쿼리 모두 지역 필터를 쓴다', () => {
   assert.ok(/sggCd: \{ in:/.test(code), 'canonical 코드 allowlist로 거르지 않는다');
   assert.ok(!/notIn/.test(code) && !/seoulPublicBlockedLawdCds/.test(code), 'deny-list가 남아 있다');
   const allowed = publicAllowedLawdCds('search');
-  assert.equal(allowed.length, 16 + 8);
-  assert.ok(allowed.every((c) => c.startsWith('26') || (SEOUL_BETA_LAWDCDS as readonly string[]).includes(c)));
+  assert.equal(allowed.length, 16 + 25);
+  assert.ok(allowed.every((c) => c.startsWith('26') || c.startsWith('11')));
 });
 
 test('§11 alias fallback이 검색 필터를 우회하지 못한다', () => {

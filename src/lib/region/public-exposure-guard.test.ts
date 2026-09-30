@@ -8,6 +8,7 @@ import {
   isPublicRegionAllowed,
   isSidoPubliclyHidden,
   isSidoPartiallyPublic,
+  isSidoWholeQuerySupported,
   isTradeDbFirstLawdCd,
   publicAllowedLawdCds,
   SEOUL_BETA_LAWDCDS,
@@ -60,18 +61,20 @@ test('2·3. 서울 승인 8구 — 검색·지도·상세는 열림, 리포트·
   }
 });
 
-test('4. 공개 차단 서울(강남 + 나머지 16구) — 모든 공개 축 닫힘', () => {
+// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 서울 17구 공개: 앱·검색·지도·상세만 열리고 나머지 공개 축은 닫힌 채, 상세는 NOINDEX.
+test('4. 서울 17구(강남 포함, 2026-09-30 공개) — app·search·map·detail만 열림, report·stats·supply·sitemap·seoIndex 닫힘', () => {
   assert.equal(SEOUL_BLOCKED.length, 17);
   assert.ok(SEOUL_BLOCKED.includes(GANGNAM));
   for (const c of SEOUL_BLOCKED) {
-    for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
-    assert.equal(decidePublicSeo([c], 'detail'), 'BLOCKED');
+    for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), (APP_SAFE as readonly string[]).includes(axis), `${c} ${axis}`);
+    assert.equal(decidePublicSeo([c], 'detail'), 'NOINDEX');
+    assert.equal(decidePublicSeo([c], 'report'), 'BLOCKED');
   }
 });
 
 test('5·14·16. 검색 — allowlist(IN)만, alias fallback도 같은 게이트, 다른 지역으로 대체하지 않는다', () => {
   const allowed = new Set(publicAllowedLawdCds('search'));
-  assert.equal(allowed.size, 24);
+  assert.equal(allowed.size, 41); // 부산 16 + 서울 25(2026-09-30 공개)
   for (const c of GYEONGGI_ALL) assert.ok(!allowed.has(c), `경기 ${c}가 검색 allowlist에 있다`);
   const search = code('src/app/api/search/route.ts');
   assert.ok(/const regionScope = \{ sggCd: \{ in: \[\.\.\.publicAllowedLawdCds\('search'\)\] \} \};/.test(search));
@@ -91,7 +94,8 @@ test('6·15. 지도/transactions — map 축이 닫힌 lawdCd는 MOLIT·master �
   assert.ok(gate < src.indexOf('fetchMolitData({ lawdCd'), 'MOLIT 호출보다 뒤');
   assert.ok(gate < src.indexOf('getMasterCoords(lawdCd)'), 'master 좌표 조회보다 뒤');
   assert.ok(/regionUnsupported: true/.test(src.slice(gate, gate + 400)));
-  for (const c of [...GYEONGGI_ALL, ...SEOUL_BLOCKED, '27110', '99999']) assert.equal(isPublicRegionAllowed(c, 'map'), false, c);
+  for (const c of [...GYEONGGI_ALL, '27110', '99999']) assert.equal(isPublicRegionAllowed(c, 'map'), false, c);
+  for (const c of SEOUL_BLOCKED) assert.equal(isPublicRegionAllowed(c, 'map'), true, c); // 2026-09-30 공개
   // 차단 응답은 "검증된 0건"으로 읽히지 않는다.
   const s = resolveTransactionsReadState(true, { transactions: [], regionUnsupported: true, partial: false });
   assert.equal(s.regionUnsupported, true);
@@ -127,10 +131,12 @@ test('8·9. 리포트·비교 — 단지 리포트 게이트를 비교가 우회
   assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('41111-41')], 'report'), 'BLOCKED');
 });
 
-test('10. 지역 선택기 — 부산·서울만(서울은 8구, "서울 전체" 없음), 경기·그 밖 시도 없음', () => {
+test('10. 지역 선택기 — 부산·서울만(서울은 25구, "서울 전체" 없음), 경기·그 밖 시도 없음', () => {
   assert.equal(isSidoPubliclyHidden('26'), false);
   assert.equal(isSidoPubliclyHidden('11'), false);
-  assert.equal(isSidoPartiallyPublic('11'), true);
+  // 2026-09-30 서울 25구 전부 app 공개 → 더는 "일부 공개"가 아니지만, 시도 단위 질의는 여전히 없다("서울특별시 전체" 없음)
+  assert.equal(isSidoPartiallyPublic('11'), false);
+  assert.equal(isSidoWholeQuerySupported('11'), false);
   for (const sido of ['41', '27', '28', '29', '30', '31', '36', '42', '43', '44', '45', '46', '47', '48', '50', '51', '52', '', null]) {
     assert.equal(isSidoPubliclyHidden(sido), true, `시도 ${sido}가 선택지에 나온다`);
   }

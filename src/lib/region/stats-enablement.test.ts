@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   isTradeDbFirstSido, isTradeDbFirstLawdCd,
-  isStatsEnabledSido, getStatsEnabledSidoCodes, getTradeDbFirstSidoCodes,
+  isStatsEnabledSido, isStatsEnabledLawdCd, getStatsEnabledSidoCodes, getTradeDbFirstSidoCodes,
   getSidoEnablement,
 } from './enablement';
 import { FEED_DB_SIDO_CODE, isFeedDbBackedSido } from '../stats/feed-db-source';
@@ -53,13 +53,16 @@ test('3 · 대표 구(서구·해운대구·연제구)도 동일', () => {
 
 // ── 4~8. 서울/경기/미지 지역은 DB-first가 아니다(= live 경로 유지) ─────────
 
-test('4 · 서울 강남구는 DB-first가 아니다 — 부산 DB로 답하지 않는다', () => {
-  assert.equal(isTradeDbFirstLawdCd('11680'), false);
+// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 서울 17구 공개로 강남·송파는 자기 구 DB로 읽는다(DB-first). 통계는 여전히 닫힘.
+test('4 · 서울 강남구는 자기 구 DB-first(2026-09-30) — 통계는 닫힘, 서울 시도 층은 DB-first 아님', () => {
+  assert.equal(isTradeDbFirstLawdCd('11680'), true);
+  assert.equal(isStatsEnabledLawdCd('11680'), false);
   assert.equal(isTradeDbFirstSido('11'), false);
 });
 
 test('5 · 서울 송파구도 동일', () => {
-  assert.equal(isTradeDbFirstLawdCd('11710'), false);
+  assert.equal(isTradeDbFirstLawdCd('11710'), true);
+  assert.equal(isStatsEnabledLawdCd('11710'), false);
 });
 
 test('6 · 경기 성남시 분당구는 DB-first가 아니다', () => {

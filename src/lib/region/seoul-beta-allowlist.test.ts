@@ -66,10 +66,11 @@ test('§4 서울 나머지 17구는 allowlist 밖이다', () => {
 
 // ── 런타임 상태: SEOUL_MOBILE_BETA_LAUNCH_V1 이후 켜져 있다 ─────────────────────
 
-test('§5 마스터 스위치가 켜져 있다 — 승인 8구는 app·cronSync만, 나머지 17구는 전 축 닫힘', () => {
+test('§5 마스터 스위치가 켜져 있다 — 승인 8구는 기존 프로필, 나머지 17구는 2026-09-30 공개 프로필(앱·검색·지도·상세·DB 읽기)', () => {
   assert.equal(SEOUL_BETA_ENABLED, true, 'beta 스위치가 꺼져 있다');
   const betaAxes = { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: true, sitemap: false, seoIndex: false, cronSync: true };
-  const allFalse = { app: false, search: false, map: false, detail: false, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: false };
+  // SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 17구: report·stats·supply·sitemap·seoIndex는 닫힌 채
+  const s17Axes = { app: true, search: true, map: true, detail: true, report: false, stats: false, supply: false, sitemap: false, seoIndex: false, cronSync: true };
   for (const code of SEOUL_BETA_LAWDCDS) {
     assert.deepEqual(getRegionEnablement(code), betaAxes, `${code} 축 구성이 다르다`);
     assert.equal(isBetaAllowlistedLawdCd(code), true, `${code}가 allowlist에 적중하지 않는다`);
@@ -77,10 +78,10 @@ test('§5 마스터 스위치가 켜져 있다 — 승인 8구는 app·cronSync�
     assert.equal(isTradeDbFirstLawdCd(code), true, `${code} DB-first가 아니다`);
   }
   for (const code of SEOUL_NON_BETA) {
-    assert.deepEqual(getRegionEnablement(code), allFalse, `${code}가 열려 있다`);
-    assert.equal(isBetaAllowlistedLawdCd(code), false, `${code}가 allowlist에 적중한다`);
+    assert.deepEqual(getRegionEnablement(code), s17Axes, `${code} 축 구성이 다르다`);
+    assert.equal(isBetaAllowlistedLawdCd(code), true, `${code}가 enablement 맵에 없다`); // 2026-09-30 공개로 맵에 들어감
     assert.equal(isStatsEnabledLawdCd(code), false);
-    assert.equal(isTradeDbFirstLawdCd(code), false);
+    assert.equal(isTradeDbFirstLawdCd(code), true);
   }
 });
 
@@ -104,12 +105,12 @@ test('§7 부산 16구는 이 변경의 영향을 받지 않는다(무회귀)', 
   assert.deepEqual(getTradeDbFirstSidoCodes(), ['26']);
 });
 
-test('§8 축별 열린 지역 — app·cronSync는 부산 16 + 서울 8, 나머지 축은 부산 16뿐', () => {
-  const beta8 = [...SEOUL_BETA_LAWDCDS].sort();
+test('§8 축별 열린 지역 — app·cronSync는 부산 16 + 서울 25(2026-09-30), 나머지 축은 부산 16뿐', () => {
+  const seoul25 = REGION_NODES.filter((n) => n.sidoCode === '11' && n.isMolitLeaf).map((n) => n.lawdCd).sort();
   for (const axis of ['app', 'cronSync'] as const) {
     const open = getEnabledRegions(axis, REGION_NODES);
-    assert.equal(open.length, 24, `${axis} 축이 24개가 아니다`);
-    assert.deepEqual(open.filter((n) => n.sidoCode === '11').map((n) => n.lawdCd).sort(), beta8, `${axis} 축의 서울이 승인 8구가 아니다`);
+    assert.equal(open.length, 41, `${axis} 축이 41개가 아니다`);
+    assert.deepEqual(open.filter((n) => n.sidoCode === '11').map((n) => n.lawdCd).sort(), seoul25, `${axis} 축의 서울이 25구가 아니다`);
     assert.equal(open.filter((n) => n.sidoCode === '26').length, 16);
   }
   for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) {
@@ -117,7 +118,7 @@ test('§8 축별 열린 지역 — app·cronSync는 부산 16 + 서울 8, 나머
     assert.equal(open.length, 16, `${axis} 축이 16개가 아니다`);
     assert.ok(open.every((n) => n.sidoCode === '26'), `${axis} 축에 비부산이 있다`);
   }
-  assert.equal(getMolitLeafRegions().filter((n) => getRegionEnablement(n.lawdCd).cronSync).length, 24);
+  assert.equal(getMolitLeafRegions().filter((n) => getRegionEnablement(n.lawdCd).cronSync).length, 41);
 });
 
 // ── 소스 수준 가드 ───────────────────────────────────────────────────────────

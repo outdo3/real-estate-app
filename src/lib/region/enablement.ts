@@ -221,7 +221,7 @@ export const SEOUL_25_BETA_PREVIEW_ENABLED = resolveSeoul25PreviewFlag(
 // 문서: docs/development/SEOUL_25_GO_LIVE_CHECKLIST_V1.md
 
 /** 서울 17구 Production 공개 스위치. **false = 17구 Production 닫힘(현재).** 사용자 최종 승인 뒤에만 true. */
-export const SEOUL_17_PUBLIC_ENABLED = false;
+export const SEOUL_17_PUBLIC_ENABLED = true;
 
 /** 17구가 이 빌드에서 열리는가(순수): Production 스위치 또는 Preview 전용 스위치. */
 export function resolveSeoul17Open(publicEnabled: boolean, previewEnabled: boolean): boolean {

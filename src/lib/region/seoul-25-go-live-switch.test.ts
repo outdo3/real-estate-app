@@ -24,7 +24,7 @@ import { BUSAN_LAWDCD_16 } from '../rent-verified-range';
 import { decideSupplyRegion, supplyCheckFrom } from '../stats/supply-region-gate';
 
 
-// SEOUL25_GO_LIVE_PREP_V1 — 17구 Production 공개는 SEOUL_17_PUBLIC_ENABLED 한 줄. 지금은 false.
+// SEOUL25_GO_LIVE_PREP_V1 — 17구 Production 공개는 SEOUL_17_PUBLIC_ENABLED 한 줄. 2026-09-30부터 true(공개).
 // "켜면"은 simulateRegionEnablement(seoul17Open: true)로 본다(Production 설정은 바꾸지 않는다).
 
 const ROOT = resolve(__dirname, '../../..');
@@ -36,19 +36,21 @@ const LIVE = { seoulBeta: true, gyeonggiBeta: false, seoul17Open: true } as cons
 const NOW = { seoulBeta: true, gyeonggiBeta: false } as const;
 const sim = (c: string, axis: keyof RegionEnablement, flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Open?: boolean } = LIVE) => simulateRegionEnablement(c, flags)[axis];
 
-test('스위치는 한 곳 · 리터럴 false · 현재 빌드에서 17구 닫힘', () => {
-  assert.equal(SEOUL_17_PUBLIC_ENABLED, false);
-  assert.equal(SEOUL_17_OPEN, false);
+test('스위치는 한 곳 · 리터럴 true(2026-09-30 공개) · 17구는 앱·검색·지도·상세·DB 읽기만 열림', () => {
+  // SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 사용자 승인("서울25 Production 공개 승인")으로 true. 롤백은 이 한 줄을 false로.
+  assert.equal(SEOUL_17_PUBLIC_ENABLED, true);
+  assert.equal(SEOUL_17_OPEN, true);
   const src = code('src/lib/region/enablement.ts');
-  assert.match(src, /export const SEOUL_17_PUBLIC_ENABLED = false;/);
+  assert.match(src, /export const SEOUL_17_PUBLIC_ENABLED = true;/);
   assert.equal((src.match(/SEOUL_17_PUBLIC_ENABLED/g) || []).length, 2, '스위치를 읽는 곳이 하나가 아니다(정의 + SEOUL_17_OPEN)');
   assert.match(src, /seoul17Open: SEOUL_17_OPEN,/);
   for (const c of S17) {
-    for (const axis of ['app', 'search', 'map', 'detail', 'report', 'stats', 'supply', 'sitemap', 'seoIndex', 'cronSync'] as const) {
-      assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
-    }
-    assert.equal(isDbOnlyLawdCd(c), false, c);
+    for (const axis of ['app', 'search', 'map', 'detail', 'cronSync'] as const) assert.equal(isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
+    for (const axis of ['report', 'stats', 'supply', 'sitemap', 'seoIndex'] as const) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
+    assert.equal(isDbOnlyLawdCd(c), true, c);
   }
+  // 서울 8구는 DB 전용이 아니다(기존 live 경로 그대로)
+  for (const c of S8) assert.equal(isDbOnlyLawdCd(c), false, c);
 });
 
 test('열림 판정 진리표: Production 스위치 또는 Preview 스위치', () => {

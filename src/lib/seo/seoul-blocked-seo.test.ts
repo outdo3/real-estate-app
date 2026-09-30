@@ -48,16 +48,19 @@ test('§1 beta OFF(시뮬레이션) — 승인 8구 상세도 BLOCKED(noindex)',
   for (const code of BETA8) assert.equal(decidePublicSeo([code], 'app', betaOff), 'BLOCKED', code);
 });
 
-test('§2 강남 상세 BLOCKED — beta OFF·현재(ON) 모두', () => {
+// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 서울 17구 공개: 현재 런타임에서 강남·17구 상세는 열리되 NOINDEX(색인 금지), 리포트는 BLOCKED.
+test('§2 강남 상세 — beta OFF(롤백 상태)는 BLOCKED, 현재(2026-09-30 공개)는 NOINDEX', () => {
   assert.equal(decidePublicSeo([GANGNAM], 'app', betaOff), 'BLOCKED');
-  assert.equal(decidePublicSeo([GANGNAM], 'app'), 'BLOCKED');
-  assert.equal(decidePublicSeo([null, lawdCdFromAptSeq('11680-4090')], 'app'), 'BLOCKED');
+  assert.equal(decidePublicSeo([GANGNAM], 'app'), 'NOINDEX');
+  assert.equal(decidePublicSeo([null, lawdCdFromAptSeq('11680-4090')], 'app'), 'NOINDEX');
+  assert.equal(decidePublicSeo([GANGNAM], 'report'), 'BLOCKED');
 });
 
-test('§3 나머지 17구 상세 BLOCKED — beta OFF·현재(ON) 모두', () => {
+test('§3 나머지 17구 상세 — beta OFF(롤백 상태)는 BLOCKED, 현재(2026-09-30 공개)는 NOINDEX · 리포트 BLOCKED', () => {
   for (const code of SEOUL_NON_BETA) {
     assert.equal(decidePublicSeo([code], 'app', betaOff), 'BLOCKED', code);
-    assert.equal(decidePublicSeo([code], 'app'), 'BLOCKED', code);
+    assert.equal(decidePublicSeo([code], 'app'), 'NOINDEX', code);
+    assert.equal(decidePublicSeo([code], 'report'), 'BLOCKED', code);
   }
 });
 
@@ -143,8 +146,9 @@ test('§10 beta ON이어도 강남·나머지 17구는 BLOCKED, 섞인 식별자
   for (const code of SEOUL_NON_BETA) assert.equal(decidePublicSeo([code], 'app', betaOn), 'BLOCKED', code);
   // 쿼리 lawdCd는 승인 구인데 aptSeq는 강남 → 막는다.
   assert.equal(decidePublicSeo(['11440', lawdCdFromAptSeq('11680-4090')], 'app', betaOn), 'BLOCKED');
-  // 쿼리 lawdCd는 부산인데 aptSeq는 차단 서울 → 막는다.
-  assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('11680-4090')], 'app'), 'BLOCKED');
+  // 쿼리 lawdCd는 부산인데 aptSeq는 서울 17구 → 현재 런타임(2026-09-30 공개)에서는 덜 열린 쪽인 NOINDEX, 8구만 열린 시뮬레이션에서는 BLOCKED.
+  assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('11680-4090')], 'app'), 'NOINDEX');
+  assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('11680-4090')], 'app', betaOn), 'BLOCKED');
   assert.equal(decidePublicSeo(['26350', lawdCdFromAptSeq('11440-136')], 'app', betaOff), 'BLOCKED');
 });
 

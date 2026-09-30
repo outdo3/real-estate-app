@@ -43,7 +43,8 @@ const SEOUL_ALL = REGION_NODES.filter((n) => n.sidoCode === '11').map((n) => n.l
 const GG_ALL = REGION_NODES.filter((n) => n.sidoCode === '41').map((n) => n.lawdCd);
 const PUBLIC_AXES = ['app', 'search', 'map', 'detail', 'report', 'stats', 'sitemap', 'seoIndex'] as const;
 const PREVIEW = { seoulBeta: true, gyeonggiBeta: false, seoul17Open: true } as const;
-const PROD = { seoulBeta: true, gyeonggiBeta: false } as const;
+// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30부터 Production도 17구 공개(Preview와 같은 프로필).
+const PROD = { seoulBeta: true, gyeonggiBeta: false, seoul17Open: true } as const;
 const sim = (c: string, axis: keyof RegionEnablement, flags: { seoulBeta: boolean; gyeonggiBeta: boolean; seoul17Open?: boolean } = PREVIEW) => simulateRegionEnablement(c, flags)[axis];
 const REP = { 강남: '11680', 서초: '11650', 송파: '11710', 노원: '11350', 강서: '11500', 관악: '11620', 성북: '11290', 은평: '11380' } as const;
 
@@ -68,10 +69,11 @@ test('1 · Preview 스위치는 두 값이 정확할 때만 켜진다(fail-close
   assert.match(src, /resolveSeoul25PreviewFlag\(\s*process\.env\.NEXT_PUBLIC_VERCEL_ENV,\s*process\.env\.NEXT_PUBLIC_SEOUL_25_BETA_PREVIEW\s*\)/);
 });
 
-test('14 · Production 설정: 서울 17구는 전 축 닫힘 · 공개 8구·부산·경기는 그대로', () => {
+test('14 · Production 설정(2026-09-30 공개): 서울 17구는 앱·검색·지도·상세·DB 읽기만 · 공개 8구·부산·경기는 그대로', () => {
   for (const c of S17) {
-    for (const axis of [...PUBLIC_AXES, 'cronSync'] as const) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
-    assert.equal(decidePublicSeo([c], 'detail'), 'BLOCKED', c);
+    for (const axis of ['app', 'search', 'map', 'detail', 'cronSync'] as const) assert.equal(isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
+    for (const axis of ['report', 'stats', 'supply', 'sitemap', 'seoIndex'] as const) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
+    assert.equal(decidePublicSeo([c], 'detail'), 'NOINDEX', c);
     assert.equal(decidePublicSeo([c], 'report'), 'BLOCKED', c);
   }
   for (const c of S8) for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
@@ -79,8 +81,8 @@ test('14 · Production 설정: 서울 17구는 전 축 닫힘 · 공개 8구·�
   for (const c of BUSAN_LAWDCD_16) for (const axis of PUBLIC_AXES) assert.equal(isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
   for (const axis of ['search', 'map', 'detail', 'app'] as const) {
     const set = publicAllowedLawdCds(axis);
-    assert.equal(set.length, 16 + 8, axis);
-    assert.ok(!set.some((c) => S17.includes(c)), axis);
+    assert.equal(set.length, 16 + 8 + 17, axis);
+    assert.ok(S17.every((c) => set.includes(c)), axis);
   }
   // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — supply(84e1c61): 17구·경기·서울 전체 닫힘, 공개 8구·부산 열림
   for (const c of S17) assert.equal(getRegionEnablement(c).supply, false, `${c} supply`);
@@ -96,8 +98,8 @@ test('14 · Production 설정: 서울 17구는 전 축 닫힘 · 공개 8구·�
 });
 
 test('3 · "서울특별시 전체": 8구 부분 공개 · 25구 공개(시뮬레이션) 모두 없음 · 부산 전체 그대로 · 미출시 시도 그대로', () => {
-  // 1) 지금(8/25)
-  assert.equal(isSidoPartiallyPublic('11'), true);
+  // 1) 지금(2026-09-30부터 25/25 공개): "일부 공개"는 아니지만 시도 단위 질의는 없다
+  assert.equal(isSidoPartiallyPublic('11'), false);
   assert.equal(isSidoWholeQuerySupported('11'), false);
   // 2) 25/25: "일부 공개" 판정은 false가 되지만(= 예전 가드는 전체 버튼을 되살림) 시도 단위 질의는 여전히 미지원
   const open25 = SEOUL_ALL.filter((c) => sim(c, 'app')).length;
