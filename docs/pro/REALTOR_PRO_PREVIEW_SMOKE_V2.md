@@ -2,6 +2,10 @@
 
 ## 결론
 
+> **갱신 2026-10-01 — PARTIAL.** 로그인 후 hosted E2E(관리자·신청·매물·고객·매칭·브리핑·Free 한도·보안)는 전부 PASS.
+> 모바일 375/390 QA는 **사용자 수동 확인 대기**(자동화 로그인이 Google에 막힘). 아래 "Hosted E2E V2" · "모바일 QA V3" 절 참고.
+> 이 절 아래의 HOLD 문단은 로그인 전(2026-09-30) 기록이다.
+
 **HOLD — 사용자 작업 필요.** 로컬 준비(현재 main 통합 · 테스트 · 빌드)는 끝났다. hosted Preview는 아래 세 가지가 먼저 필요하다:
 ① Preview 환경 변수 쓰기(에이전트 권한에서 차단됨), ② 쓰기 가능한 격리 hosted DB(계정 작업 필요), ③ Preview 전용 `NEXTAUTH_SECRET`(새로 찾은 보안 문제).
 Production 변경 0 · push 0 · 배포 0.
@@ -101,3 +105,63 @@ Production 변경 0 · push 0 · 배포 0.
 3. hosted DB에 필요한 기반 스키마 + Pro migration `20260930090000_realtor_pro_mvp_v1` → 10 테이블 · RLS 30 · CHECK 26 · FK 13 확인, DB 수준 RLS 테스트
 4. Pro Preview MOLIT 차단: Pro DB에는 공개 거래 데이터가 없어 공개 페이지가 DB 미스 → live MOLIT로 갈 수 있다. Preview 전용 차단(코드 또는 브랜치 env) 필요
 5. 브랜치 push → Preview 배포 → 공개 라우트 회귀 · /pro 격리 · E2E · 모바일 · 보안 점검
+
+## Hosted E2E V2 — 로그인 후 실제 Preview 검증 (2026-09-30 23:17~23:30 KST, 사용자 승인)
+
+대상: 배포 `dpl_GZVh1F7peu68uqDwDTMs69Ua5dX5`(코드 `1e3a162`) · 테스트 DB `ejip-pro-preview`만. 요청은 사용자가 직접 로그인한 실제 Preview 세션에서
+같은 출처 `fetch`로 보냈다(CSRF 규칙 그대로 통과). DB 확인은 guard(ref 일치·Production ref와 다름) 통과 후에만, 값이 아니라 개수·참거짓만 출력.
+
+| 항목 | 결과 | 근거(실측) |
+|---|---|---|
+| 작업 환경 | PASS | 브랜치 `realtor-pro-mvp-overnight-v1` `8e714b4`, 변경 0 · 브랜치 별칭 → 위 배포 · guard PASS · migration up to date |
+| Google 로그인 계정 | PASS | 테스트 DB 사용자 1명 · google 계정 1개 · 브라우저 세션 ID 접두와 일치. 이메일·토큰 출력 0 |
+| Preview ADMIN | PASS | 그 1명만 `ADMIN`(1행). 합성 사용자 3명은 `USER`. JWT에 역할이 구워져 있어 사용자 재로그인 후 세션 `role: ADMIN` 확인 |
+| 일반 사용자 관리자 차단 | PASS | 승격 전 `/api/admin/pro/applications` 403 · `/admin/pro` 리다이렉트 |
+| 중개사 신청 | PASS | 신청 전 쓰기 403 `NOT_VERIFIED_REALTOR` → 신청 201 `PENDING_REVIEW`(플랜 FREE) · 재신청 409 `ALREADY_APPLIED` · 대기 중 매물·고객 쓰기 403 |
+| 관리자 승인/반려 | PASS | 목록 200(자격번호는 `hasLicenseNumber` 등 불리언만) · 합성 C 승인 200 · 합성 D 반려 200(사유 저장) · 잘못된 전이 409 `BAD_TRANSITION` · 없는 상태 400 · 없는 ID 404 · 비 JSON 415 · 사용자 신청 승인 → `VERIFIED`/`FREE` |
+| 매물 | PASS | 생성 201 · aptSeq `11680-218`·lawdCd 정확히 저장 · DTO에 소유자 이름·전화·암호문 0 · 목록에 B 매물 없음 · 상세·수정(가격)·보관/복원·메모·소유자 연락처 열람 200 · `realtorId` 바꿔치기 무시 · B 매물 6개 경로 전부 404 |
+| 공개 단지 정보 | PASS(데이터 없음) | 테스트 DB에 공개 단지 데이터가 없어 `data: null` — 다른 단지로 대체하지 않음 |
+| 고객 | PASS | 생성 201 · 응답·목록·상세에 전화·이메일·암호문 0 · 이름 검색은 자기 고객만 · 수정 · 연락처 열람 · 조건 등록 · 팔로업 생성→일정 변경→오늘 대시보드 표시→완료 · B 고객 7개 경로 404. 같은 고객 두 번째 진행 중 팔로업은 Free 규칙대로 403 `PLAN_LIMIT` |
+| 매칭 | PASS | 점수 93 · 신뢰도 SUFFICIENT · 이유 6개(예산·면적·입주·주차 MATCH, 층 MISS, **통근 UNKNOWN "확인 필요(통근지 좌표 없음)"**) · 학교 항목은 점수 없음 · B 매물 결과 0 |
+| 브리핑 | PASS | 생성 201 · 토큰 43자 · 목록에 원문 토큰 없음 · 익명 요청(쿠키 제외) 200 · 비공개 문자열 11종 노출 0 · 헤더 `noindex, nofollow` · `no-referrer` · `no-store` · CSP · AdSense·GA·Kakao·ipinfo·위치 조회·canonical 0 |
+| 브리핑 취소/만료 | PASS | 취소 200 → 같은 링크는 "만료되었거나 더 이상 볼 수 없는" 안내만(매물·고객 내용 0) · 합성 브리핑 1건 만료 처리 후 같은 안내 · 한 글자 다른 토큰 404 |
+| Free 한도 | PASS | 활성 매물 10 허용·11번째 403 `PLAN_LIMIT` · 고객 5 허용·6번째 403 · 브리핑 하루 3 허용·4번째 403 · 매물 보관 후 새 매물 201 |
+| 정지 중개사 | PASS | 정지 → 쓰기 3종 403 `SUSPENDED` · 읽기 200 · 대시보드 정지 표시 · 재개 → `VERIFIED` |
+| Mass assignment | PASS | 고객 `realtorId`, 프로필 `status`·`userId` 입력 무시(소유·상태 그대로) |
+| XSS | PASS | `<img src=x onerror>` 메모 저장 후 상세 화면에서 글자로만 표시 · 실행 0 · 삽입된 img 0 |
+| 개인정보 암호화(DB) | PASS | Pro 테이블 10개 평문 연락처 0 · 고객 전화/이메일·소유자 전화 암호문+해시 존재 · 키 ID `pv1` 아닌 암호문 0 |
+| 토큰 저장(DB) | PASS | 브리핑 3건 모두 `token_hash`만(HMAC) · 원문 토큰 형태 값 0 |
+| 감사 로그(DB) | PASS | 신청·상태 변경·매물·고객·연락처 열람·브리핑 생성/취소 기록 · 민감 문자열 0 |
+| Hosted RLS | PASS(재실행 안 함) | 2026-09-30 15/15 결과 유지 — 이번 라운드는 API 계층 격리를 실측 |
+
+익명·CSRF·브리핑 위조 토큰 검사는 위 "Preview 배포 + hosted 검증" 결과를 그대로 쓴다(이번에 다시 돌리지 않음).
+
+### 테스트 데이터 (ejip-pro-preview에만 있음 · 삭제하지 않음)
+
+- 사용자 계정 1(실제 Google 로그인, Preview ADMIN 유지) · 합성 사용자 3(`qa-syn-` ID, `[TEST]` 이름, 연락처 없음: 중개사 B·신청자 C 승인·신청자 D 반려)
+- 사용자 중개사 A 소유 합성 데이터: 매물 11건 생성(`[TEST]` 이름, 일부 보관) · 고객 5명(가짜 번호 `010-0000-xxxx`, `example.com` 메일) · 브리핑 3건(취소 1·만료 1) · 팔로업 1건(완료) · XSS 메모 1건
+- 정리가 필요하면 범위를 따로 보고하고 승인 후에만 지운다.
+
+## 모바일 QA V3 (2026-10-01) — 사용자 수동 확인 대기
+
+- **상태: NOT_VERIFIED(사용자 DevTools 확인 대기).** 375/390 실제 화면 검증은 아직 하지 않았다.
+- 시도한 것과 막힌 이유:
+  1. 일반 Chrome 창을 375px로 줄이기 → Chrome 최소 너비 때문에 innerWidth 767px. 사용자 지시로 이 방식은 쓰지 않는다.
+  2. Playwright(시스템 Chrome·별도 프로필·실제 기기 뷰포트 375×812 / 390×844) → 에이전트가 띄운 창은 사용자 화면에 보이지 않았고,
+     사용자가 직접 띄운 창에서는 **Google이 자동화 브라우저 로그인을 "안전하지 않을 수 있음"으로 차단**. 로그인 우회·쿠키 복사는 하지 않았다(사용자 지시).
+     자동화 프로세스는 종료했고 임시 프로필은 삭제했다. 측정 결과는 0건 — 이 방식으로 얻은 PASS/FAIL 없음.
+- 사용자 확인 절차(일반 Chrome, 정상 로그인 세션): F12 → `Ctrl+Shift+M` → Dimensions `Responsive` 375×812, 이어서 390×844 →
+  `/pro/dashboard` · `/pro/listings` · `/pro/listings/new` · `/pro/customers` · 고객 상세 1건 · `/pro/matches` · `/pro/briefings`에서
+  가로 스크롤 · 맨 아래까지 내렸을 때 마지막 버튼이 하단 메뉴 위에 완전히 보이는지 · 글자 겹침/잘림 · 입력 가능 여부 ·
+  `/pro/listings/new` 단지 검색(2글자 이상) 결과 목록이 화면 폭 안에 있는지 · `/pro/matches`·고객 상세의 선택 상자 표시를 본다.
+- 코드에서 확인한 것(화면 검증 아님): Pro 셸은 하단 탭바를 피하려고 `padding-bottom: calc(96px + env(safe-area-inset-bottom))`, `overflow-x: hidden`,
+  본문 `max-width 960px`·좌우 16px. 모달은 없고 선택 상자는 기본 `<select>`, 단지 검색 결과는 문서 흐름 안의 목록(`role="listbox"`)이다.
+- 로컬 격리 DB에서의 모바일 16회 PASS(V1 문서)는 예전 코드 기준이라 hosted 결과를 대신하지 않는다.
+
+## 검토 필요 항목 (정책 결정 전 구현 안 함)
+
+| # | 현재 동작 | 영향 | 선택지 |
+|---|---|---|---|
+| 1. 관리자 자기 승인 | `adminSetStatus`·`adminGrantBetaPro`는 `requireAdmin()`만 본다. 관리자가 자기 중개사 신청을 승인할 수 있고(이번 E2E에서 실제로 그렇게 승인), 자기에게 베타 Pro도 줄 수 있다. 감사 로그에 `reviewedByUserId` = 신청자 본인으로 남는다 | 관리자가 1명인 지금은 운영상 필요할 수 있다. 다만 자격 확인 없이 스스로 인증 중개사가 될 수 있어, 관리자 계정이 탈취되면 인증 표시를 위조할 수 있다 | (a) 자기 신청은 거부(409) (b) 허용하되 감사 로그에 `SELF_REVIEW` 표시 (c) 2인 승인. Production 전 결정 필요 |
+| 2. 취소·만료 브리핑 HTTP 200 | `/b/[token]`: 없는 토큰은 `notFound()`(404), 취소·만료는 200 + "더 이상 볼 수 없는 브리핑" 안내. 내용은 0, 헤더(noindex·no-store·no-referrer)는 그대로 | 개인정보 노출은 없다. 다만 200이라 링크 미리보기·모니터링이 "정상 페이지"로 볼 수 있고, 취소된 토큰과 없는 토큰이 상태 코드로 구분된다(토큰이 한때 유효했다는 사실이 드러남 — 토큰이 43자 무작위라 추측 공격 가치는 낮음) | (a) 그대로 (b) 410 Gone (c) 404로 통일. 안내 문구 유지 여부와 함께 결정 |
+| 3. Pro 화면의 공개 하단 메뉴 | Pro 셸이 공개 `Header`를 그대로 써서 모바일에 공개 하단 탭(홈·지도·통계·재개발·분양·MY)이 고정 표시된다. Pro 탭(대시보드·매물·고객·매칭·브리핑·설정)은 본문 위쪽에 따로 있다 | 하단 탭을 누르면 Pro 구역을 떠나 공개 화면으로 전체 문서 이동. 하단 고정 바가 Pro 본문을 가리는지는 모바일 QA 대기 중(셸이 96px+안전영역 여백을 둠). 중개사 업무 화면 하단에 공개 메뉴가 보이는 것이 제품상 맞는지 결정 필요 | (a) 그대로 (b) `Header`의 기존 `hideMobileNav` 옵션으로 Pro에서 숨김 (c) Pro 전용 하단 탭으로 교체. (b)는 코드 한 줄이지만 화면 방향 결정이라 승인 후 진행 |

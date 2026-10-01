@@ -1,5 +1,18 @@
 # 이집 개발 변경 기록
 
+## 2026-10-01
+
+### REALTOR PRO HOSTED E2E V2 + MOBILE QA V3 — 로그인 후 hosted 기능·보안 전부 PASS, 모바일은 사용자 수동 확인 대기
+
+상세: `docs/pro/REALTOR_PRO_PREVIEW_SMOKE_V2.md` "Hosted E2E V2" · "모바일 QA V3" · "검토 필요 항목"
+
+    대상     Preview dpl_GZVh1F7peu68uqDwDTMs69Ua5dX5(코드 1e3a162) · 테스트 DB ejip-pro-preview만 · 코드 변경 0
+    PASS     관리자 승인/반려 · 신청→대기 쓰기 제한→승인 · 매물(aptSeq 정확·A/B 격리) · 고객(연락처 암호화 pv1·열람) · 매칭(통근 좌표 없음 = 확인 필요)
+             브리핑(익명 노출 0·noindex/no-referrer/no-store·추적 0·취소/만료 차단·토큰 해시만) · Free 한도 10/5/3 · 정지 쓰기 차단 · mass assignment · XSS
+    대기     모바일 375/390 — 자동화 로그인이 Google에 차단되어 측정 0건, 사용자 DevTools 확인 대기
+    검토     관리자 자기 승인 가능 · 취소/만료 브리핑 HTTP 200 · Pro 화면에 공개 하단 메뉴 — 정책 결정 전 구현 안 함
+    데이터   사용자 계정 Preview ADMIN 유지 · 합성 데이터(qa-syn-·[TEST]) 유지 · Production 변경 0
+
 ## 2026-09-30
 
 ### REALTOR PRO PREVIEW DEPLOY + HOSTED E2E V1 — Preview 배포·DB 대상·외부 API 관문 확인, 로그인 필요 단계에서 중단
