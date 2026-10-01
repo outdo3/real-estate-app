@@ -2,9 +2,12 @@
 
 ## 결론
 
-> **갱신 2026-10-01 — PASS.** 로그인 후 hosted E2E(관리자·신청·매물·고객·매칭·브리핑·Free 한도·보안) 전부 PASS.
-> 모바일 375/390 QA도 PASS(사용자가 Chrome DevTools device mode에서 직접 확인). 아래 "Hosted E2E V2" · "모바일 QA V3" 절 참고.
-> 정책 검토 항목 3개는 아직 결정 전이다("검토 필요 항목").
+> **REALTOR PRO PREVIEW 최종 — PASS (2026-10-01).** Preview `dpl_H2zNLNDvZMsrPPaYgLuc6D3joPbc`(코드 `ccbae25`) · 테스트 DB `ejip-pro-preview`.
+> · hosted E2E(관리자·신청·매물·고객·매칭·브리핑·Free 한도·보안) PASS — "Hosted E2E V2"
+> · 정책 3개 결정·구현: 자기 승인 409 · 취소/만료 브리핑 410 · Pro 하단 공개 메뉴 숨김 — "POLICY HARDENING V1"
+> · 모바일 375×812 · 390×844 PASS — 하단 메뉴 숨김 **전**(모바일 QA V3)과 **후**(POLICY HARDENING V1) 모두 사용자 DevTools 수동 확인
+> · 남은 한계: 자기 승인 차단은 hosted에서 차단 코드까지 실측하지 않음(사용자 VERIFIED 유지) → 단위 테스트로 확인
+> · Production · main(`b78c0c4`) 변경 0. Production 반영은 별도 승인(migration·PII 키·env·배포) 대상
 > 이 절 아래의 HOLD 문단은 로그인 전(2026-09-30) 기록이다.
 
 **HOLD — 사용자 작업 필요.** 로컬 준비(현재 main 통합 · 테스트 · 빌드)는 끝났다. hosted Preview는 아래 세 가지가 먼저 필요하다:
@@ -228,11 +231,18 @@ PRO_BOTTOM_NAV         = HIDDEN (모바일)
 | 테스트 DB 확인(읽기 전용) | Pro 테이블 평문 연락처 0 · 암호문 키 ID `pv1`만 · 브리핑 6건 전부 해시 · 원문 토큰 형태 값 0 · 감사로그 민감 문자열 0 |
 | Production(읽기) | e-jip.com `/`·`/map` 200 · `/b/<합성>` 404(Pro 꺼짐) · main `b78c0c4` |
 
-### 모바일 375/390 화면 확인 — 사용자 수동 확인 대기
+### 모바일 375/390 화면 확인 — PASS (사용자 수동 확인, 2026-10-01)
 
-SSR HTML에서는 숨김 클래스가 확인됐지만, 실제 375×812·390×844 화면(하단 바 없음, 하단 여백, 저장 바 위치)은 사용자 DevTools 확인이 필요하다.
-확인할 것: Pro 7개 화면에서 홈·지도·통계 하단 바가 없는지 · 맨 아래 여백이 과하지 않은지 · `/pro/listings/new`·고객 등록 화면의 저장 버튼 바가 화면 맨 아래에 붙는지 ·
-가로 스크롤·버튼 가림·글자 겹침 없음. 공개 `/`는 하단 바가 그대로 보여야 한다.
+사용자가 일반 Chrome DevTools device mode, 정상 로그인 세션으로 **375×812 · 390×844**에서 Pro 7개 화면을 확인했다(배포 `ccbae25`).
+
+| 확인 항목 | 375×812 | 390×844 |
+|---|---|---|
+| Pro 7개 화면에 공개 하단 메뉴 없음 | PASS | PASS |
+| 과도한 하단 여백 없음 | PASS | PASS |
+| 매물·고객 등록 화면 저장 버튼 바 정상 | PASS | PASS |
+| 공개 `/` 하단 메뉴 그대로 표시 | PASS | PASS |
+
+증거 성격: 사용자 수동 확인(에이전트 측정값·스크린샷 없음) + 위 SSR HTML 숨김 클래스 확인.
 
 ### 테스트 데이터 추가분 (ejip-pro-preview)
 

@@ -12,7 +12,8 @@
              Pro 셸 Header hideMobileNav · 하단 여백 96→32px · 폼 저장 바 맨 아래로
     검증     새 테스트 10/10 · src 2289/2297(실패 2 = 기존 CRLF, 1 = matcher 테스트 갱신 후 PASS) · tsc src 0 · eslint 0 · build PASS
              Preview: 타인 승인 200 · valid 200 / revoked 410 / expired 410 / unknown·near-miss 404 · 헤더·추적 0 · Pro 7화면 SSR 숨김 클래스
-    대기     자기 승인 차단의 hosted 실측(사용자 VERIFIED 유지 때문에 불가 → 단위 테스트로 확인) · 모바일 375/390 화면 사용자 확인
+    모바일   375×812 · 390×844 PASS — 사용자 DevTools 수동 확인(Pro 하단 공개 메뉴 없음 · 하단 여백 정상 · 저장 바 정상 · 공개 / 하단 메뉴 유지)
+    최종     REALTOR PRO PREVIEW = PASS · 한계: 자기 승인 차단은 hosted 실측 대신 단위 테스트(사용자 VERIFIED 유지)
 
 ### REALTOR PRO HOSTED E2E V2 + MOBILE QA V3 — 로그인 후 hosted 기능·보안·모바일 전부 PASS
 
