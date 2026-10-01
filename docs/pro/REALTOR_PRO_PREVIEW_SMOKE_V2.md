@@ -180,3 +180,60 @@ Production 변경 0 · push 0 · 배포 0.
 | 1. 관리자 자기 승인 | `adminSetStatus`·`adminGrantBetaPro`는 `requireAdmin()`만 본다. 관리자가 자기 중개사 신청을 승인할 수 있고(이번 E2E에서 실제로 그렇게 승인), 자기에게 베타 Pro도 줄 수 있다. 감사 로그에 `reviewedByUserId` = 신청자 본인으로 남는다 | 관리자가 1명인 지금은 운영상 필요할 수 있다. 다만 자격 확인 없이 스스로 인증 중개사가 될 수 있어, 관리자 계정이 탈취되면 인증 표시를 위조할 수 있다 | (a) 자기 신청은 거부(409) (b) 허용하되 감사 로그에 `SELF_REVIEW` 표시 (c) 2인 승인. Production 전 결정 필요 |
 | 2. 취소·만료 브리핑 HTTP 200 | `/b/[token]`: 없는 토큰은 `notFound()`(404), 취소·만료는 200 + "더 이상 볼 수 없는 브리핑" 안내. 내용은 0, 헤더(noindex·no-store·no-referrer)는 그대로 | 개인정보 노출은 없다. 다만 200이라 링크 미리보기·모니터링이 "정상 페이지"로 볼 수 있고, 취소된 토큰과 없는 토큰이 상태 코드로 구분된다(토큰이 한때 유효했다는 사실이 드러남 — 토큰이 43자 무작위라 추측 공격 가치는 낮음) | (a) 그대로 (b) 410 Gone (c) 404로 통일. 안내 문구 유지 여부와 함께 결정 |
 | 3. Pro 화면의 공개 하단 메뉴 | Pro 셸이 공개 `Header`를 그대로 써서 모바일에 공개 하단 탭(홈·지도·통계·재개발·분양·MY)이 고정 표시된다. Pro 탭(대시보드·매물·고객·매칭·브리핑·설정)은 본문 위쪽에 따로 있다 | 하단 탭을 누르면 Pro 구역을 떠나 공개 화면으로 전체 문서 이동. 하단 고정 바가 Pro 본문 버튼을 가리지 않음은 모바일 QA에서 확인(셸이 96px+안전영역 여백을 둠). 중개사 업무 화면 하단에 공개 메뉴가 보이는 것이 제품상 맞는지 결정 필요 | (a) 그대로 (b) `Header`의 기존 `hideMobileNav` 옵션으로 Pro에서 숨김 (c) Pro 전용 하단 탭으로 교체. (b)는 코드 한 줄이지만 화면 방향 결정이라 승인 후 진행 |
+
+## POLICY HARDENING V1 (2026-10-01) — 위 "검토 필요 항목" 3개 결정·구현
+
+결정(사용자): ① 관리자 자기 승인 금지 ② 취소·만료 브리핑 410 ③ Pro 화면에서 공개 하단 메뉴 숨김. 코드 `ccbae25` → Preview `dpl_H2zNLNDvZMsrPPaYgLuc6D3joPbc` READY(브랜치 URL이 이 배포를 가리킴). main `b78c0c4` 불변.
+
+```
+SELF_APPROVAL          = BLOCKED (409 SELF_APPROVAL_NOT_ALLOWED)
+REVOKED_BRIEFING_HTTP  = 410
+EXPIRED_BRIEFING_HTTP  = 410
+PRO_BOTTOM_NAV         = HIDDEN (모바일)
+```
+
+### 구현
+
+| 항목 | 방식 | 범위 밖으로 남긴 것 |
+|---|---|---|
+| 자기 승인 금지 | `adminSetStatus`(서버 서비스): 대상 프로필 `userId` = 관리자 세션 `userId`이고 목표가 `VERIFIED`(신청 승인·정지 해제 모두)면 409 `SELF_APPROVAL_NOT_ALLOWED`. 상태·감사로그 변화 0. 반려·정지·다른 사용자 승인은 그대로. 기존 VERIFIED 행은 소급 변경 없음 | 차단 시도 감사로그 — `realtor_audit_logs.action` CHECK 제약에 값이 없어 migration 필요 → 값 없는 서버 경고(`[pro-admin] self-approval blocked`)만. 베타 Pro 자기 부여(`adminGrantBetaPro`)는 이번 범위 밖 |
+| 브리핑 410 | App Router 페이지는 상태 코드를 410으로 못 정하므로 `src/proxy.ts`가 `/b/:token`을 먼저 판정(`src/lib/pro/briefing-gone.ts`). 취소·만료면 고정 HTML(브리핑·중개사·고객 정보 0, 스크립트·외부 리소스 0) + `/b/*` 보안 헤더(CSP·no-referrer·X-Robots-Tag) + `no-store`. 그 외는 기존 페이지(404·200). proxy는 조회수를 세지 않음. 토큰 해시 구조 불변 | 중개사 정지(UNAVAILABLE)는 기존대로 200 안내. proxy 판정 오류 시 페이지로 넘김(페이지가 같은 판정으로 내용 차단, 상태만 200) |
+| 하단 메뉴 숨김 | Pro 셸 `Header`에 기존 `hideMobileNav` 옵션 · 셸 하단 여백 96px→32px(+안전영역) · 폼 고정 저장 바 위치 76px→화면 맨 아래(+안전영역) | `/admin/pro`는 다른 관리자 화면과 같은 공개 레이아웃이라 유지. 데스크톱 상단 메뉴는 그대로. Pro 전용 하단 탭 없음 |
+
+### 로컬 검증
+
+| 항목 | 결과 |
+|---|---|
+| 새 테스트 `src/lib/pro/pro-policy-hardening.test.ts` | 10/10 PASS |
+| src 전체 `npx tsx --test "src/**/*.test.ts"` | 2297 중 2289 pass · fail 3 → 1개는 이번 변경(`feedback.test.ts`가 proxy matcher를 `['/admin/:path*']` 정확히 요구) — 의도(관리자 가드 유지)대로 첫 항목 검사로 수정 후 26/26 PASS. 나머지 2개(`community-launch` §15, `recent-auth-parity` §5)는 **수정 전 HEAD(e5cd66b)에서도 똑같이 실패**(기존 worktree CRLF) |
+| `npx tsc --noEmit` | src 오류 0 · scripts 21(기존, FAIL_EXISTING_SCRIPT_ERRORS) |
+| eslint(변경 파일) | 0 |
+| `npm run build` | PASS(`ƒ Proxy (Middleware)`) |
+
+### Preview 검증 (실제 로그인 세션, 테스트 DB만)
+
+| 항목 | 결과 |
+|---|---|
+| 세션 | 사용자 계정 `role: ADMIN` · 프로필 `VERIFIED`/`FREE` — 검증 후에도 그대로 |
+| 다른 사용자 승인 | 합성 신청자 E(`qa-syn-rp-e`, 이번에 추가한 PENDING_REVIEW 1건) 승인 200 → VERIFIED |
+| 자기 승인 | **hosted에서 차단 코드까지는 실측 못 함** — 사용자 프로필이 이미 VERIFIED라 요청이 앞선 전환 검사에서 409 `BAD_TRANSITION`으로 끝난다. `SELF_APPROVAL_NOT_ALLOWED` 경로를 실제로 타려면 사용자 프로필을 PENDING/SUSPENDED로 바꿔야 하는데, 사용자 VERIFIED 유지 원칙 때문에 하지 않았다. 차단 자체는 단위 테스트(신청 승인·정지 해제 둘 다)로 확인 |
+| 관리자 기능 | 목록 200 · 승인 후에도 관리자 API 200 |
+| 브리핑 valid | 200 · 매물 내용 표시 · 고객·메모·연락처 0 |
+| 브리핑 revoked | **410** · 고정 안내 · 비공개 문자열·토큰 0 · 스크립트 0 |
+| 브리핑 expired | 테스트 DB에서 이번 합성 브리핑 1건 만료 처리 → **410** · 같은 결과 · 외부 URL 0 |
+| unknown / near-miss / 형식 불일치 | 404 / 404 / 404 |
+| 헤더(전 상태) | `X-Robots-Tag: noindex, nofollow, noarchive` · `Referrer-Policy: no-referrer` · `Cache-Control` no-store · CSP 있음 · GA·AdSense·Kakao·ipinfo·위치 조회 0 |
+| Free 한도 | 오늘 세 번째 브리핑 생성 403 `PLAN_LIMIT`(오늘 이미 1건이 있었음) — 한도 유지 |
+| 하단 메뉴(SSR HTML) | Pro 7개 화면 전부 공개 하단 바에 모바일 숨김 클래스 · `/`·`/community`는 그대로 표시 · `/map`은 자체 하단 메뉴라 변경 없음 |
+| 테스트 DB 확인(읽기 전용) | Pro 테이블 평문 연락처 0 · 암호문 키 ID `pv1`만 · 브리핑 6건 전부 해시 · 원문 토큰 형태 값 0 · 감사로그 민감 문자열 0 |
+| Production(읽기) | e-jip.com `/`·`/map` 200 · `/b/<합성>` 404(Pro 꺼짐) · main `b78c0c4` |
+
+### 모바일 375/390 화면 확인 — 사용자 수동 확인 대기
+
+SSR HTML에서는 숨김 클래스가 확인됐지만, 실제 375×812·390×844 화면(하단 바 없음, 하단 여백, 저장 바 위치)은 사용자 DevTools 확인이 필요하다.
+확인할 것: Pro 7개 화면에서 홈·지도·통계 하단 바가 없는지 · 맨 아래 여백이 과하지 않은지 · `/pro/listings/new`·고객 등록 화면의 저장 버튼 바가 화면 맨 아래에 붙는지 ·
+가로 스크롤·버튼 가림·글자 겹침 없음. 공개 `/`는 하단 바가 그대로 보여야 한다.
+
+### 테스트 데이터 추가분 (ejip-pro-preview)
+
+합성 사용자 E + 프로필(`qa-syn-rp-e`, 승인됨) · 사용자 A 브리핑 2건(1건 취소, 1건 만료 처리). 삭제 0 · 사용자 ADMIN 유지.

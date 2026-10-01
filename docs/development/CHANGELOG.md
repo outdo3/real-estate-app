@@ -2,6 +2,18 @@
 
 ## 2026-10-01
 
+### REALTOR PRO POLICY HARDENING V1 — 자기 승인 금지 · 취소/만료 브리핑 410 · Pro 하단 공개 메뉴 숨김
+
+상세: `docs/pro/REALTOR_PRO_PREVIEW_SMOKE_V2.md` "POLICY HARDENING V1"
+
+    코드     ccbae25 → Preview dpl_H2zNLNDvZMsrPPaYgLuc6D3joPbc READY (main b78c0c4·Production 불변, DB 스키마·migration 0)
+    정책     관리자 자기 프로필 →VERIFIED 409 SELF_APPROVAL_NOT_ALLOWED(승인·정지 해제) · 반려·정지·타인 승인 그대로 · 차단 감사로그는 CHECK 제약 때문에 미기록
+             /b/<token> 취소·만료 = proxy가 410 + 고정 HTML(정보 0) + 기존 보안 헤더 · unknown 404 · valid 200
+             Pro 셸 Header hideMobileNav · 하단 여백 96→32px · 폼 저장 바 맨 아래로
+    검증     새 테스트 10/10 · src 2289/2297(실패 2 = 기존 CRLF, 1 = matcher 테스트 갱신 후 PASS) · tsc src 0 · eslint 0 · build PASS
+             Preview: 타인 승인 200 · valid 200 / revoked 410 / expired 410 / unknown·near-miss 404 · 헤더·추적 0 · Pro 7화면 SSR 숨김 클래스
+    대기     자기 승인 차단의 hosted 실측(사용자 VERIFIED 유지 때문에 불가 → 단위 테스트로 확인) · 모바일 375/390 화면 사용자 확인
+
 ### REALTOR PRO HOSTED E2E V2 + MOBILE QA V3 — 로그인 후 hosted 기능·보안·모바일 전부 PASS
 
 상세: `docs/pro/REALTOR_PRO_PREVIEW_SMOKE_V2.md` "Hosted E2E V2" · "모바일 QA V3" · "검토 필요 항목"
