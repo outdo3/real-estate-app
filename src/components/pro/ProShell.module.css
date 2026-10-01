@@ -1,9 +1,10 @@
-/* REALTOR_PRO_MVP_V1 — Pro 셸(상단 바·탭·본문 여백). 하단 탭바와 겹치지 않도록 아래 여백을 둔다. */
+/* REALTOR_PRO_MVP_V1 — Pro 셸(상단 바·탭·본문 여백).
+   REALTOR_PRO_POLICY_HARDENING_V1 — 공개 하단 탭바를 숨겼으므로 그 높이(60px)만큼의 여백은 두지 않고, 홈 인디케이터 안전영역만 더한다. */
 
 .shell {
   min-height: 100vh;
   background: var(--bg-color);
-  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  padding-bottom: calc(32px + env(safe-area-inset-bottom));
   overflow-x: hidden;
 }
 

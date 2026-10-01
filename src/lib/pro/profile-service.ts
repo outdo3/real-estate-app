@@ -137,6 +137,12 @@ export async function adminSetStatus(
   const cur = await deps.repo.adminGetProfile(realtorId);
   if (!cur) return fail(404, 'NOT_FOUND', '찾을 수 없습니다.');
   if (!ALLOWED_TRANSITIONS[cur.status].includes(to as ProfileStatus)) return fail(409, 'BAD_TRANSITION', `${cur.status} → ${to} 전환은 허용되지 않습니다.`);
+  // REALTOR_PRO_POLICY_HARDENING_V1 — 관리자는 자기 신청을 승인(→VERIFIED, 정지 해제 포함)할 수 없다. 반려·정지는 그대로.
+  // 차단 시도는 감사로그에 남기지 않는다: action CHECK 제약에 해당 값이 없어 migration이 필요하다(값 없는 서버 경고만).
+  if (to === 'VERIFIED' && cur.userId === admin.userId) {
+    console.warn('[pro-admin] self-approval blocked');
+    return fail(409, 'SELF_APPROVAL_NOT_ALLOWED', '본인의 중개사 신청은 직접 승인할 수 없습니다. 다른 관리자가 승인해야 합니다.');
+  }
   if ((to === 'REJECTED' || to === 'SUSPENDED') && !reason) return INVALID([{ field: 'reason', code: 'REQUIRED' }]);
   const now = deps.now();
   const row = await deps.repo.adminSetProfileStatus(realtorId, { status: to as ProfileStatus, statusReason: reason || null, reviewedByUserId: admin.userId, reviewedAt: now });

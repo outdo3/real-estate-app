@@ -22,7 +22,8 @@ export default function ProLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={styles.shell}>
-      <Header pageTitle="중개사 Pro" />
+      {/* REALTOR_PRO_POLICY_HARDENING_V1 — Pro 화면에서는 공개 서비스 하단 탭(홈·지도·통계…)을 숨긴다(Header 기존 옵션). */}
+      <Header pageTitle="중개사 Pro" hideMobileNav />
       <div className={styles.inner}>
         <div className={styles.topBar}>
           <p className={styles.brand}>

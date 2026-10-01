@@ -270,7 +270,8 @@ test('14. 관리자 API는 requireAdmin() 통과 전에는 DB에 닿지 않는�
   const helpers = code('src/lib/auth-helpers.ts');
   assert.match(helpers, /if \(!user\) return \{ error: '로그인이 필요합니다\.' as const, status: 401 as const, user: null \};/);
   assert.match(helpers, /if \(!isAdminSessionUser\(user as any\)\) return \{ error: '관리자만 사용할 수 있습니다\.' as const, status: 403 as const/);
-  assert.match(code('src/proxy.ts'), /matcher: \['\/admin\/:path\*'\]/, '관리자 페이지도 proxy에서 막힌다');
+  // REALTOR_PRO_POLICY_HARDENING_V1 — matcher에 /b/:token(브리핑 410)이 추가돼도 관리자 경로 가드는 첫 항목으로 유지
+  assert.match(code('src/proxy.ts'), /matcher: \['\/admin\/:path\*'[,\]]/, '관리자 페이지도 proxy에서 막힌다');
 });
 
 function fakeAdminRepo(seed: FeedbackRow[]) {

@@ -428,7 +428,8 @@ a.rowTitle:hover {
 
 .stickyActions {
   position: sticky;
-  bottom: calc(76px + env(safe-area-inset-bottom));
+  /* REALTOR_PRO_POLICY_HARDENING_V1 — Pro에서는 공개 하단 탭바가 없으므로 화면 맨 아래(안전영역 위)에 붙인다. */
+  bottom: env(safe-area-inset-bottom, 0px);
   z-index: 5;
   display: flex;
   gap: 8px;
