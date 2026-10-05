@@ -35,5 +35,6 @@ Preview(ejip-pro-preview)는 23/23 상태 → 새 migration 1개만 pending(아�
 - 합성 데이터(`qa-syn-udel-*`) 실검증: A profile 없는 user 삭제 허용 · B profile 있는 user 삭제 차단(FK 위반, 데이터 불변) · C SUSPENDED 후 user/profile/listing/customer 유지(user 삭제는 여전히 차단) · D profile 명시 삭제 후 하위 행 제거, user 삭제 허용
 - 이번 step이 만든 합성 행만 삭제: users 2, profiles 1, listings 1, customers 1. 전후 스냅샷 동일(users 5, ADMIN 1, profiles 5, VERIFIED 4, listings 12, customers 6, briefings 6)
 - 코드 2cd1bbb → Preview dpl_56Xu3xxF7DnCSg863u7bXdYbTXeH READY (실제 코드 SHA 배포 확인)
-- 미확인: 로그인 후 런타임(Google 로그인은 자동화 불가, 사용자 수동 확인 필요). 비로그인: `/` 200, `/pro` 200, `/api/pro/listings` 401
+- 로그인 후 런타임: 사용자 수동 확인 PASS(2026-10-05) — Google 로그인 · Preview ADMIN 유지 · Realtor Pro 접근 · 기존 매물/고객/브리핑 기능 · 취소 브리핑 410 · Pro 하단 일반 메뉴 숨김. 회귀 없음.
+- **Preview 최종 상태 = PASS** 비로그인: `/` 200, `/pro` 200, `/api/pro/listings` 401
 - PREVIEW_MIGRATION = 24/24 · USER_DELETE_WITH_PROFILE = BLOCKED · SUSPEND_PRESERVES_DATA = YES · EXPLICIT_DELETE_REQUIRED = YES · PRODUCTION_UNCHANGED = YES

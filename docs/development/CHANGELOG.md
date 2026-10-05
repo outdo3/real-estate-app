@@ -10,6 +10,7 @@
     DB       새 migration 20261005090000: realtor_profiles.user_id FK CASCADE → RESTRICT. Preview(ejip-pro-preview) 24/24 적용,
              Production 미적용(pending 2개: Pro + 이 migration)
     검증     합성 데이터 A~D PASS(profile 있는 user 삭제 차단, SUSPENDED 시 데이터 유지, 명시 삭제 후 user 삭제 가능)
+    런타임   사용자 수동 확인 PASS(로그인·ADMIN·Pro 접근·매물/고객/브리핑·410·하단 메뉴 숨김) → Preview 최종 PASS
 
 ## 2026-10-01
 
