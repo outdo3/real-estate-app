@@ -28,3 +28,12 @@ Preview(ejip-pro-preview)는 23/23 상태 → 새 migration 1개만 pending(아�
 ## Follow-up
 - 코드에 users 물리 삭제 경로 없음(회원 탈퇴 API·관리자 삭제·cron 정리 없음, `PrismaAdapter.deleteUser`는 NextAuth v4가 호출하지 않음). 약관·개인정보처리방침은 마이페이지 탈퇴를 언급하지만 구현은 없음 → 구현 시 Pro profile 보유자 처리(SUSPENDED + 명시적 삭제 절차) 정책 필요.
 - Rollback: 새 migration의 역(FK를 CASCADE로 재생성)은 데이터 변경 없이 가능하나 안전 정책을 되돌리는 것이므로 권장하지 않음.
+
+## Preview 적용 결과 (2026-10-05, 사용자 승인 — ejip-pro-preview만)
+- 가드: project ref 일치 · Production과 다른 DB · 23/23 정상(failed 0) · pending = 새 migration 1개 · 기존 migration checksum 불변
+- `prisma migrate deploy` → 24/24, failed 0, pending 0. FK = ON DELETE RESTRICT / ON UPDATE CASCADE, `user_id` NOT NULL
+- 합성 데이터(`qa-syn-udel-*`) 실검증: A profile 없는 user 삭제 허용 · B profile 있는 user 삭제 차단(FK 위반, 데이터 불변) · C SUSPENDED 후 user/profile/listing/customer 유지(user 삭제는 여전히 차단) · D profile 명시 삭제 후 하위 행 제거, user 삭제 허용
+- 이번 step이 만든 합성 행만 삭제: users 2, profiles 1, listings 1, customers 1. 전후 스냅샷 동일(users 5, ADMIN 1, profiles 5, VERIFIED 4, listings 12, customers 6, briefings 6)
+- 코드 2cd1bbb → Preview dpl_56Xu3xxF7DnCSg863u7bXdYbTXeH READY (실제 코드 SHA 배포 확인)
+- 미확인: 로그인 후 런타임(Google 로그인은 자동화 불가, 사용자 수동 확인 필요). 비로그인: `/` 200, `/pro` 200, `/api/pro/listings` 401
+- PREVIEW_MIGRATION = 24/24 · USER_DELETE_WITH_PROFILE = BLOCKED · SUSPEND_PRESERVES_DATA = YES · EXPLICIT_DELETE_REQUIRED = YES · PRODUCTION_UNCHANGED = YES

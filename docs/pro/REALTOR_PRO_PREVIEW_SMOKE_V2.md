@@ -247,3 +247,6 @@ PRO_BOTTOM_NAV         = HIDDEN (모바일)
 ### 테스트 데이터 추가분 (ejip-pro-preview)
 
 합성 사용자 E + 프로필(`qa-syn-rp-e`, 승인됨) · 사용자 A 브리핑 2건(1건 취소, 1건 만료 처리). 삭제 0 · 사용자 ADMIN 유지.
+
+## USER DELETE SAFETY V1 (2026-10-05) — Preview migration 24/24
+`realtor_profiles_user_id_fkey` CASCADE → RESTRICT를 ejip-pro-preview에 적용(`20261005090000_realtor_profile_user_delete_restrict`). 합성 데이터로 A~D 실검증 PASS, 기존 QA 데이터·ADMIN·VERIFIED 불변, Production 불변. 상세: `docs/pro/REALTOR_PRO_USER_DELETE_SAFETY_V1.md`. 로그인 후 런타임 재확인은 사용자 수동 확인 대기.

@@ -1,5 +1,16 @@
 # 이집 개발 변경 기록
 
+## 2026-10-05
+
+### REALTOR PRO USER DELETE SAFETY V1 — users 삭제가 Pro 데이터를 연쇄 삭제하지 못하게 함
+
+상세: `docs/pro/REALTOR_PRO_USER_DELETE_SAFETY_V1.md`
+
+    코드     2cd1bbb → Preview dpl_56Xu3xxF7DnCSg863u7bXdYbTXeH READY (main·Production 불변)
+    DB       새 migration 20261005090000: realtor_profiles.user_id FK CASCADE → RESTRICT. Preview(ejip-pro-preview) 24/24 적용,
+             Production 미적용(pending 2개: Pro + 이 migration)
+    검증     합성 데이터 A~D PASS(profile 있는 user 삭제 차단, SUSPENDED 시 데이터 유지, 명시 삭제 후 user 삭제 가능)
+
 ## 2026-10-01
 
 ### REALTOR PRO POLICY HARDENING V1 — 자기 승인 금지 · 취소/만료 브리핑 410 · Pro 하단 공개 메뉴 숨김
