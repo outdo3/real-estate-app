@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  NEARBY_API_VERSION,
   NEARBY_MAX_LIMIT,
   NEARBY_MAX_RADIUS_KM,
   NEARBY_RECENT_TRADES_PER_KIND,
@@ -240,4 +241,29 @@ test('입력 객체를 바꾸지 않는다(읽기 전용 순수 함수)', () => 
   const copy = JSON.parse(JSON.stringify(rows));
   summarizeSale(rows, { area: null, areaTolerance: 1 });
   assert.deepEqual(rows, copy);
+});
+
+test('응답 계약: apiVersion과 상세 경로(출처 링크용)가 있고, 필드 순서와 무관하게 필요한 키가 모두 있다', () => {
+  const r = build([{ master: rm(7, 0.1), sale: [sale('2026-08-12', 4053, 34.5)], rent: [], attribution: { status: 'ATTRIBUTED', note: null } }]);
+  assert.equal(r.apiVersion, NEARBY_API_VERSION);
+  assert.equal(r.items[0].detailPath, '/officetel/7');
+  for (const k of ['query', 'dataStatus', 'comparison', 'window', 'dataAsOf', 'source', 'coverage', 'totals', 'truncated', 'notes', 'items']) assert.ok(k in r, k);
+});
+
+test('DB가 센 요약(saleSummary/rentSummary)이 있으면 원시 행이 아니라 그 건수를 쓴다(불러온 행 수에 좌우되지 않음)', () => {
+  const r = build([{
+    master: rm(1, 0.2),
+    saleSummary: { count: 1234, latestDealDate: '2026-08-29', recent: [sale('2026-08-29', 5000, 84), sale('2026-08-01', 4900, 84), sale('2026-07-01', 4800, 84), sale('2026-06-01', 4700, 84)] },
+    rentSummary: { count: 0, latestDealDate: null, recent: [] },
+    attribution: { status: 'ATTRIBUTED', note: null },
+  }]);
+  assert.equal(r.items[0].sale.count, 1234);
+  assert.equal(r.items[0].sale.recent.length, 3);
+  assert.equal(r.items[0].sale.recent[0].dealMonth, '2026-08');
+  assert.equal(r.items[0].tradeStatus, 'HAS_TRADES');
+  assert.deepEqual(r.items[0].rent, { count: 0, latestDealDate: null, recent: [] });
+  // 요약은 kinds 요청을 여전히 따른다
+  const onlyRent = build([{ master: rm(1, 0.2), saleSummary: { count: 5, latestDealDate: '2026-08-29', recent: [] }, rentSummary: { count: 2, latestDealDate: '2026-08-01', recent: [rent('2026-08-01', 1000, 50, 59)] }, attribution: { status: 'ATTRIBUTED', note: null } }], { query: { kinds: 'rent' } });
+  assert.equal(onlyRent.items[0].sale, null);
+  assert.equal(onlyRent.items[0].rent.count, 2);
 });

@@ -12,6 +12,8 @@
 //   * 입력은 전부 검증하고 범위·개수를 제한한다. 내부 식별정보(canonicalKey, 거래 id, 원천 컬럼)는 내보내지 않는다.
 
 // ------------------------------------------------------------------ limits
+/** 응답 계약 버전. 필드를 지우거나 뜻을 바꾸면 올린다. 필드 추가는 올리지 않는다(소비자는 모르는 필드를 무시한다). */
+export const NEARBY_API_VERSION = 1;
 export const NEARBY_DEFAULT_RADIUS_KM = 1;
 export const NEARBY_MAX_RADIUS_KM = 3;
 export const NEARBY_DEFAULT_LIMIT = 5;
@@ -24,8 +26,6 @@ export const NEARBY_MAX_AREA_TOLERANCE = 5;
 export const NEARBY_RECENT_TRADES_PER_KIND = 3;
 /** 후보 master 상한(좌표 상자 안). 넘으면 자르지 않고 truncated로 알린다. */
 export const NEARBY_MAX_CANDIDATES = 800;
-/** 거래 행 조회 상한. 넘으면 truncated로 알린다. */
-export const NEARBY_MAX_TRADE_ROWS = 4000;
 /** 수집일이 이보다 오래되면 STALE. */
 export const NEARBY_STALE_AFTER_DAYS = 45;
 
@@ -225,8 +225,15 @@ export type NearbyDataStatus = 'OK' | 'INSUFFICIENT' | 'NO_NEARBY_OFFICETEL';
 
 export interface NearbyMasterInput {
   master: RankedMaster;
-  sale: SaleTradeRow[];
-  rent: RentTradeRow[];
+  /** 원시 행(테스트/표본 계산용). saleSummary가 있으면 그것이 우선한다. */
+  sale?: SaleTradeRow[];
+  rent?: RentTradeRow[];
+  /**
+   * DB가 이미 센 값(조회 기간 + 면적 조건 + 취소 제외). 읽기 계층은 이 경로를 쓴다 — 건수가 "몇 행을 불러왔는가"에 좌우되지 않게 하기 위해서다.
+   * recent는 최근순 상위 몇 건(NEARBY_RECENT_TRADES_PER_KIND 이하)이면 된다.
+   */
+  saleSummary?: { count: number; latestDealDate: string | null; recent: SaleTradeRow[] };
+  rentSummary?: { count: number; latestDealDate: string | null; recent: RentTradeRow[] };
   attribution: { status: NearbyAttributionStatus; note: string | null };
 }
 
@@ -249,12 +256,15 @@ export function buildOfficetelNearbyResponse(input: NearbyBuildInput) {
   const wantRent = query.kinds !== 'sale';
   const since = windowStartDate(now, query.months);
 
-  const items = input.masters.map(({ master, sale, rent, attribution }) => {
-    const saleSummary = wantSale ? summarizeSale(sale, query) : null;
-    const rentSummary = wantRent ? summarizeRent(rent, query) : null;
+  const withMonth = <T extends { dealDate: string }>(rows: T[]) => rows.slice(0, NEARBY_RECENT_TRADES_PER_KIND).map((r) => ({ ...r, dealMonth: r.dealDate.slice(0, 7) }));
+  const items = input.masters.map(({ master, sale, rent, saleSummary: preSale, rentSummary: preRent, attribution }) => {
+    const saleSummary = !wantSale ? null : preSale ? { count: preSale.count, latestDealDate: preSale.latestDealDate, recent: withMonth(preSale.recent) } : summarizeSale(sale ?? [], query);
+    const rentSummary = !wantRent ? null : preRent ? { count: preRent.count, latestDealDate: preRent.latestDealDate, recent: withMonth(preRent.recent) } : summarizeRent(rent ?? [], query);
     const hasTrades = (saleSummary?.count ?? 0) + (rentSummary?.count ?? 0) > 0;
     return {
       id: master.id,
+      /** 이집의 오피스텔 상세 화면 상대 경로(출처 링크용). 호스트는 호출하는 쪽이 붙인다. */
+      detailPath: `/officetel/${master.id}`,
       name: master.displayName,
       propertyType: 'officetel' as const,
       address: { dong: master.umdNm, jibun: master.jibun, buildingDong: master.buildingDong, roadAddress: master.roadAddress },
@@ -285,6 +295,7 @@ export function buildOfficetelNearbyResponse(input: NearbyBuildInput) {
   if (items.some((i) => i.attribution.status === 'UNATTRIBUTED_AT_ADDRESS')) notes.push('동별로 구분할 수 없는 거래는 어느 오피스텔에도 붙이지 않았습니다(거래 없음이 아닙니다).');
 
   return {
+    apiVersion: NEARBY_API_VERSION,
     query: { lat: query.lat, lng: query.lng, radiusKm: query.radiusKm, limit: query.limit, months: query.months, area: query.area, areaTolerance: query.area === null ? null : query.areaTolerance, kinds: query.kinds },
     dataStatus,
     /** 이 응답은 오피스텔만 담는다. 아파트 실거래와 같은 조건(면적·거래 유형·시점)으로 비교하지 않는다. */
