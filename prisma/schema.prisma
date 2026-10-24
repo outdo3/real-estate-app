@@ -1715,3 +1715,83 @@ model OfficetelRentHistory {
   @@index([lawdCd, dealDate])
   @@map("officetel_rent_histories")
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// OFFICETEL INCREMENTAL SYNC V1 — 셀 상태 저장소 (additive only)
+//
+// docs/development/OFFICETEL_INCREMENTAL_SYNC_V1.md 참고.
+//
+// 왜 아파트 `sync_coverage_cells`(SyncDataset SALE/RENT)에 값을 추가하지 않는가:
+//   1. 그 테이블을 읽는 곳이 15개 파일(리포트·통계·admin ops·rent verified range·recheck 코어)이다.
+//      dataset 필터가 대부분 있지만, 한 곳이라도 누락되거나 exhaustive switch가 있으면 아파트
+//      coverage 판정(예: "16개 구가 전부 COMPLETE인가")에 오피스텔 셀이 섞일 수 있다.
+//   2. Postgres enum에 값을 추가하는 마이그레이션은 되돌릴 수 없다(ALTER TYPE ... DROP VALUE 없음).
+//      새 테이블은 DROP TABLE 한 줄로 롤백된다.
+//   3. 오피스텔 셀에는 아파트 셀에 없는 정보(실패 사유, unresolved master 수, 마지막 시도 vs
+//      마지막 검증)가 필요하다.
+// 이 테이블은 아파트 sync 코드·읽기 경로 어디에서도 참조되지 않는다.
+//
+// 셀 하나 = (dataset, lawdCd, dealYmd) 하나. 마지막 "시도"와 마지막 "검증 성공"을 분리해 저장한다 —
+// 실패한 시도가 이전의 검증 기록을 지우지 않는다.
+// ══════════════════════════════════════════════════════════════════════════
+enum OfficetelSyncDataset {
+  OFFICETEL_SALE
+  OFFICETEL_RENT
+}
+
+/// COMPLETE: 원천 totalCount와 수신 행 수가 일치(정상 0건 포함 — sourceTotalCount=0, fetchedCount=0).
+/// PARTIAL : 완전성 미검증(페이지 실패·한도 도달·일부 행 파싱 실패). COMPLETE처럼 취급하지 않는다.
+/// INVALID : 구조적으로 믿을 수 없는 응답(셀 월과 행 월 불일치 등). 아무것도 쓰지 않는다.
+enum OfficetelSyncCellStatus {
+  COMPLETE
+  PARTIAL
+  INVALID
+}
+
+enum OfficetelSyncFailureReason {
+  API_ERROR
+  TIMEOUT
+  QUOTA
+  PARSE_ERROR
+  DB_ERROR
+  PARTIAL_PAGINATION
+}
+
+model OfficetelSyncCell {
+  id Int @id @default(autoincrement())
+
+  dataset OfficetelSyncDataset @map("dataset")
+  lawdCd  String               @map("lawd_cd")
+  dealYmd String               @map("deal_ymd")
+
+  /// 마지막 시도의 결과.
+  status        OfficetelSyncCellStatus     @map("status")
+  failureReason OfficetelSyncFailureReason? @map("failure_reason")
+
+  /// 원천이 알려 준 전체 건수. 모르면 null — 0으로 바꾸지 않는다(실패 != 거래 없음).
+  sourceTotalCount Int? @map("source_total_count")
+  fetchedCount     Int  @default(0) @map("fetched_count")
+  insertedCount    Int  @default(0) @map("inserted_count")
+  /// 매매 취소 반영으로 갱신한 행 수(전월세는 항상 0 — 원천에 취소 필드가 없다).
+  updatedCount     Int  @default(0) @map("updated_count")
+  /// 이미 있어 건너뛴 행 수.
+  duplicateCount   Int  @default(0) @map("duplicate_count")
+  /// master에 연결하지 못한 채 적재한 행 수(주소 그룹 master 없음/다수). 버리지 않는다.
+  unresolvedCount  Int  @default(0) @map("unresolved_count")
+  /// 파싱 실패로 적재하지 못한 행 수.
+  invalidRowCount  Int  @default(0) @map("invalid_row_count")
+
+  runId String @map("run_id")
+
+  /// 마지막 시도 시각.
+  attemptedAt DateTime  @map("attempted_at")
+  /// 마지막으로 COMPLETE였던 시각. 한 번도 없으면 null.
+  verifiedAt  DateTime? @map("verified_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([dataset, lawdCd, dealYmd], name: "officetel_sync_cell_key")
+  @@index([dataset, dealYmd, status])
+  @@map("officetel_sync_cells")
+}
