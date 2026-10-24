@@ -393,7 +393,8 @@ test('23 · 공개 enablement(서울 beta on · 경기 beta on, 2026-09-30), 동
 });
 
 test('24 · cron 스케줄 불변(11개 · 경로·시각 정확히)', () => {
-  const crons = JSON.parse(read('vercel.json')).crons;
+  // 오피스텔 cron(officetel-*)은 별도 계약(officetel/sync/sync.test.ts O2)이 고정한다. 여기서는 아파트 11개만 본다.
+  const crons = (JSON.parse(read('vercel.json')).crons as { path: string; schedule: string }[]).filter((c) => !c.path.includes('/officetel-'));
   assert.deepEqual(crons, [
     { path: '/api/cron/sale-sync?mode=apply', schedule: '0 19 * * *' },
     { path: '/api/cron/rent-sync?mode=apply', schedule: '0 21 * * *' },

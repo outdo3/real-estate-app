@@ -491,14 +491,14 @@ test('O. cron 인증 — secret 미설정/불일치는 거부, 허용 밖 lawdCd
   assert.equal(parseOfficetelCronParams(new URL('http://x/a?minBack=5&maxBack=2'), 'sale-recheck', NOW).ok, false);
 });
 
-test('O2. cron 계획 — vercel.json 기존 시각과 겹치지 않고, 아직 등록되지 않았으며, 개수 한도 안이다', () => {
+test('O2. cron 계획 — vercel.json에 정확히 3개 등록, 아파트 cron 시각과 겹치지 않고, 개수 한도 안이다', () => {
   const vercel = JSON.parse(readFileSync(resolve(ROOT, 'vercel.json'), 'utf8')) as { crons: { path: string; schedule: string }[] };
-  const used = new Set(vercel.crons.map((c) => c.schedule.split(' ').slice(0, 2).join(':')));
-  for (const e of OFFICETEL_CRON_PLAN) {
-    assert.ok(!used.has(e.schedule.split(' ').slice(0, 2).join(':')), `${e.kind} collides with an existing cron time`);
-    assert.ok(!vercel.crons.some((c) => c.path.includes('officetel')), 'officetel cron must not be registered yet');
-  }
-  assert.ok(vercel.crons.length + OFFICETEL_CRON_PLAN.length <= 100, 'Vercel Hobby cron count limit (100)');
+  const offi = vercel.crons.filter((c) => c.path.includes('/officetel-'));
+  const other = vercel.crons.filter((c) => !c.path.includes('/officetel-'));
+  assert.deepEqual(offi.map((c) => ({ path: c.path, schedule: c.schedule })), OFFICETEL_CRON_PLAN.map((e) => ({ path: e.path, schedule: e.schedule })));
+  const used = new Set(other.map((c) => c.schedule.split(' ').slice(0, 2).join(':')));
+  for (const e of OFFICETEL_CRON_PLAN) assert.ok(!used.has(e.schedule.split(' ').slice(0, 2).join(':')), e.kind + ' collides with an existing cron time');
+  assert.ok(vercel.crons.length <= 100, 'Vercel Hobby cron count limit (100)');
   // 일 1회 이하(Hobby 최소 간격): 분/시가 숫자로 고정돼야 한다
   for (const e of OFFICETEL_CRON_PLAN) assert.match(e.schedule, /^\d+ \d+ \* \* (\*|\d)$/);
   // 라우트가 실제로 존재한다

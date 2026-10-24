@@ -138,7 +138,8 @@ test('§H cronSync는 그대로 — 서울은 여전히 비공개이고 scope �
 
 // ── SEOUL_SALE_INCREMENTAL_CRON_ENABLE_V1 — 승인된 cron 집합 고정 ─────────────────────────
 
-const CRONS = (JSON.parse(read('vercel.json')).crons as { path: string; schedule: string }[]);
+// 오피스텔 cron(officetel-*)은 별도 계약(officetel/sync/sync.test.ts O2)이 고정한다. 이 파일은 아파트 cron만 본다.
+const CRONS = (JSON.parse(read('vercel.json')).crons as { path: string; schedule: string }[]).filter((c) => !c.path.includes('/officetel-'));
 
 test('cron: 부산 3개 + 서울 2개 + 경기 2개는 그대로 + 승인된 서울 17구 4개만 추가 = 11개, 중복 없음', () => {
   assert.deepEqual(CRONS, [
