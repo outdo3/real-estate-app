@@ -252,3 +252,22 @@ SELECT dataset, lawd_cd, deal_ymd, verified_at FROM officetel_sync_cells ORDER B
 - natural key 중복 0. master 잘못 연결 0(연결된 행은 sgg/umd 모두 일치).
 - 범위 밖: 다른 15개 구 건수 변화 0, master 변화 0, 통계 카운터상 쓰기는 거래 2테이블과 sync cell 테이블뿐.
 - 다음: 부산 16구 apply 승인 요청. cron 등록(`vercel.json`)은 그 이후.
+
+## 부산 16구 전체 catch-up apply 결과 (2026-10-24)
+
+- 범위: 부산 16개 구·군 x 202609~202610 x 매매+전월세 = 64셀. cron은 아직 OFF(`vercel.json` 미변경, 배포·main merge 없음).
+- 사전 재 dry-run(읽기 전용, SQL 111건 모두 SELECT, 쓰기 시도 0, MOLIT 64 GET, 오류 0): API 매매 577 / 전월세 2,734로 첫 dry-run과 동일. 수영구 기존 적재분은 기존 row로 정확히 인식(매매 existing 35 = 6 + 수영 29, 전월세 321 = 95 + 수영 226). 신규 후보 매매 542 / 전월세 2,413, natural key 충돌 0.
+- 실행: `incremental-catchup.ts --apply --confirm=<token> --all-districts --from=202609 --to=202610` 1회, exit 0, 두 run 모두 SUCCESS.
+
+| 구분 | API | 기존(중복) | insert | 미연결 master(신규) | invalid |
+| --- | --- | --- | --- | --- | --- |
+| 매매 | 577 | 35 | 542 | 18 | 0 |
+| 전월세 | 2,734 | 321 | 2,413 (전세 404, 월세 2,009) | 92 | 0 |
+
+- 취소: 취소 상태로 신규 insert 13건(수영 1건 포함 시 누적 14), 기존 row 취소 update 0, restore pending 0.
+- sync cell 64개 모두 COMPLETE(매매 32, 전월세 32), failure reason 0, verified_at 전부 있음. 거래가 0건인 셀(예: 중구 매매)은 source total 0으로 COMPLETE 기록되어 "수집 실패"와 구분된다.
+- row 증가: 매매 +542, 전월세 +2,413, sync cell +60(수영 4셀은 upsert), master 변화 0. apply 출력과 정확히 일치.
+- natural key 중복 0, 수영구 재삽입 0, 기존 row 수정 0, 신규 row의 source_fetched_at은 모두 2026-10-24. 신규 row 중 202609/202610 밖은 0.
+- master 잘못 연결 0. 미연결은 NULL master 유지(동 구분 불가, 신축). master는 만들거나 수정하지 않았다.
+- 통계 카운터상 쓰기는 거래 2테이블과 sync cell 테이블뿐(아파트, Realtor Pro, users 포함 다른 테이블 0).
+- 다음: cron 배포 승인 요청(OFFICETEL_CRON_PLAN을 `vercel.json`에 등록하고 배포).
