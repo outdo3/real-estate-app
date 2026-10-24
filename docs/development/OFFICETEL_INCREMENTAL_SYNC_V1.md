@@ -232,3 +232,23 @@ WHERE attempted_at > now() - interval '2 days' GROUP BY 1,2,3 ORDER BY 1,2,3;
 -- 오래 검증되지 않은 셀
 SELECT dataset, lawd_cd, deal_ymd, verified_at FROM officetel_sync_cells ORDER BY verified_at NULLS FIRST LIMIT 20;
 ```
+
+## 첫 Production apply 결과 — 수영구 26500 (2026-10-24)
+
+- 대상: 수영구 26500, 202609~202610, 매매+전월세. 승인 범위 밖 구/기간/cron/배포는 실행하지 않았다.
+- 사전: migration `20261024100000_officetel_sync_cells` 적용 완료(25개, 미완료 0), 기준 건수 master 5,056 / 매매 88,674 / 전월세 226,291 / sync cell 0.
+- 실행: `incremental-catchup.ts --apply --confirm=<token> --lawd=26500 --from=202609 --to=202610` 1회. exit 0, 두 run 모두 SUCCESS.
+
+| 구분 | API | insert | 중복 | 미연결 master | invalid |
+| --- | --- | --- | --- | --- | --- |
+| 매매 | 29 (202609=23, 202610=6) | 29 | 0 | 1 | 0 |
+| 전월세 | 232 (202609=145, 202610=87) | 226 (전세 39, 월세 187) | 6 (기존) | 4 | 0 |
+
+- 취소: 취소 상태로 신규 insert 1건(cancel_date 있음). 기존 row 취소 update 0, restore pending 0.
+- sync cell 4개 모두 COMPLETE, failure_reason 없음.
+- 실제 증가량은 dry-run 예상(매매 29 / 전월세 226)과 정확히 일치.
+- 신규 row의 source_fetched_at은 이번 수집 시각(2026-10-24)이다. 기존 6행은 수정되지 않았다(updated_at=created_at).
+- 수영구 최신 거래일: 매매 2026-08-31 -> 2026-10-20, 전월세 2026-09-03 -> 2026-10-23.
+- natural key 중복 0. master 잘못 연결 0(연결된 행은 sgg/umd 모두 일치).
+- 범위 밖: 다른 15개 구 건수 변화 0, master 변화 0, 통계 카운터상 쓰기는 거래 2테이블과 sync cell 테이블뿐.
+- 다음: 부산 16구 apply 승인 요청. cron 등록(`vercel.json`)은 그 이후.
