@@ -1,0 +1,1063 @@
+{
+  "_notice": "SAMPLE ONLY. 모든 값은 형식을 보여 주기 위한 모의 값이다. 실제 운영 거래를 복사하지 않았고 개인정보·secret이 없다. masterId·건물명·금액은 실재하지 않는 예시다. Kakao 좌표(latitude/longitude)는 V1 계약에 없다.",
+  "apiVersion": "v1",
+  "1_apartment_building_search": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/search?lawdCd=26350&q=샘플&propertyType=apartment&limit=5",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000001",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "masterId": "apt-26350-1001",
+            "propertyType": "apartment",
+            "name": "샘플아파트",
+            "masterMatchStatus": "MATCHED",
+            "unresolvedReason": null,
+            "location": {
+              "lawdCd": "26350",
+              "sigungu": "해운대구",
+              "dong": "우동",
+              "jibun": "1",
+              "buildingDong": null,
+              "roadAddress": "부산 해운대구 샘플로 1",
+              "jibunAddress": "부산 해운대구 우동 1"
+            },
+            "buildYear": 2010,
+            "unitCount": 500,
+            "unitCountBasis": "households"
+          }
+        ],
+        "truncated": false,
+        "query": {
+          "lawdCd": "26350",
+          "dong": null,
+          "q": "샘플",
+          "propertyTypes": [
+            "apartment"
+          ],
+          "limit": 5
+        }
+      }
+    }
+  },
+  "2_officetel_building_search": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/search?lawdCd=26350&dong=우동&propertyType=officetel",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000002",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "items": [
+          {
+            "masterId": "offi-11",
+            "propertyType": "officetel",
+            "name": "샘플오피스텔",
+            "masterMatchStatus": "MATCHED",
+            "unresolvedReason": null,
+            "location": {
+              "lawdCd": "26350",
+              "sigungu": null,
+              "dong": "우동",
+              "jibun": "10",
+              "buildingDong": null,
+              "roadAddress": "부산 해운대구 샘플대로 10",
+              "jibunAddress": null
+            },
+            "buildYear": 2018,
+            "unitCount": 300,
+            "unitCountBasis": "ho"
+          }
+        ],
+        "truncated": false,
+        "query": {
+          "lawdCd": "26350",
+          "dong": "우동",
+          "q": null,
+          "propertyTypes": [
+            "officetel"
+          ],
+          "limit": 10
+        }
+      }
+    }
+  },
+  "3_apartment_sale_transactions": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/apt-26350-1001/transactions?transactionType=sale&fromMonth=2026-07&toMonth=2026-10&minArea=84&maxArea=85&pageSize=2",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000003",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "building": {
+          "masterId": "apt-26350-1001",
+          "propertyType": "apartment",
+          "name": "샘플아파트",
+          "masterMatchStatus": "MATCHED",
+          "unresolvedReason": null,
+          "location": {
+            "lawdCd": "26350",
+            "sigungu": "해운대구",
+            "dong": "우동",
+            "jibun": "1",
+            "buildingDong": null,
+            "roadAddress": "부산 해운대구 샘플로 1",
+            "jibunAddress": "부산 해운대구 우동 1"
+          },
+          "buildYear": 2010,
+          "unitCount": 500,
+          "unitCountBasis": "households"
+        },
+        "query": {
+          "transactionType": "sale",
+          "fromMonth": "2026-07",
+          "toMonth": "2026-10",
+          "minArea": 84,
+          "maxArea": 85,
+          "includeCanceled": false
+        },
+        "resultState": "HAS_DATA",
+        "items": [
+          {
+            "propertyType": "apartment",
+            "masterId": "apt-26350-1001",
+            "masterMatchStatus": "MATCHED",
+            "transactionType": "sale",
+            "dealDate": "2026-10-17",
+            "price": 122700,
+            "deposit": null,
+            "monthlyRent": null,
+            "exclusiveArea": 84.6389,
+            "floor": 15,
+            "canceled": false,
+            "cancelDate": null,
+            "cancellationCoverage": "PROVIDED",
+            "contractType": null,
+            "sourceFetchedAt": "2026-10-23T19:59:44.580Z"
+          },
+          {
+            "propertyType": "apartment",
+            "masterId": "apt-26350-1001",
+            "masterMatchStatus": "MATCHED",
+            "transactionType": "sale",
+            "dealDate": "2026-09-30",
+            "price": 120000,
+            "deposit": null,
+            "monthlyRent": null,
+            "exclusiveArea": 84.6389,
+            "floor": 8,
+            "canceled": false,
+            "cancelDate": null,
+            "cancellationCoverage": "PROVIDED",
+            "contractType": null,
+            "sourceFetchedAt": "2026-10-23T19:59:44.580Z"
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "pageSize": 2,
+          "totalItems": 7,
+          "totalPages": 4,
+          "hasMore": true
+        },
+        "unattributed": null,
+        "verification": {
+          "freshnessStatus": "FRESH",
+          "coverageStatus": "PARTIAL",
+          "recent": {
+            "months": [
+              "2026-08",
+              "2026-09",
+              "2026-10"
+            ],
+            "monthsVerified": 2,
+            "oldestVerifiedAt": "2026-10-24T21:00:00.000Z",
+            "newestVerifiedAt": "2026-10-25T00:56:10.330Z"
+          },
+          "coverage": {
+            "monthsRequested": 4,
+            "monthsVerified": 3,
+            "unverifiedMonths": [
+              "2026-10"
+            ],
+            "oldestVerifiedAt": "2026-10-24T21:00:00.000Z",
+            "newestVerifiedAt": "2026-10-25T00:56:10.330Z"
+          },
+          "freshWithinHours": 192
+        },
+        "sources": {
+          "transactions": {
+            "name": "국토교통부 실거래가 공개자료",
+            "dataset": "국토교통부_아파트 매매 실거래가 자료",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          },
+          "building": {
+            "name": "건축물대장",
+            "dataset": "국토교통부_건축HUB_건축물대장정보 서비스",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          }
+        }
+      }
+    }
+  },
+  "4_apartment_rent_transactions": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/apt-26350-1001/transactions?transactionType=wolse&pageSize=1",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000004",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "building": {
+          "masterId": "apt-26350-1001",
+          "propertyType": "apartment",
+          "name": "샘플아파트",
+          "masterMatchStatus": "MATCHED",
+          "unresolvedReason": null,
+          "location": {
+            "lawdCd": "26350",
+            "sigungu": "해운대구",
+            "dong": "우동",
+            "jibun": "1",
+            "buildingDong": null,
+            "roadAddress": "부산 해운대구 샘플로 1",
+            "jibunAddress": "부산 해운대구 우동 1"
+          },
+          "buildYear": 2010,
+          "unitCount": 500,
+          "unitCountBasis": "households"
+        },
+        "query": {
+          "transactionType": "wolse",
+          "fromMonth": "2025-11",
+          "toMonth": "2026-10",
+          "minArea": null,
+          "maxArea": null,
+          "includeCanceled": false
+        },
+        "resultState": "HAS_DATA",
+        "items": [
+          {
+            "propertyType": "apartment",
+            "masterId": "apt-26350-1001",
+            "masterMatchStatus": "MATCHED",
+            "transactionType": "wolse",
+            "dealDate": "2026-09-29",
+            "price": null,
+            "deposit": 10000,
+            "monthlyRent": 296,
+            "exclusiveArea": 126.9004,
+            "floor": 37,
+            "canceled": null,
+            "cancelDate": null,
+            "cancellationCoverage": "NOT_PROVIDED_BY_SOURCE",
+            "contractType": "갱신",
+            "sourceFetchedAt": "2026-10-06T21:57:40.565Z"
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "pageSize": 1,
+          "totalItems": 100,
+          "totalPages": 100,
+          "hasMore": true
+        },
+        "unattributed": null,
+        "verification": {
+          "freshnessStatus": "FRESH",
+          "coverageStatus": "PARTIAL",
+          "recent": {
+            "months": [
+              "2026-08",
+              "2026-09",
+              "2026-10"
+            ],
+            "monthsVerified": 2,
+            "oldestVerifiedAt": "2026-10-24T21:57:45.795Z",
+            "newestVerifiedAt": "2026-10-24T21:57:45.795Z"
+          },
+          "coverage": {
+            "monthsRequested": 12,
+            "monthsVerified": 3,
+            "unverifiedMonths": [
+              "2025-11",
+              "2025-12",
+              "2026-01",
+              "2026-02",
+              "2026-03",
+              "2026-04",
+              "2026-05",
+              "2026-06",
+              "2026-10"
+            ],
+            "oldestVerifiedAt": "2026-10-24T21:57:45.795Z",
+            "newestVerifiedAt": "2026-10-24T21:57:45.795Z"
+          },
+          "freshWithinHours": 192
+        },
+        "sources": {
+          "transactions": {
+            "name": "국토교통부 실거래가 공개자료",
+            "dataset": "국토교통부_아파트 전월세 실거래가 자료",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          },
+          "building": {
+            "name": "건축물대장",
+            "dataset": "국토교통부_건축HUB_건축물대장정보 서비스",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          }
+        }
+      }
+    }
+  },
+  "5_officetel_sale_transactions": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/offi-11/transactions?transactionType=sale&pageSize=1",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000005",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "building": {
+          "masterId": "offi-11",
+          "propertyType": "officetel",
+          "name": "샘플오피스텔",
+          "masterMatchStatus": "MATCHED",
+          "unresolvedReason": null,
+          "location": {
+            "lawdCd": "26350",
+            "sigungu": null,
+            "dong": "우동",
+            "jibun": "10",
+            "buildingDong": null,
+            "roadAddress": "부산 해운대구 샘플대로 10",
+            "jibunAddress": null
+          },
+          "buildYear": 2018,
+          "unitCount": 300,
+          "unitCountBasis": "ho"
+        },
+        "query": {
+          "transactionType": "sale",
+          "fromMonth": "2025-11",
+          "toMonth": "2026-10",
+          "minArea": null,
+          "maxArea": null,
+          "includeCanceled": false
+        },
+        "resultState": "HAS_DATA",
+        "items": [
+          {
+            "propertyType": "officetel",
+            "masterId": "offi-11",
+            "masterMatchStatus": "MATCHED",
+            "transactionType": "sale",
+            "dealDate": "2026-10-07",
+            "price": 9000,
+            "deposit": null,
+            "monthlyRent": null,
+            "exclusiveArea": 31.6862,
+            "floor": 7,
+            "canceled": false,
+            "cancelDate": null,
+            "cancellationCoverage": "PROVIDED",
+            "contractType": null,
+            "sourceFetchedAt": "2026-10-24T08:30:36.306Z"
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "pageSize": 1,
+          "totalItems": 26,
+          "totalPages": 26,
+          "hasMore": true
+        },
+        "unattributed": null,
+        "verification": {
+          "freshnessStatus": "FRESH",
+          "coverageStatus": "PARTIAL",
+          "recent": {
+            "months": [
+              "2026-08",
+              "2026-09",
+              "2026-10"
+            ],
+            "monthsVerified": 3,
+            "oldestVerifiedAt": "2026-10-24T12:39:00.000Z",
+            "newestVerifiedAt": "2026-10-25T01:33:22.000Z"
+          },
+          "coverage": {
+            "monthsRequested": 12,
+            "monthsVerified": 8,
+            "unverifiedMonths": [
+              "2025-11",
+              "2025-12",
+              "2026-01",
+              "2026-02"
+            ],
+            "oldestVerifiedAt": "2026-10-24T12:39:00.000Z",
+            "newestVerifiedAt": "2026-10-25T01:33:22.000Z"
+          },
+          "freshWithinHours": 192
+        },
+        "sources": {
+          "transactions": {
+            "name": "국토교통부 실거래가 공개자료",
+            "dataset": "국토교통부_오피스텔 매매 실거래가 자료",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          },
+          "building": {
+            "name": "건축물대장",
+            "dataset": "국토교통부_건축HUB_건축물대장정보 서비스",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          }
+        }
+      }
+    }
+  },
+  "6_officetel_rent_transactions": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/offi-11/transactions?transactionType=jeonse&pageSize=1",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000006",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "building": {
+          "masterId": "offi-11",
+          "propertyType": "officetel",
+          "name": "샘플오피스텔",
+          "masterMatchStatus": "MATCHED",
+          "unresolvedReason": null,
+          "location": {
+            "lawdCd": "26350",
+            "sigungu": null,
+            "dong": "우동",
+            "jibun": "10",
+            "buildingDong": null,
+            "roadAddress": "부산 해운대구 샘플대로 10",
+            "jibunAddress": null
+          },
+          "buildYear": 2018,
+          "unitCount": 300,
+          "unitCountBasis": "ho"
+        },
+        "query": {
+          "transactionType": "jeonse",
+          "fromMonth": "2025-11",
+          "toMonth": "2026-10",
+          "minArea": null,
+          "maxArea": null,
+          "includeCanceled": false
+        },
+        "resultState": "HAS_DATA",
+        "items": [
+          {
+            "propertyType": "officetel",
+            "masterId": "offi-11",
+            "masterMatchStatus": "MATCHED",
+            "transactionType": "jeonse",
+            "dealDate": "2026-09-03",
+            "price": null,
+            "deposit": 14500,
+            "monthlyRent": 0,
+            "exclusiveArea": 49.72,
+            "floor": 26,
+            "canceled": null,
+            "cancelDate": null,
+            "cancellationCoverage": "NOT_PROVIDED_BY_SOURCE",
+            "contractType": "신규",
+            "sourceFetchedAt": "2026-10-24T08:30:57.034Z"
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "pageSize": 1,
+          "totalItems": 26,
+          "totalPages": 26,
+          "hasMore": true
+        },
+        "unattributed": null,
+        "verification": {
+          "freshnessStatus": "FRESH",
+          "coverageStatus": "PARTIAL",
+          "recent": {
+            "months": [
+              "2026-08",
+              "2026-09",
+              "2026-10"
+            ],
+            "monthsVerified": 2,
+            "oldestVerifiedAt": "2026-10-25T01:19:14.000Z",
+            "newestVerifiedAt": "2026-10-25T01:19:27.000Z"
+          },
+          "coverage": {
+            "monthsRequested": 12,
+            "monthsVerified": 2,
+            "unverifiedMonths": [
+              "2025-11",
+              "2025-12",
+              "2026-01",
+              "2026-02",
+              "2026-03",
+              "2026-04",
+              "2026-05",
+              "2026-06",
+              "2026-07",
+              "2026-08"
+            ],
+            "oldestVerifiedAt": "2026-10-25T01:19:14.000Z",
+            "newestVerifiedAt": "2026-10-25T01:19:27.000Z"
+          },
+          "freshWithinHours": 192
+        },
+        "sources": {
+          "transactions": {
+            "name": "국토교통부 실거래가 공개자료",
+            "dataset": "국토교통부_오피스텔 전월세 실거래가 자료",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          },
+          "building": {
+            "name": "건축물대장",
+            "dataset": "국토교통부_건축HUB_건축물대장정보 서비스",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          }
+        }
+      }
+    }
+  },
+  "7_content_summary": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/apt-26350-1001/summary?transactionType=sale&fromMonth=2026-01&toMonth=2026-10&minArea=84&maxArea=85",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000007",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "building": {
+          "masterId": "apt-26350-1001",
+          "propertyType": "apartment",
+          "name": "샘플아파트",
+          "masterMatchStatus": "MATCHED",
+          "unresolvedReason": null,
+          "location": {
+            "lawdCd": "26350",
+            "sigungu": "해운대구",
+            "dong": "우동",
+            "jibun": "1",
+            "buildingDong": null,
+            "roadAddress": "부산 해운대구 샘플로 1",
+            "jibunAddress": "부산 해운대구 우동 1"
+          },
+          "buildYear": 2010,
+          "unitCount": 500,
+          "unitCountBasis": "households"
+        },
+        "period": {
+          "fromMonth": "2026-01",
+          "toMonth": "2026-10"
+        },
+        "query": {
+          "transactionType": "sale",
+          "fromMonth": "2026-01",
+          "toMonth": "2026-10",
+          "minArea": 84,
+          "maxArea": 85
+        },
+        "resultState": "HAS_DATA",
+        "masterMatchStatus": "MATCHED",
+        "statistics": {
+          "transactionType": "sale",
+          "primaryMetricName": "price",
+          "sampleCount": 12,
+          "sampleStatus": "SUFFICIENT",
+          "canceledIncluded": false,
+          "metrics": {
+            "price": {
+              "min": 108000,
+              "max": 126000,
+              "median": 118500
+            }
+          },
+          "latest": {
+            "dealDate": "2026-10-17",
+            "price": 122700,
+            "deposit": null,
+            "monthlyRent": null,
+            "exclusiveArea": 84.6389,
+            "floor": 15
+          },
+          "distinctAreaCount": 1,
+          "byExclusiveArea": [
+            {
+              "exclusiveArea": 84.6389,
+              "count": 12,
+              "latestDealDate": "2026-10-17",
+              "sampleStatus": "SUFFICIENT",
+              "primaryMetric": {
+                "min": 108000,
+                "max": 126000,
+                "median": 118500
+              }
+            }
+          ],
+          "byExclusiveAreaTruncated": false,
+          "quality": {
+            "rowsWithoutCancellationCoverage": 0,
+            "identicalSiblingRows": 0,
+            "canceledExcludedCount": 1
+          },
+          "calculationMethod": "표본 = 조회 기간·면적 조건에 맞는 취소되지 않은 매매 거래 행 전부(행 1개 = 1건, 동일 내용 행도 병합하지 않음). 금액 단위는 만원이며 반올림하지 않는다. median은 표본 5건 이상일 때만 제공한다(짝수면 가운데 두 값의 평균). 전용면적은 원본 ㎡ 값 그대로 묶으며 평형으로 환산하지 않는다."
+        },
+        "unattributed": null,
+        "verification": {
+          "freshnessStatus": "FRESH",
+          "coverageStatus": "COMPLETE",
+          "recent": {
+            "months": [
+              "2026-08",
+              "2026-09",
+              "2026-10"
+            ],
+            "monthsVerified": 3,
+            "oldestVerifiedAt": "2026-10-24T21:00:00.000Z",
+            "newestVerifiedAt": "2026-10-25T00:56:10.330Z"
+          },
+          "coverage": {
+            "monthsRequested": 10,
+            "monthsVerified": 10,
+            "unverifiedMonths": [],
+            "oldestVerifiedAt": "2026-10-24T21:00:00.000Z",
+            "newestVerifiedAt": "2026-10-25T00:56:10.330Z"
+          },
+          "freshWithinHours": 192
+        },
+        "sources": {
+          "transactions": {
+            "name": "국토교통부 실거래가 공개자료",
+            "dataset": "국토교통부_아파트 매매 실거래가 자료",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          },
+          "building": {
+            "name": "건축물대장",
+            "dataset": "국토교통부_건축HUB_건축물대장정보 서비스",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          }
+        },
+        "contentGuidance": {
+          "recentFactsAllowed": true,
+          "periodTrendEligible": true,
+          "reasons": []
+        }
+      }
+    }
+  },
+  "8_unresolved_master": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/offi-12/transactions?transactionType=sale",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000008",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "building": {
+          "masterId": "offi-12",
+          "propertyType": "officetel",
+          "name": "샘플다동오피스텔",
+          "masterMatchStatus": "UNRESOLVED",
+          "unresolvedReason": "MULTI_MASTER_ADDRESS",
+          "location": {
+            "lawdCd": "26350",
+            "sigungu": null,
+            "dong": "우동",
+            "jibun": "20",
+            "buildingDong": "B동",
+            "roadAddress": "부산 해운대구 샘플대로 20",
+            "jibunAddress": null
+          },
+          "buildYear": 2019,
+          "unitCount": 200,
+          "unitCountBasis": "ho"
+        },
+        "query": {
+          "transactionType": "sale",
+          "fromMonth": "2025-11",
+          "toMonth": "2026-10",
+          "minArea": null,
+          "maxArea": null,
+          "includeCanceled": false
+        },
+        "resultState": "UNATTRIBUTED_AT_ADDRESS",
+        "items": [],
+        "pagination": {
+          "page": 1,
+          "pageSize": 50,
+          "totalItems": 0,
+          "totalPages": 0,
+          "hasMore": false
+        },
+        "unattributed": {
+          "unattributedAtAddressCount": 349,
+          "note": "같은 지번에 여러 동이 등록돼 원천이 동을 구분하지 않으므로, 이 주소의 거래는 어느 건물에도 귀속하지 않았습니다."
+        },
+        "verification": {
+          "freshnessStatus": "FRESH",
+          "coverageStatus": "PARTIAL",
+          "recent": {
+            "months": [
+              "2026-08",
+              "2026-09",
+              "2026-10"
+            ],
+            "monthsVerified": 3,
+            "oldestVerifiedAt": "2026-10-24T12:39:00.000Z",
+            "newestVerifiedAt": "2026-10-25T01:33:22.000Z"
+          },
+          "coverage": {
+            "monthsRequested": 12,
+            "monthsVerified": 8,
+            "unverifiedMonths": [
+              "2025-11",
+              "2025-12",
+              "2026-01",
+              "2026-02"
+            ],
+            "oldestVerifiedAt": "2026-10-24T12:39:00.000Z",
+            "newestVerifiedAt": "2026-10-25T01:33:22.000Z"
+          },
+          "freshWithinHours": 192
+        },
+        "sources": {
+          "transactions": {
+            "name": "국토교통부 실거래가 공개자료",
+            "dataset": "국토교통부_오피스텔 매매 실거래가 자료",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          },
+          "building": {
+            "name": "건축물대장",
+            "dataset": "국토교통부_건축HUB_건축물대장정보 서비스",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          }
+        }
+      }
+    },
+    "_note": "items가 비어 있어도 '거래가 없다'가 아니다. 이 주소에는 거래가 있으나 어느 동의 것인지 확정할 수 없어 내보내지 않았다. 콘텐츠에서 이 건물의 거래/시세로 서술하면 안 된다."
+  },
+  "9_no_transactions": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/offi-11/transactions?transactionType=sale&minArea=200&maxArea=210",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000009",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "building": {
+          "masterId": "offi-11",
+          "propertyType": "officetel",
+          "name": "샘플오피스텔",
+          "masterMatchStatus": "MATCHED",
+          "unresolvedReason": null,
+          "location": {
+            "lawdCd": "26350",
+            "sigungu": null,
+            "dong": "우동",
+            "jibun": "10",
+            "buildingDong": null,
+            "roadAddress": "부산 해운대구 샘플대로 10",
+            "jibunAddress": null
+          },
+          "buildYear": 2018,
+          "unitCount": 300,
+          "unitCountBasis": "ho"
+        },
+        "query": {
+          "transactionType": "sale",
+          "fromMonth": "2025-11",
+          "toMonth": "2026-10",
+          "minArea": 200,
+          "maxArea": 210,
+          "includeCanceled": false
+        },
+        "resultState": "NO_TRANSACTIONS_UNVERIFIED",
+        "items": [],
+        "pagination": {
+          "page": 1,
+          "pageSize": 50,
+          "totalItems": 0,
+          "totalPages": 0,
+          "hasMore": false
+        },
+        "unattributed": null,
+        "verification": {
+          "freshnessStatus": "FRESH",
+          "coverageStatus": "PARTIAL",
+          "recent": {
+            "months": [
+              "2026-08",
+              "2026-09",
+              "2026-10"
+            ],
+            "monthsVerified": 3,
+            "oldestVerifiedAt": "2026-10-24T12:39:00.000Z",
+            "newestVerifiedAt": "2026-10-25T01:33:22.000Z"
+          },
+          "coverage": {
+            "monthsRequested": 12,
+            "monthsVerified": 8,
+            "unverifiedMonths": [
+              "2025-11",
+              "2025-12",
+              "2026-01",
+              "2026-02"
+            ],
+            "oldestVerifiedAt": "2026-10-24T12:39:00.000Z",
+            "newestVerifiedAt": "2026-10-25T01:33:22.000Z"
+          },
+          "freshWithinHours": 192
+        },
+        "sources": {
+          "transactions": {
+            "name": "국토교통부 실거래가 공개자료",
+            "dataset": "국토교통부_오피스텔 매매 실거래가 자료",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          },
+          "building": {
+            "name": "건축물대장",
+            "dataset": "국토교통부_건축HUB_건축물대장정보 서비스",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          }
+        }
+      }
+    },
+    "_note": "NO_TRANSACTIONS_VERIFIED 는 요청 기간의 모든 달이 검증(coverageStatus=COMPLETE)됐을 때만 나온다. 여기처럼 coverageStatus=PARTIAL이면 freshnessStatus가 FRESH여도 \"없다\"고 단정하지 말고 \"확인된 범위에서는 없음\"으로 쓴다. 수집 실패는 이 응답이 아니라 5xx로 나온다."
+  },
+  "11_low_sample_summary": {
+    "request": "GET /api/integrations/sellflow/v1/buildings/offi-11/summary?transactionType=jeonse",
+    "response": {
+      "success": true,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000016",
+      "asOf": "2026-10-25T03:00:00.000Z",
+      "data": {
+        "building": {
+          "masterId": "offi-11",
+          "propertyType": "officetel",
+          "name": "샘플오피스텔",
+          "masterMatchStatus": "MATCHED",
+          "unresolvedReason": null,
+          "location": {
+            "lawdCd": "26350",
+            "sigungu": null,
+            "dong": "우동",
+            "jibun": "10",
+            "buildingDong": null,
+            "roadAddress": "부산 해운대구 샘플대로 10",
+            "jibunAddress": null
+          },
+          "buildYear": 2018,
+          "unitCount": 300,
+          "unitCountBasis": "ho"
+        },
+        "period": {
+          "fromMonth": "2025-11",
+          "toMonth": "2026-10"
+        },
+        "query": {
+          "transactionType": "jeonse",
+          "fromMonth": "2025-11",
+          "toMonth": "2026-10",
+          "minArea": null,
+          "maxArea": null
+        },
+        "resultState": "HAS_DATA",
+        "masterMatchStatus": "MATCHED",
+        "statistics": {
+          "transactionType": "jeonse",
+          "primaryMetricName": "deposit",
+          "sampleCount": 3,
+          "sampleStatus": "LOW_SAMPLE",
+          "canceledIncluded": false,
+          "metrics": {
+            "deposit": {
+              "min": 9000,
+              "max": 14500,
+              "median": null
+            }
+          },
+          "latest": {
+            "dealDate": "2026-09-03",
+            "price": null,
+            "deposit": 14500,
+            "monthlyRent": 0,
+            "exclusiveArea": 49.72,
+            "floor": 26
+          },
+          "distinctAreaCount": 2,
+          "byExclusiveArea": [
+            {
+              "exclusiveArea": 24.5,
+              "count": 2,
+              "latestDealDate": "2026-08-11",
+              "sampleStatus": "LOW_SAMPLE",
+              "primaryMetric": {
+                "min": 9000,
+                "max": 9500,
+                "median": null
+              }
+            },
+            {
+              "exclusiveArea": 49.72,
+              "count": 1,
+              "latestDealDate": "2026-09-03",
+              "sampleStatus": "LOW_SAMPLE",
+              "primaryMetric": {
+                "min": 14500,
+                "max": 14500,
+                "median": null
+              }
+            }
+          ],
+          "byExclusiveAreaTruncated": false,
+          "quality": {
+            "rowsWithoutCancellationCoverage": null,
+            "identicalSiblingRows": 0,
+            "canceledExcludedCount": null
+          },
+          "calculationMethod": "표본 = 조회 기간·면적 조건에 맞는 전세 거래 행 전부(행 1개 = 1건, 동일 내용 행도 병합하지 않음). 금액 단위는 만원이며 반올림하지 않는다. median은 표본 5건 이상일 때만 제공한다(짝수면 가운데 두 값의 평균). 전용면적은 원본 ㎡ 값 그대로 묶으며 평형으로 환산하지 않는다."
+        },
+        "verification": {
+          "freshnessStatus": "FRESH",
+          "coverageStatus": "PARTIAL",
+          "recent": {
+            "months": [
+              "2026-08",
+              "2026-09",
+              "2026-10"
+            ],
+            "monthsVerified": 2,
+            "oldestVerifiedAt": "2026-10-25T01:19:14.000Z",
+            "newestVerifiedAt": "2026-10-25T01:19:27.000Z"
+          },
+          "coverage": {
+            "monthsRequested": 12,
+            "monthsVerified": 2,
+            "unverifiedMonths": [
+              "2025-11",
+              "2025-12",
+              "2026-01",
+              "2026-02",
+              "2026-03",
+              "2026-04",
+              "2026-05",
+              "2026-06",
+              "2026-07",
+              "2026-08"
+            ],
+            "oldestVerifiedAt": "2026-10-25T01:19:14.000Z",
+            "newestVerifiedAt": "2026-10-25T01:19:27.000Z"
+          },
+          "freshWithinHours": 192
+        },
+        "sources": {
+          "transactions": {
+            "name": "국토교통부 실거래가 공개자료",
+            "dataset": "국토교통부_오피스텔 전월세 실거래가 자료",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          },
+          "building": {
+            "name": "건축물대장",
+            "dataset": "국토교통부_건축HUB_건축물대장정보 서비스",
+            "provider": "공공데이터포털(data.go.kr)",
+            "processedBy": "이집(E-JIP) 수집·가공"
+          }
+        },
+        "contentGuidance": {
+          "recentFactsAllowed": true,
+          "periodTrendEligible": false,
+          "reasons": [
+            "LOW_SAMPLE",
+            "COVERAGE_NOT_COMPLETE",
+            "MIXED_AREAS"
+          ]
+        },
+        "unattributed": null
+      }
+    },
+    "_note": "LOW_SAMPLE + PARTIAL 이므로 periodTrendEligible=false. \"최근 확인된 전세 거래는 …\" 같은 개별 사실 서술만 가능하고 급등/급락/시세 상승세 등 추세·평균 시세 표현은 쓰지 않는다."
+  },
+  "10_error_responses": {
+    "400": {
+      "success": false,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000011",
+      "error": {
+        "code": "PERIOD_TOO_LONG",
+        "message": "조회 기간은 최대 36개월입니다."
+      }
+    },
+    "401": {
+      "success": false,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000010",
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "인증이 필요합니다."
+      }
+    },
+    "403": {
+      "success": false,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000012",
+      "error": {
+        "code": "FORBIDDEN",
+        "message": "이 키로 조회할 수 없는 유형입니다."
+      }
+    },
+    "404": {
+      "success": false,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000013",
+      "error": {
+        "code": "MASTER_NOT_FOUND",
+        "message": "해당 건물을 찾을 수 없습니다."
+      }
+    },
+    "500": {
+      "success": false,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000014",
+      "error": {
+        "code": "INTERNAL_ERROR",
+        "message": "요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."
+      }
+    },
+    "503": {
+      "success": false,
+      "apiVersion": "v1",
+      "requestId": "00000000-0000-4000-8000-000000000015",
+      "error": {
+        "code": "NOT_ENABLED",
+        "message": "이 API는 아직 활성화되지 않았습니다."
+      }
+    }
+  }
+}
