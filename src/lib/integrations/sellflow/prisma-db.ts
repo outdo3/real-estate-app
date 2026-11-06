@@ -162,15 +162,18 @@ export const prismaSellflowDb: SellflowDb = {
       });
       return rows.map(aptRow);
     }
-    const rows = await prisma.officetelMaster.findMany({
-      where: {
-        sggCd: lawdCd,
-        ...(dong ? { umdNm: dong } : {}),
-        ...(qNormalized ? { normalizedName: { contains: qNormalized, mode: 'insensitive' as const } } : {}),
-      },
-      orderBy: [{ normalizedName: 'asc' }, { id: 'asc' }],
-      take,
-    });
+    const base = { sggCd: lawdCd, ...(dong ? { umdNm: dong } : {}) };
+    const order = [{ normalizedName: 'asc' as const }, { id: 'asc' as const }];
+    let rows;
+    if (qNormalized) {
+      rows = await prisma.officetelMaster.findMany({ where: { ...base, normalizedName: { contains: qNormalized, mode: 'insensitive' as const } }, orderBy: order, take });
+    } else {
+      // 이름 없이(동만) 찾을 때: 빈 이름이 정렬상 맨 앞이라 후보 상한을 다 차지할 수 있다 → 이름 있는 것을 먼저, 남는 자리에만 이름 없는 것.
+      const named = await prisma.officetelMaster.findMany({ where: { ...base, normalizedName: { not: '' } }, orderBy: order, take });
+      const rest = take - named.length;
+      const nameless = rest > 0 ? await prisma.officetelMaster.findMany({ where: { ...base, normalizedName: '' }, orderBy: order, take: rest }) : [];
+      rows = [...named, ...nameless];
+    }
     const counts = await mastersAtAddressMap(rows);
     return rows.map((m) => offiRow(m, counts.get(`${m.sggCd}|${m.umdNm}|${m.jibun}`) ?? 1));
   },

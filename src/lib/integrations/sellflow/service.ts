@@ -151,9 +151,12 @@ export async function searchBuildings(query: SearchQuery, db: SellflowDb): Promi
     if (l.length > SEARCH_MAX_CANDIDATES) overflow = true;
     pool.push(...l.slice(0, SEARCH_MAX_CANDIDATES));
   }
+  // 이름이 없는 master(name=null)는 같은 순위 안에서 **뒤로** 보낸다. 빈 문자열로 비교하면 가장 앞에 와서 목록을 다 채운다(이름은 지어내지 않는다).
+  const unnamed = (m: MasterRow): number => ((m.name ?? '').trim() === '' ? 1 : 0);
   pool.sort(
     (a, b) =>
       matchRank(a.normalizedName, query.qNormalized) - matchRank(b.normalizedName, query.qNormalized) ||
+      unnamed(a) - unnamed(b) ||
       (a.name ?? '').localeCompare(b.name ?? '', 'ko') ||
       String(a.key).localeCompare(String(b.key)),
   );

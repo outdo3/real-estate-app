@@ -205,6 +205,17 @@ test('검색: 다동 주소 오피스텔은 UNRESOLVED(사유 포함), 이름 �
   assert.equal(byId['offi-13'].masterMatchStatus, 'MATCHED');
 });
 
+test('검색: 동만 줄 때 이름 없는 master가 이름 있는 master보다 앞서 목록을 채우지 않는다 (이름은 지어내지 않는다)', async () => {
+  const nameless = Array.from({ length: 12 }, (_, i): MasterRow => ({ ...offi, key: 100 + i, name: null, normalizedName: '', jibun: String(100 + i) }));
+  const named = Array.from({ length: 3 }, (_, i): MasterRow => ({ ...offi, key: 200 + i, name: `이름${i}오피스텔`, normalizedName: `이름${i}오피스텔`, jibun: String(200 + i) }));
+  const db = fakeDb({ masters: [...nameless, ...named], trades: {} });
+  const r = await call(`${BASE}/search?lawdCd=26350&dong=우동&limit=10`, db);
+  const items = r.body.data.items as any[];
+  assert.equal(items.length, 10);
+  assert.deepEqual(items.slice(0, 3).map((i) => i.name), ['이름0오피스텔', '이름1오피스텔', '이름2오피스텔']);
+  assert.ok(items.slice(3).every((i) => i.name === null)); // 이름 없음은 null 그대로
+});
+
 test('검색: limit 상한과 truncated', async () => {
   const many = Array.from({ length: 30 }, (_, i): MasterRow => ({ ...apt, key: `26140-${2000 + i}`, name: `샘플${i}`, normalizedName: `샘플${i}` }));
   const db = fakeDb({ masters: many, trades: {} });
