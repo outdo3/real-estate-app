@@ -336,3 +336,34 @@ DB 스키마 변경 없이 서버 로그만: 한 요청당 한 줄 JSON `{"evt":
 - 선정: 이름이 있는 건물만, 거래를 귀속할 수 있는(`MATCHED`) 건물만. 세대수(오피스텔은 호수)를 기본 점수로 하되, 이미 뽑은 단지와 **같은 동이면 ×0.6, 같은 준공 연대면 ×0.75**로 감쇠해 한 동·한 연대의 대단지가 목록을 채우지 않게 한다. 동점은 이름·키 순이라 같은 입력은 같은 결과다. 규모를 모르는 단지는 뒤로 간다.
 - 자료가 없는 지역은 오류가 아니라 `items: []`(NO DATA)이다. 조회 실패는 빈 목록이 아니라 500이다. 좌표·거리는 내지 않는다.
 - 응답 `data.query`에 `view`·`minBuildYear`가 추가된다(대표 단지 보기일 때만).
+
+---
+
+## 14. V1.3 - 단지·교육 컨텍스트 / 지역 개발·공급 컨텍스트 (읽기 전용, 같은 인증·봉투)
+
+### 14.1 `GET /buildings/{masterId}/context`
+단지 속성(건축물대장 기반)과 공식 통학구역. 파라미터 없음.
+- `complex`: `parkingCount`, `parkingPerHousehold`(= 주차대수 ÷ 세대수, 둘 다 확인될 때만, 5 초과는 내지 않음), `floorAreaRatio`, `buildingCoverageRatio`, `mainBuildingCount`, `useApprovalDate`. 결측·0은 `null` + `omitted[{field, reason}]`. `basicSpecSource = UNKNOWN`(출처 미상)이면 값이 있어도 내지 않는다. 오피스텔은 `NOT_COVERED`. 이름·주소·준공연도·세대수는 기존 `building`을 쓴다.
+- `education.attendanceZone`: 한국교육시설안전원 공식 통학구역(초등)·학교군(중등). **부산 아파트만**(3,402개, 기준일 2026-03-20). 확정된 학교(신뢰도 HIGH/MEDIUM)만 내며 REVIEW_REQUIRED·NOT_AVAILABLE이면 학교를 내지 않는다. `attributionNotice`(교육청 확인 안내)를 그대로 싣는다. 통학구역은 학교 배정을 보장하지 않는다.
+- `education.schoolDistance`: 항상 `{status: 'WITHHELD', measurement: null}`. 거리·도보 시간은 내지 않는다.
+- `withheld[]`: 라이선스·출처가 확정되지 않아 **내지 않는 것**과 이유 - 학교까지 거리(Kakao 좌표 기반), 교통, 생활시설, 학교알리미 통계, 단지 커뮤니티 시설(크롤링). 이집 화면에 보이는 것과 SELLFLOW에 줄 수 있는 것은 다르다.
+- 상태 값: `HAS_DATA` / `NO_DATA` / `NOT_COVERED` / `ACCESS_DENIED` / `UNAVAILABLE`. 영역별로 독립이라 한 영역의 실패가 다른 영역을 지우지 않는다.
+- 필요한 권한: `apartment_masters` SELECT(이미 있음). 통학구역은 파일이라 DB가 필요 없다.
+
+### 14.2 `GET /areas/{lawdCd}/context[?include=redevelopment,presale]`
+시군구 단위(구가 있는 시는 구 코드, 이집 레지스트리에 있는 코드만; 모르는 코드 404).
+- `redevelopment`: 단계 그룹(PLANNING / APPROVAL / CONSTRUCTION / COMPLETED / STOPPED)·사업 유형별 건수, 최근 사업 목록(이름·유형·단계·세대수·자료 기준일·출처). 확인 필요(needsReview) 사업은 사실에서 빼고 개수만 알린다. 좌표를 쓰지 않으며(`coordinates: NOT_USED`) 특정 단지 근처라고 연결하지 않는다.
+- `presale`: 청약홈 공고(날짜로 접수 예정·접수 중·종료 계산), 분양가는 공고 기준 최저·최고(만원). 자동 갱신이 보장되지 않아 `lastCollectedAt`을 싣고, 7일 안에 수집되지 않았으면 `currentStatusStatable: false`(현재 상태로 말하지 못함).
+- 필요한 권한: `redevelopment_projects`, `presales` SELECT(**SELLFLOW 읽기 전용 역할에는 아직 없음** - 부여되기 전에는 해당 영역이 `ACCESS_DENIED`로 오고 나머지는 정상).
+- 오류: 400 잘못된 include·lawdCd, 404 모르는 지역, 501 이 배포에 컨텍스트가 연결되지 않음.
+
+### 14.3 필요한 DB 권한(적용은 승인 후, 이번 작업에서는 변경하지 않음)
+읽기 전용 역할 `sellflow_preview_reader`(Preview)와 동일 이름의 운영 역할에 대해:
+```sql
+GRANT SELECT ON public.redevelopment_projects TO sellflow_preview_reader;
+GRANT SELECT ON public.presales TO sellflow_preview_reader;
+-- 두 테이블이 RLS 활성화 상태이면 SELECT 정책도 필요하다(기존 8개 테이블과 같은 방식: USING (true)):
+-- CREATE POLICY sellflow_reader_select ON public.redevelopment_projects FOR SELECT TO sellflow_preview_reader USING (true);
+-- CREATE POLICY sellflow_reader_select ON public.presales FOR SELECT TO sellflow_preview_reader USING (true);
+```
+`schools`, `apartment_location_features`, `school_stats` 등은 라이선스 미확정이라 권한을 요청하지 않는다.

@@ -250,6 +250,25 @@ export function parseSearchQuery(keys: string[], get: Getter, allowed: PropertyT
   };
 }
 
+/** 건물별 컨텍스트는 파라미터가 없다(모르는 파라미터는 400). */
+export function parseBuildingContextQuery(keys: string[]): void {
+  rejectUnknown(keys, []);
+}
+
+export const AREA_CONTEXT_INCLUDE = ['redevelopment', 'presale'] as const;
+export const AREA_CONTEXT_PARAMS = ['include'] as const;
+/** 시군구별 컨텍스트: include=redevelopment,presale (기본: 둘 다). 지역 없이 전국 조회는 없다(경로의 lawdCd 5자리 필수). */
+export function parseAreaContextQuery(lawdCdRaw: string, keys: string[], get: Getter): { lawdCd: string; include: ('redevelopment' | 'presale')[] } {
+  rejectUnknown(keys, AREA_CONTEXT_PARAMS);
+  const lawdCd = lawdCdRaw.trim();
+  if (!/^\d{5}$/.test(lawdCd)) throw bad('INVALID_PARAMETER', 'lawdCd(법정동 시군구 5자리)가 올바르지 않습니다.');
+  const raw = (get('include') ?? '').trim();
+  if (raw === '') return { lawdCd, include: [...AREA_CONTEXT_INCLUDE] };
+  const parts = Array.from(new Set(raw.split(',').map((p) => p.trim()).filter(Boolean)));
+  if (parts.length === 0 || parts.some((p) => !(AREA_CONTEXT_INCLUDE as readonly string[]).includes(p))) throw bad('INVALID_PARAMETER', 'include는 redevelopment, presale 중에서 쉼표로 고릅니다.');
+  return { lawdCd, include: parts as ('redevelopment' | 'presale')[] };
+}
+
 export interface WindowQuery {
   transactionType: TransactionType;
   fromMonth: string;

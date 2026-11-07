@@ -229,7 +229,7 @@ async function searchRepresentative(query: SearchQuery, db: SellflowDb): Promise
 }
 
 // ------------------------------------------------------------------ shared
-async function loadMaster(masterIdRaw: string, allowed: PropertyType[], db: SellflowDb): Promise<MasterRow> {
+export async function loadMaster(masterIdRaw: string, allowed: PropertyType[], db: SellflowDb): Promise<MasterRow> {
   const parsed = parseMasterId(masterIdRaw);
   if (!allowed.includes(parsed.propertyType)) throw new SellflowApiError(403, 'FORBIDDEN', '이 키로 조회할 수 없는 유형입니다.');
   const master = await db.getMaster(parsed);

@@ -10,14 +10,22 @@ import {
   SELLFLOW_API_VERSION,
   SellflowApiError,
   authenticate,
+  parseAreaContextQuery,
+  parseBuildingContextQuery,
   parseSearchQuery,
   parseSummaryQuery,
   parseTransactionsQuery,
   type SellflowAuthConfig,
 } from './contract';
 import { getSummary, getTransactions, searchBuildings, type SellflowDb } from './service';
+import { getAreaContext, getBuildingContext, type EducationZoneLookup, type SellflowContextDb } from './context';
 
-export type SellflowRoute = { kind: 'search' } | { kind: 'transactions'; masterId: string } | { kind: 'summary'; masterId: string };
+export type SellflowRoute =
+  | { kind: 'search' }
+  | { kind: 'transactions'; masterId: string }
+  | { kind: 'summary'; masterId: string }
+  | { kind: 'buildingContext'; masterId: string }
+  | { kind: 'areaContext'; lawdCd: string };
 
 export interface SellflowLogEntry {
   evt: 'sellflow_api';
@@ -32,6 +40,10 @@ export interface SellflowLogEntry {
 export interface SellflowHandlerDeps {
   auth: SellflowAuthConfig;
   db: SellflowDb;
+  /** V1.3 context endpoints: complex attributes, redevelopment, presale (read only). Absent = those two endpoints answer 503 NOT_ENABLED-like 501. */
+  ctxDb?: SellflowContextDb;
+  /** official attendance-zone lookup (file based, Busan apartments) */
+  educationZone?: EducationZoneLookup;
   now: () => Date;
   newRequestId: () => string;
   log: (entry: SellflowLogEntry) => void;
@@ -78,6 +90,19 @@ export async function handleSellflowRequest(request: Request, route: SellflowRou
       const result = await getTransactions(route.masterId, parseTransactionsQuery(keys, get, now), auth.allowedPropertyTypes, deps.db, now);
       rows = result.rowCount;
       return respond(200, { success: true, apiVersion: SELLFLOW_API_VERSION, requestId, asOf: result.asOf, data: result.data });
+    }
+    if (route.kind === 'buildingContext' || route.kind === 'areaContext') {
+      if (!deps.ctxDb) return fail(501, 'NOT_IMPLEMENTED', '이 배포에서는 컨텍스트 조회를 지원하지 않습니다.');
+      if (route.kind === 'buildingContext') {
+        parseBuildingContextQuery(keys);
+        const result = await getBuildingContext(route.masterId, auth.allowedPropertyTypes, deps.db, deps.ctxDb, deps.educationZone ?? (() => null));
+        rows = result.rowCount;
+        return respond(200, { success: true, apiVersion: SELLFLOW_API_VERSION, requestId, asOf: now.toISOString(), data: result.data });
+      }
+      const q = parseAreaContextQuery(route.lawdCd, keys, get);
+      const result = await getAreaContext(q.lawdCd, q.include, deps.ctxDb, now);
+      rows = result.rowCount;
+      return respond(200, { success: true, apiVersion: SELLFLOW_API_VERSION, requestId, asOf: now.toISOString(), data: result.data });
     }
     const result = await getSummary(route.masterId, parseSummaryQuery(keys, get, now), auth.allowedPropertyTypes, deps.db, now);
     rows = result.rowCount;
