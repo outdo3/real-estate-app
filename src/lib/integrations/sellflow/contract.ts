@@ -22,6 +22,10 @@ export const SEARCH_MAX_CANDIDATES = 60;
 export const SEARCH_Q_MIN_LENGTH = 2;
 export const SEARCH_Q_MAX_LENGTH = 40;
 export const SEARCH_DONG_MAX_LENGTH = 20;
+/** 대표 단지 보기(view=representative): 건물명·법정동 없이 시군구만으로 찾는 유일한 경로. 유형 하나, 후보 상한은 위와 같다. */
+export const SEARCH_VIEWS = ['representative'] as const;
+export const SEARCH_MIN_BUILD_YEAR = 1900;
+export const SEARCH_MAX_BUILD_YEAR = 2100;
 
 export const TX_DEFAULT_PERIOD_MONTHS = 12;
 /** 한 요청이 덮을 수 있는 최대 개월 수(양 끝 달 포함). */
@@ -192,9 +196,13 @@ export interface SearchQuery {
   q: string | null;
   qNormalized: string | null;
   limit: number;
+  /** 'representative' = 시군구 단위 대표 단지 보기(이름·동 없이). 없으면 기존 검색. */
+  view?: 'representative' | null;
+  /** representative 전용: 이 연도 이후 준공만(신축 조건). */
+  minBuildYear?: number | null;
 }
 
-export const SEARCH_PARAMS = ['propertyType', 'lawdCd', 'dong', 'q', 'limit'] as const;
+export const SEARCH_PARAMS = ['propertyType', 'lawdCd', 'dong', 'q', 'limit', 'view', 'minBuildYear'] as const;
 
 export function parseSearchQuery(keys: string[], get: Getter, allowed: PropertyType[]): SearchQuery {
   rejectUnknown(keys, SEARCH_PARAMS);
@@ -210,9 +218,20 @@ export function parseSearchQuery(keys: string[], get: Getter, allowed: PropertyT
     propertyTypes = [pt as PropertyType];
   } else throw bad('INVALID_PARAMETER', 'propertyType은 apartment | officetel | all 이어야 합니다.');
 
+  const viewRaw = (get('view') ?? '').trim().toLowerCase();
+  if (viewRaw !== '' && !(SEARCH_VIEWS as readonly string[]).includes(viewRaw)) throw bad('INVALID_PARAMETER', 'view는 representative 만 허용됩니다.');
+  const representative = viewRaw === 'representative';
+  const minYearRaw = (get('minBuildYear') ?? '').trim();
+  if (minYearRaw !== '' && !representative) throw bad('INVALID_PARAMETER', 'minBuildYear는 view=representative에서만 쓸 수 있습니다.');
+  const minBuildYear = minYearRaw === '' ? null : intParam(minYearRaw, 'minBuildYear', SEARCH_MIN_BUILD_YEAR, SEARCH_MAX_BUILD_YEAR, SEARCH_MIN_BUILD_YEAR);
+
   const qRaw = (get('q') ?? '').trim();
   const dongRaw = (get('dong') ?? '').trim();
-  if (qRaw === '' && dongRaw === '') throw bad('INVALID_PARAMETER', 'q(건물명) 또는 dong(법정동) 중 하나는 필요합니다.');
+  if (representative) {
+    // 대표 단지 보기는 한 유형만, 이름 검색과 함께 쓰지 않는다(이름으로 찾으려면 기존 검색). 법정동은 선택 필터.
+    if (pt === 'all') throw bad('INVALID_PARAMETER', 'view=representative는 propertyType(apartment | officetel)을 하나 지정해야 합니다.');
+    if (qRaw !== '') throw bad('INVALID_PARAMETER', 'view=representative에서는 q를 쓸 수 없습니다.');
+  } else if (qRaw === '' && dongRaw === '') throw bad('INVALID_PARAMETER', 'q(건물명) 또는 dong(법정동) 중 하나는 필요합니다.');
   if (qRaw !== '' && (qRaw.length < SEARCH_Q_MIN_LENGTH || qRaw.length > SEARCH_Q_MAX_LENGTH)) {
     throw bad('INVALID_PARAMETER', `q는 ${SEARCH_Q_MIN_LENGTH}~${SEARCH_Q_MAX_LENGTH}자여야 합니다.`);
   }
@@ -227,6 +246,7 @@ export function parseSearchQuery(keys: string[], get: Getter, allowed: PropertyT
     q: qRaw === '' ? null : qRaw,
     qNormalized,
     limit: intParam(get('limit'), 'limit', 1, SEARCH_MAX_LIMIT, SEARCH_DEFAULT_LIMIT),
+    ...(representative ? { view: 'representative' as const, minBuildYear } : {}),
   };
 }
 

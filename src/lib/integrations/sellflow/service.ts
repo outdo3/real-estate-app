@@ -62,6 +62,11 @@ export interface TxFilter {
 
 export interface SellflowDb {
   searchMasters(input: { propertyType: PropertyType; lawdCd: string; dong: string | null; qNormalized: string | null; take: number }): Promise<MasterRow[]>;
+  /**
+   * 대표 단지 후보(시군구 단위, 이름·동 없이). 이름이 있는 master를 세대수 큰 순으로 최대 take건. minBuildYear가 있으면 그 연도 이후 준공만.
+   * 마스터 테이블만 읽는다(거래 테이블을 건드리지 않는다).
+   */
+  listRepresentativeMasters(input: { propertyType: PropertyType; lawdCd: string; dong: string | null; minBuildYear: number | null; take: number }): Promise<MasterRow[]>;
   getMaster(parsed: ReturnType<typeof parseMasterId>): Promise<MasterRow | null>;
   listTransactions(filter: TxFilter, skip: number, take: number): Promise<{ rows: RawTx[]; total: number }>;
   listForSummary(filter: TxFilter, maxRows: number): Promise<{ rows: RawTx[]; overflow: boolean; canceledExcluded: number | null }>;
@@ -135,11 +140,12 @@ function matchRank(normalizedName: string, q: string | null): number {
 }
 
 export interface SearchResult {
-  data: { items: BuildingDto[]; truncated: boolean; query: { lawdCd: string; dong: string | null; q: string | null; propertyTypes: PropertyType[]; limit: number } };
+  data: { items: BuildingDto[]; truncated: boolean; query: { lawdCd: string; dong: string | null; q: string | null; propertyTypes: PropertyType[]; limit: number; view?: 'representative'; minBuildYear?: number | null } };
   rowCount: number;
 }
 
 export async function searchBuildings(query: SearchQuery, db: SellflowDb): Promise<SearchResult> {
+  if (query.view === 'representative') return searchRepresentative(query, db);
   const lists = await Promise.all(
     query.propertyTypes.map((propertyType) =>
       db.searchMasters({ propertyType, lawdCd: query.lawdCd, dong: query.dong, qNormalized: query.qNormalized, take: SEARCH_MAX_CANDIDATES + 1 }),
@@ -166,6 +172,57 @@ export async function searchBuildings(query: SearchQuery, db: SellflowDb): Promi
       items,
       truncated: overflow || pool.length > query.limit,
       query: { lawdCd: query.lawdCd, dong: query.dong, q: query.q, propertyTypes: query.propertyTypes, limit: query.limit },
+    },
+    rowCount: items.length,
+  };
+}
+
+// ------------------------------------------------------------------ representative complexes (시군구 단위)
+/** 같은 동에서 이미 뽑은 단지가 있으면 다음 후보의 점수에 곱한다(0~1). 한 동의 대단지가 목록을 채우지 않게 한다. */
+export const REPRESENTATIVE_DONG_DECAY = 0.6;
+/** 같은 준공 연대(10년 단위)에서 이미 뽑은 단지가 있으면 곱한다. 오래된 대단지와 신축이 함께 나오게 한다. */
+export const REPRESENTATIVE_DECADE_DECAY = 0.75;
+
+const sizeOf = (m: MasterRow): number => (m.unitCount !== null && m.unitCount > 0 ? m.unitCount : 1);
+
+/**
+ * 대표 단지: 이름이 있고 거래를 귀속할 수 있는(MATCHED) master만, 규모(세대수)를 기본 점수로 하되 이미 뽑은 단지와 같은 동·같은 준공 연대면 점수를 깎는다.
+ * 같은 입력은 항상 같은 결과다(동점은 이름·키 순). 규모를 모르는 단지는 가장 낮은 점수라 뒤로 간다. 좌표·거리는 쓰지 않는다.
+ */
+export function pickRepresentatives(pool: readonly MasterRow[], limit: number): { picked: MasterRow[]; eligibleCount: number } {
+  const eligible = pool.filter((m) => (m.name ?? '').trim() !== '' && matchStatusOf(m).status === 'MATCHED');
+  const rest = [...eligible].sort((a, b) => sizeOf(b) - sizeOf(a) || (a.name ?? '').localeCompare(b.name ?? '', 'ko') || String(a.key).localeCompare(String(b.key)));
+  const dongPicked = new Map<string, number>();
+  const decadePicked = new Map<string, number>();
+  const decadeOf = (m: MasterRow): string => (m.buildYear === null ? 'unknown' : String(Math.floor(m.buildYear / 10)));
+  const picked: MasterRow[] = [];
+  while (picked.length < limit && rest.length > 0) {
+    let bestIdx = 0;
+    let bestScore = -1;
+    rest.forEach((m, i) => {
+      const score = sizeOf(m) * REPRESENTATIVE_DONG_DECAY ** (dongPicked.get(m.dong ?? '') ?? 0) * REPRESENTATIVE_DECADE_DECAY ** (decadePicked.get(decadeOf(m)) ?? 0);
+      if (score > bestScore) { bestScore = score; bestIdx = i; } // strictly greater: ties keep the earlier (name, key) order
+    });
+    const [m] = rest.splice(bestIdx, 1);
+    picked.push(m);
+    dongPicked.set(m.dong ?? '', (dongPicked.get(m.dong ?? '') ?? 0) + 1);
+    decadePicked.set(decadeOf(m), (decadePicked.get(decadeOf(m)) ?? 0) + 1);
+  }
+  return { picked, eligibleCount: eligible.length };
+}
+
+async function searchRepresentative(query: SearchQuery, db: SellflowDb): Promise<SearchResult> {
+  const propertyType = query.propertyTypes[0];
+  const minBuildYear = query.minBuildYear ?? null;
+  const pool = await db.listRepresentativeMasters({ propertyType, lawdCd: query.lawdCd, dong: query.dong, minBuildYear, take: SEARCH_MAX_CANDIDATES + 1 });
+  const overflow = pool.length > SEARCH_MAX_CANDIDATES;
+  const { picked, eligibleCount } = pickRepresentatives(pool.slice(0, SEARCH_MAX_CANDIDATES), query.limit);
+  const items = picked.map(mapBuilding);
+  return {
+    data: {
+      items,
+      truncated: overflow || eligibleCount > items.length,
+      query: { lawdCd: query.lawdCd, dong: query.dong, q: null, propertyTypes: query.propertyTypes, limit: query.limit, view: 'representative', minBuildYear },
     },
     rowCount: items.length,
   };

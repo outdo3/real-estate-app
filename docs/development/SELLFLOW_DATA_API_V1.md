@@ -323,3 +323,16 @@ DB 스키마 변경 없이 서버 로그만: 한 요청당 한 줄 JSON `{"evt":
 | FACT CONTEXT로 전달할 값 | `sources`, `asOf`, `statistics.sampleCount`, `statistics.sampleStatus`, `verification.freshnessStatus`, `verification.coverageStatus`, `statistics.calculationMethod`, `contentGuidance` |
 | 콘텐츠 규칙 | §5.1 표를 따른다. 특히 `LOW_SAMPLE`·`coverage PARTIAL`에서 추세/평균 확정 표현 금지, `UNRESOLVED`·`UNATTRIBUTED_AT_ADDRESS`는 거래·시세 서술 금지 |
 | 출처·기준일 표시 | 이용허락범위는 제한 없음이지만 출처·기준일 표시를 권장. 문구와 반복 여부는 SELLFLOW UX 정책 |
+
+---
+
+## 13. V1.2 - 시군구 대표 단지 보기 (`view=representative`)
+
+`GET /buildings/search?lawdCd=<5자리>&propertyType=apartment|officetel&view=representative[&dong=<법정동>][&minBuildYear=<연도>][&limit=<1~20>]`
+
+- 목적: 건물명·법정동을 모르는 주제("서울 강동구 신축 아파트", "경기 화성시 아파트 시세")에서 시군구 단위로 대표 단지를 찾는다. 기존 검색 호출은 그대로다(`q` 또는 `dong` 필수 규칙 유지).
+- 같은 인증·응답 봉투·`BuildingDto`·건물 식별자(`apt-…`/`offi-…`)·오류 규격. 새 테이블·쓰기·스키마 변경 없음(마스터 테이블 읽기만).
+- 제약: 유형은 하나(`all` 불가), `q` 사용 불가, `minBuildYear`는 이 보기에서만(1900~2100, 준공연도를 모르는 단지는 제외), `limit` ≤ 20, 후보 상한 60(유형당). 넘으면 `truncated: true`.
+- 선정: 이름이 있는 건물만, 거래를 귀속할 수 있는(`MATCHED`) 건물만. 세대수(오피스텔은 호수)를 기본 점수로 하되, 이미 뽑은 단지와 **같은 동이면 ×0.6, 같은 준공 연대면 ×0.75**로 감쇠해 한 동·한 연대의 대단지가 목록을 채우지 않게 한다. 동점은 이름·키 순이라 같은 입력은 같은 결과다. 규모를 모르는 단지는 뒤로 간다.
+- 자료가 없는 지역은 오류가 아니라 `items: []`(NO DATA)이다. 조회 실패는 빈 목록이 아니라 500이다. 좌표·거리는 내지 않는다.
+- 응답 `data.query`에 `view`·`minBuildYear`가 추가된다(대표 단지 보기일 때만).

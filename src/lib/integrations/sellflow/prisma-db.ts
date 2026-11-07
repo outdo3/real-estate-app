@@ -178,6 +178,36 @@ export const prismaSellflowDb: SellflowDb = {
     return rows.map((m) => offiRow(m, counts.get(`${m.sggCd}|${m.umdNm}|${m.jibun}`) ?? 1));
   },
 
+  async listRepresentativeMasters({ propertyType, lawdCd, dong, minBuildYear, take }) {
+    // 마스터 테이블만 읽는다. 이름이 있는 건물만, 세대수 큰 순(모르는 값은 뒤). 좌표·거래 테이블은 쓰지 않는다.
+    if (propertyType === 'apartment') {
+      const rows = await prisma.apartmentMaster.findMany({
+        where: {
+          sggCd: lawdCd,
+          aptSeq: { not: null },
+          normalizedName: { not: '' },
+          ...(dong ? { umdName: dong } : {}),
+          ...(minBuildYear !== null ? { buildYear: { gte: minBuildYear } } : {}),
+        },
+        orderBy: [{ totalHouseholds: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }],
+        take,
+      });
+      return rows.map(aptRow);
+    }
+    const rows = await prisma.officetelMaster.findMany({
+      where: {
+        sggCd: lawdCd,
+        normalizedName: { not: '' },
+        ...(dong ? { umdNm: dong } : {}),
+        ...(minBuildYear !== null ? { buildYear: { gte: minBuildYear } } : {}),
+      },
+      orderBy: [{ hoCnt: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }],
+      take,
+    });
+    const counts = await mastersAtAddressMap(rows);
+    return rows.map((m) => offiRow(m, counts.get(`${m.sggCd}|${m.umdNm}|${m.jibun}`) ?? 1));
+  },
+
   async getMaster(parsed) {
     if (parsed.propertyType === 'apartment') {
       const m = await prisma.apartmentMaster.findUnique({ where: { aptSeq: parsed.aptSeq } });

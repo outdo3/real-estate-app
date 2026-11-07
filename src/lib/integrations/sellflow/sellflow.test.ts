@@ -70,6 +70,13 @@ function fakeDb(d: FakeData): SellflowDb {
         .filter((m) => m.propertyType === i.propertyType && m.lawdCd === i.lawdCd && (i.dong === null || m.dong === i.dong) && (i.qNormalized === null || m.normalizedName.includes(i.qNormalized)))
         .slice(0, i.take);
     },
+    async listRepresentativeMasters(i) {
+      if (d.failWith) throw d.failWith;
+      return d.masters
+        .filter((m) => m.propertyType === i.propertyType && m.lawdCd === i.lawdCd && (i.dong === null || m.dong === i.dong) && (i.minBuildYear === null || (m.buildYear !== null && m.buildYear >= i.minBuildYear)) && (m.name ?? '').trim() !== '')
+        .sort((a, b) => (b.unitCount ?? -1) - (a.unitCount ?? -1))
+        .slice(0, i.take);
+    },
     async getMaster(p) {
       if (d.failWith) throw d.failWith;
       return d.masters.find((m) => (p.propertyType === 'apartment' ? m.propertyType === 'apartment' && m.key === p.aptSeq : m.propertyType === 'officetel' && m.key === p.id)) ?? null;
@@ -672,4 +679,94 @@ test('summary: 면적이 섞이면 distinctAreaCount로 알리고 면적별 통�
   assert.deepEqual(g84.primaryMetric, { min: 90000, max: 90000, median: null });
   const r = buildSummaryStatistics([rent('2026-10-01', 1000, 50)], 'wolse', null);
   assert.equal(r.quality.rowsWithoutCancellationCoverage, null);
+});
+
+// ------------------------------------------------------------------ 시군구 대표 단지 (view=representative)
+const rep = (key: string, name: string, dong: string, unitCount: number | null, buildYear: number | null, over: Partial<MasterRow> = {}): MasterRow => ({
+  ...apt, key, name, normalizedName: name, lawdCd: '11740', sigungu: '강동구', dong, unitCount, buildYear, unitCountBasis: unitCount === null ? null : 'households', ...over,
+});
+const REP = '/buildings/search?lawdCd=11740&propertyType=apartment&view=representative';
+const repData = (masters: MasterRow[]) => fakeDb({ masters, trades: {} });
+
+test('representative: 건물명·법정동 없이 시군구만으로 찾고, 이름 없는 건물과 거래 귀속 불가 건물은 제외', async () => {
+  const masters = [
+    rep('11740-1', '둔촌대단지', '둔촌동', 5000, 2020),
+    rep('11740-2', '고덕중단지', '고덕동', 1200, 2015),
+    { ...rep('11740-3', '', '명일동', 4000, 2019), name: null, normalizedName: '' },
+    { ...rep('900', '다동오피', '암사동', 3000, 2019, { propertyType: 'officetel', mastersAtAddress: 5, key: 900 }) },
+  ];
+  const { res, body } = await call(`${BASE}${REP}`, repData(masters));
+  assert.equal(res.status, 200);
+  assert.deepEqual(body.data.items.map((b: any) => b.name), ['둔촌대단지', '고덕중단지']);
+  assert.equal(body.data.query.view, 'representative');
+  assert.equal(JSON.stringify(body).includes('latitude'), false);
+  const off = await call(`${BASE}/search?lawdCd=11740&propertyType=officetel&view=representative`, repData(masters));
+  assert.deepEqual(off.body.data.items, []); // 다동오피스텔은 같은 지번에 master가 여럿이라 거래를 귀속할 수 없다 -> 대표 후보에서 제외
+});
+
+test('representative: 한 동의 대단지가 목록을 채우지 않는다(같은 동은 점수 감쇠), 결과는 결정적이다', async () => {
+  const masters = [
+    ...[3000, 2900, 2800, 2700, 2600, 2500].map((n, i) => rep(`11740-A${i}`, `가동${i}단지`, '가동', n, 2005 + i * 2)),
+    ...[900, 800, 700].map((n, i) => rep(`11740-B${i}`, `나동${i}단지`, '나동', n, 2018 + i)),
+  ];
+  const a = await call(`${BASE}${REP}&limit=6`, repData(masters));
+  const names = a.body.data.items.map((b: any) => b.name);
+  assert.equal(names.length, 6);
+  assert.ok(names.filter((n: string) => n.startsWith('나동')).length >= 2, `다른 동이 함께 나와야 한다: ${names.join(',')}`);
+  assert.equal(names[0], '가동0단지'); // 가장 큰 단지가 먼저
+  const again = await call(`${BASE}${REP}&limit=6`, repData(masters));
+  assert.deepEqual(again.body.data.items.map((b: any) => b.name), names);
+  assert.equal(a.body.data.truncated, true); // 9곳 중 6곳만
+});
+
+test('representative: minBuildYear(신축)는 그 연도 이후만, 준공연도를 모르는 단지는 제외', async () => {
+  const masters = [rep('11740-1', '구축대단지', '가동', 5000, 1999), rep('11740-2', '신축단지', '나동', 800, 2023), rep('11740-3', '연도미상', '다동', 3000, null)];
+  const { body } = await call(`${BASE}${REP}&minBuildYear=2020`, repData(masters));
+  assert.deepEqual(body.data.items.map((b: any) => b.name), ['신축단지']);
+  assert.equal(body.data.query.minBuildYear, 2020);
+});
+
+test('representative: 자료가 없는 지역은 오류가 아니라 빈 목록(NO DATA)이고, 조회 실패는 빈 목록이 아니라 500', async () => {
+  const empty = await call(`${BASE}/search?lawdCd=41590&propertyType=apartment&view=representative`, repData([rep('11740-1', '단지', '가동', 100, 2010)]));
+  assert.equal(empty.res.status, 200);
+  assert.deepEqual(empty.body.data.items, []);
+  assert.equal(empty.body.data.truncated, false);
+  const broken = await call(`${BASE}${REP}`, fakeDb({ masters: [], trades: {}, failWith: new Error('db down') }));
+  assert.equal(broken.res.status, 500);
+  assert.equal(broken.body.error.code, 'INTERNAL_ERROR');
+});
+
+test('representative: 입력 검증 - 유형 하나 필수, q 금지, minBuildYear는 이 보기에서만, 알 수 없는 view·범위 밖 값은 400, lawdCd 필수', async () => {
+  const db = repData([]);
+  for (const path of [
+    '/buildings/search?lawdCd=11740&view=representative',
+    '/buildings/search?lawdCd=11740&propertyType=all&view=representative',
+    '/buildings/search?lawdCd=11740&propertyType=apartment&view=representative&q=둔촌',
+    '/buildings/search?lawdCd=11740&propertyType=apartment&minBuildYear=2020&dong=고덕동',
+    '/buildings/search?lawdCd=11740&propertyType=apartment&view=all',
+    '/buildings/search?lawdCd=11740&propertyType=apartment&view=representative&minBuildYear=1800',
+    '/buildings/search?lawdCd=11740&propertyType=apartment&view=representative&minBuildYear=abc',
+    '/buildings/search?propertyType=apartment&view=representative',
+  ]) {
+    const r = await call(`${BASE}${path.replace('/buildings', '')}`, db);
+    assert.equal(r.res.status, 400, path);
+  }
+  // 기존 검색의 규칙은 그대로: view 없이 q·dong 둘 다 없으면 여전히 400
+  assert.equal((await call(`${BASE}/search?lawdCd=11740&propertyType=apartment`, db)).res.status, 400);
+});
+
+test('representative: 인증은 기존과 같다(키 없음 401, 허용되지 않은 유형 403)', async () => {
+  const db = repData([rep('11740-1', '단지', '가동', 100, 2010)]);
+  assert.equal((await call(`${BASE}${REP}`, db, { auth: null })).res.status, 401);
+  assert.equal((await call(`${BASE}${REP}`, db, { auth: 'Bearer wrong' })).res.status, 401);
+  const only = await call(`${BASE}${REP}`, db, { deps: { auth: { apiKey: KEY, enabled: 'true', propertyTypes: 'officetel' } } });
+  assert.equal(only.res.status, 403);
+});
+
+test('representative: limit 상한(20)과 후보 상한을 지키고 truncated로 알린다', async () => {
+  const masters = Array.from({ length: 70 }, (_, i) => rep(`11740-${i}`, `단지${String(i).padStart(2, '0')}`, `동${i % 7}`, 1000 - i, 2000 + (i % 25)));
+  const { body } = await call(`${BASE}${REP}&limit=20`, repData(masters));
+  assert.equal(body.data.items.length, 20);
+  assert.equal(body.data.truncated, true);
+  assert.equal((await call(`${BASE}${REP}&limit=21`, repData(masters))).res.status, 400);
 });
