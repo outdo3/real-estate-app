@@ -30,12 +30,12 @@ test('프록시가 거부하면 getSidoList는 throw하지 않고 빈 목록을 
   }
 });
 
-test('프록시가 5xx면 getSigunguListForSido도 빈 목록으로 떨어진다', async () => {
+test('registry 미등록 시도는 프록시가 5xx면 getSigunguListForSido도 빈 목록으로 떨어진다', async () => {
   const original = globalThis.fetch;
   globalThis.fetch = (async () => new Response('boom', { status: 503 })) as unknown as typeof fetch;
   try {
     const { getSigunguListForSido } = await freshRegionUtils();
-    const list = await getSigunguListForSido('26');
+    const list = await getSigunguListForSido('27');
     assert.deepEqual(list, []);
   } finally {
     globalThis.fetch = original;
@@ -69,6 +69,51 @@ test('abort(지연)도 실패와 같게 다뤄진다 — 매달리지 않고 빈
     const { getSidoList } = await freshRegionUtils();
     const list = await getSidoList();
     assert.deepEqual(list, []);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('registry 등록 시도(부산/서울/경기)는 프록시가 404여도 정상 목록을 준다 — 프록시 호출 0회', async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return new Response('not found', { status: 404 });
+  }) as unknown as typeof fetch;
+  try {
+    const { getSigunguListForSido } = await freshRegionUtils();
+    const busan = await getSigunguListForSido('26');
+    const seoul = await getSigunguListForSido('11');
+    const gg = await getSigunguListForSido('41');
+    assert.equal(busan.length, 16);
+    assert.equal(seoul.length, 25);
+    assert.equal(calls, 0);
+    assert.ok(busan.every((d: { code: string; name: string }) => d.code.length === 10 && d.name.startsWith('부산광역시 ')));
+    // 경기: leaf만. 부모 시 코드(수원/성남/안양/안산/고양/용인)는 제외, 중복 없음.
+    const codes = gg.map((d: { code: string }) => d.code.substring(0, 5));
+    assert.equal(new Set(codes).size, codes.length);
+    for (const parent of ['41110', '41130', '41170', '41270', '41280', '41460']) {
+      assert.ok(!codes.includes(parent), `부모 ${parent} 제외`);
+    }
+    for (const leaf of ['41135', '41465', '41570']) assert.ok(codes.includes(leaf));
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('registry 미등록 시도는 기존 프록시 경로를 유지한다', async () => {
+  const original = globalThis.fetch;
+  let url = '';
+  globalThis.fetch = (async (u: unknown) => {
+    url = String(u);
+    return new Response(JSON.stringify({ regcodes: [{ code: '2711000000', name: '대구광역시 중구' }] }), { status: 200 });
+  }) as unknown as typeof fetch;
+  try {
+    const { getSigunguListForSido } = await freshRegionUtils();
+    const list = await getSigunguListForSido('27');
+    assert.equal(list.length, 1);
+    assert.match(url, /regcode_pattern=27\*00000/);
   } finally {
     globalThis.fetch = original;
   }

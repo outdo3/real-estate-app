@@ -1,3 +1,5 @@
+import { getMolitLeafRegions } from '@/lib/region/registry';
+
 export const REGCODE_PROXY = 'https://grpc-proxy-server-mkvo6j4wsq-du.a.run.app/v1/regcodes';
 
 // STATISTICS REGION FILTER V2 — "시도 전체"(예: 부산광역시 전체) 조회를 지원하려면
@@ -71,6 +73,15 @@ export async function resolveSidoCode(sido: string): Promise<string | null> {
 // 목록을 반환한다. RegionSelectModal.selectSido와 동일한 조회 방식이라 그 흐름과
 // 항상 같은 목록을 보게 된다(중복 조회 로직 없음).
 export async function getSigunguListForSido(sidoCode: string): Promise<{ code: string; name: string }[]> {
+  // STATS_REGION_REGISTRY_FALLBACK_V1 — 내부 region registry에 등록된 시도(부산/서울/경기)는
+  // 외부 프록시를 거치지 않고 registry의 MOLIT leaf 지역을 쓴다. 외부 REGCODE_PROXY가
+  // 404/timeout이어도 통계 API가 빈 목록으로 떨어지지 않게 한다. leaf만 반환하므로
+  // 경기 부모 시(수원/성남/안양/안산/고양/용인)와 일반구가 중복 집계되지 않는다.
+  // registry에 없는 시도만 아래 기존 프록시 경로를 그대로 탄다.
+  const registered = getMolitLeafRegions(sidoCode);
+  if (registered.length > 0) {
+    return registered.map((n) => ({ code: n.lawdCd.padEnd(10, '0'), name: n.fullName }));
+  }
   if (sigunguListCache.has(sidoCode)) return sigunguListCache.get(sidoCode)!;
   try {
     const list = (await fetchRegcodes(`regcode_pattern=${sidoCode}*00000&is_ignore_zero=true`)).filter((item) => item.code.substring(0, 5) !== `${sidoCode}000`);
