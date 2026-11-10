@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRegion, RegionState } from '@/contexts/RegionContext';
 import { REGCODE_PROXY, resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import styles from './RegionSelectModal.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
+import { getSidoRegions, REGION_SIDOS } from '@/lib/region/registry';
 import { isPublicRegionAllowed, isSidoPubliclyHidden, isSidoWholeQuerySupported } from '@/lib/region/enablement';
 
 type RegionOption = { code: string; name: string };
@@ -35,12 +36,12 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
   const { isRegionModalOpen, closeRegionModal, setRegion } = useRegion();
 
   const [modalStep, setModalStep] = useState<'sido' | 'sigungu' | 'dong'>('sido');
-  const [modalSidos, setModalSidos] = useState<RegionOption[]>([]);
-  const [modalSigungus, setModalSigungus] = useState<RegionOption[]>([]);
   const [modalDongs, setModalDongs] = useState<RegionOption[]>([]);
   const [selectedSido, setSelectedSido] = useState<RegionOption | null>(null);
   const [selectedSigungu, setSelectedSigungu] = useState<RegionOption | null>(null);
   const [regionLoading, setRegionLoading] = useState(false);
+  const [dongLoadFailed, setDongLoadFailed] = useState(false);
+  const dongRequest = useRef<AbortController | null>(null);
 
   // 모달이 열릴 때마다 항상 시도 선택 단계로 초기화 (기존 홈 화면과 동일한 UX)
   useEffect(() => {
@@ -48,52 +49,36 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     setModalStep('sido');
     setSelectedSido(null);
     setSelectedSigungu(null);
-    if (modalSidos.length === 0) {
-      setRegionLoading(true);
-      fetch(`${REGCODE_PROXY}?regcode_pattern=*00000000`)
-        .then((res) => res.json())
-        .then((data) => {
-          // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 이 목록은 외부 REGCODE 프록시(전국)에서 오므로
-          // 공개 범위와 무관하다. 공개 가능한 시군구가 하나도 없는 시도는 아예 내리지 않는다
-          // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 모든 시도에 같은 규칙: 공개된 구가 있는 시도(부산·서울)만 남는다.
-          // 경기·그 밖의 전국 시도는 master 데이터가 생겨도 enablement를 열기 전까지 목록에 없다.
-          const all: RegionOption[] = data.regcodes || [];
-          setModalSidos(all.filter((s: RegionOption) => !isSidoPubliclyHidden(s.code.substring(0, 2))));
-        })
-        .catch((err) => console.error('시도 목록 조회 실패', err))
-        .finally(() => setRegionLoading(false));
-    }
-    // modalSidos는 의도적으로 deps에서 제외: 모달이 "열릴 때"만 초기화/캐시 확인을
-    // 수행해야 하며, fetch 완료로 modalSidos가 채워질 때 이 effect가 다시 돌면서
-    // 진행 중이던 시군구/읍면동 선택을 되돌리면 안 된다.
+    setModalDongs([]);
+    setRegionLoading(false);
+    setDongLoadFailed(false);
+    return () => dongRequest.current?.abort();
   }, [isRegionModalOpen]);
 
   if (!isRegionModalOpen) return null;
+
+  // Keep the existing 10-digit legal district code format at the UI boundary.
+  const modalSidos = REGION_SIDOS
+    .map((sido) => ({ code: sido.code.padEnd(10, '0'), name: sido.name }))
+    .filter((s) => !isSidoPubliclyHidden(s.code.substring(0, 2)));
+  const modalSigungus = selectedSido
+    ? getSidoRegions(selectedSido.code.substring(0, 2))
+      .map((region) => ({ code: region.lawdCd.padEnd(10, '0'), name: region.fullName }))
+      .filter((item) => isPublicRegionAllowed(item.code.substring(0, 5), 'app'))
+    : [];
 
   const handleClose = () => {
     closeRegionModal();
   };
 
   const selectSido = (sido: RegionOption) => {
+    dongRequest.current?.abort();
     setSelectedSido(sido);
     setSelectedSigungu(null);
     setModalDongs([]);
-    setRegionLoading(true);
-    const sidoCode = sido.code.substring(0, 2);
-    fetch(`${REGCODE_PROXY}?regcode_pattern=${sidoCode}*00000&is_ignore_zero=true`)
-      .then((res) => res.json())
-      .then((data) => {
-        // SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — 승인되지 않은 서울 구는 선택지에서 뺀다.
-        // 판정은 표시 이름이 아니라 법정동코드 앞 5자리(canonical 구 코드)로 한다.
-        const list = (data.regcodes || [])
-          .filter((item: RegionOption) => item.code.substring(0, 5) !== `${sidoCode}000`)
-          // GYEONGGI_PUBLIC_EXPOSURE_GUARD_V1 — 공개 allowlist(`app` 축)에 있는 구만 남긴다.
-          .filter((item: RegionOption) => isPublicRegionAllowed(item.code.substring(0, 5), 'app'));
-        setModalSigungus(list);
-        setModalStep('sigungu');
-      })
-      .catch((err) => console.error('시군구 목록 조회 실패', err))
-      .finally(() => setRegionLoading(false));
+    setRegionLoading(false);
+    setDongLoadFailed(false);
+    setModalStep('sigungu');
   };
 
   // STATISTICS REGION FILTER V2 — "부산광역시 전체"처럼 시군구를 특정하지 않는
@@ -118,18 +103,33 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
   };
 
   const selectSigungu = (sigungu: RegionOption) => {
+    dongRequest.current?.abort();
+    const request = new AbortController();
+    dongRequest.current = request;
     setSelectedSigungu(sigungu);
+    setModalDongs([]);
+    setDongLoadFailed(false);
     setRegionLoading(true);
+    setModalStep('dong');
     const sigunguCode = sigungu.code.substring(0, 5);
-    fetch(`${REGCODE_PROXY}?regcode_pattern=${sigunguCode}*&is_ignore_zero=true`)
-      .then((res) => res.json())
-      .then((data) => {
-        const list = (data.regcodes || []).filter((item: RegionOption) => item.code !== `${sigunguCode}00000`);
-        setModalDongs(list);
-        setModalStep('dong');
+    fetch(`${REGCODE_PROXY}?regcode_pattern=${sigunguCode}*&is_ignore_zero=true`, { signal: request.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`읍면동 조회 HTTP ${res.status}`);
+        return res.json();
       })
-      .catch((err) => console.error('읍면동 목록 조회 실패', err))
-      .finally(() => setRegionLoading(false));
+      .then((data) => {
+        if (!Array.isArray(data?.regcodes)) throw new Error('읍면동 응답 형식 오류');
+        if (request.signal.aborted) return;
+        const list = data.regcodes.filter((item: RegionOption) => item.code !== `${sigunguCode}00000`);
+        setModalDongs(list);
+        setDongLoadFailed(list.length === 0);
+      })
+      .catch(() => {
+        if (!request.signal.aborted) setDongLoadFailed(true);
+      })
+      .finally(() => {
+        if (!request.signal.aborted) setRegionLoading(false);
+      });
   };
 
   const finalize = (next: RegionState, exactCoords?: { lat: number; lng: number }) => {
@@ -290,46 +290,47 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
         </div>
 
         <div className={styles.gridWrapper}>
-          {regionLoading ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>불러오는 중...</div>
-          ) : (
-            <div className={styles.grid}>
-              {modalStep === 'sido' &&
-                modalSidos.map((sido) => (
-                  <button key={sido.code} className={styles.gridBtn} onClick={() => selectSido(sido)}>
-                    {sido.name}
+          {modalStep === 'dong' && (regionLoading || dongLoadFailed) && (
+            <p role="status" style={{ padding: '0 1rem', color: 'var(--text-secondary)' }}>
+              {regionLoading ? '읍면동 목록을 불러오는 중입니다.' : '읍면동 목록을 불러오지 못했습니다. 아래에서 구 전체를 선택할 수 있습니다.'}
+            </p>
+          )}
+          <div className={styles.grid}>
+            {modalStep === 'sido' &&
+              modalSidos.map((sido) => (
+                <button key={sido.code} className={styles.gridBtn} onClick={() => selectSido(sido)}>
+                  {sido.name}
+                </button>
+              ))}
+
+            {modalStep === 'sigungu' && (
+              <>
+                {isSidoWholeQuerySupported(selectedSido?.code.substring(0, 2)) && (
+                  <button className={styles.gridBtn} onClick={selectSidoAll}>
+                    {selectedSido?.name} 전체
+                  </button>
+                )}
+                {modalSigungus.map((sigungu) => (
+                  <button key={sigungu.code} className={styles.gridBtn} onClick={() => selectSigungu(sigungu)}>
+                    {sigungu.name.split(' ').slice(1).join(' ')}
                   </button>
                 ))}
+              </>
+            )}
 
-              {modalStep === 'sigungu' && (
-                <>
-                  {isSidoWholeQuerySupported(selectedSido?.code.substring(0, 2)) && (
-                    <button className={styles.gridBtn} onClick={selectSidoAll}>
-                      {selectedSido?.name} 전체
-                    </button>
-                  )}
-                  {modalSigungus.map((sigungu) => (
-                    <button key={sigungu.code} className={styles.gridBtn} onClick={() => selectSigungu(sigungu)}>
-                      {sigungu.name.split(' ').slice(1).join(' ')}
-                    </button>
-                  ))}
-                </>
-              )}
-
-              {modalStep === 'dong' && (
-                <>
-                  <button className={styles.gridBtn} onClick={() => selectDong(null)}>
-                    {selectedSigungu?.name.split(' ').slice(1).join(' ') || ''} 전체
+            {modalStep === 'dong' && (
+              <>
+                <button className={styles.gridBtn} onClick={() => selectDong(null)}>
+                  {selectedSigungu?.name.split(' ').slice(1).join(' ') || ''} 전체
+                </button>
+                {modalDongs.map((dong) => (
+                  <button key={dong.code} className={styles.gridBtn} onClick={() => selectDong(dong)}>
+                    {dong.name.split(' ').pop()}
                   </button>
-                  {modalDongs.map((dong) => (
-                    <button key={dong.code} className={styles.gridBtn} onClick={() => selectDong(dong)}>
-                      {dong.name.split(' ').pop()}
-                    </button>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
+                ))}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
