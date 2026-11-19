@@ -110,8 +110,8 @@ export async function handleSellflowRequest(request: Request, route: SellflowRou
   } catch (e) {
     if (e instanceof SellflowApiError) return fail(e.status, e.code, e.message);
     deps.onUnexpectedError?.(e instanceof Error ? e.name : 'UnknownError');
-    // 조회 실패를 빈 결과로 바꾸지 않는다.
-    return fail(500, 'INTERNAL_ERROR', '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    return fail(500, 'INTERNAL_ERROR', msg.replace(/:[^:@/]+@/, ':***@'));
   } finally {
     try {
       deps.log({ evt: 'sellflow_api', requestId, endpoint: route.kind, status, ms: deps.now().getTime() - startedAt, rows, code });
