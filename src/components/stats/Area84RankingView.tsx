@@ -8,6 +8,7 @@ import Badge from '@/components/ui/Badge';
 import Empty from '@/components/ui/Empty';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
+import { volumePeriodRangeText } from '@/lib/stats/volume-period';
 import styles from './Area84RankingView.module.css';
 import StatsUnsupportedRegion from './StatsUnsupportedRegion';
 import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
@@ -156,11 +157,15 @@ export default function Area84RankingView({
   const regionLabel = (r: Area84Row) => [r.sigunguName, r.dong].filter(Boolean).join(' ') || displayRegionName;
   const visibleRows = allRows.length > 0 ? allRows : data?.status === 'OK' ? data.rows : [];
 
-  const periodLabel = PERIOD_OPTIONS.find((p) => p.value === period)?.label || period;
+  const responsePeriod = data?.status === 'OK' ? data.period : undefined;
+  const periodLabel = PERIOD_OPTIONS.find((p) => p.value === responsePeriod?.preset)?.label;
 
   return (
     <div className={styles.wrap}>
       <p className={styles.question}>{regionQuestionLabel}</p>
+      {periodLabel && responsePeriod && (
+        <p className={styles.periodBasis}>순위 집계 · 최근 {periodLabel} · {volumePeriodRangeText(responsePeriod)} · 매매</p>
+      )}
 
       <div className={styles.filterRow}>
         {PERIOD_OPTIONS.map((p) => (
@@ -204,7 +209,7 @@ export default function Area84RankingView({
       ) : (
         <>
           <div className={styles.summary}>
-            {displayRegionName} · 최근 {periodLabel} 84㎡ 매매 {data?.summary?.totalCount ?? visibleRows.length}개 단지
+            {displayRegionName} · 84㎡ 매매 {data?.summary?.totalCount ?? visibleRows.length}개 단지
             {data?.summary?.medianAmount != null && ` · 중앙값 ${formatEok(data.summary.medianAmount)}`}
           </div>
 
