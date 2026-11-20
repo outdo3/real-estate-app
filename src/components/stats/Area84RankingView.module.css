@@ -185,3 +185,9 @@
   font-weight: 600;
   margin-top: 0.25rem;
 }
+
+.periodBasis {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  margin: 0 0 0.75rem;
+}

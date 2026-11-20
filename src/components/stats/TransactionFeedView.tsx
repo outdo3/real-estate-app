@@ -19,6 +19,7 @@ import { canShowStatsEmpty } from '@/lib/stats/view-state';
 import ErrorState from '@/components/ui/ErrorState';
 import InlineLoading from '@/components/ui/InlineLoading';
 import { formatPercentChange, directionColor } from '@/lib/stats-format';
+import { volumePeriodRangeText } from '@/lib/stats/volume-period';
 import styles from './TransactionFeedView.module.css';
 import StatsUnsupportedRegion from './StatsUnsupportedRegion';
 import { isStatsUnsupportedResponse } from '@/lib/region/stats-gate';
@@ -59,6 +60,7 @@ interface FeedTradeRow {
   lawdCd: string;
   dealType: 'sale' | 'jeonse' | 'wolse';
   dealAmount: number;
+  monthlyRent?: number; // 만원
   excluUseArea: number | null;
   floorRaw: string | number | null;
   dealDate: string;
@@ -238,7 +240,7 @@ export default function TransactionFeedView({
       </div>
       <div className={styles.dealTypeRow}>
         {DEAL_TYPE_OPTIONS.map((d) => (
-          <button key={d.value || 'all'} className={`${styles.dealChip} ${dealType === d.value ? styles.dealChipActive : ''}`} onClick={() => handleDealTypeChange(d.value)}>
+          <button key={d.value || 'all'} className={`${styles.dealChip} ${dealType === d.value ? styles.dealChipActive : ''}`} aria-pressed={dealType === d.value} onClick={() => handleDealTypeChange(d.value)}>
             {d.label}
           </button>
         ))}
@@ -268,7 +270,9 @@ export default function TransactionFeedView({
           )}
 
           <div className={styles.summaryCard}>
-            <div className={styles.summaryTitle}>{displayRegionName} · {data.period.label}</div>
+            <div className={styles.summaryTitle}>
+              {displayRegionName} · {data.period.label} · {volumePeriodRangeText(data.period)} · {DEAL_TYPE_LABEL[dealType] ?? '전체 거래'}
+            </div>
             <div className={styles.summaryGrid}>
               <div className={styles.summaryItem}><span className={styles.summaryValue}>{data.summary.verifiedCount}</span><span className={styles.summaryLabel}>실거래</span></div>
               <div className={styles.summaryItem}><span className={styles.summaryValue}>{data.summary.recordHighCount}</span><span className={styles.summaryLabel}>{data.recordHighCoverageLabel}최고가</span></div>
@@ -312,7 +316,14 @@ export default function TransactionFeedView({
                     {t.dealCanceled && <Badge variant="warning">취소</Badge>}
                   </div>
                   <div className={styles.tradeRowMid}>
-                    <span className={styles.tradePrice}>{t.priceLabel}</span>
+                    <span className={styles.tradePrice}>
+                      {t.dealType === 'wolse' ? `보증금 ${t.priceLabel}` : t.dealType === 'jeonse' ? `전세금 ${t.priceLabel}` : t.priceLabel}
+                    </span>
+                    {t.dealType === 'wolse' && (
+                      <span className={styles.tradePrice}>
+                        {t.monthlyRent && t.monthlyRent > 0 ? `월세 ${t.monthlyRent.toLocaleString('ko-KR')}만 원` : '월세 금액 미확인'}
+                      </span>
+                    )}
                     {t.changeAmount != null && !t.dealCanceled && (
                       <span className={styles.tradeChange} style={{ color: directionColor(t.changeAmount) }}>
                         {t.changeAmount > 0 ? '+' : ''}{(t.changeAmount / 10000).toFixed(t.changeAmount % 10000 === 0 ? 0 : 1)}억 ({formatPercentChange(t.changePct)})

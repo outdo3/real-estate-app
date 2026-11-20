@@ -173,6 +173,7 @@
 
 .tradeRowMid {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 0.5rem;
 }

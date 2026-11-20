@@ -151,6 +151,14 @@ test('전월세 타입 판정 규칙이 MOLIT 경로와 동일하다 — 월세>
   assert.equal(jeonse.dealAmount, 40000, '전세 보증금이 거래금액이 아니다');
   assert.equal(wolse.dealType, 'wolse');
   assert.equal(wolse.dealAmount, 5000, '월세 보증금이 거래금액이 아니다');
+  assert.equal(wolse.monthlyRent, 122);
+  assert.equal(jeonse.monthlyRent, undefined);
+  const missing = toFeedTrade({
+    ...storedRentToFeedRaw({ ...base, deposit: 5000, monthlyRent: 122, dealType: 'wolse' }),
+    monthlyRent: undefined,
+  }, 'wolse', '26230');
+  assert.ok(missing);
+  assert.equal(missing.monthlyRent, undefined);
   // 전월세에는 취소 개념이 없다 — 기존 라이브 경로와 동일하게 항상 false다.
   assert.equal(jeonse.dealCanceled, false);
   assert.equal(wolse.dealCanceled, false);

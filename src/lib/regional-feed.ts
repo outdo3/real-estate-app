@@ -157,7 +157,8 @@ export interface FeedTrade {
    * 단지 상세 canonical 이동(lawdCd+dong)에 반드시 필요하다. */
   lawdCd: string;
   dealType: 'sale' | 'jeonse' | 'wolse';
-  dealAmount: number; // 만원
+  dealAmount: number; // 만원 (임대차는 보증금)
+  monthlyRent?: number; // 만원, 확인된 월세만 제공
   excluUseArea: number | null; // ㎡, raw(원본) — pyeong 변환 금지
   floorRaw: string | number | null;
   dealDate: string; // YYYY-MM-DD
@@ -440,6 +441,9 @@ export function toFeedTrade(item: any, dealType: 'sale' | 'jeonse' | 'wolse', la
     lawdCd,
     dealType,
     dealAmount: item.dealAmount,
+    ...(dealType === 'wolse' && Number.isFinite(item.monthlyRent) && item.monthlyRent > 0
+      ? { monthlyRent: item.monthlyRent }
+      : {}),
     excluUseArea: item.excluUseArea ?? null,
     floorRaw: item.floorRaw ?? null,
     dealDate: item.dealDate,

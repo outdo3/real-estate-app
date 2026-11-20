@@ -484,7 +484,7 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
               <Link href={target.href} className={styles.reportCta}>
                 {entry.label}
               </Link>
-              <p className={styles.reportCtaBasis}>{target.basisLabel}</p>
+              <p className={styles.reportCtaBasis}>{slug === 'feed' || slug === 'area84' ? `브리핑 기준 · ${target.basisLabel}` : target.basisLabel}</p>
             </div>
           );
         })()}
