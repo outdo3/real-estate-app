@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRegion, RegionState } from '@/contexts/RegionContext';
-import { REGCODE_PROXY, resolveRegionNameByLawdCd } from '@/lib/region-utils';
+import { resolveRegionNameByLawdCd } from '@/lib/region-utils';
 import ApartmentAutocomplete, { ApartmentSearchResult } from '@/components/ApartmentAutocomplete';
 import styles from './RegionSelectModal.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
+import { getPublicLegalDongs } from '@/lib/region/legal-dongs';
 import { getSidoRegions, REGION_SIDOS } from '@/lib/region/registry';
 import { isPublicRegionAllowed, isSidoPubliclyHidden, isSidoWholeQuerySupported } from '@/lib/region/enablement';
 
@@ -36,12 +37,8 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
   const { isRegionModalOpen, closeRegionModal, setRegion } = useRegion();
 
   const [modalStep, setModalStep] = useState<'sido' | 'sigungu' | 'dong'>('sido');
-  const [modalDongs, setModalDongs] = useState<RegionOption[]>([]);
   const [selectedSido, setSelectedSido] = useState<RegionOption | null>(null);
   const [selectedSigungu, setSelectedSigungu] = useState<RegionOption | null>(null);
-  const [regionLoading, setRegionLoading] = useState(false);
-  const [dongLoadFailed, setDongLoadFailed] = useState(false);
-  const dongRequest = useRef<AbortController | null>(null);
 
   // 모달이 열릴 때마다 항상 시도 선택 단계로 초기화 (기존 홈 화면과 동일한 UX)
   useEffect(() => {
@@ -49,10 +46,6 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
     setModalStep('sido');
     setSelectedSido(null);
     setSelectedSigungu(null);
-    setModalDongs([]);
-    setRegionLoading(false);
-    setDongLoadFailed(false);
-    return () => dongRequest.current?.abort();
   }, [isRegionModalOpen]);
 
   if (!isRegionModalOpen) return null;
@@ -67,17 +60,17 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       .filter((item) => isPublicRegionAllowed(item.code.substring(0, 5), 'app'))
     : [];
 
+  const modalDongs = modalStep === 'dong' && selectedSigungu
+    ? getPublicLegalDongs(selectedSigungu.code.substring(0, 5))
+    : [];
+
   const handleClose = () => {
     closeRegionModal();
   };
 
   const selectSido = (sido: RegionOption) => {
-    dongRequest.current?.abort();
     setSelectedSido(sido);
     setSelectedSigungu(null);
-    setModalDongs([]);
-    setRegionLoading(false);
-    setDongLoadFailed(false);
     setModalStep('sigungu');
   };
 
@@ -103,33 +96,8 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
   };
 
   const selectSigungu = (sigungu: RegionOption) => {
-    dongRequest.current?.abort();
-    const request = new AbortController();
-    dongRequest.current = request;
     setSelectedSigungu(sigungu);
-    setModalDongs([]);
-    setDongLoadFailed(false);
-    setRegionLoading(true);
     setModalStep('dong');
-    const sigunguCode = sigungu.code.substring(0, 5);
-    fetch(`${REGCODE_PROXY}?regcode_pattern=${sigunguCode}*&is_ignore_zero=true`, { signal: request.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`읍면동 조회 HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        if (!Array.isArray(data?.regcodes)) throw new Error('읍면동 응답 형식 오류');
-        if (request.signal.aborted) return;
-        const list = data.regcodes.filter((item: RegionOption) => item.code !== `${sigunguCode}00000`);
-        setModalDongs(list);
-        setDongLoadFailed(list.length === 0);
-      })
-      .catch(() => {
-        if (!request.signal.aborted) setDongLoadFailed(true);
-      })
-      .finally(() => {
-        if (!request.signal.aborted) setRegionLoading(false);
-      });
   };
 
   const finalize = (next: RegionState, exactCoords?: { lat: number; lng: number }) => {
@@ -156,11 +124,10 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
       return;
     }
 
-    const dongShortName = dong.name.split(' ').pop() || 'all';
     finalize({
       lawdCd,
       sidoCode,
-      dong: dongShortName,
+      dong: dong.name,
       sido: selectedSido.name,
       sigungu: sigunguShortName,
       displayRegionName: buildRegionDisplayName({ sido: selectedSido.name, sigungu: sigunguShortName, dong: dong.name }),
@@ -290,9 +257,9 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
         </div>
 
         <div className={styles.gridWrapper}>
-          {modalStep === 'dong' && (regionLoading || dongLoadFailed) && (
+          {modalStep === 'dong' && modalDongs.length === 0 && (
             <p role="status" style={{ padding: '0 1rem', color: 'var(--text-secondary)' }}>
-              {regionLoading ? '읍면동 목록을 불러오는 중입니다.' : '읍면동 목록을 불러오지 못했습니다. 아래에서 구 전체를 선택할 수 있습니다.'}
+              읍면동 목록을 불러오지 못했습니다. 아래에서 구 전체를 선택할 수 있습니다.
             </p>
           )}
           <div className={styles.grid}>
@@ -325,7 +292,7 @@ export default function RegionSelectModal({ onKeywordMatch, onRegionFinalize }: 
                 </button>
                 {modalDongs.map((dong) => (
                   <button key={dong.code} className={styles.gridBtn} onClick={() => selectDong(dong)}>
-                    {dong.name.split(' ').pop()}
+                    {dong.name}
                   </button>
                 ))}
               </>
