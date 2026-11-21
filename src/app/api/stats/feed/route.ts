@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { isStatsEnabledLawdCd } from '@/lib/region/enablement';
 import { isStatsRegionSupported, statsUnsupportedStatusBody } from '@/lib/region/stats-gate';
-import { fetchMolitData, formatKoreanPrice } from '@/lib/api-molit';
+import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
-import { resolveLawdCd, fetchMonthsThrottled, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
+import { resolveLawdCd, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
 import { getSigunguListForSido } from '@/lib/region-utils';
 import {
   resolvePeriodRange,
@@ -201,22 +201,22 @@ export async function GET(request: Request) {
       fetchRange = { from: lookbackFrom, to: periodRange.to };
       const months = monthsForRange(fetchRange);
 
-      const cacheKey = `stats-feed:${lawdCd}:${months.join(',')}`;
+      const cacheKey = `stats-feed-district:v2:${lawdCd}:${months.join(',')}`;
       const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
         const tasks: MonthTask[] = [];
         for (const m of months) {
           tasks.push({ key: `apt:${m}`, lawdCd: lawdCd!, dealYmd: m, type: 'apt' });
           tasks.push({ key: `rent:${m}`, lawdCd: lawdCd!, dealYmd: m, type: 'rent' });
         }
-        return fetchMonthsThrottled(tasks);
+        return fetchMonthsThrottledWithStatus(tasks);
       });
 
       for (const m of months) {
-        for (const raw of rawByMonth[`apt:${m}`] || []) {
+        for (const raw of rawByMonth[`apt:${m}`]?.items ?? []) {
           const t = toFeedTrade(raw, 'sale', lawdCd!);
           if (t) allTrades.push(t);
         }
-        for (const raw of rawByMonth[`rent:${m}`] || []) {
+        for (const raw of rawByMonth[`rent:${m}`]?.items ?? []) {
           const t = toFeedTrade(raw, raw.monthlyRent > 0 ? 'wolse' : 'jeonse', lawdCd!);
           if (t) allTrades.push(t);
         }
@@ -224,20 +224,17 @@ export async function GET(request: Request) {
       allTrades = dedupeByRecord(allTrades);
       if (dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
 
-      // §39 API 실패 vs 거래 없음 구분 — period 안에 거래가 하나도 없을 때만, 그
-      // period의 최신 달 하나를 직접(재시도 래퍼 우회) 한 번 더 찔러봐서 실제로
-      // '에러' placeholder가 오는지 확인한다(추가 호출 1회, N+1 아님).
-      const periodTradesProbe = allTrades.filter((t) => isDateInRange(t.dealDate, periodRange));
-      if (periodTradesProbe.length === 0) {
-        const periodMonths = monthsForRange(periodRange);
-        const latestMonth = periodMonths[periodMonths.length - 1];
-        try {
-          const probe = await fetchMolitData({ type: 'apt', lawdCd: lawdCd!, dealYmd: latestMonth });
-          apiError = probe.length === 1 && probe[0]?.typeLabel === '에러';
-        } catch {
-          apiError = true;
-        }
-      }
+      // Only the months and sources selected by the user determine availability.
+      // A successful source response with no trades still counts as a success.
+      const sources = dealTypeFilter === 'sale' ? ['apt']
+        : dealTypeFilter === 'jeonse' || dealTypeFilter === 'wolse' ? ['rent']
+          : ['apt', 'rent'];
+      const selectedCells = monthsForRange(periodRange).flatMap((month) =>
+        sources.map((source) => rawByMonth[`${source}:${month}`]));
+      const failedCount = selectedCells.filter((cell) => cell?.failed !== false).length;
+      apiError = selectedCells.length > 0 && failedCount === selectedCells.length;
+      partial = failedCount > 0 && !apiError;
+      if (partial && lawdCd) failedDistricts = [lawdCd];
     }
 
     const periodTradesRaw = allTrades.filter((t) => isDateInRange(t.dealDate, periodRange));
@@ -328,8 +325,7 @@ export async function GET(request: Request) {
       // 방지, 절대 12개월 기준인 것처럼 오해시키지 않는다).
       recordHighWindow: { from: fetchRange.from, to: fetchRange.to },
       recordHighCoverageLabel,
-      // §35/36 — 부분 실패(일부 구만 실패)와 전체 실패(apiError)를 구분해 알린다.
-      // sido-all이 아니면 항상 false/빈 배열(단일 구 조회는 부분 실패 개념이 없음).
+      // 시도 전체는 일부 구, 단일 구는 선택 기간의 일부 월·원천 실패를 표시한다.
       partial,
       failedDistricts,
     });

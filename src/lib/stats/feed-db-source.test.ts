@@ -213,15 +213,13 @@ test('DB에서 온 부분은 MOLIT 실패 판정에 섞이지 않는다', () => 
     '호출하지도 않은 매매 task를 실패로 셀 수 있다');
 });
 
-// ── E. 단일 구 조회 계약은 건드리지 않았다 ─────────────────────────────────────
+// ── E. 단일 구 조회는 같은 MOLIT 및 캐시 범위를 유지한다 ───────────────────────
 
-test('단일 구 조회 경로는 그대로다 — 이 STEP의 범위가 아니다', () => {
+test('단일 구는 월별 MOLIT 상태를 5분 동안 캐시하고 12개월 비교 범위를 유지한다', () => {
   const code = codeOf(ROUTE);
-  assert.ok(/const rawByMonth = await getOrSetCache\(cacheKey, 5 \* 60 \* 1000,/.test(code), '단일 구 캐시가 바뀌었다');
-  assert.ok(/fetchMonthsThrottled\(tasks\)/.test(code), '단일 구가 더 이상 MOLIT을 쓰지 않는다');
-  assert.ok(/const MAX_LOOKBACK_MONTHS = 12;/.test(code), '단일 구 lookback이 바뀌었다');
-  // §39 "API 실패 vs 거래 없음" 프로브가 그대로 있다.
-  assert.ok(/typeLabel === '에러'/.test(code), 'API 실패 판별 프로브가 사라졌다');
+  assert.match(code, /const rawByMonth = await getOrSetCache\(cacheKey, 5 \* 60 \* 1000,/);
+  assert.match(code, /return fetchMonthsThrottledWithStatus\(tasks\);/);
+  assert.match(code, /const MAX_LOOKBACK_MONTHS = 12;/);
 });
 
 test('캐시 키가 v3로 올라갔다 — 담는 값의 의미(기록 단위 목록)가 바뀌었기 때문이다', () => {

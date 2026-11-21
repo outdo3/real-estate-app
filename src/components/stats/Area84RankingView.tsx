@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import useSWRInfinite from 'swr/infinite';
+import useSWR from 'swr';
 import { Home } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 import Empty from '@/components/ui/Empty';
@@ -96,7 +96,29 @@ function formatEok(amount: number | null): string {
   return `${eok.toFixed(eok >= 10 ? 1 : 2)}억`;
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+function complexId(row: Area84Row): string {
+  // The API's groupKey also includes floor area and deal type. Rank each complex once.
+  return `${row.lawdCd}:${row.complexKey}`;
+}
+
+class Area84PageError extends Error {}
+
+async function fetchPage(query: string, offset: number): Promise<Area84Response> {
+  const params = new URLSearchParams(query);
+  params.set('offset', String(offset));
+  params.set('limit', String(PAGE_SIZE));
+  const response = await fetch(`/api/stats/price-rankings?${params}`);
+  if (!response.ok) throw new Area84PageError('순위 데이터를 불러오지 못했어요.');
+  const page: Area84Response = await response.json();
+  if (isStatsUnsupportedResponse(page) && offset === 0) return page;
+  if (page?.apiError) throw new Area84PageError('국토교통부 실거래 API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.');
+  if (page?.status !== 'OK') throw new Area84PageError('순위 데이터를 불러오지 못했어요.');
+  if (page.period?.preset !== params.get('period') || page.sort !== params.get('sort') ||
+    page.pagination?.offset !== offset || !Array.isArray(page.rows)) {
+    throw new Area84PageError('선택한 조건과 순위 응답이 일치하지 않아요. 잠시 후 다시 시도해주세요.');
+  }
+  return page;
+}
 
 export default function Area84RankingView({
   lawdCd,
@@ -111,58 +133,13 @@ export default function Area84RankingView({
   displayRegionName: string;
   regionQuestionLabel: string;
 }) {
-  const router = useRouter();
   const [period, setPeriod] = useState('12m');
   const [sort, setSort] = useState('price');
-  // PERCEIVED_PERFORMANCE_V1 §12 — 클릭한 행만 즉시 흐리게 표시.
-  const [navigatingKey, setNavigatingKey] = useState<string | null>(null);
-  // 첫 페이지 URL을 기준으로 각 기간·지역·정렬의 페이지를 독립적으로 유지한다.
-  const { data: pages, error, isValidating, setSize } = useSWRInfinite<Area84Response>(
-    (pageIndex, previousPage) => {
-      if (previousPage && (previousPage.status !== 'OK' || !previousPage.pagination?.hasMore)) return null;
-      const params = new URLSearchParams({
-        ...(lawdCd ? { lawdCd } : { sidoCode }),
-        mode: 'area84', dong, period, sort, offset: String(pageIndex * PAGE_SIZE), limit: String(PAGE_SIZE),
-      });
-      return `/api/stats/price-rankings?${params.toString()}`;
-    },
-    fetcher,
-    { revalidateOnFocus: false, revalidateFirstPage: false, keepPreviousData: false, dedupingInterval: 60 * 1000 },
-  );
-  const data = pages?.[0];
-  const lastPage = pages?.at(-1);
-  const failedPage = pages?.find((page) => page.status === 'ERROR' || page.apiError);
-  const mismatchedPage = pages?.some((page, index) => page.status === 'OK' &&
-    (page.period?.preset !== period || page.sort !== sort || page.pagination?.offset !== index * PAGE_SIZE));
-
-  const coverageLabel = data?.historicalHighCoverageLabel || '2년';
-
-  const buildAptHref = (r: Area84Row) => {
-    const qs = new URLSearchParams({ lawdCd: r.lawdCd });
-    if (r.dong) qs.set('dong', r.dong);
-    if (r.aptSeq) qs.set('aptSeq', r.aptSeq);
-    return `/apt/${encodeURIComponent(r.name)}?${qs.toString()}`;
-  };
-  const goToApt = (r: Area84Row) => {
-    setNavigatingKey(`${r.complexKey}-${r.groupKey}`);
-    router.push(buildAptHref(r));
-  };
-  // PERCEIVED_PERFORMANCE_V1 §16
-  const prefetchApt = (r: Area84Row) => router.prefetch(buildAptHref(r));
-
-  const regionLabel = (r: Area84Row) => [r.sigunguName, r.dong].filter(Boolean).join(' ') || displayRegionName;
-  const visibleRows = pages?.flatMap((page) => page.status === 'OK' ? page.rows : []) ?? [];
-
-  const responsePeriod = data?.status === 'OK' && !data.apiError && !mismatchedPage ? data.period : undefined;
-  const periodLabel = PERIOD_OPTIONS.find((p) => p.value === responsePeriod?.preset)?.label;
+  const query = new URLSearchParams({ ...(lawdCd ? { lawdCd } : { sidoCode }), mode: 'area84', dong, period, sort }).toString();
 
   return (
     <div className={styles.wrap}>
       <p className={styles.question}>{regionQuestionLabel}</p>
-      {periodLabel && responsePeriod && (
-        <p className={styles.periodBasis}>순위 집계 · 최근 {periodLabel} · {volumePeriodRangeText(responsePeriod)} · 매매</p>
-      )}
-
       <div className={styles.filterRow}>
         {PERIOD_OPTIONS.map((p) => (
           <button key={p.value} className={`${styles.chip} ${period === p.value ? styles.chipActive : ''}`} aria-pressed={period === p.value} onClick={() => setPeriod(p.value)}>
@@ -179,6 +156,84 @@ export default function Area84RankingView({
         </select>
       </div>
 
+
+      <Area84RankingResults key={query} query={query} displayRegionName={displayRegionName} />
+    </div>
+  );
+}
+
+function Area84RankingResults({
+  query,
+  displayRegionName,
+}: {
+  query: string;
+  displayRegionName: string;
+}) {
+  const router = useRouter();
+  const [navigatingKey, setNavigatingKey] = useState<string | null>(null);
+  const { data, error } = useSWR(['area84', query], ([, currentQuery]) => fetchPage(currentQuery, 0), {
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+    dedupingInterval: 60 * 1000,
+  });
+  // The query key remounts these results, so a late continuation cannot append to another selection.
+  const [extraPages, setExtraPages] = useState<Area84Response[]>([]);
+  const [moreError, setMoreError] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const inFlight = useRef(false);
+  const lastPage = extraPages.at(-1) ?? data;
+
+  const loadMore = async () => {
+    if (inFlight.current || !lastPage?.pagination.hasMore) return;
+    inFlight.current = true;
+    setLoadingMore(true);
+    try {
+      const page = await fetchPage(query, lastPage.pagination.offset + PAGE_SIZE);
+      setExtraPages((previous) => [...previous, page]);
+      setMoreError(false);
+    } catch {
+      setMoreError(true);
+    } finally {
+      inFlight.current = false;
+      setLoadingMore(false);
+    }
+  };
+
+  const coverageLabel = data?.historicalHighCoverageLabel || '2년';
+
+  const buildAptHref = (r: Area84Row) => {
+    const qs = new URLSearchParams({ lawdCd: r.lawdCd });
+    if (r.dong) qs.set('dong', r.dong);
+    if (r.aptSeq) qs.set('aptSeq', r.aptSeq);
+    return `/apt/${encodeURIComponent(r.name)}?${qs.toString()}`;
+  };
+  const goToApt = (r: Area84Row) => {
+    setNavigatingKey(complexId(r));
+    router.push(buildAptHref(r));
+  };
+  // PERCEIVED_PERFORMANCE_V1 §16
+  const prefetchApt = (r: Area84Row) => router.prefetch(buildAptHref(r));
+
+  const regionLabel = (r: Area84Row) => [r.sigunguName, r.dong].filter(Boolean).join(' ') || displayRegionName;
+  const uniqueRows = new Map<string, Area84Row>();
+  for (const rows of [data?.rows ?? [], ...extraPages.map((page) => page.rows)]) {
+    for (const row of rows) {
+      const id = complexId(row);
+      if (!uniqueRows.has(id)) uniqueRows.set(id, row);
+    }
+  }
+  const visibleRows = Array.from(uniqueRows.values());
+  const totalCount = data?.summary?.totalCount ?? data?.pagination?.total ?? visibleRows.length;
+
+  const responsePeriod = data?.period;
+  const periodLabel = PERIOD_OPTIONS.find((p) => p.value === responsePeriod?.preset)?.label;
+
+  return (
+    <>
+      {periodLabel && responsePeriod && (
+        <p className={styles.periodBasis}>순위 집계 · 최근 {periodLabel} · {volumePeriodRangeText(responsePeriod)} · 매매</p>
+      )}
+
       {data?.partial && (
         <div className={styles.partialBanner}>
           일부 지역({data.failedDistricts.length}곳) 데이터 조회가 지연되고 있어요. 나머지 지역 결과만 우선 표시합니다.
@@ -187,14 +242,9 @@ export default function Area84RankingView({
 
       {isStatsUnsupportedResponse(data) ? (
         <StatsUnsupportedRegion displayRegionName={displayRegionName} />
-      ) : mismatchedPage ? (
-        <ErrorState variant="section" message="선택한 조건과 순위 응답이 일치하지 않아요. 잠시 후 다시 시도해주세요." />
-      ) : error || failedPage?.status === 'ERROR' ? (
-        <ErrorState variant="section" message={failedPage?.message || '데이터를 불러오지 못했어요.'} />
-      ) : failedPage?.apiError ? (
-        <ErrorState variant="section" message="국토교통부 실거래 API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요." />
-      ) : /* §5 — 응답이 아직 없으면 빈 상태가 아니라 로딩이다. */
-        !data ? (
+      ) : !data && error ? (
+        <ErrorState variant="section" message={error instanceof Area84PageError ? error.message : '순위 데이터를 불러오지 못했어요.'} />
+      ) : !data ? (
         <InlineLoading message={`${displayRegionName} 데이터를 확인하고 있어요...`} />
       ) : visibleRows.length === 0 ? (
         <Empty
@@ -205,7 +255,8 @@ export default function Area84RankingView({
       ) : (
         <>
           <div className={styles.summary}>
-            {displayRegionName} · 84㎡ 매매 {data?.summary?.totalCount ?? visibleRows.length}개 단지
+            {displayRegionName} · 84㎡ 매매 {totalCount}개 단지
+            {visibleRows.length !== totalCount && ` · 현재 표시 ${visibleRows.length}개`}
             {data?.summary?.medianAmount != null && ` · 중앙값 ${formatEok(data.summary.medianAmount)}`}
           </div>
 
@@ -214,12 +265,12 @@ export default function Area84RankingView({
           <ul className={styles.list}>
             {visibleRows.map((r, i) => (
               <li
-                key={`${r.complexKey}-${r.groupKey}-${i}`}
+                key={complexId(r)}
                 className={styles.row}
                 onClick={() => goToApt(r)}
                 onMouseEnter={() => prefetchApt(r)}
                 onTouchStart={() => prefetchApt(r)}
-                style={navigatingKey === `${r.complexKey}-${r.groupKey}` ? { opacity: 0.5 } : undefined}
+                style={navigatingKey === complexId(r) ? { opacity: 0.5 } : undefined}
               >
                 <div className={styles.rowTop}>
                   <span className={styles.rank}>{i + 1}</span>
@@ -266,13 +317,16 @@ export default function Area84RankingView({
             ))}
           </ul>
 
+          {moreError && (
+            <ErrorState variant="inline" message="추가 순위를 불러오지 못했어요. 다시 시도해 주세요." />
+          )}
           {lastPage?.pagination.hasMore && (
-            <button className={styles.loadMoreBtn} onClick={() => void setSize((count) => count + 1)} disabled={isValidating}>
-              {isValidating ? '불러오는 중...' : '더보기'}
+            <button className={styles.loadMoreBtn} onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore ? '불러오는 중...' : moreError ? '다시 시도' : '더보기'}
             </button>
           )}
         </>
       )}
-    </div>
+    </>
   );
 }

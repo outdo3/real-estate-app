@@ -228,6 +228,10 @@ export default function TransactionFeedView({
   // 목록이 잠깐 비었다가 다시 차는 깜빡임이 "느리다"는 체감의 큰 부분이었다.
   const { trades: visibleTrades, isStale } = resolveVisibleFeed(pages, queryKey);
   const displayGroups = useMemo(() => groupTradesByDate(visibleTrades), [visibleTrades]);
+  const districtPartial = data?.partial && !data.region.sidoAll;
+  const rentSelected = dealType === 'jeonse' || dealType === 'wolse';
+  const sourceLabel = rentSelected ? '전월세' : '실거래';
+  const districtPartialMessage = `선택한 기간의 일부 ${sourceLabel} 데이터를 불러오지 못했어요.`;
 
   return (
     <div className={styles.wrap}>
@@ -257,7 +261,9 @@ export default function TransactionFeedView({
       ) : !data ? (
         <InlineLoading message="실거래 데이터를 확인하고 있어요..." />
       ) : data?.apiError ? (
-        <ErrorState variant="section" message="국토교통부 실거래 API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요." />
+        <ErrorState variant="section" message={`국토교통부 ${data.region.sidoAll ? '실거래' : sourceLabel} API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.`} />
+      ) : districtPartial && data.summary.totalCount === 0 ? (
+        <ErrorState variant="section" message={districtPartialMessage} />
       ) : canShowStatsEmpty({ hasResponse: true, isFetching: isLoading && offset === 0, hasError: false }) &&
         !isStale && data.summary.totalCount === 0 && visibleTrades.length === 0 ? (
         <Empty variant="noData" title={`${displayRegionName}, ${PERIOD_OPTIONS.find((p) => p.preset === preset)?.label || ''} 기간 내 실거래가 없어요.`} description="다른 기간을 선택해보세요." showMascot={false} />
@@ -265,7 +271,8 @@ export default function TransactionFeedView({
         <>
           {data.partial && (
             <div className={styles.partialBanner}>
-              일부 지역({data.failedDistricts.length}곳) 데이터 조회가 지연되고 있어요. 나머지 지역 실거래만 우선 표시합니다.
+              {districtPartial ? `${districtPartialMessage} 조회된 거래만 표시합니다.`
+                : `일부 지역(${data.failedDistricts.length}곳) 데이터 조회가 지연되고 있어요. 나머지 지역 실거래만 우선 표시합니다.`}
             </div>
           )}
 
