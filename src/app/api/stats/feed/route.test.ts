@@ -15,6 +15,12 @@ mock.module(require.resolve('@/lib/api-molit'), {
     fetchMolitData: async ({ type, lawdCd, dealYmd }: { type: string; lawdCd: string; dealYmd: string }) => {
       districtCalls.push(`${lawdCd}:${type}:${dealYmd}`);
       if (type === 'apt') return dealYmd === '202607' ? [sale] : [];
+      if (dealYmd === '202608' || (dealYmd === '202609' && lawdCd === '26350')) {
+        return [{ typeLabel: '에러' }];
+      }
+      if (dealYmd === '202609' && lawdCd === '26500') {
+        return [{ ...wolse, id: 'live-wolse', dealDate: '2026-09-01' }];
+      }
       if ((lawdCd === '26500' && dealYmd === '202606') ||
           (lawdCd === '26350' && dealYmd === '202607') ||
           (lawdCd === '26230' && dealYmd === '202506')) return [{ typeLabel: '에러' }];
@@ -30,7 +36,10 @@ mock.module(require.resolve('@/lib/statistics-pyeong-resolver'), {
 mock.module(require.resolve('@/lib/rent-history-read'), {
   namedExports: {
     getRentVerifiedRange: async () => ({}),
-    splitVerifiedMonths: (months: string[]) => ({ verified: months, unverified: [] }),
+    splitVerifiedMonths: (months: string[]) => ({
+      verified: months.filter((month) => month === '202607'),
+      unverified: months.filter((month) => month !== '202607'),
+    }),
   },
 });
 mock.module(require.resolve('@/lib/stats/feed-db-source'), {
@@ -42,7 +51,10 @@ mock.module(require.resolve('@/lib/stats/feed-db-source'), {
         ...record, uid: record.id, aptSeq: null, lawdCd: '26500', dealType, excluUseArea: 84.9, floorRaw: 10,
         dealCanceled: false, ...(dealType === 'wolse' ? { monthlyRent: 30 } : {}),
       });
-      return { trades: [asTrade(sale, 'sale'), asTrade(jeonse, 'jeonse'), asTrade(wolse, 'wolse')] };
+      const sales = months.filter((month) => month === '202607' || month === '202608').map((month) =>
+        asTrade({ ...sale, id: `db-sale-${month}`, dealDate: `${month.slice(0, 4)}-${month.slice(4)}-01` }, 'sale'));
+      const rents = rentMonths.includes('202607') ? [asTrade(jeonse, 'jeonse'), asTrade(wolse, 'wolse')] : [];
+      return { trades: [...sales, ...rents] };
     },
   },
 });
@@ -129,4 +141,58 @@ test('verified Busan-wide months continue to use DB sales and leases without MOL
   assert.ok(dbCalls.includes('26500'));
   assert.equal(dbCalls.filter((entry) => entry === '202607').length, 2);
   assert.equal(districtCalls.length, before);
+});
+
+test('Busan-wide successful empty rent does not set failure flags', async () => {
+  const body = await feed('wolse', null, '2026-10-01', '2026-10-31');
+  assert.equal(body.summary.totalCount, 0);
+  assert.equal(body.partial, false);
+  assert.equal(body.apiError, false);
+});
+
+test('Busan-wide lease outage is incomplete for both lease filters and retains DB sales', async () => {
+  for (const dealType of ['jeonse', 'wolse']) {
+    const body = await feed(dealType, null, '2026-08-01', '2026-08-31');
+    assert.equal(body.summary.totalCount, 0);
+    assert.equal(body.partial, true);
+    assert.equal(body.apiError, false);
+    assert.equal(body.failedDistricts.length, 16);
+  }
+  const sales = await feed('sale', null, '2026-08-01', '2026-08-31');
+  assert.equal(sales.summary.totalCount, 1);
+  assert.equal(sales.groups[0].trades[0].dealType, 'sale');
+  assert.equal(sales.apiError, false);
+});
+
+test('Busan-wide partial district failure retains the available monthly rent', async () => {
+  const body = await feed('wolse', null, '2026-09-01', '2026-09-30');
+  assert.equal(body.partial, true);
+  assert.equal(body.apiError, false);
+  assert.deepEqual(body.failedDistricts, ['26350']);
+  assert.equal(body.summary.totalCount, 1);
+  assert.equal(body.groups[0].trades[0].dealAmount, 5000);
+  assert.equal(body.groups[0].trades[0].monthlyRent, 30);
+});
+
+test('Busan-wide mixed DB and unavailable MOLIT months retain verified leases', async () => {
+  for (const dealType of ['jeonse', 'wolse']) {
+    const body = await feed(dealType, null, '2026-07-01', '2026-08-31');
+    assert.equal(body.partial, true);
+    assert.equal(body.apiError, false);
+    assert.equal(body.summary.totalCount, 1);
+    assert.equal(body.groups[0].trades[0].dealDate, '2026-07-01');
+    assert.equal(body.groups[0].trades[0].dealType, dealType);
+  }
+});
+
+test('Suyeong distinguishes complete empty leases from a lease outage', async () => {
+  for (const dealType of ['jeonse', 'wolse']) {
+    const empty = await feed(dealType, '26500', '2026-10-01', '2026-10-31');
+    const incomplete = await feed(dealType, '26500', '2026-08-01', '2026-08-31');
+    assert.equal(empty.summary.totalCount, 0);
+    assert.equal(empty.partial, false);
+    assert.equal(empty.apiError, false);
+    assert.equal(incomplete.summary.totalCount, 0);
+    assert.equal(incomplete.apiError, true);
+  }
 });

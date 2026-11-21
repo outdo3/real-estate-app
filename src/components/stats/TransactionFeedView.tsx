@@ -262,8 +262,12 @@ export default function TransactionFeedView({
         <InlineLoading message="실거래 데이터를 확인하고 있어요..." />
       ) : data?.apiError ? (
         <ErrorState variant="section" message={`국토교통부 ${data.region.sidoAll ? '실거래' : sourceLabel} API 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.`} />
-      ) : districtPartial && data.summary.totalCount === 0 ? (
-        <ErrorState variant="section" message={districtPartialMessage} />
+      ) : data.partial && data.summary.totalCount === 0 ? (
+        <ErrorState
+          variant="section"
+          message={districtPartial ? districtPartialMessage
+            : `일부 지역의 ${sourceLabel} 데이터를 불러오지 못해 거래 건수를 확인할 수 없어요.`}
+        />
       ) : canShowStatsEmpty({ hasResponse: true, isFetching: isLoading && offset === 0, hasError: false }) &&
         !isStale && data.summary.totalCount === 0 && visibleTrades.length === 0 ? (
         <Empty variant="noData" title={`${displayRegionName}, ${PERIOD_OPTIONS.find((p) => p.preset === preset)?.label || ''} 기간 내 실거래가 없어요.`} description="다른 기간을 선택해보세요." showMascot={false} />
