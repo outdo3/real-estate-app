@@ -242,7 +242,10 @@ export class SeoulRentBackfillEngine {
         }
       }
       this.checkpoint.completedCellCount = completed;
-      fs.writeFileSync(cpPath, JSON.stringify(this.checkpoint, null, 2), 'utf-8');
+      // 원자적 파일 쓰기: 임시 파일 생성 후 rename 교체로 프로세스 강제 중단 시 파일 손상 방지
+      const tmpPath = `${cpPath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(this.checkpoint, null, 2), 'utf-8');
+      fs.renameSync(tmpPath, cpPath);
     } catch (err) {
       console.warn(`[Checkpoint] Warning: Failed to write checkpoint to ${cpPath}`, err);
     }
