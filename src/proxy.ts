@@ -10,7 +10,7 @@ export function proxy(request: NextRequest) {
   next.headers.set('Permissions-Policy', 'geolocation=()');
   next.headers.set('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://dapi.kakao.com https://*.daumcdn.net https://*.daum.net",
+    "script-src 'self' 'unsafe-inline' https://dapi.kakao.com https://*.daumcdn.net https://*.daum.net https://t1.kakaocdn.net",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://*.daumcdn.net https://*.kakaocdn.net https://*.kakao.com https://*.daum.net",
     "connect-src 'self' https://dapi.kakao.com https://*.daumcdn.net https://*.kakao.com https://*.daum.net",

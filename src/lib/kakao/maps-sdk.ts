@@ -60,19 +60,41 @@ export function loadKakaoMapsSdk(): Promise<void> {
 
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let script: HTMLScriptElement | null = null;
+    let onScriptLoad: (() => void) | null = null;
+    let onScriptError: (() => void) | null = null;
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (script) {
+        if (onScriptLoad) script.removeEventListener('load', onScriptLoad);
+        if (onScriptError) script.removeEventListener('error', onScriptError);
+      }
+    };
 
     // 어느 경로로 끝나든 타이머를 반드시 정리한다(§12 리스너 누수 방지).
     const done = (err?: Error) => {
       if (settled) return;
       settled = true;
-      if (timer) clearTimeout(timer);
+      cleanup();
       if (err) reject(err);
       else resolve();
     };
 
+    // 도메인 미등록 등으로 영영 로드되지 않거나 kakao.maps.load 콜백이 미실행되는 경우 무한 대기를 막는다.
+    // 기존 load 함수, 최초 로딩, 중복 초기화 등 모든 경로에서 10초 타임아웃이 작동하도록 타이머를 먼저 시작한다.
+    timer = setTimeout(() => done(new Error('KAKAO_SDK_TIMEOUT')), LOAD_TIMEOUT_MS);
+
     // autoload=false 로 받았으므로 maps.load()를 호출해야 실제 모듈이 준비된다.
     const runLoad = () => {
-      window.kakao.maps.load(() => done());
+      try {
+        window.kakao.maps.load(() => done());
+      } catch (err) {
+        done(err instanceof Error ? err : new Error('KAKAO_SDK_SCRIPT_ERROR'));
+      }
     };
 
     if (typeof window.kakao?.maps?.load === 'function') {
@@ -89,12 +111,13 @@ export function loadKakaoMapsSdk(): Promise<void> {
     // 잡아낸다 — SDK 스크립트는 실행되는 즉시 `window.kakao`를 채우므로 "load는
     // 끝났는데 window.kakao가 아직 없는" 중간 상태가 존재하지 않는다. 따라서
     // 동기 검사 + load 이벤트 두 가지로 모든 정상 경로가 덮인다.
-    const onScriptLoad = () => {
+    onScriptLoad = () => {
       if (typeof window.kakao?.maps?.load === 'function') runLoad();
       else done(new Error('KAKAO_SDK_SCRIPT_ERROR'));
     };
+    onScriptError = () => done(new Error('KAKAO_SDK_SCRIPT_ERROR'));
 
-    let script = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
+    script = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
     if (!script) {
       const src = kakaoMapsSdkUrl();
       if (!src) {
@@ -107,17 +130,13 @@ export function loadKakaoMapsSdk(): Promise<void> {
       script.src = src;
       script.async = true;
       script.addEventListener('load', onScriptLoad);
-      script.addEventListener('error', () => done(new Error('KAKAO_SDK_SCRIPT_ERROR')));
+      script.addEventListener('error', onScriptError);
       document.head.appendChild(script);
     } else {
       // 다른 컴포넌트가 이미 주입해 둔 태그를 재사용한다. 두 번 넣지 않는다.
       script.addEventListener('load', onScriptLoad);
-      script.addEventListener('error', () => done(new Error('KAKAO_SDK_SCRIPT_ERROR')));
+      script.addEventListener('error', onScriptError);
     }
-
-    // 도메인 미등록 등으로 영영 로드되지 않는 경우 무한 대기를 막는다.
-    // (폴링을 없앤 뒤에도 이 타임아웃은 그대로 최후의 안전장치로 남는다.)
-    timer = setTimeout(() => done(new Error('KAKAO_SDK_TIMEOUT')), LOAD_TIMEOUT_MS);
   });
 
   sdkPromise = attempt.catch((e) => {
