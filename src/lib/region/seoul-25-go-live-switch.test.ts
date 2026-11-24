@@ -49,8 +49,8 @@ test('스위치는 한 곳 · 리터럴 true(2026-09-30 공개) · 17구는 앱�
     for (const axis of ['report', 'stats', 'supply', 'sitemap', 'seoIndex'] as const) assert.equal(isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
     assert.equal(isDbOnlyLawdCd(c), true, c);
   }
-  // 서울 8구는 DB 전용이 아니다(기존 live 경로 그대로)
-  for (const c of S8) assert.equal(isDbOnlyLawdCd(c), false, c);
+  // SEOUL_STATS_SALE_PARITY_V2 — 서울 8구도 전월세 조회 보호 적용
+  for (const c of S8) assert.equal(isDbOnlyLawdCd(c), true, c);
 });
 
 test('열림 판정 진리표: Production 스위치 또는 Preview 스위치', () => {
@@ -104,8 +104,8 @@ test('go-live: 17구는 DB 전용 — live MOLIT 관문에서 닫힘, 다른 지
   // 관문은 fetchMolitData 맨 앞 한 곳이고, 17구 판정은 enablement의 같은 열림 값을 쓴다
   const molit = code('src/lib/api-molit.ts');
   assert.match(molit, /if \(isDbOnlyLawdCd\(params\.lawdCd\)\) return molitFailurePlaceholder\(params, DB_ONLY_MOLIT_MESSAGE\);/);
-  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 — 같은 관문에 경기 8구(열렸을 때)가 붙는다. 서울 17구 판정은 그대로.
-  assert.match(code('src/lib/region/enablement.ts'), /return resolveDbOnly\(SEOUL_17_OPEN, lawdCd\) \|\| resolveGyeonggiDbOnly\(GYEONGGI_8_OPEN, lawdCd\);/);
+  // GYEONGGI8_FINAL_PREVIEW_PREP_V1 · SEOUL_STATS_SALE_PARITY_V2 — 같은 관문에 경기 8구 및 서울 8구가 붙는다.
+  assert.match(code('src/lib/region/enablement.ts'), /return resolveDbOnly\(SEOUL_17_OPEN, lawdCd\) \|\| resolveSeoul8DbOnly\(SEOUL_BETA_ENABLED, lawdCd\) \|\| resolveGyeonggiDbOnly\(GYEONGGI_8_OPEN, lawdCd\);/);
   // 상세·지도는 cronSync(=DB-first) 축으로 DB를 읽는다
   assert.ok(/if \(aptSeq && isTradeDbFirstLawdCd\(aptSeq\.slice\(0, 5\)\)\)/.test(code('src/app/api/apt/[name]/route.ts')));
   assert.ok(/const isDbFirstEligible = isMapMarkerShape && isTradeDbFirstLawdCd\(lawdCd\);/.test(code('src/app/api/transactions/route.ts')));

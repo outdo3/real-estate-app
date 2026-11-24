@@ -286,17 +286,22 @@ export function resolveDbOnly(seoul17Open: boolean, lawdCd: string | null | unde
   return seoul17Open && !!lawdCd && (SEOUL_17_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
 }
 
+/** DB 전용 판정(순수) — 서울 초기 8구: 서울 beta가 열렸고 서울 8구면 live MOLIT 과다 호출 없이 DB만 읽는다(전월세 준비 중 보호). */
+export function resolveSeoul8DbOnly(seoulBetaEnabled: boolean, lawdCd: string | null | undefined): boolean {
+  return seoulBetaEnabled && !!lawdCd && (SEOUL_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
+}
+
 /** DB 전용 판정(순수) — 경기 8구: 경기 8구가 열렸고(Production 또는 Preview) 그 8구면 live MOLIT 없이 DB만 읽는다. */
 export function resolveGyeonggiDbOnly(gyeonggi8Open: boolean, lawdCd: string | null | undefined): boolean {
   return gyeonggi8Open && !!lawdCd && (GYEONGGI_BETA_LAWDCDS as readonly string[]).includes(lawdCd);
 }
 
 /**
- * 이 빌드에서 이 구가 "DB만 읽고 live MOLIT는 부르지 않는" 구인가: 서울 17구(열렸을 때) · 경기 8구(열렸을 때).
- * 닫힌 구에서는 항상 false(서울 8구·부산의 기존 live 경로 불변).
+ * 이 빌드에서 이 구가 "DB만 읽고 live MOLIT는 부르지 않는" 구인가: 서울 25구(열렸을 때) · 경기 8구(열렸을 때).
+ * 닫힌 구와 부산은 false(부산은 검증된 DB-first + 잔여 실시간 유지).
  */
 export function isDbOnlyLawdCd(lawdCd: string | null | undefined): boolean {
-  return resolveDbOnly(SEOUL_17_OPEN, lawdCd) || resolveGyeonggiDbOnly(GYEONGGI_8_OPEN, lawdCd);
+  return resolveDbOnly(SEOUL_17_OPEN, lawdCd) || resolveSeoul8DbOnly(SEOUL_BETA_ENABLED, lawdCd) || resolveGyeonggiDbOnly(GYEONGGI_8_OPEN, lawdCd);
 }
 
 /**

@@ -183,6 +183,6 @@ test('10 · SEO: 경기 상세는 공개 뒤에도 NOINDEX(색인 금지) · sit
 test('11 · 서울 25구·부산 회귀 없음 — 경기를 켜도 서울·부산의 enablement는 지금과 같다', () => {
   for (const c of [...BUSAN, ...S8, ...S17]) assert.deepEqual(sim(c, ON), sim(c, NOW), c);
   for (const c of [...BUSAN, ...S8, ...S17]) assert.deepEqual(sim(c, NOW), getRegionEnablement(c), `${c} 런타임 ≠ 시뮬레이션 NOW`);
-  for (const c of S17) assert.equal(isDbOnlyLawdCd(c), true, c);
-  for (const c of [...S8, ...BUSAN]) assert.equal(isDbOnlyLawdCd(c), false, c);
+  for (const c of [...S8, ...S17]) assert.equal(isDbOnlyLawdCd(c), true, c);
+  for (const c of BUSAN) assert.equal(isDbOnlyLawdCd(c), false, c);
 });

@@ -1,5 +1,5 @@
 import { isStatsEnabledLawdCd, isTradeDbFirstLawdCd, isTradeDbFirstSido } from '@/lib/region/enablement';
-import { isStatsRegionSupported, statsUnsupportedStatusBody } from '@/lib/region/stats-gate';
+import { isStatsRegionSupported, isStatsRankingSupported, statsUnsupportedStatusBody } from '@/lib/region/stats-gate';
 import { NextResponse } from 'next/server';
 import { fetchMolitData, formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
@@ -86,7 +86,7 @@ const MAX_LIMIT = 100;
 // NON_BUSAN_STATS_TRUST_GATE_V1 — 이제 비부산 요청은 이 판정 전에 stats 게이트(isStatsRegionSupported)에서
 // '준비 중'으로 돌아간다. 이 판정은 게이트를 통과한 지역 안에서 DB-first/live를 가르는 역할만 한다.
 function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
-  if (isSidoAll) return isTradeDbFirstSido(sidoCodeParam);
+  if (isSidoAll) return isTradeDbFirstSido(sidoCodeParam) || sidoCodeParam === '11';
   return isTradeDbFirstLawdCd(lawdCd);
 }
 
@@ -268,9 +268,10 @@ export async function GET(request: Request) {
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT));
   const isSidoAll = !lawdCdParam && !!sidoCodeParam && /^\d{2}$/.test(sidoCodeParam);
 
-  // NON_BUSAN_STATS_TRUST_GATE_V1 — 통계가 열리지 않은 지역은 캐시·DB·MOLIT에 닿기 전에 돌려보낸다.
-  if (!isStatsRegionSupported({ lawdCd: lawdCdParam, sidoCode: sidoCodeParam, sidoName: sido })) {
-    return NextResponse.json(statsUnsupportedStatusBody());
+  // SEOUL_STATS_SALE_PARITY_V2 — 가격 순위 기능별 게이트(서울 area84 등 매매 순위 개방).
+  const rankingGate = isStatsRankingSupported({ lawdCd: lawdCdParam, sidoCode: sidoCodeParam, sidoName: sido, mode });
+  if (!rankingGate.allowed) {
+    return NextResponse.json(statsUnsupportedStatusBody(rankingGate.message));
   }
 
   try {
@@ -280,7 +281,8 @@ export async function GET(request: Request) {
       if (!lawdCd) {
         return NextResponse.json({ status: 'ERROR', message: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` }, { status: 400 });
       }
-      if (!isStatsEnabledLawdCd(lawdCd)) return NextResponse.json(statsUnsupportedStatusBody());
+      const districtGate = isStatsRankingSupported({ lawdCd, sidoCode: null, sidoName: null, mode });
+      if (!districtGate.allowed) return NextResponse.json(statsUnsupportedStatusBody(districtGate.message));
     }
 
     const now = new Date();

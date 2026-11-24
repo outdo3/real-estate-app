@@ -56,6 +56,93 @@ export function isStatsRegionSupported(
   return sido ? isEnabledSido(sido.code) : false;
 }
 
+/**
+ * SEOUL_STATS_SALE_PARITY_V2 — 서울 지역 매매 통계 적격 여부(순수).
+ * 서울 25개 구는 전체 이력 매매 실거래가 DB 적재가 완료되었으므로,
+ * 매매 기반 통계(피드 매매 필터, 84㎡ 순위)의 소스로 안전하게 사용할 수 있다.
+ */
+export function isSeoulSaleStatsEligible(query: StatsRegionQuery): boolean {
+  const { lawdCd, sidoCode, sidoName } = query;
+  if (lawdCd && /^\d{5}$/.test(lawdCd)) {
+    const node = getRegionByLawdCd(lawdCd);
+    return node?.sidoCode === '11';
+  }
+  if (!lawdCd && sidoCode && /^\d{2}$/.test(sidoCode)) {
+    return sidoCode === '11';
+  }
+  if (sidoName) {
+    const sido = REGION_SIDOS.find((s) => s.name === sidoName);
+    return sido?.code === '11';
+  }
+  return false;
+}
+
+/**
+ * SEOUL_STATS_SALE_PARITY_V2 — 실거래 피드 기능별 게이트.
+ * - 부산(26): 매매, 전세, 월세 전 유형 지원
+ * - 서울(11): 매매(sale) 및 전체(all) 지원, 전월세 전용(jeonse/wolse) 필터는 미적재 상태로 차단
+ * - 그 외 지역: 차단
+ */
+export function isStatsFeedSupported(
+  query: StatsRegionQuery & { dealType?: string | null }
+): { allowed: boolean; reason?: 'UNSUPPORTED_REGION' | 'RENT_PREPARING'; message?: string } {
+  // 1. 부산 등 기존 통계 전면 공개 시도
+  if (isStatsRegionSupported(query)) {
+    return { allowed: true };
+  }
+
+  // 2. 서울 매매 피드 분기
+  if (isSeoulSaleStatsEligible(query)) {
+    if (query.dealType === 'jeonse' || query.dealType === 'wolse') {
+      return {
+        allowed: false,
+        reason: 'RENT_PREPARING',
+        message: '서울 지역의 전월세 실거래 정보는 아직 준비 중입니다 (매매 실거래가만 제공 중).',
+      };
+    }
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    reason: STATS_UNSUPPORTED_REASON,
+    message: STATS_UNSUPPORTED_MESSAGE,
+  };
+}
+
+/**
+ * SEOUL_STATS_SALE_PARITY_V2 — 가격 순위 기능별 게이트.
+ * - 부산(26): area84, decline, rising, record-high, jeonse-risk 전 모드 지원
+ * - 서울(11): area84(국민평형 순위) 및 매매 순위 지원, jeonse-risk(전세가율 위험)는 전세 미적재로 차단
+ * - 그 외 지역: 차단
+ */
+export function isStatsRankingSupported(
+  query: StatsRegionQuery & { mode?: string | null }
+): { allowed: boolean; reason?: 'UNSUPPORTED_REGION' | 'RENT_PREPARING'; message?: string } {
+  // 1. 부산 등 기존 통계 전면 공개 시도
+  if (isStatsRegionSupported(query)) {
+    return { allowed: true };
+  }
+
+  // 2. 서울 매매 기반 순위(area84 등) 분기
+  if (isSeoulSaleStatsEligible(query)) {
+    if (query.mode === 'jeonse-risk') {
+      return {
+        allowed: false,
+        reason: 'RENT_PREPARING',
+        message: '서울 지역의 전세가율 순위는 전월세 데이터 적재 준비 중입니다.',
+      };
+    }
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    reason: STATS_UNSUPPORTED_REASON,
+    message: STATS_UNSUPPORTED_MESSAGE,
+  };
+}
+
 /** 통계가 열려 있는 시도(현재 부산). 사용자가 직접 이동할 수 있게 안내용으로만 내려준다. */
 function supportedSidoFields() {
   const code = getStatsEnabledSidoCodes()[0] ?? null;
