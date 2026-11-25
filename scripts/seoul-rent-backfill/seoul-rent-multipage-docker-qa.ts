@@ -95,6 +95,14 @@ export async function runMultipageDockerQa(): Promise<MultipageDockerQaResult> {
 
   // 2. 송파구 1,404건 정규화 데이터 로드
   if (!fs.existsSync(NORM_CACHE_FILE)) {
+    const v36Fallback = path.resolve(process.cwd(), '../seoul-rent-backfill-v36/tmp/qa-seoul-rent/songpa-202610-normalized.json');
+    if (fs.existsSync(v36Fallback)) {
+      if (!fs.existsSync(QA_DIR)) fs.mkdirSync(QA_DIR, { recursive: true });
+      fs.copyFileSync(v36Fallback, NORM_CACHE_FILE);
+    }
+  }
+
+  if (!fs.existsSync(NORM_CACHE_FILE)) {
     throw new Error(`Normalized cache file not found at ${NORM_CACHE_FILE}. Run seoul-rent-multipage-probe first.`);
   }
 
