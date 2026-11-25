@@ -32,6 +32,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data: { posts, total, page, pageSize: PAGE_SIZE } });
   } catch (error) {
     console.error('Failed to list posts:', error);
+    const msg = (error as Error)?.message || '';
+    const code = (error as any)?.code;
+    if (code === '42501' || msg.includes('permission denied') || msg.includes('does not exist')) {
+      const page = 1;
+      return NextResponse.json({ success: true, data: { posts: [], total: 0, page, pageSize: PAGE_SIZE } });
+    }
     return NextResponse.json({ success: false, error: '게시글 목록을 불러오지 못했습니다.' }, { status: 500 });
   }
 }

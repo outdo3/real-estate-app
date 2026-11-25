@@ -20,6 +20,7 @@ import { buildScore } from '@/lib/compare-v2/metrics';
 import type { TradeRow } from './region-aggregate';
 import { buildApartmentReport, type AptReportInput, type AptScoreView, type ApartmentReportData } from './apt-report';
 import type { ReportEnvelope, ReportPeriod } from './types';
+import { resolveLocationFeature } from '@/lib/apartment-score/server/location-resolver';
 
 /** 12개월 창 + 2년 창. 리포트 기간 라벨은 12개월 기준이다. */
 const TRADE_WINDOW_MONTHS = 12;
@@ -158,6 +159,7 @@ export async function readApartmentReport(aptSeq: string, now: Date = new Date()
       aptSeq: true, name: true, sigungu: true, umdName: true, sggCd: true,
       roadAddress: true, jibunAddress: true, buildYear: true,
       totalHouseholds: true, parkingCount: true, parkingPerHousehold: true,
+      latitude: true, longitude: true,
     },
   });
   if (!master || !master.aptSeq) throw new AptReportNotFound(aptSeq);
@@ -211,16 +213,39 @@ export async function readApartmentReport(aptSeq: string, now: Date = new Date()
       : Promise.resolve([]),
   ]);
 
+  let locationData: any = location;
+  if (!locationData) {
+    const loc = await resolveLocationFeature(aptSeq, {
+      latitude: master.latitude ?? null,
+      longitude: master.longitude ?? null,
+    });
+    if (loc) {
+      locationData = {
+        nearestSubwayName: loc.nearestSubwayName ?? null,
+        nearestSubwayDistanceM: loc.nearestSubwayDistanceM ?? null,
+        nearestElementaryDistanceM: loc.nearestElementaryDistanceM ?? null,
+        convenienceCount500m: loc.convenienceCount500m ?? null,
+        martCount1000m: loc.martCount1000m ?? null,
+        parkCount1000m: loc.parkCount1000m ?? null,
+        qualityFlag: loc.qualityFlag ?? null,
+        fetchedAt: new Date(),
+        latitude: master.latitude ?? null,
+        longitude: master.longitude ?? null,
+      };
+    }
+  }
+
   const score = await readScore(aptSeq);
 
   // §7 — 초등학교 이름 해석용 후보. 좌표가 있는 활성 초등학교만 읽는다(읽기 전용).
-  // 부산 초등학교는 305곳 규모라 전건을 메모리에서 비교해도 비용이 무시할 만하고,
-  // 경계 상자로 미리 자르면 경계 바로 밖의 더 가까운 학교를 놓칠 위험만 생긴다.
-  // 아파트 좌표가 없으면 조회 자체를 건너뛴다.
-  const elementarySchools = location?.latitude != null && location?.longitude != null
+  // 학교 DB(prisma.school)는 현재 부산(sidoCode 26)만 구축되어 있으므로,
+  // 부산 단지일 때만 조회하여 타 지역 단지가 수백 km 밖 부산 학교에 매칭되는 결함을 차단한다.
+  const isBusan = master.sggCd?.startsWith('26');
+  const elementarySchools = (isBusan && locationData?.latitude != null && locationData?.longitude != null)
     ? await prisma.school.findMany({
         where: {
           schoolLevel: '초등학교',
+          sidoCode: '26',
           isActive: true,
           latitude: { not: null },
           longitude: { not: null },
@@ -228,6 +253,26 @@ export async function readApartmentReport(aptSeq: string, now: Date = new Date()
         select: { schoolName: true, latitude: true, longitude: true },
       })
     : [];
+
+  let totalHouseholds = master.totalHouseholds;
+  let parkingCount = master.parkingCount;
+  let parkingPerHousehold = master.parkingPerHousehold;
+
+  if (totalHouseholds == null && master.name && master.sggCd) {
+    try {
+      const apt = await prisma.apartment.findFirst({
+        where: { name: master.name, lawdCd: master.sggCd },
+        select: { totalHouseholds: true, parkingCount: true },
+      });
+      if (apt?.totalHouseholds) {
+        totalHouseholds = apt.totalHouseholds;
+        if (parkingCount == null && apt.parkingCount != null) {
+          parkingCount = apt.parkingCount;
+          parkingPerHousehold = Math.round((apt.parkingCount / apt.totalHouseholds) * 100) / 100;
+        }
+      }
+    } catch {}
+  }
 
   const dataAsOf = cells.length ? cells[0].verifiedAt.toISOString() : null;
   // 최근 12개월 셀이 모두 COMPLETE일 때만 완전하다고 말한다(없으면 검증 중).
@@ -245,26 +290,26 @@ export async function readApartmentReport(aptSeq: string, now: Date = new Date()
       roadAddress: master.roadAddress,
       jibunAddress: master.jibunAddress,
       buildYear: master.buildYear,
-      totalHouseholds: master.totalHouseholds,
-      parkingCount: master.parkingCount,
-      parkingPerHousehold: master.parkingPerHousehold,
+      totalHouseholds: totalHouseholds,
+      parkingCount: parkingCount,
+      parkingPerHousehold: parkingPerHousehold,
       sggCd: master.sggCd,
     },
     trades12m: mapRows(trades12m as RawTrade[]),
     twoYearTopCandidates: mapRows(twoYearTop as RawTrade[]),
     recentTradeRows: mapRows(recentRows as RawTrade[]),
     score,
-    location: location
+    location: locationData
       ? {
-          nearestSubwayName: location.nearestSubwayName,
-          nearestSubwayDistanceM: location.nearestSubwayDistanceM,
-          nearestElementaryDistanceM: location.nearestElementaryDistanceM,
-          nearestElementarySchool: findNearestSchool(location.latitude, location.longitude, elementarySchools),
-          convenienceCount500m: location.convenienceCount500m,
-          martCount1000m: location.martCount1000m,
-          parkCount1000m: location.parkCount1000m,
-          qualityFlag: location.qualityFlag ?? null,
-          fetchedAt: location.fetchedAt ? location.fetchedAt.toISOString() : null,
+          nearestSubwayName: locationData.nearestSubwayName,
+          nearestSubwayDistanceM: locationData.nearestSubwayDistanceM,
+          nearestElementaryDistanceM: locationData.nearestElementaryDistanceM,
+          nearestElementarySchool: findNearestSchool(locationData.latitude, locationData.longitude, elementarySchools),
+          convenienceCount500m: locationData.convenienceCount500m,
+          martCount1000m: locationData.martCount1000m,
+          parkCount1000m: locationData.parkCount1000m,
+          qualityFlag: locationData.qualityFlag ?? null,
+          fetchedAt: locationData.fetchedAt ? (locationData.fetchedAt instanceof Date ? locationData.fetchedAt.toISOString() : String(locationData.fetchedAt)) : null,
         }
       : null,
     market: market

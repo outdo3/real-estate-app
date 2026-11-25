@@ -111,7 +111,7 @@ const SEOUL_BETA_ENABLEMENT: RegionEnablement = {
   search: true,
   map: true,
   detail: true,
-  report: false,
+  report: true,
   stats: false,
   // 공급(청약홈)은 기존 정책대로 8구 단위 조회를 내준다(SEOUL_BETA_EXPOSURE_LEAK_CLOSE_V1 — "서울 전체"는 시도 층이 닫혀 계속 막힘).
   supply: true,
@@ -270,11 +270,10 @@ export const SEOUL_17_ENABLEMENT: RegionEnablement = {
   search: true,
   map: true,
   detail: true,
-  report: false,
+  report: true,
   stats: false,
-  // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — 공급(청약홈)도 닫힘. 이 Preview 프로필은 앱·검색·지도·상세만 여는 계약이다
-  // (경기 beta 프로필과 같은 정책). 17구 공급 공개는 Production 공개 단계(서울 8구 프로필로 옮길 때)에서 따로 정한다.
-  supply: false,
+  // SEOUL V5 — 공급(청약홈) 및 한장 리포트 25개 구 확대.
+  supply: true,
   sitemap: false,
   seoIndex: false,
   // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview 전용 DB-first 읽기(적재 완료 데이터). 이 프로필은 Preview 빌드에서만 쓰인다.

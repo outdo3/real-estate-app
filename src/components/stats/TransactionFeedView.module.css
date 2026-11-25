@@ -4,18 +4,14 @@
 
 .periodRow {
   display: flex;
-  gap: 0.4rem;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  gap: 0.35rem;
   padding: 0.75rem 0 0.5rem;
-  -webkit-overflow-scrolling: touch;
-}
-.periodRow::-webkit-scrollbar {
-  display: none;
 }
 
 .chip {
   flex: 0 0 auto;
-  padding: 0.4rem 0.75rem;
+  padding: 0.38rem 0.65rem;
   border-radius: 999px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
