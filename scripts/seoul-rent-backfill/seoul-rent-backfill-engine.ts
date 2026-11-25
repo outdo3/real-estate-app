@@ -66,6 +66,8 @@ export const SEOUL_DISTRICT_NAMES: Record<string, string> = {
   '11740': '강동구',
 };
 
+export type DbEnvironment = 'LOCAL_DOCKER_QA' | 'OPERATIONAL_SUPABASE' | 'UNKNOWN';
+
 export interface BackfillEngineOptions {
   scope: 'seoul-a' | 'seoul-b' | 'seoul-c' | 'seoul-all' | string[];
   fromYmd: string; // YYYYMM (e.g. '202501')
@@ -74,6 +76,7 @@ export interface BackfillEngineOptions {
   checkpointPath?: string;
   delayMs?: number;
   maxRetries?: number;
+  targetDbEnv?: DbEnvironment;
 }
 
 export interface CellExecutionRecord {
@@ -82,6 +85,7 @@ export interface CellExecutionRecord {
   districtName?: string;
   dealYmd: string;
   executionMode: 'DRY_RUN' | 'APPLIED';
+  targetDbEnv?: DbEnvironment;
   status: RentCellStatus;
   totalCount: number | null;
   collectedCount: number;
@@ -103,6 +107,7 @@ export interface CheckpointData {
   lastUpdated: string;
   completedCellCount: number;
   totalCellCount: number;
+  environment?: DbEnvironment;
   cells: Record<string, CellExecutionRecord>;
 }
 
@@ -200,6 +205,7 @@ export class SeoulRentBackfillEngine {
       checkpointPath: options.checkpointPath || path.join(process.cwd(), 'tmp', 'seoul-rent-backfill-checkpoint.json'),
       delayMs: options.delayMs ?? 300,
       maxRetries: options.maxRetries ?? 3,
+      targetDbEnv: options.targetDbEnv ?? 'LOCAL_DOCKER_QA',
     };
     this.fetcher = fetcher;
     this.dbStore = dbStore;
@@ -228,6 +234,7 @@ export class SeoulRentBackfillEngine {
       lastUpdated: new Date().toISOString(),
       completedCellCount: 0,
       totalCellCount: 0,
+      environment: this.options.targetDbEnv,
       cells: {},
     };
   }
@@ -240,6 +247,9 @@ export class SeoulRentBackfillEngine {
         fs.mkdirSync(dir, { recursive: true });
       }
       this.checkpoint.lastUpdated = new Date().toISOString();
+      if (!this.checkpoint.environment) {
+        this.checkpoint.environment = this.options.targetDbEnv;
+      }
       let completed = 0;
       for (const c of Object.values(this.checkpoint.cells)) {
         if (c.status === 'EMPTY_VALID' || (c.status === 'COMPLETE' && (c.executionMode === 'APPLIED' || c.plannedInserts === 0))) {
@@ -260,9 +270,13 @@ export class SeoulRentBackfillEngine {
    * Checkpoint 스킵 적격성 판정:
    * - Dry-run 모드에서는 DRY_RUN 또는 APPLIED로 이미 수집 검증된 셀이면 스킵
    * - Apply 모드에서는 실제 DB 적재(APPLIED)가 완료된 셀만 스킵!
-   *   (DRY_RUN으로만 완료되었거나 실제 DB에 미적재된 셀은 스킵하지 않고 실제 DB 적재를 수행)
+   * - 환경 격리 불변식: 운영 DB(OPERATIONAL_SUPABASE)와 로컬 QA(LOCAL_DOCKER_QA) 간 완료 기록 혼용 원천 차단!
    */
-  public isCellEligibleForSkip(existingCp?: CellExecutionRecord, isDryRun: boolean = true): boolean {
+  public isCellEligibleForSkip(
+    existingCp?: CellExecutionRecord,
+    isDryRun: boolean = true,
+    currentTargetDbEnv?: DbEnvironment
+  ): boolean {
     if (!existingCp) return false;
     if (existingCp.status === 'EMPTY_VALID') return true;
     if (existingCp.status !== 'COMPLETE') return false;
@@ -270,7 +284,25 @@ export class SeoulRentBackfillEngine {
     if (isDryRun) {
       return true;
     } else {
-      return existingCp.executionMode === 'APPLIED' && (existingCp.persistedCount > 0 || existingCp.plannedInserts === 0);
+      if (existingCp.executionMode !== 'APPLIED') return false;
+      if (existingCp.persistedCount === 0 && existingCp.plannedInserts > 0) return false;
+
+      // 환경 격리 안전장치:
+      // 운영 DB 환경(OPERATIONAL_SUPABASE)에서는 QA 또는 UNKNOWN 체크포인트를 결코 스킵으로 인정하지 않음
+      const activeEnv = currentTargetDbEnv || this.options.targetDbEnv || 'UNKNOWN';
+      const recordEnv = existingCp.targetDbEnv || 'UNKNOWN';
+
+      if (activeEnv === 'OPERATIONAL_SUPABASE') {
+        if (recordEnv !== 'OPERATIONAL_SUPABASE') {
+          return false; // 운영 환경에서 QA 및 UNKNOWN 체크포인트 스킵 원천 차단!
+        }
+      } else if (activeEnv === 'LOCAL_DOCKER_QA') {
+        if (recordEnv === 'OPERATIONAL_SUPABASE') {
+          return false; // QA 환경에서 운영 체크포인트 혼용 차단!
+        }
+      }
+
+      return true;
     }
   }
 
@@ -404,6 +436,7 @@ export class SeoulRentBackfillEngine {
         districtName,
         dealYmd,
         executionMode,
+        targetDbEnv: this.options.dryRun ? undefined : this.options.targetDbEnv,
         status: 'COMPLETE',
         totalCount: fetchResult.totalCount,
         collectedCount: sourceRows.length,
