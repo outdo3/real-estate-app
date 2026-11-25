@@ -187,8 +187,8 @@ export async function runDockerQaVerification(): Promise<FullQaVerificationResul
   // 캐시 저장
   fs.writeFileSync(NORM_CACHE_FILE, JSON.stringify(sourceRows, null, 2), 'utf-8');
 
-  // 3. PostgreSQL 테이블 비우기 (초기화)
-  execPsql('TRUNCATE TABLE apartment_rent_histories RESTART IDENTITY;');
+  // 3. PostgreSQL 해당 셀 비우기 (초기화, 타 테스트 병렬 실행 보호)
+  execPsql(`DELETE FROM apartment_rent_histories WHERE lawd_cd = '${LAWD_CD}' AND deal_ymd = '${DEAL_YMD}';`);
 
   // 4. 1차 최초 INSERT 실행 (stdin으로 전체 SQL 스트리밍)
   const insertStatements: string[] = [];
@@ -224,7 +224,7 @@ export async function runDockerQaVerification(): Promise<FullQaVerificationResul
 
   execPsql(insertSql);
 
-  const countRaw1 = execPsql('SELECT COUNT(*)::int FROM apartment_rent_histories;');
+  const countRaw1 = execPsql(`SELECT COUNT(*)::int FROM apartment_rent_histories WHERE lawd_cd = '${LAWD_CD}' AND deal_ymd = '${DEAL_YMD}';`);
   const totalRowsInDb = parseInt(countRaw1, 10);
 
   // 5. 2차 동일 데이터 재실행 시뮬레이션
@@ -244,13 +244,14 @@ export async function runDockerQaVerification(): Promise<FullQaVerificationResul
 
   const rerunPlan = planRentCellWrites(sourceRows as unknown as RentComparableRow[], existingRows);
 
-  const countRaw2 = execPsql('SELECT COUNT(*)::int FROM apartment_rent_histories;');
+  const countRaw2 = execPsql(`SELECT COUNT(*)::int FROM apartment_rent_histories WHERE lawd_cd = '${LAWD_CD}' AND deal_ymd = '${DEAL_YMD}';`);
   const totalRowsInDbAfterRerun = parseInt(countRaw2, 10);
 
   // 6. 자연키 충돌 및 occurrenceIndex 검증
   const dupCheck = execPsqlJson<any[]>(`
     SELECT group_key, deposit, monthly_rent, deal_date, floor, occurrence_index, COUNT(*) 
     FROM apartment_rent_histories 
+    WHERE lawd_cd = '${LAWD_CD}' AND deal_ymd = '${DEAL_YMD}'
     GROUP BY group_key, deposit, monthly_rent, deal_date, floor, occurrence_index 
     HAVING COUNT(*) > 1
   `);
