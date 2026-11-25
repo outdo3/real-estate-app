@@ -105,3 +105,30 @@ test('서울 84㎡ 가격 순위 개방 게이트 — V4.1 전월세 적재 완�
     assert.equal(isStatsRankingSupported({ lawdCd: c, sidoCode: null, sidoName: null, mode: 'area84' }).allowed, false);
   }
 });
+
+test('피드 무보증 월세 보존 — 보증금이 0원이라도 월세가 양수이면 월세 피드 거래로 온전히 보존된다', async () => {
+  const { toFeedTrade } = await import('../regional-feed');
+  const mockWolseZeroDeposit = {
+    id: 'test-wolse-01',
+    aptSeq: '11110-101',
+    name: '테스트단지',
+    dong: '사직동',
+    dealAmount: 0,
+    monthlyRent: 80,
+    excluUseArea: 59.9,
+    floorRaw: 5,
+    dealDate: '2026-05-15',
+    dealCanceled: false,
+    typeLabel: '전월세',
+  };
+
+  const trade = toFeedTrade(mockWolseZeroDeposit, 'wolse', '11110');
+  assert.notEqual(trade, null, '무보증 월세가 null로 버려졌다');
+  assert.equal(trade?.dealType, 'wolse');
+  assert.equal(trade?.dealAmount, 0);
+  assert.equal(trade?.monthlyRent, 80);
+
+  // 전세는 보증금이 0 이하이면 무효
+  const mockJeonseZero = { ...mockWolseZeroDeposit, monthlyRent: 0 };
+  assert.equal(toFeedTrade(mockJeonseZero, 'jeonse', '11110'), null, '보증금 0원 전세는 제외되어야 한다');
+});
