@@ -24,7 +24,7 @@ import {
 } from '@/lib/regional-feed';
 import { prisma } from '@/lib/prisma';
 import { resolveVolumePeriod } from '@/lib/stats/volume-period';
-import { splitVerifiedMonths, getRentVerifiedRange, fetchRentMonthBucketsFromDb } from '@/lib/rent-history-read';
+import { splitVerifiedMonths, getRentVerifiedRange, fetchRentMonthBucketsFromDb, type StoredRentTrade } from '@/lib/rent-history-read';
 import { isFeedDbBackedSido, loadBusanFeedTradesFromDb, monthRangeBounds, storedSaleToFeedRaw, storedRentToFeedRaw } from '@/lib/stats/feed-db-source';
 import { getRegionalSaleRowsForFeedFromDb } from '@/lib/trade-history-read';
 import { resolveApartmentContextBatch, type PyeongLookupKey as ContextLookupKey } from '@/lib/statistics-pyeong-resolver';
@@ -128,9 +128,10 @@ export async function GET(request: Request) {
         // 전월세는 **검증범위 안 월만** DB로 읽는다. 검증 안 된 월(주로 진행 중인
         // 현재월)은 기존 MOLIT 경로를 그대로 쓴다 — 검증되지 않은 기간을 "DB에 다
         // 있다"로 가장하지 않는다(RENT_TRADE_HISTORY_V1 PHASE D §16/§17과 동일 규칙,
-        // 같은 함수를 재사용한다). 서울은 전월세가 미적재 상태이므로 rentSplit을 빈 배열로 둔다.
+        // 같은 함수를 재사용한다). 서울 25개 구는 202511~202610이 DB에 전수 적재되어 있다.
+        const seoulRentRange = await getRentVerifiedRange('11');
         const rentSplit = isSeoulSido
-          ? { verified: [] as string[], unverified: [] as string[] }
+          ? { verified: splitVerifiedMonths(months, seoulRentRange).verified, unverified: [] as string[] }
           : dbBacked
             ? splitVerifiedMonths(months, await getRentVerifiedRange())
             : { verified: [] as string[], unverified: months };
@@ -209,15 +210,30 @@ export async function GET(request: Request) {
       const isSeoulDistrict = isSeoulSaleStatsEligible({ lawdCd, sidoCode: null, sidoName: null });
 
       if (isSeoulDistrict) {
-        // SEOUL_STATS_SALE_PARITY_V2 — 서울 단일 구: DB-first 매매 피드. live MOLIT 호출 0회.
+        // SEOUL_STATS_SALE_PARITY_V2 / V4.1 — 서울 단일 구: DB-first 매매·전월세 피드. live MOLIT 호출 0회.
         const bounds = monthRangeBounds(months);
-        const cacheKey = `stats-feed-district:v3-seoul-db:${lawdCd}:${months.join(',')}`;
+        const cacheKey = `stats-feed-district:v4-seoul-db:${lawdCd}:${dealTypeFilter || 'all'}:${months.join(',')}`;
         const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
-          const saleRows = bounds ? await getRegionalSaleRowsForFeedFromDb([lawdCd!], bounds.from, bounds.to) : [];
+          const needSale = dealTypeFilter !== 'jeonse' && dealTypeFilter !== 'wolse';
+          const needRent = dealTypeFilter !== 'sale';
+
+          const [saleRows, rentBuckets] = await Promise.all([
+            needSale && bounds ? getRegionalSaleRowsForFeedFromDb([lawdCd!], bounds.from, bounds.to) : Promise.resolve([]),
+            needRent ? fetchRentMonthBucketsFromDb([lawdCd!], months) : Promise.resolve(new Map<string, StoredRentTrade[]>()),
+          ]);
+
           const trades: FeedTrade[] = [];
           for (const row of saleRows) {
             const t = toFeedTrade(storedSaleToFeedRaw(row), 'sale', lawdCd!);
             if (t) trades.push(t);
+          }
+          for (const bucket of rentBuckets.values()) {
+            for (const row of bucket) {
+              const dt = row.monthlyRent > 0 ? 'wolse' : 'jeonse';
+              if (dealTypeFilter && dealTypeFilter !== dt) continue;
+              const t = toFeedTrade(storedRentToFeedRaw(row), dt, lawdCd!);
+              if (t) trades.push(t);
+            }
           }
           return { trades: dedupeByRecord(trades) };
         });

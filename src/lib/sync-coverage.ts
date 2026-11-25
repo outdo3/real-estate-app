@@ -63,12 +63,22 @@ export async function loadRentCoverageCells(afterYmd: string): Promise<CoverageC
 }
 
 /**
+ * SEOUL_RENT_VERIFIED_RANGE — 서울 25개 구는 V3.9-A~F를 통해 202511~202610(12개월)
+ * 전수 적재 및 검증(240,856건)이 완료된 검증범위다.
+ */
+export const SEOUL_RENT_VERIFIED_RANGE: VerifiedRange = { from: '202511', to: '202610' };
+
+/**
  * RENT 검증범위를 DB coverage 기준으로 계산한다(5분 캐시).
  *
  * DB를 읽을 수 없는 경우에도 절대 "더 넓은" 범위를 주장하지 않는다 — legacyBootstrap으로
  * 안전하게 축소 폴백한다(추측 생성 아님: 과거에 실제로 검증된 값 그대로).
+ * 서울 지역(11xxx 또는 11) 조회 시 서울의 검증범위(202511~202610)를 반환한다.
  */
-export async function getRentVerifiedRange(): Promise<VerifiedRange> {
+export async function getRentVerifiedRange(lawdCdOrSido?: string): Promise<VerifiedRange> {
+  if (lawdCdOrSido && (lawdCdOrSido.startsWith('11') || lawdCdOrSido === '11')) {
+    return SEOUL_RENT_VERIFIED_RANGE;
+  }
   return getOrSetCache(RENT_RANGE_CACHE_KEY, CACHE_TTL_MS, async () => {
     const bootstrap = readLegacyBootstrap();
     try {

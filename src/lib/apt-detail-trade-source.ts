@@ -30,6 +30,7 @@
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { normalizeAptName } from '@/lib/apt-name-match';
 import { queryTrades, type StoredTrade } from '@/lib/trade-history-read';
+import { prisma } from '@/lib/prisma';
 import type { PrismaClient } from '@prisma/client';
 
 /** 상세 라우트가 내려주는 거래 1건의 모양(MOLIT 경로와 동일 필드). */
@@ -177,4 +178,80 @@ export async function readDetailSaleTradesFromDb(
  */
 export function excludeCanceled<T extends { dealCanceled?: boolean }>(trades: readonly T[]): T[] {
   return trades.filter((t) => t.dealCanceled !== true);
+}
+
+export interface ReadDetailRentTradesResult {
+  trades: DetailTrade[];
+  /** DB에서 실제로 읽었는가. false면 호출부가 MOLIT 경로를 그대로 쓴다. */
+  usedDb: boolean;
+  aptSeq: string | null;
+}
+
+/**
+ * ApartmentRentHistory row → 상세 화면 DetailTrade 모양 변환.
+ */
+export function toDetailRentTrade(r: {
+  id: number;
+  aptName: string;
+  aptSeq: string | null;
+  dealDate: Date;
+  deposit: number;
+  monthlyRent: number;
+  exclusiveArea: unknown;
+  floor: number | null;
+  dong: string;
+  buildYear: number | null;
+  jibun: string | null;
+}): DetailTrade {
+  const areaNum = Number(r.exclusiveArea);
+  const priceNum = r.deposit / 10000;
+  const priceStr =
+    r.monthlyRent > 0
+      ? `보 ${formatKoreanPrice(r.deposit)} / 월세 ${formatKoreanPrice(r.monthlyRent)}`
+      : `보 ${formatKoreanPrice(r.deposit)}`;
+
+  return {
+    id: `db-rent-${r.id}`,
+    name: r.aptName,
+    aptSeq: r.aptSeq,
+    tradeDate: r.dealDate.toISOString().slice(0, 10),
+    price: priceNum,
+    priceStr,
+    area: `${areaNum}m²`,
+    floor: r.floor ?? 0,
+    tradeType: '전월세',
+    dong: r.dong,
+    buildYear: r.buildYear != null ? String(r.buildYear) : '',
+    jibun: r.jibun || '',
+    monthlyRent: r.monthlyRent,
+    registryDate: '',
+    dealCanceled: false,
+    cancelDate: '',
+  };
+}
+
+/**
+ * canonical aptSeq의 전월세 거래를 DB(apartment_rent_histories)에서 읽는다.
+ */
+export async function readDetailRentTradesFromDb(
+  aptSeq: string,
+  months: number
+): Promise<ReadDetailRentTradesResult> {
+  const from = new Date();
+  from.setMonth(from.getMonth() - months);
+  from.setHours(0, 0, 0, 0);
+
+  const rows = await prisma.apartmentRentHistory.findMany({
+    where: {
+      aptSeq,
+      dealDate: { gte: from },
+    },
+    orderBy: [{ dealDate: 'desc' }, { id: 'desc' }],
+  });
+
+  return {
+    trades: rows.map(toDetailRentTrade),
+    usedDb: rows.length > 0,
+    aptSeq,
+  };
 }

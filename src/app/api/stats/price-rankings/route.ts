@@ -8,6 +8,8 @@ import { getSigunguListForSido } from '@/lib/region-utils';
 import { prisma } from '@/lib/prisma';
 import { resolveTrustworthyPyeongBatch, resolveApartmentContextBatch, pyeongLookupKeyId, type PyeongLookupKey } from '@/lib/statistics-pyeong-resolver';
 import { getDeclineRowsFromDb, getRisingRowsFromDb, getRecordHighRowsFromDb, getArea84RowsFromDb } from '@/lib/trade-history-read';
+import { fetchRentMonthBucketsFromDb } from '@/lib/rent-history-read';
+import { storedRentToFeedRaw } from '@/lib/stats/feed-db-source';
 import {
   dedupeTrades,
   identityKey,
@@ -352,6 +354,23 @@ export async function GET(request: Request) {
         dbComputedRows = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
           (await getRecordHighRowsFromDb(lawdCds, period.from, period.to)).map(sqlRecordHighRowToRecordHighRow)
         );
+      } else if (mode === 'jeonse-risk' && (isTradeDbFirstSido(sidoCodeParam) || sidoCodeParam === '11')) {
+        // DB-first jeonse-risk for Sido
+        const cacheKey = `stats-price-rankings-jeonserisk-v1-db-sido:${preset}:${sidoCodeParam}:${months[0]}-${months[months.length - 1]}`;
+        const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
+          const buckets = await fetchRentMonthBucketsFromDb(lawdCds, months);
+          const trades: FeedTrade[] = [];
+          for (const [ym, rows] of buckets) {
+            for (const r of rows) {
+              if (r.dealType === 'jeonse') {
+                const t = toFeedTrade(storedRentToFeedRaw(r), r.lawdCd, 'jeonse');
+                if (t) trades.push(t);
+              }
+            }
+          }
+          return { trades, lawdCds };
+        });
+        allTrades = cached.trades;
       } else {
         // PERF §21 — apiType(apt/rent)이 다르면 완전히 다른 원본 데이터이므로
         // 캐시 키에 반드시 포함한다(포함하지 않으면 decline/rising 캐시가
@@ -401,6 +420,23 @@ export async function GET(request: Request) {
       dbComputedRows = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () =>
         (await getRecordHighRowsFromDb([lawdCd!], period.from, period.to)).map(sqlRecordHighRowToRecordHighRow)
       );
+    } else if (mode === 'jeonse-risk' && isTradeDbFirstLawdCd(lawdCd)) {
+      // DB-first jeonse-risk for district
+      const cacheKey = `stats-price-rankings-jeonserisk-v1-db:${preset}:${lawdCd}:${months[0]}-${months[months.length - 1]}`;
+      const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
+        const buckets = await fetchRentMonthBucketsFromDb([lawdCd!], months);
+        const trades: FeedTrade[] = [];
+        for (const [ym, rows] of buckets) {
+          for (const r of rows) {
+            if (r.dealType === 'jeonse') {
+              const t = toFeedTrade(storedRentToFeedRaw(r), lawdCd!, 'jeonse');
+              if (t) trades.push(t);
+            }
+          }
+        }
+        return { trades };
+      });
+      allTrades = cached.trades;
     } else {
       const cacheKey = `stats-price-rankings:${apiType}:${lawdCd}:${months[0]}-${months[months.length - 1]}`;
       const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {

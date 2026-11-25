@@ -41,8 +41,8 @@ test('서울 초기 8개 구 전월세 조회 보호 — 서울 25구 전체가 
   }
 });
 
-test('서울 매매 실거래 피드 개방 게이트 — 매매는 열리고, 전월세는 0건 위장 없이 준비 중으로 차단된다', () => {
-  // 서울 25개 구 매매 필터 (dealType: 'sale' or null)
+test('서울 실거래 피드 개방 게이트 — V4.1 전월세 적재 완료로 매매, 전세, 월세 모두 지원된다', () => {
+  // 서울 25개 구 매매, 전세, 월세 필터 모두 허용
   for (const c of [...S8, ...S17]) {
     const saleResult = isStatsFeedSupported({ lawdCd: c, sidoCode: null, sidoName: null, dealType: 'sale' });
     assert.equal(saleResult.allowed, true, `서울 ${c} 매매 피드가 차단되었다`);
@@ -50,15 +50,11 @@ test('서울 매매 실거래 피드 개방 게이트 — 매매는 열리고, �
     const allResult = isStatsFeedSupported({ lawdCd: c, sidoCode: null, sidoName: null, dealType: null });
     assert.equal(allResult.allowed, true, `서울 ${c} 전체 피드가 차단되었다`);
 
-    // 서울 전월세 필터 (dealType: 'jeonse' or 'wolse') -> RENT_PREPARING으로 정직하게 안내
     const jeonseResult = isStatsFeedSupported({ lawdCd: c, sidoCode: null, sidoName: null, dealType: 'jeonse' });
-    assert.equal(jeonseResult.allowed, false);
-    assert.equal(jeonseResult.reason, 'RENT_PREPARING');
-    assert.ok(jeonseResult.message?.includes('준비 중'));
+    assert.equal(jeonseResult.allowed, true, `서울 ${c} 전세 피드가 허용되지 않았다`);
 
     const wolseResult = isStatsFeedSupported({ lawdCd: c, sidoCode: null, sidoName: null, dealType: 'wolse' });
-    assert.equal(wolseResult.allowed, false);
-    assert.equal(wolseResult.reason, 'RENT_PREPARING');
+    assert.equal(wolseResult.allowed, true, `서울 ${c} 월세 피드가 허용되지 않았다`);
   }
 
   // 서울 전체 (sidoCode: '11')
@@ -66,8 +62,7 @@ test('서울 매매 실거래 피드 개방 게이트 — 매매는 열리고, �
   assert.equal(seoulSidoSale.allowed, true);
 
   const seoulSidoJeonse = isStatsFeedSupported({ lawdCd: null, sidoCode: '11', sidoName: null, dealType: 'jeonse' });
-  assert.equal(seoulSidoJeonse.allowed, false);
-  assert.equal(seoulSidoJeonse.reason, 'RENT_PREPARING');
+  assert.equal(seoulSidoJeonse.allowed, true);
 
   // 부산 16개 구 무회귀: 매매, 전세, 월세 전부 통과
   for (const c of BUSAN) {
@@ -84,21 +79,20 @@ test('서울 매매 실거래 피드 개방 게이트 — 매매는 열리고, �
   }
 });
 
-test('서울 84㎡ 가격 순위 개방 게이트 — area84는 열리고, 전세가율 순위(jeonse-risk)는 차단된다', () => {
+test('서울 84㎡ 가격 순위 개방 게이트 — V4.1 전월세 적재 완료로 area84 및 전세가율 순위(jeonse-risk) 모두 지원된다', () => {
   for (const c of [...S8, ...S17]) {
     // 84㎡ 국민평형 순위: 서울 25개 구 모두 허용
     const area84Res = isStatsRankingSupported({ lawdCd: c, sidoCode: null, sidoName: null, mode: 'area84' });
     assert.equal(area84Res.allowed, true, `서울 ${c} 84㎡ 순위가 차단되었다`);
 
-    // 전세가율 위험 순위: 전세 미적재 상태이므로 RENT_PREPARING 차단
+    // 전세가율 위험 순위: 서울 25개 구 모두 허용
     const jeonseRiskRes = isStatsRankingSupported({ lawdCd: c, sidoCode: null, sidoName: null, mode: 'jeonse-risk' });
-    assert.equal(jeonseRiskRes.allowed, false);
-    assert.equal(jeonseRiskRes.reason, 'RENT_PREPARING');
+    assert.equal(jeonseRiskRes.allowed, true, `서울 ${c} 전세가율 순위가 허용되지 않았다`);
   }
 
   // 서울 전체 (sidoCode: '11')
   assert.equal(isStatsRankingSupported({ lawdCd: null, sidoCode: '11', sidoName: null, mode: 'area84' }).allowed, true);
-  assert.equal(isStatsRankingSupported({ lawdCd: null, sidoCode: '11', sidoName: null, mode: 'jeonse-risk' }).allowed, false);
+  assert.equal(isStatsRankingSupported({ lawdCd: null, sidoCode: '11', sidoName: null, mode: 'jeonse-risk' }).allowed, true);
 
   // 부산 16개 구 무회귀: area84, jeonse-risk 전부 허용
   for (const c of BUSAN) {
