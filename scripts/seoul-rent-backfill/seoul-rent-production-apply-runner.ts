@@ -36,6 +36,11 @@ import {
   RentComparableRow,
 } from '../rent-trade-history/rent-group-guard-logic';
 import { RentRowInput } from '../rent-trade-history/rent-history-logic';
+import {
+  NaturalKeyTuple,
+  BackfillExecutionManifest,
+  saveRollbackManifest,
+} from './seoul-rent-surgical-rollback';
 
 // Load env safely
 const envSearchPaths = [
@@ -342,6 +347,15 @@ export async function runProductionApply(options: {
         if (isLive) {
           // LIVE WRITE EXECUTION (In chunks within transactions)
           if (plan.inserts.length > 0) {
+            const insertedKeys: NaturalKeyTuple[] = plan.inserts.map((r) => ({
+              groupKeyStr: r.groupKeyStr,
+              deposit: r.deposit,
+              monthlyRent: r.monthlyRent,
+              dealDate: r.dealDate,
+              floor: r.floor ?? null,
+              occurrenceIndex: r.occurrenceIndex ?? 0,
+            }));
+
             for (let i = 0; i < plan.inserts.length; i += BATCH_CHUNK_SIZE) {
               const chunk = plan.inserts.slice(i, i + BATCH_CHUNK_SIZE);
               await prisma.$transaction(async (tx) => {
@@ -392,6 +406,26 @@ export async function runProductionApply(options: {
                 }
               });
             }
+
+            // Save surgical rollback manifest for this cell execution
+            const runId = `manifest-${lawdCd}-${dealYmd}-${Date.now()}`;
+            saveRollbackManifest({
+              runId,
+              targetDbEnv: 'OPERATIONAL_SUPABASE',
+              lawdCd,
+              dealYmd,
+              districtName: distName,
+              startedAt: new Date(startTime).toISOString(),
+              completedAt: new Date().toISOString(),
+              transactionSuccess: true,
+              totalCacheRows: normalizedRows.length,
+              plannedInserts: plan.inserts.length,
+              unchangedCount: plan.unchanged,
+              guardedSkippedCount: plan.skippedInserts.length,
+              actualInsertedCount: plan.inserts.length,
+              insertedKeys,
+              rollbackStatus: 'NOT_TRIGGERED',
+            });
           }
 
           // Record cell success in Checkpoint
@@ -479,23 +513,171 @@ export async function runProductionApply(options: {
   }
 }
 
+export interface PilotPreconditionsCheckResult {
+  operationalProjectId: string | null;
+  projectIdMatched: boolean;
+  targetCell: {
+    lawdCd: string;
+    dealYmd: string;
+    districtName: string;
+    existingRowsInOperationalDb: number;
+    cellIsEmptyInProduction: boolean;
+  };
+  cacheStatus: {
+    cacheFilePath: string;
+    cacheExists: boolean;
+    cacheRowsCount: number;
+    jeonseCount: number;
+    wolseCount: number;
+    matchesExpected140: boolean;
+  };
+  guardsStatus: ProductionWriteGuards;
+  busanProtection: {
+    initialBusanRows: number;
+    expectedBusanRows: number;
+    busanRowsIntact: boolean;
+  };
+  chunkSizeRequirement: {
+    batchChunkSize: number;
+    withinLimit: boolean;
+  };
+  postInsertVerificationSql: string;
+  errorRecoveryProcedure: string;
+  allPreconditionsReady: boolean;
+}
+
+export async function probePilotPreconditions(): Promise<PilotPreconditionsCheckResult> {
+  const guards = evaluateProductionWriteGuards();
+  const rawDbUrl = process.env.DATABASE_URL;
+  if (!rawDbUrl) {
+    throw new Error('DATABASE_URL is not set.');
+  }
+
+  const prisma = new PrismaClient({
+    datasources: { db: { url: rawDbUrl } },
+  });
+
+  const pilotLawdCd = '11110';
+  const pilotDealYmd = '202610';
+  const pilotDistrictName = '종로구';
+
+  try {
+    // 1. Existing rows in operational DB for Jongno 202610
+    const cellCountRes = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*)::bigint AS cnt FROM apartment_rent_histories WHERE lawd_cd = $1 AND deal_ymd = $2;`,
+      pilotLawdCd,
+      pilotDealYmd
+    );
+    const existingInProd = Number(cellCountRes[0].cnt);
+
+    // 2. Busan row count
+    const busanCountRes = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*)::bigint AS cnt FROM apartment_rent_histories WHERE lawd_cd LIKE '26%';`
+    );
+    const initialBusan = Number(busanCountRes[0].cnt);
+
+    // 3. Cache inspection
+    const cachePath = resolveCacheFilePath(pilotLawdCd, pilotDealYmd);
+    const cacheExists = fs.existsSync(cachePath);
+    let cacheCount = 0;
+    let jeonseCount = 0;
+    let wolseCount = 0;
+
+    if (cacheExists) {
+      const content = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+      const rows: RentRowInput[] = content.normalizedRows || [];
+      cacheCount = rows.length;
+      for (const r of rows) {
+        const dt = (r.dealType || '').toLowerCase();
+        if (dt === 'jeonse') jeonseCount++;
+        else if (dt === 'wolse') wolseCount++;
+      }
+    }
+
+    const postInsertSql = `SELECT count(*) AS total_inserted,
+       count(*) FILTER (WHERE deal_type = 'jeonse') AS jeonse_count,
+       count(*) FILTER (WHERE deal_type = 'wolse') AS wolse_count
+FROM apartment_rent_histories
+WHERE lawd_cd = '${pilotLawdCd}' AND deal_ymd = '${pilotDealYmd}';`;
+
+    const recoveryProc =
+      '1. Chunk transaction automatic rollback on failure.\n' +
+      '2. In case of post-validation failure, run surgical rollback using saved manifest to delete only inserted natural keys.\n' +
+      '3. Verify Busan data remains 134,475 rows.';
+
+    const allReady =
+      guards.projectIdMatched &&
+      existingInProd === 0 &&
+      cacheExists &&
+      cacheCount === 140 &&
+      initialBusan === 134475;
+
+    return {
+      operationalProjectId: guards.detectedProjectId,
+      projectIdMatched: guards.projectIdMatched,
+      targetCell: {
+        lawdCd: pilotLawdCd,
+        dealYmd: pilotDealYmd,
+        districtName: pilotDistrictName,
+        existingRowsInOperationalDb: existingInProd,
+        cellIsEmptyInProduction: existingInProd === 0,
+      },
+      cacheStatus: {
+        cacheFilePath: cachePath,
+        cacheExists,
+        cacheRowsCount: cacheCount,
+        jeonseCount,
+        wolseCount,
+        matchesExpected140: cacheCount === 140,
+      },
+      guardsStatus: guards,
+      busanProtection: {
+        initialBusanRows: initialBusan,
+        expectedBusanRows: 134475,
+        busanRowsIntact: initialBusan === 134475,
+      },
+      chunkSizeRequirement: {
+        batchChunkSize: BATCH_CHUNK_SIZE,
+        withinLimit: cacheCount <= BATCH_CHUNK_SIZE,
+      },
+      postInsertVerificationSql: postInsertSql,
+      errorRecoveryProcedure: recoveryProc,
+      allPreconditionsReady: allReady,
+    };
+  } finally {
+    await prisma.$disconnect().catch(() => {});
+  }
+}
+
 if (require.main === module || process.argv[1]?.endsWith('seoul-rent-production-apply-runner.ts')) {
-  runProductionApply({ dryRunOnly: true })
-    .then((summary) => {
-      console.log('=== E-JIP SEOUL RENT PRODUCTION APPLY RUNNER (DRY-RUN CHECK) ===');
-      console.log(`Execution Mode: ${summary.mode}`);
-      console.log(`Target Host: ${summary.targetDb.hostDomainMasked}`);
-      console.log(`Project ID: ${summary.targetDb.projectId} (Verified: ${summary.targetDb.isVerifiedOperationalDb})`);
-      console.log(`All 4 Guards Passed: ${summary.guards.allGuardsPassed}`);
-      console.log(`Total Planned Cells: ${summary.totalPlannedCells}`);
-      console.log(`Planned Inserts: ${summary.totalPlannedInserts.toLocaleString()}`);
-      console.log(`Unchanged Rows: ${summary.totalUnchangedRows.toLocaleString()}`);
-      console.log(`Skipped Guarded: ${summary.totalGuardedSkipped.toLocaleString()}`);
-      console.log(`Initial Busan Rows: ${summary.initialBusanRows.toLocaleString()}`);
-      console.log(`Busan Data Preserved: ${summary.busanDataPreserved}`);
-    })
-    .catch((err) => {
-      console.error('Runner failed:', err);
-      process.exit(1);
-    });
+  if (process.argv.includes('--probe-pilot')) {
+    probePilotPreconditions()
+      .then((res) => {
+        console.log('=== JONGNO 202610 PILOT PRECONDITIONS PROBE ===');
+        console.log(JSON.stringify(res, null, 2));
+      })
+      .catch((err) => {
+        console.error('Pilot probe failed:', err);
+        process.exit(1);
+      });
+  } else {
+    runProductionApply({ dryRunOnly: true })
+      .then((summary) => {
+        console.log('=== E-JIP SEOUL RENT PRODUCTION APPLY RUNNER (DRY-RUN CHECK) ===');
+        console.log(`Execution Mode: ${summary.mode}`);
+        console.log(`Target Host: ${summary.targetDb.hostDomainMasked}`);
+        console.log(`Project ID: ${summary.targetDb.projectId} (Verified: ${summary.targetDb.isVerifiedOperationalDb})`);
+        console.log(`All 4 Guards Passed: ${summary.guards.allGuardsPassed}`);
+        console.log(`Total Planned Cells: ${summary.totalPlannedCells}`);
+        console.log(`Planned Inserts: ${summary.totalPlannedInserts.toLocaleString()}`);
+        console.log(`Unchanged Rows: ${summary.totalUnchangedRows.toLocaleString()}`);
+        console.log(`Skipped Guarded: ${summary.totalGuardedSkipped.toLocaleString()}`);
+        console.log(`Initial Busan Rows: ${summary.initialBusanRows.toLocaleString()}`);
+        console.log(`Busan Data Preserved: ${summary.busanDataPreserved}`);
+      })
+      .catch((err) => {
+        console.error('Runner failed:', err);
+        process.exit(1);
+      });
+  }
 }
