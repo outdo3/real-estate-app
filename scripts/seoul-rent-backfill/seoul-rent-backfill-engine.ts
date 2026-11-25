@@ -81,6 +81,7 @@ export interface CellExecutionRecord {
   lawdCd: string;
   districtName?: string;
   dealYmd: string;
+  executionMode: 'DRY_RUN' | 'APPLIED';
   status: RentCellStatus;
   totalCount: number | null;
   collectedCount: number;
@@ -212,7 +213,11 @@ export class SeoulRentBackfillEngine {
         const raw = fs.readFileSync(cpPath, 'utf-8');
         return JSON.parse(raw) as CheckpointData;
       } catch (err) {
-        console.warn(`[Checkpoint] Failed to parse existing checkpoint at ${cpPath}. Creating new.`);
+        console.warn(`[Checkpoint] Failed to parse existing checkpoint at ${cpPath}. Creating backup and new.`);
+        try {
+          const corruptBackup = `${cpPath}.corrupt.${Date.now()}`;
+          fs.renameSync(cpPath, corruptBackup);
+        } catch {}
       }
     }
     return {
@@ -237,7 +242,7 @@ export class SeoulRentBackfillEngine {
       this.checkpoint.lastUpdated = new Date().toISOString();
       let completed = 0;
       for (const c of Object.values(this.checkpoint.cells)) {
-        if (c.status === 'COMPLETE' || c.status === 'EMPTY_VALID') {
+        if (c.status === 'EMPTY_VALID' || (c.status === 'COMPLETE' && (c.executionMode === 'APPLIED' || c.plannedInserts === 0))) {
           completed++;
         }
       }
@@ -248,6 +253,24 @@ export class SeoulRentBackfillEngine {
       fs.renameSync(tmpPath, cpPath);
     } catch (err) {
       console.warn(`[Checkpoint] Warning: Failed to write checkpoint to ${cpPath}`, err);
+    }
+  }
+
+  /**
+   * Checkpoint 스킵 적격성 판정:
+   * - Dry-run 모드에서는 DRY_RUN 또는 APPLIED로 이미 수집 검증된 셀이면 스킵
+   * - Apply 모드에서는 실제 DB 적재(APPLIED)가 완료된 셀만 스킵!
+   *   (DRY_RUN으로만 완료되었거나 실제 DB에 미적재된 셀은 스킵하지 않고 실제 DB 적재를 수행)
+   */
+  public isCellEligibleForSkip(existingCp?: CellExecutionRecord, isDryRun: boolean = true): boolean {
+    if (!existingCp) return false;
+    if (existingCp.status === 'EMPTY_VALID') return true;
+    if (existingCp.status !== 'COMPLETE') return false;
+
+    if (isDryRun) {
+      return true;
+    } else {
+      return existingCp.executionMode === 'APPLIED' && (existingCp.persistedCount > 0 || existingCp.plannedInserts === 0);
     }
   }
 
@@ -285,9 +308,9 @@ export class SeoulRentBackfillEngine {
     const startTime = Date.now();
     const cellKey = `${lawdCd}:${dealYmd}`;
 
-    // Checkpoint 확인 (이미 COMPLETE이거나 EMPTY_VALID인 경우 재호출 없이 복원)
+    // Checkpoint 확인 (Dry-run과 Apply의 스킵 적격성 엄격 분리)
     const existingCp = this.checkpoint.cells[cellKey];
-    if (existingCp && (existingCp.status === 'COMPLETE' || existingCp.status === 'EMPTY_VALID')) {
+    if (this.isCellEligibleForSkip(existingCp, this.options.dryRun)) {
       return existingCp;
     }
 
@@ -304,12 +327,15 @@ export class SeoulRentBackfillEngine {
       };
       const status = classifyRentCellCompleteness(completenessInput);
 
+      const executionMode = this.options.dryRun ? 'DRY_RUN' : 'APPLIED';
+
       if (status === 'EMPTY_VALID') {
         const record: CellExecutionRecord = {
           cellKey,
           lawdCd,
           districtName,
           dealYmd,
+          executionMode,
           status: 'EMPTY_VALID',
           totalCount: 0,
           collectedCount: 0,
@@ -332,6 +358,7 @@ export class SeoulRentBackfillEngine {
           lawdCd,
           districtName,
           dealYmd,
+          executionMode,
           status,
           totalCount: fetchResult.totalCount,
           collectedCount: fetchResult.items.length,
@@ -376,6 +403,7 @@ export class SeoulRentBackfillEngine {
         lawdCd,
         districtName,
         dealYmd,
+        executionMode,
         status: 'COMPLETE',
         totalCount: fetchResult.totalCount,
         collectedCount: sourceRows.length,
@@ -397,6 +425,7 @@ export class SeoulRentBackfillEngine {
         lawdCd,
         districtName,
         dealYmd,
+        executionMode: this.options.dryRun ? 'DRY_RUN' : 'APPLIED',
         status: 'INVALID',
         totalCount: null,
         collectedCount: 0,
@@ -442,7 +471,7 @@ export class SeoulRentBackfillEngine {
       for (const ymd of months) {
         const cellKey = `${district.lawdCd}:${ymd}`;
         const existingCp = this.checkpoint.cells[cellKey];
-        if (existingCp && (existingCp.status === 'COMPLETE' || existingCp.status === 'EMPTY_VALID')) {
+        if (this.isCellEligibleForSkip(existingCp, this.options.dryRun)) {
           skippedByCheckpoint++;
           records.push(existingCp);
           if (existingCp.status === 'COMPLETE') completedCells++;

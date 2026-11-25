@@ -117,6 +117,13 @@ async function fetchOrLoadRawData(): Promise<{ items: RawMolitRentItem[]; fromCa
     fs.mkdirSync(QA_DIR, { recursive: true });
   }
 
+  if (!fs.existsSync(RAW_CACHE_FILE)) {
+    const v34Fallback = path.resolve(process.cwd(), '../seoul-rent-backfill-v34/tmp/qa-seoul-rent/jongno-202610-raw.json');
+    if (fs.existsSync(v34Fallback)) {
+      fs.copyFileSync(v34Fallback, RAW_CACHE_FILE);
+    }
+  }
+
   if (fs.existsSync(RAW_CACHE_FILE)) {
     const cached = JSON.parse(fs.readFileSync(RAW_CACHE_FILE, 'utf-8'));
     return { items: cached.items, fromCache: true, totalCount: cached.totalCount };
