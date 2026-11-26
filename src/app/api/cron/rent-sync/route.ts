@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isAuthorizedCronRequest } from '@/lib/cron-auth';
 import { runRentSync } from '@/lib/sync/rent-sync-core';
+import { resolveRentSyncScope } from '@/lib/sync/rent-sync-scope';
 import { httpStatusForRun, type SyncMode } from '@/lib/sync/shared';
 
 export const dynamic = 'force-dynamic';
@@ -23,11 +24,16 @@ export async function GET(request: Request) {
   const mode: SyncMode = url.searchParams.get('mode') === 'apply' ? 'apply' : 'dry-run';
   const overlapRaw = url.searchParams.get('overlapMonths');
   const overlapMonths = overlapRaw ? Number(overlapRaw) : undefined;
+  const scopeRaw = url.searchParams.get('scope');
+  const scopeRes = resolveRentSyncScope(scopeRaw);
+  if (!scopeRes.ok) {
+    return NextResponse.json({ success: false, error: scopeRes.error }, { status: 400 });
+  }
 
   const log = (line: string) => console.log(`[cron/rent-sync] ${line}`);
 
   try {
-    const summary = await runRentSync({ mode, overlapMonths }, log);
+    const summary = await runRentSync({ mode, overlapMonths, lawdCds: scopeRes.lawdCds }, log);
     return NextResponse.json(
       {
         success: summary.status === 'SUCCESS',

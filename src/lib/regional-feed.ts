@@ -432,7 +432,11 @@ export function areaBandLabel(excluUseArea: number | null): string | null {
  * 동일한 변환 규칙을 써야 같은 거래가 두 화면에서 다르게 집계되지 않는다 —
  * 애초에 한 곳에만 구현한다(§3 공통 시스템 원칙). */
 export function toFeedTrade(item: any, dealType: 'sale' | 'jeonse' | 'wolse', lawdCd: string): FeedTrade | null {
-  if (!item || item.typeLabel === '에러' || !(item.dealAmount > 0)) return null;
+  if (!item || item.typeLabel === '에러') return null;
+  const hasValidAmount = dealType === 'wolse'
+    ? (item.dealAmount > 0 || (Number.isFinite(item.monthlyRent) && item.monthlyRent > 0))
+    : (item.dealAmount > 0);
+  if (!hasValidAmount) return null;
   return {
     uid: item.id,
     aptSeq: item.aptSeq ?? null,
@@ -440,7 +444,7 @@ export function toFeedTrade(item: any, dealType: 'sale' | 'jeonse' | 'wolse', la
     dong: item.dong || '',
     lawdCd,
     dealType,
-    dealAmount: item.dealAmount,
+    dealAmount: item.dealAmount ?? 0,
     ...(dealType === 'wolse' && Number.isFinite(item.monthlyRent) && item.monthlyRent > 0
       ? { monthlyRent: item.monthlyRent }
       : {}),

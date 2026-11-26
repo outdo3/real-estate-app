@@ -67,10 +67,9 @@ test('Preview DB 전용 판정: 스위치가 켜졌을 때 서울 17구만', () 
   for (const c of [...SEOUL_BETA_LAWDCDS, '26350', '26440', '41111', '11', '1168', '11680x', '', null, undefined]) assert.equal(resolveDbOnly(true, c as string), false, String(c));
 });
 
-// SEOUL25_PRODUCTION_PUBLIC_ENABLE_V1 — 2026-09-30 공개 뒤: DB 전용은 정확히 서울 17구, 17구 DB-first 읽기 열림.
-// GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 같은 날 경기 8구 공개: DB 전용 = 서울 17구 + 경기 8구(41135·나머지 경기 아님).
-test('Production 런타임(이 테스트 env): DB 전용 = 서울 17구 + 경기 8구뿐 · 둘 다 DB-first 읽기 열림 · 서울 8구·부산 DB-first 그대로', () => {
-  const dbOnly = [...SEOUL_17_BETA_LAWDCDS, ...GYEONGGI_BETA_LAWDCDS] as readonly string[];
+// SEOUL_STATS_SALE_PARITY_V2 — 서울 8구 전월세 조회 보호 적용: DB 전용 = 서울 25구 + 경기 8구(41135·나머지 경기 아님).
+test('Production 런타임(이 테스트 env): DB 전용 = 서울 25구 + 경기 8구뿐 · 둘 다 DB-first 읽기 열림 · 부산 DB-first 그대로', () => {
+  const dbOnly = [...SEOUL_BETA_LAWDCDS, ...SEOUL_17_BETA_LAWDCDS, ...GYEONGGI_BETA_LAWDCDS] as readonly string[];
   for (const n of REGION_NODES) assert.equal(isDbOnlyLawdCd(n.lawdCd), dbOnly.includes(n.lawdCd), n.lawdCd);
   assert.equal(isDbOnlyLawdCd('41135'), false);
   for (const c of SEOUL_17_BETA_LAWDCDS) assert.equal(getRegionEnablement(c).cronSync, true, c);

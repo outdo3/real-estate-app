@@ -18,7 +18,7 @@ import styles from './SupplyView.module.css';
 const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
 interface SupplyResponse {
-  status: 'OK' | 'ERROR';
+  status: 'OK' | 'ERROR' | 'UNSUPPORTED';
   message?: string;
   scope: { sido: string | null; sigungu: string | null; nationwide: boolean };
   period: { preset: string; from: string; to: string | null };
@@ -97,7 +97,7 @@ export default function SupplyView() {
   const params = new URLSearchParams({ period });
   if (!nationwide) {
     params.set('sido', region.sido);
-    if (region.lawdCd && region.sigungu) params.set('sigungu', region.sigungu);
+    if (region.sigungu) params.set('sigungu', region.sigungu);
   }
 
   const { data, isLoading } = useSWR<SupplyResponse>(`/api/stats/supply?${params.toString()}`, fetcher, {
@@ -140,8 +140,8 @@ export default function SupplyView() {
   }, [scopeKey, period]);
 
   const scopeLabel = nationwide ? '전국' : region.lawdCd && region.sigungu ? `${region.sido} ${region.sigungu}` : region.sido;
-  const selectedMarker = data?.mapMarkers.find((m) => m.id === selectedMarkerId) || null;
-  const maxHouseholdSum = data ? Math.max(1, ...data.trend.map((t) => t.householdSum)) : 1;
+  const selectedMarker = data?.mapMarkers?.find((m) => m.id === selectedMarkerId) || null;
+  const maxHouseholdSum = data?.trend && data.trend.length > 0 ? Math.max(1, ...data.trend.map((t) => t.householdSum)) : 1;
 
   return (
     <div className={styles.wrap}>
@@ -167,6 +167,13 @@ export default function SupplyView() {
       ) : /* §5 — 응답이 도착한 뒤에만 "없어요"라고 말한다. */
         !data ? (
         <InlineLoading message="공급 데이터를 확인하고 있어요..." />
+      ) : data?.status === 'UNSUPPORTED' ? (
+        <Empty
+          variant="noData"
+          title={data.message || '이 지역 공급 정보는 현재 준비 중입니다.'}
+          description="서울시 공급 정보는 구 단위(예: 강남구, 마포구)로 선택하거나 전국을 선택해 확인하실 수 있습니다."
+          showMascot={false}
+        />
       ) : data.summary.totalCount === 0 ? (
         <Empty variant="noData" title="선택한 지역/기간에 확인된 입주예정 단지가 없어요." showMascot={false} />
       ) : tab === 'map' ? (

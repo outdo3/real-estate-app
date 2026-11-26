@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { isStatsEnabledLawdCd } from '@/lib/region/enablement';
-import { isStatsRegionSupported, statsUnsupportedStatusBody } from '@/lib/region/stats-gate';
+import { isStatsEnabledLawdCd, isTradeDbFirstLawdCd } from '@/lib/region/enablement';
+import { isStatsRegionSupported, isStatsFeedSupported, isSeoulSaleStatsEligible, statsUnsupportedStatusBody } from '@/lib/region/stats-gate';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
 import { resolveLawdCd, fetchMonthsThrottledWithStatus, MonthTask } from '@/lib/molit-stats-helpers';
@@ -24,8 +24,9 @@ import {
 } from '@/lib/regional-feed';
 import { prisma } from '@/lib/prisma';
 import { resolveVolumePeriod } from '@/lib/stats/volume-period';
-import { splitVerifiedMonths, getRentVerifiedRange } from '@/lib/rent-history-read';
-import { isFeedDbBackedSido, loadBusanFeedTradesFromDb } from '@/lib/stats/feed-db-source';
+import { splitVerifiedMonths, getRentVerifiedRange, fetchRentMonthBucketsFromDb, type StoredRentTrade } from '@/lib/rent-history-read';
+import { isFeedDbBackedSido, loadBusanFeedTradesFromDb, monthRangeBounds, storedSaleToFeedRaw, storedRentToFeedRaw } from '@/lib/stats/feed-db-source';
+import { getRegionalSaleRowsForFeedFromDb } from '@/lib/trade-history-read';
 import { resolveApartmentContextBatch, type PyeongLookupKey as ContextLookupKey } from '@/lib/statistics-pyeong-resolver';
 
 // STATISTICS V2 — REGIONAL TRANSACTION FEED §8/§9/§32. 기존 rankings/dashboard와
@@ -71,10 +72,10 @@ export async function GET(request: Request) {
   // 기존 lawdCd 기반 단일 구 조회 계약은 전혀 바뀌지 않는다(하위호환).
   const isSidoAll = !lawdCdParam && !!sidoCodeParam && /^\d{2}$/.test(sidoCodeParam);
 
-  // NON_BUSAN_STATS_TRUST_GATE_V1 — 통계가 열리지 않은 지역은 캐시·DB·MOLIT에 닿기 전에 돌려보낸다.
-  // 비부산 피드가 live MOLIT로 대신 채워지던 경로를 닫는다(부산 DB 피드로 대신 답하지도 않는다).
-  if (!isStatsRegionSupported({ lawdCd: lawdCdParam, sidoCode: sidoCodeParam, sidoName: sido })) {
-    return NextResponse.json(statsUnsupportedStatusBody());
+  // SEOUL_STATS_SALE_PARITY_V2 — 실거래 피드 기능별 게이트(서울 매매 피드 개방).
+  const feedGate = isStatsFeedSupported({ lawdCd: lawdCdParam, sidoCode: sidoCodeParam, sidoName: sido, dealType: dealTypeFilter });
+  if (!feedGate.allowed) {
+    return NextResponse.json(statsUnsupportedStatusBody(feedGate.message));
   }
 
   try {
@@ -84,7 +85,8 @@ export async function GET(request: Request) {
       if (!lawdCd) {
         return NextResponse.json({ status: 'ERROR', message: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` }, { status: 400 });
       }
-      if (!isStatsEnabledLawdCd(lawdCd)) return NextResponse.json(statsUnsupportedStatusBody());
+      const districtGate = isStatsFeedSupported({ lawdCd, sidoCode: null, sidoName: null, dealType: dealTypeFilter });
+      if (!districtGate.allowed) return NextResponse.json(statsUnsupportedStatusBody(districtGate.message));
     }
 
     const now = new Date();
@@ -114,7 +116,8 @@ export async function GET(request: Request) {
       const districts = await getSigunguListForSido(sidoCodeParam!);
       const lawdCds = districts.map((d) => d.code.substring(0, 5));
 
-      const dbBacked = isFeedDbBackedSido(sidoCodeParam);
+      const isSeoulSido = sidoCodeParam === '11';
+      const dbBacked = isFeedDbBackedSido(sidoCodeParam) || isSeoulSido;
 
       // BUSAN_12M_STATS_PERFORMANCE_FIX_V1 §4 — 캐시 키를 v2로 올린다: 캐시에 담는
       // 값이 "MOLIT raw 결과 맵"에서 "조립·중복제거까지 끝난 FeedTrade 목록"으로
@@ -125,10 +128,13 @@ export async function GET(request: Request) {
         // 전월세는 **검증범위 안 월만** DB로 읽는다. 검증 안 된 월(주로 진행 중인
         // 현재월)은 기존 MOLIT 경로를 그대로 쓴다 — 검증되지 않은 기간을 "DB에 다
         // 있다"로 가장하지 않는다(RENT_TRADE_HISTORY_V1 PHASE D §16/§17과 동일 규칙,
-        // 같은 함수를 재사용한다).
-        const rentSplit = dbBacked
-          ? splitVerifiedMonths(months, await getRentVerifiedRange())
-          : { verified: [] as string[], unverified: months };
+        // 같은 함수를 재사용한다). 서울 25개 구는 202511~202610이 DB에 전수 적재되어 있다.
+        const seoulRentRange = await getRentVerifiedRange('11');
+        const rentSplit = isSeoulSido
+          ? { verified: splitVerifiedMonths(months, seoulRentRange).verified, unverified: [] as string[] }
+          : dbBacked
+            ? splitVerifiedMonths(months, await getRentVerifiedRange())
+            : { verified: [] as string[], unverified: months };
 
         const tasks: MonthTask[] = [];
         for (const dLawdCd of lawdCds) {
@@ -201,40 +207,74 @@ export async function GET(request: Request) {
       fetchRange = { from: lookbackFrom, to: periodRange.to };
       const months = monthsForRange(fetchRange);
 
-      const cacheKey = `stats-feed-district:v2:${lawdCd}:${months.join(',')}`;
-      const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
-        const tasks: MonthTask[] = [];
+      const isSeoulDistrict = isSeoulSaleStatsEligible({ lawdCd, sidoCode: null, sidoName: null });
+
+      if (isSeoulDistrict) {
+        // SEOUL_STATS_SALE_PARITY_V2 / V4.1 — 서울 단일 구: DB-first 매매·전월세 피드. live MOLIT 호출 0회.
+        const bounds = monthRangeBounds(months);
+        const cacheKey = `stats-feed-district:v4-seoul-db:${lawdCd}:${dealTypeFilter || 'all'}:${months.join(',')}`;
+        const cached = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
+          const needSale = dealTypeFilter !== 'jeonse' && dealTypeFilter !== 'wolse';
+          const needRent = dealTypeFilter !== 'sale';
+
+          const [saleRows, rentBuckets] = await Promise.all([
+            needSale && bounds ? getRegionalSaleRowsForFeedFromDb([lawdCd!], bounds.from, bounds.to) : Promise.resolve([]),
+            needRent ? fetchRentMonthBucketsFromDb([lawdCd!], months) : Promise.resolve(new Map<string, StoredRentTrade[]>()),
+          ]);
+
+          const trades: FeedTrade[] = [];
+          for (const row of saleRows) {
+            const t = toFeedTrade(storedSaleToFeedRaw(row), 'sale', lawdCd!);
+            if (t) trades.push(t);
+          }
+          for (const bucket of rentBuckets.values()) {
+            for (const row of bucket) {
+              const dt = row.monthlyRent > 0 ? 'wolse' : 'jeonse';
+              if (dealTypeFilter && dealTypeFilter !== dt) continue;
+              const t = toFeedTrade(storedRentToFeedRaw(row), dt, lawdCd!);
+              if (t) trades.push(t);
+            }
+          }
+          return { trades: dedupeByRecord(trades) };
+        });
+        allTrades = cached.trades;
+        if (dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
+      } else {
+        const cacheKey = `stats-feed-district:v2:${lawdCd}:${months.join(',')}`;
+        const rawByMonth = await getOrSetCache(cacheKey, 5 * 60 * 1000, async () => {
+          const tasks: MonthTask[] = [];
+          for (const m of months) {
+            tasks.push({ key: `apt:${m}`, lawdCd: lawdCd!, dealYmd: m, type: 'apt' });
+            tasks.push({ key: `rent:${m}`, lawdCd: lawdCd!, dealYmd: m, type: 'rent' });
+          }
+          return fetchMonthsThrottledWithStatus(tasks);
+        });
+
         for (const m of months) {
-          tasks.push({ key: `apt:${m}`, lawdCd: lawdCd!, dealYmd: m, type: 'apt' });
-          tasks.push({ key: `rent:${m}`, lawdCd: lawdCd!, dealYmd: m, type: 'rent' });
+          for (const raw of rawByMonth[`apt:${m}`]?.items ?? []) {
+            const t = toFeedTrade(raw, 'sale', lawdCd!);
+            if (t) allTrades.push(t);
+          }
+          for (const raw of rawByMonth[`rent:${m}`]?.items ?? []) {
+            const t = toFeedTrade(raw, raw.monthlyRent > 0 ? 'wolse' : 'jeonse', lawdCd!);
+            if (t) allTrades.push(t);
+          }
         }
-        return fetchMonthsThrottledWithStatus(tasks);
-      });
+        allTrades = dedupeByRecord(allTrades);
+        if (dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
 
-      for (const m of months) {
-        for (const raw of rawByMonth[`apt:${m}`]?.items ?? []) {
-          const t = toFeedTrade(raw, 'sale', lawdCd!);
-          if (t) allTrades.push(t);
-        }
-        for (const raw of rawByMonth[`rent:${m}`]?.items ?? []) {
-          const t = toFeedTrade(raw, raw.monthlyRent > 0 ? 'wolse' : 'jeonse', lawdCd!);
-          if (t) allTrades.push(t);
-        }
+        // Only the months and sources selected by the user determine availability.
+        // A successful source response with no trades still counts as a success.
+        const sources = dealTypeFilter === 'sale' ? ['apt']
+          : dealTypeFilter === 'jeonse' || dealTypeFilter === 'wolse' ? ['rent']
+            : ['apt', 'rent'];
+        const selectedCells = monthsForRange(periodRange).flatMap((month) =>
+          sources.map((source) => rawByMonth[`${source}:${month}`]));
+        const failedCount = selectedCells.filter((cell) => cell?.failed !== false).length;
+        apiError = selectedCells.length > 0 && failedCount === selectedCells.length;
+        partial = failedCount > 0 && !apiError;
+        if (partial && lawdCd) failedDistricts = [lawdCd];
       }
-      allTrades = dedupeByRecord(allTrades);
-      if (dong !== 'all') allTrades = allTrades.filter((t) => t.dong === dong);
-
-      // Only the months and sources selected by the user determine availability.
-      // A successful source response with no trades still counts as a success.
-      const sources = dealTypeFilter === 'sale' ? ['apt']
-        : dealTypeFilter === 'jeonse' || dealTypeFilter === 'wolse' ? ['rent']
-          : ['apt', 'rent'];
-      const selectedCells = monthsForRange(periodRange).flatMap((month) =>
-        sources.map((source) => rawByMonth[`${source}:${month}`]));
-      const failedCount = selectedCells.filter((cell) => cell?.failed !== false).length;
-      apiError = selectedCells.length > 0 && failedCount === selectedCells.length;
-      partial = failedCount > 0 && !apiError;
-      if (partial && lawdCd) failedDistricts = [lawdCd];
     }
 
     const periodTradesRaw = allTrades.filter((t) => isDateInRange(t.dealDate, periodRange));
@@ -328,6 +368,8 @@ export async function GET(request: Request) {
       // 시도 전체는 일부 구, 단일 구는 선택 기간의 일부 월·원천 실패를 표시한다.
       partial,
       failedDistricts,
+      rentPreparing: isSeoulSaleStatsEligible({ lawdCd, sidoCode: sidoCodeParam, sidoName: sido }),
+      message: isSeoulSaleStatsEligible({ lawdCd, sidoCode: sidoCodeParam, sidoName: sido }) ? '서울 지역은 현재 매매 실거래가만 제공됩니다 (전월세 준비 중)' : undefined,
     });
   } catch (error) {
     console.error('Failed to load regional transaction feed:', error);

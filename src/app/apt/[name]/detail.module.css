@@ -150,8 +150,8 @@
   .timelineSummary { width: 100%; }
   .timelineControls { flex-wrap: nowrap; gap: .35rem; width: 100%; }
   .timelineControls > div { flex: 1; min-width: 0; }
-  .timelineControls button { padding-inline: .4rem !important; }
-  .timelineControls select { flex: 0 0 5.4rem; min-width: 0; padding-inline: .35rem !important; font-size: .78rem; }
+  .timelineControls button { padding-inline: .35rem !important; }
+  .timelineControls select { flex: 0 0 7rem; min-width: 0; padding-inline: .35rem !important; font-size: .78rem; white-space: nowrap; }
 }
 
 .panelTitle {

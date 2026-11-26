@@ -16,6 +16,7 @@ import { classifyPreparingReason } from './preparing-reason';
 import { calculateScoreV2 } from '../../score-v2/engine';
 import { adaptToV2Input } from '../../score-v2/adapter';
 import { getApartmentEducationZone } from '../../education/attendance-zone';
+import { resolveLocationFeature } from './location-resolver';
 
 /**
  * S2C Score Engine 진입점(§3, §41 API가 이 함수 하나만 호출한다).
@@ -34,6 +35,8 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
       parkingCount: true,
       mainBuildingCount: true,
       geocodeQuality: true,
+      latitude: true,
+      longitude: true,
     },
   });
 
@@ -78,6 +81,15 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
     ])
   );
   const locationByAptSeq = new Map<string, RawLocationFeature>(locationRows.map((r) => [r.aptSeq, r as RawLocationFeature]));
+  if (!locationByAptSeq.has(targetMaster.aptSeq)) {
+    const loc = await resolveLocationFeature(targetMaster.aptSeq, {
+      latitude: targetMaster.latitude ?? null,
+      longitude: targetMaster.longitude ?? null,
+    });
+    if (loc) {
+      locationByAptSeq.set(targetMaster.aptSeq, loc);
+    }
+  }
   const marketByAptSeq = new Map(marketRows.map((r) => [r.aptSeq, r]));
 
   const peerCandidates: PeerCandidate[] = cohortMasterRows.map((r) => ({
@@ -129,8 +141,19 @@ export async function calculateApartmentScore(aptSeq: string): Promise<FinalScor
   try {
     const eduZone = getApartmentEducationZone(targetMaster.aptSeq);
     const attendanceZoneStatus = eduZone ? eduZone.elementary.status : 'NOT_AVAILABLE';
+    const masterInfo = masterByAptSeq.get(targetMaster.aptSeq) ?? {
+      aptSeq: targetMaster.aptSeq,
+      sggCd: targetMaster.sggCd,
+      sigungu: targetMaster.sigungu,
+      umdName: targetMaster.umdName,
+      buildYear: targetMaster.buildYear,
+      totalHouseholds: targetMaster.totalHouseholds,
+      parkingCount: targetMaster.parkingCount,
+      mainBuildingCount: targetMaster.mainBuildingCount,
+      geocodeQuality: targetMaster.geocodeQuality,
+    };
     const v2Input = adaptToV2Input(
-      masterByAptSeq.get(targetMaster.aptSeq)!, 
+      masterInfo, 
       locationByAptSeq.get(targetMaster.aptSeq) ?? null,
       attendanceZoneStatus as any
     );

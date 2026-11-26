@@ -87,8 +87,12 @@ export default function ApartmentQuickSearch({ currentApt, onClose }: ApartmentQ
     };
   }, []);
 
-  const navigateToApt = (name: string, lawdCd?: string, dong?: string) => {
-    const query = lawdCd && dong ? `?lawdCd=${encodeURIComponent(lawdCd)}&dong=${encodeURIComponent(dong)}` : '';
+  const navigateToApt = (name: string, lawdCd?: string, dong?: string, aptSeq?: string | null) => {
+    const params = new URLSearchParams();
+    if (lawdCd) params.set('lawdCd', lawdCd);
+    if (dong) params.set('dong', dong);
+    if (aptSeq) params.set('aptSeq', aptSeq);
+    const query = params.toString() ? `?${params.toString()}` : '';
     onClose();
     router.push(`/apt/${encodeURIComponent(name)}${query}`);
   };
@@ -113,17 +117,17 @@ export default function ApartmentQuickSearch({ currentApt, onClose }: ApartmentQ
         .then((data: { hasTrades: boolean; hasUnitTypes: boolean }) => {
           setVerifying(false);
           if (data.hasTrades || data.hasUnitTypes) {
-            navigateToApt(result.name, result.lawdCd!, result.dong!);
+            navigateToApt(result.name, result.lawdCd!, result.dong!, result.aptSeq);
           } else {
             setConnectFailed(result.name);
           }
         })
         .catch(() => {
           setVerifying(false);
-          navigateToApt(result.name, result.lawdCd!, result.dong!);
+          navigateToApt(result.name, result.lawdCd!, result.dong!, result.aptSeq);
         });
     } else {
-      navigateToApt(result.name);
+      navigateToApt(result.name, undefined, undefined, result.aptSeq);
     }
   };
 

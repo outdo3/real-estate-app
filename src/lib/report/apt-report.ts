@@ -10,7 +10,7 @@
 //   §10 예측 금지. 해석은 Score briefing(결정론적)만 쓴다.
 //   평 라벨 금지(ApartmentUnitType 커버리지 2.9%) — ㎡만.
 
-import { aggregate, median, prepareRows, recentTrades, topPricedTrades, type TradeRow } from './region-aggregate';
+import { aggregate, median, excludeCanceled, recentTrades, topPricedTrades, type TradeRow } from './region-aggregate';
 import { districtName } from './region-scope';
 import type {
   MetricSource,
@@ -135,11 +135,11 @@ function metric(
 
 export function buildApartmentReport(input: AptReportInput): ReportEnvelope<ApartmentReportData> {
   const m = input.master;
-  const trades = prepareRows(input.trades12m);
+  const trades = excludeCanceled(input.trades12m);
   const agg = aggregate(trades);
-  const recent = recentTrades(prepareRows(input.recentTradeRows), 5);
+  const recent = recentTrades(excludeCanceled(input.recentTradeRows), 5);
   const latest = recent[0] ?? null;
-  const top2y = topPricedTrades(prepareRows(input.twoYearTopCandidates), 1)[0] ?? null;
+  const top2y = topPricedTrades(excludeCanceled(input.twoYearTopCandidates), 1)[0] ?? null;
 
   const tradeSrc: MetricSource = { source: TRADE_SOURCE, dataAsOf: input.dataAsOf };
   const masterSrc: MetricSource = { source: MASTER_SOURCE, dataAsOf: null };

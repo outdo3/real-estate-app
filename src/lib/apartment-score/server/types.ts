@@ -129,6 +129,7 @@ export interface FinalScoreResult {
 
 export interface RawLocationFeature {
   aptSeq: string;
+  nearestSubwayName?: string | null;
   nearestSubwayDistanceM: number | null;
   subwayCount1000m: number | null;
   nearestBusStopDistanceM: number | null;

@@ -1,5 +1,5 @@
-import { isStatsEnabledLawdCd, isTradeDbFirstLawdCd, isTradeDbFirstSido } from '@/lib/region/enablement';
-import { isStatsRegionSupported, statsUnsupportedSuccessBody } from '@/lib/region/stats-gate';
+import { isStatsEnabledLawdCd, isTradeDbFirstLawdCd, isTradeDbFirstSido, isDbOnlyLawdCd } from '@/lib/region/enablement';
+import { isStatsRegionSupported, isSeoulSaleStatsEligible, statsUnsupportedSuccessBody } from '@/lib/region/stats-gate';
 import { NextResponse } from 'next/server';
 import { formatKoreanPrice } from '@/lib/api-molit';
 import { getOrSetCache } from '@/lib/server-cache';
@@ -55,7 +55,7 @@ import {
 // NON_BUSAN_STATS_TRUST_GATE_V1 — 이제 비부산 요청은 이 판정 전에 stats 게이트(isStatsRegionSupported)에서
 // '준비 중'으로 돌아간다. 이 판정은 게이트를 통과한 지역 안에서 DB-first/live를 가르는 역할만 한다.
 function isBusanScopedRequest(lawdCd: string | null, sidoCodeParam: string | null, isSidoAll: boolean): boolean {
-  if (isSidoAll) return isTradeDbFirstSido(sidoCodeParam);
+  if (isSidoAll) return isTradeDbFirstSido(sidoCodeParam) || sidoCodeParam === '11';
   return isTradeDbFirstLawdCd(lawdCd);
 }
 
@@ -161,8 +161,9 @@ export async function GET(request: Request) {
   // STATISTICS REGION FILTER V2 — lawdCd 없이 sidoCode만 오면 "시도 전체".
   const isSidoAll = !lawdCdParam && !!sidoCodeParam && /^\d{2}$/.test(sidoCodeParam);
 
-  // NON_BUSAN_STATS_TRUST_GATE_V1 — 통계가 열리지 않은 지역은 캐시·DB·MOLIT에 닿기 전에 돌려보낸다.
-  if (!isStatsRegionSupported({ lawdCd: lawdCdParam, sidoCode: sidoCodeParam, sidoName: sido })) {
+  // NON_BUSAN_STATS_TRUST_GATE_V1 / V4.1 — 통계가 열리지 않은 지역은 캐시·DB·MOLIT에 닿기 전에 돌려보낸다 (서울은 V4.1 허용).
+  const isSeoul = isSeoulSaleStatsEligible({ lawdCd: lawdCdParam, sidoCode: sidoCodeParam, sidoName: sido });
+  if (!isStatsRegionSupported({ lawdCd: lawdCdParam, sidoCode: sidoCodeParam, sidoName: sido }) && !isSeoul) {
     return NextResponse.json(statsUnsupportedSuccessBody());
   }
 
@@ -173,7 +174,7 @@ export async function GET(request: Request) {
       if (!lawdCd) {
         return NextResponse.json({ success: false, error: `"${sido} ${gungu}" 지역 코드를 찾을 수 없습니다.` });
       }
-      if (!isStatsEnabledLawdCd(lawdCd)) return NextResponse.json(statsUnsupportedSuccessBody());
+      if (!isStatsEnabledLawdCd(lawdCd) && !lawdCd.startsWith('11')) return NextResponse.json(statsUnsupportedSuccessBody());
     }
 
     // RENT_TRADE_HISTORY_V1 PHASE D.2 §31 — rent source/routing이 Phase D(row-level
@@ -212,7 +213,7 @@ export async function GET(request: Request) {
       // (module load 시점 상수가 아니다). 한 요청 안에서 여러 번 쓰이므로 **한 번만**
       // 조회해 아래 모든 판정에 같은 값을 쓴다 — 요청 처리 도중 범위가 달라져 verified/
       // remainder 경계가 어긋나는(=이중 카운트/누락) 일이 생기지 않게 하기 위함이다.
-      const rentVerifiedRange = await getRentVerifiedRange();
+      const rentVerifiedRange = await getRentVerifiedRange(lawdCd || sidoCodeParam || undefined);
 
       let aptMonthly: any[][];
       let rentMonthly: any[][];
@@ -252,6 +253,7 @@ export async function GET(request: Request) {
         isBusanFlag = isBusan;
         rentLawdCds = lawdCds;
         verifiedRentMonthsFlag = verifiedRentMonths;
+        const isSeoulSido = sidoCodeParam === '11';
         const tasks: MonthTask[] = [];
         for (const dLawdCd of lawdCds) {
           for (const ym of last12Months) {
@@ -261,9 +263,11 @@ export async function GET(request: Request) {
           }
           // rent는 verified 개월만 DB로 빠지고, unverified 개월(부산이 아니면 전체
           // 12개월)만 MOLIT task를 만든다 — 검증 안 된 기간을 DB complete로
-          // 가장하지 않는다(PHASE D §16/§17).
-          for (const ym of unverifiedRentMonths) {
-            tasks.push({ key: `${dLawdCd}|rent:${ym}`, lawdCd: dLawdCd, dealYmd: ym, type: 'rent' });
+          // 가장하지 않는다(PHASE D §16/§17). 서울은 DB-only이므로 unverified task를 만들지 않는다.
+          if (!isSeoulSido) {
+            for (const ym of unverifiedRentMonths) {
+              tasks.push({ key: `${dLawdCd}|rent:${ym}`, lawdCd: dLawdCd, dealYmd: ym, type: 'rent' });
+            }
           }
         }
         const [results, aptMonthlyFromDb, rentBucketsFromDb, rentAggFromDb] = await Promise.all([
@@ -314,9 +318,10 @@ export async function GET(request: Request) {
         isBusanFlag = isBusan;
         rentLawdCds = [lawdCd!];
         verifiedRentMonthsFlag = verifiedRentMonths;
+        const isDbOnly = isDbOnlyLawdCd(lawdCd);
         const rollingTasks: MonthTask[] = [
           ...(isBusan ? [] : last12Months.map((dealYmd) => ({ key: `apt-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'apt' as const }))),
-          ...unverifiedRentMonths.map((dealYmd) => ({ key: `rent-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'rent' as const })),
+          ...(isDbOnly ? [] : unverifiedRentMonths.map((dealYmd) => ({ key: `rent-roll-${dealYmd}`, lawdCd: lawdCd!, dealYmd, type: 'rent' as const }))),
         ];
         // LAUNCH_TRUST_BLOCKERS_V1 — 예전에는 실패 여부를 버리는 fetchMonthsThrottled를
         // 써서, 단일 지역(구) 요청에서 MOLIT 호출이 실패한 달이 조용히 빈 배열이 되어

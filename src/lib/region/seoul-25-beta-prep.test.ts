@@ -242,7 +242,7 @@ test('13 · cron: 서울 8구 scope 불변 + 17구는 seoul-b 9 · seoul-c 8 별
   assert.ok(b.ok && c.ok);
   assert.deepEqual([...((b.ok && b.lawdCds) || []), ...((c.ok && c.lawdCds) || [])].sort(), [...S17].sort());
   const crons = (JSON.parse(readFileSync(resolve(ROOT, 'vercel.json'), 'utf8')).crons as { path: string }[]).map((x) => x.path);
-  assert.equal(crons.length, 11);
+  assert.equal(crons.length, 14);
   assert.equal(crons.filter((p) => /scope=seoul-b|scope=seoul-c/.test(p)).length, 4);
 });
 

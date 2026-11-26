@@ -98,9 +98,10 @@ export async function GET(
     // 항상 V1의 SCORE_VERSION으로 응답하면 실제로 사용자에게 노출되는 엔진과 label이
     // 어긋난다 — 실제로 화면에 쓰이는 엔진의 버전을 그대로 보고한다(score formula 자체는
     // 변경하지 않음).
+    const status = (shadowV2 && shadowV2.overallScore != null) ? 'OK' : result.status;
     return NextResponse.json({
-      status: result.status,
-      score: result.score,
+      status,
+      score: result.score ?? (shadowV2?.overallScore ? Math.round(shadowV2.overallScore) : null),
       scoreVersion: resolveDisplayedScoreVersion(shadowV2?.scoreVersion, result.scoreVersion),
       coverage: result.coverage,
       confidence: result.confidence,

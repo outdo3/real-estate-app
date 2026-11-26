@@ -66,7 +66,7 @@ function ymEndDate(ym: string): Date {
  * getRentPeriodComparisonFromDb를 쓴다. */
 export async function fetchRentMonthBucketsFromDb(lawdCds: string[], months: string[]): Promise<Map<string, StoredRentTrade[]>> {
   const buckets = new Map<string, StoredRentTrade[]>(months.map((m) => [m, []]));
-  const range = await getRentVerifiedRange();
+  const range = await getRentVerifiedRange(lawdCds[0]);
   const inRange = months.filter((m) => m >= range.from && m <= range.to);
   if (inRange.length === 0 || lawdCds.length === 0) return buckets;
 
@@ -123,7 +123,7 @@ const ZERO_TYPE_AGG: RentMonthTypeAggregate = { count: 0, avgDeposit: null };
  * (0/null) — fetchRentMonthBucketsFromDb와 동일한 이중 안전장치. */
 export async function getRentMonthlyAggregateFromDb(lawdCds: string[], months: string[]): Promise<Map<string, RentMonthAggregate>> {
   const buckets = new Map<string, RentMonthAggregate>(months.map((m) => [m, { jeonse: { ...ZERO_TYPE_AGG }, wolse: { ...ZERO_TYPE_AGG } }]));
-  const range = await getRentVerifiedRange();
+  const range = await getRentVerifiedRange(lawdCds[0]);
   const inRange = months.filter((m) => m >= range.from && m <= range.to);
   if (inRange.length === 0 || lawdCds.length === 0) return buckets;
 
@@ -172,7 +172,7 @@ export async function getRentPeriodComparisonFromDb(
   const result = { current: { ...ZERO_PERIOD_COUNTS }, previous: { ...ZERO_PERIOD_COUNTS } };
   if (lawdCds.length === 0) return result;
 
-  const range = await getRentVerifiedRange();
+  const range = await getRentVerifiedRange(lawdCds[0]);
   const clippedCurrent = clipDateRangeToVerified(currentRange.from, currentRange.to, range);
   const clippedPrevious = clipDateRangeToVerified(previousRange.from, previousRange.to, range);
   if (!clippedCurrent && !clippedPrevious) return result;

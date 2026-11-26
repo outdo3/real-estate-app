@@ -16,25 +16,25 @@ before(async () => {
   r = await import('./registry');
 });
 
-test('Preview env: 스위치 켜짐 · 서울 25구 app·search·map·detail 공개 · report·stats·sitemap·seoIndex 닫힘', () => {
+test('Preview env: 스위치 켜짐 · 서울 25구 app·search·map·detail·report·supply 공개 · stats·sitemap·seoIndex 닫힘', () => {
   assert.equal(e.SEOUL_25_BETA_PREVIEW_ENABLED, true);
   const seoul = r.REGION_NODES.filter((n) => n.sidoCode === '11').map((n) => n.lawdCd);
   assert.equal(seoul.length, 25);
   for (const c of seoul) {
-    for (const axis of ['app', 'search', 'map', 'detail'] as const) assert.equal(e.isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
-    for (const axis of ['report', 'stats', 'sitemap', 'seoIndex'] as const) assert.equal(e.isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
+    for (const axis of ['app', 'search', 'map', 'detail', 'report', 'supply'] as const) assert.equal(e.isPublicRegionAllowed(c, axis), true, `${c} ${axis}`);
+    for (const axis of ['sitemap', 'seoIndex'] as const) assert.equal(e.isPublicRegionAllowed(c, axis), false, `${c} ${axis}`);
   }
-  // SEOUL25_PREVIEW_READ_ONLY_DB_V1 — Preview 17구는 DB-first로 읽고 live MOLIT는 부르지 않는다
+  // SEOUL25_PREVIEW_READ_ONLY_DB_V1 · SEOUL_STATS_SALE_PARITY_V2 — 서울 25구는 DB-first로 읽고 live MOLIT는 부르지 않는다
   for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isTradeDbFirstLawdCd(c), true, `${c} DB-first`);
-  for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isDbOnlyLawdCd(c), true, `${c} DB only`);
-  for (const c of [...e.SEOUL_BETA_LAWDCDS, '26350', '41135', '99999']) assert.equal(e.isDbOnlyLawdCd(c), false, `${c} not DB-only`);
+  for (const c of [...e.SEOUL_17_BETA_LAWDCDS, ...e.SEOUL_BETA_LAWDCDS]) assert.equal(e.isDbOnlyLawdCd(c), true, `${c} DB only`);
+  for (const c of ['26350', '41135', '99999']) assert.equal(e.isDbOnlyLawdCd(c), false, `${c} not DB-only`);
   // GYEONGGI8_PRODUCTION_PUBLIC_ENABLE_V1 — 경기 8구는 2026-09-30 공개로 모든 빌드에서 DB 전용
   for (const c of e.GYEONGGI_BETA_LAWDCDS) assert.equal(e.isDbOnlyLawdCd(c), true, `${c} DB only`);
-  // SEOUL25_BETA_PREP_REBASE_COMPILE_FIX_V1 — Preview에서도 17구 공급은 닫힘, 8구는 그대로
-  for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), false, `${c} supply`);
+  // SEOUL V5 — 서울 25개 구 모두 공급(청약홈) 오픈
+  for (const c of e.SEOUL_17_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), true, `${c} supply`);
   for (const c of e.SEOUL_BETA_LAWDCDS) assert.equal(e.isPublicRegionAllowed(c, 'supply'), true, `${c} supply`);
   assert.equal(e.publicAllowedLawdCds('search').length, 49); // 부산 16 + 서울 25 + 경기 8(2026-09-30)
-  assert.equal(e.publicAllowedLawdCds('report').filter((c) => c.startsWith('11')).length, 0);
+  assert.equal(e.publicAllowedLawdCds('report').filter((c) => c.startsWith('11')).length, 25);
 });
 
 test('Preview env: 25구가 다 열려도 "서울특별시 전체"는 없다 · 서울 시도 층·DB-first·통계는 닫힘 · 부산 그대로', () => {
@@ -52,13 +52,12 @@ test('Preview env: 25구가 다 열려도 "서울특별시 전체"는 없다 · 
   assert.equal(e.isPublicRegionAllowed('41135', 'app'), false);
 });
 
-test('Preview env: 공급 라우트 — 17구·서울 전체·경기 거부, 공개 8구·부산 허용(84e1c61 유지)', async () => {
+test('Preview env: 공급 라우트 — 서울 전체·경기 거부, 서울 25구·부산 허용', async () => {
   const { decideSupplyRegion } = await import('../stats/supply-region-gate');
-  for (const g of ['강남구', '서초구', '관악구', '성북구']) assert.equal(decideSupplyRegion('서울특별시', g).allowed, false, g);
+  for (const g of ['강남구', '서초구', '관악구', '성북구', '마포구']) assert.equal(decideSupplyRegion('서울특별시', g).allowed, true, g);
   assert.equal(decideSupplyRegion('서울특별시', null).allowed, false);
   assert.equal(decideSupplyRegion('경기도', null).allowed, false);
   assert.equal(decideSupplyRegion('경기도', '수원시 장안구').allowed, false);
-  assert.equal(decideSupplyRegion('서울특별시', '마포구').allowed, true);
   assert.equal(decideSupplyRegion('부산광역시', null).allowed, true);
 });
 
@@ -77,20 +76,20 @@ test('Preview env: 17구 live MOLIT는 네트워크 없이 실패로 닫힘 · 8
     }
   }
   assert.equal(calls, 0, 'Preview 17구에서 MOLIT fetch가 호출됐다');
-  for (const c of ['11440', '26350']) await fetchMolitData({ lawdCd: c, dealYmd: '202608', type: 'apt' }, { fetchOnce });
-  assert.equal(calls, 2, '8구·부산은 기존 MOLIT 경로 그대로');
+  for (const c of ['26350']) await fetchMolitData({ lawdCd: c, dealYmd: '202608', type: 'apt' }, { fetchOnce });
+  assert.equal(calls, 1, '부산은 기존 MOLIT 경로 그대로');
 });
 
-test('Preview env: SEO — 서울 상세는 NOINDEX, 리포트는 BLOCKED', async () => {
+test('Preview env: SEO — 서울 상세는 NOINDEX, 리포트는 NOINDEX', async () => {
   const { decidePublicSeo } = await import('../seo/seoul-blocked-seo');
   for (const c of ['11680', '11350', '11620', '11380', '11290', '11110']) {
     assert.equal(decidePublicSeo([c], 'detail'), 'NOINDEX', c);
-    assert.equal(decidePublicSeo([c], 'report'), 'BLOCKED', c);
+    assert.equal(decidePublicSeo([c], 'report'), 'NOINDEX', c);
   }
 });
 
-test('Preview env: 서울 25 리포트 CTA 없음 · 부산 CTA 그대로', async () => {
+test('Preview env: 서울 25 리포트 CTA 오픈 · 부산 CTA 그대로', async () => {
   const { isReportRegionOpen } = await import('../report/report-links');
-  for (const c of ['11680', '11350', '11620', '11380', '11290', '11110']) assert.equal(isReportRegionOpen(`${c}-1`), false, c);
+  for (const c of ['11680', '11350', '11620', '11380', '11290', '11110']) assert.equal(isReportRegionOpen(`${c}-1`), true, c);
   assert.equal(isReportRegionOpen('26140-1164'), true);
 });

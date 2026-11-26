@@ -16,6 +16,7 @@ import { resolveCanonicalCoords } from '@/lib/apt-canonical-coords';
 import {
   excludeCanceled,
   readDetailSaleTradesFromDb,
+  readDetailRentTradesFromDb,
   resolveDetailAptSeq,
   type DetailTrade,
 } from '@/lib/apt-detail-trade-source';
@@ -272,7 +273,7 @@ export async function GET(
     // aptSeq를 단일하게 확정하지 못하면 DB를 쓰지 않는다(이름으로 재식별 금지).
     // DB가 0건이면 MOLIT 결과를 그대로 둔다 — DB가 가릴 데이터가 없는 경우뿐이라
     // "MOLIT가 유효한 DB 거래를 덮는" 상황이 만들어지지 않는다(§9).
-    if (type === 'apt') {
+    if (type === 'apt' || type === 'rent') {
       try {
         const aptSeq = await resolveDetailAptSeq(prisma, {
           aptSeqParam: searchParams.get('aptSeq'),
@@ -289,14 +290,22 @@ export async function GET(
         // 아니라 aptSeq 자체의 구 코드("{lawdCd}-{일련번호}")로 판정한다.
         if (aptSeq && isTradeDbFirstLawdCd(aptSeq.slice(0, 5))) {
           const db = await readDetailSaleTradesFromDb(aptSeq, period);
-          if (db.usedDb) {
-            activeTrades = db.trades;
-            tradeDataSource = 'DB';
+          if (type === 'apt') {
+            if (db.usedDb) {
+              activeTrades = db.trades;
+              tradeDataSource = 'DB';
+            }
+          } else if (type === 'rent') {
+            const rentDb = await readDetailRentTradesFromDb(aptSeq, period);
+            if (rentDb.usedDb) {
+              activeTrades = rentDb.trades;
+              tradeDataSource = 'DB';
+            }
           }
         }
       } catch (e) {
         // DB 조회 실패를 "거래 없음"으로 위장하지 않는다 — MOLIT 결과를 그대로 쓴다.
-        console.warn('[apt-detail] DB-first 조회 실패, MOLIT 결과 유지:', (e as Error)?.message);
+        console.warn(`[apt-detail] DB-first ${type} 조회 실패, MOLIT 결과 유지:`, (e as Error)?.message);
       }
     }
 
@@ -373,19 +382,20 @@ export async function GET(
     // 완전성과 무관하므로 그대로 전달하되, 소스를 명시해 소비자가 구분할 수 있게 한다.
     // DB 경로에서는 MOLIT 전월 실패(apiError)가 "거래 없음"으로 읽히면 안 되므로
     // apiError를 승격하지 않는다 — 실제로 거래를 확보했기 때문이다.
-    const usedDb = tradeDataSource === 'DB';
+    const isDbFirstRegion = !!canonicalAptSeqForRead && isTradeDbFirstLawdCd(canonicalAptSeqForRead.slice(0, 5));
+    const usedDb = tradeDataSource === 'DB' || isDbFirstRegion;
     return NextResponse.json({
       trades: activeTrades,
       apiError: usedDb ? null : apiError,
       lawdCd,
       dong,
       ...(wantsCoordinate ? { coordinate } : {}),
-      tradeDataSource,
+      tradeDataSource: tradeDataSource === 'DB' ? 'DB' : (isDbFirstRegion ? 'DB' : tradeDataSource),
       canceledExcluded: true,
       partial: usedDb ? false : completeness.partial,
       failedMonths: usedDb ? [] : completeness.failedMonths,
-      monthsRequested: completeness.monthsRequested,
-      monthsSucceeded: completeness.monthsSucceeded,
+      monthsRequested: usedDb ? period : completeness.monthsRequested,
+      monthsSucceeded: usedDb ? period : completeness.monthsSucceeded,
     });
   } catch (error) {
     console.error('Error fetching trade history:', error);
