@@ -140,8 +140,8 @@ export default function SupplyView() {
   }, [scopeKey, period]);
 
   const scopeLabel = nationwide ? '전국' : region.lawdCd && region.sigungu ? `${region.sido} ${region.sigungu}` : region.sido;
-  const selectedMarker = data?.mapMarkers.find((m) => m.id === selectedMarkerId) || null;
-  const maxHouseholdSum = data ? Math.max(1, ...data.trend.map((t) => t.householdSum)) : 1;
+  const selectedMarker = data?.mapMarkers?.find((m) => m.id === selectedMarkerId) || null;
+  const maxHouseholdSum = data?.trend && data.trend.length > 0 ? Math.max(1, ...data.trend.map((t) => t.householdSum)) : 1;
 
   return (
     <div className={styles.wrap}>
