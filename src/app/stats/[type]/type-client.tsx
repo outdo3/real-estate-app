@@ -31,7 +31,7 @@ import SupplyView from '@/components/stats/SupplyView';
 import LargeComplexView from '@/components/stats/LargeComplexView';
 import styles from '../page.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
-import { getRegionByLawdCd, REGION_SIDOS } from '@/lib/region/registry';
+import { getRegionByLawdCd, getSidoRegions, REGION_SIDOS } from '@/lib/region/registry';
 
 const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
@@ -453,6 +453,15 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
       if (s) {
         sidoCode = s.code;
         sido = s.name;
+      }
+    }
+
+    // 3. sidoCode와 sigungu가 있고 lawdCd가 아직 없는 경우 lawdCd 역추적
+    if (sidoCode && sigungu && !lawdCd) {
+      const regions = getSidoRegions(sidoCode);
+      const matched = regions.find((n) => n.name === sigungu || n.fullName === `${sido} ${sigungu}`);
+      if (matched) {
+        lawdCd = matched.lawdCd;
       }
     }
 
