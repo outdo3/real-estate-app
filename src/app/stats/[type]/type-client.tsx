@@ -31,6 +31,7 @@ import SupplyView from '@/components/stats/SupplyView';
 import LargeComplexView from '@/components/stats/LargeComplexView';
 import styles from '../page.module.css';
 import { buildRegionDisplayName } from '@/lib/region-display-name';
+import { getRegionByLawdCd, REGION_SIDOS } from '@/lib/region/registry';
 
 const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY || process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
@@ -425,12 +426,37 @@ export default function StatsTypeClient({ slug }: { slug: string }) {
   // 같은 지역을 보게 한다. RegionContext 자체의 GPS/기본값 로직은 건드리지 않는다 — 이
   // 화면에 도착했을 때만 URL 값이 있으면 우선 적용한다.
   useEffect(() => {
-    const sido = searchParams.get('sido');
-    const sidoCode = searchParams.get('sidoCode');
-    if (!sido || !sidoCode) return;
-    const sigungu = searchParams.get('sigungu') || '';
+    const rawLawdCd = searchParams.get('lawdCd');
+    const rawSido = searchParams.get('sido');
+    const rawSidoCode = searchParams.get('sidoCode');
+    const rawSigungu = searchParams.get('sigungu');
     const dong = searchParams.get('dong') || 'all';
-    const lawdCd = searchParams.get('lawdCd');
+
+    let lawdCd = rawLawdCd;
+    let sidoCode = rawSidoCode;
+    let sido = rawSido;
+    let sigungu = rawSigungu || '';
+
+    // 1. lawdCd만 직접 넘어온 경우 (예: /stats/feed?lawdCd=11110)
+    if (lawdCd) {
+      const node = getRegionByLawdCd(lawdCd);
+      if (node) {
+        sidoCode = node.sidoCode;
+        sigungu = node.name;
+        const s = REGION_SIDOS.find((r) => r.code === node.sidoCode);
+        if (s) sido = s.name;
+      }
+    }
+    // 2. sido명만 있고 sidoCode가 없는 경우 (예: /stats/supply?sido=서울특별시&sigungu=강남구)
+    else if (sido && !sidoCode) {
+      const s = REGION_SIDOS.find((r) => r.name === sido || r.shortName === sido);
+      if (s) {
+        sidoCode = s.code;
+        sido = s.name;
+      }
+    }
+
+    if (!sido || !sidoCode) return;
     const displayRegionName = buildRegionDisplayName({ sido, sigungu, dong });
     setRegion({ lawdCd: lawdCd || null, sidoCode, dong, sido, sigungu, displayRegionName });
   }, []);

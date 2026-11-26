@@ -34,11 +34,20 @@ export async function GET(request: Request) {
     console.error('Failed to list posts:', error);
     const msg = (error as Error)?.message || '';
     const code = (error as any)?.code;
-    if (code === '42501' || msg.includes('permission denied') || msg.includes('does not exist')) {
-      const page = 1;
-      return NextResponse.json({ success: true, data: { posts: [], total: 0, page, pageSize: PAGE_SIZE } });
+    // DB 권한 부족(42501 등)인 경우 false zero(0건으로 위장)를 하지 않고 권한 제한 상태로 명확히 응답
+    if (code === '42501' || msg.includes('permission denied')) {
+      return NextResponse.json(
+        { success: false, code: 'PERMISSION_DENIED', error: '현재 커뮤니티 조회가 일시적으로 제한되어 있습니다.' },
+        { status: 403 }
+      );
     }
-    return NextResponse.json({ success: false, error: '게시글 목록을 불러오지 못했습니다.' }, { status: 500 });
+    if (code === 'P1001' || code === 'P1002' || msg.includes('reach database')) {
+      return NextResponse.json(
+        { success: false, code: 'DB_CONNECTION_ERROR', error: '데이터베이스 연결이 원활하지 않습니다.' },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ success: false, code: 'INTERNAL_ERROR', error: '게시글 목록을 불러오지 못했습니다.' }, { status: 500 });
   }
 }
 
